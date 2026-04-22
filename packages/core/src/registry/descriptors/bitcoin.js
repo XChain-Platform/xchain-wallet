@@ -1,0 +1,57 @@
+// Bitcoin chain descriptors — mainnet, testnet, regtest.
+// Derivation paths per §16.1. Address types p2pkh / p2sh-p2wpkh /
+// p2wpkh / p2tr; p2wpkh is the default. URLs are placeholders per §5.5
+// — real endpoints resolve before launch.
+
+import { BITCOIN_ACTIONS } from '../actions.js';
+
+const COMMON = {
+    coin: 'bitcoin',
+    displayName: 'Bitcoin',
+    color: '#F7931A',
+    icon: '',
+    addressTypes: ['p2pkh', 'p2sh-p2wpkh', 'p2wpkh', 'p2tr'],
+    defaultAddressType: 'p2wpkh',
+    derivationPaths: {
+        p2pkh: "m/44'/0'/A'/C/I",
+        'p2sh-p2wpkh': "m/49'/0'/A'/C/I",
+        p2wpkh: "m/84'/0'/A'/C/I",
+        p2tr: "m/86'/0'/A'/C/I",
+    },
+    feeStrategy: {
+        unit: 'sats-per-vbyte',
+        supportedStrategies: ['low', 'normal', 'fast', 'custom'],
+        defaultStrategy: 'normal',
+        rbfSupported: true,
+    },
+    supportedActions: BITCOIN_ACTIONS,
+    uriScheme: 'bitcoin',
+};
+
+/** @type {import('../validate.js').ChainDescriptor[]} */
+export const bitcoinDescriptors = [
+    {
+        ...COMMON,
+        id: 'bitcoin-mainnet',
+        networkKind: 'mainnet',
+        explorer: { defaultUrl: 'https://explorer.xchain.io', defaultPort: 443 },
+        encoder: { defaultUrl: 'https://encoder.xchain.io', defaultPort: 443 },
+        hub: { defaultUrl: 'https://hub.xchain.io', defaultPort: 443 },
+    },
+    {
+        ...COMMON,
+        id: 'bitcoin-testnet',
+        networkKind: 'testnet',
+        explorer: { defaultUrl: 'https://testnet.explorer.xchain.io', defaultPort: 443 },
+        encoder: { defaultUrl: 'https://testnet.encoder.xchain.io', defaultPort: 443 },
+        hub: { defaultUrl: 'https://testnet.hub.xchain.io', defaultPort: 443 },
+    },
+    {
+        ...COMMON,
+        id: 'bitcoin-regtest',
+        networkKind: 'regtest',
+        explorer: { defaultUrl: 'http://localhost', defaultPort: 18081 },
+        encoder: { defaultUrl: 'http://localhost', defaultPort: 18082 },
+        hub: { defaultUrl: 'http://localhost', defaultPort: 18000 },
+    },
+];

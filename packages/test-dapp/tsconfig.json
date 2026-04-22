@@ -1,0 +1,14 @@
+{
+    "extends": "../../tsconfig.base.json",
+    "compilerOptions": {
+        "allowJs": false,
+        "checkJs": false,
+        "types": [],
+        "baseUrl": ".",
+        "paths": {
+            "@xchain-wallet/bridge-spec": ["../bridge-spec/src/index.ts"]
+        }
+    },
+    "include": ["src/**/*.ts"],
+    "exclude": ["node_modules", "dist"]
+}

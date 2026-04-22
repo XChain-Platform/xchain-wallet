@@ -1,0 +1,125 @@
+// ChainRegistry — the chain set as data, not code. UI surfaces enumerate
+// `registry.supportedChains()` and render from descriptor metadata (§9.7).
+// Adding a chain means adding a descriptor; no code changes to pickers,
+// filters, or forms.
+
+import { BUNDLED_DESCRIPTORS } from './descriptors/index.js';
+import { validateChainDescriptor } from './validate.js';
+
+export class ChainRegistry {
+    /**
+     * @param {{ bundled?: import('./validate.js').ChainDescriptor[], userAdded?: import('./validate.js').ChainDescriptor[] }} [opts]
+     */
+    constructor(opts = {}) {
+        const bundled = opts.bundled ?? BUNDLED_DESCRIPTORS;
+        /** @type {Map<string, import('./validate.js').ChainDescriptor>} */
+        this._entries = new Map();
+        for (const d of bundled) this._install(d, false);
+        for (const d of opts.userAdded ?? []) this._install(d, true);
+    }
+
+    /** @param {import('./validate.js').ChainDescriptor} descriptor */
+    _install(descriptor, isUserAdded) {
+        const res = validateChainDescriptor(descriptor);
+        if (!res.ok) {
+            throw new Error(
+                `ChainRegistry: invalid descriptor "${descriptor?.id}": ${res.errors.join('; ')}`,
+            );
+        }
+        if (this._entries.has(descriptor.id)) {
+            throw new Error(
+                `ChainRegistry: duplicate chain id "${descriptor.id}"`,
+            );
+        }
+        this._entries.set(descriptor.id, { ...descriptor, isUserAdded });
+    }
+
+    /** @param {string} chainId */
+    get(chainId) {
+        return this._entries.get(chainId);
+    }
+
+    /** @param {string} chainId */
+    has(chainId) {
+        return this._entries.has(chainId);
+    }
+
+    /** @returns {import('./validate.js').ChainDescriptor[]} */
+    supportedChains() {
+        return Array.from(this._entries.values());
+    }
+
+    /** @param {string} coin  e.g. 'bitcoin' */
+    byCoin(coin) {
+        return this.supportedChains().filter((d) => d.coin === coin);
+    }
+
+    /** @param {'mainnet' | 'testnet' | 'regtest'} networkKind */
+    byNetworkKind(networkKind) {
+        return this.supportedChains().filter(
+            (d) => d.networkKind === networkKind,
+        );
+    }
+
+    coins() {
+        return Array.from(new Set(this.supportedChains().map((d) => d.coin)));
+    }
+
+    /**
+     * Resolve the BIP-style derivation path for a (chain, addressType,
+     * account, change, index) tuple. Returns null if the chain or address
+     * type isn't registered.
+     *
+     * @param {string} chainId
+     * @param {string} addressType
+     * @param {number} accountIndex
+     * @param {0 | 1} change
+     * @param {number} index
+     */
+    derivationPathFor(chainId, addressType, accountIndex, change, index) {
+        const d = this._entries.get(chainId);
+        if (!d) return null;
+        const template = d.derivationPaths[addressType];
+        if (!template) return null;
+        return template
+            .replace('A', String(accountIndex))
+            .replace('C', String(change))
+            .replace('I', String(index));
+    }
+
+    /**
+     * Register a user-added chain at runtime (Developer Mode). Validates
+     * the descriptor and sets isUserAdded = true.
+     *
+     * @param {import('./validate.js').ChainDescriptor} descriptor
+     */
+    addCustom(descriptor) {
+        this._install(descriptor, true);
+    }
+
+    /** @param {string} chainId */
+    removeCustom(chainId) {
+        const entry = this._entries.get(chainId);
+        if (!entry) return false;
+        if (!entry.isUserAdded) {
+            throw new Error(
+                `ChainRegistry: "${chainId}" is bundled and cannot be removed`,
+            );
+        }
+        return this._entries.delete(chainId);
+    }
+}
+
+/** Convenience: shared default instance with only the bundled descriptors. */
+export const defaultRegistry = () => new ChainRegistry();
+
+export { BUNDLED_DESCRIPTORS } from './descriptors/index.js';
+export { validateChainDescriptor } from './validate.js';
+export {
+    COMMON_ACTIONS,
+    BTC_EXCLUSIVE_ACTIONS,
+    BITCOIN_ACTIONS,
+    DOGECOIN_ACTIONS,
+    LITECOIN_ACTIONS,
+} from './actions.js';
+export { FEE_UNITS, FEE_STRATEGY_NAMES } from './validate.js';
