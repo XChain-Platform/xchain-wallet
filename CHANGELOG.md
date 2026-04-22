@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-04-22
+
+### Added
+
+**`importMnemonic(opts)`** (§15.4 paths 1+2) — user-supplied mnemonic import
+- Handles BIP39 (12 / 24 words) and Counterwallet-legacy from one entry point
+- Auto-detects format (BIP39 checksum-validated first; Counterwallet as fallback) or validates an explicit `format` against the input
+- Normalizes input: trims, collapses whitespace, lowercases — so paste-from-anywhere works
+- Counterwallet path explicitly rejects any `bip39Passphrase`
+- Default `origin` derived from format (`imported-mnemonic` / `imported-freewallet`); caller can override
+- Exports `normalizeMnemonic`, `detectMnemonicFormat` as public utilities
+- Error classes: `InvalidMnemonicError` (carries `format` + per-field `errors`), `UnknownMnemonicFormatError`
+- Verified against real `xchain-sdk`: `abandon × 11 + about` produces the canonical BIP84 address `bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu`
+
+**`submitAction(opts)`** — one-call submission wrapper
+- Composes `unlockWallet` → `submitWithSigner` → `signer.lock()` in a `finally`
+- Seed material is always zeroed — even if `submitWithSigner` throws mid-pipeline
+- Returns the full `SubmitResult` from `submitWithSigner`; every shell's "Send" and dApp-sign-request flows can land on this
+- For batched submissions under one unlock, callers compose directly — re-unlocking is ~1s of Argon2id
+
+### Changed
+
+**`Address` schema v1 → v2** — §17.6 signer routing
+- Added `signerId: string | null` field — stable id of the owning signer (SoftwareSigner uses `wallet.id`); `null` = needs reconciliation
+- Added `addressMigrations[1]`: carries v1 records forward with `signerId: null` and documents runtime reconciliation intent
+- `validateAddress` accepts `string | null`; rejects numeric/wrong types; new records written at v2 and v1 `put` attempts are rejected
+- `createWallet` / `importMnemonic` (via `_persistHdWallet`) populate `signerId = signer.id` on initial addresses — wallets created post-migration are linked from day one
+
+**`createWallet`** — refactored to share post-encryption plumbing with `importMnemonic` via an internal `_persistHdWallet` helper. 175 lines → 84. Same behavior (regression-tested); one source of truth for the persist-new-HD-wallet pipeline.
+
 ## [0.7.0] - 2026-04-22
 
 ### Added

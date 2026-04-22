@@ -1,0 +1,132 @@
+// Internal — the "encrypt mnemonic + persist wallet + derive initial
+// addresses" pipeline shared by createWallet (fresh BIP39) and
+// importMnemonic (user-supplied BIP39 or Counterwallet).
+//
+// Not exported from the flows barrel. Flow modules import it directly.
+
+import { calibrateKdfParams, encryptWalletSeed } from '../crypto/index.js';
+import { createWallet as createWalletRecord } from '../schemas/wallet.js';
+import { createAccount } from '../schemas/account.js';
+import { createAddress } from '../schemas/address.js';
+import { unlockWalletRecord } from './unlockWallet.js';
+
+/**
+ * @typedef {Object} PersistOpts
+ * @property {string} mnemonic                      already normalized + validated
+ * @property {'bip39' | 'counterwallet-legacy'} format
+ * @property {'created' | 'imported-mnemonic' | 'imported-wif' | 'imported-xchain-backup' | 'imported-freewallet'} origin
+ * @property {boolean} passphraseEnabled
+ * @property {string} [bip39Passphrase]
+ * @property {string} password
+ * @property {string} name
+ * @property {string} accountName
+ * @property {string} [initialAddressLabel]         default 'Address #1'
+ * @property {import('../crypto/kdf.js').KdfParams} [kdfParams]
+ * @property {import('../storage/Vault.js').Vault} vault
+ * @property {import('../registry/index.js').ChainRegistry} chainRegistry
+ * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
+ * @property {string[]} activeChainIds
+ */
+
+/**
+ * @param {PersistOpts} opts
+ */
+export async function persistHdWallet({
+    mnemonic,
+    format,
+    origin,
+    passphraseEnabled,
+    bip39Passphrase = '',
+    password,
+    name,
+    accountName,
+    initialAddressLabel = 'Address #1',
+    kdfParams,
+    vault,
+    chainRegistry,
+    sdkRegistry,
+    activeChainIds,
+}) {
+    // 1. Pick KDF params; shells/tests override to skip calibration.
+    const effectiveKdfParams = kdfParams ?? calibrateKdfParams();
+
+    // 2. Encrypt the mnemonic bytes.
+    const mnemonicBytes = new TextEncoder().encode(mnemonic);
+    let encryptedSeed;
+    let storedKdfParams;
+    try {
+        const enc = await encryptWalletSeed({
+            password,
+            seed: mnemonicBytes,
+            kdfParams: effectiveKdfParams,
+        });
+        encryptedSeed = enc.encryptedSeed;
+        storedKdfParams = enc.kdfParams;
+    } finally {
+        mnemonicBytes.fill(0);
+    }
+
+    // 3. Build & persist the Wallet record.
+    const walletRecord = createWalletRecord({
+        name,
+        origin,
+        format,
+        passphraseEnabled,
+        encryptedSeed,
+        kdfParams: storedKdfParams,
+    });
+    await vault.wallets.put(walletRecord);
+
+    // 4. Build & persist the first Account.
+    const account = createAccount({
+        walletId: walletRecord.id,
+        name: accountName,
+        index: 0,
+    });
+    await vault.accounts.put(account);
+
+    // 5. Unlock the persisted wallet via the shared primitive so
+    //    address derivation uses the exact same path as a subsequent
+    //    unlock. No duplicate signer logic.
+    const signer = await unlockWalletRecord({
+        wallet: walletRecord,
+        password,
+        bip39Passphrase,
+        chainRegistry,
+        sdkRegistry,
+    });
+
+    try {
+        // 6. First address per active chain.
+        const addresses = [];
+        for (const chainId of activeChainIds) {
+            const descriptor = chainRegistry.get(chainId);
+            const addressType = descriptor.defaultAddressType;
+            const [derived] = await signer.getAddresses({
+                chainId,
+                accountIndex: 0,
+                change: 0,
+                startIndex: 0,
+                count: 1,
+                addressType,
+            });
+            const record = createAddress({
+                accountId: account.id,
+                chain: descriptor.coin,
+                network: descriptor.networkKind,
+                source: 'hd',
+                addressType,
+                derivationPath: derived.path,
+                address: derived.address,
+                publicKey: derived.publicKey,
+                label: initialAddressLabel,
+                signerId: signer.id,
+            });
+            await vault.addresses.put(record);
+            addresses.push({ chainId, address: record });
+        }
+        return { wallet: walletRecord, account, addresses };
+    } finally {
+        signer.lock();
+    }
+}

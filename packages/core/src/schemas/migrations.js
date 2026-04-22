@@ -23,7 +23,14 @@ export const walletMigrations = {};
 /** @type {MigrationMap} */
 export const accountMigrations = {};
 /** @type {MigrationMap} */
-export const addressMigrations = {};
+export const addressMigrations = {
+    // v1 → v2: §17.6. Signer routing. Existing v1 records predate
+    // address-to-signer linkage; fill signerId as null ("unresolved").
+    // Runtime reconciliation — the next time the wallet is unlocked,
+    // the shell can match addresses by (publicKey, derivationPath)
+    // against available signers and write signerId back.
+    1: (r) => ({ ...r, schemaVersion: 2, signerId: null }),
+};
 /** @type {MigrationMap} */
 export const contactMigrations = {};
 /** @type {MigrationMap} */
