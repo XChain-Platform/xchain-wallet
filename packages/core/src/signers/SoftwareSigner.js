@@ -256,6 +256,11 @@ export class SoftwareSigner extends Signer {
 
     /**
      * Sign a message for the address at `path` via `sdk.auth.signMessage`.
+     * The signature format must match the address's script type, so we
+     * route `segwitNative` / `segwitRedeemScript` opts from the BIP44
+     * purpose number in the path (44 = p2pkh, 49 = p2sh-p2wpkh,
+     * 84 = p2wpkh). p2tr (86) is not supported by the SDK's
+     * bitcoinjs-message-based signer.
      *
      * @param {import('./Signer.js').SignMessageParams} params
      * @returns {Promise<import('./Signer.js').SignMessageReturn>}
@@ -263,9 +268,18 @@ export class SoftwareSigner extends Signer {
     async signMessage({ message, chainId, path }) {
         this._assertUnlocked();
         this._assertSdkRegistry('signMessage');
+        const sigOpts = signMessageOptsFromPath(path);
         const wif = this._deriveWifFor(chainId, path);
         const sdk = this._sdkRegistry.get(chainId);
-        const signature = sdk.auth.signMessage(message, wif);
+        const result = sdk.auth.signMessage(message, wif, sigOpts);
+        // SDK's AuthUtils.signMessage returns { signature, address }; our
+        // Signer interface only exposes the signature string.
+        const signature = typeof result === 'string' ? result : result?.signature;
+        if (typeof signature !== 'string') {
+            throw new Error(
+                'SoftwareSigner.signMessage: SDK returned no signature string',
+            );
+        }
         return { signature };
     }
 
@@ -335,4 +349,18 @@ function toHex(bytes) {
     let s = '';
     for (const b of bytes) s += b.toString(16).padStart(2, '0');
     return s;
+}
+
+// Map BIP44 purpose number → SDK signMessage opts. Paths outside the
+// standard purposes (44/49/84) default to plain p2pkh signing — the
+// SDK's behavior when no opts are supplied.
+function signMessageOptsFromPath(path) {
+    const m = /^m\/(\d+)'/.exec(path);
+    const purpose = m?.[1];
+    if (purpose === '84') return { segwitNative: true };
+    if (purpose === '49') return { segwitRedeemScript: true };
+    if (purpose === '86') {
+        throw new Error('SoftwareSigner.signMessage: p2tr message signing not supported');
+    }
+    return {};
 }
