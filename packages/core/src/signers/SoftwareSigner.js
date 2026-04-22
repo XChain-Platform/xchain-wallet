@@ -14,6 +14,7 @@ import {
     isValidCounterwalletMnemonic,
 } from '../crypto/counterwallet.js';
 import { derive, hdKeyFromSeed, zeroDerivedKey } from '../crypto/hd.js';
+import { encodeWif } from '../crypto/wif.js';
 import {
     NotImplementedError,
     Signer,
@@ -43,13 +44,15 @@ export class SoftwareSigner extends Signer {
      * @param {string} opts.displayName
      * @param {import('../registry/index.js').ChainRegistry} opts.chainRegistry
      * @param {WalletEncryptionInputs} opts.walletEncryption
+     * @param {import('../sdk/index.js').SDKRegistry} [opts.sdkRegistry]   optional; required for getAddresses / signPsbt / signMessage
      */
-    constructor({ id, displayName, chainRegistry, walletEncryption }) {
+    constructor({ id, displayName, chainRegistry, walletEncryption, sdkRegistry }) {
         super();
         this._id = id;
         this._displayName = displayName;
         this._chainRegistry = chainRegistry;
         this._walletEncryption = walletEncryption;
+        this._sdkRegistry = sdkRegistry;
         /** @type {'available' | 'locked'} */
         this._status = 'locked';
         /** @type {UnlockedState | null} */
@@ -177,23 +180,128 @@ export class SoftwareSigner extends Signer {
         }
     }
 
-    async getAddresses(_params) {
+    /**
+     * Derive addresses under (chainId, accountIndex, change) for the
+     * given contiguous index range. Address encoding is delegated to
+     * `sdk.wallet.deriveAddress` via the injected SDKRegistry (§10.2).
+     *
+     * @param {import('./Signer.js').GetAddressesParams} params
+     * @returns {Promise<import('./Signer.js').DerivedAddress[]>}
+     */
+    async getAddresses({ chainId, accountIndex, change, startIndex, count, addressType }) {
         this._assertUnlocked();
-        // Needs sdk.WalletUtils.deriveAddress for address encoding per
-        // chain/addressType. Unblocked when SDKRegistry (§10.2) lands.
-        throw new NotImplementedError('SoftwareSigner.getAddresses');
+        this._assertSdkRegistry('getAddresses');
+        const descriptor = this._chainRegistry.get(chainId);
+        if (!descriptor) {
+            throw new Error(`SoftwareSigner.getAddresses: unknown chain "${chainId}"`);
+        }
+        const type = addressType ?? descriptor.defaultAddressType;
+        if (!descriptor.addressTypes.includes(type)) {
+            throw new Error(
+                `SoftwareSigner.getAddresses: addressType "${type}" not supported on ${chainId}`,
+            );
+        }
+        const sdk = this._sdkRegistry.get(chainId);
+        const root = hdKeyFromSeed(this._unlocked.seed);
+        /** @type {import('./Signer.js').DerivedAddress[]} */
+        const out = [];
+        for (let i = 0; i < count; i++) {
+            const index = startIndex + i;
+            const path = this._chainRegistry.derivationPathFor(chainId, type, accountIndex, change, index);
+            if (!path) {
+                throw new Error(
+                    `SoftwareSigner.getAddresses: no derivation path for ${chainId}/${type}`,
+                );
+            }
+            const dk = derive(root, path);
+            try {
+                const address = sdk.wallet.deriveAddress(dk.publicKeyHex, { type });
+                out.push({ index, address, publicKey: dk.publicKeyHex, path });
+            } finally {
+                zeroDerivedKey(dk);
+            }
+        }
+        return out;
     }
 
-    async signPsbt(_params) {
+    /**
+     * Sign a PSBT. All inputs are signed with the key at `signingPaths[0].path`;
+     * multi-key signing is a future enhancement (same signer, multiple paths).
+     *
+     * @param {import('./Signer.js').SignPsbtParams} params
+     * @returns {Promise<import('./Signer.js').SignPsbtReturn>}
+     */
+    async signPsbt({ psbtHex, chainId, signingPaths }) {
         this._assertUnlocked();
-        // Needs sdk.WalletUtils.signPsbt. Unblocked by SDKRegistry.
-        throw new NotImplementedError('SoftwareSigner.signPsbt');
+        this._assertSdkRegistry('signPsbt');
+        if (!Array.isArray(signingPaths) || signingPaths.length === 0) {
+            throw new Error('SoftwareSigner.signPsbt: signingPaths must be non-empty');
+        }
+        const distinctPaths = new Set(signingPaths.map((sp) => sp.path));
+        if (distinctPaths.size > 1) {
+            throw new Error(
+                'SoftwareSigner.signPsbt: multi-key signing not yet supported; all inputs must share the same path',
+            );
+        }
+        const wif = this._deriveWifFor(chainId, signingPaths[0].path);
+        try {
+            const sdk = this._sdkRegistry.get(chainId);
+            const { txHex, txid, psbtHex: signedPsbtHex } = sdk.wallet.signPsbt(psbtHex, wif);
+            return { signedPsbtHex, txHex, txid };
+        } finally {
+            // WIF is a string; no reliable zeroing in JS. Best-effort: drop
+            // the reference so GC can reclaim.
+        }
     }
 
-    async signMessage(_params) {
+    /**
+     * Sign a message for the address at `path` via `sdk.auth.signMessage`.
+     *
+     * @param {import('./Signer.js').SignMessageParams} params
+     * @returns {Promise<import('./Signer.js').SignMessageReturn>}
+     */
+    async signMessage({ message, chainId, path }) {
         this._assertUnlocked();
-        // Needs sdk.AuthUtils.signMessage. Unblocked by SDKRegistry.
-        throw new NotImplementedError('SoftwareSigner.signMessage');
+        this._assertSdkRegistry('signMessage');
+        const wif = this._deriveWifFor(chainId, path);
+        const sdk = this._sdkRegistry.get(chainId);
+        const signature = sdk.auth.signMessage(message, wif);
+        return { signature };
+    }
+
+    _assertSdkRegistry(method) {
+        if (!this._sdkRegistry) {
+            throw new Error(
+                `SoftwareSigner.${method}: requires an sdkRegistry; construct with { ..., sdkRegistry }`,
+            );
+        }
+    }
+
+    /**
+     * Derive the WIF for (chainId, path). Uses the chain descriptor's
+     * wifVersionByte. Caller is responsible for letting the WIF string
+     * fall out of scope promptly.
+     *
+     * @param {string} chainId
+     * @param {string} path
+     * @returns {string}
+     */
+    _deriveWifFor(chainId, path) {
+        const d = this._chainRegistry.get(chainId);
+        if (!d) throw new Error(`SoftwareSigner: unknown chain "${chainId}"`);
+        if (typeof path !== 'string' || !path.startsWith('m/')) {
+            throw new Error(`SoftwareSigner: invalid derivation path "${path}"`);
+        }
+        const root = hdKeyFromSeed(this._unlocked.seed);
+        const dk = derive(root, path);
+        try {
+            if (!dk.privateKey) {
+                throw new Error(`SoftwareSigner: no private key at path ${path}`);
+            }
+            return encodeWif(dk.privateKey, d.wifVersionByte, true);
+        } finally {
+            zeroDerivedKey(dk);
+        }
     }
 
     /**

@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-04-22
+
+### Added
+
+**`@xchain-wallet/core/sdk`** — per-chain SDK instance registry (§10.2)
+- `SDKRegistry` class: lazy instantiation on `get(chainId)`, instance caching, `initActive(chainIds)` for parallel startup, `invalidate(chainId)` / `invalidateAll()` with `sdk.close()` cleanup hook, `setEndpointOverrides()` for Settings-driven URL overrides
+- `SDKFactory` callback pattern — `core` stays SDK-agnostic; shells pass in whatever import path works for their target (`require('xchain-sdk')`, `await import`, or a mock for tests)
+- `XChainSDKLike` typedef documenting the minimal SDK surface the wallet depends on
+- `UnknownChainError` for unregistered chain ids
+- Smart URL join: `:443` / `:80` elided; other ports kept explicit
+
+### Changed
+
+**Chain descriptors** carry `wifVersionByte`
+- Added to `ChainDescriptor` shape and validator (`[0,255]` required)
+- Bundled values: BTC 0x80 / 0xef (mainnet / test+regtest), LTC 0xb0 / 0xef, DOGE 0x9e / 0xf1
+
+**`SoftwareSigner`** — three previously stubbed methods are now real
+- Constructor takes optional `sdkRegistry`; throws a clear error if a delegated method is called without one
+- `getAddresses({ chainId, accountIndex, change, startIndex, count, addressType? })` — derives each pubkey via BIP32, calls `sdk.wallet.deriveAddress(pubkeyHex, { type })`. Rejects address types the chain doesn't support. Derived keys zeroed after encoding
+- `signPsbt({ psbtHex, chainId, signingPaths })` — derives WIF with chain-appropriate version byte, calls `sdk.wallet.signPsbt`. Phase 1 restriction: all `signingPaths` must share one path; multi-key signing is flagged as a future enhancement
+- `signMessage({ message, chainId, path })` — derives WIF, calls `sdk.auth.signMessage`
+- All three still gate on `_assertUnlocked()` (`SignerLockedError` when locked)
+
 ## [0.4.0] - 2026-04-22
 
 ### Added

@@ -56,6 +56,7 @@ export const FEE_STRATEGY_NAMES = /** @type {const} */ ([
  * @property {FeeStrategyConfig} feeStrategy
  * @property {string[]} supportedActions
  * @property {string} uriScheme                   e.g. 'bitcoin' for BIP21
+ * @property {number} wifVersionByte              leading byte for WIF-encoded private keys on this network
  * @property {EndpointConfig} explorer
  * @property {EndpointConfig} encoder
  * @property {EndpointConfig} hub
@@ -116,6 +117,12 @@ export function validateChainDescriptor(record) {
     check(errors, 'feeStrategy', isFeeStrategy(r.feeStrategy), 'malformed');
     checkEach(errors, 'supportedActions', r.supportedActions, isNonEmptyString, 'must be a non-empty string');
     check(errors, 'uriScheme', isNonEmptyString(r.uriScheme), 'must be a non-empty string');
+    check(
+        errors,
+        'wifVersionByte',
+        Number.isInteger(r.wifVersionByte) && r.wifVersionByte >= 0 && r.wifVersionByte <= 0xff,
+        'must be an integer in [0, 255]',
+    );
     check(errors, 'explorer', isEndpoint(r.explorer), 'malformed');
     check(errors, 'encoder', isEndpoint(r.encoder), 'malformed');
     check(errors, 'hub', isEndpoint(r.hub), 'malformed');
