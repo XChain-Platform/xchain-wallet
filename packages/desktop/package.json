@@ -1,0 +1,8 @@
+{
+    "name": "@xchain-wallet/desktop",
+    "version": "0.1.0",
+    "private": true,
+    "description": "Electron desktop shell for XChain Wallet (Windows / macOS / Linux)",
+    "main": "./main/index.js",
+    "type": "module"
+}

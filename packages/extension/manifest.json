@@ -1,0 +1,15 @@
+{
+    "manifest_version": 3,
+    "name": "XChain Wallet",
+    "version": "0.1.0",
+    "description": "Self-custodial multi-chain wallet for the XChain Platform",
+    "action": {
+        "default_title": "XChain Wallet"
+    },
+    "background": {
+        "service_worker": "background.js",
+        "type": "module"
+    },
+    "permissions": [],
+    "host_permissions": []
+}

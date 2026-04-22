@@ -37,31 +37,34 @@ The design and scope of this project are captured in a complete specification ma
 
 **All four phases ship before public v1.0 launch.** Phases are release units, not tiers of completeness.
 
-## Repository layout (target, not yet in place)
+## Repository layout
+
+Base scaffolding is in place. Phase 2+ packages and tooling subdirectories are added as implementation proceeds.
 
 ```
 xchain-wallet/
-├── package.json                 # workspace root
-├── pnpm-workspace.yaml
-├── LICENSE.md / NOTICE.md       # Dankest Community License
-├── CHANGELOG.md                 # Keep a Changelog format
-├── README.md                    # this file
-├── .github/workflows/           # CI
-├── docs/                        # architecture docs, dApp-bridge spec
+├── package.json                 # workspace root                  [scaffolded]
+├── pnpm-workspace.yaml          #                                 [scaffolded]
+├── tsconfig.base.json           # shared TS config for JS+JSDoc   [scaffolded]
+├── LICENSE.md / NOTICE.md       # Dankest Community License       [in place]
+├── CHANGELOG.md                 # Keep a Changelog format         [in place]
+├── README.md                    # this file                       [in place]
+├── .github/workflows/           # CI skeleton                     [scaffolded]
+├── docs/                        # architecture docs, dApp-bridge  [scaffolded]
 ├── packages/
-│   ├── core/                    # React components, state, SDK integration
-│   ├── web/                     # browser SPA shell
-│   ├── extension/               # Chrome MV3 extension (popup + full-screen + background + content-script)
-│   ├── desktop/                 # Electron shell
-│   ├── signers-trezor/          # TrezorSigner
-│   ├── signers-ledger/          # LedgerSigner
-│   ├── bridge-spec/             # window.xchain type definitions + reference client
-│   └── test-dapp/               # reference dApp exercising the bridge
+│   ├── core/                    # React components, state, SDK    [scaffolded]
+│   ├── web/                     # browser SPA shell               [scaffolded]
+│   ├── extension/               # Chrome MV3 extension            [scaffolded]
+│   ├── desktop/                 # Electron shell                  [scaffolded]
+│   ├── bridge-spec/             # window.xchain type definitions  [scaffolded]
+│   ├── signers-trezor/          # TrezorSigner                    (Phase 2)
+│   ├── signers-ledger/          # LedgerSigner                    (Phase 2)
+│   └── test-dapp/               # reference dApp                  (pending)
 ├── tools/
-│   ├── build-reproduce/         # reproducible-build scripts
-│   ├── release/                 # signing and packaging
-│   └── regtest/                 # regtest environment for E2E
-└── e2e/                         # Playwright E2E suite
+│   ├── build-reproduce/         # reproducible-build scripts      (pending)
+│   ├── release/                 # signing and packaging           (pending)
+│   └── regtest/                 # regtest environment for E2E     (pending)
+└── e2e/                         # Playwright E2E suite            (pending)
 ```
 
 ## Parent platform
