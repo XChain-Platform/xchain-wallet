@@ -1,0 +1,9 @@
+/node_modules
+/packages/*/node_modules
+/packages/*/dist
+/packages/*/build
+/.env
+.DS_Store
+*.log
+.vscode/
+.idea/
