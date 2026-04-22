@@ -9,6 +9,10 @@ import {
     bip39MnemonicToSeed,
     isValidBip39Mnemonic,
 } from '../crypto/mnemonic.js';
+import {
+    counterwalletMnemonicToSeedBytes,
+    isValidCounterwalletMnemonic,
+} from '../crypto/counterwallet.js';
 import { derive, hdKeyFromSeed, zeroDerivedKey } from '../crypto/hd.js';
 import {
     NotImplementedError,
@@ -21,7 +25,8 @@ import {
  * @property {string} encryptedSeed                         base64 ciphertext from Wallet.encryptedSeed
  * @property {import('../crypto/kdf.js').KdfParams} kdfParams
  * @property {Uint8Array} [aad]                             extra authenticated data passed at encrypt time
- * @property {boolean} [passphraseEnabled]                  §15.6 — BIP39 passphrase required at unlock
+ * @property {boolean} [passphraseEnabled]                  §15.6 — BIP39 passphrase required at unlock (BIP39 only)
+ * @property {'bip39' | 'counterwallet-legacy'} [format]    Wallet.format; defaults to 'bip39'
  */
 
 /**
@@ -73,21 +78,34 @@ export class SoftwareSigner extends Signer {
 
     /**
      * Decrypt the wallet's seed blob, validate the resulting mnemonic,
-     * and stretch it through BIP39 with the optional 25th-word
-     * passphrase. Throws on bad password (the AEAD tag check fails) or
-     * if the plaintext isn't a valid BIP39 mnemonic.
+     * and produce a seed suitable for BIP32. Routing by
+     * `walletEncryption.format`:
+     *
+     *   - `'bip39'` (default) — PBKDF2-stretched 64-byte seed via
+     *     BIP39, with the optional 25th-word passphrase (§15.6).
+     *   - `'counterwallet-legacy'` — 16-byte raw seed via §15.2. No
+     *     passphrase concept; BIP39 passphrase must be omitted.
+     *
+     * Throws on bad password (the AEAD tag check fails) or if the
+     * plaintext is not a valid mnemonic in the declared format.
      *
      * @param {Object} opts
      * @param {string} opts.password
-     * @param {string} [opts.bip39Passphrase]   required if passphraseEnabled was set at creation
+     * @param {string} [opts.bip39Passphrase]   required iff format='bip39' and passphraseEnabled
      */
     async unlock({ password, bip39Passphrase = '' }) {
         if (typeof password !== 'string' || password.length === 0) {
             throw new Error('SoftwareSigner.unlock: password is required');
         }
         const enc = this._walletEncryption;
-        if (enc.passphraseEnabled && bip39Passphrase.length === 0) {
+        const format = enc.format ?? 'bip39';
+        if (format === 'bip39' && enc.passphraseEnabled && bip39Passphrase.length === 0) {
             throw new Error('SoftwareSigner.unlock: bip39Passphrase is required');
+        }
+        if (format === 'counterwallet-legacy' && bip39Passphrase.length > 0) {
+            throw new Error(
+                'SoftwareSigner.unlock: counterwallet-legacy wallets do not support a BIP39 passphrase',
+            );
         }
 
         const plaintext = await decryptWalletSeed({
@@ -98,12 +116,27 @@ export class SoftwareSigner extends Signer {
         });
 
         const mnemonic = new TextDecoder().decode(plaintext);
-        if (!isValidBip39Mnemonic(mnemonic)) {
+
+        let seed;
+        if (format === 'bip39') {
+            if (!isValidBip39Mnemonic(mnemonic)) {
+                plaintext.fill(0);
+                throw new Error('SoftwareSigner.unlock: decrypted blob is not a valid BIP39 mnemonic');
+            }
+            seed = await bip39MnemonicToSeed(mnemonic, bip39Passphrase);
+        } else if (format === 'counterwallet-legacy') {
+            if (!isValidCounterwalletMnemonic(mnemonic)) {
+                plaintext.fill(0);
+                throw new Error(
+                    'SoftwareSigner.unlock: decrypted blob is not a valid Counterwallet mnemonic',
+                );
+            }
+            seed = counterwalletMnemonicToSeedBytes(mnemonic);
+        } else {
             plaintext.fill(0);
-            throw new Error('SoftwareSigner.unlock: decrypted blob is not a valid BIP39 mnemonic');
+            throw new Error(`SoftwareSigner.unlock: unsupported wallet format "${format}"`);
         }
 
-        const seed = await bip39MnemonicToSeed(mnemonic, bip39Passphrase);
         this._acceptUnlockedState({
             mnemonicBytes: plaintext,
             seed,
