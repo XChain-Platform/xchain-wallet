@@ -16,4 +16,11 @@ export * as uri from './uri/index.js';
 export * as branding from './branding/index.js';
 export * as decoder from './decoder/index.js';
 export * as i18n from './i18n/index.js';
-export * as shared from './shared/index.js';
+
+// NOTE: the `shared` surface (React routes, provider, hooks) is
+// deliberately NOT re-exported here. Its entry pulls `.jsx` files
+// which Node's native ESM loader can't parse; bundlers (Vite) handle
+// the extension, but the core Node smoke scripts — which resolve this
+// module directly — would break. Consumers reach shared via its
+// subpath export instead:
+//     import { MessagingProvider } from '@xchain-wallet/core/shared/MessagingProvider.jsx';

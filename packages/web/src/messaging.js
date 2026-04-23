@@ -96,6 +96,17 @@ export function sendAsset(opts) {
 }
 
 /**
+ * Build, sign, and broadcast an ISSUE action — creates or updates a
+ * token on the XChain protocol. See popup messaging.js for prop docs.
+ *
+ * @param {object} opts
+ * @returns {Promise<any>}
+ */
+export function issueToken(opts) {
+    return /** @type {any} */ (sendMessage('action.issue', opts));
+}
+
+/**
  * Derive + persist the next unused external address for (wallet, chain).
  * Requires the user's password because the signer re-derives the HD
  * key material; the vault-level unlock doesn't cover the per-wallet

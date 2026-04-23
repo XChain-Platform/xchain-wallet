@@ -7,6 +7,151 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.50.0] - 2026-04-23
+
+Phase 2 — Steps 5-7 of 26 — pieces 2c + 2d + 2e. Closes out **Piece 2 (Token Creation Wizard, §40.1)** end-to-end. The wizard is now reachable from Home on both popup + web, all six templates are interactive with per-template field visibility + composition, and the sign stage runs through a real `action.issue` background handler backed by a new `issueToken` core flow. First Phase-2 user-visible feature shipped.
+
+### Added
+
+**Piece 2c / Step 5 — messaging + background host** (§40.1 sign stage)
+
+- `packages/core/src/flows/issueToken.js` — wraps `submitAction` with `action: 'ISSUE'`, reuses `normalizeSource` from `sendAsset`, forwards encoder + signer options through. Guard-rails reject missing opts / params / TICK / from before hitting the SDK.
+- `packages/core/src/flows/index.js` re-exports `issueToken`.
+- `packages/extension/src/background/createBackgroundHost.js` registers `action.issue` next to `action.send` + `action.sweep`. Handler injects `vault`, `chainRegistry`, `sdkRegistry` from the host context; the popup + web payloads are pass-throughs.
+- `packages/extension/src/popup/messaging.js` + `packages/web/src/messaging.js` each export `issueToken(opts)` — same signature, same target message type, matching the popup/web parity pattern the other helpers follow.
+- New smoke: `packages/core/test/issue-token.smoke.js`. Exercises the flow's guard-rails live (`flows.issueToken` throws on missing opts / params / TICK / from) and statically verifies the `action.issue` handler + both messaging helpers + the wizard's call-site.
+
+**Piece 2d / Step 6 — per-template composition**
+
+- `TEMPLATE_COMPOSERS` object in `TokenWizard.jsx` replaces the single `composeIssueParams` function. One composer per template (Meme / Utility / Community / Collectible / Subasset / Custom), each picking the subset of ISSUE v0 fields that template wants:
+    - **Meme** — one ISSUE with `MAX_SUPPLY` + `MINT_SUPPLY` (creator gets full supply) + `DECIMALS=0` + `LOCK_MAX_SUPPLY` + `LOCK_MINT`. Matches §40.1's intent atomically via a single transaction; the spec's "BATCH" description was inaccurate — the protocol's ISSUE v0 composes mint + lock in one go.
+    - **Utility** — `MAX_SUPPLY` + `MINT_SUPPLY` + optional `MAX_MINT`, no lock flags. Mintable going forward.
+    - **Community** — same shape as Utility. Dividends happen later via the DIVIDEND action on the TICK; no Phase-1 flag on ISSUE.
+    - **Collectible** — single-edition (`MAX_SUPPLY=1`, `MINT_SUPPLY=1`, `DECIMALS=0`, both locks). Image goes in `DESCRIPTION` — explorer renders linked URLs as images (the JDOG protocol example). Full FILE + BATCH path is deferred past Phase 2 because §BATCH bans FILE.
+    - **Subasset** — composer joins `parent.child` into the final `TICK`; form collects parent + child separately so the wizard can show the preview correctly.
+    - **Custom** — every ISSUE v0 field exposed (superset of the other five). The escape hatch for edge cases the templates don't cover.
+- `TEMPLATE_FIELDS` visibility map drives which inputs show on the details stage per template. Collectible hides Supply (hard-wired to 1 by composer). Subasset adds Parent asset (required, uppercased, A-Z 0-9). Community hides the lock-on-create + transfer-to toggles (Utility's shape).
+- `TEMPLATES` table: all six `interactive: true`. The "Coming in Step 6" affordance is gone — templates are live.
+- New form state: `imageUrl` (Collectible), `parentAsset` (Subasset). Both stay in state across template switches so the user can flip templates without retyping.
+- Details-stage validation tightened: top-level ticker is `[A-Za-z0-9]+` (no period — the composer joins for subassets). Subasset requires `parentAsset`. Collectible skips the positive-supply check (composer pins supply to 1).
+
+**Piece 2e / Step 7 — Home entry + App.jsx routing**
+
+- `packages/core/src/shared/routes/Home.jsx` accepts a new `onCreateToken` prop and renders a third "Create a token" action card next to Send + Receive.
+- Popup + web `App.jsx` both add `'wizard'` to the `unlockedView` sub-route union; `<TokenWizard walletId onBack>` renders when `unlockedView === 'wizard'`; Home receives `onCreateToken` bound to the sub-route setter. Identical wiring on both shells — same pattern as Send + Receive, which is why the shared-routes refactor (Piece 1) was worth doing first.
+- `packages/core/test/shared-routes.smoke.js` grows its file-existence list + App.jsx import list to include `TokenWizard`, and adds `routeMessagingCalls.TokenWizard = ['messaging.getAddressesByChain', 'messaging.issueToken']` so the wizard gets the same call-site + context-use assertions the other routes get.
+- `packages/core/test/token-wizard.smoke.js` adds a Section 9 covering the Home + App.jsx wiring (`onClick={onCreateToken}`, `'wizard'` sub-route in both shells, `<TokenWizard>` rendered).
+
+### Wiring diagram (end-to-end for §40.1)
+
+```
+Home → onClick={onCreateToken} → App.jsx setUnlockedView('wizard')
+     → <TokenWizard walletId onBack>
+        → stage: template → chain → details → preview → sign
+        → composeIssueParams(template, form)  [per-template composers]
+        → decoder.decodeAction({ action: 'ISSUE', params })  [Step 3]
+        → messaging.issueToken({ walletId, password, chainId, from, params })
+        → chrome.runtime.sendMessage / hostBridge.sendMessage → 'action.issue'
+        → createBackgroundHost → issueToken flow
+        → submitAction → SDK encode + sign + broadcast
+        → { txid } → TokenWizard.stage = 'done'
+```
+
+### Tests
+
+- 25 smokes pass (`node packages/core/test/_run-smokes.js`) — `issue-token.smoke.js` added, `shared-routes.smoke.js` + `token-wizard.smoke.js` extended.
+- Static-wiring assertions cover every link in the diagram above except the SDK broadcast (needs real `xchain-sdk` install + regtest, gated to the reproducible-build pipeline).
+
+### Scope boundary
+
+- **Collectible's FILE path is deferred.** The shortcut of putting the image URL into `DESCRIPTION` matches the protocol's JDOG example; it relies on the explorer/indexer recognizing URLs and rendering them. Full FILE-action support (IPFS-style content IDs, BATCH composition) is a Phase-3 or later feature because protocol §BATCH explicitly bans FILE inside a BATCH and the FILE-action pipeline is its own product surface.
+- **Subasset parent-ownership is not verified pre-flight.** The wizard accepts any `parentAsset` string; the protocol layer rejects a subasset-create on a parent the signer doesn't own. A future polish queries the wallet's owned-assets index + presents a picker.
+- **Auto-lock still popup-only.** The wizard inherits the shell-level auto-lock behavior from the shared-routes infrastructure.
+- **Fee estimation is pass-through.** `issueToken` forwards `fee` / `feePerKb` / `rbf` options to `submitAction` but the wizard UI doesn't expose them — creators get the SDK default. Explicit fee control lands with RBF (Pass 5 §44.4) or the Advanced Actions Form (§40.10).
+
+## [0.49.0] - 2026-04-23
+
+Phase 2 — Step 4 of 26 — piece 2b. Token Creation Wizard scaffold (§40.1). Five-stage flow (template → chain → details → preview → sign) rendered from `@xchain-wallet/core/shared/routes/TokenWizard.jsx` so popup + web + eventual desktop shells all consume the same component via `MessagingProvider`.
+
+### Added
+
+**`packages/core/src/shared/routes/TokenWizard.jsx` + `TokenWizard.module.css`**
+
+- **Template stage** — a 6-card picker (Meme / Utility / Collectible / Community / Subasset / Custom) matching §40.1. **Custom** is the only interactive template today; the other five surface a "Coming in Step 6 — use Custom for now" affordance and visually disable themselves. Dedicated per-template detail forms + composition (Meme = one ISSUE with lock flags, Collectible = FILE+ISSUE+MINT BATCH, Subasset = `PARENT.SUB` ticker, etc.) land in Step 6 (piece 2d).
+- **Chain stage** — filters to chains the wallet already has a persisted address on (the wizard needs a fee-paying address; "create on a new chain" goes through Receive first). Auto-picks the highest external HD address. Matches Send.jsx's chain-picker pattern.
+- **Details stage (Custom)** — every ISSUE v0 field exposed: ticker (A–Z 0–9 + period, auto-uppercased on input), display name (UI-only, not stored on-chain), supply, divisible toggle (→ `DECIMALS = 8 | 0`), description (on-chain, 250 char cap), max-mint-per-tx, lock-on-create toggle (sets both `LOCK_MAX_SUPPLY` + `LOCK_MINT`), transfer-ownership address.
+- **Preview stage** — runs the composed ISSUE params through the Step 3 decoder (`decoder.decodeAction({ action: 'ISSUE', params, chainId, chainRegistry })`) so the user sees the plain-English recap + warnings (permanent-lock, empty-ticker, etc.) before entering the password. Password field follows the Send review pattern.
+- **Sign stage** — calls `messaging.issueToken({ walletId, password, chainId, from, params })`. The messaging helper + background `action.issue` handler land in Step 5 (piece 2c); the sign button surfaces the "unknown message type" error cleanly until then. `InvalidPasswordError` maps to "Incorrect password." inline; other errors show the raw message.
+- **Done stage** — renders transaction id if present.
+
+**`composeIssueParams()`** — file-local helper, not exported. Maps the form state into the ACTION params shape the SDK + decoder both consume. Uppercases the ticker (belt-and-suspenders with the `<Input onChange>`), sets `MINT_SUPPLY = supply` on create so initial supply lands in the creator's wallet, expands the lock-on-create toggle into both `LOCK_MAX_SUPPLY` and `LOCK_MINT`. Step 6 will wrap per-template composers around this base.
+
+### Tests
+
+- `packages/core/test/token-wizard.smoke.js` (8 assertion groups). Covers: file existence, `TokenWizard` export, composer kept file-local, all five stages + done present, each stage-transition `setStage('next')` call-site, TEMPLATES table has all six with Custom alone interactive, preview calls `decoder.decodeAction({ action: 'ISSUE', ... })`, sign stage calls `messaging.issueToken`, ticker upper-casing, `DECIMALS` 8/0 mapping, `LOCK_MAX_SUPPLY` + `LOCK_MINT` wiring, `TRANSFER` field, `useMessaging` + `screenVariantFor` context use, CSS module class presence.
+- 24 smokes pass; the new test lands at `token-wizard.smoke.js` and auto-discovers via `_run-smokes.js`.
+
+### Not wired yet
+
+- **No Home entry + no App.jsx route.** The wizard is file-only; Home's "Create a token" card and the popup + web `unlockedView` transition land in Step 7 (piece 2e). A user running today's build can't reach the wizard through the UI — the route is ready, the entry is in the next sub-piece.
+- **Sign stage is stubbed end-to-end.** `messaging.issueToken` lands in Step 5 (piece 2c) along with the `action.issue` background handler + a core `flows/issueToken.js` SDK wrapper.
+- **Five templates are non-interactive.** Per-template details forms + BATCH composition (Collectible) + subasset parent-picker land in Step 6 (piece 2d).
+
+## [0.48.0] - 2026-04-23
+
+Phase 2 — Step 3 of 26 — piece 2a. Extends `actionDecoder.decodeAction` to cover the four ACTION kinds the Token Creation Wizard (§40.1) emits: ISSUE (all six format versions), MINT, DESTROY, BATCH. Unlocks the wizard's preview step in the next sub-piece so the user sees a plain-English recap of what they're signing before the key material is touched.
+
+### Added
+
+**`packages/core/src/decoder/actionDecoder.js`**
+
+- **ISSUE** — six format-version branches. Summaries differentiate the semantic intent rather than just echoing "ISSUE":
+    - v0 with `MAX_SUPPLY` → `"Create token TICK with max supply N on Chain"`.
+    - v0 with `TRANSFER` but no supply fields → `"Transfer ownership of TICK to ADDR on Chain"`.
+    - v0 otherwise → `"Configure token TICK on Chain"`.
+    - v1 → `"Update description of TICK on Chain"`.
+    - v2 → `"Update mint parameters of TICK on Chain"`.
+    - v3 → `"Lock TICK (max supply, minting, ...) on Chain"` when any `LOCK_*` flag is set; names the locks in human terms, not field names.
+    - v4 → `"Update callback parameters of TICK on Chain"`.
+    - v5 → `"Update allow/block list for TICK on Chain"`.
+- **MINT** — `"Mint AMOUNT TICK on Chain to DESTINATION"`; missing destination reads as `"broadcasting address"` in the details list.
+- **DESTROY** — v0 (single) produces `"Destroy AMOUNT TICK on Chain"`. v1/v2 (multi-destroy, repeating `TICK`/`AMOUNT` pairs) fall through to the generic decoder but are decorated with the irreversibility warning so the user still sees it before signing.
+- **BATCH** — recurses into the `params.COMMANDS` array (wallet-side shape; each entry `{ action, params }`) and composes child summaries into a numbered list. Details show `Step N` rows with indented sub-action details. Warnings from every nested command bubble up to the root. Empty / malformed `COMMANDS` surfaces a dedicated "review raw transaction" warning so no blind-sign is possible.
+
+**New warnings across the four kinds**
+
+- `"Locking is permanent — these properties cannot be changed after this transaction confirms."` — ISSUE with any `LOCK_*` flag (v0 or v3).
+- `"Destroying is irreversible — the tokens cannot be recovered."` — DESTROY (all versions).
+- `"Token ticker is empty."` — ISSUE / MINT / DESTROY with empty `TICK`.
+- `"Amount is not positive."` — MINT / DESTROY with `AMOUNT <= 0`.
+- `"Memo contains | or ; — the protocol will reject this transaction."` — MINT / DESTROY / ISSUE.
+
+**Private helpers** (file-local, not re-exported)
+
+- `decodeIssue(params, chainName, chainSuffix)` — dispatches by `VERSION`.
+- `decodeBatch(params, chainId, chainName, chainSuffix, chainRegistry)` — re-enters `decodeAction` for each command.
+- `collectLockFlags(params)` — maps `LOCK_*` fields to human labels; treats `''`, `'0'`, `0`, `false`, `null`, `undefined` as inactive.
+- `genericFallback(action, params, chainSuffix)` — existing catch-all, now reusable.
+
+### Tests
+
+- `packages/core/test/action-decoder.smoke.js` grows from 7 to 18 cases. New coverage: ISSUE v0 Meme-template shape (create + MAX_SUPPLY + locks), ISSUE v0 transfer-ownership-only, ISSUE v1 description-only, ISSUE v3 lock-params summary, MINT happy + broadcasting-address default + zero-amount warning, DESTROY v0 + multi-version fallback with irreversibility preserved, BATCH composed summary + Step-row details, empty-BATCH no-decoded-commands warning. SignApproval static wiring checks unchanged.
+
+### Scope boundary
+
+- Decoder output is **plain text strings**. The sign screen renders them; no HTML, no markup. Lock-flag labels are English ("max supply", "minting"), not protocol field names ("LOCK_MAX_SUPPLY") — the decoder's job is to translate protocol into human, not mirror it.
+- `COMMANDS` is the wallet-side representation. The SDK ultimately serializes a BATCH to `BATCH|0|CMD1;CMD2` per protocol §BATCH v0; the decoder runs before serialization, on the authored-but-not-yet-encoded shape. A future enhancement could parse the on-wire form too, for dApp-origin sign requests — not needed today.
+- Phase 2 sub-pieces 2b–2e (wizard scaffold, messaging, templates, Home entry) build on top of this decoder. ISSUE / MINT / DESTROY standalone forms (§40.2–§40.5, Steps 8–11) reuse it unchanged.
+- DISPENSER / DIVIDEND / AIRDROP / BROADCAST / FILE decoders land alongside their authoring forms (Batch 2 — Steps 20–24).
+
+### Smoke-runner regressions surfaced + fixed
+
+Running `node packages/core/test/_run-smokes.js` after the decoder work flushed out three pre-existing regressions that had slipped through earlier releases (pnpm wasn't available in the sandbox where those pieces were proposed, so the smoke suite never ran end-to-end). All three are static/wiring fixes — no runtime behavior changed:
+
+- `packages/core/src/index.js` no longer re-exports the `shared` namespace. The shared surface pulls `.jsx` files which Node's native ESM loader can't parse, so `import { decoder } from '@xchain-wallet/core'` broke the moment the namespace alias was followed. Consumers already reach shared via the subpath export (`@xchain-wallet/core/shared/MessagingProvider.jsx`); the namespace alias was dead weight introduced in v0.46.0.
+- `packages/core/test/popup-shell.smoke.js` — stale from v0.46.0. It iterated `popup/routes/Loading.jsx` + friends that got hoisted to shared and deleted. Replaced with assertions that the popup App.jsx pulls the 8 shared routes + wraps in `<MessagingProvider shell="popup">`.
+- `packages/core/test/sdk-bundle.smoke.js` — the "shim doesn't re-import `ws`" assertion in v0.47.0 was naive substring-matching and tripped on the JSDoc example at the top of `ws-browser.js` that cites `require('ws')` as the consumer call site. Now strips comment lines before the check.
+
 ## [0.47.0] - 2026-04-23
 
 Phase 2 Batch 1 piece 1b — real `xchain-sdk` browser-bundle pass. Makes both shell Vite builds resolve the real SDK end-to-end so every Phase-2 authoring form (ISSUE, MINT, wizard, etc.) has a working encode + sign path from day one instead of dead-ending at the dev-mock fallback. Surfaces the three CJS/Node-builtin interop issues once, not per-form.

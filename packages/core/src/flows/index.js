@@ -16,6 +16,7 @@ export {
 export { submitAction } from './submitAction.js';
 export { sendAsset, normalizeSource } from './sendAsset.js';
 export { sweepAsset } from './sweepAsset.js';
+export { issueToken } from './issueToken.js';
 export { seedSettingsForChains, ensureSettings } from './seedSettings.js';
 export { receiveAddress, NoMatchingAccountError } from './receiveAddress.js';
 export {

@@ -61,24 +61,28 @@ assert.ok(
     'messaging.js targets session.status',
 );
 
-// Popup-local routes: Locked was hoisted into @xchain-wallet/core/shared/routes
-// (see shared-routes.smoke.js). Loading/Onboarding/Home stay popup-local
-// until Pieces 3 + 5 of the shared-routes refactor land.
-for (const route of ['Loading', 'Onboarding', 'Home']) {
-    const src = readFileSync(
-        join(ext, 'src', 'popup', 'routes', `${route}.jsx`),
-        'utf8',
-    );
+// Every Phase-1 popup route (Loading / Onboarding / Locked / Create /
+// Import / Home / Receive / Send) now lives in
+// @xchain-wallet/core/shared/routes — the popup imports them from
+// there and passes `shell="popup"` through MessagingProvider. The
+// presence + wiring assertions live in shared-routes.smoke.js; the
+// popup shell's contract here is just that its App.jsx pulls the
+// shared routes + provider and its messaging.js exposes the pre-host
+// helpers the background handlers consume.
+const popupApp = readFileSync(join(ext, 'src', 'popup', 'App.jsx'), 'utf8');
+for (const route of [
+    'Loading', 'Onboarding', 'CreateWallet', 'ImportWallet',
+    'Locked', 'Home', 'Receive', 'Send',
+]) {
     assert.ok(
-        new RegExp(`export function ${route}\\b`).test(src),
-        `${route}.jsx exports ${route}`,
+        popupApp.includes(`@xchain-wallet/core/shared/routes/${route}.jsx`),
+        `popup App.jsx imports shared ${route}`,
     );
-    const css = readFileSync(
-        join(ext, 'src', 'popup', 'routes', `${route}.module.css`),
-        'utf8',
-    );
-    assert.ok(css.length > 0, `${route}.module.css non-empty`);
 }
+assert.ok(
+    popupApp.includes('MessagingProvider') && popupApp.includes('shell="popup"'),
+    'popup App.jsx wraps in <MessagingProvider shell="popup">',
+);
 
 // --- 2. Vite config ---------------------------------------------------
 

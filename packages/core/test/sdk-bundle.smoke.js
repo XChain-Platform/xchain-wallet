@@ -62,9 +62,16 @@ for (const constant of ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED']) {
 }
 // Shim must not pull Node built-ins — if it did, we'd still need the
 // polyfills to load it. The shim's whole job is to stay browser-pure.
+// Look only at non-comment lines so the JSDoc example at the top of
+// the shim (which cites `require('ws')` as the consumer call site)
+// doesn't trip the check.
+const shimCodeOnly = shim
+    .split('\n')
+    .filter((line) => !/^\s*(?:\/\/|\*|\/\*)/.test(line))
+    .join('\n');
 for (const forbidden of ["require('ws')", "require('net')", "require('tls')"]) {
     assert.ok(
-        !shim.includes(forbidden),
+        !shimCodeOnly.includes(forbidden),
         `ws-browser shim does NOT re-import ${forbidden}`,
     );
 }

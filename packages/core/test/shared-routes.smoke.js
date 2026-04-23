@@ -61,6 +61,8 @@ for (const rel of [
     'src/shared/routes/Send.module.css',
     'src/shared/routes/Receive.jsx',
     'src/shared/routes/Receive.module.css',
+    'src/shared/routes/TokenWizard.jsx',
+    'src/shared/routes/TokenWizard.module.css',
 ]) {
     assert.ok(existsSync(join(core, rel)), `shared file exists: ${rel}`);
 }
@@ -114,6 +116,10 @@ const routeMessagingCalls = {
         'messaging.getNewestAddress',
         'messaging.generateReceiveAddress',
     ],
+    TokenWizard: [
+        'messaging.getAddressesByChain',
+        'messaging.issueToken',
+    ],
 };
 for (const [route, calls] of Object.entries(routeMessagingCalls)) {
     const src = readFileSync(join(sharedRoutes, `${route}.jsx`), 'utf8');
@@ -148,7 +154,7 @@ assert.ok(
 );
 for (const route of [
     'Loading', 'Onboarding', 'CreateWallet', 'ImportWallet',
-    'Locked', 'Home', 'Receive', 'Send',
+    'Locked', 'Home', 'Receive', 'Send', 'TokenWizard',
 ]) {
     assert.ok(
         popupApp.includes(
@@ -169,7 +175,7 @@ assert.ok(
 );
 for (const route of [
     'Loading', 'Onboarding', 'CreateWallet', 'ImportWallet',
-    'Locked', 'Home', 'Receive', 'Send',
+    'Locked', 'Home', 'Receive', 'Send', 'TokenWizard',
 ]) {
     assert.ok(
         webApp.includes(

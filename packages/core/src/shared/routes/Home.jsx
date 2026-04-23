@@ -12,18 +12,19 @@ const chainRegistry = registryLib.defaultRegistry();
 /**
  * Home screen — landing view for an unlocked wallet. Header shows the
  * wallet name + Lock button; body renders a per-chain balance card
- * grid; footer exposes Send + Receive action buttons.
+ * grid; footer exposes Send / Receive / Create-a-token action buttons.
  *
  * Auto-lock is foreground-only and enabled for the popup shell only;
  * web tabs opt out today because their session lifetime already caps
  * with tab close. See `useAutoLock` for the scope limitation.
  *
  * @param {object} props
- * @param {() => void} [props.onLocked]   refresh upstream state machine
- * @param {() => void} [props.onSend]     navigate to Send sub-route
- * @param {() => void} [props.onReceive]  navigate to Receive sub-route
+ * @param {() => void} [props.onLocked]        refresh upstream state machine
+ * @param {() => void} [props.onSend]          navigate to Send sub-route
+ * @param {() => void} [props.onReceive]       navigate to Receive sub-route
+ * @param {() => void} [props.onCreateToken]   navigate to Token Wizard sub-route (§40.1)
  */
-export function Home({ onLocked, onSend, onReceive }) {
+export function Home({ onLocked, onSend, onReceive, onCreateToken }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -168,6 +169,14 @@ export function Home({ onLocked, onSend, onReceive }) {
                         disabled={!onReceive}
                     >
                         Receive
+                    </Button>
+                    <Button
+                        variant="secondary"
+                        block={!isFull}
+                        onClick={onCreateToken}
+                        disabled={!onCreateToken}
+                    >
+                        Create a token
                     </Button>
                 </div>
             </div>

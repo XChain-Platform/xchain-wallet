@@ -153,3 +153,26 @@ export function generateReceiveAddress(opts) {
 export function sendAsset(opts) {
     return /** @type {any} */ (sendMessage('action.send', opts));
 }
+
+/**
+ * Build, sign, and broadcast an ISSUE action — creates or updates a
+ * token on the XChain protocol. Fee-paid from the wallet's source
+ * address (`from`); ticker + supply + lock flags + transfer targets
+ * live in `params`. The Token Creation Wizard is the primary caller;
+ * standalone ISSUE / admin forms (§40.2 + §40.5) will use it too.
+ *
+ * @param {object} opts
+ * @param {string} opts.walletId
+ * @param {string} opts.password
+ * @param {string} opts.chainId
+ * @param {{ address: string, publicKey: string, derivationPath?: string | null, addressId?: string }} opts.from
+ * @param {Record<string, string>} opts.params        ISSUE field map
+ * @param {number} [opts.fee]
+ * @param {number} [opts.feePerKb]
+ * @param {boolean} [opts.rbf]
+ * @param {string} [opts.bip39Passphrase]
+ * @returns {Promise<any>}
+ */
+export function issueToken(opts) {
+    return /** @type {any} */ (sendMessage('action.issue', opts));
+}

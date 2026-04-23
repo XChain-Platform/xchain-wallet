@@ -24,6 +24,7 @@ import { Locked } from '@xchain-wallet/core/shared/routes/Locked.jsx';
 import { Home } from '@xchain-wallet/core/shared/routes/Home.jsx';
 import { Receive } from '@xchain-wallet/core/shared/routes/Receive.jsx';
 import { Send } from '@xchain-wallet/core/shared/routes/Send.jsx';
+import { TokenWizard } from '@xchain-wallet/core/shared/routes/TokenWizard.jsx';
 import * as messaging from './messaging.js';
 import { getSessionStatus, listWallets } from './messaging.js';
 
@@ -41,7 +42,7 @@ function AppInner() {
         /** @type {'welcome' | 'create' | 'import'} */ ('welcome'),
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'wizard'} */ ('home'),
     );
     const [activeWalletId, setActiveWalletId] = useState(
         /** @type {string | null} */ (null),
@@ -124,11 +125,20 @@ function AppInner() {
                     />
                 );
             }
+            if (unlockedView === 'wizard' && activeWalletId) {
+                return (
+                    <TokenWizard
+                        walletId={activeWalletId}
+                        onBack={() => setUnlockedView('home')}
+                    />
+                );
+            }
             return (
                 <Home
                     onLocked={refresh}
                     onSend={activeWalletId ? () => setUnlockedView('send') : undefined}
                     onReceive={activeWalletId ? () => setUnlockedView('receive') : undefined}
+                    onCreateToken={activeWalletId ? () => setUnlockedView('wizard') : undefined}
                 />
             );
         default:

@@ -23,6 +23,7 @@ const {
     receiveAddress,
     sendAsset,
     sweepAsset,
+    issueToken,
     walletBalances,
     addressBalances,
     addressHistory,
@@ -200,6 +201,10 @@ export function createBackgroundHost(deps) {
 
     host.register('action.sweep', async (req, { vault, chainRegistry, sdkRegistry }) => {
         return sweepAsset({ ...req, vault, chainRegistry, sdkRegistry });
+    });
+
+    host.register('action.issue', async (req, { vault, chainRegistry, sdkRegistry }) => {
+        return issueToken({ ...req, vault, chainRegistry, sdkRegistry });
     });
 
     // --- Reads ---------------------------------------------------------------
