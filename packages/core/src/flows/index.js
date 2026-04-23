@@ -12,3 +12,6 @@ export {
     UnknownMnemonicFormatError,
 } from './importMnemonic.js';
 export { submitAction } from './submitAction.js';
+export { sendAsset, normalizeSource } from './sendAsset.js';
+export { sweepAsset } from './sweepAsset.js';
+export { seedSettingsForChains, ensureSettings } from './seedSettings.js';

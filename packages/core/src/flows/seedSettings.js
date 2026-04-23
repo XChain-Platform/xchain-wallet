@@ -1,0 +1,80 @@
+// seedSettings — populate per-chain entries in Settings.fees and
+// Settings.ads.perChain from chain-registry defaults. Idempotent:
+// existing entries are never overwritten, so a user's customized
+// fee strategy or ADS amount survives a second invocation (e.g.,
+// activating an additional chain later, or a fresh wallet created
+// in an already-configured vault).
+//
+// Per-chain fee defaults come from the descriptor's `feeStrategy`:
+//   strategy        → descriptor.feeStrategy.defaultStrategy
+//   customSatsPerKb → null
+//   rbfByDefault    → descriptor.feeStrategy.rbfSupported
+//
+// Per-chain ADS entries start at zeroed lifetime counters; the tx/
+// trigger amounts come from the ADS_DEFAULT_* constants in the
+// settings schema.
+
+import {
+    createDefaultAdsChainState,
+    createDefaultSettings,
+} from '../schemas/settings.js';
+
+/**
+ * Return a new Settings object with fees + ads.perChain entries seeded
+ * for every chainId in `activeChainIds` that doesn't already have one.
+ *
+ * @param {import('../schemas/settings.js').Settings} settings
+ * @param {import('../registry/index.js').ChainRegistry} chainRegistry
+ * @param {string[]} activeChainIds
+ * @returns {import('../schemas/settings.js').Settings}
+ */
+export function seedSettingsForChains(settings, chainRegistry, activeChainIds) {
+    if (!settings) throw new Error('seedSettingsForChains: settings is required');
+    if (!chainRegistry) throw new Error('seedSettingsForChains: chainRegistry is required');
+    if (!Array.isArray(activeChainIds)) {
+        throw new Error('seedSettingsForChains: activeChainIds must be an array');
+    }
+
+    const fees = { ...settings.fees };
+    const adsPerChain = { ...settings.ads.perChain };
+
+    for (const chainId of activeChainIds) {
+        const descriptor = chainRegistry.get(chainId);
+        if (!descriptor) {
+            throw new Error(`seedSettingsForChains: unknown chain "${chainId}"`);
+        }
+        if (!fees[chainId]) {
+            fees[chainId] = {
+                strategy: descriptor.feeStrategy.defaultStrategy,
+                customSatsPerKb: null,
+                rbfByDefault: descriptor.feeStrategy.rbfSupported,
+            };
+        }
+        if (!adsPerChain[chainId]) {
+            adsPerChain[chainId] = createDefaultAdsChainState();
+        }
+    }
+
+    return {
+        ...settings,
+        fees,
+        ads: { ...settings.ads, perChain: adsPerChain },
+    };
+}
+
+/**
+ * Vault-aware variant: read current settings (or default if absent),
+ * seed for the active chains, write back. Returns the seeded record.
+ *
+ * @param {import('../storage/Vault.js').Vault} vault
+ * @param {import('../registry/index.js').ChainRegistry} chainRegistry
+ * @param {string[]} activeChainIds
+ * @returns {Promise<import('../schemas/settings.js').Settings>}
+ */
+export async function ensureSettings(vault, chainRegistry, activeChainIds) {
+    if (!vault) throw new Error('ensureSettings: vault is required');
+    const current = (await vault.settings.get()) ?? createDefaultSettings();
+    const seeded = seedSettingsForChains(current, chainRegistry, activeChainIds);
+    await vault.settings.put(seeded);
+    return seeded;
+}

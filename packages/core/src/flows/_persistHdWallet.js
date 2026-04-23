@@ -8,6 +8,7 @@ import { calibrateKdfParams, encryptWalletSeed } from '../crypto/index.js';
 import { createWallet as createWalletRecord } from '../schemas/wallet.js';
 import { createAccount } from '../schemas/account.js';
 import { createAddress } from '../schemas/address.js';
+import { ensureSettings } from './seedSettings.js';
 import { unlockWalletRecord } from './unlockWallet.js';
 
 /**
@@ -125,6 +126,13 @@ export async function persistHdWallet({
             await vault.addresses.put(record);
             addresses.push({ chainId, address: record });
         }
+
+        // 7. Seed per-chain Settings entries (fees + ADS) for any
+        //    active chain not already configured. Idempotent — a user's
+        //    customized fee strategy on an earlier wallet is preserved
+        //    if they create a second wallet in the same vault.
+        await ensureSettings(vault, chainRegistry, activeChainIds);
+
         return { wallet: walletRecord, account, addresses };
     } finally {
         signer.lock();
