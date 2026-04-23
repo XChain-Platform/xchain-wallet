@@ -66,6 +66,21 @@ export class ChainRegistry {
     }
 
     /**
+     * Reverse lookup: given (coin, networkKind) from an Address record,
+     * return the matching chainId — or `null` if no descriptor matches.
+     *
+     * @param {string} coin          e.g. 'bitcoin'
+     * @param {'mainnet' | 'testnet' | 'regtest'} networkKind
+     * @returns {string | null}
+     */
+    chainIdFor(coin, networkKind) {
+        for (const d of this._entries.values()) {
+            if (d.coin === coin && d.networkKind === networkKind) return d.id;
+        }
+        return null;
+    }
+
+    /**
      * Resolve the BIP-style derivation path for a (chain, addressType,
      * account, change, index) tuple. Returns null if the chain or address
      * type isn't registered.

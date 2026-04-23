@@ -2,6 +2,8 @@ export { createWallet } from './createWallet.js';
 export {
     unlockWallet,
     unlockWalletRecord,
+    withUnlocked,
+    withUnlockedRecord,
     WalletNotFoundError,
 } from './unlockWallet.js';
 export {
@@ -15,3 +17,9 @@ export { submitAction } from './submitAction.js';
 export { sendAsset, normalizeSource } from './sendAsset.js';
 export { sweepAsset } from './sweepAsset.js';
 export { seedSettingsForChains, ensureSettings } from './seedSettings.js';
+export { receiveAddress, NoMatchingAccountError } from './receiveAddress.js';
+export {
+    addressBalances,
+    addressHistory,
+    walletBalances,
+} from './balances.js';

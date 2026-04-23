@@ -112,3 +112,54 @@ export async function unlockWallet({
         sdkRegistry,
     });
 }
+
+/**
+ * Session helper: unlock a wallet, run the callback with the unlocked
+ * signer, and always lock on return (success or error). The signer is
+ * guaranteed to be locked by the time `withUnlocked` resolves or
+ * rejects — no half-unlocked state can leak.
+ *
+ * Batches multiple signing operations under one unlock — important
+ * because Argon2id KDF is ~1s per unlock on a typical device. Instead
+ * of calling `receiveAddress` three times (three KDF rounds), a shell
+ * can call `withUnlocked(opts, async (signer) => { …derive three… })`
+ * for one KDF round total.
+ *
+ * @template T
+ * @param {UnlockWalletOpts} unlockOpts
+ * @param {(signer: SoftwareSigner) => Promise<T> | T} fn
+ * @returns {Promise<T>}
+ */
+export async function withUnlocked(unlockOpts, fn) {
+    if (typeof fn !== 'function') {
+        throw new Error('withUnlocked: fn must be a function');
+    }
+    const signer = await unlockWallet(unlockOpts);
+    try {
+        return await fn(signer);
+    } finally {
+        signer.lock();
+    }
+}
+
+/**
+ * Same as `withUnlocked` but takes an already-loaded Wallet record,
+ * skipping the vault lookup. Mirror of `unlockWalletRecord` →
+ * `unlockWallet`.
+ *
+ * @template T
+ * @param {UnlockRecordOpts} unlockOpts
+ * @param {(signer: SoftwareSigner) => Promise<T> | T} fn
+ * @returns {Promise<T>}
+ */
+export async function withUnlockedRecord(unlockOpts, fn) {
+    if (typeof fn !== 'function') {
+        throw new Error('withUnlockedRecord: fn must be a function');
+    }
+    const signer = await unlockWalletRecord(unlockOpts);
+    try {
+        return await fn(signer);
+    } finally {
+        signer.lock();
+    }
+}
