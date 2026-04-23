@@ -32,6 +32,7 @@ export {
     InvalidWifError,
     WrongPasswordError,
 } from './importWif.js';
+export { importSingleWif } from './importSingleWif.js';
 export {
     exportPrivateKey,
     AddressNotFoundError,

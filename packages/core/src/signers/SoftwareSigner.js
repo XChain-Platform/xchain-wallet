@@ -5,6 +5,8 @@
 // `xchain-sdk` and stay stubbed until SDKRegistry lands (§10.2).
 
 import { decryptWalletSeed } from '../crypto/walletBlob.js';
+import { decrypt } from '../crypto/aead.js';
+import { base64ToBytes, deriveMasterKey } from '../crypto/kdf.js';
 import {
     bip39MnemonicToSeed,
     isValidBip39Mnemonic,
@@ -23,11 +25,12 @@ import {
 
 /**
  * @typedef {Object} WalletEncryptionInputs
- * @property {string} encryptedSeed                         base64 ciphertext from Wallet.encryptedSeed
+ * @property {string} encryptedSeed                         base64 ciphertext from Wallet.encryptedSeed; empty string legal when format='wif-only'
  * @property {import('../crypto/kdf.js').KdfParams} kdfParams
  * @property {Uint8Array} [aad]                             extra authenticated data passed at encrypt time
  * @property {boolean} [passphraseEnabled]                  §15.6 — BIP39 passphrase required at unlock (BIP39 only)
- * @property {'bip39' | 'counterwallet-legacy'} [format]    Wallet.format; defaults to 'bip39'
+ * @property {'bip39' | 'counterwallet-legacy' | 'wif-only'} [format]    Wallet.format; defaults to 'bip39'
+ * @property {Array<{ encryptedWif: string }>} [importedKeys]            §15.4 — wif-only unlock validates password by decrypting the first entry
  */
 
 /**
@@ -109,6 +112,41 @@ export class SoftwareSigner extends Signer {
             throw new Error(
                 'SoftwareSigner.unlock: counterwallet-legacy wallets do not support a BIP39 passphrase',
             );
+        }
+        if (format === 'wif-only' && bip39Passphrase.length > 0) {
+            throw new Error(
+                'SoftwareSigner.unlock: wif-only wallets have no mnemonic and do not accept a BIP39 passphrase',
+            );
+        }
+
+        // wif-only wallets have no seed to decrypt. Validate the password
+        // by decrypting the first importedKey entry — if it succeeds,
+        // the master key is correct; if it fails, the AEAD tag check
+        // surfaces as a wrong-password error the same way the seed
+        // decrypt would for a seed-backed wallet.
+        if (format === 'wif-only') {
+            const imported = enc.importedKeys ?? [];
+            if (imported.length === 0) {
+                throw new Error(
+                    'SoftwareSigner.unlock: wif-only wallet has no importedKeys to validate against',
+                );
+            }
+            const masterKey = deriveMasterKey(password, enc.kdfParams);
+            try {
+                const probe = await decrypt(
+                    masterKey,
+                    base64ToBytes(imported[0].encryptedWif),
+                );
+                probe.fill(0);
+            } finally {
+                masterKey.fill(0);
+            }
+            this._acceptUnlockedState({
+                mnemonicBytes: new Uint8Array(0),
+                seed: new Uint8Array(0),
+                importedWifs: new Map(),
+            });
+            return;
         }
 
         const plaintext = await decryptWalletSeed({

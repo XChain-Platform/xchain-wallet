@@ -32,6 +32,7 @@ export const WALLET_ORIGINS = /** @type {const} */ ([
 export const WALLET_FORMATS = /** @type {const} */ ([
     'bip39',
     'counterwallet-legacy',
+    'wif-only',
 ]);
 
 /**
@@ -124,9 +125,25 @@ export function validateWallet(record) {
     check(errors, 'format', isOneOf(r.format, WALLET_FORMATS), `must be one of ${WALLET_FORMATS.join(', ')}`);
     check(errors, 'passphraseEnabled', isBoolean(r.passphraseEnabled), 'must be a boolean');
     check(errors, 'encryptionAlgorithm', r.encryptionAlgorithm === 'aes-256-gcm', 'must be "aes-256-gcm"');
-    check(errors, 'encryptedSeed', isNonEmptyString(r.encryptedSeed), 'must be a non-empty string');
+    // encryptedSeed: non-empty for seed-backed wallets; empty string is
+    // legal for format='wif-only' per §15.4 (wallet has no seed, just
+    // imported private keys stored in importedKeys).
+    if (r.format === 'wif-only') {
+        check(errors, 'encryptedSeed', isString(r.encryptedSeed), 'must be a string (may be empty for wif-only)');
+    } else {
+        check(errors, 'encryptedSeed', isNonEmptyString(r.encryptedSeed), 'must be a non-empty string');
+    }
     check(errors, 'kdfParams', isKdfParams(r.kdfParams), 'malformed');
     checkEach(errors, 'importedKeys', r.importedKeys, isImportedKey, 'malformed');
+
+    // A wif-only wallet must have at least one imported key (otherwise
+    // there's literally no key material and nothing to unlock).
+    if (r.format === 'wif-only' && isArray(r.importedKeys) && r.importedKeys.length === 0) {
+        errors.push('importedKeys: wif-only wallet must have at least one entry');
+    }
+    if (r.format === 'wif-only' && r.passphraseEnabled === true) {
+        errors.push('passphraseEnabled: wif-only wallet has no mnemonic; must be false');
+    }
 
     if (r.multisig !== null && !isNull(r.multisig)) {
         const m = validateMultisigConfig(r.multisig);

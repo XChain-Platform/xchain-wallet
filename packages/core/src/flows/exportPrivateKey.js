@@ -137,15 +137,33 @@ export async function exportPrivateKey({
 
         const masterKey = deriveMasterKey(password, wallet.kdfParams);
         try {
-            try {
-                await decrypt(masterKey, base64ToBytes(wallet.encryptedSeed));
-            } catch {
-                throw new WrongPasswordError();
+            // Password probe. For seed-backed wallets we decrypt the
+            // seed blob; for wif-only wallets (no seed) we probe the
+            // target importedKey itself — if it decrypts cleanly, the
+            // password is correct, and we reuse the decrypted bytes
+            // below. Either way a wrong password surfaces as a typed
+            // WrongPasswordError instead of a bare AEAD failure.
+            let wifBytes;
+            if (wallet.format === 'wif-only') {
+                try {
+                    wifBytes = await decrypt(
+                        masterKey,
+                        base64ToBytes(entry.encryptedWif),
+                    );
+                } catch {
+                    throw new WrongPasswordError();
+                }
+            } else {
+                try {
+                    await decrypt(masterKey, base64ToBytes(wallet.encryptedSeed));
+                } catch {
+                    throw new WrongPasswordError();
+                }
+                wifBytes = await decrypt(
+                    masterKey,
+                    base64ToBytes(entry.encryptedWif),
+                );
             }
-            const wifBytes = await decrypt(
-                masterKey,
-                base64ToBytes(entry.encryptedWif),
-            );
             try {
                 const wif = new TextDecoder().decode(wifBytes);
                 return {

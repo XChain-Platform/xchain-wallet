@@ -58,6 +58,7 @@ export async function unlockWalletRecord({
             kdfParams: wallet.kdfParams,
             passphraseEnabled: wallet.passphraseEnabled,
             format: wallet.format,
+            importedKeys: wallet.importedKeys,
         },
     });
 
