@@ -8,6 +8,8 @@ import {
     getSessionStatus,
     unlockWalletLocal,
     lockWalletLocal,
+    createWalletLocal,
+    importMnemonicLocal,
 } from './hostBridge.js';
 
 export { sendMessage, getSessionStatus };
@@ -19,6 +21,35 @@ export function unlockWallet(password) {
 
 export function lockWallet() {
     return lockWalletLocal();
+}
+
+/**
+ * Create a fresh BIP39 wallet + unlock. Returns the plaintext mnemonic
+ * so the UI can display the §19.2 seed-phrase ceremony screen.
+ *
+ * @param {object} opts
+ * @param {string} opts.password
+ * @param {string} [opts.name]
+ * @param {128 | 160 | 192 | 224 | 256} [opts.strengthBits]
+ * @param {string} [opts.bip39Passphrase]
+ * @returns {Promise<{ mnemonic: string, walletName: string }>}
+ */
+export function createWallet(opts) {
+    return createWalletLocal(opts);
+}
+
+/**
+ * Import an existing mnemonic (BIP39 or Counterwallet-legacy).
+ *
+ * @param {object} opts
+ * @param {string} opts.password
+ * @param {string} opts.mnemonic
+ * @param {string} [opts.name]
+ * @param {string} [opts.bip39Passphrase]
+ * @returns {Promise<{ format: 'bip39' | 'counterwallet-legacy', walletName: string }>}
+ */
+export function importMnemonic(opts) {
+    return importMnemonicLocal(opts);
 }
 
 export function listWallets() {
@@ -38,4 +69,28 @@ export function getAddressesByChain(walletId) {
 /** @param {string} walletId @param {string} chainId */
 export function getNewestAddress(walletId, chainId) {
     return /** @type {any} */ (sendMessage('addresses.newest', { walletId, chainId }));
+}
+
+/**
+ * Build, sign, and broadcast a SEND action via the host's `action.send`
+ * handler. Pass-through to core's `sendAsset` flow — fails loudly
+ * against the dev-SDK stub until real xchain-sdk is bundled.
+ *
+ * @param {object} opts
+ * @param {string} opts.walletId
+ * @param {string} opts.password
+ * @param {string} opts.chainId
+ * @param {{ address: string, publicKey: string, derivationPath?: string | null, addressId?: string }} opts.from
+ * @param {string} opts.to
+ * @param {string} opts.asset
+ * @param {string | number} opts.amount
+ * @param {string} [opts.memo]
+ * @param {number} [opts.fee]
+ * @param {number} [opts.feePerKb]
+ * @param {boolean} [opts.rbf]
+ * @param {string} [opts.bip39Passphrase]
+ * @returns {Promise<any>}
+ */
+export function sendAsset(opts) {
+    return /** @type {any} */ (sendMessage('action.send', opts));
 }

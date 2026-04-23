@@ -7,6 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.43.0] - 2026-04-22
+
+Covers Batch 4 pieces 12 + 13 (web onboarding + web Send). Bundled because both touch `packages/web/src/messaging.js` and `packages/web/src/App.jsx`; splitting would churn the same files without shipping anything different.
+
+### Added
+
+**Piece 12 — web onboarding: create + import** (§15.3, §19.2)
+
+Closes the bootstrap gap called out in `TEST_DAPP_RUNBOOK.md` for web. Users can now create a fresh BIP39 wallet or import an existing 12/15/18/21/24-word phrase without hand-seeding IDB through DevTools.
+
+- `packages/web/src/hostBridge.js`:
+  - Replaced the throwing SDK scaffold with a clearly-flagged `createDevMockSdk` (DO NOT USE FOR MAINNET). Produces deterministic pseudo-addresses per (pubkey, addressType) so HD derivation completes during onboarding; signing / broadcast / message-signing still throw loudly. Real `xchain-sdk` bundling is a Batch 5 piece.
+  - `createWalletLocal({ password, name, strengthBits, bip39Passphrase, activeChainIds })` — fresh kdfParams, master key, blank vault → `flows.createWallet` → save meta → host live. Returns `{ mnemonic, walletName }`.
+  - `importMnemonicLocal({ password, mnemonic, name, bip39Passphrase, activeChainIds })` — same persistence path for an existing phrase (BIP39 or Counterwallet-legacy; format auto-detected).
+  - Both helpers guard idempotence (second create / import against an existing meta rejects with "a wallet already exists").
+  - `DEFAULT_ACTIVE_CHAIN_IDS` — BTC/DOGE/LTC mainnet. Users can change via Settings (later piece).
+- `packages/web/src/messaging.js` — `createWallet` + `importMnemonic` helpers.
+- `packages/web/src/routes/CreateWallet.jsx` (+ CSS) — 2-stage flow: password+confirm+name form → mnemonic display with "I've saved it" checkbox. Mnemonic is generated client-side via `cryptoLib.generateBip39Mnemonic` and **only persisted after** the user acks, via `importMnemonic` with the generated phrase — so a user who closes the tab at the display stage leaves no vault behind.
+- `packages/web/src/routes/ImportWallet.jsx` (+ CSS) — textarea for the phrase (spell-check off, lowercase, no autocomplete), word-count validation (12/15/18/21/24), password + confirm, name.
+- `packages/web/src/components/MnemonicGrid.jsx` (+ CSS) — numbered 3/4-column read-only grid. Deliberately no copy-to-clipboard button per §19 — seeds should be hand-written, not parked in clipboard history.
+- `packages/web/src/routes/Onboarding.jsx` — activated the Create + Import buttons via new `onCreate` / `onImport` props.
+- `packages/web/src/App.jsx` — added `no-wallet` sub-routing (`welcome | create | import`). Successful create/import leaves the host live; next `refresh()` transitions the app to Home without a separate unlock step.
+
+**Piece 13 — web Send form + review** (§29 authoring)
+
+- `packages/web/src/routes/Send.jsx` (+ CSS) — multi-stage authoring flow:
+  - **form**: chain picker (when the wallet has addresses on >1 chain), auto-picked source address (highest external HD index on the chain), native-ticker default (`descriptor.coin.toUpperCase()`), recipient / asset / amount / memo inputs. Client-side validation: required fields, positive amount, protocol `|` + `;` memo rejection.
+  - **review**: decoded summary (Chain / From / To / Asset / Amount / Memo) in a `<dl>` grid with an inline password input.
+  - **submitting / done / error** states — `InvalidPasswordError` surfaces as "Incorrect password."; other errors surface raw and drop back to review with the form state hydrated so the user doesn't retype.
+- `packages/web/src/messaging.js` — `sendAsset(opts)` helper targeting the host's `action.send` handler.
+- `packages/web/src/App.jsx` — added `unlocked` sub-routing (`home | send`), caches active walletId at App level so Send reuses Home's single-wallet assumption.
+- `packages/web/src/routes/Home.jsx` — activated the Send button via new `onSend` prop.
+
+### Scope boundary
+
+Real broadcast via Send is blocked by the dev-SDK stub — the flow exercises cleanly through form + review + password entry, then fails with a visible "xchain-sdk" / "not yet wired" error at the encoder step. Shipping real broadcast is a Batch 5 piece (SDK bundling).
+
+Onboarding in the **extension popup** remains a stub — the popup route set hasn't been hoisted into shared components yet. That shared-routes refactor + popup onboarding land together in a later cleanup.
+
+### Tests
+
+- `packages/core/test/web-onboarding.smoke.js` — static wiring (App sub-routes, CreateWallet generates + persists via `importMnemonic`, ImportWallet's word-count validation, dev-SDK stub flagged) plus behavioural round-trips: real create → mnemonic returned + vault persisted + session=unlocked + `wallet.list` returns the seeded wallet + lock/unlock round-trip proves kdfParams persisted + idempotence guard rejects a second create; reset; import with a fresh BIP39 phrase + idempotence guard.
+- `packages/core/test/web-send.smoke.js` — static wiring (stage coverage, validation rules, App/Home wiring) + end-to-end `action.send` round-trip against the dev-SDK stub: vault seeded, real source address resolved from the persisted addresses-by-chain result, `sendAsset` called, error surfaced as a structured rejection matching the expected "xchain-sdk / not yet wired / encoder" message.
+
 ## [0.42.0] - 2026-04-22
 
 ### Added

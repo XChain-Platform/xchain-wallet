@@ -36,20 +36,50 @@ import { WebMetaBackend } from './storage/WebMetaBackend.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
-// Stub SDK factory — the real SDK wiring for the web shell lands
-// alongside the extension's SDK integration in a later piece.
-const scaffoldSdkFactory = () => ({
+// Dev-mode SDK stub — DO NOT USE FOR MAINNET.
+//
+// The real XChain SDK (a bundled CJS package with bitcoinjs-lib,
+// axios, ws, etc.) wires into the web + extension shells in a
+// dedicated piece. Until then `deriveAddress` is the only call that
+// has to succeed for the create / import onboarding flows to produce
+// a persisted wallet record — signing and broadcast legitimately
+// can't be fulfilled without the real SDK, so they throw loudly.
+//
+// Pseudo-addresses derived here are deterministic per (pubkey, type)
+// but are NOT valid on-chain. A release candidate replaces this with
+// `adaptXChainSDK(XChainSDK)`; until then the wallet will fail gracefully
+// on Send / broadcast even after onboarding completes.
+const createDevMockSdk = () => ({
     wallet: {
-        deriveAddress() { throw new Error('SDK not yet wired'); },
-        signPsbt() { throw new Error('SDK not yet wired'); },
-        validateAddress() {
-            return { valid: false, type: null, network: null, error: 'SDK not wired' };
+        /**
+         * @param {string} publicKeyHex
+         * @param {{ type?: string }} [opts]
+         */
+        deriveAddress(publicKeyHex, opts) {
+            const type = opts?.type ?? 'p2wpkh';
+            const prefix = {
+                p2pkh: '1devmock',
+                'p2sh-p2wpkh': '3devmock',
+                p2wpkh: 'bc1qdevmock',
+                p2tr: 'bc1pdevmock',
+            }[type] ?? `${type}:`;
+            const tail = String(publicKeyHex || '').slice(0, 24);
+            return `${prefix}${tail}`.toLowerCase();
         },
-        broadcastTx() { return Promise.reject(new Error('SDK not yet wired')); },
-        importWIF() { throw new Error('SDK not yet wired'); },
+        signPsbt() { throw new Error('Dev SDK stub: signing requires the real xchain-sdk'); },
+        validateAddress(addr) {
+            return {
+                valid: typeof addr === 'string' && addr.length > 0,
+                type: null,
+                network: null,
+                error: null,
+            };
+        },
+        broadcastTx() { return Promise.reject(new Error('Dev SDK stub: broadcast requires the real xchain-sdk')); },
+        importWIF() { throw new Error('Dev SDK stub: WIF import requires the real xchain-sdk'); },
     },
     auth: {
-        signMessage() { throw new Error('SDK not yet wired'); },
+        signMessage() { throw new Error('Dev SDK stub: message signing requires the real xchain-sdk'); },
         verifyMessage() { return false; },
         generateChallenge() { return ''; },
     },
@@ -57,8 +87,15 @@ const scaffoldSdkFactory = () => ({
 
 const sdkRegistry = new sdkLib.SDKRegistry({
     chainRegistry,
-    sdkFactory: scaffoldSdkFactory,
+    sdkFactory: createDevMockSdk,
 });
+
+/** Default active chains for onboarding. Users can change later via Settings. */
+export const DEFAULT_ACTIVE_CHAIN_IDS = [
+    'bitcoin-mainnet',
+    'dogecoin-mainnet',
+    'litecoin-mainnet',
+];
 
 let host = null;
 let vault = null;
@@ -93,6 +130,127 @@ export class NoVaultError extends Error {
         super('No wallet exists to unlock.');
         this.name = 'NoVaultError';
     }
+}
+
+/**
+ * Create a fresh BIP39 wallet. Generates kdfParams, derives the master
+ * key from `password`, opens a blank Vault, runs the core `createWallet`
+ * flow, persists kdfParams to the meta slot, and leaves the host live
+ * so the app transitions to `unlocked` on the next `getSessionStatus`.
+ *
+ * @param {{ password: string, name?: string, strengthBits?: 128 | 160 | 192 | 224 | 256, bip39Passphrase?: string, activeChainIds?: string[] }} req
+ * @returns {Promise<{ mnemonic: string, walletName: string }>}
+ */
+export async function createWalletLocal(req) {
+    const password = req?.password;
+    if (typeof password !== 'string' || password.length === 0) {
+        throw new Error('wallet.create: password is required');
+    }
+    const {
+        name = 'Main Wallet',
+        strengthBits = 128,
+        bip39Passphrase = '',
+        activeChainIds = DEFAULT_ACTIVE_CHAIN_IDS,
+    } = req;
+
+    const meta = new WebMetaBackend();
+    if (await meta.load()) {
+        throw new Error('wallet.create: a wallet already exists — import or reset first');
+    }
+
+    const kdfParams = cryptoLib.makeFreshKdfParams();
+    const masterKey = cryptoLib.deriveMasterKey(password, kdfParams);
+    try {
+        const storage = new IndexedDBStorageBackend();
+        const v = new storageLib.Vault({ backend: storage, masterKey });
+        await v.open();  // blank document
+        const flowsNs = await getFlows();
+        const result = await flowsNs.createWallet({
+            password,
+            vault: v,
+            chainRegistry,
+            sdkRegistry,
+            activeChainIds,
+            name,
+            strengthBits,
+            bip39Passphrase,
+            kdfParams,
+        });
+        await v.save();
+        vault = v;
+        host = createBackgroundHost({ vault, chainRegistry, sdkRegistry });
+        await meta.save({ kdfParams });
+        return { mnemonic: result.mnemonic, walletName: result.wallet.name };
+    } finally {
+        masterKey.fill(0);
+    }
+}
+
+/**
+ * Import a pre-existing mnemonic (BIP39 12/24-word or Counterwallet
+ * legacy 12-word). Same persistence path as `createWalletLocal` — fresh
+ * kdfParams, open vault, run the core `importMnemonic` flow, save meta.
+ *
+ * @param {{ password: string, mnemonic: string, name?: string, bip39Passphrase?: string, activeChainIds?: string[] }} req
+ * @returns {Promise<{ format: 'bip39' | 'counterwallet-legacy', walletName: string }>}
+ */
+export async function importMnemonicLocal(req) {
+    const password = req?.password;
+    const mnemonic = req?.mnemonic;
+    if (typeof password !== 'string' || password.length === 0) {
+        throw new Error('wallet.import: password is required');
+    }
+    if (typeof mnemonic !== 'string' || mnemonic.trim().length === 0) {
+        throw new Error('wallet.import: mnemonic is required');
+    }
+    const {
+        name = 'Imported Wallet',
+        bip39Passphrase = '',
+        activeChainIds = DEFAULT_ACTIVE_CHAIN_IDS,
+    } = req;
+
+    const meta = new WebMetaBackend();
+    if (await meta.load()) {
+        throw new Error('wallet.import: a wallet already exists — unlock or reset first');
+    }
+
+    const kdfParams = cryptoLib.makeFreshKdfParams();
+    const masterKey = cryptoLib.deriveMasterKey(password, kdfParams);
+    try {
+        const storage = new IndexedDBStorageBackend();
+        const v = new storageLib.Vault({ backend: storage, masterKey });
+        await v.open();
+        const flowsNs = await getFlows();
+        const result = await flowsNs.importMnemonic({
+            password,
+            mnemonic,
+            vault: v,
+            chainRegistry,
+            sdkRegistry,
+            activeChainIds,
+            name,
+            bip39Passphrase,
+            kdfParams,
+        });
+        await v.save();
+        vault = v;
+        host = createBackgroundHost({ vault, chainRegistry, sdkRegistry });
+        await meta.save({ kdfParams });
+        return { format: result.format, walletName: result.wallet.name };
+    } finally {
+        masterKey.fill(0);
+    }
+}
+
+/** Lazy-load the flows namespace so tests that don't touch onboarding
+ * don't pay the cost of pulling every flow + BIP39 wordlist at module
+ * init. */
+let _flowsCache = null;
+async function getFlows() {
+    if (_flowsCache) return _flowsCache;
+    const mod = await import('@xchain-wallet/core');
+    _flowsCache = mod.flows;
+    return _flowsCache;
 }
 
 /**

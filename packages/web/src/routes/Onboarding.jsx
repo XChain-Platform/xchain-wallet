@@ -4,15 +4,19 @@ import { ExtensionBanner } from '../components/ExtensionBanner.jsx';
 import styles from './Onboarding.module.css';
 
 /**
- * Stub onboarding screen — the real create / import flows ship in
- * Batch 4 piece 12. This view exists so piece 11's state machine has
- * something to render when IndexedDB has no vault.
+ * Welcome screen — the entry point for users with no wallet yet.
+ * Dispatches to `CreateWallet` or `ImportWallet` via the parent App's
+ * onboarding sub-route state (see packages/web/src/App.jsx).
  *
  * The extension-detection banner at the top is real — it fires
  * whenever `window.xchain` is injected, offering the user a pointer
  * to their extension wallet.
+ *
+ * @param {object} props
+ * @param {() => void} [props.onCreate]  navigate to create sub-route
+ * @param {() => void} [props.onImport]  navigate to import sub-route
  */
-export function Onboarding() {
+export function Onboarding({ onCreate, onImport }) {
     return (
         <>
             <ExtensionBanner />
@@ -27,15 +31,22 @@ export function Onboarding() {
                     <p className={styles.tagline}>{branding.TAGLINE}</p>
                 </div>
                 <div className={styles.actions}>
-                    <Button variant="primary" block disabled>
+                    <Button
+                        variant="primary"
+                        block
+                        onClick={onCreate}
+                        disabled={!onCreate}
+                    >
                         Create a new wallet
                     </Button>
-                    <Button variant="secondary" block disabled>
+                    <Button
+                        variant="secondary"
+                        block
+                        onClick={onImport}
+                        disabled={!onImport}
+                    >
                         I already have a wallet
                     </Button>
-                    <p className={styles.note}>
-                        Create / import flows ship in piece 12.
-                    </p>
                 </div>
             </Screen>
         </>

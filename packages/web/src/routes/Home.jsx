@@ -18,8 +18,9 @@ const chainRegistry = registryLib.defaultRegistry();
  *
  * @param {object} props
  * @param {() => void} [props.onLocked]
+ * @param {() => void} [props.onSend]  navigate to the Send sub-route
  */
-export function Home({ onLocked }) {
+export function Home({ onLocked, onSend }) {
     const [wallets, setWallets] = useState(/** @type {any[] | null} */ (null));
     const [activeWalletId, setActiveWalletId] = useState(
         /** @type {string | null} */ (null),
@@ -144,7 +145,11 @@ export function Home({ onLocked }) {
                 ) : null}
 
                 <div className={styles.actions}>
-                    <Button variant="primary" disabled>
+                    <Button
+                        variant="primary"
+                        onClick={onSend}
+                        disabled={!onSend}
+                    >
                         Send
                     </Button>
                     <Button variant="secondary" disabled>
@@ -152,8 +157,7 @@ export function Home({ onLocked }) {
                     </Button>
                 </div>
                 <p className={styles.note}>
-                    Send + Receive ship in pieces 13 (send) and a later
-                    shared-routes cleanup.
+                    Receive ships in a later shared-routes cleanup.
                 </p>
             </div>
         </Screen>
