@@ -28,6 +28,11 @@ const {
     destroyAsset,
     broadcastAction,
     dispenserAction,
+    dispensersForSource,
+    dispensersForAddress,
+    dispensersForToken,
+    dispenserByActionIndex,
+    dispensesFor,
     registerSigner,
     listSignersForWallet,
     unregisterSigner,
@@ -229,6 +234,30 @@ export function createBackgroundHost(deps) {
 
     host.register('action.dispenser', async (req, { vault, chainRegistry, sdkRegistry }) => {
         return dispenserAction({ ...req, vault, chainRegistry, sdkRegistry });
+    });
+
+    // Dispenser discovery + detail — read-only explorer passthroughs
+    // behind the background so the popup / web / desktop renderers
+    // don't need to know about sdkRegistry directly.
+
+    host.register('dispensers.forSource', async (req, { sdkRegistry }) => {
+        return dispensersForSource({ ...req, sdkRegistry });
+    });
+
+    host.register('dispensers.forAddress', async (req, { sdkRegistry }) => {
+        return dispensersForAddress({ ...req, sdkRegistry });
+    });
+
+    host.register('dispensers.forToken', async (req, { sdkRegistry }) => {
+        return dispensersForToken({ ...req, sdkRegistry });
+    });
+
+    host.register('dispensers.byActionIndex', async (req, { sdkRegistry }) => {
+        return dispenserByActionIndex({ ...req, sdkRegistry });
+    });
+
+    host.register('dispenses.query', async (req, { sdkRegistry }) => {
+        return dispensesFor({ ...req, sdkRegistry });
     });
 
     // --- Signer registry -----------------------------------------------------

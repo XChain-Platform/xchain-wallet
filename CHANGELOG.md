@@ -7,6 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.61.0] - 2026-04-23
+
+Phase 2 — Step 22a of 26 — piece 7b part 1. Owner-facing half of Dispensers (§40.7.1 / §40.7.2): "My dispensers" list view + dispenser detail page + cancel action. Plugs into Step 21's v1 cancel lane so users can now author → review → cancel a dispenser end-to-end. The buyer-facing half (browse / buy) lands as Step 22b.
+
+### Added
+
+**Core flows** (`packages/core/src/flows/dispenserQueries.js`)
+
+- `dispensersForSource(sdkRegistry, chainId, address, opts?)` — returns the dispensers an address opened. Drives "My dispensers".
+- `dispensersForAddress`, `dispensersForToken` — explorer passthroughs for the source-or-destination lane and the token-filter lane (the token lane is what Step 22b's buyer explorer will consume).
+- `dispenserByActionIndex(chainId, actionIndex)` — single-dispenser fetch via `sdk.getAction`.
+- `dispensesFor({ query, type })` — list dispense events; covers `source` / `address` / `destination` / `token` / `block` types.
+- All five re-exported from `@xchain-wallet/core` via `flows/index.js`.
+
+**Background handlers** (`packages/extension/src/background/createBackgroundHost.js`)
+
+- `dispensers.forSource`, `dispensers.forAddress`, `dispensers.forToken`, `dispensers.byActionIndex`, `dispenses.query` — thin read-only passthroughs; no vault involvement.
+
+**Shell messaging helpers**
+
+- `getDispensersForSource / forAddress / forToken`, `getDispenserByActionIndex`, `getDispenses` in `popup/messaging.js`, `web/messaging.js`, `desktop/renderer/messaging.js`.
+
+**Shared form routes**
+
+- `packages/core/src/shared/routes/DispensersList.jsx` — loads each chain's HD addresses in parallel, fans out one `getDispensersForSource` per address, merges + dedupes by `action_index`, sorts newest-block-first. Per-chain error surfaces inline so one chain's SDK outage doesn't block the others. Empty state wording calls out the no-addresses / no-dispensers cases. Click a row → host-provided `onOpenDispenser(chainId, actionIndex)` navigates to detail. Reuses `ActionsMenu.module.css` for list styling.
+- `packages/core/src/shared/routes/DispenserDetail.jsx` — loads the dispenser action via `dispensers.byActionIndex` + wallet addresses via `addresses.byChain` in parallel; detects ownership by matching the dispenser's source against the wallet's addresses on the chain. Static metadata rows (rate, creator, dispenser address, status, block, memo, action index) plus a best-effort recent-dispenses list via `dispenses.query`. For owners, a "Cancel dispenser" button opens a confirmation stage that composes `{ VERSION: '1', DISPENSER_ACTION_INDEX }` and submits via `messaging.dispenserAction`. Danger-variant sign button, wrong-password re-prompt, 1-hour-close-window advisory. Non-owners see the read-only view.
+
+**ActionsMenu + App routing**
+
+- "My dispensers" entry added to `ActionsMenu` in all three shells (popup / web / desktop). Entry sits between "Create dispenser" and "Pair hardware signer".
+- Each `App.jsx` tracks `'dispensers-list'` + `'dispenser-detail'` sub-routes and a `dispenserRef = { chainId, actionIndex }` state that carries context through the list → detail transition. Detail's back button returns to the list (not Actions), so users can pick a different dispenser without two hops.
+
+### Smoke
+
+- `packages/core/test/dispensers-list.smoke.js` — new.
+  - File layout + single-export shape for both shared routes.
+  - List's messaging wiring (`getDispensersForSource` per address), dedupe-by-action-index, newest-block-first sort, empty / error states.
+  - Detail's load sequence (dispenser fetch + address fetch in parallel), owner-detection state, recent-dispenses fetch, cancel composer (`VERSION: '1'`, DISPENSER_ACTION_INDEX from props), danger-variant sign button, close-window advisory, wrong-password handling.
+  - Flow guards (sdkRegistry / chainId / address / actionIndex / type required).
+  - Positive-path test: `dispensersForSource` invokes `sdk.getDispensers(address, 'source', opts)` with expected args against a fake SDK.
+  - Five background handlers registered; all three shells export the five messaging helpers.
+  - ActionsMenu "My dispensers" entry + App.jsx `'dispensers-list'` / `'dispenser-detail'` sub-routes + `setDispenserRef({ chainId, actionIndex })` nav transition in popup / web / desktop.
+
+40/40 smokes green.
+
+### Known deferrals
+
+- **Live escrow / remaining fills / dispense count** — `xchain-explorer/src/db.js getDispensers()` carries a TODO to surface these once the indexer fills in dispenser state. The detail page calls this out to the user ("Remaining escrow and dispense count aren't published by the indexer yet").
+- **Edit (v2) surface** — the v2 cancel/edit lanes are supported in the core flow + decoder (Step 21), and the detail page now surfaces cancel. Edit (refill escrow / update lists / change expiration) waits for a follow-up — probably a separate sub-step once the list-management surface (§40.13 territory) lands.
+- **Buyer explorer + "Buy one fill"** — Step 22b.
+- **Reputation** — §40.7.2 shows creator reputation stars; no reputation data source exists in the indexer / hub yet.
+
 ## [0.60.0] - 2026-04-23
 
 Phase 2 — Step 21 of 26 — piece 7a. DISPENSER authoring form (§40.7.1). First half of the Dispensers feature — creates a vending machine that sells the user's token for the native coin (primary lane) or a FIAT-priced amount (advanced). The discovery / explorer surface (§40.7.2) lands in Step 22; cancel + edit land alongside a dispenser-detail page in a later step.

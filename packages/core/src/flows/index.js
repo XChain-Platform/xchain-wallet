@@ -22,6 +22,13 @@ export { destroyAsset } from './destroyAsset.js';
 export { broadcastAction } from './broadcastAction.js';
 export { dispenserAction } from './dispenserAction.js';
 export {
+    dispensersForSource,
+    dispensersForAddress,
+    dispensersForToken,
+    dispenserByActionIndex,
+    dispensesFor,
+} from './dispenserQueries.js';
+export {
     registerSigner,
     listSignersForWallet,
     unregisterSigner,

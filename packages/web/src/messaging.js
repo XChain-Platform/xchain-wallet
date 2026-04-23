@@ -150,6 +150,31 @@ export function dispenserAction(opts) {
     return /** @type {any} */ (sendMessage('action.dispenser', opts));
 }
 
+/** @param {object} req */
+export function getDispensersForSource(req) {
+    return /** @type {any} */ (sendMessage('dispensers.forSource', req));
+}
+
+/** @param {object} req */
+export function getDispensersForAddress(req) {
+    return /** @type {any} */ (sendMessage('dispensers.forAddress', req));
+}
+
+/** @param {object} req */
+export function getDispensersForToken(req) {
+    return /** @type {any} */ (sendMessage('dispensers.forToken', req));
+}
+
+/** @param {object} req */
+export function getDispenserByActionIndex(req) {
+    return /** @type {any} */ (sendMessage('dispensers.byActionIndex', req));
+}
+
+/** @param {object} req */
+export function getDispenses(req) {
+    return /** @type {any} */ (sendMessage('dispenses.query', req));
+}
+
 /**
  * Persist a paired hardware signer (§17.6 / §18.3). See popup
  * messaging.js for prop docs.

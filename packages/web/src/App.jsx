@@ -36,6 +36,8 @@ import { DestroyForm } from '@xchain-wallet/core/shared/routes/DestroyForm.jsx';
 import { TokenAdminForm } from '@xchain-wallet/core/shared/routes/TokenAdminForm.jsx';
 import { BroadcastForm } from '@xchain-wallet/core/shared/routes/BroadcastForm.jsx';
 import { DispenserForm } from '@xchain-wallet/core/shared/routes/DispenserForm.jsx';
+import { DispensersList } from '@xchain-wallet/core/shared/routes/DispensersList.jsx';
+import { DispenserDetail } from '@xchain-wallet/core/shared/routes/DispenserDetail.jsx';
 import { PairSignerForm } from '@xchain-wallet/core/shared/routes/PairSignerForm.jsx';
 import { pairTrezorSigner } from './signers/trezorFactory.js';
 import { pairLedgerSigner } from './signers/ledgerFactory.js';
@@ -58,10 +60,13 @@ function AppInner() {
         /** @type {'welcome' | 'create' | 'import'} */ ('welcome'),
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'pair-signer'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'pair-signer'} */ ('home'),
     );
     const [activeWalletId, setActiveWalletId] = useState(
         /** @type {string | null} */ (null),
+    );
+    const [dispenserRef, setDispenserRef] = useState(
+        /** @type {{ chainId: string, actionIndex: string } | null} */ (null),
     );
 
     const refresh = useCallback(() => {
@@ -203,6 +208,28 @@ function AppInner() {
                     />
                 );
             }
+            if (unlockedView === 'dispensers-list' && activeWalletId) {
+                return (
+                    <DispensersList
+                        walletId={activeWalletId}
+                        onOpenDispenser={(chainId, actionIndex) => {
+                            setDispenserRef({ chainId, actionIndex });
+                            setUnlockedView('dispenser-detail');
+                        }}
+                        onBack={() => setUnlockedView('actions')}
+                    />
+                );
+            }
+            if (unlockedView === 'dispenser-detail' && activeWalletId && dispenserRef) {
+                return (
+                    <DispenserDetail
+                        walletId={activeWalletId}
+                        chainId={dispenserRef.chainId}
+                        actionIndex={dispenserRef.actionIndex}
+                        onBack={() => setUnlockedView('dispensers-list')}
+                    />
+                );
+            }
             if (unlockedView === 'pair-signer' && activeWalletId) {
                 return (
                     <PairSignerForm
@@ -226,6 +253,7 @@ function AppInner() {
                             onTransferOwnership: () => setUnlockedView('transfer'),
                             onBroadcast: () => setUnlockedView('broadcast'),
                             onCreateDispenser: () => setUnlockedView('dispenser'),
+                            onMyDispensers: () => setUnlockedView('dispensers-list'),
                             onPairSigner: () => setUnlockedView('pair-signer'),
                         })}
                         onBack={() => setUnlockedView('home')}
@@ -256,6 +284,7 @@ function buildActionEntries({
     onLock, onUpdateDescription, onTransferOwnership,
     onBroadcast,
     onCreateDispenser,
+    onMyDispensers,
     onPairSigner,
 }) {
     return [
@@ -306,6 +335,12 @@ function buildActionEntries({
             label: 'Create dispenser',
             description: 'Open a vending machine that sells your token for coin or FIAT (§40.7.1).',
             onSelect: onCreateDispenser,
+        },
+        {
+            id: 'dispensers-list',
+            label: 'My dispensers',
+            description: 'Manage dispensers you have opened — view + cancel (§40.7.1).',
+            onSelect: onMyDispensers,
         },
         {
             id: 'pair-signer',

@@ -264,6 +264,55 @@ export function dispenserAction(opts) {
 }
 
 /**
+ * List dispensers the address opened ("My dispensers"). Read-only
+ * passthrough to `explorer.getDispensers(address, 'source')`.
+ *
+ * @param {{ chainId: string, address: string, opts?: object }} req
+ * @returns {Promise<any>}
+ */
+export function getDispensersForSource(req) {
+    return /** @type {any} */ (sendMessage('dispensers.forSource', req));
+}
+
+/**
+ * List dispensers where the address is either source OR dispenser
+ * address.
+ *
+ * @param {{ chainId: string, address: string, opts?: object }} req
+ */
+export function getDispensersForAddress(req) {
+    return /** @type {any} */ (sendMessage('dispensers.forAddress', req));
+}
+
+/**
+ * List dispensers filtered by token ticker. Used by the buyer-facing
+ * explorer (Step 22b).
+ *
+ * @param {{ chainId: string, token: string, opts?: object }} req
+ */
+export function getDispensersForToken(req) {
+    return /** @type {any} */ (sendMessage('dispensers.forToken', req));
+}
+
+/**
+ * Fetch a single dispenser by action index. Used by the detail page.
+ *
+ * @param {{ chainId: string, actionIndex: string }} req
+ */
+export function getDispenserByActionIndex(req) {
+    return /** @type {any} */ (sendMessage('dispensers.byActionIndex', req));
+}
+
+/**
+ * List dispense events (fills) by type.
+ *
+ * @param {{ chainId: string, query: string, type: 'address' | 'source' | 'destination' | 'token' | 'block', opts?: object }} req
+ */
+export function getDispenses(req) {
+    return /** @type {any} */ (sendMessage('dispenses.query', req));
+}
+
+/**
  * Persist a paired hardware signer (§17.6 / §18.3). The caller runs
  * `pairTrezorSigner` (or the Ledger equivalent) in the renderer,
  * obtains the `pairingInfo` payload, and forwards it here. Idempotent
