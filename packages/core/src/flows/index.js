@@ -38,6 +38,12 @@ export {
     NoKeyForAddressError,
     ImportedKeyMissingError,
 } from './exportPrivateKey.js';
+export {
+    exportBackupFile,
+    importBackupFile,
+    BackupConflictError,
+    BACKUP_PAYLOAD_VERSION,
+} from './backupFile.js';
 export { signMessageFlow, signPsbtFlow } from './signFlows.js';
 export { createDemoWallet } from './createDemoWallet.js';
 export {
