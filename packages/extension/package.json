@@ -5,7 +5,14 @@
     "description": "Chrome MV3 extension shell for XChain Wallet — popup, full-screen, background service worker, content script, injected provider",
     "main": "./src/index.js",
     "type": "module",
+    "scripts": {
+        "build": "vite build",
+        "dev": "vite build --watch --mode development"
+    },
     "dependencies": {
         "@xchain-wallet/core": "workspace:*"
+    },
+    "devDependencies": {
+        "vite": "^5.4.0"
     }
 }

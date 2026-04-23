@@ -25,6 +25,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Build
+        run: pnpm -r --if-present build
+
       # Future steps (enable as packages define them):
       # - name: Typecheck
       #   run: pnpm -r --if-present typecheck
@@ -32,8 +35,6 @@ jobs:
       #   run: pnpm -r --if-present lint
       # - name: Test
       #   run: pnpm -r --if-present test
-      # - name: Build
-      #   run: pnpm -r --if-present build
 
   audit:
     name: pnpm audit (prod)

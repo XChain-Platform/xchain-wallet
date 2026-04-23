@@ -5,7 +5,15 @@
     "description": "Browser web-app shell for XChain Wallet",
     "main": "./src/index.js",
     "type": "module",
+    "scripts": {
+        "build": "vite build",
+        "dev": "vite",
+        "preview": "vite preview"
+    },
     "dependencies": {
         "@xchain-wallet/core": "workspace:*"
+    },
+    "devDependencies": {
+        "vite": "^5.4.0"
     }
 }

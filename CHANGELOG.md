@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.33.0] - 2026-04-22
+
+### Added
+
+**Vite build scaffolding for `extension` and `web` packages** (§9.5 / §51.1) — infrastructure only, no UI framework decisions yet
+
+- `packages/extension/vite.config.js` — multi-entry rollup with three fixed outputs (`background.js`, `content/contentScript.js`, `inject/xchainProvider.js`) matching the paths `manifest.json` already references. Custom `closeBundle` plugin copies `manifest.json` from the package root into `dist/` at build close (keeps the canonical manifest location stable while the UI session adds popup / full-screen HTML). Shared `@xchain-wallet/core` split into its own chunk so the three entries don't duplicate it
+- `packages/extension/src/background.js` — MV3 service-worker entry. Builds a `ChainRegistry`, `SDKRegistry` (with a scaffold `throw`-on-use SDK factory — real SDK wires in at build time alongside the popup UI), and lazy-initialises a Vault + MessageHost against `ChromeStorageBackend` + `ChromeSessionBackend`. `attachChromeRuntime(host)` fires once a master key exists in session storage; the popup's unlock flow is responsible for triggering re-init
+- `packages/web/vite.config.js` — minimal SPA config. Root `index.html` + `src/main.js` entry that imports `@xchain-wallet/core` and renders a scaffold marker into `#app`, proving the bundler reaches workspace deps. Dev server on port 5173
+- `vite@^5.4.0` added as a dev dependency on both packages; build + dev scripts wired (`pnpm -C packages/extension build`, `pnpm -C packages/web build`, `pnpm -C packages/web dev`)
+- CI build step enabled: the `install` job now runs `pnpm -r --if-present build` after install, exercising both Vite configs on every PR
+
+### Scope boundary for the UI session
+
+This release is a pipeline prover. No UI framework decision is baked in — the web `main.js` and extension popup/full-screen HTML are deliberately absent so the UI session can pick React / Solid / vanilla / etc. without config churn. What lands when UI work begins: popup HTML entry added to the extension's `rollupOptions.input`, framework runtime added to both packages' devDeps, the scaffold `main.js` replaced wholesale.
+
 ## [0.32.0] - 2026-04-22
 
 ### Added
