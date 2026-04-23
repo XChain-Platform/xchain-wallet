@@ -12,3 +12,4 @@ export * as crypto from './crypto/index.js';
 export * as storage from './storage/index.js';
 export * as sdk from './sdk/index.js';
 export * as flows from './flows/index.js';
+export * as uri from './uri/index.js';
