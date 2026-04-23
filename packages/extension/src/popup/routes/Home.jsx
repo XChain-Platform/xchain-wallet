@@ -28,8 +28,9 @@ const chainRegistry = registryLib.defaultRegistry();
  *
  * @param {object} props
  * @param {() => void} [props.onLocked]   refresh upstream state machine
+ * @param {() => void} [props.onReceive]  navigate to Receive sub-route
  */
-export function Home({ onLocked }) {
+export function Home({ onLocked, onReceive }) {
     const [wallets, setWallets] = useState(/** @type {any[] | null} */ (null));
     const [activeWalletId, setActiveWalletId] = useState(
         /** @type {string | null} */ (null),
@@ -150,12 +151,15 @@ export function Home({ onLocked }) {
                 <Button variant="primary" block disabled>
                     Send
                 </Button>
-                <Button variant="secondary" block disabled>
+                <Button
+                    variant="secondary"
+                    block
+                    onClick={onReceive}
+                    disabled={!onReceive}
+                >
                     Receive
                 </Button>
-                <p className={styles.note}>
-                    Send ships in Batch 4; Receive wires up in piece 7.
-                </p>
+                <p className={styles.note}>Send ships in Batch 4.</p>
             </div>
         </Screen>
     );

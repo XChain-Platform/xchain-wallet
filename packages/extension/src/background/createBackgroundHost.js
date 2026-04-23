@@ -29,6 +29,90 @@ const {
 } = flows;
 
 /**
+ * Group a wallet's addresses by chainId. No SDK calls, no password —
+ * used by the Receive view to know which chains have existing addresses
+ * before the user picks one. Returns `{}` when the wallet has no
+ * accounts yet (fresh-import edge case).
+ *
+ * @param {{ walletId: string }} req
+ * @param {{ vault: import('@xchain-wallet/core').storage.Vault, chainRegistry: import('@xchain-wallet/core').registry.ChainRegistry }} deps
+ * @returns {Promise<Record<string, import('@xchain-wallet/core').schemas.Address[]>>}
+ */
+async function addressesByChain(req, { vault, chainRegistry }) {
+    const walletId = /** @type {any} */ (req)?.walletId;
+    if (typeof walletId !== 'string' || walletId.length === 0) {
+        throw new Error('addresses.byChain: walletId is required');
+    }
+    const accounts = await vault.accounts.findBy('walletId', walletId);
+    const accountIds = new Set(accounts.map((a) => a.id));
+    if (accountIds.size === 0) return {};
+    const all = await vault.addresses.list();
+    /** @type {Record<string, any[]>} */
+    const byChain = {};
+    for (const a of all) {
+        if (!a.accountId || !accountIds.has(a.accountId)) continue;
+        const chainId = chainRegistry.chainIdFor(a.chain, a.network);
+        if (!chainId) continue;
+        if (!byChain[chainId]) byChain[chainId] = [];
+        byChain[chainId].push(a);
+    }
+    return byChain;
+}
+
+/**
+ * Return the newest (highest external index) HD address for a wallet +
+ * chain, or `null` if no address exists. External = change = 0 in the
+ * BIP44-style derivation path. Skips imported WIFs — those aren't a
+ * "receive next" concept.
+ *
+ * @param {{ walletId: string, chainId: string, addressType?: string }} req
+ * @param {{ vault: import('@xchain-wallet/core').storage.Vault, chainRegistry: import('@xchain-wallet/core').registry.ChainRegistry }} deps
+ * @returns {Promise<import('@xchain-wallet/core').schemas.Address | null>}
+ */
+async function newestAddress(req, { vault, chainRegistry }) {
+    const walletId = /** @type {any} */ (req)?.walletId;
+    const chainId = /** @type {any} */ (req)?.chainId;
+    const addressType = /** @type {any} */ (req)?.addressType;
+    if (typeof walletId !== 'string' || walletId.length === 0) {
+        throw new Error('addresses.newest: walletId is required');
+    }
+    if (typeof chainId !== 'string' || chainId.length === 0) {
+        throw new Error('addresses.newest: chainId is required');
+    }
+    const descriptor = chainRegistry.get(chainId);
+    if (!descriptor) {
+        throw new Error(`addresses.newest: unknown chain "${chainId}"`);
+    }
+    const type = addressType ?? descriptor.defaultAddressType;
+
+    const accounts = await vault.accounts.findBy('walletId', walletId);
+    const accountIds = new Set(accounts.map((a) => a.id));
+    if (accountIds.size === 0) return null;
+
+    const all = await vault.addresses.list();
+    let winner = null;
+    let winnerIdx = -1;
+    for (const a of all) {
+        if (!accountIds.has(a.accountId)) continue;
+        if (a.chain !== descriptor.coin) continue;
+        if (a.network !== descriptor.networkKind) continue;
+        if (a.addressType !== type) continue;
+        if (a.source !== 'hd') continue;
+        if (typeof a.derivationPath !== 'string') continue;
+        const parts = a.derivationPath.split('/');
+        if (parts.length < 2) continue;
+        if (parts[parts.length - 2] !== '0') continue;  // external only
+        const idx = Number(parts[parts.length - 1]);
+        if (!Number.isFinite(idx)) continue;
+        if (idx > winnerIdx) {
+            winner = a;
+            winnerIdx = idx;
+        }
+    }
+    return winner;
+}
+
+/**
  * Strip sensitive fields before handing a Wallet record to the popup/UI.
  * @param {import('@xchain-wallet/core').schemas.Wallet} w
  */
@@ -98,6 +182,14 @@ export function createBackgroundHost(deps) {
 
     host.register('receive.getAddress', async (req, { vault, chainRegistry, sdkRegistry }) => {
         return receiveAddress({ ...req, vault, chainRegistry, sdkRegistry });
+    });
+
+    host.register('addresses.byChain', async (req, { vault, chainRegistry }) => {
+        return addressesByChain(req, { vault, chainRegistry });
+    });
+
+    host.register('addresses.newest', async (req, { vault, chainRegistry }) => {
+        return newestAddress(req, { vault, chainRegistry });
     });
 
     // --- Actions -------------------------------------------------------------

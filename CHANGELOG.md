@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.39.0] - 2026-04-22
+
+### Added
+
+**Receive view + BIP21 QR** (§29.7 receive flow, §29.10 BIP21 URI) — Batch 2 piece 7
+
+- `packages/extension/src/popup/routes/Receive.jsx` + `.module.css` — full Receive surface:
+  - Chain picker (native `<select>`) when the wallet has addresses on multiple chains; single `ChainBadge` header otherwise. Picker is filtered to chains the wallet already owns an address on — "add a new chain" is a later onboarding flow.
+  - Newest persisted external HD address for the picked chain, rendered as a BIP21-encoded QR via `qrcode@^1.5.4`. QR uses error-correction level `M`, 200px wide, `#0F172A` on `#FFFFFF` so contrast holds in both themes.
+  - Address pane uses `<AddressText truncate={false}>` + `<CopyButton>` so the full string is visible + one-tap copyable.
+  - "New address" button opens an inline password form that calls `receive.getAddress`. The password prompt is required because HD seed decryption re-runs Argon2id per derivation (§26 — password-never-stored posture); the current-newest address is displayed without a prompt so routine "send me some" traffic doesn't trigger the KDF.
+  - ← Back control returns to Home.
+- **Two new pre-password host handlers** in `createBackgroundHost.js`:
+  - `addresses.byChain({ walletId })` → `Record<chainId, Address[]>` — used to build the Receive picker.
+  - `addresses.newest({ walletId, chainId, addressType? })` → newest external-index HD address (change=0), or `null`. Skips imported WIFs and internal (change=1) addresses.
+- `packages/extension/src/popup/App.jsx` — popup-local sub-route within the `unlocked` state: `home | receive`. Active walletId is cached at App level so Receive can reuse Home's single-wallet assumption without re-querying `wallet.list`.
+- `packages/extension/src/popup/routes/Home.jsx` — `Receive` button activated via a new `onReceive` prop (disabled when the prop is absent).
+- Messaging: `getAddressesByChain(walletId)`, `getNewestAddress(walletId, chainId)`, `generateReceiveAddress({ walletId, chainId, password, bip39Passphrase?, addressType? })`.
+
+### Changed
+
+- `packages/extension/package.json` adds `qrcode@^1.5.4` as a runtime dependency.
+
+### Tests
+
+- `packages/core/test/receive-view.smoke.js` — drives both new handlers end-to-end against a real Vault seeded with BTC-mainnet external (indexes 0/1/2) + internal (change=1) + a DOGE address + a second wallet's address-that-must-not-leak. Asserts: byChain buckets cleanly, newest picks the highest external index and skips change=1 + other wallets, null for chains with no persisted addresses, missing-field rejection, plus a BIP21 encode/parse round-trip proving the QR payload is reversible.
+
 ## [0.38.0] - 2026-04-22
 
 Covers Batch 2 pieces 5 + 6 (real unlock screen + Home screen with `wallet.lock` + foreground auto-lock). Bundled because both pieces touch `sessionMeta.js` + `messaging.js`; splitting the commit would require churn without shipping anything different.

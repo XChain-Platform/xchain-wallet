@@ -97,3 +97,43 @@ export function listWallets() {
 export function getWalletBalances(walletId) {
     return /** @type {any} */ (sendMessage('balances.wallet', { walletId }));
 }
+
+/**
+ * @param {string} walletId
+ * @returns {Promise<Record<string, Array<{ address: string, label: string, addressType: string, derivationPath: string | null }>>>}
+ */
+export function getAddressesByChain(walletId) {
+    return /** @type {any} */ (sendMessage('addresses.byChain', { walletId }));
+}
+
+/**
+ * Newest (highest external index) HD address for a wallet + chain, or
+ * `null` if no address exists yet.
+ *
+ * @param {string} walletId
+ * @param {string} chainId
+ * @returns {Promise<null | { address: string, label: string, addressType: string, derivationPath: string | null }>}
+ */
+export function getNewestAddress(walletId, chainId) {
+    return /** @type {any} */ (
+        sendMessage('addresses.newest', { walletId, chainId })
+    );
+}
+
+/**
+ * Derive + persist the next unused external address for (wallet, chain).
+ * Requires the user's password because the signer re-derives the HD
+ * key material; the vault-level unlock doesn't cover the per-wallet
+ * seed decryption.
+ *
+ * @param {object} opts
+ * @param {string} opts.walletId
+ * @param {string} opts.chainId
+ * @param {string} opts.password
+ * @param {string} [opts.bip39Passphrase]
+ * @param {string} [opts.addressType]
+ * @returns {Promise<{ id: string, address: string, label: string, addressType: string, derivationPath: string | null }>}
+ */
+export function generateReceiveAddress(opts) {
+    return /** @type {any} */ (sendMessage('receive.getAddress', opts));
+}
