@@ -26,6 +26,10 @@ const {
     issueToken,
     mintAsset,
     destroyAsset,
+    registerSigner,
+    listSignersForWallet,
+    unregisterSigner,
+    exportPrivateKey,
     walletBalances,
     addressBalances,
     addressHistory,
@@ -215,6 +219,45 @@ export function createBackgroundHost(deps) {
 
     host.register('action.destroy', async (req, { vault, chainRegistry, sdkRegistry }) => {
         return destroyAsset({ ...req, vault, chainRegistry, sdkRegistry });
+    });
+
+    // --- Signer registry -----------------------------------------------------
+    //
+    // Hardware-signer pairing runs in the popup/web renderer context
+    // (Trezor Connect needs a tab; Ledger WebHID needs a user gesture),
+    // so the renderer does the device dance and then asks the
+    // background to persist the resulting SignerRecord. listSigners +
+    // unregisterSigner round out the CRUD surface.
+
+    host.register('signer.register', async (req, { vault }) => {
+        return registerSigner({ ...req, vault });
+    });
+
+    host.register('signer.list', async (req, { vault }) => {
+        const walletId = /** @type {any} */ (req)?.walletId;
+        if (typeof walletId !== 'string' || walletId.length === 0) {
+            throw new Error('signer.list: walletId is required');
+        }
+        return listSignersForWallet(vault, walletId);
+    });
+
+    host.register('signer.unregister', async (req, { vault }) => {
+        const signerId = /** @type {any} */ (req)?.signerId;
+        if (typeof signerId !== 'string' || signerId.length === 0) {
+            throw new Error('signer.unregister: signerId is required');
+        }
+        return { deleted: await unregisterSigner(vault, signerId) };
+    });
+
+    // --- Private key export (§17.7) -----------------------------------
+    //
+    // Returns the WIF for an address owned by this wallet. The flow
+    // itself refuses hardware + watch-only addresses; the UI caller
+    // (ViewPrivateKey.jsx) already gates on `Address.source`, but the
+    // flow's guard is the authoritative line.
+
+    host.register('wallet.exportPrivateKey', async (req, { vault, chainRegistry, sdkRegistry }) => {
+        return exportPrivateKey({ ...req, vault, chainRegistry, sdkRegistry });
     });
 
     // --- Reads ---------------------------------------------------------------

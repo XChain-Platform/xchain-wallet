@@ -34,6 +34,9 @@ import { IssueTokenForm } from '@xchain-wallet/core/shared/routes/IssueTokenForm
 import { MintForm } from '@xchain-wallet/core/shared/routes/MintForm.jsx';
 import { DestroyForm } from '@xchain-wallet/core/shared/routes/DestroyForm.jsx';
 import { TokenAdminForm } from '@xchain-wallet/core/shared/routes/TokenAdminForm.jsx';
+import { PairSignerForm } from '@xchain-wallet/core/shared/routes/PairSignerForm.jsx';
+import { pairTrezorSigner } from './signers/trezorFactory.js';
+import { pairLedgerSigner } from './signers/ledgerFactory.js';
 import * as messaging from './messaging.js';
 import { getSessionStatus, listWallets } from './messaging.js';
 import { ExtensionBanner } from './components/ExtensionBanner.jsx';
@@ -53,7 +56,7 @@ function AppInner() {
         /** @type {'welcome' | 'create' | 'import'} */ ('welcome'),
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'pair-signer'} */ ('home'),
     );
     const [activeWalletId, setActiveWalletId] = useState(
         /** @type {string | null} */ (null),
@@ -182,6 +185,17 @@ function AppInner() {
                     />
                 );
             }
+            if (unlockedView === 'pair-signer' && activeWalletId) {
+                return (
+                    <PairSignerForm
+                        walletId={activeWalletId}
+                        pairTrezor={pairTrezorSigner}
+                        pairLedger={pairLedgerSigner}
+                        onBack={() => setUnlockedView('actions')}
+                        onPaired={() => setUnlockedView('actions')}
+                    />
+                );
+            }
             if (unlockedView === 'actions' && activeWalletId) {
                 return (
                     <ActionsMenu
@@ -192,6 +206,7 @@ function AppInner() {
                             onLock: () => setUnlockedView('lock'),
                             onUpdateDescription: () => setUnlockedView('description'),
                             onTransferOwnership: () => setUnlockedView('transfer'),
+                            onPairSigner: () => setUnlockedView('pair-signer'),
                         })}
                         onBack={() => setUnlockedView('home')}
                     />
@@ -219,6 +234,7 @@ function AppInner() {
 function buildActionEntries({
     onIssue, onMint, onDestroy,
     onLock, onUpdateDescription, onTransferOwnership,
+    onPairSigner,
 }) {
     return [
         {
@@ -256,6 +272,12 @@ function buildActionEntries({
             label: 'Transfer ownership',
             description: 'Hand token ownership to another address (§40.5).',
             onSelect: onTransferOwnership,
+        },
+        {
+            id: 'pair-signer',
+            label: 'Pair hardware signer',
+            description: 'Add a Trezor or Ledger to this wallet (§17.6 / §18.3).',
+            onSelect: onPairSigner,
         },
     ];
 }

@@ -1,0 +1,342 @@
+// LedgerSigner — §17.4. Wraps a Ledger Bitcoin app client (from
+// `@ledgerhq/hw-app-btc`) talking over an injected Transport. Mirrors
+// TrezorSigner's DI posture: the class itself imports nothing from
+// Ledger's SDK — both `app` and `transport` are passed in by the
+// per-target factory, so core stays testable without hardware.
+//
+// Per-target transports (§18.2):
+//
+//   packages/extension/src/signers/ledgerFactory.js   (WebHID)
+//   packages/web/src/signers/ledgerFactory.js         (WebHID)
+//   packages/desktop/src/signers/ledgerFactory.js     (node-HID; Piece 5)
+//
+// Ledger specifics that shape the surface:
+//
+//   - Ledger requires the user to open the correct coin app on the
+//     device before signing. `getStatus()` returns `'wrong-app'` when
+//     the user has the wrong app open, so the UI can prompt them.
+//   - Ledger does not expose a stable device identifier via a standard
+//     API (privacy). The factory computes one from a fingerprint of
+//     the account-0 xpub and the class takes it as a parameter.
+//   - Apps are per-coin. The factory constructs one Btc client per
+//     chain family (BTC / LTC / DOGE / testnet all use the Bitcoin
+//     app, parameterized by `currency`). The signer's `chainId` →
+//     `currency` mapping mirrors Trezor's `chainIdToTrezorCoin`.
+//
+// Step 14 scope parallels Step 13 for Trezor: getStatus / getAddresses
+// / getPublicKey are wired; signPsbt + signMessage throw
+// NotImplementedError (PSBT↔Ledger input/output conversion is
+// non-trivial and depends on xchain-sdk's PSBT utilities).
+
+import { NotImplementedError, Signer, SignerStatusError } from './Signer.js';
+
+/**
+ * Minimal shape of the injected Ledger Bitcoin app instance.
+ * Production code passes a real `@ledgerhq/hw-app-btc` client; tests
+ * pass a hand-written fake. Every method TrezorSigner calls is
+ * listed — keeping this narrow is what makes the mock surface tiny.
+ *
+ * @typedef {Object} LedgerBtcApp
+ * @property {() => Promise<{ name: string, version: string, flags?: number }>} getAppAndVersion
+ * @property {(path: string, opts?: { verify?: boolean, format?: string }) => Promise<{ publicKey: string, bitcoinAddress: string, chainCode: string }>} getWalletPublicKey
+ * @property {(path: string, messageHex: string) => Promise<{ v: number, r: string, s: string }>} signMessage
+ * @property {(args: any) => Promise<string>} createPaymentTransaction
+ */
+
+/**
+ * Ledger app names exposed via `getAppAndVersion`. Keyed by chainId
+ * so getStatus can check the user has the right app open. All the
+ * BIP44-coin variants the wallet supports run on Ledger's Bitcoin
+ * app; the `currency` parameter inside the app handles the
+ * per-coin differences.
+ */
+const LEDGER_APP_NAME_FOR_CHAIN = {
+    'bitcoin-mainnet': 'Bitcoin',
+    'bitcoin-testnet': 'Bitcoin Test',
+    'litecoin-mainnet': 'Litecoin',
+    'dogecoin-mainnet': 'Dogecoin',
+};
+
+/**
+ * @param {string} chainId
+ * @returns {string}
+ */
+function chainIdToLedgerFormat(chainId) {
+    switch (chainId) {
+        case 'bitcoin-mainnet':
+        case 'bitcoin-testnet':
+        case 'litecoin-mainnet':
+        case 'dogecoin-mainnet':
+            return 'bech32';
+        default:
+            throw new Error(`LedgerSigner: unsupported chainId "${chainId}"`);
+    }
+}
+
+export class LedgerSigner extends Signer {
+    /**
+     * @param {Object} opts
+     * @param {string} opts.id                 SignerRecord-derived id
+     * @param {string} opts.displayName
+     * @param {string} opts.model              Matches firmware-manifest keys (nanoS, nanoSP, nanoX, stax)
+     * @param {string} opts.deviceIdentifier
+     * @param {LedgerBtcApp} opts.app          Ledger Bitcoin app client
+     */
+    constructor({ id, displayName, model, deviceIdentifier, app }) {
+        super();
+        if (!id) throw new Error('LedgerSigner: id is required');
+        if (!displayName) throw new Error('LedgerSigner: displayName is required');
+        if (!model) throw new Error('LedgerSigner: model is required');
+        if (!deviceIdentifier) throw new Error('LedgerSigner: deviceIdentifier is required');
+        if (!app || typeof app !== 'object') {
+            throw new Error('LedgerSigner: app is required');
+        }
+        this._id = id;
+        this._displayName = displayName;
+        this._model = model;
+        this._deviceIdentifier = deviceIdentifier;
+        this._app = app;
+    }
+
+    get id() { return this._id; }
+    get displayName() { return this._displayName; }
+    get kind() { return 'ledger'; }
+    get requiresPhysicalConfirmation() { return true; }
+    get model() { return this._model; }
+    get deviceIdentifier() { return this._deviceIdentifier; }
+
+    /**
+     * Reads the currently-open app + version from the device. Returns:
+     *   - `'available'` — expected app open; device responsive
+     *   - `'wrong-app'` — device responsive but a different app open;
+     *                    UI should prompt the user to open the right one
+     *   - `'disconnected'` — `getAppAndVersion` throws (cable unplugged,
+     *                       PIN locked, transport error)
+     *
+     * `expectedApp` is optional: pass the chainId you care about, or
+     * omit it to accept any app (useful for initial pairing before a
+     * chain is chosen).
+     *
+     * @param {{ chainId?: string }} [opts]
+     * @returns {Promise<import('./Signer.js').SignerStatus>}
+     */
+    async getStatus(opts = {}) {
+        let info;
+        try {
+            info = await this._app.getAppAndVersion();
+        } catch {
+            return 'disconnected';
+        }
+        if (!info || typeof info.name !== 'string') {
+            return 'disconnected';
+        }
+        const expected = opts.chainId ? LEDGER_APP_NAME_FOR_CHAIN[opts.chainId] : null;
+        if (expected && info.name !== expected) {
+            return 'wrong-app';
+        }
+        return 'available';
+    }
+
+    /**
+     * Derive a range of addresses. One `getWalletPublicKey` call per
+     * index — the user confirms on-device the first time the app is
+     * addressed per session (Ledger caches the "unlocked" state while
+     * the app is open).
+     *
+     * @param {import('./Signer.js').GetAddressesParams} params
+     * @returns {Promise<import('./Signer.js').DerivedAddress[]>}
+     */
+    async getAddresses({ chainId, accountIndex, change, startIndex, count, addressType }) {
+        const format = ledgerFormatFor(addressType, chainId);
+        const out = [];
+        for (let i = 0; i < count; i += 1) {
+            const index = startIndex + i;
+            const path = formatBip44Path({
+                purpose: bip44PurposeFor(addressType, chainId),
+                chainId,
+                accountIndex,
+                change,
+                index,
+            });
+            const res = await runLedger(
+                this._id,
+                'getWalletPublicKey',
+                () => this._app.getWalletPublicKey(path, { verify: false, format }),
+            );
+            out.push({
+                index,
+                address: res.bitcoinAddress,
+                publicKey: res.publicKey,
+                path,
+            });
+        }
+        return out;
+    }
+
+    /**
+     * Fetch `{ publicKey, chainCode, fingerprint }` at a single path.
+     * Used by the pairing flow to compute the `deviceIdentifier`
+     * (factory-side) and by multisig setup in Phase 4+.
+     *
+     * @param {import('./Signer.js').GetPublicKeyParams} params
+     * @returns {Promise<import('./Signer.js').GetPublicKeyReturn>}
+     */
+    async getPublicKey({ chainId: _chainId, path }) {
+        const res = await runLedger(
+            this._id,
+            'getWalletPublicKey',
+            () => this._app.getWalletPublicKey(path, { verify: false }),
+        );
+        return {
+            publicKey: res.publicKey,
+            chainCode: res.chainCode,
+            // Ledger's getWalletPublicKey does not expose a BIP32
+            // fingerprint directly — it's derivable from the pubkey
+            // via hash160, but that computation lives at a higher
+            // layer (xchain-sdk or a dedicated helper). Returning an
+            // empty string here keeps the return shape aligned with
+            // the Signer contract without lying about the value.
+            fingerprint: '',
+        };
+    }
+
+    /**
+     * PSBT signing. Mirrors TrezorSigner's deferral: Ledger's
+     * `createPaymentTransaction` takes its own input/output shape
+     * (not PSBT), and the PSBT↔Ledger converter depends on
+     * xchain-sdk's PSBT utilities. That integration belongs in its
+     * own step — the class throws NotImplementedError today so
+     * callers fail loudly instead of silently.
+     *
+     * @param {import('./Signer.js').SignPsbtParams} _params
+     * @returns {Promise<import('./Signer.js').SignPsbtReturn>}
+     */
+    async signPsbt(_params) {
+        throw new NotImplementedError(
+            'LedgerSigner.signPsbt — PSBT↔Ledger conversion lands in a later step. '
+            + 'See §17.4 for the pending work.',
+        );
+    }
+
+    /**
+     * Message signing. Ledger's `signMessage` returns `{ v, r, s }`
+     * fields that need combining into a compact signature + address-
+     * recovery byte in the xchain-sdk convention. Deferred.
+     *
+     * @param {import('./Signer.js').SignMessageParams} _params
+     * @returns {Promise<import('./Signer.js').SignMessageReturn>}
+     */
+    async signMessage(_params) {
+        throw new NotImplementedError(
+            'LedgerSigner.signMessage — v/r/s → xchain-sdk signature format conversion lands in a later step.',
+        );
+    }
+}
+
+function ledgerFormatFor(addressType, chainId) {
+    // Ledger's `format` option: 'legacy' | 'p2sh' | 'bech32' | 'bech32m' | 'cashaddr'.
+    if (addressType === 'p2wpkh') return 'bech32';
+    if (addressType === 'p2sh-p2wpkh') return 'p2sh';
+    if (addressType === 'p2pkh') return 'legacy';
+    // DOGE + LTC default to legacy on Ledger.
+    if (chainId === 'dogecoin-mainnet' || chainId === 'litecoin-mainnet') return 'legacy';
+    return chainIdToLedgerFormat(chainId);
+}
+
+function bip44PurposeFor(addressType, chainId) {
+    if (addressType === 'p2wpkh') return "84'";
+    if (addressType === 'p2sh-p2wpkh') return "49'";
+    if (addressType === 'p2pkh') return "44'";
+    if (chainId === 'dogecoin-mainnet' || chainId === 'litecoin-mainnet') return "44'";
+    return "84'";
+}
+
+function formatBip44Path({ purpose, chainId, accountIndex, change, index }) {
+    const coinType = coinTypeFor(chainId);
+    return `m/${purpose}/${coinType}/${accountIndex}'/${change}/${index}`;
+}
+
+function coinTypeFor(chainId) {
+    switch (chainId) {
+        case 'bitcoin-mainnet': return "0'";
+        case 'bitcoin-testnet': return "1'";
+        case 'litecoin-mainnet': return "2'";
+        case 'dogecoin-mainnet': return "3'";
+        default:
+            throw new Error(`LedgerSigner: unsupported chainId "${chainId}"`);
+    }
+}
+
+/**
+ * Helper that wraps a Ledger SDK call and converts thrown errors
+ * (HID transport issues, app-level errors with statusCode) into a
+ * SignerStatusError the rest of the wallet can branch on.
+ */
+async function runLedger(signerId, method, fn) {
+    try {
+        return await fn();
+    } catch (err) {
+        const msg = err && err.message ? String(err.message) : String(err);
+        const code = err && err.statusCode ? ` (0x${Number(err.statusCode).toString(16)})` : '';
+        throw new SignerStatusError(signerId, 'error', `${method} failed: ${msg}${code}`);
+    }
+}
+
+/**
+ * Ledger does not expose a stable, privacy-safe device serial number.
+ * The convention across wallets (Sparrow, Ledger Live itself in some
+ * contexts) is to fingerprint the account-0 xpub. This helper takes
+ * the `publicKey` returned at path `m/44'/0'/0'` (or equivalent for
+ * other chains) and returns its SHA-256 truncated to 16 hex chars.
+ *
+ * Factory code runs this during pairing and passes the result into
+ * `LedgerSigner`'s constructor.
+ *
+ * @param {string} publicKeyHex
+ * @returns {Promise<string>}
+ */
+export async function deriveLedgerDeviceIdentifier(publicKeyHex) {
+    if (typeof publicKeyHex !== 'string' || publicKeyHex.length === 0) {
+        throw new Error('deriveLedgerDeviceIdentifier: publicKeyHex is required');
+    }
+    const bytes = hexToBytes(publicKeyHex);
+    const digest = await crypto.subtle.digest('SHA-256', bytes);
+    const view = new Uint8Array(digest);
+    let out = '';
+    for (let i = 0; i < 8; i += 1) {
+        out += view[i].toString(16).padStart(2, '0');
+    }
+    return out;
+}
+
+function hexToBytes(hex) {
+    const clean = hex.startsWith('0x') ? hex.slice(2) : hex;
+    if (clean.length % 2 !== 0) {
+        throw new Error('deriveLedgerDeviceIdentifier: publicKeyHex must have an even length');
+    }
+    const bytes = new Uint8Array(clean.length / 2);
+    for (let i = 0; i < bytes.length; i += 1) {
+        bytes[i] = parseInt(clean.substr(i * 2, 2), 16);
+    }
+    return bytes;
+}
+
+/**
+ * Map Ledger's reported model flag (when the wallet exposes it via
+ * transport.deviceModel) to a firmware-manifest key. If the flag
+ * isn't supplied, fall back to 'nanoX' — the most common modern
+ * Ledger — and leave the pairing flow free to correct it.
+ *
+ * @param {unknown} deviceModel
+ * @returns {string}
+ */
+export function modelFromLedgerTransport(deviceModel) {
+    if (deviceModel && typeof deviceModel === 'object' && typeof /** @type {any} */ (deviceModel).id === 'string') {
+        const id = /** @type {any} */ (deviceModel).id;
+        if (id === 'nanoS') return 'nanoS';
+        if (id === 'nanoSP') return 'nanoSP';
+        if (id === 'nanoX') return 'nanoX';
+        if (id === 'stax') return 'stax';
+    }
+    return 'nanoX';
+}

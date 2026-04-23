@@ -129,6 +129,38 @@ export function destroyAsset(opts) {
 }
 
 /**
+ * Persist a paired hardware signer (§17.6 / §18.3). See popup
+ * messaging.js for prop docs.
+ *
+ * @param {object} opts
+ * @returns {Promise<any>}
+ */
+export function registerSigner(opts) {
+    return /** @type {any} */ (sendMessage('signer.register', opts));
+}
+
+/** @param {string} walletId */
+export function listSigners(walletId) {
+    return /** @type {any} */ (sendMessage('signer.list', { walletId }));
+}
+
+/** @param {string} signerId */
+export function unregisterSigner(signerId) {
+    return /** @type {any} */ (sendMessage('signer.unregister', { signerId }));
+}
+
+/**
+ * Export the WIF for an address (§17.7). See popup messaging.js for
+ * prop docs.
+ *
+ * @param {object} opts
+ * @returns {Promise<any>}
+ */
+export function exportPrivateKey(opts) {
+    return /** @type {any} */ (sendMessage('wallet.exportPrivateKey', opts));
+}
+
+/**
  * Derive + persist the next unused external address for (wallet, chain).
  * Requires the user's password because the signer re-derives the HD
  * key material; the vault-level unlock doesn't cover the per-wallet

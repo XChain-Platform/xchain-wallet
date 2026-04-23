@@ -7,6 +7,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.53.0] - 2026-04-23
+
+Phase 2 — Steps 13–15 of 26 — pieces 4b + 4c + 4d. Closes out **Piece 4 (Hardware signers go live, §40.11 / §17.3–17.4 / §18)**. Trezor + Ledger signer classes, per-target transport factories (WebHID + Trezor Connect popup), the pairing UI, and the §17.7 view/export private key ceremony are all in. Device-signing itself — PSBT and message signing — is deliberately deferred; see "Known deferrals" below.
+
+### Added
+
+**Piece 4b / Step 13 — TrezorSigner (§17.3, §18.1)**
+
+- `packages/core/src/signers/TrezorSigner.js` — `TrezorSigner` class extending `Signer`. Dependency-injected: constructor takes `{ id, displayName, model, deviceIdentifier, connect }`, where `connect` is the Trezor Connect instance. The class imports nothing from `@trezor/connect-web` — the DI keeps core decoupled from the SDK and makes mock-based testing clean. Implements `getStatus` (compares device_id to pairing-time deviceIdentifier), `getAddresses` (multi-index derivation with BIP44 purpose + coinType per chain), `getPublicKey`, and model/firmware-version/device-identifier extractors from `getFeatures` payloads.
+- `signPsbt` + `signMessage` throw `NotImplementedError` with explicit deferral messages. PSBT↔Trezor input/output conversion depends on xchain-sdk's PSBT utilities; that integration gets its own step (see Known deferrals).
+- `packages/extension/src/signers/trezorFactory.js` — extension (and popup) factory. Lazy-imports `@trezor/connect-web` so the SDK only loads when the user actually pairs; initializes Connect with the wallet's manifest; exposes `getTrezorConnect` + `pairTrezorSigner(opts)` + `resetTrezorConnect`. `pairTrezorSigner` returns `{ signer, pairingInfo }` — the caller persists `pairingInfo` via `flows.registerSigner`.
+- `packages/web/src/signers/trezorFactory.js` — re-exports the extension factory via cross-package relative path, matching `hostBridge.js`'s convention so Node smoke tests resolve without the pnpm workspace symlink.
+- `packages/extension/package.json` + `packages/web/package.json` — declare `@trezor/connect-web ^9.7.0` (pinned to the 9.x major, floor at 9.7 which is the current stable line).
+- `flows.registerSigner` / `flows.listSignersForWallet` / `flows.unregisterSigner` wired into the background host as `signer.register` / `signer.list` / `signer.unregister` handlers. `messaging.registerSigner` / `listSigners` / `unregisterSigner` helpers exported from both popup + web — Step 15's pairing UI fires through these.
+- New smoke: `packages/core/test/trezor-signer.smoke.js`. Hand-written ~30-line mock Connect exercises the class's `getStatus` / `getAddresses` / `getPublicKey` paths, proves same-device vs. different-device getStatus branching, asserts `signPsbt` + `signMessage` throw `NotImplementedError`, verifies the factory files + package.json deps, and proves the TrezorSigner class has zero Trezor SDK imports.
+
+**Piece 4c / Step 14 — LedgerSigner (§17.4, §18.2)**
+
+- `packages/core/src/signers/LedgerSigner.js` — same DI posture as TrezorSigner. Constructor takes `{ id, displayName, model, deviceIdentifier, app }` where `app` is the `@ledgerhq/hw-app-btc` Bitcoin app client. `getStatus(opts)` distinguishes Ledger's `'wrong-app'` state (user has a different coin app open) from `'disconnected'` / `'available'`. `getAddresses` derives per-chain formats (bech32 for BTC, legacy for DOGE/LTC). `deriveLedgerDeviceIdentifier(publicKeyHex)` fingerprints the account-0 xpub to produce a stable identifier (Ledger doesn't expose a serial — this is the common-wallet convention). `modelFromLedgerTransport` maps transport.deviceModel to firmware-manifest keys.
+- `signPsbt` + `signMessage` deferred with the same `NotImplementedError` pattern as Trezor.
+- `packages/extension/src/signers/ledgerFactory.js` — WebHID transport factory. Lazy-imports `@ledgerhq/hw-transport-webhid` + `@ledgerhq/hw-app-btc`, opens a shared transport, constructs the Bitcoin app, reads `getAppAndVersion` + the identity xpub, derives the device identifier, returns `{ signer, pairingInfo }`.
+- `packages/web/src/signers/ledgerFactory.js` — thin re-export (cross-package relative path).
+- Both shell package.jsons declare `@ledgerhq/hw-transport-webhid ^6.35.0` + `@ledgerhq/hw-app-btc ^10.21.0`.
+- New smoke: `packages/core/test/ledger-signer.smoke.js`. Mock app covers getStatus (wrong-app / available / disconnected), getAddresses across BTC / LTC / DOGE, deriveLedgerDeviceIdentifier determinism + input validation, modelFromLedgerTransport mapping, deferred signPsbt/signMessage, factory + package.json + zero-SDK-import checks.
+
+**Piece 4d / Step 15 — Signer selection UI + view-key UI (§17.6, §17.7)**
+
+- `packages/core/src/shared/routes/PairSignerForm.jsx` + `.module.css`. Four-stage flow: vendor picker (Trezor / Ledger) → pairing (shell-supplied factory runs) → confirm (device info + firmware verdict + label input) → saving (messaging.registerSigner) → done. The factories are injected as props (`pairTrezor`, `pairLedger`) so the shared route stays shell-agnostic. Firmware verdict (from `checkFirmware`) gates the save button: `'unsupported'` firmware changes the button to "Update firmware first" and disables save.
+- `packages/core/src/shared/routes/ViewPrivateKey.jsx` + `.module.css`. Implements §17.7's reveal ceremony end-to-end:
+    - Warning screen before any password prompt.
+    - Password re-entry required every time, even when the wallet is already unlocked (§17.7.3).
+    - Tap-to-reveal WIF; auto-hide on `window.blur`; Hide button always visible.
+    - Clipboard auto-clear after 60 seconds.
+    - `classifySource(address)` routes HW + watch-only addresses to informational panels (no password prompt, no fake reveal) per §17.7.2.
+    - QR rendering via a `renderQR({ value })` render-prop so the `qrcode` dep stays in shell packages.
+- `packages/core/src/flows/exportPrivateKey.js` — existed since Pass 2; this step wires it into the messaging surface. Background host registers `wallet.exportPrivateKey`; `messaging.exportPrivateKey(opts)` exported from both popup + web.
+- `packages/extension/src/popup/App.jsx` + `packages/web/src/App.jsx` — new `'pair-signer'` sub-route; factories imported from each shell's `signers/*Factory.js` and passed into `<PairSignerForm>`. `buildActionEntries` grows a seventh "Pair hardware signer" entry in the Actions menu.
+- New smoke: `packages/core/test/signer-ui.smoke.js`. Asserts four-stage state machine on PairSignerForm, DI prop shape + shell-agnostic imports, firmware-verdict gating, classifySource branching on ViewPrivateKey, window-blur + clipboard auto-clear wiring, exportPrivateKey handler + messaging, App.jsx sub-route + factory imports in both shells.
+
+### Known deferrals
+
+PSBT signing and message signing through hardware signers are deliberately unimplemented in Piece 4. Both `TrezorSigner.signPsbt` and `LedgerSigner.signPsbt` (and the corresponding `signMessage` methods) throw `NotImplementedError` with explicit messages. What they need:
+
+- **PSBT↔Trezor conversion** — Trezor Connect's `signTransaction` takes its own input/output shape, not a raw PSBT. Converting requires xchain-sdk's PSBT utilities (input-value lookups, script-type inference, output formatting).
+- **PSBT↔Ledger conversion** — Ledger's `createPaymentTransaction` has a similar per-input-and-output envelope. Same dependency profile.
+- **Message signing envelopes** — both vendors return low-level `{ v, r, s }` or raw-signature shapes; the xchain-sdk convention for auth signatures needs a wrapping step.
+- **Signing bridge** — HW signing physically runs in the renderer context (Trezor Connect popup needs a tab; Ledger WebHID needs a user gesture), but the rest of `submitAction` runs in the background service worker. The two halves need a messaging channel so the background can request a signature from the renderer-hosted signer. This is architectural work that likely wants its own step rather than being tacked onto a feature step.
+
+These four items would cleanly compose into one step — "HW signing integration" — landing after Piece 5 (Electron desktop) since desktop has a much simpler signing-bridge story (main-process can hold the Transport directly, no renderer round-trip).
+
+### Manual verification pending
+
+End-to-end pairing against real hardware is not smoke-tested (no way to exercise WebHID / Trezor Connect popups from Node). Verification plan: plug in a Trezor + Ledger, run the popup extension + web app in a Chrome-family browser, walk through the `Actions → Pair hardware signer` flow for each vendor, confirm the SignerRecord persists with correct firmware + model + device identifier, and confirm firmware-verdict banners render correctly at current versus outdated firmware.
+
+### Changed
+
+- `packages/core/src/signers/index.js` — barrel now re-exports `TrezorSigner`, `deviceIdentifierFromFeatures`, `modelFromFeatures`, `firmwareVersionFromFeatures`, `LedgerSigner`, `deriveLedgerDeviceIdentifier`, `modelFromLedgerTransport` alongside the existing `SoftwareSigner` / `Signer` / firmware helpers.
+- `packages/extension/src/background/createBackgroundHost.js` — new handlers: `signer.register`, `signer.list`, `signer.unregister`, `wallet.exportPrivateKey`.
+- `packages/extension/src/popup/messaging.js` + `packages/web/src/messaging.js` — new helpers: `registerSigner`, `listSigners`, `unregisterSigner`, `exportPrivateKey`.
+
+### Developer notes
+
+- Smoke count: 33. Both shell package.jsons declare the HW SDK deps but installation is not required for the smoke suite — the class-level tests use hand-written mocks; the factory-level tests are static (file existence + `package.json` checks).
+- `TrezorSigner.getStatus` cross-checks the device's reported `device_id` against the `deviceIdentifier` captured at pairing time. Different device → `'disconnected'`. This is the "swapped device" defense — an attacker can't hand the user a substituted Trezor and expect the wallet to silently accept it.
+- `LedgerSigner.getStatus({ chainId })` distinguishes the `'wrong-app'` state from `'disconnected'`. UI callers should treat `'wrong-app'` as a guided-prompt state ("Please open the Bitcoin app on your Ledger") rather than a hard error.
+- The HW sign path is the biggest remaining pre-Phase-3 gap. Piece 5 (Electron desktop) comes next in the plan; a dedicated "HW sign integration" step should slot in either before or after Piece 5 depending on device-availability during testing.
+
 ## [0.52.0] - 2026-04-23
 
 Phase 2 — Step 12 of 26 — piece 4a. Opens **Piece 4 (Hardware signers go live, §40.11 / §17.3–17.4 / §18)** with scaffolding only. No `@trezor/connect` or `@ledgerhq/hw-transport-*` dependencies yet — those land in Steps 13 (TrezorSigner) and 14 (LedgerSigner). This step is infrastructure Steps 13-14 plug into: persistent records for paired devices, a firmware status helper, and the cross-check UI the sign screens will render once HW signers come online.

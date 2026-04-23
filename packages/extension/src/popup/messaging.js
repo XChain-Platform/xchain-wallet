@@ -217,3 +217,63 @@ export function mintAsset(opts) {
 export function destroyAsset(opts) {
     return /** @type {any} */ (sendMessage('action.destroy', opts));
 }
+
+/**
+ * Persist a paired hardware signer (§17.6 / §18.3). The caller runs
+ * `pairTrezorSigner` (or the Ledger equivalent) in the renderer,
+ * obtains the `pairingInfo` payload, and forwards it here. Idempotent
+ * by (walletId, vendor, deviceIdentifier) — re-pairing the same
+ * device returns the existing record with bumped `lastSeenAt`.
+ *
+ * @param {object} opts
+ * @param {string} opts.walletId
+ * @param {'trezor' | 'ledger'} opts.kind
+ * @param {string} opts.vendor
+ * @param {string} opts.model
+ * @param {string} opts.deviceIdentifier
+ * @param {string} [opts.label]
+ * @param {string | null} [opts.firmwareVersion]
+ * @returns {Promise<any>}
+ */
+export function registerSigner(opts) {
+    return /** @type {any} */ (sendMessage('signer.register', opts));
+}
+
+/**
+ * List signers paired to a wallet.
+ *
+ * @param {string} walletId
+ * @returns {Promise<any[]>}
+ */
+export function listSigners(walletId) {
+    return /** @type {any} */ (sendMessage('signer.list', { walletId }));
+}
+
+/**
+ * Forget a paired signer. Does not cascade into addresses — existing
+ * Address records keep their `signerId` until a later reconciliation
+ * pass fills them back in (or the user pairs a replacement device).
+ *
+ * @param {string} signerId
+ * @returns {Promise<{ deleted: boolean }>}
+ */
+export function unregisterSigner(signerId) {
+    return /** @type {any} */ (sendMessage('signer.unregister', { signerId }));
+}
+
+/**
+ * Export the WIF for an address (§17.7). The core flow rejects
+ * watch-only + hardware addresses with a typed error; for HD it
+ * decrypts the seed blob under `password` and derives at the address's
+ * recorded path.
+ *
+ * @param {object} opts
+ * @param {string} opts.walletId
+ * @param {string} opts.password
+ * @param {string} opts.addressId
+ * @param {string} [opts.bip39Passphrase]
+ * @returns {Promise<{ wif: string, source: 'hd' | 'imported-wif', derivationPath: string | null, address: string, chainId: string }>}
+ */
+export function exportPrivateKey(opts) {
+    return /** @type {any} */ (sendMessage('wallet.exportPrivateKey', opts));
+}
