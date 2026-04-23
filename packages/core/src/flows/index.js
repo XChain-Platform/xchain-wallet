@@ -27,3 +27,8 @@ export {
     reconcileAddressSigners,
     AmbiguousSignerMatchError,
 } from './reconcileAddressSigners.js';
+export {
+    importWif,
+    InvalidWifError,
+    WrongPasswordError,
+} from './importWif.js';
