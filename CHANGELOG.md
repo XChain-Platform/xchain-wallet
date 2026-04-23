@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.36.0] - 2026-04-22
+
+### Changed
+
+**Electron desktop shell moved out of Phase 1 into Phase 2** (spec §40.12)
+
+Rationale: the desktop shell's headline differentiators over web + extension are (a) OS keychain integration and (b) native USB/HID hardware-wallet transports. Hardware signers (`TrezorSigner` / `LedgerSigner`) are Phase 2 per §17.3–17.4, so shipping the desktop shell in Phase 1 would mean a desktop app whose standout features are stubs. Bundling the two into Phase 2 (§40.11 Hardware Wallets + §40.12 Electron Desktop) delivers the desktop app with its value intact.
+
+- `packages/desktop/package.json` — description flagged as "Phase 2 stub; ships alongside hardware signers per spec §40.12."
+- `packages/desktop/README.md` — new; explains the deferral + points at spec §40.12. Phase 1 users get the web SPA + Chrome extension (both cover the full send/receive/sign surface).
+
+Spec + IMPLEMENTATION_STATUS updates land in the platform working-copy (gitignored from this repo):
+
+- §8.1 Phase 1 targets table no longer lists Electron desktop
+- §8.2 deferred targets table adds the Electron desktop row with a Phase 2 marker
+- §39.1 Phase 1 per-target delivery drops "Desktop (Electron) with OS keychain"
+- §39.2 Phase 1 out-of-scope adds "Electron desktop shell → Phase 2"
+- §40.12 new subsection "Electron Desktop Shell Goes Live" covers main-process signing isolation, OS keychain (safeStorage / keytar), native Trezor / Ledger node transports, URI scheme registration, `electron-builder` packaging + signing, and reproducible builds
+- IMPLEMENTATION_STATUS scope-change note + Target-Matrix row + Shell-layer descriptions refreshed to match
+
+### Tests
+
+- `packages/core/test/phase-scope.smoke.js` — new; guards the scope change against accidental revert. Verifies §8.1 does not list Electron desktop, §8.2 lists it with a Phase 2 marker, §39.2 out-of-scope calls it out, §40.12 subsection exists, IMPLEMENTATION_STATUS records the scope change and references §40.12, and desktop/package.json description mentions Phase 2.
+
 ## [0.35.0] - 2026-04-22
 
 ### Added
