@@ -242,6 +242,28 @@ export function broadcastAction(opts) {
 }
 
 /**
+ * Build, sign, and broadcast a DISPENSER action — opens a vending-
+ * machine that dispenses GIVE_TICK when triggered by a GET_COIN or
+ * GET_TICK payment (§40.7). Version: '0' create, '1' cancel, '2' edit.
+ * Cancel + edit require DISPENSER_ACTION_INDEX.
+ *
+ * @param {object} opts
+ * @param {string} opts.walletId
+ * @param {string} opts.password
+ * @param {string} opts.chainId
+ * @param {{ address: string, publicKey: string, derivationPath?: string | null, addressId?: string }} opts.from
+ * @param {Record<string, string>} opts.params   DISPENSER field map (VERSION + create / cancel / edit fields per DISPENSER.md)
+ * @param {number} [opts.fee]
+ * @param {number} [opts.feePerKb]
+ * @param {boolean} [opts.rbf]
+ * @param {string} [opts.bip39Passphrase]
+ * @returns {Promise<any>}
+ */
+export function dispenserAction(opts) {
+    return /** @type {any} */ (sendMessage('action.dispenser', opts));
+}
+
+/**
  * Persist a paired hardware signer (§17.6 / §18.3). The caller runs
  * `pairTrezorSigner` (or the Ledger equivalent) in the renderer,
  * obtains the `pairingInfo` payload, and forwards it here. Idempotent

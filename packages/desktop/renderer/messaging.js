@@ -85,6 +85,11 @@ export function broadcastAction(opts) {
 }
 
 /** @param {object} opts */
+export function dispenserAction(opts) {
+    return /** @type {any} */ (sendMessage('action.dispenser', opts));
+}
+
+/** @param {object} opts */
 export function registerSigner(opts) {
     return /** @type {any} */ (sendMessage('signer.register', opts));
 }

@@ -140,6 +140,17 @@ export function broadcastAction(opts) {
 }
 
 /**
+ * Build, sign, and broadcast a DISPENSER action. See popup messaging.js
+ * for prop docs.
+ *
+ * @param {object} opts
+ * @returns {Promise<any>}
+ */
+export function dispenserAction(opts) {
+    return /** @type {any} */ (sendMessage('action.dispenser', opts));
+}
+
+/**
  * Persist a paired hardware signer (§17.6 / §18.3). See popup
  * messaging.js for prop docs.
  *

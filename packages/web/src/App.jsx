@@ -35,6 +35,7 @@ import { MintForm } from '@xchain-wallet/core/shared/routes/MintForm.jsx';
 import { DestroyForm } from '@xchain-wallet/core/shared/routes/DestroyForm.jsx';
 import { TokenAdminForm } from '@xchain-wallet/core/shared/routes/TokenAdminForm.jsx';
 import { BroadcastForm } from '@xchain-wallet/core/shared/routes/BroadcastForm.jsx';
+import { DispenserForm } from '@xchain-wallet/core/shared/routes/DispenserForm.jsx';
 import { PairSignerForm } from '@xchain-wallet/core/shared/routes/PairSignerForm.jsx';
 import { pairTrezorSigner } from './signers/trezorFactory.js';
 import { pairLedgerSigner } from './signers/ledgerFactory.js';
@@ -57,7 +58,7 @@ function AppInner() {
         /** @type {'welcome' | 'create' | 'import'} */ ('welcome'),
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'pair-signer'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'pair-signer'} */ ('home'),
     );
     const [activeWalletId, setActiveWalletId] = useState(
         /** @type {string | null} */ (null),
@@ -194,6 +195,14 @@ function AppInner() {
                     />
                 );
             }
+            if (unlockedView === 'dispenser' && activeWalletId) {
+                return (
+                    <DispenserForm
+                        walletId={activeWalletId}
+                        onBack={() => setUnlockedView('actions')}
+                    />
+                );
+            }
             if (unlockedView === 'pair-signer' && activeWalletId) {
                 return (
                     <PairSignerForm
@@ -216,6 +225,7 @@ function AppInner() {
                             onUpdateDescription: () => setUnlockedView('description'),
                             onTransferOwnership: () => setUnlockedView('transfer'),
                             onBroadcast: () => setUnlockedView('broadcast'),
+                            onCreateDispenser: () => setUnlockedView('dispenser'),
                             onPairSigner: () => setUnlockedView('pair-signer'),
                         })}
                         onBack={() => setUnlockedView('home')}
@@ -245,6 +255,7 @@ function buildActionEntries({
     onIssue, onMint, onDestroy,
     onLock, onUpdateDescription, onTransferOwnership,
     onBroadcast,
+    onCreateDispenser,
     onPairSigner,
 }) {
     return [
@@ -289,6 +300,12 @@ function buildActionEntries({
             label: 'Broadcast',
             description: 'Publish text, oracle value, or feed reference on-chain (§40.6).',
             onSelect: onBroadcast,
+        },
+        {
+            id: 'dispenser',
+            label: 'Create dispenser',
+            description: 'Open a vending machine that sells your token for coin or FIAT (§40.7.1).',
+            onSelect: onCreateDispenser,
         },
         {
             id: 'pair-signer',

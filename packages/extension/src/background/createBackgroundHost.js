@@ -27,6 +27,7 @@ const {
     mintAsset,
     destroyAsset,
     broadcastAction,
+    dispenserAction,
     registerSigner,
     listSignersForWallet,
     unregisterSigner,
@@ -224,6 +225,10 @@ export function createBackgroundHost(deps) {
 
     host.register('action.broadcast', async (req, { vault, chainRegistry, sdkRegistry }) => {
         return broadcastAction({ ...req, vault, chainRegistry, sdkRegistry });
+    });
+
+    host.register('action.dispenser', async (req, { vault, chainRegistry, sdkRegistry }) => {
+        return dispenserAction({ ...req, vault, chainRegistry, sdkRegistry });
     });
 
     // --- Signer registry -----------------------------------------------------

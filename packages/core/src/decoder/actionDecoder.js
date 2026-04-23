@@ -156,7 +156,149 @@ export function decodeAction({ action, params, chainId, chainRegistry }) {
         return decodeBroadcast(p, chainSuffix);
     }
 
+    if (action === 'DISPENSER') {
+        return decodeDispenser(p, chainSuffix);
+    }
+
     return genericFallback(action, p, chainSuffix);
+}
+
+/**
+ * DISPENSER decoder — §40.7. Three format versions (DISPENSER.md):
+ *
+ *   - v0 Create — open a new dispenser. The form can emit either a
+ *     coin-paid lane (GET_COIN set, GET_TICK empty — buyer pays in the
+ *     native coin) or a token-paid lane (GET_TICK set, GET_COIN empty).
+ *     FIAT dispensers (FIAT_CODE + FIAT_AMOUNT, or ORACLE_ADDRESS) get
+ *     their own summary line so the user sees the pricing mode before
+ *     signing.
+ *   - v1 Cancel — closes an existing dispenser; the v1 decoder is
+ *     reached from the dispenser-detail "Close" path.
+ *   - v2 Edit — refills escrow, updates expiration / lists.
+ */
+function decodeDispenser(p, chainSuffix) {
+    const version = str(p.VERSION) || '0';
+    const memo = str(p.MEMO);
+    const baseWarnings = [
+        ...(memo && /[|;]/.test(memo)
+            ? ['Memo contains | or ; — the protocol will reject this transaction.']
+            : []),
+    ];
+
+    if (version === '1') {
+        // Cancel
+        const idx = str(p.DISPENSER_ACTION_INDEX);
+        return {
+            summary: `Cancel dispenser${chainSuffix}${idx ? ` (#${idx})` : ''}`,
+            details: [
+                ...(idx ? [{ label: 'Dispenser action index', value: idx }] : []),
+                ...(memo ? [{ label: 'Memo', value: memo }] : []),
+            ],
+            warnings: [
+                'Cancelling a dispenser returns the remaining escrow to the owner after a 1-hour close window.',
+                ...(!idx ? ['Dispenser action index is empty.'] : []),
+                ...baseWarnings,
+            ],
+        };
+    }
+
+    if (version === '2') {
+        // Edit
+        const idx = str(p.DISPENSER_ACTION_INDEX);
+        const giveEscrow = str(p.GIVE_ESCROW);
+        const expiration = str(p.EXPIRATION);
+        const allowList = str(p.ALLOW_LIST);
+        const blockList = str(p.BLOCK_LIST);
+        return {
+            summary: `Edit dispenser${chainSuffix}${idx ? ` (#${idx})` : ''}`,
+            details: [
+                ...(idx ? [{ label: 'Dispenser action index', value: idx }] : []),
+                ...(giveEscrow ? [{ label: 'Refill escrow by', value: giveEscrow }] : []),
+                ...(expiration ? [{ label: 'Expiration (unix)', value: expiration }] : []),
+                ...(allowList ? [{ label: 'Allow list', value: allowList }] : []),
+                ...(blockList ? [{ label: 'Block list', value: blockList }] : []),
+                ...(memo ? [{ label: 'Memo', value: memo }] : []),
+            ],
+            warnings: [
+                ...(!idx ? ['Dispenser action index is empty.'] : []),
+                'Allow/block list changes take effect after a 1-hour delay.',
+                ...baseWarnings,
+            ],
+        };
+    }
+
+    // Version 0 — create
+    const giveCoin = str(p.GIVE_COIN);
+    const giveTick = str(p.GIVE_TICK);
+    const giveAmount = str(p.GIVE_AMOUNT);
+    const giveEscrow = str(p.GIVE_ESCROW);
+    const getCoin = str(p.GET_COIN);
+    const getTick = str(p.GET_TICK);
+    const getAmount = str(p.GET_AMOUNT);
+    const getAddress = str(p.GET_ADDRESS);
+    const fiatCode = str(p.FIAT_CODE);
+    const fiatAmount = str(p.FIAT_AMOUNT);
+    const oracle = str(p.ORACLE_ADDRESS);
+    const expiration = str(p.EXPIRATION);
+    const allowList = str(p.ALLOW_LIST);
+    const blockList = str(p.BLOCK_LIST);
+
+    // Pricing lane — determines how the one-liner reads.
+    const payPriceLabel = oracle
+        ? `an oracle-priced ${fiatCode || 'FIAT'} amount`
+        : fiatAmount && fiatCode
+            ? `${fiatAmount} ${fiatCode}`
+            : getTick
+                ? `${getAmount || '?'} ${getTick}`
+                : `${getAmount || '?'} ${getCoin || '?'}`;
+
+    const fillsEstimate = giveAmount && giveEscrow && Number(giveAmount) > 0
+        ? Math.floor(Number(giveEscrow) / Number(giveAmount))
+        : null;
+
+    const summary = `Create dispenser${chainSuffix}: lock ${giveEscrow || '?'} ${giveTick || '?'}, give ${giveAmount || '?'} ${giveTick || '?'} per ${payPriceLabel}`;
+
+    const details = [
+        { label: 'Token (give)', value: giveTick },
+        ...(giveCoin ? [{ label: 'Token chain', value: giveCoin }] : []),
+        ...(giveAmount ? [{ label: 'Per-fill amount', value: giveAmount }] : []),
+        ...(giveEscrow ? [{ label: 'Escrow (locked)', value: giveEscrow }] : []),
+        ...(fillsEstimate !== null ? [{ label: 'Estimated fills', value: String(fillsEstimate) }] : []),
+        ...(getAmount ? [{ label: 'Trigger amount', value: getAmount }] : []),
+        ...(getTick ? [{ label: 'Buyer pays (token)', value: getTick }] : []),
+        ...(!getTick && getCoin ? [{ label: 'Buyer pays (coin)', value: getCoin }] : []),
+        ...(fiatCode ? [{ label: 'Priced in', value: fiatCode }] : []),
+        ...(fiatAmount ? [{ label: 'Fiat amount', value: fiatAmount }] : []),
+        ...(oracle ? [{ label: 'Oracle address', value: oracle }] : []),
+        ...(getAddress ? [{ label: 'Dispenser address', value: getAddress }] : []),
+        ...(expiration ? [{ label: 'Expiration (unix)', value: expiration }] : []),
+        ...(allowList ? [{ label: 'Allow list', value: allowList }] : []),
+        ...(blockList ? [{ label: 'Block list', value: blockList }] : []),
+        ...(memo ? [{ label: 'Memo', value: memo }] : []),
+    ];
+
+    const warnings = [
+        ...(!giveTick ? ['Give-token ticker is empty.'] : []),
+        ...(!giveAmount || Number(giveAmount) <= 0
+            ? ['Per-fill amount is not positive.']
+            : []),
+        ...(!giveEscrow || Number(giveEscrow) <= 0
+            ? ['Escrow amount is not positive.']
+            : []),
+        ...(giveAmount && giveEscrow && Number(giveEscrow) < Number(giveAmount)
+            ? ['Escrow is smaller than a single fill — the dispenser will never dispense.']
+            : []),
+        ...(!getAmount ? ['Trigger amount is empty.'] : []),
+        ...(!getTick && !getCoin
+            ? ['Buyer payment is ambiguous — set either a token (GET_TICK) or a coin (GET_COIN).']
+            : []),
+        ...(oracle && !fiatCode
+            ? ['Oracle pricing requires FIAT_CODE — the oracle publishes token prices in that fiat.']
+            : []),
+        ...baseWarnings,
+    ];
+
+    return { summary, details, warnings };
 }
 
 /**

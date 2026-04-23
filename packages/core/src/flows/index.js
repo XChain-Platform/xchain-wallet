@@ -20,6 +20,7 @@ export { issueToken } from './issueToken.js';
 export { mintAsset } from './mintAsset.js';
 export { destroyAsset } from './destroyAsset.js';
 export { broadcastAction } from './broadcastAction.js';
+export { dispenserAction } from './dispenserAction.js';
 export {
     registerSigner,
     listSignersForWallet,

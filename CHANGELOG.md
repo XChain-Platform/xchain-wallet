@@ -7,6 +7,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.60.0] - 2026-04-23
+
+Phase 2 — Step 21 of 26 — piece 7a. DISPENSER authoring form (§40.7.1). First half of the Dispensers feature — creates a vending machine that sells the user's token for the native coin (primary lane) or a FIAT-priced amount (advanced). The discovery / explorer surface (§40.7.2) lands in Step 22; cancel + edit land alongside a dispenser-detail page in a later step.
+
+### Dependency
+
+- `xchain-sdk` bumped from `^1.8.0` to `^1.8.1`. The 1.8.1 fix narrows DISPENSER create's required-fields set to `['GIVE_TICK', 'GIVE_AMOUNT', 'GET_AMOUNT']` and adds a cross-field "either GET_TICK (token-paid) or GET_COIN (coin-paid)" check. Previously a coin-paid dispenser (the primary §40.7.1 lane) was rejected at validate-time because the validator demanded a non-empty GET_TICK. The protocol example itself emits an empty GET_TICK in that lane, so this form could not have worked against 1.8.0.
+
+### Added
+
+**Core flow** (`packages/core/src/flows/dispenserAction.js`)
+
+- `dispenserAction(opts)` — mirrors `broadcastAction`. Covers all three DISPENSER lanes: v0 create (enforces `GIVE_TICK + GIVE_AMOUNT + GET_AMOUNT` + `GET_TICK or GET_COIN`), v1 cancel (requires `DISPENSER_ACTION_INDEX`), v2 edit (requires `DISPENSER_ACTION_INDEX`). Refuses `DISPENSER_ACTION_INDEX` with `VERSION 0`.
+- Re-exported from `@xchain-wallet/core` via `flows/index.js`.
+
+**Decoder** (`packages/core/src/decoder/actionDecoder.js`)
+
+- New `decodeDispenser` case with three version-specific summaries:
+  - v0 create: `"Create dispenser on X: lock N TICK, give M TICK per <price>"`. Price string adapts to coin-paid / validator-FIAT / user-oracle lanes.
+  - v1 cancel: `"Cancel dispenser on X (#INDEX)"` + 1-hour-close warning.
+  - v2 edit: `"Edit dispenser on X (#INDEX)"` + list-delay warning.
+- Decoder emits diagnostic warnings: non-positive give/escrow, escrow < give, ambiguous payment (neither GET_TICK nor GET_COIN), oracle set without FIAT_CODE, pipe/semicolon in MEMO.
+
+**Shared form route** (`packages/core/src/shared/routes/DispenserForm.jsx`)
+
+- Three-stage state machine (`form → review → submitting → done`). Reuses `IssueTokenForm.module.css`.
+- Spec-primary fields: Token ticker (`GIVE_TICK`), Give amount, Escrow amount, Trigger price (auto-labels with the chain's native coin). Chain + source-address pickers defaulting to the newest external HD address.
+- Advanced-options expand: FIAT code (12 validated codes: USD/CAD/AUD/MXN/GBP/JPY/CNY/CHF/BRL/INR/EUR/KRW), FIAT amount (X.XX), oracle address. Covers both Mode 1 (validator-FIAT) and Mode 2 (user-oracle) FIAT lanes per DISPENSER.md.
+- Live summary sentence matching the §40.7.1 wording ("You will lock … Each time someone sends … they will receive …. The dispenser holds about N fills.").
+- Auto-sets `GIVE_COIN = GET_COIN = <chain's protocol ticker>` (BTC / LTC / DOGE); leaves `GET_TICK` unset for the coin-paid lane. Validates escrow ≥ give, FIAT X.XX format, oracle ⇒ FIAT_CODE.
+
+**Background handler** (`packages/extension/src/background/createBackgroundHost.js`)
+
+- `host.register('action.dispenser', …)` — forwards `vault + chainRegistry + sdkRegistry` into `dispenserAction`.
+
+**Shell messaging helpers**
+
+- `packages/extension/src/popup/messaging.js`, `packages/web/src/messaging.js`, `packages/desktop/renderer/messaging.js` — `dispenserAction(opts)` → `sendMessage('action.dispenser', opts)` on all three.
+
+**ActionsMenu entry + App routing**
+
+- `popup/App.jsx`, `web/App.jsx`, `desktop/renderer/App.jsx` — new `'dispenser'` sub-route renders `<DispenserForm />`; ActionsMenu's `buildActionEntries` includes a "Create dispenser" entry between "Broadcast" and "Pair hardware signer".
+
+### Smoke
+
+- `packages/core/test/dispenser-form.smoke.js` — new.
+  - File layout, three-stage machine, decoder wiring with `action: 'DISPENSER'`.
+  - Params composer: VERSION pinned, GIVE_COIN/GET_COIN populated from chain, `GET_TICK` left unset (coin-paid lane), ORACLE_ADDRESS + FIAT fields only set when user provides them.
+  - Flow guards: opts / params / GIVE_TICK / GIVE_AMOUNT / GET_AMOUNT / GET_TICK-or-GET_COIN / DISPENSER_ACTION_INDEX-requires-v1-or-v2 / from.
+  - Decoder coverage for v0 coin-paid, v0 escrow < give warning, v0 oracle-without-FIAT_CODE warning, v1 cancel, v2 edit, MEMO pipe/semicolon warn.
+  - `messaging.dispenserAction` on all three shells; `action.dispenser` handler; ActionsMenu + App.jsx wiring in popup + web + desktop.
+- `packages/core/test/action-decoder.smoke.js` — swapped the fallback-case check from DISPENSER (now decoded) to DIVIDEND (still generic).
+
+39/39 smokes green.
+
+### Known deferrals
+
+- Cancel / edit UI — v1 and v2 are supported in the core flow and decoder, but no user surface exposes them yet. They land with the dispenser-detail page (a "My dispensers" list view is part of §40.7.1 and a later step).
+- Dispenser explorer / discovery (§40.7.2) — Step 22.
+- Oracle-mode fill-count estimate — the "estimated fills" line in the live summary only shows for coin-paid dispensers; FIAT dispensers depend on oracle snapshots the wallet doesn't fetch.
+- ALLOW_LIST / BLOCK_LIST authoring — the decoder surfaces them, but the form doesn't collect LIST action indices; that waits on a LIST management surface (deferred until §40.13 territory).
+
 ## [0.59.0] - 2026-04-23
 
 Phase 2 — Step 20 of 26 — piece 6. BROADCAST authoring form (§40.6). First Batch-2 feature to land after Piece 5 closed out Electron packaging. Reuses the Piece 3 (ISSUE / MINT / DESTROY) pattern end-to-end: shared form route, core flow, background handler, per-shell messaging helper, ActionsMenu entry, App.jsx sub-route.
