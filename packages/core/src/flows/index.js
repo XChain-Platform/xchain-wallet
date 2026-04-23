@@ -67,3 +67,4 @@ export {
     discardQueuedBroadcast,
     NoQueuedTxError,
 } from './queuedBroadcast.js';
+export { diagnosticDump, createErrorRingBuffer } from './diagnosticDump.js';
