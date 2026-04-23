@@ -62,6 +62,17 @@ export async function sweepAsset(opts) {
     };
     if (opts.memo !== undefined) params.MEMO = opts.memo;
 
+    const flags = [];
+    if (balances) flags.push('balances');
+    if (ownerships) flags.push('ownerships');
+    if (escrows) flags.push('escrows');
+    const memoTail = opts.memo ? ` — "${opts.memo}"` : '';
+    const pendingTxMeta = opts.trackPendingTx === false ? undefined : {
+        fromAddress: source.address,
+        toAddress: opts.to,
+        actionSummary: `Sweep ${flags.join(' + ')} to ${opts.to}${memoTail}`,
+    };
+
     return submitAction({
         vault: opts.vault,
         walletId: opts.walletId,
@@ -78,6 +89,7 @@ export async function sweepAsset(opts) {
             ...(opts.rbf !== undefined && { rbf: opts.rbf }),
         },
         signingPaths: [{ inputIndex: 0, path: source.derivationPath }],
+        pendingTxMeta,
         waitForTxid: opts.waitForTxid,
         waitOpts: opts.waitOpts,
         onProgress: opts.onProgress,

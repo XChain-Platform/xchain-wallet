@@ -3,11 +3,27 @@
 // action" path. Every UI surface that builds a single transaction (send
 // form, sign-dApp-request screen, dispenser purchase, etc.) uses this.
 //
+// When `pendingTxMeta` is supplied, the flow also maintains a
+// PendingTx record (§11.3.8) through the submission lifecycle: created
+// at `composing`, advanced on each `submitWithSigner` phase, settled
+// to `broadcast` / `indexed` on success or `failed` on error. The
+// record is persisted via the provided Vault at every transition, so
+// the tx-status timeline (§28.4) and RBF/cancel UX (§44.4) can read
+// live state.
+//
 // For batched submissions under one unlock, use unlockWallet +
 // submitWithSigner directly — re-unlocking is expensive (Argon2id).
 
 import { unlockWallet } from './unlockWallet.js';
 import { submitWithSigner } from '../sdk/submitWithSigner.js';
+import { createPendingTx } from '../schemas/pendingTx.js';
+
+/**
+ * @typedef {Object} PendingTxMeta
+ * @property {string} fromAddress
+ * @property {string} toAddress
+ * @property {string} actionSummary   §21.1 plain-English summary
+ */
 
 /**
  * @typedef {Object} SubmitActionOpts
@@ -21,14 +37,27 @@ import { submitWithSigner } from '../sdk/submitWithSigner.js';
  * @property {{ action: string, params: object }} actionData
  * @property {import('../sdk/submitWithSigner.js').SubmitEncoderOpts} encoderOpts
  * @property {Array<{ inputIndex: number, path: string, sighashType?: number }>} signingPaths
+ * @property {PendingTxMeta} [pendingTxMeta]     when set, the flow persists + updates a PendingTx record
  * @property {(txid: string, opts?: object) => Promise<unknown>} [waitForTxid]
  * @property {object} [waitOpts]
  * @property {(phase: string, data: object) => void} [onProgress]
  */
 
 /**
+ * @typedef {Object} SubmitActionResult
+ * @property {string} txid
+ * @property {string} actionString
+ * @property {string} action
+ * @property {number | string} [version]
+ * @property {string} encoding
+ * @property {{ signedPsbtHex: string, txHex: string, txid: string }} signed
+ * @property {unknown} indexed
+ * @property {string | null} pendingTxId        present when pendingTxMeta was supplied
+ */
+
+/**
  * @param {SubmitActionOpts} opts
- * @returns {Promise<import('../sdk/submitWithSigner.js').SubmitResult>}
+ * @returns {Promise<SubmitActionResult>}
  */
 export async function submitAction({
     vault,
@@ -41,10 +70,70 @@ export async function submitAction({
     actionData,
     encoderOpts,
     signingPaths,
+    pendingTxMeta,
     waitForTxid,
     waitOpts,
     onProgress,
 }) {
+    const descriptor = chainRegistry.get(chainId);
+    if (!descriptor) throw new Error(`submitAction: unknown chain "${chainId}"`);
+
+    // If the caller supplied pendingTxMeta, set up lifecycle persistence.
+    // The tracker mutates a mutable record and writes through to the vault
+    // on every transition; it also observes onProgress phase events.
+    let pending = null;
+    if (pendingTxMeta) {
+        pending = createPendingTx({
+            chain: descriptor.coin,
+            network: descriptor.networkKind,
+            fromAddress: pendingTxMeta.fromAddress,
+            toAddress: pendingTxMeta.toAddress,
+            action: actionData.action,
+            actionSummary: pendingTxMeta.actionSummary,
+            psbtHex: '',
+        });
+        await vault.pendingTxs.put(pending);
+    }
+
+    const writePending = async (patch) => {
+        if (!pending) return;
+        pending = { ...pending, ...patch };
+        await vault.pendingTxs.put(pending);
+    };
+
+    // Chain the caller's onProgress with our lifecycle-tracking callback
+    // so both fire for every phase.
+    const composedOnProgress = async (phase, data) => {
+        if (onProgress) {
+            try {
+                onProgress(phase, data);
+            } catch {
+                // Caller's onProgress throwing should not derail lifecycle tracking.
+            }
+        }
+        if (!pending) return;
+        if (phase === 'encoding' && typeof data?.actionString === 'string') {
+            // No-op; psbt arrives in the signing phase.
+        } else if (phase === 'signing' && typeof data?.encoding === 'string') {
+            await writePending({ status: 'awaiting-signature' });
+        } else if (phase === 'broadcasting' && typeof data?.txid === 'string') {
+            await writePending({ status: 'broadcasting', txid: data.txid });
+        } else if (phase === 'p2sh_spending' && typeof data?.phase1Txid === 'string') {
+            // phase-2 still pending; stay in broadcasting.
+        } else if (phase === 'waiting' && typeof data?.txid === 'string') {
+            await writePending({
+                status: 'broadcast',
+                broadcastAt: new Date().toISOString(),
+                txid: data.txid,
+            });
+        } else if (phase === 'confirmed' && typeof data?.txid === 'string') {
+            await writePending({
+                status: 'indexed',
+                confirmedAt: new Date().toISOString(),
+            });
+        }
+    };
+
     const signer = await unlockWallet({
         vault,
         walletId,
@@ -53,19 +142,60 @@ export async function submitAction({
         chainRegistry,
         sdkRegistry,
     });
+
+    let result;
     try {
-        return await submitWithSigner({
-            sdkRegistry,
-            chainId,
-            actionData,
-            encoderOpts,
-            signer,
-            signingPaths,
-            waitForTxid,
-            waitOpts,
-            onProgress,
-        });
+        try {
+            result = await submitWithSigner({
+                sdkRegistry,
+                chainId,
+                actionData,
+                encoderOpts,
+                signer,
+                signingPaths,
+                waitForTxid,
+                waitOpts,
+                onProgress: composedOnProgress,
+            });
+        } catch (err) {
+            if (pending) {
+                await writePending({
+                    status: 'failed',
+                    error: err && err.message ? String(err.message) : String(err),
+                });
+            }
+            throw err;
+        }
     } finally {
         signer.lock();
     }
+
+    // Settle: ensure the final txid and status reach the record even if
+    // no wait callback was supplied. Without waitForTxid, status ends at
+    // 'broadcast'; with it, it ends at 'indexed'.
+    if (pending) {
+        if (!waitForTxid) {
+            await writePending({
+                status: 'broadcast',
+                broadcastAt: new Date().toISOString(),
+                txid: result.txid,
+                txHex: result.signed.txHex ?? null,
+            });
+        } else if (pending.status !== 'indexed') {
+            // Defensive: the lifecycle callback should have advanced to
+            // 'indexed' via the 'confirmed' phase. If for some reason the
+            // progress event was missed, patch the terminal state here.
+            await writePending({
+                status: 'indexed',
+                confirmedAt: pending.confirmedAt ?? new Date().toISOString(),
+                txid: result.txid,
+                txHex: result.signed.txHex ?? null,
+            });
+        } else {
+            // Already 'indexed'; just make sure txHex is stored.
+            await writePending({ txHex: result.signed.txHex ?? null });
+        }
+    }
+
+    return { ...result, pendingTxId: pending?.id ?? null };
 }

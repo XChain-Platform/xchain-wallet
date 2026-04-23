@@ -58,6 +58,13 @@ export async function sendAsset(opts) {
     };
     if (opts.memo !== undefined) params.MEMO = opts.memo;
 
+    const memoTail = opts.memo ? ` — "${opts.memo}"` : '';
+    const pendingTxMeta = opts.trackPendingTx === false ? undefined : {
+        fromAddress: source.address,
+        toAddress: opts.to,
+        actionSummary: `Send ${opts.amount} ${opts.asset} to ${opts.to}${memoTail}`,
+    };
+
     return submitAction({
         vault: opts.vault,
         walletId: opts.walletId,
@@ -74,6 +81,7 @@ export async function sendAsset(opts) {
             ...(opts.rbf !== undefined && { rbf: opts.rbf }),
         },
         signingPaths: [{ inputIndex: 0, path: source.derivationPath }],
+        pendingTxMeta,
         waitForTxid: opts.waitForTxid,
         waitOpts: opts.waitOpts,
         onProgress: opts.onProgress,
