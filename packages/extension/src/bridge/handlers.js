@@ -147,7 +147,13 @@ export function registerBridgeHandlers(host, opts = {}) {
             displayName: d.displayName,
             networkKind: d.networkKind,
             color: d.color,
-            icon: d.icon,
+            // `d.icon` is a filename resolved by the shell's bundler.
+            // Exposing the raw filename to a dApp would be unresolvable
+            // cross-origin. A later shell-layer piece wires this into a
+            // `chrome.runtime.getURL(...)` call against a web-accessible
+            // asset path; until then omit the field rather than send a
+            // bare filename.
+            icon: '',
             addressTypes: d.addressTypes,
             defaultAddressType: d.defaultAddressType,
             supportedActions: d.supportedActions,

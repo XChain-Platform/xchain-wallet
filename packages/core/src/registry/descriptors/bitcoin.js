@@ -2,6 +2,9 @@
 // Derivation paths per §16.1. Address types p2pkh / p2sh-p2wpkh /
 // p2wpkh / p2tr; p2wpkh is the default. URLs are placeholders per §5.5
 // — real endpoints resolve before launch.
+//
+// `icon` carries an asset filename resolved by `branding.assetUrl()`;
+// per-network icons live in packages/core/src/branding/assets/.
 
 import { BITCOIN_ACTIONS } from '../actions.js';
 import { ADS_DONATION_ADDRESS_PLACEHOLDER } from '../validate.js';
@@ -10,7 +13,6 @@ const COMMON = {
     coin: 'bitcoin',
     displayName: 'Bitcoin',
     color: '#F7931A',
-    icon: '',
     addressTypes: ['p2pkh', 'p2sh-p2wpkh', 'p2wpkh', 'p2tr'],
     defaultAddressType: 'p2wpkh',
     derivationPaths: {
@@ -36,6 +38,7 @@ export const bitcoinDescriptors = [
         ...COMMON,
         id: 'bitcoin-mainnet',
         networkKind: 'mainnet',
+        icon: 'bitcoin-mainnet-icon-20.png',
         wifVersionByte: 0x80,
         explorer: { defaultUrl: 'https://explorer.xchain.io', defaultPort: 443 },
         encoder: { defaultUrl: 'https://encoder.xchain.io', defaultPort: 443 },
@@ -45,6 +48,7 @@ export const bitcoinDescriptors = [
         ...COMMON,
         id: 'bitcoin-testnet',
         networkKind: 'testnet',
+        icon: 'bitcoin-testnet-icon-20.png',
         wifVersionByte: 0xef,
         explorer: { defaultUrl: 'https://testnet.explorer.xchain.io', defaultPort: 443 },
         encoder: { defaultUrl: 'https://testnet.encoder.xchain.io', defaultPort: 443 },
@@ -54,6 +58,7 @@ export const bitcoinDescriptors = [
         ...COMMON,
         id: 'bitcoin-regtest',
         networkKind: 'regtest',
+        icon: 'bitcoin-regtest-icon-20.png',
         wifVersionByte: 0xef,
         explorer: { defaultUrl: 'http://localhost', defaultPort: 18081 },
         encoder: { defaultUrl: 'http://localhost', defaultPort: 18082 },

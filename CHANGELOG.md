@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.34.0] - 2026-04-22
+
+### Added
+
+**§5 product identity — branding module + chain-icon assets**
+
+- `packages/core/src/branding/branding.js` — single source of truth for user-facing brand strings and asset pointers. Exports `PRODUCT_NAME` (`"XChain Wallet"`), `TAGLINE` (placeholder from §5.2 candidate), `CANONICAL_DOMAIN` (`wallet.xchain.io`), `HOMEPAGE_URL`, `ACCENT_PRIMARY` / `ACCENT_SECONDARY` (sampled from the XChain logo — blue `#1E90C7`, purple `#7B2C8F`), `DEFAULT_EXPLORER_BASE` / `DEFAULT_HUB_BASE`, and chain-icon maps (`CHAIN_ICON_SMALL`, `CHAIN_ICON_LARGE`) keyed by ChainDescriptor.id
+- `packages/core/src/branding/assets/` — 20 files vendored from `xchain-explorer/src/content/images/`: product logo (`xchain-color-750.png`), favicon (`favicon.png`), and 9 chain icons × 2 sizes (20px + 500px) covering BTC / DOGE / LTC × mainnet / testnet / regtest
+- `assetUrl(filename)` / `logoUrl()` / `faviconUrl()` / `chainIconSmallUrl(chainId)` / `chainIconLargeUrl(chainId)` — resolve asset filenames to runtime URLs via `new URL('./assets/...', import.meta.url)`, the Vite-friendly pattern that emits hashed static assets at build time and still resolves on disk under Node
+
+**§5.5 placeholders — resolved (non-marketing-gated)**
+
+| Item | Resolution |
+|---|---|
+| Product name | `"XChain Wallet"` |
+| Tagline | §5.2 candidate (self-custodial wallet for the XChain Platform) |
+| Canonical domain | `wallet.xchain.io` |
+| Per-chain explorer/hub URLs | `https://explorer.xchain.io`, `https://hub.xchain.io` (base); existing descriptor entries retained |
+| Primary accent | `#1E90C7` (sampled from logo) |
+| Secondary accent | `#7B2C8F` (sampled from logo) |
+| Logo | `xchain-color-750.png` shipped |
+| Favicon | `favicon.png` shipped |
+| Chain icons | 9 × 2 sizes shipped |
+
+ADS donation addresses remain the `PLACEHOLDER_REPLACE_BEFORE_MAINNET` sentinel (unchanged — marketing-/ops-gated). Tagline, primary-brand wordmark, and store-listing copy remain pending the marketing pass per §5.5.
+
+### Changed
+
+- `packages/core/src/registry/descriptors/{bitcoin,dogecoin,litecoin}.js` — replaced empty `icon: ''` with per-network asset filenames (e.g. `icon: 'bitcoin-mainnet-icon-20.png'`) on each of the 9 bundled descriptors. Validator JSDoc updated to describe `icon` as an asset filename resolved via `branding.assetUrl()`.
+- `packages/extension/src/bridge/handlers.js` — `bridge.getSupportedChains` no longer forwards `descriptor.icon` verbatim to dApps. Raw filenames would be unresolvable cross-origin; a follow-up shell-layer piece will resolve them to `chrome.runtime.getURL(...)` URLs against a web-accessible asset path. Until then the bridge sends `icon: ''` (pre-existing behaviour) with an in-line TODO.
+
+### Tests
+
+- `packages/core/test/branding.smoke.js` — verifies 17 exports, 20 asset files exist on disk, all 9 bundled descriptors validate with their new `icon` fields, and no §5.5 `PLACEHOLDER_` sentinel leaks into branding strings.
+
 ## [0.33.0] - 2026-04-22
 
 ### Added
