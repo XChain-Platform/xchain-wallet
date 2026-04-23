@@ -1,0 +1,9 @@
+.chainLine {
+    display: flex;
+    justify-content: flex-start;
+    margin-bottom: var(--xc-space-2);
+}
+
+.form {
+    margin: 0;
+}

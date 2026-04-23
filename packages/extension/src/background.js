@@ -19,6 +19,7 @@ import {
     ChromeStorageBackend,
 } from './storage/index.js';
 import {
+    ApprovalBroker,
     attachChromeRuntime,
     attachSessionMetaListener,
     createBackgroundHost,
@@ -59,6 +60,11 @@ const sdkRegistry = new sdkLib.SDKRegistry({
     sdkFactory: scaffoldSdkFactory,
 });
 
+// Module-scoped so the broker survives across unlock / lock cycles —
+// rejecting any pending approval on window-close continues to work even
+// if no wallet is unlocked.
+const approvalBroker = new ApprovalBroker();
+
 let host = null;
 let vault = null;
 let detachHost = null;
@@ -76,7 +82,12 @@ async function ensureHost() {
         masterKey,
     });
     await vault.open();
-    host = createBackgroundHost({ vault, chainRegistry, sdkRegistry });
+    host = createBackgroundHost({
+        vault,
+        chainRegistry,
+        sdkRegistry,
+        approvals: approvalBroker,
+    });
     detachHost = attachChromeRuntime(host);
     return host;
 }

@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.40.0] - 2026-04-22
+
+Covers Batch 3 pieces 8 + 9 (approval window plumbing + per-kind approval screens). Bundled because piece 9 replaces piece 8's `approval/main.jsx` placeholder and extends `approval/messaging.js` — splitting would just churn the same files.
+
+### Added
+
+**Piece 8 — approval window plumbing** (§43.4 request-approval flow)
+
+- `packages/extension/src/background/approvalBroker.js` — `ApprovalBroker` class implements the `Approvals` interface (`connect`, `signAction`, `signMessage`, `signPsbt`, `signIn`) by parking requests in an in-memory map, opening an approval popup via `chrome.windows.create`, and returning a Promise that settles when the popup calls back via `approval.resolve` or when the window is closed by the user (chrome.windows.onRemoved → resolves as `{ approved: false }` — the `USER_REJECTED` convention). Deps are injectable (`newId`, `getUrl`, `windows`) so tests can drive the lifecycle without a browser.
+- `packages/extension/src/background/uuid.js` — `sessionRandomUUID()` falls back to `crypto.getRandomValues` when `randomUUID` isn't available so the broker is testable under older Node.
+- `packages/extension/src/background/createBackgroundHost.js` registers two new host handlers gated on the broker having the methods:
+  - `approval.fetch({ id })` — returns the parked `{ id, kind, payload }` for the approval window; surfaces `ApprovalNotFoundError` for unknown ids.
+  - `approval.resolve({ id, result })` — settles the parked Promise. Closes the window via `chrome.windows.remove`.
+- `packages/extension/approval.html` + `packages/extension/src/approval/main.jsx` — the approval-window entry. Piece 8 shipped a `<Placeholder />` to prove the window plumbing works end-to-end; piece 9 replaces it with a real Router.
+- `packages/extension/vite.config.js` adds `approval` as a fourth HTML entry. The manifest doesn't reference `approval.html` directly — `chrome.runtime.getURL` does, so the plugin copy is enough.
+- `packages/extension/src/background.js` constructs a module-scoped `ApprovalBroker` at startup (survives unlock/lock cycles) and passes it as `approvals` when building the host.
+
+**Piece 9 — per-kind approval screens**
+
+- `packages/extension/src/approval/Router.jsx` — dispatches by `data.kind` to the matching component. Shared `reject()` settles the broker with `{ approved: false }` before calling `window.close()` so the bridge handler sees a clean `USER_REJECTED` instead of the window-close fallback.
+- `packages/extension/src/approval/kinds/ConnectApproval.jsx` (+ `.module.css`) — connect flow. Chain checkboxes enumerate `chainRegistry.supportedChains()`, pre-checking the dApp's `requestedChains` (empty default if none requested — user must opt into each). `canSignMessage` toggle (off by default). `canSignAction: {}` always empty; per-action opt-in happens at signAction time via its "Always allow" toggle. Connect disabled until at least one chain is selected.
+- `packages/extension/src/approval/kinds/SignApproval.jsx` (+ `.module.css`) — shared screen for the four password-gated kinds (`signMessage`, `signPsbt`, `signAction`, `signIn`). Layout: chain badge → per-kind summary block → password input → optional "Always allow on this origin" toggle → Reject/Approve. `savePermanent` shows for `signAction` and for `signMessage` when the request's `alreadyGranted` flag is not set — `signPsbt` has no toggle because PSBTs vary enough per-transaction that a blanket allow is dangerous (§21.3). Result envelope: `{ approved: true, walletId, password, savePermanent? }`. `InvalidPasswordError` surfaces as "Incorrect password." inline; other errors show their raw message for diagnosis.
+- `packages/extension/src/approval/approval.module.css` — shared header / footer / summary / toggle-row utilities.
+- `packages/extension/src/approval/messaging.js` adds `listWallets()` so `SignApproval` can pick `wallets[0].id` as `walletId` for the sign-result envelope. Multi-wallet picker is Phase 2.
+
+### Changed
+
+- `packages/extension/src/shared/chromeMessaging.js` — extracted the `sendMessage` wrapper so both `popup/messaging.js` and `approval/messaging.js` can consume the same implementation without either depending on the other.
+- `packages/extension/src/popup/messaging.js` — now re-imports `sendMessage` from the shared module (popup-facing helpers unchanged).
+- `packages/core/test/popup-shell.smoke.js` — regex that checks for `sendMessage` accepts both direct-export and re-export forms.
+
+### Tests
+
+- `packages/core/test/approval-broker.smoke.js` — static wiring + full broker lifecycle against a fake `chrome.windows`: connect → fetch → resolve round-trip, double-resolve no-op, unknown-id returns, window-close → `{approved: false}`, missing-windows rejection, plus a real MessageHost round-trip that verifies `approval.fetch` returns the parked payload, unknown ids surface `ApprovalNotFoundError`, and `approval.resolve` settles the pending bridge Promise.
+- `packages/core/test/approval-screens.smoke.js` — static wiring for Router / ConnectApproval / SignApproval (dispatch by kind, result-envelope fields, kind coverage, savePermanent conditional, InvalidPasswordError pathway) + three broker round-trips that simulate each kind of popup result envelope and verify the bridge-side Promise resolves with exactly those fields.
+
 ## [0.39.0] - 2026-04-22
 
 ### Added

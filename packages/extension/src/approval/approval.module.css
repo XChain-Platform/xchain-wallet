@@ -1,0 +1,74 @@
+/* Shared styles across the approval kinds. Each kind component adds
+ * its own co-located module too — these tokens-only utilities keep
+ * the headers / footers / summaries consistent. */
+
+.header {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+    width: 100%;
+    text-align: center;
+}
+
+.title {
+    font-weight: 700;
+    font-size: var(--xc-text-md);
+    color: var(--xc-text);
+}
+
+.origin {
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    font-family: var(--xc-font-mono);
+}
+
+.footer {
+    display: flex;
+    gap: var(--xc-space-2);
+    width: 100%;
+}
+
+.summary {
+    background: var(--xc-bg-muted);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-md);
+    padding: var(--xc-space-3);
+    margin-bottom: var(--xc-space-3);
+}
+
+.summaryLabel {
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    font-weight: 600;
+    margin: 0 0 var(--xc-space-1);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.summaryValue {
+    font-family: var(--xc-font-mono);
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text);
+    white-space: pre-wrap;
+    word-break: break-all;
+    margin: 0;
+}
+
+.toggleRow {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text);
+    margin: var(--xc-space-2) 0;
+}
+
+.toggleRow input[type="checkbox"] {
+    margin: 0;
+}
+
+.error {
+    color: var(--xc-danger);
+    font-size: var(--xc-text-xs);
+    margin: var(--xc-space-2) 0 0;
+}

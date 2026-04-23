@@ -216,6 +216,43 @@ export function createBackgroundHost(deps) {
         return addressHistory({ ...req, sdkRegistry });
     });
 
+    // --- Approval broker IPC -------------------------------------------------
+    // The approval window opens from chrome.windows.create and queries
+    // the broker for its parked request, then reports the user's decision
+    // back. Gated on `approvals.fetch` / `approvals.resolve` being
+    // present — the default `rejectAllApprovals` doesn't implement them,
+    // so callers that haven't wired a real broker (tests, early scaffolds)
+    // get an `UnknownMessageTypeError` that's easy to spot.
+    if (approvals && typeof approvals.fetch === 'function') {
+        host.register('approval.fetch', async (req) => {
+            const id = /** @type {any} */ (req)?.id;
+            if (typeof id !== 'string' || id.length === 0) {
+                throw new Error('approval.fetch: id is required');
+            }
+            const data = approvals.fetch(id);
+            if (!data) {
+                throw Object.assign(new Error(`approval.fetch: unknown id "${id}"`), {
+                    name: 'ApprovalNotFoundError',
+                });
+            }
+            return data;
+        });
+    }
+    if (approvals && typeof approvals.resolve === 'function') {
+        host.register('approval.resolve', async (req) => {
+            const id = /** @type {any} */ (req)?.id;
+            const result = /** @type {any} */ (req)?.result;
+            if (typeof id !== 'string' || id.length === 0) {
+                throw new Error('approval.resolve: id is required');
+            }
+            if (!result || typeof result !== 'object') {
+                throw new Error('approval.resolve: result object is required');
+            }
+            const ok = await approvals.resolve(id, result);
+            return { resolved: ok };
+        });
+    }
+
     // --- dApp bridge ---------------------------------------------------------
     // §43 surface. Shells wire Approvals to pipe user-prompts through a
     // popup window; the default rejects everything with

@@ -49,8 +49,8 @@ assert.ok(appJsx.includes('getSessionStatus'), 'App.jsx queries getSessionStatus
 
 const messaging = readFileSync(join(ext, 'src', 'popup', 'messaging.js'), 'utf8');
 assert.ok(
-    /export function sendMessage/.test(messaging),
-    'messaging.js exports sendMessage',
+    /export\s+\{\s*sendMessage\b|export function sendMessage/.test(messaging),
+    'messaging.js exports sendMessage (direct or re-export)',
 );
 assert.ok(
     /export function getSessionStatus/.test(messaging),
