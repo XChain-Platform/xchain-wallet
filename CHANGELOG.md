@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-04-22
+
+### Added
+
+**Labels-survive-restore: on-chain FILE-action sync** (§19.5.2) — seed-derived encrypted labels + contacts
+- `computeLabelSyncCommitmentKey(seed)` → `SHA256("xchain-wallet-label-sync" || seed)` — deterministic 32-byte AES-256 key; same seed always produces the same key
+- `computeLabelSyncDiscoveryName(commitmentKey)` → hex SHA256 of the key — goes into the FILE action's `name` field so a restoring wallet can find its own ciphertext without trial-decrypting every FILE on the chain
+- `encodeLabelSyncPayload` / `decodeLabelSyncPayload` — AES-256-GCM `iv || ct || tag` round-trip; body shape `{ version, updatedAt, labels, contacts }`
+- `buildLabelSyncPayload({ vault, walletId, seed })` — reads the wallet's labeled addresses (HD + imported-WIF, label must be non-empty) and contacts; returns `{ ciphertext, discoveryName, body }` ready for the caller to publish via a FILE action
+- `applyLabelSyncPayload({ vault, walletId, payload, onConflict })` — matches incoming labels to persisted addresses by id first, by `address` string as fallback (the id can't survive a from-seed restore because the new wallet generates fresh UUIDs). `onConflict: 'overwrite'` (default, user asked for sync) or `'preserve'`. Contacts are fully upserted with a fresh `updatedAt`
+- Returns `{ addressesUpdated, addressesSkipped, addressesMissing, contactsAdded, contactsUpdated, contactsSkipped }` so the shell can surface "restored N labels, Y incoming labels had no matching address"
+- Smoke-tested: deterministic keys, round-trip decrypt, wrong-key rejection, end-to-end on a seed-restored wallet (labeled HD address on wallet A → new wallet B from same mnemonic → payload decrypts with B's seed → label applied to B's corresponding address)
+
+The FILE action submission itself (calling `sdk.encoder.action` with the chain choice) is kept in the shell integration — it needs a chainId picker (lowest-fee chain by default per spec) and access to the wallet's fee strategy, both of which are orthogonal to the payload codec.
+
 ## [0.21.0] - 2026-04-22
 
 ### Added

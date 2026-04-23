@@ -6,3 +6,4 @@ export * from './hd.js';
 export * from './wif.js';
 export * from './walletBlob.js';
 export * from './backup.js';
+export * from './labelSync.js';
