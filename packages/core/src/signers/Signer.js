@@ -61,10 +61,22 @@ export class NotImplementedError extends Error {
  */
 
 /**
+ * A signing-path entry. Exactly one of `path` (HD-derived) or
+ * `addressId` (imported-WIF, software signer only) must be present.
+ * Hardware signers accept only the `path` form.
+ *
+ * @typedef {Object} SigningPathEntry
+ * @property {number} inputIndex
+ * @property {string} [path]         BIP32 path — HD-derived key
+ * @property {string} [addressId]    Address record id — imported-WIF key (SoftwareSigner only)
+ * @property {number} [sighashType]
+ */
+
+/**
  * @typedef {Object} SignPsbtParams
  * @property {string} psbtHex
  * @property {string} chainId
- * @property {Array<{ inputIndex: number, path: string, sighashType?: number }>} signingPaths
+ * @property {SigningPathEntry[]} signingPaths
  */
 
 /**
@@ -75,10 +87,14 @@ export class NotImplementedError extends Error {
  */
 
 /**
+ * Sign a message. Like `SignPsbtParams.signingPaths`, exactly one of
+ * `path` or `addressId` identifies the key.
+ *
  * @typedef {Object} SignMessageParams
  * @property {string} message
  * @property {string} chainId
- * @property {string} path
+ * @property {string} [path]
+ * @property {string} [addressId]
  */
 
 /**

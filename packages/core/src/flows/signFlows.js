@@ -22,7 +22,8 @@ import { unlockWallet } from './unlockWallet.js';
  * @property {import('../registry/index.js').ChainRegistry} chainRegistry
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
  * @property {string} chainId
- * @property {string} path                                    BIP32 path of the signing key
+ * @property {string} [path]        BIP32 path — HD key
+ * @property {string} [addressId]   Address record id — imported-WIF key
  * @property {string} message
  */
 
@@ -39,14 +40,19 @@ export async function signMessageFlow({
     sdkRegistry,
     chainId,
     path,
+    addressId,
     message,
 }) {
     if (!vault) throw new Error('signMessageFlow: vault is required');
     if (typeof chainId !== 'string' || chainId.length === 0) {
         throw new Error('signMessageFlow: chainId is required');
     }
-    if (typeof path !== 'string' || !path.startsWith('m/')) {
-        throw new Error('signMessageFlow: path must be a BIP32 path string');
+    const hasPath = typeof path === 'string' && path.startsWith('m/');
+    const hasAddressId = typeof addressId === 'string' && addressId.length > 0;
+    if (hasPath === hasAddressId) {
+        throw new Error(
+            'signMessageFlow: supply exactly one of `path` (BIP32) or `addressId` (imported-WIF)',
+        );
     }
     if (typeof message !== 'string') {
         throw new Error('signMessageFlow: message must be a string');
@@ -60,7 +66,7 @@ export async function signMessageFlow({
         sdkRegistry,
     });
     try {
-        return await signer.signMessage({ message, chainId, path });
+        return await signer.signMessage({ message, chainId, path, addressId });
     } finally {
         signer.lock();
     }
@@ -76,7 +82,7 @@ export async function signMessageFlow({
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
  * @property {string} chainId
  * @property {string} psbtHex
- * @property {Array<{ inputIndex: number, path: string, sighashType?: number }>} signingPaths
+ * @property {import('../signers/Signer.js').SigningPathEntry[]} signingPaths
  */
 
 /**

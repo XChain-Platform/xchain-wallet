@@ -11,8 +11,9 @@ import { submitAction } from './submitAction.js';
 /**
  * @typedef {Object} SourceRef
  * @property {string} address
- * @property {string} publicKey        hex, compressed (SDK expects this form)
- * @property {string} derivationPath   BIP32 path
+ * @property {string} publicKey                  hex, compressed (SDK expects this form)
+ * @property {string | null} [derivationPath]    HD path; null/omitted for imported-WIF
+ * @property {string} [addressId]                Address record id; required when derivationPath is null
  */
 
 /**
@@ -80,7 +81,9 @@ export async function sendAsset(opts) {
             ...(opts.feePerKb !== undefined && { feePerKb: opts.feePerKb }),
             ...(opts.rbf !== undefined && { rbf: opts.rbf }),
         },
-        signingPaths: [{ inputIndex: 0, path: source.derivationPath }],
+        signingPaths: [source.derivationPath
+            ? { inputIndex: 0, path: source.derivationPath }
+            : { inputIndex: 0, addressId: source.addressId }],
         pendingTxMeta,
         waitForTxid: opts.waitForTxid,
         waitOpts: opts.waitOpts,
@@ -90,8 +93,14 @@ export async function sendAsset(opts) {
 
 /**
  * Normalize the `from` argument to a SourceRef. Accepts either an
- * Address schema record or a plain `{ address, publicKey, derivationPath }`
- * triple. Shared by sendAsset and sweepAsset.
+ * Address schema record (including imported-WIF addresses from a
+ * wif-only wallet or HD+imported) or a plain object with the same
+ * fields. Shared by sendAsset and sweepAsset.
+ *
+ * HD source: needs `address`, `publicKey`, `derivationPath`.
+ * Imported-WIF source: needs `address`, `publicKey`, plus `addressId`
+ * (the Address record id; the signer resolves the WIF from
+ * `Wallet.importedKeys[addressId]`). Watch-only addresses are rejected.
  *
  * @param {unknown} from
  * @param {string} fnName
@@ -101,17 +110,32 @@ export function normalizeSource(from, fnName = 'flow') {
     if (!from || typeof from !== 'object') {
         throw new Error(`${fnName}: from is required`);
     }
-    const { address, publicKey, derivationPath } = /** @type {SourceRef} */ (from);
+    const source = /** @type {SourceRef & { source?: string, id?: string }} */ (from);
+    const { address, publicKey, derivationPath } = source;
     if (typeof address !== 'string' || address.length === 0) {
         throw new Error(`${fnName}: from.address must be a non-empty string`);
     }
     if (typeof publicKey !== 'string' || publicKey.length === 0) {
         throw new Error(`${fnName}: from.publicKey must be a non-empty string`);
     }
-    if (typeof derivationPath !== 'string' || derivationPath.length === 0) {
+    if (source.source === 'watch-only' || source.source === 'trezor' || source.source === 'ledger') {
         throw new Error(
-            `${fnName}: from.derivationPath must be a non-empty string — HD addresses only (imported-WIF / watch-only have null paths)`,
+            `${fnName}: from.source = "${source.source}" — this signer cannot produce signatures here`,
         );
     }
-    return { address, publicKey, derivationPath };
+    if (typeof derivationPath === 'string' && derivationPath.length > 0) {
+        return { address, publicKey, derivationPath };
+    }
+    // Imported-WIF path. `addressId` is required and taken from the
+    // Address record's `id` field (which is what the Address schema
+    // puts there), or from an explicit `addressId` on a plain triple.
+    const addressId = typeof source.addressId === 'string' && source.addressId.length > 0
+        ? source.addressId
+        : (typeof source.id === 'string' && source.id.length > 0 ? source.id : null);
+    if (!addressId) {
+        throw new Error(
+            `${fnName}: from.derivationPath is null — imported-WIF source must include an addressId (Address record's id)`,
+        );
+    }
+    return { address, publicKey, derivationPath: null, addressId };
 }

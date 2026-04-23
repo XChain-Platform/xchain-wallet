@@ -35,9 +35,9 @@ import {
 
 /**
  * @typedef {Object} UnlockedState
- * @property {Uint8Array} mnemonicBytes   UTF-8 bytes of the decrypted BIP39 mnemonic
- * @property {Uint8Array} seed            64-byte BIP39 seed (mnemonic + passphrase)
- * @property {Map<string, Uint8Array>} importedWifs   keyed by addressId
+ * @property {Uint8Array} mnemonicBytes   UTF-8 bytes of the decrypted BIP39 mnemonic (empty for wif-only)
+ * @property {Uint8Array} seed            64-byte BIP39 seed; empty for wif-only
+ * @property {Map<string, Uint8Array>} importedWifs   decrypted WIFs keyed by addressId (bytes, so we can zero on lock)
  */
 
 export class SoftwareSigner extends Signer {
@@ -119,11 +119,11 @@ export class SoftwareSigner extends Signer {
             );
         }
 
-        // wif-only wallets have no seed to decrypt. Validate the password
-        // by decrypting the first importedKey entry — if it succeeds,
-        // the master key is correct; if it fails, the AEAD tag check
-        // surfaces as a wrong-password error the same way the seed
-        // decrypt would for a seed-backed wallet.
+        // wif-only wallets have no seed to decrypt. We still derive the
+        // master key from the password and decrypt every importedKey
+        // entry; the first one's decrypt also doubles as the password
+        // probe (if it fails, the AEAD tag check surfaces the same way
+        // seed-decrypt failure does for seed-backed wallets).
         if (format === 'wif-only') {
             const imported = enc.importedKeys ?? [];
             if (imported.length === 0) {
@@ -132,19 +132,16 @@ export class SoftwareSigner extends Signer {
                 );
             }
             const masterKey = deriveMasterKey(password, enc.kdfParams);
+            let importedWifs;
             try {
-                const probe = await decrypt(
-                    masterKey,
-                    base64ToBytes(imported[0].encryptedWif),
-                );
-                probe.fill(0);
+                importedWifs = await decryptImportedKeys(masterKey, imported);
             } finally {
                 masterKey.fill(0);
             }
             this._acceptUnlockedState({
                 mnemonicBytes: new Uint8Array(0),
                 seed: new Uint8Array(0),
-                importedWifs: new Map(),
+                importedWifs,
             });
             return;
         }
@@ -178,10 +175,27 @@ export class SoftwareSigner extends Signer {
             throw new Error(`SoftwareSigner.unlock: unsupported wallet format "${format}"`);
         }
 
+        // Seed-backed wallets can also carry importedKeys (§15.5 — WIFs
+        // imported INTO an existing HD wallet). Decrypt them now so
+        // signPsbt / signMessage / exportWifForAddress can route to
+        // them without a second KDF round.
+        let importedWifs;
+        const importedRecords = enc.importedKeys ?? [];
+        if (importedRecords.length > 0) {
+            const masterKey = deriveMasterKey(password, enc.kdfParams);
+            try {
+                importedWifs = await decryptImportedKeys(masterKey, importedRecords);
+            } finally {
+                masterKey.fill(0);
+            }
+        } else {
+            importedWifs = new Map();
+        }
+
         this._acceptUnlockedState({
             mnemonicBytes: plaintext,
             seed,
-            importedWifs: new Map(),
+            importedWifs,
         });
     }
 
@@ -263,8 +277,10 @@ export class SoftwareSigner extends Signer {
     }
 
     /**
-     * Sign a PSBT. All inputs are signed with the key at `signingPaths[0].path`;
-     * multi-key signing is a future enhancement (same signer, multiple paths).
+     * Sign a PSBT. All inputs are signed by a single key; that key is
+     * identified by either `path` (HD) or `addressId` (imported-WIF).
+     * Multi-key signing (different paths across inputs) is a future
+     * enhancement.
      *
      * @param {import('./Signer.js').SignPsbtParams} params
      * @returns {Promise<import('./Signer.js').SignPsbtReturn>}
@@ -275,39 +291,40 @@ export class SoftwareSigner extends Signer {
         if (!Array.isArray(signingPaths) || signingPaths.length === 0) {
             throw new Error('SoftwareSigner.signPsbt: signingPaths must be non-empty');
         }
-        const distinctPaths = new Set(signingPaths.map((sp) => sp.path));
-        if (distinctPaths.size > 1) {
-            throw new Error(
-                'SoftwareSigner.signPsbt: multi-key signing not yet supported; all inputs must share the same path',
-            );
-        }
-        const wif = this._deriveWifFor(chainId, signingPaths[0].path);
-        try {
-            const sdk = this._sdkRegistry.get(chainId);
-            const { txHex, txid, psbtHex: signedPsbtHex } = sdk.wallet.signPsbt(psbtHex, wif);
-            return { signedPsbtHex, txHex, txid };
-        } finally {
-            // WIF is a string; no reliable zeroing in JS. Best-effort: drop
-            // the reference so GC can reclaim.
-        }
+        assertSameSigningSource(signingPaths, 'signPsbt');
+        const entry = signingPaths[0];
+        const wif = this._resolveWifForEntry(chainId, entry);
+        const sdk = this._sdkRegistry.get(chainId);
+        const { txHex, txid, psbtHex: signedPsbtHex } = sdk.wallet.signPsbt(psbtHex, wif);
+        return { signedPsbtHex, txHex, txid };
     }
 
     /**
-     * Sign a message for the address at `path` via `sdk.auth.signMessage`.
-     * The signature format must match the address's script type, so we
-     * route `segwitNative` / `segwitRedeemScript` opts from the BIP44
-     * purpose number in the path (44 = p2pkh, 49 = p2sh-p2wpkh,
+     * Sign a message via `sdk.auth.signMessage`. Key identified by
+     * either `path` (HD) or `addressId` (imported-WIF).
+     *
+     * For HD keys the signature format must match the address's script
+     * type, so we route `segwitNative` / `segwitRedeemScript` from the
+     * BIP44 purpose number in the path (44 = p2pkh, 49 = p2sh-p2wpkh,
      * 84 = p2wpkh). p2tr (86) is not supported by the SDK's
      * bitcoinjs-message-based signer.
+     *
+     * For imported-WIF keys the script type is recorded on the Address
+     * record rather than a path; the caller wiring (signMessageFlow)
+     * resolves this by passing `addressType` through a separate path
+     * if needed, but for v1 we default to plain p2pkh — matches how
+     * WIFs imported without path context were typically used.
      *
      * @param {import('./Signer.js').SignMessageParams} params
      * @returns {Promise<import('./Signer.js').SignMessageReturn>}
      */
-    async signMessage({ message, chainId, path }) {
+    async signMessage({ message, chainId, path, addressId }) {
         this._assertUnlocked();
         this._assertSdkRegistry('signMessage');
-        const sigOpts = signMessageOptsFromPath(path);
-        const wif = this._deriveWifFor(chainId, path);
+        const entry = { path, addressId };
+        assertEntryShape(entry, 'signMessage');
+        const sigOpts = path ? signMessageOptsFromPath(path) : {};
+        const wif = this._resolveWifForEntry(chainId, entry);
         const sdk = this._sdkRegistry.get(chainId);
         const result = sdk.auth.signMessage(message, wif, sigOpts);
         // SDK's AuthUtils.signMessage returns { signature, address }; our
@@ -330,14 +347,14 @@ export class SoftwareSigner extends Signer {
     }
 
     /**
-     * Public wrapper around `_deriveWifFor` for §17.7 "view / export
-     * private key" flows. Returns the WIF for an HD-derived address
-     * owned by this signer. Caller is responsible for letting the WIF
-     * string fall out of scope promptly (see §17.7.3 memory-hygiene
-     * caveat on JS string zeroing).
+     * Public wrapper for §17.7 "view / export private key" flows.
+     * Returns the WIF for an HD-derived address owned by this signer.
+     * Caller is responsible for letting the WIF string fall out of
+     * scope promptly (see §17.7.3 memory-hygiene caveat on JS string
+     * zeroing).
      *
-     * Imported-WIF addresses are handled outside the signer by
-     * `exportPrivateKey` (decrypted directly from `Wallet.importedKeys`).
+     * Imported-WIF addresses are handled by `exportWifForAddressId`
+     * or the top-level `exportPrivateKey` flow.
      *
      * @param {Object} params
      * @param {string} params.chainId
@@ -350,6 +367,47 @@ export class SoftwareSigner extends Signer {
             throw new Error('SoftwareSigner.exportWifForPath: chainId is required');
         }
         return this._deriveWifFor(chainId, path);
+    }
+
+    /**
+     * Return the WIF for an imported-WIF Address record owned by this
+     * signer. Looks up `_unlocked.importedWifs[addressId]`.
+     *
+     * @param {string} addressId
+     * @returns {string}
+     */
+    exportWifForAddressId(addressId) {
+        this._assertUnlocked();
+        if (typeof addressId !== 'string' || addressId.length === 0) {
+            throw new Error('SoftwareSigner.exportWifForAddressId: addressId is required');
+        }
+        const bytes = this._unlocked.importedWifs.get(addressId);
+        if (!bytes) {
+            throw new Error(
+                `SoftwareSigner.exportWifForAddressId: no imported WIF for addressId "${addressId}"`,
+            );
+        }
+        return new TextDecoder().decode(bytes);
+    }
+
+    /**
+     * Internal: resolve the WIF for a signingPaths entry. Routes on
+     * which field is present.
+     *
+     * @param {string} chainId
+     * @param {{ path?: string, addressId?: string }} entry
+     * @returns {string}
+     */
+    _resolveWifForEntry(chainId, entry) {
+        if (entry && typeof entry.path === 'string' && entry.path.length > 0) {
+            return this._deriveWifFor(chainId, entry.path);
+        }
+        if (entry && typeof entry.addressId === 'string' && entry.addressId.length > 0) {
+            return this.exportWifForAddressId(entry.addressId);
+        }
+        throw new Error(
+            'SoftwareSigner: signing-path entry must supply either `path` (HD) or `addressId` (imported-WIF)',
+        );
     }
 
     /**
@@ -410,6 +468,52 @@ function toHex(bytes) {
     let s = '';
     for (const b of bytes) s += b.toString(16).padStart(2, '0');
     return s;
+}
+
+// Decrypt every entry in `importedKeys` into a Map<addressId,
+// Uint8Array> keyed by addressId. The plaintext bytes are the WIF's
+// UTF-8 encoding; we keep them as bytes (not strings) so lock() can
+// zero them. The caller controls the master key lifetime — we use it
+// for this one batch then zero it ourselves.
+async function decryptImportedKeys(masterKey, importedRecords) {
+    /** @type {Map<string, Uint8Array>} */
+    const out = new Map();
+    for (const rec of importedRecords) {
+        if (!rec || typeof rec.encryptedWif !== 'string') continue;
+        const wifBytes = await decrypt(masterKey, base64ToBytes(rec.encryptedWif));
+        out.set(rec.addressId, wifBytes);
+    }
+    return out;
+}
+
+// All entries in a signingPaths array must identify the same key.
+// Multi-key signing (different keys across inputs of one tx) is a
+// future enhancement — when it lands, this check moves to routing
+// different inputs to different WIFs.
+function assertSameSigningSource(signingPaths, method) {
+    const paths = new Set(
+        signingPaths.map((sp) => sp.path).filter((p) => typeof p === 'string'),
+    );
+    const addressIds = new Set(
+        signingPaths.map((sp) => sp.addressId).filter((a) => typeof a === 'string'),
+    );
+    if (paths.size + addressIds.size !== 1) {
+        throw new Error(
+            `SoftwareSigner.${method}: multi-key signing not yet supported; all inputs must share the same path or addressId`,
+        );
+    }
+    for (const sp of signingPaths) assertEntryShape(sp, method);
+}
+
+function assertEntryShape(entry, method) {
+    const hasPath = typeof entry.path === 'string' && entry.path.length > 0;
+    const hasAddressId = typeof entry.addressId === 'string' && entry.addressId.length > 0;
+    if (hasPath === hasAddressId) {
+        // Both or neither.
+        throw new Error(
+            `SoftwareSigner.${method}: signing entry must supply exactly one of \`path\` or \`addressId\``,
+        );
+    }
 }
 
 // Map BIP44 purpose number → SDK signMessage opts. Paths outside the

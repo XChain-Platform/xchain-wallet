@@ -88,7 +88,9 @@ export async function sweepAsset(opts) {
             ...(opts.feePerKb !== undefined && { feePerKb: opts.feePerKb }),
             ...(opts.rbf !== undefined && { rbf: opts.rbf }),
         },
-        signingPaths: [{ inputIndex: 0, path: source.derivationPath }],
+        signingPaths: [source.derivationPath
+            ? { inputIndex: 0, path: source.derivationPath }
+            : { inputIndex: 0, addressId: source.addressId }],
         pendingTxMeta,
         waitForTxid: opts.waitForTxid,
         waitOpts: opts.waitOpts,
