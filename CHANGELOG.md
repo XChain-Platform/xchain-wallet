@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.38.0] - 2026-04-22
+
+Covers Batch 2 pieces 5 + 6 (real unlock screen + Home screen with `wallet.lock` + foreground auto-lock). Bundled because both pieces touch `sessionMeta.js` + `messaging.js`; splitting the commit would require churn without shipping anything different.
+
+### Added
+
+**Piece 5 — unlock flow** (§26 lock/unlock)
+
+- **Pre-host dispatcher** — `packages/extension/src/background/sessionMeta.js` refactored from a single-type listener into a dispatcher. Exports `PRE_HOST_MESSAGE_TYPES` (authoritative set the host listener skips) and handles `session.status` + `wallet.unlock`. `ChromeRuntimeAdapter` now consults that set directly instead of a `session.*` prefix check — keeping the two listeners disjoint without convention-coupling.
+- **`wallet.unlock` handler** — `packages/extension/src/background/walletUnlock.js` derives the vault master key via `cryptoLib.deriveMasterKey`, authenticates by opening the encrypted blob (AES-GCM tag mismatch ⇒ `InvalidPasswordError`), seeds the session backend, and fires `onUnlocked()` so background can re-init the host. `NoVaultError` surfaces when no kdfParams meta is planted; empty-password guarded at the boundary.
+- **Plaintext meta storage** — `packages/extension/src/storage/ChromeMetaBackend.js` stores vault kdfParams at `xchain-wallet:vault-meta`. Non-secret by design (Argon2id salt is public; memory/iterations are tuning info). Needed because the master key must be derived from password before the ciphertext can be touched.
+- **Locked screen** — `src/popup/routes/Locked.jsx` is now a functional password form: auto-focus on mount, auto-re-focus+select on failure, `<Input type="password" autoComplete="current-password">`, `<Button type="submit" loading>` for inline spinner, Enter-to-submit via native `<form>`. `InvalidPasswordError` surfaces as "Incorrect password." — other errors show the raw message (bugs worth seeing).
+- `unlockWallet(password)` added to `src/popup/messaging.js`.
+
+**Piece 6 — Home screen + wallet.lock + foreground auto-lock**
+
+- **`wallet.lock` handler** — `packages/extension/src/background/walletLock.js` clears the session backend and fires `onLocked()`. Added to `PRE_HOST_MESSAGE_TYPES` (with a matching dispatch case). Idempotent — safe to call when there's already no session.
+- **Background teardown** — `background.js` captures `attachChromeRuntime`'s detach fn, defines `tearDownHost()` (detach listener + `vault.close()` + null refs), and passes it as `onLocked`. A subsequent unlock starts from a clean slate; stale vault references can't leak across a lock boundary.
+- **Home screen** — `src/popup/routes/Home.jsx` ships the full unlocked-wallet landing view:
+  - Header: wallet name (from `wallet.list[0]` — single-wallet Phase 1 scope; picker is a later piece) + `Lock` button with loading state.
+  - Body: per-chain `<ChainBalanceCard>` rendered from `balances.wallet`. Graceful error fallback for each chain card so the SDK-stubbed state (every entry carries an `error`) renders as informative text instead of a crash. Empty-wallet hint when no addresses exist.
+  - Actions: disabled `Send` + `Receive` with an inline note pointing at their later pieces.
+- **ChainBalanceCard** — `src/popup/components/ChainBalanceCard.jsx` + `.module.css`. Card with a `ChainBadge` header, address-count sub-label, and a fallback body that surfaces the SDK error when all entries failed.
+- **`useAutoLock` hook** — `src/popup/hooks/useAutoLock.js` foreground auto-lock (§26). 5-min default, 30s tick, listens for mousemove / keydown / scroll / click / touchstart. Calls `onLock()` once the idle threshold is crossed. Documents the scope gap: background-mediated auto-lock (survives popup close/reopen) is a later piece.
+- `lockWallet()` / `listWallets()` / `getWalletBalances(walletId)` added to `messaging.js`.
+
+### Changed
+
+- `packages/extension/src/storage/index.js` re-exports `ChromeMetaBackend` + `DEFAULT_META_KEY`.
+- `packages/extension/src/background/ChromeRuntimeAdapter.js` imports `PRE_HOST_MESSAGE_TYPES` and defers those types to the meta listener (replaces the piece-4 `session.*` prefix check).
+- `packages/core/test/popup-shell.smoke.js` adapted to the new `attachSessionMetaListener(deps, chromeRuntime)` signature + the new adapter filter wording.
+
+### Tests
+
+- `packages/core/test/unlock-flow.smoke.js` — real-crypto round-trip. Builds a genuine AES-GCM vault blob via the core `Vault`, plants kdfParams in the meta slot, and drives `wallet.unlock` through four behavioural cases: no-vault, right-password (unlock + session seeded + `onUnlocked` fired), wrong-password (`InvalidPasswordError`, session untouched), empty-password (boundary guard).
+- `packages/core/test/home-lock.smoke.js` — static wiring of Home / messaging / useAutoLock / ChainBalanceCard / background teardown, plus behavioural cases for `wallet.lock`: lock-from-unlocked (session cleared + `onLocked` fires + status flips to `locked`) and lock-without-session (idempotent, callback still fires).
+
+Both new smokes install `webcrypto` from `node:crypto` onto `globalThis.crypto` since Node 18 exposes it only under the experimental flag and `@noble/hashes` + AES-GCM both reach for the bare global.
+
 ## [0.37.0] - 2026-04-22
 
 ### Added

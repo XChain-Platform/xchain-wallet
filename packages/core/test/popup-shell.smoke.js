@@ -142,8 +142,8 @@ const adapter = readFileSync(
     'utf8',
 );
 assert.ok(
-    /session\./.test(adapter) && /startsWith\('session\.'\)/.test(adapter),
-    'ChromeRuntimeAdapter skips session.* messages',
+    adapter.includes('PRE_HOST_MESSAGE_TYPES.has('),
+    'ChromeRuntimeAdapter defers pre-host message types to the meta listener',
 );
 
 // --- 5. Behavioural: session-meta listener drives 3 real states -------
@@ -225,7 +225,7 @@ function withChromeStubs({ hasWallet, hasSession }, fn) {
 async function probe(flags) {
     return withChromeStubs(flags, async () => {
         const fake = makeFakeRuntime();
-        attachSessionMetaListener(fake.runtime);
+        attachSessionMetaListener({}, fake.runtime);
         return fake.fire({ type: 'session.status' });
     });
 }
@@ -256,7 +256,7 @@ async function probe(flags) {
 {
     await withChromeStubs({ hasWallet: false, hasSession: false }, async () => {
         const fake = makeFakeRuntime();
-        attachSessionMetaListener(fake.runtime);
+        attachSessionMetaListener({}, fake.runtime);
         const r = await fake.fire({ type: 'wallet.list' });
         assert.equal(r.ok, false, 'wallet.list is not handled by meta listener');
         assert.equal(r.error.name, 'Unhandled');

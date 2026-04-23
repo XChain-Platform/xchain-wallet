@@ -11,6 +11,12 @@
 // the Promise settles. Newer Chrome also supports returning a Promise
 // from the listener; we use the sendResponse pattern for broadest MV3
 // compatibility.
+//
+// Co-exists with the pre-host listener in `sessionMeta.js`: this adapter
+// returns `false` for types in `PRE_HOST_MESSAGE_TYPES` so the two
+// listeners stay disjoint and no message ever gets two sendResponses.
+
+import { PRE_HOST_MESSAGE_TYPES } from './sessionMeta.js';
 
 /**
  * Attach a MessageHost to a chrome.runtime surface. Returns a function
@@ -30,16 +36,15 @@ export function attachChromeRuntime(host, chromeRuntime) {
     }
 
     const listener = (message, _sender, sendResponse) => {
-        // Reserve `session.*` for the session-meta listener (see
-        // sessionMeta.js). That listener runs before the MessageHost is
-        // wired up and answers questions that don't need a vault; skipping
-        // them here avoids a double-sendResponse when both listeners fire
-        // for the same message.
+        // Pre-host listener (sessionMeta.js) owns a small set of types
+        // that must work before the MessageHost's vault-backed handlers
+        // are registered. Skip those here so no message ever sees two
+        // sendResponses.
         if (
             message &&
             typeof message === 'object' &&
             typeof message.type === 'string' &&
-            message.type.startsWith('session.')
+            PRE_HOST_MESSAGE_TYPES.has(message.type)
         ) {
             return false;
         }

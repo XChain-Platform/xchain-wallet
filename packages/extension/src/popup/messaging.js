@@ -52,3 +52,48 @@ export function sendMessage(type, request) {
 export function getSessionStatus() {
     return /** @type {any} */ (sendMessage('session.status'));
 }
+
+/**
+ * Derive the vault master key from `password`, authenticate it by
+ * opening the encrypted blob, seed the session backend, and trigger a
+ * host re-init in the background. On wrong-password, rejects with an
+ * error whose `name === 'InvalidPasswordError'`.
+ *
+ * @param {string} password
+ * @returns {Promise<{ unlocked: true }>}
+ */
+export function unlockWallet(password) {
+    return /** @type {any} */ (sendMessage('wallet.unlock', { password }));
+}
+
+/**
+ * Clear the session master key and tear down the background host. Next
+ * query of `session.status` returns `locked`.
+ *
+ * @returns {Promise<{ locked: true }>}
+ */
+export function lockWallet() {
+    return /** @type {any} */ (sendMessage('wallet.lock'));
+}
+
+/**
+ * List all persisted wallets, safe-projected (no encryptedSeed / kdfParams /
+ * importedKeys). Populates the Home screen's wallet picker.
+ *
+ * @returns {Promise<Array<{ id: string, name: string, createdAt: string, origin: string, format: string, passphraseEnabled: boolean, multisig: boolean | null }>>}
+ */
+export function listWallets() {
+    return /** @type {any} */ (sendMessage('wallet.list'));
+}
+
+/**
+ * Aggregate balances for a wallet, grouped by chainId. Per-address
+ * entries carry `balances: null` + a `error` string when the SDK
+ * read fails — the Home screen renders those as retry rows.
+ *
+ * @param {string} walletId
+ * @returns {Promise<Record<string, Array<{ address: string, addressType: string, label: string, balances: unknown | null, error: string | null }>>>}
+ */
+export function getWalletBalances(walletId) {
+    return /** @type {any} */ (sendMessage('balances.wallet', { walletId }));
+}

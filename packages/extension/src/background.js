@@ -61,6 +61,7 @@ const sdkRegistry = new sdkLib.SDKRegistry({
 
 let host = null;
 let vault = null;
+let detachHost = null;
 
 async function ensureHost() {
     if (host) return host;
@@ -76,15 +77,41 @@ async function ensureHost() {
     });
     await vault.open();
     host = createBackgroundHost({ vault, chainRegistry, sdkRegistry });
-    attachChromeRuntime(host);
+    detachHost = attachChromeRuntime(host);
     return host;
 }
 
-// Session-meta listener runs before the vault is open so the popup can
-// ask "no-wallet / locked / unlocked?" on first render. It responds to
-// `session.status` only; the host listener (attached below when a
-// session key is available) handles everything else.
-attachSessionMetaListener();
+/**
+ * Release the host + close the vault so a subsequent unlock starts from
+ * a clean slate. Called by the wallet.lock handler via the onLocked
+ * callback; also safe to call from any cleanup path (e.g. panic mode).
+ */
+function tearDownHost() {
+    if (detachHost) {
+        try { detachHost(); } catch (_err) { /* best-effort */ }
+        detachHost = null;
+    }
+    if (vault) {
+        try { vault.close(); } catch (_err) { /* best-effort */ }
+        vault = null;
+    }
+    host = null;
+}
+
+// Pre-host listener runs before the vault is open so the popup can ask
+// "no-wallet / locked / unlocked?" and perform `wallet.unlock` — both
+// of which need to work when the vault is still encrypted. The host
+// listener (attached inside `ensureHost` once a session key is present)
+// picks up everything else. See sessionMeta.PRE_HOST_MESSAGE_TYPES.
+attachSessionMetaListener({
+    onUnlocked: () =>
+        ensureHost().catch((err) => {
+            console.error('[xchain] ensureHost after unlock failed:', err);
+        }),
+    onLocked: () => {
+        tearDownHost();
+    },
+});
 
 // Kick ensureHost on startup — no-ops when there's no session.
 ensureHost().catch((err) => {
