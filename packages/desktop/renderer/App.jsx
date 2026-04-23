@@ -38,6 +38,7 @@ import { DispenserForm } from '@xchain-wallet/core/shared/routes/DispenserForm.j
 import { DispensersList } from '@xchain-wallet/core/shared/routes/DispensersList.jsx';
 import { DispenserDetail } from '@xchain-wallet/core/shared/routes/DispenserDetail.jsx';
 import { DispenserExplorer } from '@xchain-wallet/core/shared/routes/DispenserExplorer.jsx';
+import { DividendForm } from '@xchain-wallet/core/shared/routes/DividendForm.jsx';
 import { PairSignerForm } from '@xchain-wallet/core/shared/routes/PairSignerForm.jsx';
 import * as messaging from './messaging.js';
 import { getSessionStatus, listWallets } from './messaging.js';
@@ -58,7 +59,7 @@ function AppInner() {
         /** @type {'welcome' | 'create' | 'import'} */ ('welcome'),
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'pair-signer'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'pair-signer'} */ ('home'),
     );
     const [activeWalletId, setActiveWalletId] = useState(
         /** @type {string | null} */ (null),
@@ -239,6 +240,14 @@ function AppInner() {
                     />
                 );
             }
+            if (unlockedView === 'dividend' && activeWalletId) {
+                return (
+                    <DividendForm
+                        walletId={activeWalletId}
+                        onBack={() => setUnlockedView('actions')}
+                    />
+                );
+            }
             if (unlockedView === 'pair-signer' && activeWalletId) {
                 return (
                     <PairSignerForm
@@ -264,6 +273,7 @@ function AppInner() {
                             onCreateDispenser: () => setUnlockedView('dispenser'),
                             onMyDispensers: () => setUnlockedView('dispensers-list'),
                             onBrowseDispensers: () => setUnlockedView('dispenser-explorer'),
+                            onPayDividend: () => setUnlockedView('dividend'),
                             onPairSigner: () => setUnlockedView('pair-signer'),
                         })}
                         onBack={() => setUnlockedView('home')}
@@ -291,6 +301,7 @@ function buildActionEntries({
     onCreateDispenser,
     onMyDispensers,
     onBrowseDispensers,
+    onPayDividend,
     onPairSigner,
 }) {
     return [
@@ -353,6 +364,12 @@ function buildActionEntries({
             label: 'Browse dispensers',
             description: 'Search for open dispensers by token or address (§40.7.2).',
             onSelect: onBrowseDispensers,
+        },
+        {
+            id: 'dividend',
+            label: 'Pay dividend',
+            description: 'Distribute a dividend asset to holders of a token pro rata (§40.8).',
+            onSelect: onPayDividend,
         },
         {
             id: 'pair-signer',

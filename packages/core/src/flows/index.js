@@ -28,6 +28,7 @@ export {
     dispenserByActionIndex,
     dispensesFor,
 } from './dispenserQueries.js';
+export { dividendAction, holdersFor } from './dividendAction.js';
 export {
     registerSigner,
     listSignersForWallet,

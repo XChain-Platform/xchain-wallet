@@ -313,6 +313,37 @@ export function getDispenses(req) {
 }
 
 /**
+ * Build, sign, and broadcast a DIVIDEND action (§40.8). Distributes
+ * AMOUNT of DIVIDEND_TICK to every holder of TICK at the snapshot
+ * block. Source is excluded from receiving.
+ *
+ * @param {object} opts
+ * @param {string} opts.walletId
+ * @param {string} opts.password
+ * @param {string} opts.chainId
+ * @param {{ address: string, publicKey: string, derivationPath?: string | null, addressId?: string }} opts.from
+ * @param {Record<string, string>} opts.params   DIVIDEND field map (VERSION, TICK, DIVIDEND_TICK, AMOUNT, optional MEMO)
+ * @param {number} [opts.fee]
+ * @param {number} [opts.feePerKb]
+ * @param {boolean} [opts.rbf]
+ * @param {string} [opts.bip39Passphrase]
+ * @returns {Promise<any>}
+ */
+export function dividendAction(opts) {
+    return /** @type {any} */ (sendMessage('action.dividend', opts));
+}
+
+/**
+ * List holders of a token — drives DividendForm's cost preview
+ * ("N holders / ~TOTAL distribution").
+ *
+ * @param {{ chainId: string, tick: string, opts?: object }} req
+ */
+export function getHoldersForToken(req) {
+    return /** @type {any} */ (sendMessage('holders.forTick', req));
+}
+
+/**
  * Persist a paired hardware signer (§17.6 / §18.3). The caller runs
  * `pairTrezorSigner` (or the Ledger equivalent) in the renderer,
  * obtains the `pairingInfo` payload, and forwards it here. Idempotent

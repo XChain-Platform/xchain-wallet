@@ -33,6 +33,8 @@ const {
     dispensersForToken,
     dispenserByActionIndex,
     dispensesFor,
+    dividendAction,
+    holdersFor,
     registerSigner,
     listSignersForWallet,
     unregisterSigner,
@@ -258,6 +260,14 @@ export function createBackgroundHost(deps) {
 
     host.register('dispenses.query', async (req, { sdkRegistry }) => {
         return dispensesFor({ ...req, sdkRegistry });
+    });
+
+    host.register('action.dividend', async (req, { vault, chainRegistry, sdkRegistry }) => {
+        return dividendAction({ ...req, vault, chainRegistry, sdkRegistry });
+    });
+
+    host.register('holders.forTick', async (req, { sdkRegistry }) => {
+        return holdersFor({ ...req, sdkRegistry });
     });
 
     // --- Signer registry -----------------------------------------------------

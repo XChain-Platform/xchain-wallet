@@ -160,7 +160,45 @@ export function decodeAction({ action, params, chainId, chainRegistry }) {
         return decodeDispenser(p, chainSuffix);
     }
 
+    if (action === 'DIVIDEND') {
+        return decodeDividend(p, chainSuffix);
+    }
+
     return genericFallback(action, p, chainSuffix);
+}
+
+/**
+ * DIVIDEND decoder — §40.8. DIVIDEND.md has a single format version
+ * `VERSION|TICK|DIVIDEND_TICK|AMOUNT|MEMO`. The action pays AMOUNT of
+ * DIVIDEND_TICK per unit of TICK held at the snapshot block. Source
+ * address is excluded from receiving dividends (§40.8 / DIVIDEND.md
+ * Rules). The decoder can't fetch holder count itself — the form
+ * adds that preview at render time.
+ */
+function decodeDividend(p, chainSuffix) {
+    const tick = str(p.TICK);
+    const dividendTick = str(p.DIVIDEND_TICK);
+    const amount = str(p.AMOUNT);
+    const memo = str(p.MEMO);
+    return {
+        summary: `Pay ${amount || '?'} ${dividendTick || '?'} per unit of ${tick || '?'}${chainSuffix}`,
+        details: [
+            { label: 'Holders of', value: tick },
+            { label: 'Receive', value: dividendTick },
+            { label: 'Per-unit amount', value: amount },
+            ...(memo ? [{ label: 'Memo', value: memo }] : []),
+        ],
+        warnings: [
+            ...(!tick ? ['Holder ticker is empty.'] : []),
+            ...(!dividendTick ? ['Dividend ticker is empty.'] : []),
+            ...(!amount || Number(amount) <= 0
+                ? ['Per-unit amount is not positive.']
+                : []),
+            ...(memo && /[|;]/.test(memo)
+                ? ['Memo contains | or ; — the protocol will reject this transaction.']
+                : []),
+        ],
+    };
 }
 
 /**

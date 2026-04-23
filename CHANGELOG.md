@@ -7,6 +7,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.63.0] - 2026-04-23
+
+Phase 2 — Step 23 of 26 — piece 8. DIVIDEND authoring form (§40.8). Distributes AMOUNT of DIVIDEND_TICK to every holder of TICK at the snapshot block, pro rata. Spec §40.8 shows holder count + total distribution on the review screen so the user sees the cost before signing; this form delivers both via the explorer's `getHolders` query.
+
+### Added
+
+**Core flow** (`packages/core/src/flows/dividendAction.js`)
+
+- `dividendAction(opts)` — mirrors `broadcastAction` / `mintAsset` / `dispenserAction`. Guards `TICK`, `DIVIDEND_TICK`, and `AMOUNT` (the SDK validator's required-field set). Forwards to `submitAction` with `action: 'DIVIDEND'`.
+- `holdersFor({ sdkRegistry, chainId, tick, opts })` — thin passthrough to `sdk.getHolders(tick, opts)`. Drives the cost-preview on the form.
+- Both re-exported from `@xchain-wallet/core` via `flows/index.js`.
+
+**Decoder** (`packages/core/src/decoder/actionDecoder.js`)
+
+- New `decodeDividend` case covering DIVIDEND v0 (the only format version). Summary matches §40.8 wording: `"Pay AMOUNT DIVIDEND_TICK per unit of TICK on <chain>"`. Details surface Holders-of / Receive / Per-unit amount / optional Memo. Warnings for empty tickers, non-positive amount, and `|`/`;` in MEMO.
+
+**Background handlers** (`packages/extension/src/background/createBackgroundHost.js`)
+
+- `action.dividend` — routes to `dividendAction`.
+- `holders.forTick` — read-only passthrough to `holdersFor`.
+
+**Shell messaging helpers**
+
+- `dividendAction(opts)` + `getHoldersForToken({ chainId, tick, opts? })` exported from `popup/messaging.js`, `web/messaging.js`, and `desktop/renderer/messaging.js`.
+
+**Shared form route** (`packages/core/src/shared/routes/DividendForm.jsx`)
+
+- Fields per §40.8: source-address picker, Holder-of token (TICK), Dividend asset (DIVIDEND_TICK), Per-unit amount (AMOUNT), optional Memo. Three-stage state machine (form → review → submitting → done). Reuses `IssueTokenForm.module.css`.
+- **Live holder-count preview**: when the TICK input settles (400ms debounce), the form fetches holders via `messaging.getHoldersForToken` and renders `"N eligible holder(s) · total distribution ~X DIVIDEND_TICK"` inline + on the review screen. Per DIVIDEND.md the source address is excluded from receiving dividends — the preview filters it out and tags the preview row with "(source excluded)" when it applied.
+- Validation: required fields, ticker regex (`A–Z`, `0–9`, `.`, or `^TICK_ID`), positive amount, memo pipe/semicolon rejection. Wrong-password on sign surfaces inline without leaving the review stage.
+- Fee-warning hint on the review screen: "DIVIDEND charges an XChain fee based on number of database hits (§DIVIDEND.md). Make sure the source address holds enough DIVIDEND asset to cover the full payout."
+
+**ActionsMenu + App routing**
+
+- "Pay dividend" entry added to `ActionsMenu` in all three shells. Sits between "Browse dispensers" and "Pair hardware signer".
+- Each `App.jsx` tracks the `'dividend'` sub-route rendering `<DividendForm />`.
+
+### Smoke
+
+- `packages/core/test/dividend-form.smoke.js` — new. File layout, three-stage machine, decoder wiring, messaging.dividendAction sign path, debounced holders fetch, source-address exclusion logic, validation, params composer (VERSION pinned, tickers uppercased, MEMO gated), flow guard rails, positive-path `holdersFor` → `sdk.getHolders` call, decoder DIVIDEND case coverage (summary + details + warnings), background handlers + three-shell messaging exports, ActionsMenu "Pay dividend" + `'dividend'` sub-route in popup / web / desktop.
+- `packages/core/test/action-decoder.smoke.js` — swapped the fallback-case check from DIVIDEND (now decoded) to AIRDROP (still generic).
+
+42/42 smokes green.
+
+### Known deferrals
+
+- **Token-detail-page pre-fill** — §40.8 shows the form reachable from a Token detail page with TICK pre-filled ("Of token: MYTOKEN (pre-filled from context)"). Until Token detail ships, TICK is user-entered. A later step can accept a `tick` prop for pre-fill — the form's state is already structured for it.
+- **Accurate fee estimate** — §40.8 shows a `Fee: ~1000 sats` line. The indexer computes the real fee from the number of database hits at execute time; the form prints the per-hit pattern as a hint rather than a specific sats figure. A future step can pre-flight the fee via `sdk.estimateFees` once the encoder exposes it for DIVIDEND.
+- **Divisibility warning for non-divisible dividend assets** — DIVIDEND.md notes: "If TICK is divisible and DIVIDEND_TICK is non-divisible, quantities under 1.0 will receive no DIVIDEND_TICK." The form doesn't yet fetch token metadata to check divisibility. Falls to the user to validate.
+
 ## [0.62.0] - 2026-04-23
 
 Phase 2 — Step 22b of 26 — piece 7b part 2. Buyer-facing half of Dispensers (§40.7.2): browse surface + detail-page buy flow. Closes Piece 7b. Users can now find open dispensers by token or address, click through to detail, and — for token-paid dispensers — buy one or more fills with a single signed SEND.

@@ -115,6 +115,16 @@ export function getDispenses(req) {
 }
 
 /** @param {object} opts */
+export function dividendAction(opts) {
+    return /** @type {any} */ (sendMessage('action.dividend', opts));
+}
+
+/** @param {object} req */
+export function getHoldersForToken(req) {
+    return /** @type {any} */ (sendMessage('holders.forTick', req));
+}
+
+/** @param {object} opts */
 export function registerSigner(opts) {
     return /** @type {any} */ (sendMessage('signer.register', opts));
 }

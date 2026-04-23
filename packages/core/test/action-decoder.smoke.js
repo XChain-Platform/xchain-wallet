@@ -95,17 +95,18 @@ const chainRegistry = registryLib.defaultRegistry();
 }
 
 // 1e. Unknown / not-yet-decoded action falls back with the "no
-// plain-English" warning. Using DIVIDEND — decoded actions now cover
-// SEND, SWEEP, ISSUE (v0/v1-v5), MINT, DESTROY, BATCH, BROADCAST, and
-// DISPENSER; DIVIDEND + AIRDROP + ORDER + SWAP + etc. still route here.
+// plain-English" warning. Using AIRDROP — decoded actions now cover
+// SEND, SWEEP, ISSUE (v0/v1-v5), MINT, DESTROY, BATCH, BROADCAST,
+// DISPENSER, and DIVIDEND; AIRDROP + ORDER + SWAP + etc. still route
+// here.
 {
     const d = decoderLib.decodeAction({
-        action: 'DIVIDEND',
-        params: { TICK: 'MYTOKEN', DIVIDEND_TICK: 'XCP', AMOUNT: '1' },
+        action: 'AIRDROP',
+        params: { TICK: 'MYTOKEN', AMOUNT: '10', LIST_ACTION_INDEX: '42' },
         chainId: 'bitcoin-mainnet',
         chainRegistry,
     });
-    assert.match(d.summary, /Sign DIVIDEND on Bitcoin/);
+    assert.match(d.summary, /Sign AIRDROP on Bitcoin/);
     assert.ok(
         d.warnings.some((w) => /no plain-english summary is available/i.test(w)),
         'fallback surfaces the "not decoded" warning',

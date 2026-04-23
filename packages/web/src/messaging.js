@@ -175,6 +175,16 @@ export function getDispenses(req) {
     return /** @type {any} */ (sendMessage('dispenses.query', req));
 }
 
+/** @param {object} opts */
+export function dividendAction(opts) {
+    return /** @type {any} */ (sendMessage('action.dividend', opts));
+}
+
+/** @param {object} req */
+export function getHoldersForToken(req) {
+    return /** @type {any} */ (sendMessage('holders.forTick', req));
+}
+
 /**
  * Persist a paired hardware signer (§17.6 / §18.3). See popup
  * messaging.js for prop docs.
