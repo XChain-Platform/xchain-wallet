@@ -7,6 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.42.0] - 2026-04-22
+
+### Added
+
+**Web SPA shell + extension-detection banner** (§8.1 target #1, §8.3, §9.3.3) — Batch 4 piece 11
+
+The web SPA is now a real React app. Same state-machine topology as the extension popup, with routes rendered full-layout and messaging dispatched through an in-page MessageHost instead of `chrome.runtime`.
+
+**In-page host bridge**
+
+- `packages/web/src/hostBridge.js` — module-scoped `vault` + `host` that survive re-renders but die on tab close / reload (web's key-isolation tradeoff per §9.3.3). Exposes `getSessionStatus`, `unlockWalletLocal`, `lockWalletLocal`, and a `sendMessage(type, request)` dispatcher whose envelope shape matches the popup's `chrome.runtime.sendMessage` wrapper — so the later shared-routes refactor can swap shells without touching route code.
+- `packages/web/src/storage/WebMetaBackend.js` — plaintext kdfParams slot at `xchain-wallet:vault-meta` in localStorage. Non-secret by Argon2id design; needed so the unlock flow can derive the master key before touching the IndexedDB ciphertext. Injectable `storage` adapter for tests.
+- `packages/web/src/messaging.js` — popup-parity helpers (`unlockWallet`, `lockWallet`, `listWallets`, `getWalletBalances`, `getAddressesByChain`, `getNewestAddress`) wrapping `hostBridge.sendMessage`.
+
+**SPA shell + routes**
+
+- `packages/web/src/main.jsx` — React root. Imports `@xchain-wallet/core/ui/tokens.css` once so design-token custom properties install on `:root` for every route.
+- `packages/web/src/App.jsx` — 5-state router matching the popup (`loading | error | no-wallet | locked | unlocked`), rendering the web routes with `Screen variant="full"`.
+- `packages/web/src/routes/` — four routes + co-located CSS modules:
+  - `Loading.jsx` — full-layout three-dot indicator.
+  - `Onboarding.jsx` — stub hero + disabled create/import buttons pointing at piece 12. Wraps in `<ExtensionBanner />`.
+  - `Locked.jsx` — real password form, same focus + error handling as the popup's Locked, routed through `unlockWallet()`. Wraps in `<ExtensionBanner />`.
+  - `Home.jsx` — wallet-name header + Lock button + per-chain balance grid (via `ChainBadge`), disabled Send/Receive.
+- `packages/web/src/components/ExtensionBanner.jsx` — §8.3 detection banner. Checks `window.xchain` on mount and listens for the inject-script's `xchain#initialized` event. Dismissal persisted to `sessionStorage` so it doesn't nag across navigations but reappears on a fresh tab.
+
+**Build wiring**
+
+- `packages/web/vite.config.js` enables `@vitejs/plugin-react`.
+- `packages/web/index.html` — root div renamed to `xchain-web-root`, script src updated to `/src/main.jsx`.
+- `packages/web/src/main.js` deleted.
+- `packages/web/src/index.js` re-exports `WebMetaBackend` + namespace-exports `hostBridge`.
+
+### Changed
+
+- `packages/web/package.json` now depends on `@xchain-wallet/extension` for the shared `createBackgroundHost` factory. Flagged in `hostBridge.js` as a candidate for extraction into a lower-level `host-wiring` package when a third shell appears; importing via a cross-package relative path keeps Node smokes runnable without the pnpm workspace symlink while Vite resolves the same path cleanly at build.
+
+### Scope boundary
+
+Routes are intentionally duplicated between popup and web for this piece. A later cleanup piece hoists the shared ones into `src/shared/routes/` behind a `MessagingProvider` React context so both shells consume the same components. Onboarding remains a stub until piece 12.
+
+### Tests
+
+- `packages/core/test/web-shell.smoke.js` — static wiring (Vite plugin, index.html entry, App state coverage, Locked/Home/ExtensionBanner specifics, workspace deps) plus an in-page bridge lifecycle against a real AES-GCM vault with injected `localStorage` + IndexedDB fakes: fresh page → `no-wallet`, wrong-password unlock → `InvalidPasswordError` (state stays `locked`), right-password unlock → `unlocked` with a working `sendMessage('wallet.list')` round-trip returning the seeded wallet, `lockWalletLocal()` → `locked` + `sendMessage` rejects with `VaultClosedError`.
+
 ## [0.41.0] - 2026-04-22
 
 ### Added

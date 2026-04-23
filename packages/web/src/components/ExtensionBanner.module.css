@@ -1,0 +1,33 @@
+.banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--xc-space-3);
+    padding: var(--xc-space-2) var(--xc-space-4);
+    background: color-mix(in srgb, var(--xc-accent-primary) 10%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--xc-accent-primary) 25%, transparent);
+    color: var(--xc-text);
+    font-size: var(--xc-text-sm);
+}
+
+.label {
+    line-height: 1.4;
+}
+
+.dismiss {
+    flex-shrink: 0;
+    background: transparent;
+    border: 1px solid var(--xc-border-strong);
+    border-radius: var(--xc-radius-sm);
+    color: var(--xc-text);
+    font-size: var(--xc-text-xs);
+    padding: 2px var(--xc-space-2);
+    cursor: pointer;
+}
+.dismiss:hover {
+    background: var(--xc-bg-muted);
+}
+.dismiss:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
