@@ -59,3 +59,11 @@ export {
     stepAdsAccumulator,
     commitAdsStep,
 } from './ads.js';
+export { checkReachability } from './reachability.js';
+export {
+    enqueueSignedTx,
+    listQueuedBroadcasts,
+    drainQueuedBroadcast,
+    discardQueuedBroadcast,
+    NoQueuedTxError,
+} from './queuedBroadcast.js';

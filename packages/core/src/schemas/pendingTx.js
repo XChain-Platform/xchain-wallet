@@ -18,6 +18,7 @@ export const PENDING_TX_STATUSES = /** @type {const} */ ([
     'composing',
     'awaiting-signature',
     'signed',
+    'queued',
     'broadcasting',
     'broadcast',
     'indexed',

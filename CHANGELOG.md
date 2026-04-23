@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.0] - 2026-04-22
+
+### Added
+
+**§49 Offline / degraded mode** — reachability classification + queued broadcasts
+- `checkReachability({ sdkRegistry, chainIds, probes?, timeoutMs? })` — per-chain × per-service (explorer / encoder / hub) probe with per-probe timeout. Returns `{ overall: 'normal'|'degraded'|'offline', perChain: [{ chainId, services, mode, latencyMs, errors }] }`. Default probes: `sdk.pingEncoder()`, `sdk.pingHub()`, and `sdk.explorer._get('/')` for explorer (any HTTP response within the timeout counts as reachable — probe only measures TCP+HTTP round-trip, not status code)
+- Callers supply custom probes via `probes`; `null` disables that check and reports `'not-configured'` instead of reachable/unreachable. Cross-chain rollup: all-normal → `normal`, all-offline → `offline`, anything mixed → `degraded`
+- New PendingTx status `'queued'` for §49.5 queued broadcasts
+- `enqueueSignedTx` — stash signed tx hex in a PendingTx (fresh record or update an existing one). `listQueuedBroadcasts` — read all `status='queued'` records, optionally filtered by chainId. `drainQueuedBroadcast` — attempt to broadcast one; on success transition to `broadcast`, on failure stay `queued` with error recorded. `discardQueuedBroadcast` — user's "Discard" button (idempotent)
+- Spec-compliant: §49.5 calls for per-record explicit user approval, not automatic re-broadcast — `drainQueuedBroadcast` is one-at-a-time and surfaces failure without swallowing. `discardQueuedBroadcast` is the dual
+- Smoke-tested: normal/degraded/offline classification under all single- and multi-chain configurations, disabled-probe path, timeout path, end-to-end enqueue → drain success → drain failure → discard lifecycle, per-chain filtering
+
 ## [0.26.0] - 2026-04-22
 
 ### Added
