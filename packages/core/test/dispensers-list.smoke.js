@@ -251,8 +251,8 @@ for (const [shell, appPath] of [
         `${shell} wires onMyDispensers to the list sub-route`,
     );
     assert.ok(
-        /setDispenserRef\(\{\s*chainId,\s*actionIndex\s*\}\)/.test(app),
-        `${shell} threads chainId + actionIndex through setDispenserRef`,
+        /setDispenserRef\(\{\s*chainId,\s*actionIndex,\s*origin:/.test(app),
+        `${shell} threads chainId + actionIndex + origin through setDispenserRef`,
     );
 }
 

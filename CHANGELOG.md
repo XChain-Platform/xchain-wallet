@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.62.0] - 2026-04-23
+
+Phase 2 — Step 22b of 26 — piece 7b part 2. Buyer-facing half of Dispensers (§40.7.2): browse surface + detail-page buy flow. Closes Piece 7b. Users can now find open dispensers by token or address, click through to detail, and — for token-paid dispensers — buy one or more fills with a single signed SEND.
+
+### Added
+
+**Shared routes**
+
+- `packages/core/src/shared/routes/DispenserExplorer.jsx` — browse surface for finding dispensers. Two search modes:
+  - **By token** — routes through `messaging.getDispensersForToken` (matches both `GIVE_TICK` and `GET_TICK`). Token input is regex-validated (A–Z, 0–9, period, or `^TICK_ID` reference).
+  - **By address** — routes through `messaging.getDispensersForAddress` (matches both source and dispenser address).
+  - Chain filter: single-chain or "All chains" with per-chain parallel fan-out. Per-chain errors surface inline so one outage doesn't block others. Row click → host's `onOpenDispenser(chainId, actionIndex)` navigates to detail.
+- `packages/core/src/shared/routes/DispenserDetail.jsx` — new buyer surfaces under the existing detail page (owner-only sections unchanged):
+  - **Token-paid lane** (`GET_TICK` set, buyer pays XChain token): new "Buy from this dispenser" section with payer-address picker (HD external addresses on the dispenser's chain), integer `fills` input (multi-fill purchase), and a "Buy N fills" button that opens a review stage → password prompt → `messaging.sendAsset` with `asset = GET_TICK`, `amount = GET_AMOUNT × fills`, `to = <dispenser address>`. Review surfaces per-fill price + per-fill give, dispenser address, chain badge, plus a hint about UTXO-chain buy races ("if the dispenser closes or runs out before confirmation, the payment reaches the creator but no TICK is released"). Danger-aware wording without blocking the flow. Wrong-password errors re-prompt.
+  - **Coin-paid lane** (`GET_COIN` set, `GET_TICK` empty, buyer pays native coin): "Pay to buy" panel with dispenser address, exact trigger amount, copy-to-clipboard helpers, and a note that "any {COIN} wallet can trigger a fill" + "Native-coin sending from this wallet is on the roadmap." This lane defers a full buy flow because native-coin sends from the XChain wallet require bare-transaction infrastructure the wallet doesn't have yet (no OP_RETURN, direct UTXO-to-output PSBT via the SDK's wallet module or bitcoinjs-lib) — tracked for a future step.
+
+**ActionsMenu + App routing**
+
+- "Browse dispensers" entry added to `ActionsMenu` in all three shells. Between "My dispensers" and "Pair hardware signer".
+- Each `App.jsx` tracks the `'dispenser-explorer'` sub-route. `dispenserRef` now carries an `origin: 'list' | 'explorer'` field so the detail page's back button returns to whichever list the user came from.
+
+### Smoke
+
+- `packages/core/test/dispenser-explorer.smoke.js` — new. Covers:
+  - Single-component export, search-mode toggle, chain-filter wiring + empty-state wording.
+  - Token-regex validation.
+  - Per-chain parallel fan-out on "All chains".
+  - Routing of token vs address searches to the right messaging helper.
+  - DispenserDetail's new buyer surfaces: `isTokenPaid` / `isCoinPaid` lane detection, buy-flow state, sendAsset composition (asset = GET_TICK, amount scaled by fills, target = dispenser address), multi-fill support, UTXO-race warning copy, pay-here copy-to-clipboard helpers, ownership-gated visibility.
+  - ActionsMenu "Browse dispensers" entry + explorer sub-route + origin-tagged list-vs-explorer nav across popup / web / desktop.
+- `packages/core/test/dispensers-list.smoke.js` — updated the `setDispenserRef` assertion to expect the new `origin` field.
+
+41/41 smokes green.
+
+### Known deferrals
+
+- **Native-coin buy from this wallet** — coin-paid dispensers are the primary §40.7.1 lane. The indexer triggers on bare payments to the dispenser address with no XChain action attached; the wallet's encoder path requires an action. A future step builds bare-coin-send infrastructure (likely through the SDK's `wallet.signPsbt` / `encoder.broadcastTx` pair, assembling a UTXO-funded PSBT with only the dispenser output + change). For now the detail page points users to any native wallet and provides copy-to-clipboard helpers.
+- **FIAT pay estimates** — for oracle-priced dispensers (Mode 1 or Mode 2), the buyer's per-fill coin cost is computed dynamically at the indexer. The buy panel currently shows the dispenser's declared `GET_AMOUNT` directly; a follow-up can add oracle-aware hinting once the explorer publishes oracle snapshots.
+- **Reputation stars (§40.7.2)** — no indexer data source.
+- **Live escrow / stock** — still in the indexer TODO; the detail page surfaces the gap inline.
+- **Dispenser edit (v2)** — flow + decoder support exist since Step 21; still no UI. Waits for a list-management surface (§40.13 territory).
+
 ## [0.61.0] - 2026-04-23
 
 Phase 2 — Step 22a of 26 — piece 7b part 1. Owner-facing half of Dispensers (§40.7.1 / §40.7.2): "My dispensers" list view + dispenser detail page + cancel action. Plugs into Step 21's v1 cancel lane so users can now author → review → cancel a dispenser end-to-end. The buyer-facing half (browse / buy) lands as Step 22b.

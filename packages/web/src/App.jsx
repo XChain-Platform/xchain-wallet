@@ -38,6 +38,7 @@ import { BroadcastForm } from '@xchain-wallet/core/shared/routes/BroadcastForm.j
 import { DispenserForm } from '@xchain-wallet/core/shared/routes/DispenserForm.jsx';
 import { DispensersList } from '@xchain-wallet/core/shared/routes/DispensersList.jsx';
 import { DispenserDetail } from '@xchain-wallet/core/shared/routes/DispenserDetail.jsx';
+import { DispenserExplorer } from '@xchain-wallet/core/shared/routes/DispenserExplorer.jsx';
 import { PairSignerForm } from '@xchain-wallet/core/shared/routes/PairSignerForm.jsx';
 import { pairTrezorSigner } from './signers/trezorFactory.js';
 import { pairLedgerSigner } from './signers/ledgerFactory.js';
@@ -60,7 +61,7 @@ function AppInner() {
         /** @type {'welcome' | 'create' | 'import'} */ ('welcome'),
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'pair-signer'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'pair-signer'} */ ('home'),
     );
     const [activeWalletId, setActiveWalletId] = useState(
         /** @type {string | null} */ (null),
@@ -213,7 +214,7 @@ function AppInner() {
                     <DispensersList
                         walletId={activeWalletId}
                         onOpenDispenser={(chainId, actionIndex) => {
-                            setDispenserRef({ chainId, actionIndex });
+                            setDispenserRef({ chainId, actionIndex, origin: 'list' });
                             setUnlockedView('dispenser-detail');
                         }}
                         onBack={() => setUnlockedView('actions')}
@@ -226,7 +227,18 @@ function AppInner() {
                         walletId={activeWalletId}
                         chainId={dispenserRef.chainId}
                         actionIndex={dispenserRef.actionIndex}
-                        onBack={() => setUnlockedView('dispensers-list')}
+                        onBack={() => setUnlockedView(dispenserRef.origin === 'explorer' ? 'dispenser-explorer' : 'dispensers-list')}
+                    />
+                );
+            }
+            if (unlockedView === 'dispenser-explorer' && activeWalletId) {
+                return (
+                    <DispenserExplorer
+                        onOpenDispenser={(chainId, actionIndex) => {
+                            setDispenserRef({ chainId, actionIndex, origin: 'explorer' });
+                            setUnlockedView('dispenser-detail');
+                        }}
+                        onBack={() => setUnlockedView('actions')}
                     />
                 );
             }
@@ -254,6 +266,7 @@ function AppInner() {
                             onBroadcast: () => setUnlockedView('broadcast'),
                             onCreateDispenser: () => setUnlockedView('dispenser'),
                             onMyDispensers: () => setUnlockedView('dispensers-list'),
+                            onBrowseDispensers: () => setUnlockedView('dispenser-explorer'),
                             onPairSigner: () => setUnlockedView('pair-signer'),
                         })}
                         onBack={() => setUnlockedView('home')}
@@ -285,6 +298,7 @@ function buildActionEntries({
     onBroadcast,
     onCreateDispenser,
     onMyDispensers,
+    onBrowseDispensers,
     onPairSigner,
 }) {
     return [
@@ -341,6 +355,12 @@ function buildActionEntries({
             label: 'My dispensers',
             description: 'Manage dispensers you have opened — view + cancel (§40.7.1).',
             onSelect: onMyDispensers,
+        },
+        {
+            id: 'dispenser-explorer',
+            label: 'Browse dispensers',
+            description: 'Search for open dispensers by token or address (§40.7.2).',
+            onSelect: onBrowseDispensers,
         },
         {
             id: 'pair-signer',

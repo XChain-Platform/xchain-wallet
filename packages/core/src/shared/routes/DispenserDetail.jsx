@@ -53,6 +53,10 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     const [ownerAddress, setOwnerAddress] = useState(
         /** @type {any | null} */ (null),
     );
+    const [buyerAddresses, setBuyerAddresses] = useState(/** @type {any[]} */ ([]));
+    const [buyerAddressId, setBuyerAddressId] = useState(
+        /** @type {string | null} */ (null),
+    );
 
     const [cancelStage, setCancelStage] = useState(
         /** @type {'idle' | 'confirm' | 'submitting' | 'done'} */ ('idle'),
@@ -61,6 +65,18 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     const [cancelError, setCancelError] = useState(/** @type {string | null} */ (null));
     const [cancelResult, setCancelResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+
+    // Buy-one-fill state (token-paid lane only; coin-paid uses the
+    // instructions panel rather than a signed XChain SEND).
+    const [fills, setFills] = useState('1');
+    const [buyStage, setBuyStage] = useState(
+        /** @type {'idle' | 'confirm' | 'submitting' | 'done'} */ ('idle'),
+    );
+    const [buyPassword, setBuyPassword] = useState('');
+    const [buyError, setBuyError] = useState(/** @type {string | null} */ (null));
+    const [buyResult, setBuyResult] = useState(/** @type {any | null} */ (null));
+    const buyPasswordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const [copied, setCopied] = useState(/** @type {string | null} */ (null));
 
     const descriptor = chainRegistry.get(chainId);
 
@@ -91,9 +107,30 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             setDispenser(disp);
 
             const source = disp?.source || act?.source;
-            if (source && addrsByChain) {
-                const matches = (addrsByChain[chainId] || []).find((a) => a.address === source);
-                if (matches) setOwnerAddress(matches);
+            if (addrsByChain) {
+                const onChain = (addrsByChain[chainId] || []);
+                if (source) {
+                    const matches = onChain.find((a) => a.address === source);
+                    if (matches) setOwnerAddress(matches);
+                }
+                // Pre-populate the buyer-address picker with this wallet's
+                // HD addresses on the dispenser's chain. Non-HD (watch-
+                // only) addresses are filtered out because they can't
+                // sign. The default is the newest external address,
+                // matching the convention used by Send / MintForm.
+                const spendable = onChain.filter(
+                    (a) => a.source === 'hd'
+                        && a.derivationPath?.split('/')?.[4] === '0',
+                );
+                setBuyerAddresses(spendable);
+                if (spendable.length > 0) {
+                    const sorted = [...spendable].sort((a, b) => {
+                        const ai = Number(a.derivationPath?.split('/')?.[5] ?? -1);
+                        const bi = Number(b.derivationPath?.split('/')?.[5] ?? -1);
+                        return bi - ai;
+                    });
+                    setBuyerAddressId(sorted[0].id);
+                }
             }
             setLoading(false);
 
@@ -117,6 +154,12 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         }
     }, [cancelStage]);
 
+    useEffect(() => {
+        if (buyStage === 'confirm') {
+            setTimeout(() => buyPasswordRef.current?.focus(), 0);
+        }
+    }, [buyStage]);
+
     const cancelParams = useMemo(() => ({
         VERSION: '1',
         DISPENSER_ACTION_INDEX: String(actionIndex),
@@ -131,6 +174,104 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             chainRegistry,
         });
     }, [cancelStage, cancelParams, chainId]);
+
+    // Buyer lanes:
+    //   - Token-paid (dispenser.get_tick non-empty): triggered by an
+    //     XChain SEND of GET_TICK to the dispenser address. Uses the
+    //     existing messaging.sendAsset flow, so the wallet signs +
+    //     broadcasts through the standard pipeline.
+    //   - Coin-paid (dispenser.get_coin set, dispenser.get_tick empty):
+    //     triggered by a bare native-coin payment to the dispenser
+    //     address — "no XChain action needed from the buyer" per
+    //     DISPENSER.md. The wallet doesn't yet have a bare-coin-send
+    //     path, so this lane renders a pay-here instruction panel that
+    //     works with any native coin wallet (including this one, via
+    //     future native-send infrastructure).
+    const getTick = dispenser?.get_tick || '';
+    const getCoin = dispenser?.get_coin || '';
+    const getAmount = dispenser?.get_amount;
+    const giveTick = dispenser?.give_tick;
+    const giveAmount = dispenser?.give_amount;
+    const dispAddr = dispenser?.address;
+    const isTokenPaid = Boolean(getTick) && !!getAmount;
+    const isCoinPaid = !getTick && Boolean(getCoin) && !!getAmount;
+    const canBuyWithSend = isTokenPaid && buyerAddresses.length > 0 && !ownerAddress;
+    const showPayHere = isCoinPaid && !ownerAddress;
+
+    const fillsNum = useMemo(() => {
+        const n = Number(String(fills).trim());
+        return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+    }, [fills]);
+
+    const totalPayAmount = useMemo(() => {
+        if (!getAmount || fillsNum <= 0) return null;
+        const base = Number(getAmount);
+        if (!Number.isFinite(base)) return null;
+        // Protocol `GET_AMOUNT` is a string; multiplying with floats is
+        // precision-risky for small satoshi fractions, but the detail
+        // page is display-only — downstream SEND composition sends the
+        // exact stringified value and relies on the SDK for precision.
+        return (base * fillsNum).toString();
+    }, [getAmount, fillsNum]);
+
+    const totalReceive = useMemo(() => {
+        if (!giveAmount || fillsNum <= 0) return null;
+        const base = Number(giveAmount);
+        if (!Number.isFinite(base)) return null;
+        return (base * fillsNum).toString();
+    }, [giveAmount, fillsNum]);
+
+    async function handleCopy(text, label) {
+        try {
+            await navigator.clipboard?.writeText(text);
+            setCopied(label);
+            setTimeout(() => setCopied(null), 1500);
+        } catch {
+            /* swallow — older browsers or locked-down contexts */
+        }
+    }
+
+    const buyerAddress = useMemo(() => {
+        if (!buyerAddressId) return null;
+        return buyerAddresses.find((a) => a.id === buyerAddressId) || null;
+    }, [buyerAddressId, buyerAddresses]);
+
+    async function handleBuy(event) {
+        event.preventDefault();
+        if (buyStage === 'submitting' || buyPassword.length === 0 || !buyerAddress) return;
+        if (!isTokenPaid || !dispAddr || !totalPayAmount) return;
+        setBuyStage('submitting');
+        setBuyError(null);
+        try {
+            const res = await messaging.sendAsset({
+                walletId,
+                password: buyPassword,
+                chainId,
+                from: {
+                    address: buyerAddress.address,
+                    publicKey: buyerAddress.publicKey,
+                    derivationPath: buyerAddress.derivationPath,
+                    addressId: buyerAddress.id,
+                },
+                to: dispAddr,
+                asset: getTick,
+                amount: totalPayAmount,
+            });
+            setBuyResult(res);
+            setBuyPassword('');
+            setBuyStage('done');
+        } catch (err) {
+            const isBadPassword = err?.name === 'InvalidPasswordError';
+            setBuyError(
+                isBadPassword
+                    ? 'Incorrect password.'
+                    : err?.message || 'Buy failed.',
+            );
+            setBuyStage('confirm');
+            buyPasswordRef.current?.focus();
+            buyPasswordRef.current?.select();
+        }
+    }
 
     async function handleCancel(event) {
         event.preventDefault();
@@ -180,7 +321,9 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             <span className={styles.title}>
                 {cancelStage === 'confirm' || cancelStage === 'submitting'
                     ? 'Confirm cancel'
-                    : 'Dispenser detail'}
+                    : buyStage === 'confirm' || buyStage === 'submitting'
+                        ? 'Review buy'
+                        : 'Dispenser detail'}
             </span>
             <span className={styles.spacer} />
         </div>
@@ -213,6 +356,94 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     <Button variant="primary" onClick={onBack}>Done</Button>
                 </div>
             </>,
+        );
+    }
+
+    if (buyStage === 'done') {
+        const txid = buyResult?.txid || buyResult?.broadcast?.txid;
+        return wrap(
+            <>
+                <h2 className={styles.successTitle}>Buy submitted</h2>
+                <p className={styles.hint}>
+                    You paid {totalPayAmount} {getTick}. If the dispenser is still open
+                    when this confirms, you should receive {totalReceive} {giveTick}.
+                </p>
+                {txid ? (
+                    <>
+                        <p className={styles.successLabel}>Transaction ID</p>
+                        <code className={styles.txid}>{txid}</code>
+                    </>
+                ) : null}
+                <div className={styles.actions}>
+                    <Button variant="primary" onClick={onBack}>Done</Button>
+                </div>
+            </>,
+        );
+    }
+
+    if (buyStage === 'confirm' || buyStage === 'submitting') {
+        return wrap(
+            <form onSubmit={handleBuy} noValidate>
+                <p className={styles.summary}>
+                    Buy {fillsNum} fill{fillsNum === 1 ? '' : 's'} — pay {totalPayAmount} {getTick}
+                    {' '}→ receive ~{totalReceive} {giveTick}
+                </p>
+                <dl className={styles.detailsList}>
+                    <dt className={styles.detailsLabel}>Chain</dt>
+                    <dd className={styles.detailsValue}>
+                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
+                    </dd>
+                    <dt className={styles.detailsLabel}>From</dt>
+                    <dd className={styles.detailsValue}>
+                        <AddressText address={buyerAddress?.address || ''} />
+                    </dd>
+                    <dt className={styles.detailsLabel}>Dispenser</dt>
+                    <dd className={styles.detailsValue}>
+                        <AddressText address={dispAddr || ''} />
+                    </dd>
+                    <dt className={styles.detailsLabel}>Per-fill price</dt>
+                    <dd className={styles.detailsValue}>{getAmount} {getTick}</dd>
+                    <dt className={styles.detailsLabel}>Per-fill give</dt>
+                    <dd className={styles.detailsValue}>{giveAmount} {giveTick}</dd>
+                </dl>
+                <p className={styles.hint}>
+                    The dispenser triggers when this SEND confirms. If the dispenser closes
+                    or runs out before confirmation, the payment reaches the creator but
+                    no {giveTick} is released — an inherent risk of UTXO-chain buys.
+                </p>
+                <Input
+                    ref={buyPasswordRef}
+                    type="password"
+                    label="Password"
+                    hint="Required to sign."
+                    value={buyPassword}
+                    onChange={(e) => {
+                        setBuyPassword(e.target.value);
+                        if (buyError) setBuyError(null);
+                    }}
+                    autoComplete="current-password"
+                    disabled={buyStage === 'submitting'}
+                    error={buyError || undefined}
+                />
+                <div className={styles.actions}>
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => setBuyStage('idle')}
+                        disabled={buyStage === 'submitting'}
+                    >
+                        Back
+                    </Button>
+                    <Button
+                        type="submit"
+                        variant="primary"
+                        loading={buyStage === 'submitting'}
+                        disabled={buyPassword.length === 0}
+                    >
+                        {descriptor ? `Sign buy on ${descriptor.displayName}` : 'Sign buy'}
+                    </Button>
+                </div>
+            </form>,
         );
     }
 
@@ -348,6 +579,93 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                             </li>
                         ))}
                     </ul>
+                </section>
+            ) : null}
+
+            {canBuyWithSend ? (
+                <section style={{ marginTop: '1rem', padding: '0.75rem', border: '1px solid var(--xc-border)', borderRadius: '4px' }}>
+                    <p className={styles.successLabel}>Buy from this dispenser</p>
+                    <p className={styles.hint}>
+                        Send {getAmount} {getTick} per fill. Tokens dispense when the SEND
+                        confirms and the dispenser is still open.
+                    </p>
+                    {buyerAddresses.length > 1 ? (
+                        <label style={{ display: 'block', marginBottom: '0.5rem' }}>
+                            <span className={styles.detailsLabel}>Pay from</span>
+                            <select
+                                value={buyerAddressId || ''}
+                                onChange={(e) => setBuyerAddressId(e.target.value)}
+                                style={{ marginLeft: '0.5rem' }}
+                            >
+                                {buyerAddresses.map((a) => (
+                                    <option key={a.id} value={a.id}>{a.address}</option>
+                                ))}
+                            </select>
+                        </label>
+                    ) : buyerAddress ? (
+                        <p className={styles.entryDescription}>
+                            Paying from <AddressText address={buyerAddress.address} />
+                        </p>
+                    ) : null}
+                    <Input
+                        label="Fills"
+                        hint="Multiply per-fill amounts by this number (integer ≥ 1)."
+                        inputMode="numeric"
+                        value={fills}
+                        onChange={(e) => setFills(e.target.value)}
+                        autoComplete="off"
+                    />
+                    <Button
+                        variant="primary"
+                        onClick={() => setBuyStage('confirm')}
+                        disabled={fillsNum <= 0 || !buyerAddress || !dispAddr}
+                    >
+                        Buy {fillsNum > 0 ? `${fillsNum} ` : ''}fill{fillsNum === 1 ? '' : 's'}
+                    </Button>
+                </section>
+            ) : null}
+
+            {showPayHere ? (
+                <section style={{ marginTop: '1rem', padding: '0.75rem', border: '1px solid var(--xc-border)', borderRadius: '4px' }}>
+                    <p className={styles.successLabel}>Pay to buy</p>
+                    <p className={styles.hint}>
+                        This dispenser accepts bare {getCoin} payments — any {getCoin} wallet
+                        can trigger a fill. Send exactly {getAmount} {getCoin} per fill to
+                        the dispenser address.
+                    </p>
+                    <dl className={styles.detailsList}>
+                        <dt className={styles.detailsLabel}>Send to</dt>
+                        <dd className={styles.detailsValue}>
+                            <code style={{ wordBreak: 'break-all' }}>{dispAddr}</code>
+                            {' '}
+                            <button
+                                type="button"
+                                onClick={() => handleCopy(dispAddr, 'address')}
+                                style={{ marginLeft: '0.5rem' }}
+                            >
+                                {copied === 'address' ? 'Copied' : 'Copy'}
+                            </button>
+                        </dd>
+                        <dt className={styles.detailsLabel}>Send exactly</dt>
+                        <dd className={styles.detailsValue}>
+                            <code>{getAmount} {getCoin}</code>
+                            {' '}
+                            <button
+                                type="button"
+                                onClick={() => handleCopy(String(getAmount), 'amount')}
+                                style={{ marginLeft: '0.5rem' }}
+                            >
+                                {copied === 'amount' ? 'Copied' : 'Copy amount'}
+                            </button>
+                            {' per fill'}
+                        </dd>
+                        <dt className={styles.detailsLabel}>Per-fill give</dt>
+                        <dd className={styles.detailsValue}>{giveAmount} {giveTick}</dd>
+                    </dl>
+                    <p className={styles.hint}>
+                        Native-coin sending from this wallet is on the roadmap; for now,
+                        use any {getCoin} wallet to trigger the dispense.
+                    </p>
                 </section>
             ) : null}
 
