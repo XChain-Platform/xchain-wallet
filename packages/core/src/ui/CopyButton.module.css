@@ -1,0 +1,24 @@
+.btn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+    padding: 2px var(--xc-space-2);
+    font-size: var(--xc-text-xs);
+    font-weight: 500;
+    color: var(--xc-accent-primary);
+    background: transparent;
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-sm);
+    cursor: pointer;
+    transition: background var(--xc-transition), border-color var(--xc-transition);
+}
+
+.btn:hover {
+    background: var(--xc-bg-muted);
+    border-color: var(--xc-border-strong);
+}
+
+.btn:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}

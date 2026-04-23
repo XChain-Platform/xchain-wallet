@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.35.0] - 2026-04-22
+
+### Added
+
+**React + CSS Modules wiring + `@xchain-wallet/core/ui` primitives**
+
+Picks the UI framework + styling approach for the Phase 1 UI session. React 18.3 + CSS Modules wins on ecosystem depth (hardware-wallet libs, QR libs, a11y libs) and bundler-native styling (no runtime cost).
+
+**Framework wiring**
+
+- `packages/core/package.json` — `react` / `react-dom` declared as optional peer dependencies (`^18.3.0`). Optional because non-UI code (smoke tests, background handlers) imports `@xchain-wallet/core` without needing React. New `exports` map exposes subpaths so Node-only callers don't trip on JSX reached through the default entry:
+    ```
+    ".": "./src/index.js"
+    "./ui": "./src/ui/index.js"
+    "./ui/tokens.css": "./src/ui/tokens.css"
+    "./ui/*": "./src/ui/*"
+    "./branding/*": "./src/branding/*"
+    ```
+- `packages/extension/package.json` + `packages/web/package.json` — `react` / `react-dom` as regular deps; `@vitejs/plugin-react@^4.3.0` as a dev dep. Wired at the shell level so each Vite config can opt in to JSX in a later piece.
+
+**Design tokens (§5.4 visual identity, §37 micro-UX)**
+
+- `packages/core/src/ui/tokens.css` — CSS custom properties for spacing (4px grid), typography (system-font stack + monospace), radii, motion (≤200ms, cubic-bezier(0.2, 0, 0.2, 1) per §5.4), and a full palette. Light theme default + `@media (prefers-color-scheme: dark)` overrides. `@media (prefers-reduced-motion: reduce)` disables transitions. Accent colours match `branding.js` ACCENT_PRIMARY / ACCENT_SECONDARY. Shells import once: `import '@xchain-wallet/core/ui/tokens.css'`.
+
+**Primitives (`packages/core/src/ui/`)**
+
+Six components, each a JSX file plus a co-located `.module.css`:
+
+- `<Screen />` — top-level layout wrapper. `variant="popup"` renders fixed 360×600 per §8.1; `variant="full"` flexes for extension full-screen / web SPA. Header / body / footer slots.
+- `<Button />` — `variant: 'primary' | 'secondary' | 'ghost' | 'danger'`, `size: 'sm' | 'md'`, `block`, `loading` (spinner + aria-busy), `disabled`. Focus ring from tokens. Spinner disables under `prefers-reduced-motion`.
+- `<Input />` — `forwardRef`'d text input with label, hint, and error slots. `aria-invalid` + `aria-describedby` wired to the matching hint/error nodes via `useId()`. Pass-through props land on the underlying `<input>` so `value` / `onChange` / `autoFocus` / `autoComplete` go directly through.
+- `<ChainBadge />` — icon + display name pill. Reads `branding.chainIconSmallUrl(descriptor.id)` for the asset; `descriptor.color` drives the tinted background/border via `color-mix()`. Non-mainnet networks surface the network kind in muted text next to the name.
+- `<AddressText />` — monospace address with optional `first6…last6` truncation. Full address preserved via `title` + `aria-label` so hover and AT still expose the canonical string.
+- `<CopyButton />` — writes to clipboard via `navigator.clipboard.writeText()`, flips label to "Copied" for 1.5s (configurable via `feedbackMs`). Silent no-op when clipboard is unavailable — callers own the fallback (manual-selection hint, QR).
+
+**`packages/core/src/ui/index.js`** — barrel re-export for the 6 primitives. `tokens.css` stays unreferenced here (it's a global side-effect import shells do once at their entry point).
+
+### Tests
+
+- `packages/core/test/ui-surface.smoke.js` — static check: tokens.css declares the expected 11 custom properties + dark-mode + reduced-motion blocks + brand accent hex matches branding.js; every primitive exports its name, imports its co-located CSS module, references design tokens; `ui/index.js` re-exports all six; `core/package.json` declares the `./ui` + `./ui/tokens.css` subpath exports and `react` / `react-dom` as peerDeps; both shell `package.json`s declare `react` / `react-dom` / `@vitejs/plugin-react`. Runtime JSX smoke lives in the popup piece once a shell bundle compiles it.
+
 ## [0.34.0] - 2026-04-22
 
 ### Added

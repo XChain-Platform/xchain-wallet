@@ -1,0 +1,113 @@
+/* Design tokens — spec §5.4 visual identity, §5.3 voice + tone, §37 micro-UX.
+ *
+ * Source of truth for brand accent colours lives in
+ * packages/core/src/branding/branding.js (ACCENT_PRIMARY, ACCENT_SECONDARY).
+ * When those values change, update the --xc-accent-* variables below so the
+ * two stay in lockstep. Chain-specific colours are not tokenised here — they
+ * come off ChainDescriptor.color and are applied inline (see ChainBadge).
+ *
+ * Shells import this file exactly once at the entry point:
+ *     import '@xchain-wallet/core/ui/tokens.css';
+ */
+
+:root {
+    /* Spacing — 4px grid */
+    --xc-space-1: 4px;
+    --xc-space-2: 8px;
+    --xc-space-3: 12px;
+    --xc-space-4: 16px;
+    --xc-space-5: 20px;
+    --xc-space-6: 24px;
+    --xc-space-8: 32px;
+
+    /* Typography — system fonts by default per §5.4 */
+    --xc-font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    --xc-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+    --xc-text-xs: 11px;
+    --xc-text-sm: 13px;
+    --xc-text-md: 14px;
+    --xc-text-lg: 16px;
+    --xc-text-xl: 20px;
+    --xc-text-2xl: 24px;
+
+    /* Radii */
+    --xc-radius-sm: 4px;
+    --xc-radius-md: 8px;
+    --xc-radius-lg: 12px;
+    --xc-radius-pill: 9999px;
+
+    /* Motion — §5.4 transitions ≤ 200ms, no bouncy springs */
+    --xc-transition: 160ms cubic-bezier(0.2, 0, 0.2, 1);
+
+    /* Brand accent (sampled from branding/assets/xchain-color-750.png) */
+    --xc-accent-primary: #1E90C7;
+    --xc-accent-primary-hover: #1A7BAC;
+    --xc-accent-secondary: #7B2C8F;
+
+    /* Light theme — default */
+    --xc-bg: #FFFFFF;
+    --xc-bg-muted: #F5F6F8;
+    --xc-surface: #FFFFFF;
+    --xc-surface-raised: #FFFFFF;
+    --xc-border: #E4E7EB;
+    --xc-border-strong: #C7CCD4;
+    --xc-text: #0F172A;
+    --xc-text-muted: #64748B;
+    --xc-text-inverted: #FFFFFF;
+    --xc-danger: #DC2626;
+    --xc-warning: #D97706;
+    --xc-success: #16A34A;
+    --xc-focus-ring: rgba(30, 144, 199, 0.45);
+    --xc-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+    --xc-shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --xc-bg: #0B0F17;
+        --xc-bg-muted: #121824;
+        --xc-surface: #151B28;
+        --xc-surface-raised: #1B2231;
+        --xc-border: #243044;
+        --xc-border-strong: #364257;
+        --xc-text: #E5EAF2;
+        --xc-text-muted: #94A3B8;
+        --xc-text-inverted: #0B0F17;
+        --xc-focus-ring: rgba(30, 144, 199, 0.6);
+        --xc-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+        --xc-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    :root {
+        --xc-transition: 0ms;
+    }
+}
+
+body {
+    margin: 0;
+    font-family: var(--xc-font-sans);
+    font-size: var(--xc-text-md);
+    color: var(--xc-text);
+    background: var(--xc-bg);
+    -webkit-font-smoothing: antialiased;
+}
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}

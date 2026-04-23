@@ -1,0 +1,11 @@
+// @xchain-wallet/core/ui — React primitives for the shell layer.
+//
+// tokens.css is a sibling of this file; shells import it once at their
+// entry point: `import '@xchain-wallet/core/ui/tokens.css';`.
+
+export { Screen } from './Screen.jsx';
+export { Button } from './Button.jsx';
+export { Input } from './Input.jsx';
+export { ChainBadge } from './ChainBadge.jsx';
+export { AddressText } from './AddressText.jsx';
+export { CopyButton } from './CopyButton.jsx';

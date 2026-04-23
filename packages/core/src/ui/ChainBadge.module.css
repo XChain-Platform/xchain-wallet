@@ -1,0 +1,47 @@
+.badge {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    padding: 2px var(--xc-space-2);
+    border-radius: var(--xc-radius-pill);
+    background: color-mix(in srgb, var(--chain-color) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--chain-color) 25%, transparent);
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text);
+    font-weight: 500;
+    vertical-align: middle;
+}
+
+.md {
+    padding: var(--xc-space-1) var(--xc-space-3);
+    font-size: var(--xc-text-md);
+}
+
+.icon {
+    display: block;
+    border-radius: 50%;
+}
+
+.iconFallback {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--chain-color);
+    color: var(--xc-text-inverted);
+    font-size: var(--xc-text-xs);
+    font-weight: 700;
+}
+
+.md .iconFallback {
+    width: 24px;
+    height: 24px;
+    font-size: var(--xc-text-sm);
+}
+
+.network {
+    color: var(--xc-text-muted);
+    font-weight: 400;
+}

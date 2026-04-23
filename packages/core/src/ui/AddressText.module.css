@@ -1,0 +1,13 @@
+.addr {
+    font-family: var(--xc-font-mono);
+    color: var(--xc-text);
+    word-break: break-all;
+}
+
+.sm {
+    font-size: var(--xc-text-xs);
+}
+
+.md {
+    font-size: var(--xc-text-sm);
+}

@@ -1,0 +1,34 @@
+.screen {
+    display: flex;
+    flex-direction: column;
+    background: var(--xc-bg);
+    color: var(--xc-text);
+}
+
+.popup {
+    width: 360px;
+    height: 600px;
+}
+
+.full {
+    width: 100%;
+    min-height: 100vh;
+}
+
+.header {
+    padding: var(--xc-space-3) var(--xc-space-4);
+    border-bottom: 1px solid var(--xc-border);
+    background: var(--xc-surface-raised);
+}
+
+.body {
+    flex: 1;
+    padding: var(--xc-space-4);
+    overflow-y: auto;
+}
+
+.footer {
+    padding: var(--xc-space-3) var(--xc-space-4);
+    border-top: 1px solid var(--xc-border);
+    background: var(--xc-surface-raised);
+}
