@@ -49,7 +49,6 @@ xchain-wallet/
 ├── LICENSE.md / NOTICE.md       # Dankest Community License       [in place]
 ├── CHANGELOG.md                 # Keep a Changelog format         [in place]
 ├── README.md                    # this file                       [in place]
-├── .github/workflows/           # CI skeleton                     [scaffolded]
 ├── docs/                        # architecture docs, dApp-bridge  [scaffolded]
 ├── packages/
 │   ├── core/                    # React components, state, SDK    [scaffolded]
@@ -66,6 +65,14 @@ xchain-wallet/
 │   └── regtest/                 # regtest environment for E2E     (pending)
 └── e2e/                         # Playwright E2E suite            (pending)
 ```
+
+## Versioning
+
+All packages in this repository — root, `packages/core`, `packages/extension`, `packages/web`, `packages/desktop`, `packages/bridge-spec`, `packages/test-dapp`, and `e2e` — **ship at the same version number**. The root `package.json` version is the single source of truth; every sub-package's `package.json` tracks the root in lockstep.
+
+Rationale: users running the web app, the extension, and the desktop app need an obvious way to confirm they're on the same build. Every shell's About screen surfaces its own `package.json.version`, so synchronized versions let users diff `0.54.0-extension` vs `0.54.0-web` vs `0.54.0-desktop` and immediately know they're on the same codebase.
+
+**On each release:** bump every `package.json` together. `CHANGELOG.md` at the repo root is authoritative; individual sub-packages do not maintain their own changelogs.
 
 ## Parent platform
 

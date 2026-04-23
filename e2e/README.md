@@ -60,7 +60,8 @@ e2e/
 
 ## CI
 
-`.github/workflows/ci.yml` runs the full suite on every PR. The
-`e2e` job installs workspace deps, downloads Chromium, and runs
-`pnpm --filter @xchain-wallet/e2e test`. Playwright's HTML report is
-uploaded as a workflow artifact on failure.
+No GitHub Actions workflow while the wallet is under active
+development — matches the rest of the xchain-* platform (none of
+the sibling services wire CI during the build phase). Run the suite
+locally with `pnpm --filter @xchain-wallet/e2e test`. A CI workflow
+will be reintroduced once Phase 2 lands.

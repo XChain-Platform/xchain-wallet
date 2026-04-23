@@ -1,6 +1,6 @@
 {
     "name": "@xchain-wallet/desktop",
-    "version": "0.1.0",
+    "version": "0.54.0",
     "private": true,
     "description": "Electron desktop shell for XChain Wallet (Windows / macOS / Linux) — Phase 2 stub; ships alongside hardware signers per spec §40.12.",
     "main": "./main/index.js",

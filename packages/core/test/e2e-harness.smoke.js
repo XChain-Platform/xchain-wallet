@@ -85,29 +85,13 @@ for (const phrase of [
     assert.ok(readme.includes(phrase), `README mentions "${phrase}"`);
 }
 
-// --- 5. CI workflow has an e2e job + wires Vitest + smokes ----------
-
-const ci = readFileSync(
-    join(wsRoot, '.github', 'workflows', 'ci.yml'),
-    'utf8',
-);
-assert.ok(/name:\s*Playwright \(web SPA\)/.test(ci), 'CI has Playwright job');
-assert.ok(
-    /pnpm --filter @xchain-wallet\/e2e (install:browsers|test)/.test(ci),
-    'CI runs Playwright via the workspace filter',
-);
-assert.ok(
-    /pnpm -r --if-present test/.test(ci) || /pnpm -C packages\/core test/.test(ci),
-    'CI runs the Vitest + smoke suite',
-);
-assert.ok(
-    /pnpm -C packages\/core test:smoke/.test(ci),
-    'CI runs the Node-script smoke harness via the runner',
-);
-assert.ok(
-    /upload-artifact@v4/.test(ci) && /playwright-report/.test(ci),
-    'CI uploads the Playwright report on failure',
-);
+// --- 5. CI workflow check removed ------------------------------------
+//
+// `.github/workflows/ci.yml` was removed at v0.54.0 to match the rest
+// of the xchain-* platform (none of the sibling services ship a
+// GitHub Actions workflow during the build phase). The test suite
+// still runs locally via `node packages/core/test/_run-smokes.js` and
+// Playwright runs via `pnpm --filter @xchain-wallet/e2e test`.
 
 // --- 6. test-results is git-ignored ---------------------------------
 
@@ -154,5 +138,5 @@ for (const label of expectedLabels) {
 }
 
 console.log(
-    'OK — e2e harness smoke (workspace, playwright.config, onboarding + send specs, README, CI job, UI-label cross-check)',
+    'OK — e2e harness smoke (workspace, playwright.config, onboarding + send specs, README, UI-label cross-check)',
 );

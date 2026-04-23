@@ -10,7 +10,7 @@ Phase 1 ships the scaffolding: the pinned toolchain, the verify script, and the 
 
 ## Pinning
 
-- **Node:** the exact patch version lives in `.github/workflows/ci.yml` (`actions/setup-node@v4` with `node-version: '18'`). Mainnet RC pipelines will pin to a specific patch (e.g. `18.19.1`) to avoid drift.
+- **Node:** Node 18 LTS while the wallet is under development (Node 18.19.1 is the local-dev baseline). Mainnet RC pipelines will pin to a specific patch to avoid drift; the pin lives here in this README until the release pipeline codifies it.
 - **pnpm:** `packageManager` field in the root `package.json` (`pnpm@9.0.0`).
 - **Dependencies:** `pnpm-lock.yaml` committed. `pnpm install --frozen-lockfile` in CI prevents silent upgrades.
 - **Native binaries:** `sharp` (icon resize) pulls platform-specific prebuilts. Reproducible builds pin the target OS + architecture — currently `ubuntu-latest` on x64 (GitHub's CI image).

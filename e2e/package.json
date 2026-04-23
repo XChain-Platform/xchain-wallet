@@ -1,6 +1,6 @@
 {
     "name": "@xchain-wallet/e2e",
-    "version": "0.1.0",
+    "version": "0.54.0",
     "private": true,
     "description": "Playwright end-to-end suite — drives the web SPA through the full Phase 1 flows. Pairs with the regtest stack for sign+broadcast specs once real xchain-sdk is bundled.",
     "type": "module",

@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.54.0] - 2026-04-23
+
+Housekeeping — no feature changes. Drops the GitHub Actions CI workflow and synchronizes every workspace package's version with the root so all surfaces report the same version.
+
+### Removed
+
+- `.github/workflows/ci.yml` and the `.github/` directory. Matches the rest of the xchain-* platform (`xchain-encoder`, `xchain-decoder`, `xchain-node`, etc. don't ship a GitHub Actions workflow during their build phase). CI will be reintroduced post-Phase-2 when the wallet's release surface stabilizes. Until then: run the test suite locally with `node packages/core/test/_run-smokes.js` and Playwright with `pnpm --filter @xchain-wallet/e2e test`.
+- `packages/core/test/e2e-harness.smoke.js` — section 5 (CI workflow structural checks) replaced with a comment explaining the removal. The smoke's OK-line updated to drop the "CI job" mention.
+- `README.md` — the repo-tree line `├── .github/workflows/` removed.
+
+### Changed
+
+- **Synchronized versioning across all workspace packages.** Every `package.json` (root + `packages/core` + `packages/extension` + `packages/web` + `packages/desktop` + `packages/bridge-spec` + `packages/test-dapp` + `e2e`) now reports `0.54.0`. Previously sub-packages were pinned at `0.1.0` while the root tracked wallet progression — meaning a shipped extension bundle's manifest reported `0.1.0` instead of the true build version. The synchronized scheme lets users diff `0.54.0-extension` / `0.54.0-web` / `0.54.0-desktop` in each shell's About screen and confirm they're on the same codebase.
+- `README.md` — new "Versioning" section documenting the lockstep-bump convention so it's discoverable.
+- `e2e/README.md` — `## CI` section reworded to explain CI is intentionally absent during development, matching the xchain-* platform convention.
+- `tools/build-reproduce/README.md` — Node-version pin note no longer points at the (now-removed) `.github/workflows/ci.yml`. Pin moves here until the release pipeline codifies it.
+
+### Convention going forward
+
+On each release, bump every `package.json` version in lockstep. The root `package.json` version is the single source of truth; every sub-package tracks it. Individual sub-packages do not maintain their own changelogs — this file is authoritative.
+
 ## [0.53.0] - 2026-04-23
 
 Phase 2 — Steps 13–15 of 26 — pieces 4b + 4c + 4d. Closes out **Piece 4 (Hardware signers go live, §40.11 / §17.3–17.4 / §18)**. Trezor + Ledger signer classes, per-target transport factories (WebHID + Trezor Connect popup), the pairing UI, and the §17.7 view/export private key ceremony are all in. Device-signing itself — PSBT and message signing — is deliberately deferred; see "Known deferrals" below.
