@@ -7,6 +7,96 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.58.0] - 2026-04-23
+
+Phase 2 — Step 19 of 26 — piece 5d. Electron-builder packaging pipeline for the desktop shell (§40.12, §51). Closes Piece 5 (Electron desktop shell). Ships the scaffolding needed to produce installable artifacts on all three target OSes — electron-builder config, Vite renderer bundle, Dockerfile-based reproducible builds (Level-2 scoped to the pre-signing artifact), URI scheme registration (Tier-1 `xchain:` claimed unconditionally + Tier-2 `bitcoin/litecoin/dogecoin` registered at install, claimed only via runtime opt-in), deep-link dispatch with BIP21 parsing, electron-updater wiring against `downloads.xchain.io`, CSP tightening + hardened-runtime entitlements. Code signing is structured but env-var-driven — no certs in-repo; `pnpm run dist` works without signing for dev builds.
+
+### Added
+
+**Packaging config + build resources** (`packages/desktop/`)
+
+- `electron-builder.config.cjs` — single source of truth for packaging across Windows / macOS / Linux.
+  - `appId = io.xchain.wallet`, `productName = XChain Wallet`, `asar: true`, `npmRebuild: false`, `buildDependenciesFromSource: false` (reproducibility-critical flags).
+  - `mac` — hardened-runtime + entitlements at `build/entitlements.mac.plist`, `identity: CSC_IDENTITY_NAME ?? null` (unsigned dev builds work without certs), notarization gated on `APPLE_API_KEY_ID`, targets: dmg + zip (x64 + arm64).
+  - `win` — publisher = "Dankest, LLC", SHA256 signing, RFC 3161 timestamp server pinned (signatures survive cert expiry), targets: nsis + zip (x64 + arm64).
+  - `linux` — maintainer + synopsis + description set, targets: AppImage + deb (x64 + arm64), xz compression on deb.
+  - `protocols` declares all four schemes (`xchain`, `bitcoin`, `litecoin`, `dogecoin`) at install time so the OS knows we CAN handle them — runtime claim is gated in `main/protocol.js`.
+  - `publish` — electron-updater generic provider at `https://downloads.xchain.io/wallet/desktop/`.
+  - `extraMetadata.buildDate` derived from `SOURCE_DATE_EPOCH` (set by reproduce.sh to the HEAD commit's author date).
+- `vite.config.js` — renderer build config. Deterministic chunk / asset filenames; source maps off; `assetsInlineLimit: 0` to prevent small-file inlining variance; output into `renderer/dist/`.
+- `build/entitlements.mac.plist` — macOS hardened-runtime entitlements. `com.apple.security.device.usb` (required for WebHID ↔ Ledger), `com.apple.security.network.client` (xchain-sdk + Trezor Connect iframe + electron-updater); JIT / unsigned-executable disabled.
+- `build/README.md` — placeholder for `icon.png` / `icon.icns` / `icon.ico` (not yet committed — icon design is an open task).
+- `packages/desktop/package.json` — new scripts (`build:renderer`, `dist`, `dist:unpacked`, `reproduce`); new devDep `electron-builder ^25.1.0`; new dep `electron-updater ^6.3.0`.
+
+**Level-2 reproducible builds** (§51)
+
+- `Dockerfile` — digest-pinned Debian bookworm-slim base, SHA256-pinned Node 20.18.0 tarball, pnpm version sourced from root `packageManager` field via build-arg. Non-root `builder` user with UID 1000 (reproduce.sh maps to host UID via `--user`). Installs only the system deps electron-builder Linux target needs (fpm, fakeroot, rpm, libarchive-tools).
+- `.dockerignore` — excludes `node_modules`, `dist`, `.vite`, etc. from the build context so the image stays small + doesn't leak local dev state.
+- `scripts/build.sh` — in-container build entry. Enforces `SOURCE_DATE_EPOCH`, runs `pnpm install --frozen-lockfile`, builds the renderer, invokes `electron-builder --dir` (unpacked app only — signing happens outside), emits `/out/RELEASE_HASHES.txt` (sorted find | xargs sha256sum).
+- `scripts/reproduce.sh` — third-party reproduction entry. Takes a git ref, derives `SOURCE_DATE_EPOCH` from its commit date, creates an isolated git worktree, builds the image with the ref's pnpm version, runs the build, prints the manifest for diffing against published `RELEASE_HASHES.md`.
+- `REPRODUCIBLE_BUILDS.md` — end-to-end verification protocol: what's reproducible (Linux pre-signing artifact), what's NOT (signed outputs, macOS + Windows builds — those need platform-specific runners — the Electron framework download itself), the `diff` recipe, non-determinism sources we've addressed (SOURCE_DATE_EPOCH, LC_ALL / TZ, frozen lockfile, Vite deterministic hashing), update trust chain (platform-specific integrity checks), Trezor Connect trust boundary + on-device-confirmation mitigation, per-release checklist.
+
+**URI scheme registration + deep-link dispatch** (`packages/desktop/main/protocol.js`)
+
+- `TIER_1_SCHEME = 'xchain'` / `TIER_2_SCHEMES = ['bitcoin', 'litecoin', 'dogecoin']` — single source of truth.
+- `registerProtocolClients(app, { optedInSchemes })` — claims `xchain:` unconditionally; Tier-2 schemes only when the caller passes them in the opt-in list. Proactively `removeAsDefaultProtocolClient`s un-opted schemes so the settings toggle can flip them later without a reinstall.
+- `updateCoinSchemeOptIn(app, schemes)` — future settings-UI hook (persisted-preference wiring lands in a follow-up step).
+- `attachDeepLinkHandlers(app, { onDeepLink })` — wires `requestSingleInstanceLock` (second `bitcoin://` click while app is running consolidates into the existing window), macOS `open-url`, Windows/Linux `second-instance` + first-launch `process.argv` scan. Returns `{ gotLock: false }` when another instance holds the lock, letting the caller quit cleanly.
+- `classifyDeepLink(url)` — parses URIs. `xchain:` bubbles up raw (renderer decodes via core's action decoder). `bitcoin:` / `litecoin:` / `dogecoin:` run through core's `parseBip21Uri`; malformed BIP21 surfaces as `parsed: null` with raw preserved for debugging.
+
+**electron-updater wiring** (`packages/desktop/main/updater.js`)
+
+- `attachUpdater({ loader, onEvent })` — DI'd loader (dynamic-imports `electron-updater` in production). Short-circuits cleanly in dev (`isUpdaterActive() === false`) — no-op `checkForUpdates` + no event listener registration, so `pnpm run start` doesn't try to self-update against the prod URL.
+- `autoDownload` forced off — user clicks "install" in an in-app notification, then `downloadUpdate()` runs and progress events relay to the renderer.
+- All seven updater events (`checking`, `available`, `not-available`, `progress`, `downloaded`, `error`) forwarded via the `onEvent` callback in a uniform `{ type, info }` shape.
+
+**Main-process wiring** (`packages/desktop/main/index.js`)
+
+- Single-instance lock acquired BEFORE `whenReady` — per Electron's docs, `requestSingleInstanceLock` must fire early so a second invocation's URL routes into the existing instance before anything else runs.
+- On `whenReady`: `registerProtocolClients(app, { optedInSchemes: [] })` (Tier-1 only until settings lands), `attachHidPermissions(session.defaultSession)` (unchanged from Step 18), `attachUpdater({ onEvent: relayToRenderer })` + kicks off a check.
+- `forwardDeepLink` — queues the first URI if the renderer isn't up yet, replays on `ready-to-show`. Focuses the window so a `bitcoin://` click surfaces the app to the foreground.
+- `mainWindow.loadFile` now points at `renderer/dist/index.html` (the Vite bundle output), not `renderer/index.html` (the source).
+
+**CSP tightening** (`packages/desktop/renderer/index.html`)
+
+- `frame-src https://connect.trezor.io` — explicit allowlist for the Trezor Connect iframe. Makes the trust dependency auditable instead of ambient permissiveness. `connect-src` stays `'self'` — the renderer itself never fetches from connect.trezor.io; only the Trezor iframe does, and it lives in a separate origin bound by `frame-src`.
+
+### Smoke + docs
+
+- `packages/core/test/desktop-packaging.smoke.js` — new. Exercises:
+  - File layout + electron-builder config structure + deterministic flags (asar, npmRebuild, buildDependenciesFromSource).
+  - All four schemes declared in `protocols`.
+  - mac / win / linux target shapes; `identity: null` when CSC_IDENTITY_NAME unset; Windows RFC 3161 timestamp server pinned.
+  - `publish` uses electron-updater generic provider pointing at `downloads.xchain.io` over HTTPS.
+  - Protocol module: Tier 1 + Tier 2 constants; `registerProtocolClients` claims + removes correctly based on opt-in list; `classifyDeepLink` handles `xchain:`, coin URIs, malformed BIP21, junk input; `attachDeepLinkHandlers` validates its callback.
+  - Updater module: dev-mode short-circuit, prod-mode event forwarding for all seven event types, `autoDownload` forced off, input validation.
+  - `main/index.js` wires `registerProtocolClients` + `attachDeepLinkHandlers` + `attachUpdater` + single-instance lock + loads `renderer/dist/index.html`.
+  - Dockerfile pins base-image digest + Node SHA256 + takes pnpm version as build-arg + runs as non-root.
+  - `build.sh` / `reproduce.sh` — strict mode, `SOURCE_DATE_EPOCH` required, `--frozen-lockfile`, SHA256 manifest emission, `git worktree` isolation, `--user $(id -u):$(id -g)` mapping.
+  - Scripts are executable.
+  - CSP allowlists only `connect.trezor.io` for `frame-src`.
+  - `REPRODUCIBLE_BUILDS.md` sections present.
+- `packages/desktop/REPRODUCIBLE_BUILDS.md` — end-to-end verifier docs.
+
+### Changed
+
+- Version bump: `0.57.0 → 0.58.0`. All 8 workspace packages stay synchronized.
+- `packages/desktop/package.json` description updated to reflect Piece 5 completion ("Phase 2 §40.12: main-process signing isolation, OS keychain auto-unlock, WebHID hardware signer pairing, electron-builder packaging with Level-2 reproducible pre-signing artifacts, URI scheme registration, electron-updater wiring").
+
+### Known deferrals
+
+- **Icon assets** — `build/icon.png` / `.icns` / `.ico` not yet committed. First public release must ship them; electron-builder's default placeholder is fine for dev.
+- **Code-signing certs** — config structured, certs not wired. Signed releases happen when `CSC_LINK` / `CSC_KEY_PASSWORD` / `APPLE_API_KEY_ID` / `APPLE_TEAM_ID` are set in the build env. Needs Sectigo / DigiCert EV (Windows) + Apple Developer Program (macOS) before the first public signed release.
+- **Tier-2 opt-in settings UI** — `updateCoinSchemeOptIn` exists; the settings screen + persisted preference backing it don't. A user-visible toggle for "Make XChain Wallet my default Bitcoin wallet?" lands alongside the settings route in a future step.
+- **Trezor Connect local bundling** — deferred per the Step-19 risk analysis. On-device confirmation is the real trust anchor; CSP allowlist makes the CDN dependency auditable. Future step can bundle Connect assets under an `app://` scheme + flip `connectSrc` if a specific incident or product need justifies it.
+- **macOS + Windows reproducible builds** — current Dockerfile targets Linux. Cross-compiling macOS / Windows bit-for-bit is significantly harder (platform runners, `lipo`, Authenticode signing, notarization tickets embedded in binaries). Pre-signing hashes for those platforms are published from maintainer-operated platform runners; VM-based reproduction is a post-1.0 consideration.
+- **GPG-signed update manifests** — Linux artifact integrity today depends on HTTPS TLS + maintainer control of `downloads.xchain.io`. A TUF-style role separation model is a stronger chain we can add post-1.0.
+
+### Developer notes
+
+- Smoke count: 37 (was 36; +1 for desktop-packaging).
+- End-to-end Electron + electron-builder execution still requires `pnpm install` (~200 MB Electron bundle) + platform-specific signing tooling. Static smokes cover the config + wiring; real `pnpm run dist` verification waits for a dev-env setup.
+- Piece 5 (Electron desktop shell, §40.12) is feature-complete at this layer — Steps 16, 17, 18, 19 together deliver the scaffold, keychain auto-unlock, HW signer pairing, and packaging / update / URI scheme infrastructure. Phase 2 continues with Batch 2 (Steps 20-26 — BROADCAST, dispensers, DIVIDEND, AIRDROP, Advanced Actions Form, FreeWallet migration).
 
 ## [0.57.0] - 2026-04-23
 
@@ -73,7 +163,6 @@ Phase 2 — Step 18 of 26 — piece 5c. Hardware signer pairing goes live on the
 - Smoke count: 36 (was 35; +1 for hw-factories).
 - Real-hardware verification still pending: plugging a Trezor + Ledger into the Electron app requires `pnpm install` + the ~200 MB Electron bundle + user manual testing. DI-mock smokes cover the wiring; live device exercise waits for Step 19 + on-device pass.
 - `TrezorSigner` / `LedgerSigner` continue to have zero Trezor/Ledger SDK imports in core — the Step-13/14 invariant is preserved at the class level, and Step 18 extends it up to the factory layer.
-
 
 ## [0.56.0] - 2026-04-23
 

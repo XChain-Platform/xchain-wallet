@@ -43,6 +43,11 @@ import { FileMetaBackend, metaPathFor } from './meta.js';
 import { KeychainSessionBackend, sessionKeyPathFor } from './keychain.js';
 import { attachHidPermissions } from './permissions.js';
 import {
+    attachDeepLinkHandlers,
+    registerProtocolClients,
+} from './protocol.js';
+import { attachUpdater } from './updater.js';
+import {
     createRuntime,
     ensureHost,
     handleIpcMessage,
@@ -53,6 +58,20 @@ const here = dirname(fileURLToPath(import.meta.url));
 
 let mainWindow = /** @type {BrowserWindow | null} */ (null);
 let runtime = /** @type {ReturnType<typeof createRuntime> | null} */ (null);
+
+/** @type {{ scheme: string, raw: string, parsed: any } | null} */
+let pendingDeepLink = null;
+
+function forwardDeepLink(event) {
+    // Renderer may not exist yet at app start; queue the first one and
+    // replay when the window is ready.
+    if (!mainWindow || mainWindow.isDestroyed()) {
+        pendingDeepLink = event;
+        return;
+    }
+    mainWindow.webContents.send('xchain:uri', event);
+    if (!mainWindow.isFocused()) mainWindow.focus();
+}
 
 function buildRuntime() {
     const userData = app.getPath('userData');
@@ -88,10 +107,31 @@ function createMainWindow() {
     });
 
     // Renderer is built into packages/desktop/renderer/dist by Step 19's
-    // packaging pipeline. In dev we load the file directly.
-    mainWindow.loadFile(join(here, '..', 'renderer', 'index.html'));
-    mainWindow.once('ready-to-show', () => mainWindow?.show());
+    // packaging pipeline (vite build). In packaged mode that's what
+    // `mainWindow.loadFile` points at; in dev the same path works
+    // because `pnpm run start` runs vite first.
+    mainWindow.loadFile(join(here, '..', 'renderer', 'dist', 'index.html'));
+    mainWindow.once('ready-to-show', () => {
+        mainWindow?.show();
+        // Replay any deep link that arrived before the window was up.
+        if (pendingDeepLink) {
+            const event = pendingDeepLink;
+            pendingDeepLink = null;
+            forwardDeepLink(event);
+        }
+    });
     mainWindow.on('closed', () => { mainWindow = null; });
+}
+
+// §40.12 Step 19: single-instance lock + deep-link dispatch must run
+// BEFORE whenReady so a second invocation (e.g. a `bitcoin:` click
+// while the app is already running) routes correctly. `requestSingleInstanceLock`
+// is idempotent and safe to call early.
+const deepLinkCtx = attachDeepLinkHandlers(app, { onDeepLink: forwardDeepLink });
+if (!deepLinkCtx.gotLock) {
+    // Another instance is already running. Quit cleanly; the running
+    // instance will pick up our URL from `second-instance`.
+    app.quit();
 }
 
 app.whenReady().then(async () => {
@@ -110,6 +150,30 @@ app.whenReady().then(async () => {
     // handlers Electron returns an empty device list under
     // `contextIsolation: true`.
     attachHidPermissions(session.defaultSession);
+
+    // §40.12 Step 19: claim `xchain:` unconditionally. Tier-2 coin
+    // schemes (bitcoin / litecoin / dogecoin) stay unclaimed until a
+    // future settings toggle opts in — we don't silently override the
+    // user's primary BTC wallet.
+    registerProtocolClients(app, { optedInSchemes: [] });
+
+    // electron-updater — only active in packaged builds (isUpdaterActive
+    // returns false in dev). Events relay to the renderer via IPC so
+    // the Home screen can surface an "update available" toast.
+    try {
+        const { checkForUpdates } = await attachUpdater({
+            onEvent: (event) => {
+                if (mainWindow && !mainWindow.isDestroyed()) {
+                    mainWindow.webContents.send('xchain:updater', event);
+                }
+            },
+        });
+        // Kick a check on launch. User-triggered re-checks land later
+        // via a "Check for updates" menu item (future step).
+        void checkForUpdates();
+    } catch (err) {
+        console.error('[xchain] updater wiring failed:', err);
+    }
 
     ipcMain.handle(IPC_CHANNEL, async (_event, message) => {
         if (!runtime) {
@@ -140,3 +204,4 @@ app.on('before-quit', () => {
     // next launch reuses it via the keychain.
     if (runtime) tearDownHost(runtime);
 });
+

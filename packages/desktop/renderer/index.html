@@ -3,7 +3,19 @@
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self';" />
+        <!--
+            CSP notes (§40.12, Step 19):
+            - `frame-src https://connect.trezor.io` — Trezor Connect loads
+              its popup/iframe from this domain. Allow-listing it
+              explicitly rather than leaving `frame-src` unset makes the
+              trust assumption auditable. See REPRODUCIBLE_BUILDS.md §
+              "Trezor Connect trust boundary". A later step can bundle
+              Connect locally and drop this directive.
+            - `connect-src` stays 'self' — the renderer itself never
+              fetches from connect.trezor.io. Only the Trezor iframe does,
+              and it lives in a separate origin bound by frame-src above.
+        -->
+        <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-src https://connect.trezor.io;" />
         <title>XChain Wallet</title>
     </head>
     <body>

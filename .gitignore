@@ -3,6 +3,10 @@
 /packages/*/dist
 /packages/*/build
 /packages/*/coverage
+
+# electron-builder buildResources dir — tracked (entitlements + icon
+# metadata), not a build-output directory despite the name.
+!/packages/desktop/build/
 /.env
 .DS_Store
 *.log

@@ -1,0 +1,11 @@
+# Exclude from Docker build context — keeps the image small + avoids
+# leaking local dev state into the reproducible-build path.
+
+**/node_modules
+**/dist
+**/.vite
+**/.cache
+**/.DS_Store
+**/*.log
+packages/desktop/dist
+packages/*/node_modules
