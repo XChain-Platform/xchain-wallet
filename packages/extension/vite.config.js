@@ -1,31 +1,29 @@
 // Vite build for the MV3 extension shell — §9.5 / §51.
 //
-// Multi-entry rollup: three bundles land at the paths the manifest.json
-// references. Vite's module resolution + workspace linking means the
-// shared @xchain-wallet/core code gets tree-shaken into whichever
-// bundles actually import it.
+// Multi-entry rollup producing four bundles + one HTML asset at the paths
+// manifest.json references:
 //
-// The manifest.json itself lives at the package root; Vite's
-// `publicDir` copies it into `dist/` verbatim. Anything else that
-// needs to ship as a static asset (icons, when §5.5 resolves them,
-// popup HTML when the UI lands) goes in `public/`.
+//     background.js                       ← src/background.js
+//     content/contentScript.js            ← src/content/contentScript.js
+//     inject/xchainProvider.js            ← src/inject/xchainProvider.js
+//     popup.html + assets/popup-<hash>.js ← popup.html + src/popup/main.jsx
 //
-// Scope note (Phase 1 infra session): this config exists to prove the
-// build pipeline works and produces a loadable MV3 artifact. Popup +
-// full-screen HTML entries get added in the UI session — they would
-// slot in as additional `rollupOptions.input` keys pointing at the
-// HTML file.
+// Workspace `@xchain-wallet/core` is split into a shared chunk so the
+// entries don't duplicate it. The popup + its React tree are the only
+// JSX/ESM-module consumers; background/content/inject stay vanilla ESM.
+//
+// Static assets handled by custom plugins:
+//   - copyManifestPlugin: the canonical `manifest.json` lives at the
+//     package root; this plugin copies it verbatim into dist/ on close.
+//   - iconResizePlugin:  resizes the 128x128 favicon into the four PNG
+//     sizes the MV3 manifest expects (`icons` + `action.default_icon`).
 
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import sharp from 'sharp';
 
-/**
- * Copy the MV3 manifest.json from the package root into `dist/` at the
- * close of the build. Using a plugin rather than `publicDir` so the
- * canonical source of the manifest stays at `packages/extension/manifest.json`
- * — the UI session will add popup / full-screen HTML next to it.
- */
 function copyManifestPlugin() {
     return {
         name: 'xchain-copy-manifest',
@@ -35,8 +33,6 @@ function copyManifestPlugin() {
                 fileURLToPath(new URL('./manifest.json', import.meta.url)),
                 'utf8',
             );
-            // Write via Vite's emitted-assets helper via writeFile to dist.
-            const { writeFile } = await import('node:fs/promises');
             await writeFile(
                 fileURLToPath(new URL('./dist/manifest.json', import.meta.url)),
                 manifest,
@@ -46,14 +42,33 @@ function copyManifestPlugin() {
     };
 }
 
+/**
+ * @param {{ source: URL, outDir: URL, sizes: number[] }} opts
+ */
+function iconResizePlugin({ source, outDir, sizes }) {
+    return {
+        name: 'xchain-icon-resize',
+        apply: 'build',
+        async closeBundle() {
+            const srcBuf = await readFile(fileURLToPath(source));
+            const outAbs = fileURLToPath(outDir);
+            await mkdir(outAbs, { recursive: true });
+            for (const size of sizes) {
+                const outPath = fileURLToPath(
+                    new URL(`./icon-${size}.png`, outDir),
+                );
+                await sharp(srcBuf).resize(size, size).png().toFile(outPath);
+            }
+        },
+    };
+}
+
 export default defineConfig({
-    // Keep MV3-friendly: no eval, no dynamic imports, stable output paths
-    // that match what manifest.json references.
+    // Keep MV3-friendly: no eval, no dynamic imports in SW / content / inject,
+    // stable output paths that match what manifest.json references.
     build: {
         outDir: 'dist',
         emptyOutDir: true,
-        // MV3 service workers can't import URL-relative modules — Rollup
-        // must produce self-contained bundles per entry.
         target: 'es2022',
         sourcemap: false,
         minify: false,
@@ -62,11 +77,13 @@ export default defineConfig({
                 background: fileURLToPath(new URL('./src/background.js', import.meta.url)),
                 contentScript: fileURLToPath(new URL('./src/content/contentScript.js', import.meta.url)),
                 xchainProvider: fileURLToPath(new URL('./src/inject/xchainProvider.js', import.meta.url)),
+                popup: fileURLToPath(new URL('./popup.html', import.meta.url)),
             },
             output: {
                 // Fixed output paths so manifest.json's string references
-                // survive bundling. Any dynamic chunking lands under
-                // chunks/ and won't break the manifest.
+                // survive bundling. The HTML-backed popup entry goes through
+                // Vite's HTML pipeline and lands at `dist/popup.html`; its
+                // JS chunk is hash-named under `assets/`.
                 entryFileNames: (chunk) => {
                     switch (chunk.name) {
                         case 'background':
@@ -76,13 +93,11 @@ export default defineConfig({
                         case 'xchainProvider':
                             return 'inject/xchainProvider.js';
                         default:
-                            return '[name].js';
+                            return 'assets/[name]-[hash].js';
                     }
                 },
                 chunkFileNames: 'chunks/[name]-[hash].js',
                 assetFileNames: 'assets/[name]-[hash][extname]',
-                // One shared core chunk across the three entries rather
-                // than duplicating @xchain-wallet/core per bundle.
                 manualChunks: {
                     core: ['@xchain-wallet/core'],
                 },
@@ -91,5 +106,16 @@ export default defineConfig({
     },
     // manifest.json at the package root is copied via the plugin below.
     publicDir: false,
-    plugins: [copyManifestPlugin()],
+    plugins: [
+        react(),
+        copyManifestPlugin(),
+        iconResizePlugin({
+            source: new URL(
+                '../core/src/branding/assets/favicon.png',
+                import.meta.url,
+            ),
+            outDir: new URL('./dist/icons/', import.meta.url),
+            sizes: [16, 32, 48, 128],
+        }),
+    ],
 });

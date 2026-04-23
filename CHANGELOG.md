@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.37.0] - 2026-04-22
+
+### Added
+
+**Extension popup HTML entry + React root + session-meta listener** (§8.1 target #3, §9.3.1 process isolation)
+
+The popup is the user's primary entry point to the wallet. This piece ships the shell: HTML entry, React root, hash-free state-machine router, and the background wiring that lets the popup answer "what do I render?" without demanding an unlocked vault.
+
+**Popup shell**
+
+- `packages/extension/popup.html` — at the package root so MV3 can reference `popup.html` directly out of `dist/`. Mounts `<App />` into `#xchain-popup-root` via a type-module script tag pointing at `src/popup/main.jsx`.
+- `packages/extension/src/popup/main.jsx` — `createRoot(container).render(<App />)`; imports `@xchain-wallet/core/ui/tokens.css` once so every route inherits the design-token palette + dark-mode + reduced-motion handling.
+- `packages/extension/src/popup/App.jsx` — 5-state router: `loading → no-wallet | locked | unlocked | error`. Queries `session.status` on mount, renders the matching route, and passes each route a `refresh()` callback so flows that change state (create wallet, unlock, lock) re-pull ground truth from the background.
+- `packages/extension/src/popup/messaging.js` — `sendMessage(type, request)` wraps `chrome.runtime.sendMessage` in a Promise. Surfaces the MessageHost `{ok, result} | {ok, error}` envelope as resolve/reject and preserves the error-class name. `getSessionStatus()` is the named query.
+- `packages/extension/src/popup/routes/` — four route stubs with co-located CSS modules:
+    - `Loading.jsx` — animated three-dot pulse indicator; static under `prefers-reduced-motion`.
+    - `Onboarding.jsx` — logo hero + tagline from `branding.js`; "Create a new wallet" / "I already have one" buttons (disabled — real flows land in Batch 4).
+    - `Locked.jsx` — scaffold stub; real password form + `unlockWallet` wiring lands in piece 5.
+    - `Home.jsx` — scaffold stub with a header "Lock" trigger so the state machine is exercisable end-to-end; balances / send / receive land in pieces 6–7.
+
+**Background session-meta listener**
+
+The popup renders first-thing-on-open — before any unlock flow has run. `MessageHost` requires an open Vault, so a vault-less question like "is there a wallet?" couldn't be asked through it. The session-meta listener plugs that gap.
+
+- `packages/extension/src/background/sessionMeta.js` — `attachSessionMetaListener(chromeRuntime?)` installs a `chrome.runtime.onMessage` listener that answers one type (`session.status`) from the two storage backends directly. Returns `{ hasWallet, hasSession, state }` where `state ∈ {'no-wallet', 'locked', 'unlocked'}`. Returns `false` for any non-`session.*` message so the host listener picks those up normally.
+- `packages/extension/src/background/ChromeRuntimeAdapter.js` — host listener now returns `false` for `session.*` message types so the two listeners stay disjoint (prevents double-`sendResponse` on the same message).
+- `packages/extension/src/background.js` — `attachSessionMetaListener()` runs before `ensureHost()` so the popup gets an answer even when the vault is still locked. Host listener attaches once the session key is present.
+
+**Vite wiring + manifest + app icons** (§9.5, §51)
+
+- `packages/extension/vite.config.js` — `@vitejs/plugin-react` enabled; fourth entry added (`popup` pointing at `popup.html`) so Vite's HTML pipeline produces `dist/popup.html` + a hashed `assets/popup-<hash>.js`. New `iconResizePlugin` uses `sharp` to resize `packages/core/src/branding/assets/favicon.png` (128×128 source) into MV3-standard 16 / 32 / 48 / 128 PNGs at `dist/icons/icon-<size>.png` on every build.
+- `packages/extension/manifest.json` — added top-level `icons` + `action.default_popup = "popup.html"` + `action.default_icon` at all four sizes.
+- `packages/extension/package.json` — `sharp@^0.33.5` devDep (consumed only by the icon-resize plugin at build time).
+
+### Tests
+
+- `packages/core/test/popup-shell.smoke.js` — 13 static-wiring checks (popup HTML, React entry, App state coverage, route exports, Vite config plugins + popup input + icon sizes, manifest popup/icon references, sharp devDep, background listener wiring) plus a runtime test that installs the session-meta listener against a fake `chrome.runtime` + `chrome.storage` and drives it through all three wallet states (no-wallet / locked / unlocked) plus a non-session-message passthrough check.
+
 ## [0.36.0] - 2026-04-22
 
 ### Changed

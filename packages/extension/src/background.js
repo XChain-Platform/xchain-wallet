@@ -20,6 +20,7 @@ import {
 } from './storage/index.js';
 import {
     attachChromeRuntime,
+    attachSessionMetaListener,
     createBackgroundHost,
 } from './background/index.js';
 
@@ -78,6 +79,12 @@ async function ensureHost() {
     attachChromeRuntime(host);
     return host;
 }
+
+// Session-meta listener runs before the vault is open so the popup can
+// ask "no-wallet / locked / unlocked?" on first render. It responds to
+// `session.status` only; the host listener (attached below when a
+// session key is available) handles everything else.
+attachSessionMetaListener();
 
 // Kick ensureHost on startup — no-ops when there's no session.
 ensureHost().catch((err) => {

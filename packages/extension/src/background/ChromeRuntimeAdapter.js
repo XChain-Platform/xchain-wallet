@@ -30,6 +30,19 @@ export function attachChromeRuntime(host, chromeRuntime) {
     }
 
     const listener = (message, _sender, sendResponse) => {
+        // Reserve `session.*` for the session-meta listener (see
+        // sessionMeta.js). That listener runs before the MessageHost is
+        // wired up and answers questions that don't need a vault; skipping
+        // them here avoids a double-sendResponse when both listeners fire
+        // for the same message.
+        if (
+            message &&
+            typeof message === 'object' &&
+            typeof message.type === 'string' &&
+            message.type.startsWith('session.')
+        ) {
+            return false;
+        }
         // Fire-and-forget the async work, then reply via sendResponse.
         Promise.resolve()
             .then(() => host.handle(message))
