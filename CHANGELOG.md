@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.47.0] - 2026-04-23
+
+Phase 2 Batch 1 piece 1b — real `xchain-sdk` browser-bundle pass. Makes both shell Vite builds resolve the real SDK end-to-end so every Phase-2 authoring form (ISSUE, MINT, wizard, etc.) has a working encode + sign path from day one instead of dead-ending at the dev-mock fallback. Surfaces the three CJS/Node-builtin interop issues once, not per-form.
+
+### Added
+
+**Browser shims** (`packages/core/src/shims/`)
+
+- `ws-browser.js` — wraps native browser `WebSocket` in a Node-`ws`-shaped adapter. The SDK's `websocket.js` calls `.on('open'|'message'|'close'|'error', fn)` + reads `WebSocket.OPEN`-style static constants; browser `WebSocket` exposes `.addEventListener` / `onopen`. Shim translates, plus handles `close(code, reason)` / `readyState` / `send(data)`. Throws loudly if `globalThis.WebSocket` is unavailable.
+- `http-browser.js` — no-op `http.Agent` class so `encoder.js` + `explorer.js`'s `new (require('http').Agent)({ keepAlive: true })` connection-pool init resolves without pulling in the 30 KB `stream-http` polyfill. Browsers manage their own connection pool; axios's `httpAgent` is a no-op there.
+- `repl-browser.js` — throws if `startREPL()` is ever called. `xchain-sdk/index.js` transitively loads `src/repl.js` at module init via `require('./src/repl.js')`, which calls `require('repl')`. The wallet never calls `startREPL`; the shim lets the module graph resolve without shipping a real polyfill for `node:repl`.
+- `packages/core/package.json` exports `./shims/*` so Vite configs resolve the shim paths via `@xchain-wallet/core/shims/*`-style imports (today the configs use `fileURLToPath(new URL(...))` because Vite's `resolve.alias` values are filesystem paths, not package-subpath imports).
+
+**Vite config wiring** (`packages/web/vite.config.js`, `packages/extension/vite.config.js`)
+
+- `vite-plugin-node-polyfills` added with `include: ['buffer', 'process', 'crypto', 'events', 'stream', 'util']` + `globals: { Buffer: true, process: true, global: true }` + `protocolImports: true`. Covers `require('crypto')` in `auth.js` + `messaging.js` (ECDH, AES-256-GCM, randomBytes, SHA-256), Buffer in `bitcoinjs-lib`, and `process` in a few transitive deps.
+- `resolve.alias` maps `ws` → `ws-browser.js`, `http` → `http-browser.js`, `repl` → `repl-browser.js`. Aliasing at the Vite level means we don't touch `xchain-sdk` source.
+- Extension Vite config keeps its existing multi-entry shape (background / contentScript / xchainProvider / popup / approval). Tree-shaking keeps the polyfills + shims out of `contentScript` + `xchainProvider` bundles since those don't consume xchain-sdk.
+
+**Runtime + dev deps**
+
+- `vite-plugin-node-polyfills@^0.22.0` added as devDep to `packages/web` + `packages/extension`. `packages/core` already depended on `@noble/hashes` + `@scure/*` directly — not using crypto-browserify.
+- `xchain-sdk@^1.8.0` already pinned in both shells from v0.45.0.
+
+### Tests
+
+- **New smoke** — `packages/core/test/sdk-bundle.smoke.js`. Verifies: the three shim files exist + expose the expected surface; both Vite configs import `vite-plugin-node-polyfills` and call `nodePolyfills()` with the right include list + global Buffer flag; both configs resolve `ws` / `http` / `repl` via alias to the shims; both package.json files pin `xchain-sdk` at `^1.8.0` and list `vite-plugin-node-polyfills` as a devDep; both `sdkFactory.js` files still dynamic-import `xchain-sdk` + wrap with `adaptXChainSDK` + emit the console.warn markers `check-no-dev-mock.sh` greps for; `tools/build-reproduce/check-no-dev-mock.sh` still names all three markers.
+
+### Scope boundary
+
+- **Static smoke only.** The full "does it actually bundle" gate is `pnpm -C packages/web build && pnpm -C packages/extension build && bash tools/build-reproduce/check-no-dev-mock.sh`. Those run in CI + before a release; the smoke asserts the static wiring, not the bundle itself.
+- **Messaging features are Phase 3.** The SDK's `src/messaging.js` uses `crypto.createECDH('secp256k1')` and AES-256-GCM for §MESSAGE ECIES. Bundling the module graph works (crypto-browserify supports both), but the wallet doesn't invoke messaging flows until Phase 3 (§41.x). Any runtime-only bugs in the polyfill path there surface later; Phase 2 authoring (ISSUE/MINT/wizard/HW signers) doesn't touch messaging.
+- **ws shim is minimal.** It implements the `.on / .off / .once / .send / .close / .terminate / readyState / url / protocol / bufferedAmount` surface the SDK's `websocket.js` consumes plus `CONNECTING / OPEN / CLOSING / CLOSED` static constants — not a general-purpose `ws` polyfill. If the SDK adds new WebSocket call sites in a future version, the smoke fails at bundle time and the shim gets extended.
+- **http shim is intentionally a stub.** If the SDK starts doing anything beyond `new http.Agent()`, the browser bundler hits an undefined-property error and we notice. We don't want to quietly pull in `stream-http` (30 KB) for features the wallet doesn't use.
+
+### Known follow-ups
+
+- The full `pnpm -r build` + `check-no-dev-mock.sh` gate is scoped to CI — the user runs it locally when they want visual confirmation. A reproducible-build RC pass (§51.4) adds the gate automatically pre-release.
+- If `bitcoinjs-lib`'s browser surface reports an ESM/CJS interop issue in the bundle log, the fix is typically a `optimizeDeps.include: ['bitcoinjs-lib']` entry in the Vite config — not shipped today because pre-bundling it may not be necessary with `@vitejs/plugin-commonjs` built-in handling.
+
 ## [0.46.0] - 2026-04-23
 
 Phase 2 Batch 1 piece 1 — shared-routes refactor. Closes the Phase-1 popup-Send + web-Receive gaps by hoisting every Phase-1 route into `@xchain-wallet/core/shared/routes/*` behind a `MessagingProvider` React context. Popup + web shells become thin routers that wrap the tree with `<MessagingProvider shell="popup|web" messaging={shellMessaging}>`; shared routes call the bag of messaging helpers via the context and pick `Screen` variants from `screenVariantFor(shell)`.

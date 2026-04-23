@@ -12,7 +12,8 @@
         "./ui/*": "./src/ui/*",
         "./branding/*": "./src/branding/*",
         "./shared": "./src/shared/index.js",
-        "./shared/*": "./src/shared/*"
+        "./shared/*": "./src/shared/*",
+        "./shims/*": "./src/shims/*"
     },
     "scripts": {
         "test": "vitest run",

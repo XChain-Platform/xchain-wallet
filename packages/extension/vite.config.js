@@ -22,7 +22,20 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import sharp from 'sharp';
+
+// Absolute paths for our workspace-local Node shims that xchain-sdk
+// pulls in at module load. Vite resolves these via resolve.alias below.
+const wsBrowserShim = fileURLToPath(
+    new URL('../core/src/shims/ws-browser.js', import.meta.url),
+);
+const httpBrowserShim = fileURLToPath(
+    new URL('../core/src/shims/http-browser.js', import.meta.url),
+);
+const replBrowserShim = fileURLToPath(
+    new URL('../core/src/shims/repl-browser.js', import.meta.url),
+);
 
 function copyManifestPlugin() {
     return {
@@ -66,6 +79,27 @@ function iconResizePlugin({ source, outDir, sizes }) {
 export default defineConfig({
     // Keep MV3-friendly: no eval, no dynamic imports in SW / content / inject,
     // stable output paths that match what manifest.json references.
+    //
+    // xchain-sdk is CJS and pulls in `ws` + `crypto` + Buffer at module load.
+    // `ws` is aliased to our browser shim (packages/core/src/shims/ws-browser.js);
+    // `crypto`/`Buffer`/`process`/`stream`/`events` are handled by
+    // vite-plugin-node-polyfills. The polyfills add ~20–30 KB to the
+    // popup + background chunks — acceptable for a wallet that needs to
+    // sign PSBTs. Content + inject scripts don't touch the SDK, so
+    // tree-shaking keeps the polyfills out of those bundles.
+    resolve: {
+        alias: {
+            ws: wsBrowserShim,
+            // xchain-sdk's encoder.js + explorer.js use `new http.Agent`
+            // for connection pooling — browser manages its own pool, so
+            // our tiny no-op shim avoids pulling in stream-http (~30 KB).
+            http: httpBrowserShim,
+            // repl is loaded transitively via xchain-sdk/index.js →
+            // src/repl.js. The wallet never calls startREPL, so the
+            // shim throws loudly if anything does.
+            repl: replBrowserShim,
+        },
+    },
     build: {
         outDir: 'dist',
         emptyOutDir: true,
@@ -109,6 +143,11 @@ export default defineConfig({
     publicDir: false,
     plugins: [
         react(),
+        nodePolyfills({
+            include: ['buffer', 'process', 'crypto', 'events', 'stream', 'util'],
+            globals: { Buffer: true, process: true, global: true },
+            protocolImports: true,
+        }),
         copyManifestPlugin(),
         iconResizePlugin({
             source: new URL(
