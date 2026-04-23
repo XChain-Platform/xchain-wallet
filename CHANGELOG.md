@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.32.0] - 2026-04-22
+
+### Added
+
+**`bridge.parallel` stub** — structured `PHASE_DEFERRED` response so the inject script's `provider.parallel(actions)` surfaces a clean result-shape (`{ error: 'PHASE_DEFERRED', phase: 4, message }`) instead of falling through to `UnknownMessageTypeError`. Matches `bridge.signAction`'s `UNSUPPORTED_ACTION` pattern — dApp authors branch on `result.error` rather than try/catch. Full implementation ships with cross-chain orchestration in Phase 4+.
+
 ## [0.31.0] - 2026-04-22
 
 ### Added

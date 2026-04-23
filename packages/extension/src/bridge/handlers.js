@@ -291,6 +291,18 @@ export function registerBridgeHandlers(host, opts = {}) {
         });
     });
 
+    host.register('bridge.parallel', async () => {
+        // §43.2 parallel() ships in Phase 4+ alongside cross-chain
+        // orchestration (§42.8.2). Returning a structured shape (not
+        // throwing) mirrors bridge.signAction's UNSUPPORTED_ACTION
+        // response so dApp authors can branch on `result.error`.
+        return {
+            error: 'PHASE_DEFERRED',
+            phase: 4,
+            message: 'bridge.parallel() ships alongside cross-chain orchestration in Phase 4+',
+        };
+    });
+
     host.register('bridge.signIn', async (req, deps) => {
         const site = await requireSite(deps.vault, req);
         const decision = await approvals.signIn({
