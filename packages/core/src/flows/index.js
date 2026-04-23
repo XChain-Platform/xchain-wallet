@@ -68,3 +68,9 @@ export {
     NoQueuedTxError,
 } from './queuedBroadcast.js';
 export { diagnosticDump, createErrorRingBuffer } from './diagnosticDump.js';
+export {
+    discoverUsedAddresses,
+    DEFAULT_GAP_LIMIT,
+    DEFAULT_PER_QUERY_TIMEOUT_MS,
+    DEFAULT_CHAIN_TIMEOUT_MS,
+} from './discoverUsedAddresses.js';
