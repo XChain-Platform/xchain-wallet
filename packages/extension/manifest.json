@@ -10,6 +10,20 @@
         "service_worker": "background.js",
         "type": "module"
     },
-    "permissions": [],
+    "content_scripts": [
+        {
+            "matches": ["http://*/*", "https://*/*"],
+            "js": ["content/contentScript.js"],
+            "run_at": "document_start",
+            "all_frames": false
+        }
+    ],
+    "web_accessible_resources": [
+        {
+            "resources": ["inject/xchainProvider.js"],
+            "matches": ["http://*/*", "https://*/*"]
+        }
+    ],
+    "permissions": ["storage"],
     "host_permissions": []
 }

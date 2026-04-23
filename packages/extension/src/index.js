@@ -15,3 +15,4 @@ export {
     DEFAULT_SESSION_STORAGE_KEY,
 } from './storage/ChromeSessionBackend.js';
 export * as background from './background/index.js';
+export * as bridge from './bridge/index.js';

@@ -14,6 +14,7 @@
 
 import { flows } from '@xchain-wallet/core';
 import { MessageHost } from './MessageHost.js';
+import { registerBridgeHandlers } from '../bridge/handlers.js';
 
 const {
     createWallet,
@@ -45,11 +46,12 @@ function toSafeWallet(w) {
 }
 
 /**
- * @param {import('./MessageHost.js').MessageHostDeps} deps
+ * @param {import('./MessageHost.js').MessageHostDeps & { approvals?: import('../bridge/Approvals.js').Approvals }} deps
  * @returns {MessageHost}
  */
 export function createBackgroundHost(deps) {
-    const host = new MessageHost(deps);
+    const { approvals, ...hostDeps } = deps ?? {};
+    const host = new MessageHost(hostDeps);
 
     // --- Wallet management ---------------------------------------------------
 
@@ -121,6 +123,13 @@ export function createBackgroundHost(deps) {
     host.register('history.address', async (req, { sdkRegistry }) => {
         return addressHistory({ ...req, sdkRegistry });
     });
+
+    // --- dApp bridge ---------------------------------------------------------
+    // §43 surface. Shells wire Approvals to pipe user-prompts through a
+    // popup window; the default rejects everything with
+    // USER_APPROVAL_REQUIRED, giving dApps a structured error instead of
+    // a hang when the shell's approval popup isn't wired yet.
+    registerBridgeHandlers(host, { approvals });
 
     return host;
 }
