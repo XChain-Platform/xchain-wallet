@@ -3,14 +3,14 @@ import * as branding from '@xchain-wallet/core/branding/branding.js';
 import styles from './Onboarding.module.css';
 
 /**
- * Stub onboarding — real create / import / demo flows ship in Batch 4
- * (web SPA parity, shared across shells). For Phase 1 the popup gives
- * the user entry points that will wire up when those flows exist.
+ * Welcome screen inside the popup — dispatches to CreateWallet or
+ * ImportWallet via the parent App's onboardingStep state.
  *
  * @param {object} props
- * @param {() => void} [props.onCreated]
+ * @param {() => void} [props.onCreate]
+ * @param {() => void} [props.onImport]
  */
-export function Onboarding({ onCreated: _onCreated }) {
+export function Onboarding({ onCreate, onImport }) {
     return (
         <Screen variant="popup">
             <div className={styles.hero}>
@@ -23,15 +23,22 @@ export function Onboarding({ onCreated: _onCreated }) {
                 <p className={styles.tagline}>{branding.TAGLINE}</p>
             </div>
             <div className={styles.actions}>
-                <Button variant="primary" block disabled>
+                <Button
+                    variant="primary"
+                    block
+                    onClick={onCreate}
+                    disabled={!onCreate}
+                >
                     Create a new wallet
                 </Button>
-                <Button variant="secondary" block disabled>
+                <Button
+                    variant="secondary"
+                    block
+                    onClick={onImport}
+                    disabled={!onImport}
+                >
                     I already have a wallet
                 </Button>
-                <p className={styles.note}>
-                    Onboarding flows ship in a later piece.
-                </p>
             </div>
         </Screen>
     );

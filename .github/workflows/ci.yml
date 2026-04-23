@@ -28,13 +28,56 @@ jobs:
       - name: Build
         run: pnpm -r --if-present build
 
+      - name: Vitest + Node-script smokes
+        # `test` runs Vitest in packages/core. `test:smoke` (Node-
+        # script harness) runs the integration smokes. Both must
+        # pass for the install job to go green.
+        run: |
+          pnpm -r --if-present test
+          pnpm -C packages/core test:smoke
+
       # Future steps (enable as packages define them):
       # - name: Typecheck
       #   run: pnpm -r --if-present typecheck
       # - name: Lint
       #   run: pnpm -r --if-present lint
-      # - name: Test
-      #   run: pnpm -r --if-present test
+
+  e2e:
+    name: Playwright (web SPA)
+    runs-on: ubuntu-latest
+    # Depends on the install job so Playwright picks up a cached pnpm
+    # store when possible. Still does its own install because CI caches
+    # don't pass node_modules between jobs.
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm --filter @xchain-wallet/e2e install:browsers
+
+      - name: Run Playwright suite
+        env:
+          CI: '1'
+        run: pnpm --filter @xchain-wallet/e2e test
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: e2e/playwright-report
+          retention-days: 7
 
   audit:
     name: pnpm audit (prod)

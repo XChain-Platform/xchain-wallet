@@ -77,8 +77,8 @@ for (const fn of ['createWallet', 'importMnemonic']) {
 
 const host = readFileSync(join(webPkg, 'src', 'hostBridge.js'), 'utf8');
 assert.ok(
-    /DO NOT USE FOR MAINNET/.test(host),
-    'dev SDK stub flagged "DO NOT USE FOR MAINNET"',
+    /xchain-sdk isn't resolvable|sdkResolved/.test(host),
+    'hostBridge references the real-SDK resolver with dev-mock fallback',
 );
 assert.ok(
     /createWalletLocal/.test(host),

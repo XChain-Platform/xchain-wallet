@@ -23,42 +23,37 @@ import {
     attachChromeRuntime,
     attachSessionMetaListener,
     createBackgroundHost,
+    createDevMockSdk,
+    resolveSdkFactory,
 } from './background/index.js';
-
-// The SDK factory is injected at bundle time. Shells with a live SDK
-// wire it here; the infra scaffold uses a no-op factory that lets the
-// extension load without a fatal crash when no SDK is present.
-// Replace this with `adaptXChainSDK(XChainSDK)` when the real SDK is
-// bundled for the extension (Phase 1 build-and-release work).
-const scaffoldSdkFactory = () => ({
-    wallet: {
-        deriveAddress() { throw new Error('SDK not yet wired'); },
-        signPsbt() { throw new Error('SDK not yet wired'); },
-        validateAddress() { return { valid: false, type: null, network: null, error: 'SDK not wired' }; },
-        broadcastTx() { return Promise.reject(new Error('SDK not yet wired')); },
-        importWIF() { throw new Error('SDK not yet wired'); },
-    },
-    auth: {
-        signMessage() { throw new Error('SDK not yet wired'); },
-        verifyMessage() { return false; },
-        generateChallenge() { return ''; },
-    },
-});
 
 // --- Lazy wiring --------------------------------------------------------
 // The service worker starts with no master key — it's in ChromeSessionBackend
 // only if the user has unlocked the wallet in this browser session. Until
 // that happens, MessageHost handlers that require a Vault will fail; the
 // popup is responsible for prompting unlock before issuing any operation.
-//
-// In this scaffold we attach the runtime listener unconditionally and let
-// the host report "vault not ready" via its own error envelopes.
 
 const chainRegistry = registryLib.defaultRegistry();
-const sdkRegistry = new sdkLib.SDKRegistry({
+
+// Build the SDKRegistry against the dev mock synchronously so the
+// service worker can register handlers immediately, then swap in the
+// real `xchain-sdk`-backed factory once the dynamic import settles.
+// Callers that need to wait on real-SDK availability can await
+// `sdkResolved` before issuing sign / broadcast requests.
+let sdkRegistry = new sdkLib.SDKRegistry({
     chainRegistry,
-    sdkFactory: scaffoldSdkFactory,
+    sdkFactory: createDevMockSdk,
 });
+
+export const sdkResolved = resolveSdkFactory({ devMockFactory: createDevMockSdk })
+    .then((result) => {
+        sdkRegistry = new sdkLib.SDKRegistry({
+            chainRegistry,
+            sdkFactory: result.factory,
+        });
+        return result.source;
+    })
+    .catch(() => 'dev-mock');
 
 // Module-scoped so the broker survives across unlock / lock cycles —
 // rejecting any pending approval on window-close continues to work even
@@ -115,6 +110,8 @@ function tearDownHost() {
 // listener (attached inside `ensureHost` once a session key is present)
 // picks up everything else. See sessionMeta.PRE_HOST_MESSAGE_TYPES.
 attachSessionMetaListener({
+    chainRegistry,
+    get sdkRegistry() { return sdkRegistry; },
     onUnlocked: () =>
         ensureHost().catch((err) => {
             console.error('[xchain] ensureHost after unlock failed:', err);

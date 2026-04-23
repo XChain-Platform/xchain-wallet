@@ -15,3 +15,4 @@ export * as flows from './flows/index.js';
 export * as uri from './uri/index.js';
 export * as branding from './branding/index.js';
 export * as decoder from './decoder/index.js';
+export * as i18n from './i18n/index.js';

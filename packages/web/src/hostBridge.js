@@ -33,22 +33,21 @@ import {
 import { createBackgroundHost } from '../../extension/src/background/createBackgroundHost.js';
 import { IndexedDBStorageBackend } from './storage/IndexedDBStorageBackend.js';
 import { WebMetaBackend } from './storage/WebMetaBackend.js';
+import { resolveSdkFactory } from './sdkFactory.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
-// Dev-mode SDK stub — DO NOT USE FOR MAINNET.
+// Dev-mode SDK stub — fallback when `xchain-sdk` isn't resolvable.
 //
-// The real XChain SDK (a bundled CJS package with bitcoinjs-lib,
-// axios, ws, etc.) wires into the web + extension shells in a
-// dedicated piece. Until then `deriveAddress` is the only call that
-// has to succeed for the create / import onboarding flows to produce
-// a persisted wallet record — signing and broadcast legitimately
-// can't be fulfilled without the real SDK, so they throw loudly.
+// Production builds load the real SDK via `resolveSdkFactory` which
+// dynamically imports `xchain-sdk`. This stub exists so Node smoke
+// tests (no workspace install) + RC builds pre-SDK-pin can still
+// exercise the onboarding / read flows.
 //
-// Pseudo-addresses derived here are deterministic per (pubkey, type)
-// but are NOT valid on-chain. A release candidate replaces this with
-// `adaptXChainSDK(XChainSDK)`; until then the wallet will fail gracefully
-// on Send / broadcast even after onboarding completes.
+// `deriveAddress` returns deterministic pseudo-addresses per
+// (pubkey, type) so createWallet / importMnemonic persist real vault
+// records. Signing / broadcast / WIF-import throw loudly — those
+// paths have no non-SDK implementation.
 const createDevMockSdk = () => ({
     wallet: {
         /**
@@ -85,10 +84,28 @@ const createDevMockSdk = () => ({
     },
 });
 
-const sdkRegistry = new sdkLib.SDKRegistry({
+// Build the SDKRegistry against a boot-time-resolved factory. Starts
+// with the dev mock so the module is usable synchronously; the real
+// factory swaps in once the dynamic import settles. A lazy swap like
+// this is safe because `SDKRegistry._instances` caches per chain, so
+// early-bind calls (onboarding) get the mock and post-resolution
+// calls (Send) get the real SDK. For a clean production run users
+// should onboard AFTER the swap — the `sdkResolved` promise below
+// gives callers a handle on that.
+let sdkRegistry = new sdkLib.SDKRegistry({
     chainRegistry,
     sdkFactory: createDevMockSdk,
 });
+
+export const sdkResolved = resolveSdkFactory({ devMockFactory: createDevMockSdk })
+    .then((result) => {
+        sdkRegistry = new sdkLib.SDKRegistry({
+            chainRegistry,
+            sdkFactory: result.factory,
+        });
+        return result.source;
+    })
+    .catch(() => 'dev-mock');
 
 /** Default active chains for onboarding. Users can change later via Settings. */
 export const DEFAULT_ACTIVE_CHAIN_IDS = [

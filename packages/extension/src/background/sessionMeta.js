@@ -16,11 +16,17 @@ import {
 } from '../storage/index.js';
 import { handleWalletUnlock } from './walletUnlock.js';
 import { handleWalletLock } from './walletLock.js';
+import {
+    handleWalletCreateWithMnemonic,
+    handleWalletImport,
+} from './walletCreate.js';
 
 /**
  * @typedef {Object} PreHostDeps
  * @property {() => Promise<void> | void} [onUnlocked]
  * @property {() => Promise<void> | void} [onLocked]
+ * @property {import('@xchain-wallet/core').registry.ChainRegistry} [chainRegistry]
+ * @property {import('@xchain-wallet/core').sdk.SDKRegistry} [sdkRegistry]
  */
 
 /** Types the pre-host listener owns. `ChromeRuntimeAdapter` ignores these. */
@@ -28,6 +34,8 @@ export const PRE_HOST_MESSAGE_TYPES = new Set([
     'session.status',
     'wallet.unlock',
     'wallet.lock',
+    'wallet.create',
+    'wallet.import',
 ]);
 
 /**
@@ -84,6 +92,24 @@ async function dispatch(type, request, deps) {
             return handleWalletLock(request, {
                 sessionBackend: new ChromeSessionBackend(),
                 onLocked: deps.onLocked,
+            });
+        case 'wallet.create':
+            return handleWalletCreateWithMnemonic(request, {
+                storageBackend: new ChromeStorageBackend(),
+                sessionBackend: new ChromeSessionBackend(),
+                metaBackend: new ChromeMetaBackend(),
+                chainRegistry: deps.chainRegistry,
+                sdkRegistry: deps.sdkRegistry,
+                onUnlocked: deps.onUnlocked,
+            });
+        case 'wallet.import':
+            return handleWalletImport(request, {
+                storageBackend: new ChromeStorageBackend(),
+                sessionBackend: new ChromeSessionBackend(),
+                metaBackend: new ChromeMetaBackend(),
+                chainRegistry: deps.chainRegistry,
+                sdkRegistry: deps.sdkRegistry,
+                onUnlocked: deps.onUnlocked,
             });
         default:
             throw new Error(`pre-host: no dispatcher for "${type}"`);

@@ -31,6 +31,34 @@ export function unlockWallet(password) {
 }
 
 /**
+ * Create a fresh BIP39 wallet via the pre-host `wallet.create` handler.
+ * Returns the plaintext mnemonic for the §19.2 seed-phrase ceremony.
+ *
+ * @param {object} opts
+ * @param {string} opts.password
+ * @param {string} [opts.name]
+ * @param {128 | 160 | 192 | 224 | 256} [opts.strengthBits]
+ * @param {string} [opts.bip39Passphrase]
+ */
+export function createWallet(opts) {
+    return /** @type {any} */ (sendMessage('wallet.create', opts));
+}
+
+/**
+ * Import an existing 12/15/18/21/24-word BIP39 mnemonic (or
+ * Counterwallet-legacy 12-word; format auto-detected).
+ *
+ * @param {object} opts
+ * @param {string} opts.password
+ * @param {string} opts.mnemonic
+ * @param {string} [opts.name]
+ * @param {string} [opts.bip39Passphrase]
+ */
+export function importMnemonic(opts) {
+    return /** @type {any} */ (sendMessage('wallet.import', opts));
+}
+
+/**
  * Clear the session master key and tear down the background host. Next
  * query of `session.status` returns `locked`.
  *

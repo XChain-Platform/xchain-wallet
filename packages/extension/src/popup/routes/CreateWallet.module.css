@@ -1,0 +1,38 @@
+.head {
+    margin-bottom: var(--xc-space-3);
+}
+
+.title {
+    font-size: var(--xc-text-lg);
+    font-weight: 700;
+    margin: 0 0 var(--xc-space-1);
+    color: var(--xc-text);
+}
+
+.subtitle {
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    line-height: 1.4;
+    margin: 0;
+}
+
+.confirmRow {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--xc-space-2);
+    margin: var(--xc-space-3) 0;
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text);
+    line-height: 1.3;
+}
+
+.confirmRow input[type="checkbox"] {
+    margin-top: 2px;
+}
+
+.actions {
+    display: flex;
+    gap: var(--xc-space-2);
+    justify-content: flex-end;
+    margin-top: var(--xc-space-3);
+}

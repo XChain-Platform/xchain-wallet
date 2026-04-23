@@ -7,6 +7,81 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.45.0] - 2026-04-22
+
+Closes out Phase 1's buildable surface. One combined release covering Batch 5 (Vitest in core, Playwright harness, i18n scaffold, axe-core CI gate) + piece 19 (real SDK wiring), piece 20 (extension popup onboarding), piece 21 (threat-model artifact), and piece 22 (reproducible-build scaffold). Released as a single version because the pieces together cross the "Phase 1 shippable" line — the release-gate checklist in `IMPLEMENTATION_STATUS.md` drops from every-item-open to "external review + signed releases" as the remaining gate.
+
+### Added
+
+**Piece 15 — Vitest in `core`** (§52.2)
+
+- `packages/core/vitest.config.js` — jsdom env, `@vitejs/plugin-react` for JSX, `test/**/*.test.{js,jsx}` include, `*.smoke.js` excluded so the Node-script smokes run untouched, v8 coverage provider. Coverage thresholds deliberately unset until the suite grows toward §52.2's 80% target.
+- `packages/core/test/setup.js` — loads `@testing-library/jest-dom/vitest`, polyfills `webcrypto` on Node 18.
+- `packages/core/test/_run-smokes.js` — discovery-based runner wraps every `*.smoke.js` behind `pnpm -C packages/core test:smoke`.
+- Vitest suites (`*.test.{js,jsx}`, 5 files, 25 cases): `decoder.test.js`, `ui/Button.test.jsx`, `ui/Input.test.jsx`, `ui/ChainBadge.test.jsx`, `ui/CopyButton.test.jsx`.
+- `packages/core/package.json` — `test` / `test:watch` / `test:coverage` / `test:smoke` scripts + Vitest devDep set.
+- `.gitignore` excludes `/packages/*/coverage`.
+
+**Piece 16 — Playwright harness** (§52.4)
+
+- `e2e/` workspace package with `playwright.config.js` (Chromium, workers=1, `webServer` spawns `pnpm -C packages/web dev`, traces + video + screenshots on failure), README runbook.
+- `tests/onboarding.spec.js` — 4 cases: create/lock/unlock round-trip, wrong-password error, BIP39 import, word-count validation.
+- `tests/send-form.spec.js` — 4 cases: review round-trip with form-state preservation, `|;` memo rejection, zero-amount rejection, broadcast attempt surfaces SDK-stub error.
+- `.github/workflows/ci.yml` — new Playwright job; existing install job gains `pnpm -r test` + `pnpm -C packages/core test:smoke`.
+- `pnpm-workspace.yaml` includes `e2e`.
+
+**Piece 17 — i18n scaffold** (§54)
+
+- `packages/core/src/i18n/en.js` (57 keys) + `index.js` with `t()`, `format()`, `setLocale`/`registerLocale`/`onLocaleChange`/`availableLocales`. Missing keys fall back to English then to the key itself.
+- Re-exported as the `i18n` namespace from core's `index.js`.
+
+**Piece 18 — axe-core CI gate** (§53)
+
+- `e2e/tests/a11y.spec.js` scans every Phase-1 screen against WCAG 2.1 A + AA tags. Helper surfaces the violation list in failure messages.
+- `@axe-core/playwright` added as an e2e devDep.
+
+**Piece 19 — real `xchain-sdk` wiring**
+
+- `packages/web/src/sdkFactory.js` + `packages/extension/src/background/sdkFactory.js` — shared-shape resolvers that dynamic-import `xchain-sdk`, wrap via `core.sdk.adaptXChainSDK`, and fall back to a clearly-flagged dev mock when the package isn't resolvable. Single `console.warn` on fallback.
+- `hostBridge.sdkResolved` / `background.sdkResolved` — promises that settle with `'real' | 'dev-mock'`.
+- `xchain-sdk@^1.8.0` as a runtime dep on both shells.
+
+**Piece 20 — extension popup onboarding**
+
+Closes the `TEST_DAPP_RUNBOOK` bootstrap gap for the extension.
+
+- `packages/extension/src/background/walletCreate.js` — pre-host `wallet.create` / `wallet.import` handlers. `WalletExistsError` idempotence guard.
+- `sessionMeta.js` dispatcher + `PRE_HOST_MESSAGE_TYPES` now covers `wallet.create` + `wallet.import`; accepts `chainRegistry` + (lazy-bound) `sdkRegistry` deps.
+- Popup routes: `CreateWallet.jsx`, `ImportWallet.jsx`, `components/MnemonicGrid.jsx` (+ CSS) — popup-sized variants of the web onboarding flows.
+- Popup `App.jsx` adds the `welcome | create | import` sub-route.
+- Popup `messaging.js` gains `createWallet` + `importMnemonic` helpers.
+
+**Piece 21 — threat-model artifact** (§12)
+
+- `docs/THREAT_MODEL.md` — full draft covering protected assets, in/out-of-scope threats, 5 attacker scenarios with code-pointer mitigations, known open items, review cadence, and a Verification section cross-referencing smoke tests. Release-gating-checklist item has a concrete artifact to hand to reviewers.
+
+**Piece 22 — reproducible-build scaffold** (§51.4)
+
+- `tools/build-reproduce/README.md` — pinning notes, verify-script plan, current gotchas, RC checklist.
+- `tools/build-reproduce/check-no-dev-mock.sh` — pre-release gate greps built `dist/` for dev-SDK fallback markers. Fails the pipeline if found → guarantees `xchain-sdk` resolved during the production build.
+
+### Tests
+
+Six new smokes (auto-discovered by `_run-smokes.js`): `sdk-wiring`, `e2e-harness`, `vitest-setup`, `i18n`, `a11y-harness`, `extension-onboarding`, `release-gates`. 21 smokes total; all pass.
+
+### Scope boundary — Phase 1 remaining
+
+Remaining items are external/operational:
+
+- Real broadcast testing on regtest (SDK resolution + live stack).
+- External threat-model review (doc is ready).
+- Legal review of user-facing copy (i18n scaffold ready).
+- Signed releases (needs certs + signing key).
+- Manual accessibility audit (screen-reader pass; axe covers the programmatic side).
+- Reproducible-build verification (scaffold + gate shipped; `RELEASE_MANIFEST.txt` from the release pipeline closes the loop).
+
+Every "pending" item in `IMPLEMENTATION_STATUS.md` that a single codebase commit could deliver has been delivered.
+
 ## [0.44.0] - 2026-04-22
 
 ### Added

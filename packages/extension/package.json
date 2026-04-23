@@ -13,7 +13,8 @@
         "@xchain-wallet/core": "workspace:*",
         "qrcode": "^1.5.4",
         "react": "^18.3.0",
-        "react-dom": "^18.3.0"
+        "react-dom": "^18.3.0",
+        "xchain-sdk": "^1.8.0"
     },
     "devDependencies": {
         "@vitejs/plugin-react": "^4.3.0",
