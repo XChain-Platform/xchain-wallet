@@ -4,5 +4,8 @@
     "private": true,
     "description": "Browser web-app shell for XChain Wallet",
     "main": "./src/index.js",
-    "type": "module"
+    "type": "module",
+    "dependencies": {
+        "@xchain-wallet/core": "workspace:*"
+    }
 }

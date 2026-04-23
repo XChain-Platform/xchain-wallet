@@ -5,4 +5,9 @@
 //
 // Implementation begins in Phase 1.
 
-export {};
+export {
+    IndexedDBStorageBackend,
+    DEFAULT_DB_NAME,
+    DEFAULT_STORE_NAME,
+    DEFAULT_STORAGE_KEY,
+} from './storage/IndexedDBStorageBackend.js';

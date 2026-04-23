@@ -39,7 +39,11 @@ importers:
         specifier: workspace:*
         version: link:../bridge-spec
 
-  packages/web: {}
+  packages/web:
+    dependencies:
+      '@xchain-wallet/core':
+        specifier: workspace:*
+        version: link:../core
 
 packages:
 
