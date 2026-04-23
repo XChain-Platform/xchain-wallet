@@ -32,3 +32,4 @@ export {
     InvalidWifError,
     WrongPasswordError,
 } from './importWif.js';
+export { signMessageFlow, signPsbtFlow } from './signFlows.js';
