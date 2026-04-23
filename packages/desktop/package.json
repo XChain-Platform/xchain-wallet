@@ -1,8 +1,23 @@
 {
     "name": "@xchain-wallet/desktop",
-    "version": "0.54.0",
+    "version": "0.55.0",
     "private": true,
-    "description": "Electron desktop shell for XChain Wallet (Windows / macOS / Linux) — Phase 2 stub; ships alongside hardware signers per spec §40.12.",
+    "description": "Electron desktop shell for XChain Wallet (Windows / macOS / Linux) — main-process signing isolation (§9.3.2). Native HW transports + OS keychain + packaging ship in Phase 2 Steps 17–19.",
     "main": "./main/index.js",
-    "type": "module"
+    "type": "module",
+    "scripts": {
+        "start": "electron .",
+        "build": "vite build"
+    },
+    "dependencies": {
+        "@xchain-wallet/core": "workspace:*",
+        "@xchain-wallet/extension": "workspace:*",
+        "react": "^18.3.0",
+        "react-dom": "^18.3.0"
+    },
+    "devDependencies": {
+        "@vitejs/plugin-react": "^4.3.0",
+        "electron": "^41.3.0",
+        "vite": "^5.4.0"
+    }
 }

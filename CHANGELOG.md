@@ -7,6 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.55.0] - 2026-04-23
+
+Phase 2 — Step 16 of 26 — piece 5a. Opens **Piece 5 (Electron desktop shell, §40.12)** with the main-process signing isolation scaffold (§9.3.2). Desktop renderer mounts the same React app popup + web use; keys never cross the contextBridge IPC boundary into the renderer. Steps 17–19 fill in OS keychain, native HW transports, and electron-builder packaging.
+
+### Added
+
+**Main process** (`packages/desktop/main/`)
+
+- `main/index.js` — Electron app entry. `app.whenReady` initializes the vault + MessageHost + BrowserWindow. `ipcMain.handle(IPC_CHANNEL)` routes bridge messages into the host. BrowserWindow is hardened: `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`. `app.on('before-quit')` zeros the master key + closes the vault defensively.
+- `main/messageHost.js` — `createDesktopMessageHost(deps)` wraps `createBackgroundHost` (the same factory the extension service worker uses) with an IPC-friendly `handle(message)` function. Exports `IPC_CHANNEL = 'xchain-wallet:message'` so preload + main never drift. Cross-package relative import keeps this smoke-resolvable under Node.
+- `main/storage.js` — `FileStorageBackend` extends `StorageBackend`, persists the encrypted blob to `app.getPath('userData')/vault.bin`. Atomic writes via `fs.writeFile(tmpPath)` + `fs.rename()` — POSIX and Windows both guarantee atomic rename. `load()` returns `null` on ENOENT (first-run case). `vaultPathFor(userDataDir)` is a pure helper so non-Electron callers (smoke tests, CLI inspectors) can compute the path.
+
+**Preload + renderer** (`packages/desktop/`)
+
+- `preload.js` — exposes exactly `window.xchainWalletBridge.sendMessage(message)` via `contextBridge`, nothing else. No Node modules, no `require`, no filesystem access leak into the renderer.
+- `renderer/main.jsx` — React mount. Imports `@xchain-wallet/core/ui/tokens.css` so design tokens install on `:root`.
+- `renderer/App.jsx` — same state-machine shape as popup/web App.jsx: `MessagingProvider shell="desktop"` + every shared route under `@xchain-wallet/core/shared/routes/*`. PairSignerForm receives `pairTrezor={undefined}` + `pairLedger={undefined}` — the form's vendor cards render the "not available in this context" fallback. Real desktop-native HW factories arrive in Step 18.
+- `renderer/bridgeMessaging.js` — wraps `window.xchainWalletBridge.sendMessage` into a `sendMessage(type, request)` Promise that mirrors `chromeMessaging.js`'s envelope unwrapping. Typed error names (`InvalidPasswordError`, `NotImplementedError`, etc.) preserve across IPC so shared components branch on them unchanged.
+- `renderer/messaging.js` — popup/web-parity helpers (`unlockWallet`, `listWallets`, `getWalletBalances`, `sendAsset`, `issueToken`, `mintAsset`, `destroyAsset`, `registerSigner`, `listSigners`, `unregisterSigner`, `exportPrivateKey`, …). The smoke verifies that every helper the desktop exports exists in the popup module — drift in either direction would break the shared routes.
+- `renderer/index.html` — standard Electron renderer HTML. Ships a CSP header (`default-src 'self'`) pinning the renderer to loading only locally-bundled assets.
+
+**Smoke + docs**
+
+- `packages/core/test/desktop-shell.smoke.js` — covers the main-process file layout, preload-bridge narrowness (no `node:` imports, no `require()`), IPC channel name constant, MessageHost reuse of `createBackgroundHost`, `contextIsolation` / `nodeIntegration` / `sandbox` on the BrowserWindow, full round-trip of the FileStorageBackend through an OS tmpdir, a real MessageHost `handle()` call (`wallet.list`) including the unknown-type error envelope, parity of the renderer messaging helpers against popup, App.jsx import surface + the `pairTrezor={undefined}` deferral, and synchronized-version diff against the root `package.json`.
+- `packages/desktop/README.md` — rewritten from "Phase 2 — deferred" to document the Step 16 scaffold, the two-process architecture, and what Steps 17–19 still have to land.
+- `packages/desktop/package.json` — declares `@xchain-wallet/core` + `@xchain-wallet/extension` workspace deps and Electron as a devDep (`^41.3.0`, the current stable at release time).
+
+### Known deferrals
+
+- **Unlock flow** — main/index.js initializes the vault with a placeholder master key. Real unlock (password → Argon2id → master key) comes via the existing `wallet.unlock` handler from `createBackgroundHost`; the vault's internal state needs a re-seed pass when the password is collected. This is fine for the scaffold — the IPC contract is in place, so Step 17's keychain work can extend it cleanly.
+- **OS keychain** (Step 17) — Electron `safeStorage` wired to skip password prompts after first launch.
+- **Native HW transports** (Step 18) — desktop-specific `pairTrezorSigner` + `pairLedgerSigner` factories using `@trezor/connect` (node) + `@ledgerhq/hw-transport-node-hid`. Until then PairSignerForm renders the "not available in this context" fallback on desktop.
+- **Packaging** (Step 19) — electron-builder config, Authenticode / notarization / Linux repackage, URI scheme registration, reproducible-build scripts per §51.
+
+### Changed
+
+- Version bump: `0.54.0 → 0.55.0`. All eight workspace packages stay synchronized per the convention codified at v0.54.0.
+
+### Developer notes
+
+- Smoke count: 34 (was 33; +1 for desktop-shell).
+- The Step 16 scaffold is exercisable **only** via the smoke — actually launching Electron needs `pnpm install` and the ~200 MB Electron bundle, which the dev environment here doesn't have. The smoke covers everything statically checkable + a real file-backed `FileStorageBackend` round-trip through the OS tmpdir.
+- Using the extension's `createBackgroundHost` via cross-package relative path (matches `packages/web/src/hostBridge.js`'s convention) was the key call that keeps the MessageHost contract single-sourced without needing a pnpm workspace symlink at smoke time.
+
 ## [0.54.0] - 2026-04-23
 
 Housekeeping — no feature changes. Drops the GitHub Actions CI workflow and synchronizes every workspace package's version with the root so all surfaces report the same version.
