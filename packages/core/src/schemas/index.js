@@ -12,6 +12,7 @@ export * as connectedSite from './connectedSite.js';
 export * as multisigConfig from './multisigConfig.js';
 export * as settings from './settings.js';
 export * as pendingTx from './pendingTx.js';
+export * as signer from './signer.js';
 export * as migrations from './migrations.js';
 
 export { createWallet, validateWallet } from './wallet.js';
@@ -27,6 +28,7 @@ export {
     ADS_DEFAULT_ENABLED,
 } from './settings.js';
 export { createPendingTx, validatePendingTx } from './pendingTx.js';
+export { createSignerRecord, validateSignerRecord, SIGNER_KINDS } from './signer.js';
 export {
     migrate,
     migrateWallet,
@@ -37,4 +39,5 @@ export {
     migrateSettings,
     migratePendingTx,
     migrateMultisigConfig,
+    migrateSigner,
 } from './migrations.js';

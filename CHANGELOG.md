@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.52.0] - 2026-04-23
+
+Phase 2 — Step 12 of 26 — piece 4a. Opens **Piece 4 (Hardware signers go live, §40.11 / §17.3–17.4 / §18)** with scaffolding only. No `@trezor/connect` or `@ledgerhq/hw-transport-*` dependencies yet — those land in Steps 13 (TrezorSigner) and 14 (LedgerSigner). This step is infrastructure Steps 13-14 plug into: persistent records for paired devices, a firmware status helper, and the cross-check UI the sign screens will render once HW signers come online.
+
+### Added
+
+- `packages/core/src/signers/firmware-manifest.js` — bundled manifest keyed by `vendor → model → { minimum, recommended, knownVulnerable[], unsupported[] }`. Ships with Trezor One / Model T / Safe 3 / Safe 5 and Ledger Nano S / Nano S+ / Nano X / Stax entries. JS module (not JSON) so browser shells and Node 18 both load it without loader config.
+- `packages/core/src/signers/checkFirmware.js` — `checkFirmware({ vendor, model, version })` returns a flat verdict `{ status, vendor, model, displayName, minimum, recommended, updateUrl, detail, version }` where status is one of `'ok' | 'outdated' | 'vulnerable' | 'unsupported' | 'unknown'`. Version matching handles exact, prefix (`"1.11."`), and major-only (`"1.x"`) patterns. Also exports `compareVersions` for Steps 13-14 to reuse for ad-hoc comparisons. Unknown vendor/model falls back to `'unknown'` with a neutral "verify with vendor" banner rather than blocking the sign path.
+- `packages/core/src/schemas/signer.js` — `SignerRecord` (v1) schema. Fields: `walletId`, `kind` (`'trezor' | 'ledger'`), `vendor`, `model`, opaque `deviceIdentifier`, `label`, `firmwareVersion` (nullable until first observation), `pairedAt`, `lastSeenAt`. No secrets (no PINs, seed material, or xpubs — those live on the device; the wallet re-derives public keys as needed). Re-exported from the `@xchain-wallet/core/schemas` barrel, with a migration slot wired up in `migrations.js`.
+- Vault `signers` collection — added to `Vault.js`, the codec document shape, and the `emptyDocument`/`decodeDocument` fallbacks so older persisted blobs load cleanly with an empty `signers: []`.
+- `packages/core/src/flows/registerSigner.js` — `registerSigner(opts)` is idempotent by `(walletId, vendor, deviceIdentifier)`: re-pairing the same physical device updates `firmwareVersion` + `lastSeenAt` + optional `label` rather than inserting a duplicate. `listSignersForWallet`, `unregisterSigner`, and `findSigner` round out the registry surface. Re-exported from `@xchain-wallet/core` flows.
+- `packages/core/src/shared/components/DerivationPathCrossCheck.jsx` + `.module.css` — §18.5 UI block. Renders `{ signerName, path, address }` plus the wallet's explicit cross-check instruction: *"Verify the address shown on your device matches the address shown here. If they don't match, reject on the device."* Device-label branches on `signerKind` so copy reads "Trezor" / "Ledger" / fallback "your device" as appropriate. Ready to drop into sign screens — Steps 13-14 wire the render.
+- New smoke: `packages/core/test/signer-scaffold.smoke.js`. Exercises the firmware verdicts (happy/outdated/unsupported/major-only/unknown vendor/unknown model/missing version/compareVersions edge cases), `SignerRecord` schema validation, `registerSigner` re-pair idempotence, a vault save→close→reopen round-trip (confirming codec slot persistence), and structural checks on the `DerivationPathCrossCheck` component.
+
+### Changed
+
+- `packages/core/src/signers/index.js` — barrel now re-exports `checkFirmware`, `compareVersions`, and `FIRMWARE_MANIFEST` alongside `Signer` + `SoftwareSigner`.
+- `packages/core/src/schemas/migrations.js` — `signerMigrations` / `migrateSigner` registered; ready for future `SignerRecord` version bumps.
+- `packages/core/src/storage/codec.js` — `VaultDocument` gains a `signers: SignerRecord[]` slot. Older blobs (no `signers` key) load with `[]` instead of `undefined`.
+
+### Developer notes
+
+- This step deliberately does **not** add any vendor SDK dependencies. `@trezor/connect-web`, `@trezor/connect` (node), `@ledgerhq/hw-transport-webhid`, and `@ledgerhq/hw-transport-node-hid` all land in Steps 13-14 where the `TrezorSigner` and `LedgerSigner` classes that consume them are built.
+- `registerSigner`'s "idempotent by `(walletId, vendor, deviceIdentifier)`" contract is the reason Address records can keep a stable `signerId` across re-plug events: the user unplugging and replugging their Trezor should not cause the wallet to re-derive addresses or break the pre-existing `Address.signerId → SignerRecord.id` link.
+- Smoke count: 30. vitest-setup smoke auto-updates the count.
+
 ## [0.51.0] - 2026-04-23
 
 Phase 2 — Steps 8–11 of 26 — pieces 3a + 3b + 3c + 3d. Closes out **Piece 3 (standalone ISSUE / MINT / DESTROY + token admin surfaces, §40.2–§40.5)** end-to-end. Home now opens a new Actions menu that reaches six authoring surfaces: standalone ISSUE, MINT, DESTROY, Lock supply, Update description, Transfer ownership. Each form reviews its draft through the shared action decoder (same preview the dApp-initiated sign screen uses) and signs through a background handler backed by a core flow.

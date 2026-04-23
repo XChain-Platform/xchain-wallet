@@ -31,6 +31,7 @@ export function emptyDocument() {
         contacts: [],
         connectedSites: [],
         pendingTxs: [],
+        signers: [],
         settings: null,
     };
 }
@@ -44,6 +45,7 @@ export function emptyDocument() {
  * @property {import('../schemas/contact.js').Contact[]} contacts
  * @property {import('../schemas/connectedSite.js').ConnectedSite[]} connectedSites
  * @property {import('../schemas/pendingTx.js').PendingTx[]} pendingTxs
+ * @property {import('../schemas/signer.js').SignerRecord[]} signers
  * @property {import('../schemas/settings.js').Settings | null} settings
  */
 
@@ -103,6 +105,7 @@ export async function decodeDocument(masterKey, blob, aad) {
         contacts: parsed.contacts ?? empty.contacts,
         connectedSites: parsed.connectedSites ?? empty.connectedSites,
         pendingTxs: parsed.pendingTxs ?? empty.pendingTxs,
+        signers: parsed.signers ?? empty.signers,
         settings: parsed.settings ?? empty.settings,
     };
 }

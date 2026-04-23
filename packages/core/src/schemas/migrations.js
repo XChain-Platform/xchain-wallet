@@ -12,6 +12,7 @@ import { CURRENT_VERSION as CONNECTED_SITE_VERSION } from './connectedSite.js';
 import { CURRENT_VERSION as SETTINGS_VERSION } from './settings.js';
 import { CURRENT_VERSION as PENDING_TX_VERSION } from './pendingTx.js';
 import { CURRENT_VERSION as MULTISIG_VERSION } from './multisigConfig.js';
+import { CURRENT_VERSION as SIGNER_VERSION } from './signer.js';
 
 /**
  * @typedef {(record: any) => any} MigrationStep
@@ -41,6 +42,8 @@ export const settingsMigrations = {};
 export const pendingTxMigrations = {};
 /** @type {MigrationMap} */
 export const multisigConfigMigrations = {};
+/** @type {MigrationMap} */
+export const signerMigrations = {};
 
 /**
  * Walk `record` forward through `migrations` until it reaches `target`.
@@ -91,3 +94,4 @@ export const migrateSettings = (r) => migrate(r, settingsMigrations, SETTINGS_VE
 export const migratePendingTx = (r) => migrate(r, pendingTxMigrations, PENDING_TX_VERSION);
 export const migrateMultisigConfig = (r) =>
     migrate(r, multisigConfigMigrations, MULTISIG_VERSION);
+export const migrateSigner = (r) => migrate(r, signerMigrations, SIGNER_VERSION);

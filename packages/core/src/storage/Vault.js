@@ -31,6 +31,7 @@ import {
     migrateContact,
     migratePendingTx,
     migrateSettings,
+    migrateSigner,
     migrateWallet,
 } from '../schemas/migrations.js';
 import { validateAccount } from '../schemas/account.js';
@@ -39,6 +40,7 @@ import { validateConnectedSite } from '../schemas/connectedSite.js';
 import { validateContact } from '../schemas/contact.js';
 import { validatePendingTx } from '../schemas/pendingTx.js';
 import { validateSettings } from '../schemas/settings.js';
+import { validateSignerRecord } from '../schemas/signer.js';
 import { validateWallet } from '../schemas/wallet.js';
 
 export class VaultStateError extends Error {
@@ -95,6 +97,12 @@ export class Vault {
             'pendingTxs',
             migratePendingTx,
             validatePendingTx,
+        );
+        this.signers = makeCollection(
+            this,
+            'signers',
+            migrateSigner,
+            validateSignerRecord,
         );
         this.settings = makeSingleton(this, 'settings', migrateSettings, validateSettings);
     }

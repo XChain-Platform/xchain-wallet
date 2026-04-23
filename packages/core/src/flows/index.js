@@ -19,6 +19,12 @@ export { sweepAsset } from './sweepAsset.js';
 export { issueToken } from './issueToken.js';
 export { mintAsset } from './mintAsset.js';
 export { destroyAsset } from './destroyAsset.js';
+export {
+    registerSigner,
+    listSignersForWallet,
+    unregisterSigner,
+    findSigner,
+} from './registerSigner.js';
 export { seedSettingsForChains, ensureSettings } from './seedSettings.js';
 export { receiveAddress, NoMatchingAccountError } from './receiveAddress.js';
 export {
