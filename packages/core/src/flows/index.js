@@ -44,6 +44,7 @@ export {
     BackupConflictError,
     BACKUP_PAYLOAD_VERSION,
 } from './backupFile.js';
+export { dryRunRestore, DEFAULT_DRY_RUN_GAP } from './dryRunRestore.js';
 export { signMessageFlow, signPsbtFlow } from './signFlows.js';
 export { createDemoWallet } from './createDemoWallet.js';
 export {
