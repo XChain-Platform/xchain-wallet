@@ -7,6 +7,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+## [0.56.0] - 2026-04-23
+
+Phase 2 — Step 17 of 26 — piece 5b. OS keychain integration for the Electron desktop shell (§40.12). After the first-launch unlock, the master key is cached in the OS-level keychain (macOS Keychain / Windows DPAPI / Linux libsecret) via Electron `safeStorage` so subsequent app launches skip the password prompt until the user explicitly locks or the OS keychain becomes unreadable (logout, keychain reset, user profile change). When no real keychain is available, the shell silently refuses to persist to disk — the user re-enters their password every launch rather than have the key cached insecurely.
+
+### Added
+
+**Main process** (`packages/desktop/main/`)
+
+- `main/keychain.js` — `KeychainSessionBackend` class. Same `{load, save, clear}` contract as the extension's `ChromeSessionBackend` so the shared pre-host handlers (`wallet.unlock`, `wallet.lock`, `wallet.create`, `wallet.import`) treat it identically. `save(masterKey)` encrypts via `safeStorage.encryptString`, writes the ciphertext to `session.bin` under `app.getPath('userData')` atomically (tmp + rename). `load()` decrypts the ciphertext, returning the raw key bytes; falls back to `null` on missing file, unavailable keychain, or decrypt failure (OS logout / keychain reset / corrupted ciphertext) — never throws on "no session", so callers treat `null` as "prompt for password". Also caches the current-session key in a module-private in-memory slot so the shell stays unlocked in-process even when no OS keychain is wired. `isAvailable()` returns false when `safeStorage.isEncryptionAvailable()` is false OR `getSelectedStorageBackend()` reports `basic_text` (deterministic fallback — no real confidentiality).
+- `main/meta.js` — `FileMetaBackend` class. Plaintext JSON slot for the vault's Argon2id `kdfParams` (public by design; storing outside the ciphertext is the only way the unlock flow can derive the master key from the user's password before touching the encrypted blob). Atomic writes via tmp + rename.
+- `main/runtime.js` — Electron-free state machine that `index.js` delegates to. `createRuntime(deps)` builds the lifecycle object; `ensureHost(runtime)` auto-unlocks from the cached session key; `tearDownHost(runtime)` closes the vault + drops the host; `handleIpcMessage(runtime, message)` routes pre-host types (gated by `PRE_HOST_MESSAGE_TYPES`) through `dispatchPreHost` and everything else into the `MessageHost`, returning the standard `{ ok, result } | { ok, error }` envelope. Non-pre-host messages when the host is null return `WalletLockedError`. The split keeps all the interesting logic testable under plain Node without importing `electron`.
+
+**Extension + core refactor**
+
+- `packages/extension/src/background/sessionMeta.js` — exported two new shell-agnostic helpers alongside the existing `attachSessionMetaListener`:
+  - `dispatchPreHost(type, request, { storageBackend, sessionBackend, metaBackend, chainRegistry, sdkRegistry, onUnlocked, onLocked })` — the same handler dispatch the extension's chrome.runtime listener uses, now parameterized on the backend trio so desktop can wire a file/keychain backend set. Throws `Error` for unknown types.
+  - `handleSessionStatus({ storageBackend, sessionBackend })` — refactored to take the backends as deps instead of instantiating `ChromeStorageBackend` / `ChromeSessionBackend` itself.
+- `packages/extension/src/background/index.js` — re-exports `dispatchPreHost`, `handleSessionStatus`, and `PRE_HOST_MESSAGE_TYPES` alongside `attachSessionMetaListener`.
+
+**Main-process rewire** (`packages/desktop/main/index.js`)
+
+- Replaced the Step 16 scaffold's placeholder master-key wiring with the real three-backend pipeline. `app.whenReady` now:
+  1. Builds the runtime against `FileStorageBackend` (vault) + `FileMetaBackend` (kdfParams) + `KeychainSessionBackend` (master key).
+  2. Calls `ensureHost(runtime)` — best-effort auto-unlock. Success → vault opens, MessageHost comes up, renderer sees `state: 'unlocked'` on first `session.status`. Failure (no cached key, keychain unavailable, or cached key doesn't decrypt the vault — stale after a wallet reset) → stays locked; renderer drives `wallet.unlock` through the pre-host listener.
+  3. Registers `ipcMain.handle(IPC_CHANNEL, …)` that delegates to `handleIpcMessage`.
+- SDK factory swapped from the `getSdk / has / listChainIds` stub to a real `sdkLib.SDKRegistry` wrapping `createDevMockSdk` — same pattern the extension service worker and web hostBridge use, so onboarding flows actually reach the vault (the Step 16 stub didn't expose `.get(chainId)` and `wallet.create` would `TypeError`).
+- `app.on('before-quit')` zeros the master key + closes the vault via `tearDownHost(runtime)`; the keychain ciphertext stays on disk so the next launch can auto-unlock.
+
+### Smoke + docs
+
+- `packages/core/test/desktop-keychain.smoke.js` — new, exercises the full Step 17 surface:
+  - `KeychainSessionBackend` round-trip through a mock safeStorage (XOR scramble, not cryptographic — tests fidelity, not security). Ciphertext on disk is NOT equal to plaintext. `clear` removes the file + zeros the in-memory slot.
+  - `isAvailable()` returns false when `isEncryptionAvailable()` is false; false when the backend is `basic_text`. `save` is a no-op (no file created) in the unavailable case but keeps the key in-memory for the current session.
+  - `load()` returns `null` (not throws) on decrypt failure — simulates OS logout / keychain reset via a second backend instance with a failing `decryptString`.
+  - `FileMetaBackend` round-trip: save + load preserves object shape, clear removes the file.
+  - End-to-end runtime lifecycle with real crypto + mock keychain: fresh runtime → `state: 'no-wallet'` → `wallet.create` onboarding (onUnlocked fires, host is built, session.bin persisted, post-host `wallet.list` returns the created wallet) → "restart" (drop runtime, build a new one against the same userData) auto-unlocks via the keychain without a password prompt → `wallet.lock` clears session.bin + returns `WalletLockedError` for subsequent post-host messages → wrong-password `wallet.unlock` returns `InvalidPasswordError` with no session written → right password rebuilds the host + re-persists the session.
+  - Keychain-unavailable path: onboarding succeeds but session.bin is NOT written; restart sees `state: 'locked'` and requires a password prompt. No insecure cache, as designed.
+  - Static wiring: `main/index.js` imports `keychain.js`, `meta.js`, `runtime.js`; references `safeStorage` and `ensureHost(runtime)`; `runtime.js` routes via `dispatchPreHost` + gates on `PRE_HOST_MESSAGE_TYPES` + returns `WalletLockedError`; `keychain.js` checks `isEncryptionAvailable` + refuses `basic_text`.
+
+### Changed
+
+- `packages/desktop/package.json` description updated from "Native HW transports + OS keychain + packaging ship in Phase 2 Steps 17–19" to "main-process signing isolation (§9.3.2) + OS keychain auto-unlock (§40.12). Native HW transports + packaging ship in Phase 2 Steps 18–19".
+- Version bump: `0.55.0 → 0.56.0`. All eight workspace packages stay synchronized per the convention codified at v0.54.0.
+
+### Known deferrals
+
+- **Native HW transports** (Step 18) — desktop-specific `pairTrezorSigner` + `pairLedgerSigner` factories using `@trezor/connect` (node) + `@ledgerhq/hw-transport-node-hid`. Until then PairSignerForm renders the "not available in this context" fallback on desktop.
+- **Packaging** (Step 19) — electron-builder config, Authenticode / notarization / Linux repackage, URI scheme registration, reproducible-build scripts per §51.
+- **Idle-lock timer** — spec mentions an auto-lock on idle; desktop currently only locks on explicit `wallet.lock`. Folding an idle timer into `runtime.js` is cheap and can land in any later step.
+
+### Developer notes
+
+- Smoke count: 35 (was 34; +1 for desktop-keychain).
+- The Step 17 scaffold is exercisable **only** via the smoke — actually launching Electron still needs `pnpm install` and the ~200 MB Electron bundle.
+- `dispatchPreHost` is now the single source of truth for unlock / lock / onboarding dispatch. Extension's `attachSessionMetaListener` and desktop's `handleIpcMessage` both route through it — no divergence in error shapes, handler ordering, or validation between the two shells.
+
 ## [0.55.0] - 2026-04-23
 
 Phase 2 — Step 16 of 26 — piece 5a. Opens **Piece 5 (Electron desktop shell, §40.12)** with the main-process signing isolation scaffold (§9.3.2). Desktop renderer mounts the same React app popup + web use; keys never cross the contextBridge IPC boundary into the renderer. Steps 17–19 fill in OS keychain, native HW transports, and electron-builder packaging.

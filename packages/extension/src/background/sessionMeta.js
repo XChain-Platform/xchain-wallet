@@ -3,11 +3,20 @@
 //
 //   - `session.status`  What state is the wallet in? (no-wallet / locked / unlocked)
 //   - `wallet.unlock`   Derive master key from password, open vault, seed session.
+//   - `wallet.lock`     Clear the session key and signal teardown.
+//   - `wallet.create`   Fresh install — onboard with a generated mnemonic.
+//   - `wallet.import`   Fresh install — onboard with an existing mnemonic.
 //
 // Anything outside `PRE_HOST_MESSAGE_TYPES` falls through to the host
 // listener. `ChromeRuntimeAdapter` imports that set to know which types
 // it should not handle, keeping the two listeners disjoint (no double
 // `sendResponse` on the same message).
+//
+// The shell-agnostic `dispatchPreHost` + `handleSessionStatus` helpers
+// are exported so the desktop shell's ipcMain handler can route pre-host
+// messages identically — same handlers, same validation, same error
+// shapes; only the backend classes differ (Chrome storage vs file +
+// keychain).
 
 import {
     ChromeMetaBackend,
@@ -22,6 +31,18 @@ import {
 } from './walletCreate.js';
 
 /**
+ * @typedef {Object} PreHostBackends
+ * @property {{ load: () => Promise<Uint8Array | null>, save: (blob: Uint8Array) => Promise<void>, clear: () => Promise<void> }} storageBackend
+ * @property {{ load: () => Promise<Uint8Array | null>, save: (blob: Uint8Array) => Promise<void>, clear: () => Promise<void> }} sessionBackend
+ * @property {{ load: () => Promise<unknown | null>, save: (obj: unknown) => Promise<void>, clear: () => Promise<void> }} metaBackend
+ *
+ * @typedef {PreHostBackends & {
+ *   chainRegistry?: import('@xchain-wallet/core').registry.ChainRegistry,
+ *   sdkRegistry?: import('@xchain-wallet/core').sdk.SDKRegistry,
+ *   onUnlocked?: () => Promise<void> | void,
+ *   onLocked?: () => Promise<void> | void,
+ * }} PreHostDispatchDeps
+ *
  * @typedef {Object} PreHostDeps
  * @property {() => Promise<void> | void} [onUnlocked]
  * @property {() => Promise<void> | void} [onLocked]
@@ -58,7 +79,15 @@ export function attachSessionMetaListener(deps = {}, chromeRuntime) {
         }
         (async () => {
             try {
-                const result = await dispatch(type, message.request, deps);
+                const result = await dispatchPreHost(type, message.request, {
+                    storageBackend: new ChromeStorageBackend(),
+                    sessionBackend: new ChromeSessionBackend(),
+                    metaBackend: new ChromeMetaBackend(),
+                    chainRegistry: deps.chainRegistry,
+                    sdkRegistry: deps.sdkRegistry,
+                    onUnlocked: deps.onUnlocked,
+                    onLocked: deps.onLocked,
+                });
                 sendResponse({ ok: true, result });
             } catch (err) {
                 sendResponse({
@@ -77,36 +106,58 @@ export function attachSessionMetaListener(deps = {}, chromeRuntime) {
     return () => runtime.onMessage.removeListener(listener);
 }
 
-async function dispatch(type, request, deps) {
+/**
+ * Shell-agnostic pre-host dispatcher. Shells build their own backend
+ * trio (storage + session + meta) that implement the three-method
+ * contract (load/save/clear) and hand them in here; everything else is
+ * shared.
+ *
+ * @param {string} type
+ * @param {unknown} request
+ * @param {PreHostDispatchDeps} deps
+ */
+export async function dispatchPreHost(type, request, deps) {
+    if (!deps?.storageBackend) {
+        throw new Error('dispatchPreHost: storageBackend is required');
+    }
+    if (!deps?.sessionBackend) {
+        throw new Error('dispatchPreHost: sessionBackend is required');
+    }
+    if (!deps?.metaBackend) {
+        throw new Error('dispatchPreHost: metaBackend is required');
+    }
     switch (type) {
         case 'session.status':
-            return handleSessionStatus();
+            return handleSessionStatus({
+                storageBackend: deps.storageBackend,
+                sessionBackend: deps.sessionBackend,
+            });
         case 'wallet.unlock':
             return handleWalletUnlock(request, {
-                storageBackend: new ChromeStorageBackend(),
-                sessionBackend: new ChromeSessionBackend(),
-                metaBackend: new ChromeMetaBackend(),
+                storageBackend: deps.storageBackend,
+                sessionBackend: deps.sessionBackend,
+                metaBackend: deps.metaBackend,
                 onUnlocked: deps.onUnlocked,
             });
         case 'wallet.lock':
             return handleWalletLock(request, {
-                sessionBackend: new ChromeSessionBackend(),
+                sessionBackend: deps.sessionBackend,
                 onLocked: deps.onLocked,
             });
         case 'wallet.create':
             return handleWalletCreateWithMnemonic(request, {
-                storageBackend: new ChromeStorageBackend(),
-                sessionBackend: new ChromeSessionBackend(),
-                metaBackend: new ChromeMetaBackend(),
+                storageBackend: deps.storageBackend,
+                sessionBackend: deps.sessionBackend,
+                metaBackend: deps.metaBackend,
                 chainRegistry: deps.chainRegistry,
                 sdkRegistry: deps.sdkRegistry,
                 onUnlocked: deps.onUnlocked,
             });
         case 'wallet.import':
             return handleWalletImport(request, {
-                storageBackend: new ChromeStorageBackend(),
-                sessionBackend: new ChromeSessionBackend(),
-                metaBackend: new ChromeMetaBackend(),
+                storageBackend: deps.storageBackend,
+                sessionBackend: deps.sessionBackend,
+                metaBackend: deps.metaBackend,
                 chainRegistry: deps.chainRegistry,
                 sdkRegistry: deps.sdkRegistry,
                 onUnlocked: deps.onUnlocked,
@@ -116,11 +167,12 @@ async function dispatch(type, request, deps) {
     }
 }
 
-async function handleSessionStatus() {
-    const storage = new ChromeStorageBackend();
-    const session = new ChromeSessionBackend();
-    const blob = await storage.load();
-    const sessionBytes = await session.load();
+/**
+ * @param {{ storageBackend: PreHostBackends['storageBackend'], sessionBackend: PreHostBackends['sessionBackend'] }} deps
+ */
+export async function handleSessionStatus({ storageBackend, sessionBackend }) {
+    const blob = await storageBackend.load();
+    const sessionBytes = await sessionBackend.load();
     const hasWallet = blob !== null;
     const hasSession = sessionBytes !== null;
     return {

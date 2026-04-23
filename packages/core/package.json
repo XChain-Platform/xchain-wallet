@@ -1,6 +1,6 @@
 {
     "name": "@xchain-wallet/core",
-    "version": "0.55.0",
+    "version": "0.56.0",
     "private": true,
     "description": "Platform-agnostic components, state, SDK integration, and signer implementations for XChain Wallet",
     "type": "module",
@@ -43,7 +43,6 @@
         "@vitest/coverage-v8": "^2.1.0",
         "jsdom": "^25.0.0",
         "react": "^18.3.0",
-        "react-dom": "^18.3.0",
-        "vitest": "^2.1.0"
+        "react-dom": "^18.3.0"
     }
 }

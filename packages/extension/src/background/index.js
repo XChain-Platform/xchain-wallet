@@ -5,6 +5,11 @@ export {
 } from './MessageHost.js';
 export { createBackgroundHost } from './createBackgroundHost.js';
 export { attachChromeRuntime } from './ChromeRuntimeAdapter.js';
-export { attachSessionMetaListener } from './sessionMeta.js';
+export {
+    attachSessionMetaListener,
+    dispatchPreHost,
+    handleSessionStatus,
+    PRE_HOST_MESSAGE_TYPES,
+} from './sessionMeta.js';
 export { ApprovalBroker } from './approvalBroker.js';
 export { resolveSdkFactory, createDevMockSdk } from './sdkFactory.js';

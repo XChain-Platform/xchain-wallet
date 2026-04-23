@@ -1,10 +1,9 @@
 // Electron main process — entry point.
 //
-// Lifecycle:
-//   app.whenReady()                  → initialize vault + host + window
-//   ipcMain.handle(IPC_CHANNEL)      → route messages into MessageHost
-//   app.on('window-all-closed')      → quit on non-darwin; hide on macOS
-//   app.on('before-quit')            → close vault (zero master key)
+// Thin adapter over `runtime.js`: wires Electron's lifecycle events to
+// the pure-JS runtime state machine. Keeping Electron-specific code
+// confined to this file means the IPC dispatch + auto-unlock logic is
+// testable under plain Node (see `desktop-keychain.smoke.js`).
 //
 // Security posture (§9.3.2):
 //   - Renderer runs with nodeIntegration=false, contextIsolation=true.
@@ -15,51 +14,61 @@
 //     envelopes — same shape the extension background uses, so shared
 //     renderer code doesn't need to branch on shell.
 //
-// The OS keychain integration (§17 Step 17) will hook into `app.whenReady`
-// to prompt for the first-launch password once per boot and cache the
-// master key via Electron `safeStorage`. For Step 16 the vault stays
-// locked until the renderer's unlock screen collects the password —
-// same as the extension's and web app's first-run flow.
+// OS keychain integration (§40.12, Step 17):
+//   - After first-launch unlock, the master key is cached in the OS
+//     keychain via Electron `safeStorage` (macOS Keychain / Windows DPAPI
+//     / Linux libsecret). The ciphertext is written to `session.bin`;
+//     the key material stays inside the OS keychain.
+//   - On subsequent launches, `app.whenReady` probes the keychain; if
+//     the master key is readable, the vault opens and the renderer's
+//     first `session.status` call returns `unlocked` — the password
+//     prompt is skipped until the user explicitly locks (or the keychain
+//     becomes unreadable, e.g. OS logout, keychain reset).
+//   - If `safeStorage.isEncryptionAvailable()` is false, the session
+//     cache is silently disabled — the user re-enters their password
+//     every launch rather than having the key written insecurely.
 
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, safeStorage } from 'electron';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import {
-    registry as registryLib,
-    storage as storageLib,
-} from '@xchain-wallet/core';
-import { createDesktopMessageHost, IPC_CHANNEL } from './messageHost.js';
+import { registry as registryLib, sdk as sdkLib } from '@xchain-wallet/core';
+import { createDevMockSdk } from '@xchain-wallet/extension/src/background/sdkFactory.js';
+
+import { IPC_CHANNEL } from './messageHost.js';
+// Pre-host + runtime helpers live in the pure-JS runtime module so the
+// IPC dispatch logic is testable without importing `electron`.
 import { FileStorageBackend, vaultPathFor } from './storage.js';
+import { FileMetaBackend, metaPathFor } from './meta.js';
+import { KeychainSessionBackend, sessionKeyPathFor } from './keychain.js';
+import {
+    createRuntime,
+    ensureHost,
+    handleIpcMessage,
+    tearDownHost,
+} from './runtime.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
 let mainWindow = /** @type {BrowserWindow | null} */ (null);
-let vault = /** @type {import('@xchain-wallet/core').storage.Vault | null} */ (null);
+let runtime = /** @type {ReturnType<typeof createRuntime> | null} */ (null);
 
-async function initMain() {
+function buildRuntime() {
+    const userData = app.getPath('userData');
     const chainRegistry = registryLib.defaultRegistry();
-    // SDK resolution follows the same pattern as the extension's
-    // sdkFactory — Step 16 ships the scaffold with a dev-mock SDK
-    // placeholder. The real `xchain-sdk` factory lands alongside the
-    // signing-integration step (see v0.53.0 CHANGELOG "Known
-    // deferrals").
-    const sdkRegistry = createDevSdkRegistryStub();
-
-    const backend = new FileStorageBackend(vaultPathFor(app.getPath('userData')));
-    // Defer vault.open until the user unlocks via the renderer. The
-    // renderer's `wallet.unlock` handler opens and seeds the host
-    // dependencies at that point. Step 17 will add safeStorage-
-    // backed auto-unlock to skip the first prompt on subsequent
-    // launches.
-    const masterKey = new Uint8Array(32);  // placeholder; replaced on unlock
-    vault = new storageLib.Vault({ backend, masterKey });
-
-    const { handle } = createDesktopMessageHost({
-        vault, chainRegistry, sdkRegistry,
+    return createRuntime({
+        storageBackend: new FileStorageBackend(vaultPathFor(userData)),
+        metaBackend: new FileMetaBackend(metaPathFor(userData)),
+        sessionBackend: new KeychainSessionBackend({
+            safeStorage,
+            filePath: sessionKeyPathFor(userData),
+        }),
+        chainRegistry,
+        sdkRegistry: new sdkLib.SDKRegistry({
+            chainRegistry,
+            sdkFactory: createDevMockSdk,
+        }),
     });
-
-    ipcMain.handle(IPC_CHANNEL, async (_event, message) => handle(message));
 }
 
 function createMainWindow() {
@@ -85,7 +94,26 @@ function createMainWindow() {
 }
 
 app.whenReady().then(async () => {
-    await initMain();
+    runtime = buildRuntime();
+    // Best-effort auto-unlock. Failure here is logged but doesn't block
+    // startup — the renderer will see `state: 'locked'` and prompt for
+    // the password.
+    try {
+        await ensureHost(runtime);
+    } catch (err) {
+        console.error('[xchain] desktop auto-unlock failed:', err);
+    }
+
+    ipcMain.handle(IPC_CHANNEL, async (_event, message) => {
+        if (!runtime) {
+            return {
+                ok: false,
+                error: { name: 'Error', message: 'desktop: runtime not initialized' },
+            };
+        }
+        return handleIpcMessage(runtime, message);
+    });
+
     createMainWindow();
 
     app.on('activate', () => {
@@ -98,31 +126,10 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
-    // Zero the master key + close the encrypted doc. Defence in depth —
-    // the OS already treats process-exit memory as freed, but explicit
-    // zeroing catches cases where a GC'd buffer might otherwise linger
-    // until reallocation.
-    if (vault && typeof vault.close === 'function') {
-        try { vault.close(); } catch { /* already closed */ }
-    }
+    // Zero the master key + close the encrypted doc. The OS already
+    // treats process-exit memory as freed, but explicit zeroing catches
+    // cases where a GC'd buffer might otherwise linger until
+    // reallocation. The session-backend ciphertext stays on disk — the
+    // next launch reuses it via the keychain.
+    if (runtime) tearDownHost(runtime);
 });
-
-/**
- * Placeholder SDK registry for the Step 16 scaffold. Mirrors the
- * extension's dev-mock posture (see
- * `packages/extension/src/background/sdkFactory.js`): good enough to
- * let the onboarding + read flows exercise; signing + broadcast
- * throw loudly. Real `xchain-sdk` wiring lands with the signing
- * integration step.
- */
-function createDevSdkRegistryStub() {
-    return {
-        async getSdk() {
-            throw new Error(
-                'desktop: xchain-sdk is not yet wired — run the pnpm install and bundle step before signing/broadcast paths exercise.',
-            );
-        },
-        async has() { return false; },
-        async listChainIds() { return []; },
-    };
-}
