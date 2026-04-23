@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-04-22
+
+### Added
+
+**ADS accumulator arithmetic** (§36.3) — pure + vault-aware helpers that drive the Automatic Donation System
+- `resolveAdsForNextTx(settings, chainId) → { donationAmount }` — read-only check run BEFORE constructing a tx. If the accumulator has crossed the trigger, the next tx carries a donation output of that amount
+- `stepAdsAccumulator(settings, chainId, { donationIncluded }) → Settings` — pure state transition run AFTER a successful broadcast. Normal: `accumulated += perTx`, `lifetimeTxCount++`. When `donationIncluded`: `lifetimeDonatedSats += prior accumulated`, `accumulated = perTx` (this tx's own contribution seeds the next cycle), `lifetimeTxCount++`
+- `commitAdsStep({ vault, chainId, donationIncluded })` — vault-aware wrapper: reads current Settings, runs `stepAdsAccumulator`, persists
+- Pure `step` is identity when ADS is disabled or the chain isn't seeded — safe to call unconditionally from submission flows
+- Round-trip verified: 1000 txs at `perTx=1, trigger=1000` → exactly one donation fires on tx 1001; `accumulated` resets correctly; other chains' state is untouched
+
+**Known gap:** the `submitAction` integration (inject donation output into `encoderOpts.customOutputs`, then `commitAdsStep`) is intentionally deferred. It needs a per-chain donation address, which is a §5.5 placeholder pending hub-config resolution. The arithmetic ships now; the integration lands when the address is wired.
+
 ## [0.17.0] - 2026-04-22
 
 ### Added

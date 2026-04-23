@@ -34,3 +34,8 @@ export {
 } from './importWif.js';
 export { signMessageFlow, signPsbtFlow } from './signFlows.js';
 export { createDemoWallet } from './createDemoWallet.js';
+export {
+    resolveAdsForNextTx,
+    stepAdsAccumulator,
+    commitAdsStep,
+} from './ads.js';
