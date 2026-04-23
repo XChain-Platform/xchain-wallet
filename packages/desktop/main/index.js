@@ -28,7 +28,7 @@
 //     cache is silently disabled — the user re-enters their password
 //     every launch rather than having the key written insecurely.
 
-import { app, BrowserWindow, ipcMain, safeStorage } from 'electron';
+import { app, BrowserWindow, ipcMain, safeStorage, session } from 'electron';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -41,6 +41,7 @@ import { IPC_CHANNEL } from './messageHost.js';
 import { FileStorageBackend, vaultPathFor } from './storage.js';
 import { FileMetaBackend, metaPathFor } from './meta.js';
 import { KeychainSessionBackend, sessionKeyPathFor } from './keychain.js';
+import { attachHidPermissions } from './permissions.js';
 import {
     createRuntime,
     ensureHost,
@@ -103,6 +104,12 @@ app.whenReady().then(async () => {
     } catch (err) {
         console.error('[xchain] desktop auto-unlock failed:', err);
     }
+
+    // §40.12 / Step 18: allow WebHID access for Ledger + Trezor vendor
+    // IDs so PairSignerForm can reach the device picker. Without these
+    // handlers Electron returns an empty device list under
+    // `contextIsolation: true`.
+    attachHidPermissions(session.defaultSession);
 
     ipcMain.handle(IPC_CHANNEL, async (_event, message) => {
         if (!runtime) {

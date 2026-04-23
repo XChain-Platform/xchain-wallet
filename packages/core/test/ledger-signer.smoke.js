@@ -213,11 +213,37 @@ assert.equal(modelFromLedgerTransport({ id: 'unknown' }), 'nanoX', 'unknown → 
 assert.ok(schemas.SIGNER_KINDS.includes('ledger'));
 
 // --- 10. Factory files + package.json deps ----------------------------
+//
+// Step 18 hoisted the pair sequence into core's
+// `signerFactories/ledger.js`. Shell factories bind transport + app
+// class loaders via DI and delegate to `makeLedgerFactory`.
 
+const coreFactory = join(core, 'src', 'signerFactories', 'ledger.js');
 const extFactory = join(ext, 'src', 'signers', 'ledgerFactory.js');
 const webFactory = join(web, 'src', 'signers', 'ledgerFactory.js');
+assert.ok(existsSync(coreFactory), 'core signerFactories/ledger.js exists');
 assert.ok(existsSync(extFactory), 'extension ledgerFactory.js exists');
 assert.ok(existsSync(webFactory), 'web ledgerFactory.js exists');
+
+const coreFactorySrc = readFileSync(coreFactory, 'utf8');
+assert.ok(
+    /export function makeLedgerFactory/.test(coreFactorySrc),
+    'core exports makeLedgerFactory builder',
+);
+assert.ok(
+    !/@ledgerhq/.test(stripComments(coreFactorySrc)),
+    'core builder does NOT import @ledgerhq/* — DI keeps core decoupled',
+);
+assert.ok(
+    /pairingInfo/.test(coreFactorySrc),
+    'core builder returns pairingInfo — caller persists via flows.registerSigner',
+);
+
+function stripComments(src) {
+    return src
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/^\s*\/\/.*$/gm, '');
+}
 
 const extSrc = readFileSync(extFactory, 'utf8');
 assert.ok(
@@ -245,8 +271,12 @@ assert.ok(
     'extension factory lazy-imports the Bitcoin app',
 );
 assert.ok(
-    /pairingInfo/.test(extSrc),
-    'pairLedgerSigner returns pairingInfo — caller persists via flows.registerSigner',
+    /makeLedgerFactory/.test(extSrc),
+    'extension factory delegates to core makeLedgerFactory',
+);
+assert.ok(
+    /\.\.\/\.\.\/\.\.\/core\/src\/signerFactories\/index\.js/.test(extSrc),
+    'extension factory imports core builder via cross-package relative path',
 );
 
 const webSrc = readFileSync(webFactory, 'utf8');

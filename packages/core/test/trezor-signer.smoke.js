@@ -310,11 +310,48 @@ assert.ok(
 );
 
 // --- 9. Factory files + package.json deps -----------------------------
+//
+// Step 18 hoisted the pair sequence into core's `signerFactories/`
+// module — shell factories are now thin bindings that lazy-import the
+// HW SDK and delegate to `makeTrezorFactory({ getConnect })`. The
+// extension + web + desktop bindings all share the same core logic;
+// only transport init (manifest, connectSrc, permission wiring) is
+// shell-specific.
 
+const coreFactory = join(core, 'src', 'signerFactories', 'trezor.js');
+const coreFactoryIndex = join(core, 'src', 'signerFactories', 'index.js');
 const extFactory = join(ext, 'src', 'signers', 'trezorFactory.js');
 const webFactory = join(web, 'src', 'signers', 'trezorFactory.js');
+assert.ok(existsSync(coreFactory), 'core signerFactories/trezor.js exists');
+assert.ok(existsSync(coreFactoryIndex), 'core signerFactories/index.js exists');
 assert.ok(existsSync(extFactory), 'extension trezorFactory.js exists');
 assert.ok(existsSync(webFactory), 'web trezorFactory.js exists');
+
+const coreFactorySrc = readFileSync(coreFactory, 'utf8');
+assert.ok(
+    /export function makeTrezorFactory/.test(coreFactorySrc),
+    'core exports makeTrezorFactory builder',
+);
+assert.ok(
+    !/@trezor\/connect-web/.test(stripComments(coreFactorySrc)),
+    'core builder does NOT import @trezor/connect-web — DI keeps core decoupled',
+);
+assert.ok(
+    /pairingInfo/.test(coreFactorySrc),
+    'core builder returns pairingInfo — caller persists via flows.registerSigner',
+);
+
+function stripComments(src) {
+    return src
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/^\s*\/\/.*$/gm, '');
+}
+
+const coreFactoryIndexSrc = readFileSync(coreFactoryIndex, 'utf8');
+assert.ok(
+    /export \{ makeTrezorFactory \}/.test(coreFactoryIndexSrc),
+    'core signerFactories/index.js re-exports makeTrezorFactory',
+);
 
 const extFactorySrc = readFileSync(extFactory, 'utf8');
 assert.ok(
@@ -338,8 +375,12 @@ assert.ok(
     'extension factory supplies a Trezor manifest',
 );
 assert.ok(
-    /pairingInfo/.test(extFactorySrc),
-    'pairTrezorSigner returns pairingInfo — caller persists via flows.registerSigner',
+    /makeTrezorFactory/.test(extFactorySrc),
+    'extension factory delegates to core makeTrezorFactory',
+);
+assert.ok(
+    /\.\.\/\.\.\/\.\.\/core\/src\/signerFactories\/index\.js/.test(extFactorySrc),
+    'extension factory imports core builder via cross-package relative path',
 );
 assert.ok(
     /import\(.@trezor\/connect-web.\)/.test(extFactorySrc),

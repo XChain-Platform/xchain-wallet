@@ -6,12 +6,16 @@
 // flows through `messaging.*` → preload `sendMessage` → main
 // MessageHost. No keys live here.
 //
-// HW pairing factories (Trezor / Ledger) are not yet wired on desktop
-// — those need the native node-HID / node-usb transports that arrive
-// with Step 18 ("Native hardware-wallet transports wired"). Until
-// then PairSignerForm renders the vendor cards with the "not
-// available in this context" note, which is the expected Step 16
-// behaviour.
+// HW pairing (§40.12, Step 18): `pairTrezorSigner` + `pairLedgerSigner`
+// use Chromium's WebHID (via `@ledgerhq/hw-transport-webhid`) + Trezor
+// Connect's iframe popup (via `@trezor/connect-web`). Both libs are
+// pure JS — no native node-HID / node-usb — so the desktop factories
+// are thin bindings around the shared core `makeTrezorFactory` /
+// `makeLedgerFactory` builders, same as extension + web.
+//
+// Main process (`main/permissions.js`) must wire WebHID permission
+// handlers onto `session.defaultSession` — without them, Electron
+// returns an empty device list under `contextIsolation: true`.
 
 import { useCallback, useEffect, useState } from 'react';
 import { MessagingProvider } from '@xchain-wallet/core/shared/MessagingProvider.jsx';
@@ -32,6 +36,8 @@ import { TokenAdminForm } from '@xchain-wallet/core/shared/routes/TokenAdminForm
 import { PairSignerForm } from '@xchain-wallet/core/shared/routes/PairSignerForm.jsx';
 import * as messaging from './messaging.js';
 import { getSessionStatus, listWallets } from './messaging.js';
+import { pairTrezorSigner } from './signerFactories/trezorFactory.js';
+import { pairLedgerSigner } from './signerFactories/ledgerFactory.js';
 
 export function App() {
     return (
@@ -177,16 +183,11 @@ function AppInner() {
                 );
             }
             if (unlockedView === 'pair-signer' && activeWalletId) {
-                // HW factories arrive with Step 18 (native node-HID +
-                // node-USB transports for desktop). PairSignerForm
-                // accepts undefined factories and shows a "not
-                // available in this context" message — correct
-                // behaviour for Step 16.
                 return (
                     <PairSignerForm
                         walletId={activeWalletId}
-                        pairTrezor={undefined}
-                        pairLedger={undefined}
+                        pairTrezor={pairTrezorSigner}
+                        pairLedger={pairLedgerSigner}
                         onBack={() => setUnlockedView('actions')}
                         onPaired={() => setUnlockedView('actions')}
                     />
@@ -267,7 +268,7 @@ function buildActionEntries({
         {
             id: 'pair-signer',
             label: 'Pair hardware signer',
-            description: 'Add a Trezor or Ledger to this wallet (native HW transports arrive at Step 18).',
+            description: 'Add a Trezor or Ledger to this wallet via WebHID + Trezor Connect.',
             onSelect: onPairSigner,
         },
     ];

@@ -8,6 +8,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 
+## [0.57.0] - 2026-04-23
+
+Phase 2 — Step 18 of 26 — piece 5c. Hardware signer pairing goes live on the Electron desktop shell via Chromium's WebHID (`@ledgerhq/hw-transport-webhid` + `@ledgerhq/hw-app-btc`) and Trezor Connect's iframe popup (`@trezor/connect-web`). Zero native modules — same pure-JS HW stack as the extension + web shells, so no `node-hid`, no `electron-rebuild`, no per-platform `.node` binaries, no `asarUnpack`. As part of this step the pair-sequence logic was hoisted into `@xchain-wallet/core/signerFactories/` so extension + web + desktop share one source of truth; shells own only the transport init + permission wiring.
+
+### Added
+
+**Core builders** (`packages/core/src/signerFactories/`)
+
+- `signerFactories/trezor.js` — `makeTrezorFactory({ getConnect })`. Shell-agnostic Trezor pair sequence: call `getConnect()` to obtain an initialized TrezorConnect, call `getFeatures`, derive `deviceIdentifier` / `model` / `firmwareVersion` via the existing `deviceIdentifierFromFeatures` / `modelFromFeatures` / `firmwareVersionFromFeatures` helpers (from Step 13), construct a `TrezorSigner` with the connect reference, return `{ signer, pairingInfo }` for `flows.registerSigner`. No `@trezor/connect-web` imports in core — DI keeps the native SDK bound to each shell.
+- `signerFactories/ledger.js` — `makeLedgerFactory({ getTransport, getAppClass })`. Shell-agnostic Ledger pair sequence: call the DI'd transport + Btc-class loaders, construct the Btc app, read `getAppAndVersion`, derive the device identifier from the account-0 xpub via `deriveLedgerDeviceIdentifier` (from Step 14), construct a `LedgerSigner`. Same DI posture as Trezor — no `@ledgerhq/*` imports in core.
+- `signerFactories/index.js` — re-exports both builders.
+- `packages/core/src/index.js` — re-exports `signerFactories` as a namespace bag alongside `signers`, `flows`, etc.
+- `packages/core/package.json` — new `"./signerFactories"` subpath export for direct import without the root namespace.
+
+**Desktop renderer factories** (`packages/desktop/renderer/signerFactories/`)
+
+- `trezorFactory.js` — thin binding around `makeTrezorFactory`. Lazy-imports `@trezor/connect-web`, initializes with the XChain manifest, feeds the result into the core builder. Keeps the default `connectSrc` for now (pointing at `connect.trezor.io`); Step 19 packaging will add a local-bundled `connectSrc` so sign-click doesn't hit the network.
+- `ledgerFactory.js` — thin binding around `makeLedgerFactory`. Lazy-imports `@ledgerhq/hw-transport-webhid` + `@ledgerhq/hw-app-btc`, feeds `TransportWebHID.create()` + the Btc class into the core builder.
+
+**Main-process WebHID permission wiring** (`packages/desktop/main/permissions.js`)
+
+- `attachHidPermissions(session)` — attaches both `setPermissionRequestHandler` (grants `hid`, default-denies everything else) and `setDevicePermissionHandler` (allowlist: Ledger `0x2C97`, Trezor T `0x1209`, Trezor One `0x534C` — filters the device-picker dialog). Without this, Electron under `contextIsolation: true` + `sandbox: true` returns an empty device list to `navigator.hid.requestDevice()` and the WebHID transport spins indefinitely.
+- `HID_VENDOR_ALLOWLIST` + `isAllowedHidVendor(vendorId)` — the constants + a pure helper so smokes can verify the allowlist without mounting an Electron session.
+- `packages/desktop/main/index.js` — wires `attachHidPermissions(session.defaultSession)` into `app.whenReady`.
+
+### Changed
+
+**Shell factories — now thin bindings over core builders**
+
+- `packages/extension/src/signers/trezorFactory.js` — rewritten to delegate pair logic to `makeTrezorFactory` while keeping the extension-specific manifest, lazy-loader, and cached Connect instance in place. Public API unchanged (`getTrezorConnect`, `pairTrezorSigner`, `resetTrezorConnect`). The `@trezor/connect-web` lazy-import stays in the extension package — core remains dep-free.
+- `packages/extension/src/signers/ledgerFactory.js` — same posture: delegates to `makeLedgerFactory`, keeps `@ledgerhq/*` lazy-imports + cached transport in the extension.
+- `packages/web/src/signers/trezorFactory.js` / `ledgerFactory.js` — unchanged. Web still re-exports from the extension factory via cross-package relative path, so it picks up the new delegation transitively.
+
+**Renderer wiring** (`packages/desktop/renderer/App.jsx`)
+
+- Imports `pairTrezorSigner` + `pairLedgerSigner` from the new `./signerFactories/*.js` modules and passes them into `PairSignerForm` (previously `undefined` placeholders per the Step 16 scaffold). The ActionsMenu entry description changed from "native HW transports arrive at Step 18" to "via WebHID + Trezor Connect".
+
+### Dependencies
+
+- `packages/desktop/package.json` — adds `@trezor/connect-web` ^9.7.0, `@ledgerhq/hw-transport-webhid` ^6.35.0, `@ledgerhq/hw-app-btc` ^10.21.0 at the same versions the extension pins. pnpm hoists to a single install so the on-disk footprint doesn't double. Description updated: "main-process signing isolation (§9.3.2) + OS keychain auto-unlock + WebHID hardware signer pairing (§40.12). electron-builder packaging ships in Phase 2 Step 19".
+
+### Smoke + docs
+
+- `packages/core/test/hw-factories.smoke.js` — new. Exercises:
+  - Core builders exist + import no `@trezor/*` / `@ledgerhq/*` (comments stripped before the regex to let the JSDoc examples mention the SDK names without tripping the check).
+  - `makeTrezorFactory` validates deps, success path returns `{ signer, pairingInfo }` with the right shape against a mock Connect, failure paths (user cancellation, malformed Connect) surface clear errors.
+  - `makeLedgerFactory` same end-to-end: success path returns a `LedgerSigner` + pairingInfo with a deterministically-derived `deviceIdentifier`, failure paths (null transport, non-constructor Btc, Bitcoin app closed) surface clear errors.
+  - Desktop renderer factories exist, import the core builder via cross-package relative path, and lazy-import the HW SDKs.
+  - `packages/desktop/package.json` declares HW deps at extension-parity versions (drift guard: assertion diffs against extension/package.json).
+  - `renderer/App.jsx` wires the real factories into PairSignerForm and no longer passes `undefined`.
+  - Main-process permission handlers: vendor allowlist covers Ledger + both Trezor models; allows `hid` / denies other permissions; device handler filters on `deviceType === 'hid'` and whitelisted vendorId; rejects null session; invoked from main/index.js on `app.whenReady`.
+- `packages/core/test/trezor-signer.smoke.js` — updated. New assertions verify the core builder file exists, exports `makeTrezorFactory`, and contains no `@trezor/connect-web` imports (real code, with comments stripped). Extension factory asserts it delegates via `makeTrezorFactory` + imports core through the cross-package relative path `../../../core/src/signerFactories/index.js`. Retains all Step-13 behavioural assertions (mock Connect round-trip, deviceIdentifier / model / firmwareVersion helpers).
+- `packages/core/test/ledger-signer.smoke.js` — parallel updates for the Ledger factory migration.
+- `packages/core/test/desktop-shell.smoke.js` — the Step 16 "renderer App passes `undefined` HW factories (deferred to Step 18)" assertion flipped to "renderer App wires real `pairTrezorSigner` + `pairLedgerSigner` factories". Description + success line updated accordingly.
+
+### Known deferrals
+
+- **Packaging** (Step 19) — electron-builder config, Authenticode / notarization / Linux repackage, URI scheme registration, reproducible-build scripts per §51. Step 19 will also bundle Trezor Connect's iframe assets locally and flip the desktop factory's `connectSrc` to an `app://`-scheme URL so sign-click stops touching connect.trezor.io.
+- **Sign-path integration for HW** — PSBT↔Trezor / PSBT↔Ledger converters + message-signing envelope + renderer↔background signing bridge remain deferred (see v0.53.0 CHANGELOG "Known deferrals"). Step 18 delivers pairing; actual HW signing lands in a dedicated later step.
+
+### Developer notes
+
+- Smoke count: 36 (was 35; +1 for hw-factories).
+- Real-hardware verification still pending: plugging a Trezor + Ledger into the Electron app requires `pnpm install` + the ~200 MB Electron bundle + user manual testing. DI-mock smokes cover the wiring; live device exercise waits for Step 19 + on-device pass.
+- `TrezorSigner` / `LedgerSigner` continue to have zero Trezor/Ledger SDK imports in core — the Step-13/14 invariant is preserved at the class level, and Step 18 extends it up to the factory layer.
+
+
 ## [0.56.0] - 2026-04-23
 
 Phase 2 — Step 17 of 26 — piece 5b. OS keychain integration for the Electron desktop shell (§40.12). After the first-launch unlock, the master key is cached in the OS-level keychain (macOS Keychain / Windows DPAPI / Linux libsecret) via Electron `safeStorage` so subsequent app launches skip the password prompt until the user explicitly locks or the OS keychain becomes unreadable (logout, keychain reset, user profile change). When no real keychain is available, the shell silently refuses to persist to disk — the user re-enters their password every launch rather than have the key cached insecurely.

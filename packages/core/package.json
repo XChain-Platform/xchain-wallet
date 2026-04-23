@@ -1,6 +1,6 @@
 {
     "name": "@xchain-wallet/core",
-    "version": "0.56.0",
+    "version": "0.57.0",
     "private": true,
     "description": "Platform-agnostic components, state, SDK integration, and signer implementations for XChain Wallet",
     "type": "module",
@@ -13,7 +13,8 @@
         "./branding/*": "./src/branding/*",
         "./shared": "./src/shared/index.js",
         "./shared/*": "./src/shared/*",
-        "./shims/*": "./src/shims/*"
+        "./shims/*": "./src/shims/*",
+        "./signerFactories": "./src/signerFactories/index.js"
     },
     "scripts": {
         "test": "vitest run",

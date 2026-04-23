@@ -8,6 +8,7 @@
 export * as schemas from './schemas/index.js';
 export * as registry from './registry/index.js';
 export * as signers from './signers/index.js';
+export * as signerFactories from './signerFactories/index.js';
 export * as crypto from './crypto/index.js';
 export * as storage from './storage/index.js';
 export * as sdk from './sdk/index.js';

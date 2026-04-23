@@ -16,7 +16,7 @@
 //      (unlockWallet, sendAsset, issueToken, registerSigner, etc.).
 //   6. Renderer App.jsx is `shell="desktop"`, imports every shared
 //      route the popup + web shells do, and routes `'pair-signer'`
-//      with factories intentionally unset (deferred to Step 18).
+//      with real pairTrezorSigner + pairLedgerSigner factories (wired Step 18).
 //   7. package.json declares `electron` + React deps at v0.54.0+,
 //      workspace deps on core + extension.
 
@@ -209,9 +209,9 @@ for (const route of [
     );
 }
 assert.ok(
-    /pairTrezor=\{undefined\}/.test(rendererApp)
-        && /pairLedger=\{undefined\}/.test(rendererApp),
-    'renderer App passes undefined HW factories (Step 18 wires real transports)',
+    /pairTrezor=\{pairTrezorSigner\}/.test(rendererApp)
+        && /pairLedger=\{pairLedgerSigner\}/.test(rendererApp),
+    'renderer App wires real pairTrezorSigner + pairLedgerSigner factories (Step 18 §40.12)',
 );
 
 // --- 7. package.json deps ---------------------------------------------
@@ -260,5 +260,5 @@ assert.ok(
 );
 
 console.log(
-    'OK — desktop shell smoke (main-process isolation scaffold §9.3.2: FileStorageBackend file round-trip, MessageHost reuses createBackgroundHost, preload exposes narrow bridge, renderer App.jsx mounts all shared routes under shell="desktop", messaging parity with popup/web, HW factories deferred to Step 18)',
+    'OK — desktop shell smoke (main-process isolation scaffold §9.3.2: FileStorageBackend file round-trip, MessageHost reuses createBackgroundHost, preload exposes narrow bridge, renderer App.jsx mounts all shared routes under shell="desktop", messaging parity with popup/web, HW factories wired via WebHID + Trezor Connect)',
 );

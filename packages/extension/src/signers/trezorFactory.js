@@ -1,24 +1,22 @@
 // Trezor Connect factory — extension (popup + service worker) target.
+// Thin binding layer: the pair sequence itself lives in
+// `@xchain-wallet/core/signerFactories/trezor.js` (Phase 2 Step 18, §40.12),
+// shared with the web + desktop shells. This file owns the extension-
+// specific `@trezor/connect-web` lazy-import + init (manifest, default
+// `connectSrc` pointing at connect.trezor.io).
+//
 // Lazy-imports `@trezor/connect-web` so the SDK only loads when the
-// user actually pairs a Trezor. Keeps the extension's baseline bundle
-// free of Trezor Connect's iframe bootstrap code until it's needed.
-//
-// Trezor Connect opens a popup that talks to the Trezor Bridge daemon
-// (or WebUSB on supported browsers). The popup needs a tab anchor —
-// the MV3 service worker can't host a popup directly, so the caller
-// runs this from the extension's React popup (popup.html) or from a
-// transient action tab opened via `chrome.tabs.create`.
-//
-// Initialization is module-scoped (one `connect` instance per popup
-// lifetime). Re-pairing the same device reuses the same instance;
-// switching extension contexts requires re-init.
+// user actually pairs a Trezor — keeps the extension's baseline
+// bundle free of Trezor Connect's iframe bootstrap code until it's
+// needed. Connect uses a popup/iframe that talks to the Trezor Bridge
+// daemon (or WebUSB on supported browsers); the MV3 service worker
+// can't host that directly, so the caller runs this from the
+// extension's React popup.
 
-import {
-    TrezorSigner,
-    deviceIdentifierFromFeatures,
-    modelFromFeatures,
-    firmwareVersionFromFeatures,
-} from '@xchain-wallet/core';
+// Cross-package relative path to core — matches the convention in
+// hostBridge.js and messageHost.js so Node smoke scripts resolve the
+// module without the pnpm workspace symlink.
+import { makeTrezorFactory } from '../../../core/src/signerFactories/index.js';
 
 /**
  * Manifest handed to Trezor Connect at init. Required — Trezor gates
@@ -64,53 +62,23 @@ function defaultLoader() {
 }
 
 /**
- * Pair a Trezor device. Reads features from the device, constructs a
- * TrezorSigner, and returns it alongside the metadata the caller
- * needs to persist via `registerSigner`:
- *
- *   { signer, pairingInfo: { vendor, model, deviceIdentifier, firmwareVersion } }
+ * Pair a Trezor device. The pair sequence (getFeatures → derive device
+ * identifier → construct TrezorSigner → return pairingInfo) lives in
+ * core's `makeTrezorFactory`; this export is just the extension-side
+ * binding.
  *
  * The caller is responsible for calling `flows.registerSigner` with
- * `pairingInfo` to persist the SignerRecord.
+ * the returned `pairingInfo` to persist the SignerRecord.
  *
- * @param {Object} opts
+ * @param {Object} [opts]
  * @param {() => Promise<any>} [opts.loader]  for tests
- * @returns {Promise<{ signer: TrezorSigner, pairingInfo: { vendor: 'trezor', model: string, deviceIdentifier: string, firmwareVersion: string | null } }>}
+ * @returns {ReturnType<ReturnType<typeof makeTrezorFactory>>}
  */
 export async function pairTrezorSigner({ loader } = {}) {
-    const connect = await getTrezorConnect(loader);
-    const res = await connect.getFeatures();
-    if (!res?.success) {
-        const msg = res?.payload?.error ?? res?.error?.error ?? 'Trezor pairing was cancelled or failed';
-        throw new Error(`pairTrezorSigner: ${msg}`);
-    }
-    const features = res.payload;
-    const deviceIdentifier = deviceIdentifierFromFeatures(features);
-    const model = modelFromFeatures(features);
-    const firmwareVersion = firmwareVersionFromFeatures(features);
-    if (!deviceIdentifier) {
-        throw new Error('pairTrezorSigner: device did not report a device_id or fw_fingerprint');
-    }
-    if (!model) {
-        throw new Error('pairTrezorSigner: device did not report a model');
-    }
-    const label = features.label || 'Trezor';
-    const signer = new TrezorSigner({
-        id: `trezor-${deviceIdentifier}`,
-        displayName: `${label} (${model})`,
-        model,
-        deviceIdentifier,
-        connect,
+    const factory = makeTrezorFactory({
+        getConnect: () => getTrezorConnect(loader),
     });
-    return {
-        signer,
-        pairingInfo: {
-            vendor: 'trezor',
-            model,
-            deviceIdentifier,
-            firmwareVersion,
-        },
-    };
+    return factory();
 }
 
 /**
