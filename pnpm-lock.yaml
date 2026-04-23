@@ -27,7 +27,11 @@ importers:
 
   packages/desktop: {}
 
-  packages/extension: {}
+  packages/extension:
+    dependencies:
+      '@xchain-wallet/core':
+        specifier: workspace:*
+        version: link:../core
 
   packages/test-dapp:
     dependencies:

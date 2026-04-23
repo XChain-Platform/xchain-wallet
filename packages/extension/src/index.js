@@ -6,4 +6,11 @@
 //
 // Implementation begins in Phase 1.
 
-export {};
+export {
+    ChromeStorageBackend,
+    DEFAULT_STORAGE_KEY,
+} from './storage/ChromeStorageBackend.js';
+export {
+    ChromeSessionBackend,
+    DEFAULT_SESSION_STORAGE_KEY,
+} from './storage/ChromeSessionBackend.js';

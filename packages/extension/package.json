@@ -4,5 +4,8 @@
     "private": true,
     "description": "Chrome MV3 extension shell for XChain Wallet — popup, full-screen, background service worker, content script, injected provider",
     "main": "./src/index.js",
-    "type": "module"
+    "type": "module",
+    "dependencies": {
+        "@xchain-wallet/core": "workspace:*"
+    }
 }

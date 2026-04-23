@@ -23,3 +23,7 @@ export {
     addressHistory,
     walletBalances,
 } from './balances.js';
+export {
+    reconcileAddressSigners,
+    AmbiguousSignerMatchError,
+} from './reconcileAddressSigners.js';
