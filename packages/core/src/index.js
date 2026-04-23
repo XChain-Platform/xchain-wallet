@@ -14,3 +14,4 @@ export * as sdk from './sdk/index.js';
 export * as flows from './flows/index.js';
 export * as uri from './uri/index.js';
 export * as branding from './branding/index.js';
+export * as decoder from './decoder/index.js';

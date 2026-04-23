@@ -7,3 +7,52 @@
 .form {
     margin: 0;
 }
+
+.detailsList {
+    margin: var(--xc-space-2) 0 0;
+    padding: 0;
+    border-top: 1px solid var(--xc-border);
+}
+
+.detailsRow {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: var(--xc-space-2);
+    padding: var(--xc-space-1) 0;
+    border-bottom: 1px dashed var(--xc-border);
+}
+
+.detailsLabel {
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin: 0;
+    align-self: start;
+}
+
+.detailsValue {
+    font-family: var(--xc-font-mono);
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text);
+    margin: 0;
+    word-break: break-word;
+    white-space: pre-wrap;
+}
+
+.warnings {
+    margin: var(--xc-space-2) 0 0;
+    padding: var(--xc-space-2) var(--xc-space-3);
+    list-style: none;
+    background: color-mix(in srgb, var(--xc-warning) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--xc-warning) 35%, transparent);
+    border-radius: var(--xc-radius-sm);
+    color: var(--xc-text);
+    font-size: var(--xc-text-xs);
+    line-height: 1.4;
+}
+
+.warnings li + li {
+    margin-top: var(--xc-space-1);
+}

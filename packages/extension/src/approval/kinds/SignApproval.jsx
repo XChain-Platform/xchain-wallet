@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { Screen, Button, Input, ChainBadge } from '@xchain-wallet/core/ui';
-import { registry as registryLib } from '@xchain-wallet/core';
+import {
+    registry as registryLib,
+    decoder as decoderLib,
+} from '@xchain-wallet/core';
 import { listWallets, resolveApproval } from '../messaging.js';
 import shared from '../approval.module.css';
 import styles from './SignApproval.module.css';
@@ -203,17 +206,44 @@ function SignSummary({ kind, payload }) {
                     ) : null}
                 </div>
             );
-        case 'signAction':
+        case 'signAction': {
+            const decoded = decoderLib.decodeAction({
+                action: payload?.action,
+                params: inner,
+                chainId: payload?.chainId,
+                chainRegistry,
+            });
             return (
-                <div className={shared.summary}>
-                    <p className={shared.summaryLabel}>Action</p>
-                    <pre className={shared.summaryValue}>{String(payload?.action ?? '')}</pre>
-                    <p className={shared.summaryLabel} style={{ marginTop: 8 }}>Parameters</p>
-                    <pre className={shared.summaryValue}>
-                        {safeJson(inner)}
-                    </pre>
-                </div>
+                <>
+                    <div className={shared.summary}>
+                        <p className={shared.summaryLabel}>{payload?.action || 'Action'}</p>
+                        <p
+                            className={shared.summaryValue}
+                            style={{ whiteSpace: 'normal', fontFamily: 'var(--xc-font-sans)', fontSize: 13, lineHeight: 1.4 }}
+                        >
+                            {decoded.summary}
+                        </p>
+                        {decoded.details.length > 0 ? (
+                            <dl className={styles.detailsList}>
+                                {decoded.details.map((row) => (
+                                    <div className={styles.detailsRow} key={row.label}>
+                                        <dt className={styles.detailsLabel}>{row.label}</dt>
+                                        <dd className={styles.detailsValue}>{row.value}</dd>
+                                    </div>
+                                ))}
+                            </dl>
+                        ) : null}
+                    </div>
+                    {decoded.warnings.length > 0 ? (
+                        <ul className={styles.warnings} role="alert">
+                            {decoded.warnings.map((w, i) => (
+                                <li key={i}>{w}</li>
+                            ))}
+                        </ul>
+                    ) : null}
+                </>
             );
+        }
         case 'signIn':
             return (
                 <div className={shared.summary}>

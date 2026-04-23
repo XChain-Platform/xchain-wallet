@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.44.0] - 2026-04-22
+
+### Added
+
+**Plain-English action decoder + sign-screen upgrade** (§21.1, §30) — Batch 4 piece 14
+
+Closes out Batch 4.
+
+- `packages/core/src/decoder/actionDecoder.js` — pure function:
+    ```
+    decodeAction({ action, params, chainId, chainRegistry })
+      → { summary: string, details: Array<{ label, value }>, warnings: string[] }
+    ```
+  Phase 1 covers SEND + SWEEP with human sentences ("Send 100 MYTOKEN on Bitcoin to bc1q…", "Sweep all assets on Dogecoin to bc1q…"). Every other ACTION kind gets a generic fallback that pretty-prints the params and surfaces a "no plain-English summary yet" warning — dedicated decoders for ISSUE / MINT / DISPENSER / etc. land alongside their authoring forms in later phases.
+  
+  Warnings it raises:
+  - Memo containing `|` or `;` (protocol rejects the tx).
+  - SEND with amount ≤ 0 or empty destination.
+  - SWEEP blanket "moves every balance at the source address" reminder + empty-destination warning.
+  - Unknown action "no summary yet" notice.
+
+- `packages/core/src/index.js` re-exports the `decoder` namespace so both shells reach it via `import { decoder } from '@xchain-wallet/core'`.
+
+- `packages/extension/src/approval/kinds/SignApproval.jsx` — `signAction` summary block now calls `decoder.decodeAction`. Renders the human summary line, a proper `<dl>` details list (labeled rows, not raw JSON), and a warnings alert styled as a yellow banner above the password input.
+
+- `packages/extension/src/approval/kinds/SignApproval.module.css` — new styles for `.detailsList` / `.detailsRow` / `.detailsLabel` / `.detailsValue` and the `.warnings` alert block.
+
+### Scope boundary
+
+- **PSBT summary stayed raw-hex** — structural PSBT parsing needs `bitcoinjs-lib`. Until the real SDK is bundled, showing `psbtHex` truncated + signing paths is the honest fallback; no fake parser.
+- **Web `Send.jsx` still uses its own review layout** — the review there renders structured rows (Chain / From / To / Asset / Amount / Memo) that differ from the decoder's flat `details[]` shape. Converging is a later polish pass; both paths render the same underlying data correctly today.
+- **Rejection UX** is the existing Reject button + the warnings banner. §30's "once, clearly" anti-paternalism guideline means the decoder surfaces warnings inline without adding a confirm-dialog before Approve.
+
+### Tests
+
+- `packages/core/test/action-decoder.smoke.js` — 7 decoder cases (happy SEND, SEND with `|` memo → warning, SEND with zero amount + empty destination → two warnings, SWEEP blanket-balance warning, unknown-action fallback, no-chain-registry path, null-params safety) + static wiring for the core namespace re-export and SignApproval's import/use of the decoder.
+
 ## [0.43.0] - 2026-04-22
 
 Covers Batch 4 pieces 12 + 13 (web onboarding + web Send). Bundled because both touch `packages/web/src/messaging.js` and `packages/web/src/App.jsx`; splitting would churn the same files without shipping anything different.
