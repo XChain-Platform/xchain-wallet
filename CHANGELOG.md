@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.41.0] - 2026-04-22
+
+### Added
+
+**Batch 3 piece 10 — bridge end-to-end smoke + test-dApp runbook**
+
+- `packages/core/test/bridge-e2e.smoke.js` — integration smoke that assembles the real Vault + MessageHost + ApprovalBroker (with a fake `chrome.windows`) and drives the full Phase-1 bridge surface through `host.handle`:
+  - `bridge.connect` → approval parked → `approval.resolve` with the same envelope the popup sends → `ConnectedSite` written + response shape verified.
+  - Second `connect` on the same origin is idempotent (no new approval window opens).
+  - `bridge.getAccounts` / `getAddresses` / `getSupportedChains` (9 chains; `icon` elided as piece-1 shell follow-up intended).
+  - `bridge.signAction` with `ISSUE` returns `{ error: 'UNSUPPORTED_ACTION', supportedActions: ['SEND', 'SWEEP'] }` without opening an approval.
+  - `bridge.disconnect` removes the site.
+  - Window-close-without-decision on a pending connect → dApp-side Promise rejects with `UserRejectedError`.
+  - Test-dApp surface (`runExample` + `MockXChainProvider`) still exposes the symbols the runbook references — catches accidental drift.
+- `packages/extension/docs/TEST_DAPP_RUNBOOK.md` — manual browser-pass runbook for RC builds. Covers build + load unpacked, bootstrap gap (seed a wallet via DevTools until Batch 4's onboarding lands), serving the test-dApp, walking `runExample` through each approval popup with expected outcomes, edge cases (reject / close / re-connect / always-allow / mid-flow lock), and a pointer at the node smoke for PR gate use.
+
+### Scope boundary
+
+Sign paths that hit the real SDK (`signMessage`, `signPsbt`, `signAction` SEND) are exercised up to the approval hand-off. Going further — i.e. producing a valid signed payload — needs the real SDK bundled into the extension, which ships in a later piece.
+
 ## [0.40.0] - 2026-04-22
 
 Covers Batch 3 pieces 8 + 9 (approval window plumbing + per-kind approval screens). Bundled because piece 9 replaces piece 8's `approval/main.jsx` placeholder and extends `approval/messaging.js` — splitting would just churn the same files.
