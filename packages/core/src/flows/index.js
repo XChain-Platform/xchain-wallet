@@ -32,6 +32,12 @@ export {
     InvalidWifError,
     WrongPasswordError,
 } from './importWif.js';
+export {
+    exportPrivateKey,
+    AddressNotFoundError,
+    NoKeyForAddressError,
+    ImportedKeyMissingError,
+} from './exportPrivateKey.js';
 export { signMessageFlow, signPsbtFlow } from './signFlows.js';
 export { createDemoWallet } from './createDemoWallet.js';
 export {

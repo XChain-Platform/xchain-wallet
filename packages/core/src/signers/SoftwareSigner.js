@@ -292,6 +292,29 @@ export class SoftwareSigner extends Signer {
     }
 
     /**
+     * Public wrapper around `_deriveWifFor` for §17.7 "view / export
+     * private key" flows. Returns the WIF for an HD-derived address
+     * owned by this signer. Caller is responsible for letting the WIF
+     * string fall out of scope promptly (see §17.7.3 memory-hygiene
+     * caveat on JS string zeroing).
+     *
+     * Imported-WIF addresses are handled outside the signer by
+     * `exportPrivateKey` (decrypted directly from `Wallet.importedKeys`).
+     *
+     * @param {Object} params
+     * @param {string} params.chainId
+     * @param {string} params.path        BIP32 path of the HD key
+     * @returns {string}
+     */
+    exportWifForPath({ chainId, path }) {
+        this._assertUnlocked();
+        if (typeof chainId !== 'string' || chainId.length === 0) {
+            throw new Error('SoftwareSigner.exportWifForPath: chainId is required');
+        }
+        return this._deriveWifFor(chainId, path);
+    }
+
+    /**
      * Derive the WIF for (chainId, path). Uses the chain descriptor's
      * wifVersionByte. Caller is responsible for letting the WIF string
      * fall out of scope promptly.
