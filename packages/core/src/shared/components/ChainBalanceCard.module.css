@@ -1,0 +1,25 @@
+.card {
+    padding: var(--xc-space-3);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-md);
+    background: var(--xc-surface);
+}
+
+.header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--xc-space-2);
+    margin-bottom: var(--xc-space-2);
+}
+
+.count {
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+}
+
+.fallback {
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    margin: 0;
+}

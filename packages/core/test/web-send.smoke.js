@@ -34,22 +34,33 @@ const webPkg = join(wsRoot, 'packages', 'web');
 
 // --- 1. Static wiring -------------------------------------------------
 
-const send = readFileSync(join(webPkg, 'src', 'routes', 'Send.jsx'), 'utf8');
+// Send is shared at @xchain-wallet/core/shared/routes/Send.jsx. Review
+// stage now runs through decoder.decodeAction so the warnings banner
+// matches SignApproval's sign-screen.
+const sharedRoutes = join(webPkg, '..', 'core', 'src', 'shared', 'routes');
+const send = readFileSync(join(sharedRoutes, 'Send.jsx'), 'utf8');
 for (const stage of ['form', 'review', 'submitting', 'done']) {
-    assert.ok(send.includes(`'${stage}'`), `Send.jsx handles stage "${stage}"`);
+    assert.ok(send.includes(`'${stage}'`), `shared Send.jsx handles stage "${stage}"`);
 }
-assert.ok(/sendAsset\(\{/.test(send), 'Send.jsx calls sendAsset');
+assert.ok(
+    /messaging\.sendAsset\(\{/.test(send),
+    'shared Send.jsx calls messaging.sendAsset',
+);
+assert.ok(
+    /decoder\s*as\s*decoderLib|decoderLib\.decodeAction/.test(send),
+    'shared Send.jsx runs review through the action decoder',
+);
 assert.ok(
     /\[\|;\]/.test(send),
-    'Send.jsx rejects | and ; in memo (protocol constraint)',
+    'shared Send.jsx rejects | and ; in memo (protocol constraint)',
 );
 assert.ok(
     /Number\(amt\) <= 0/.test(send),
-    'Send.jsx validates positive amount',
+    'shared Send.jsx validates positive amount',
 );
 assert.ok(
     send.includes("'InvalidPasswordError'"),
-    'Send.jsx distinguishes wrong password from other errors',
+    'shared Send.jsx distinguishes wrong password from other errors',
 );
 assert.ok(
     /inputMode="decimal"/.test(send),
@@ -57,20 +68,20 @@ assert.ok(
 );
 
 const app = readFileSync(join(webPkg, 'src', 'App.jsx'), 'utf8');
-assert.ok(app.includes('<Send'), 'App.jsx renders Send route');
+assert.ok(app.includes('<Send'), 'web App.jsx renders Send route');
 assert.ok(
     app.includes("'send'"),
-    'App.jsx tracks unlockedView === send sub-route',
+    'web App.jsx tracks unlockedView === send sub-route',
 );
 assert.ok(
     app.includes('activeWalletId'),
-    'App.jsx caches activeWalletId for Send',
+    'web App.jsx caches activeWalletId for Send',
 );
 
-const home = readFileSync(join(webPkg, 'src', 'routes', 'Home.jsx'), 'utf8');
+const home = readFileSync(join(sharedRoutes, 'Home.jsx'), 'utf8');
 assert.ok(
     /onSend/.test(home) && /onClick=\{onSend\}/.test(home),
-    'Home.jsx activates Send button via onSend',
+    'shared Home.jsx activates Send button via onSend',
 );
 
 const msg = readFileSync(join(webPkg, 'src', 'messaging.js'), 'utf8');

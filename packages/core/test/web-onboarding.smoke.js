@@ -44,27 +44,24 @@ for (const sub of ['welcome', 'create', 'import']) {
 assert.ok(app.includes('<CreateWallet'), 'App.jsx renders CreateWallet');
 assert.ok(app.includes('<ImportWallet'), 'App.jsx renders ImportWallet');
 
-const create = readFileSync(
-    join(webPkg, 'src', 'routes', 'CreateWallet.jsx'),
-    'utf8',
-);
+// CreateWallet + ImportWallet live in @xchain-wallet/core/shared/routes
+// and reach messaging.importMnemonic through the MessagingProvider.
+const sharedRoutes = join(webPkg, '..', 'core', 'src', 'shared', 'routes');
+const create = readFileSync(join(sharedRoutes, 'CreateWallet.jsx'), 'utf8');
 assert.ok(
-    /importMnemonic\(\{ password, mnemonic, name \}\)/.test(create),
-    'CreateWallet persists via importMnemonic (post-confirm commit)',
+    /messaging\.importMnemonic\(\{ password, mnemonic, name \}\)/.test(create),
+    'shared CreateWallet persists via messaging.importMnemonic (post-confirm commit)',
 );
 assert.ok(
     /generateBip39Mnemonic/.test(create),
-    'CreateWallet generates BIP39 mnemonic client-side',
+    'shared CreateWallet generates BIP39 mnemonic client-side',
 );
-assert.ok(create.includes('MnemonicGrid'), 'CreateWallet shows the mnemonic grid');
+assert.ok(create.includes('MnemonicGrid'), 'shared CreateWallet shows the mnemonic grid');
 
-const importR = readFileSync(
-    join(webPkg, 'src', 'routes', 'ImportWallet.jsx'),
-    'utf8',
-);
+const importR = readFileSync(join(sharedRoutes, 'ImportWallet.jsx'), 'utf8');
 assert.ok(
-    /\[12,\s*15,\s*18,\s*21,\s*24\]/.test(importR),
-    'ImportWallet validates BIP39 word counts',
+    /ACCEPTED_WORD_COUNTS\s*=\s*\[12,\s*15,\s*18,\s*21,\s*24\]/.test(importR),
+    'shared ImportWallet validates BIP39 word counts',
 );
 
 const msg = readFileSync(join(webPkg, 'src', 'messaging.js'), 'utf8');

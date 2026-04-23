@@ -7,6 +7,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.46.0] - 2026-04-23
+
+Phase 2 Batch 1 piece 1 — shared-routes refactor. Closes the Phase-1 popup-Send + web-Receive gaps by hoisting every Phase-1 route into `@xchain-wallet/core/shared/routes/*` behind a `MessagingProvider` React context. Popup + web shells become thin routers that wrap the tree with `<MessagingProvider shell="popup|web" messaging={shellMessaging}>`; shared routes call the bag of messaging helpers via the context and pick `Screen` variants from `screenVariantFor(shell)`.
+
+### Added
+
+**Shared surface** (`packages/core/src/shared/`)
+
+- `MessagingContext.js` + `MessagingProvider.jsx` + `useMessaging.js` — React context + hook wrapping a `{ shell, messaging }` value. `useMessaging` throws when consumed outside a provider so wiring mistakes surface immediately. `screenVariantFor(shell)` returns `'popup' | 'full'`.
+- `hooks/useAutoLock.js` — hoisted from the popup; now a shared foreground auto-lock timer. `enabled: false` makes it a no-op so shells that don't want it (web today) can still call the hook unconditionally per React hook rules.
+- `components/MnemonicGrid.jsx` — shared read-only seed-phrase grid. `variant="popup"` renders the compact 3-col layout; `variant="full"` picks a responsive 3/4-col grid for the full layout.
+- `components/ChainBalanceCard.jsx` — shared per-chain balance card (hoisted from popup).
+- `routes/Loading.jsx`, `Onboarding.jsx`, `CreateWallet.jsx`, `ImportWallet.jsx`, `Locked.jsx`, `Home.jsx`, `Send.jsx`, `Receive.jsx` — every Phase-1 route + its `.module.css`. Each route reads `shell` from context and picks its layout variant; each CSS module co-locates `-popup` / `-full` class variants where sizing diverges.
+- `shared/index.js` barrel + `packages/core/src/index.js` namespace export (`import { shared } from '@xchain-wallet/core'`).
+- `packages/core/package.json` exports map extended with `./shared` and `./shared/*`.
+
+**Closing the Phase-1 gaps**
+
+- **Popup gains Send** — popup `App.jsx`'s `unlockedView` now tracks `home | send | receive`; Home's Send button is live. `packages/extension/src/popup/messaging.js` adds a `sendAsset` helper targeting the host's `action.send` handler.
+- **Web gains Receive** — web `App.jsx` adds the `receive` sub-route and renders the shared `Receive`. `packages/web/src/messaging.js` adds a `generateReceiveAddress` helper targeting the host's `receive.getAddress` handler.
+- **Review shape converged** — shared `Send.jsx`'s review stage runs the user's draft through `decoder.decodeAction` so the plain-English summary + warnings banner match SignApproval's sign-screen. Memo `|` or `;` surfaces the same protocol-reject warning in both surfaces.
+- **Create flow converged on safer pattern** — shared `CreateWallet.jsx` generates the BIP39 mnemonic client-side and persists post-confirm via `messaging.importMnemonic`, matching the web shell's existing behavior. A user who closes the popup/tab at the mnemonic display stage leaves no vault behind (§19.2).
+
+### Changed
+
+- `packages/web/src/App.jsx` — `<ExtensionBanner>` hoisted to App-level above the router (previously per-route in Locked + Onboarding). Auto-hiding behavior is unchanged; the banner only renders when `window.xchain` is detected and not dismissed for the session. Double-render regression on Onboarding is impossible because the per-route `<ExtensionBanner>` was deleted.
+- Popup + web `App.jsx` are now thin: wrap in `<MessagingProvider>`, dispatch by state, pass `shell`/`messaging` through context. All route files live in `@xchain-wallet/core/shared/routes/`.
+
+### Removed
+
+Per-shell duplicates (hoisted to shared):
+
+- `packages/extension/src/popup/routes/*.{jsx,module.css}` — Locked, Loading, Onboarding, CreateWallet, ImportWallet, Home, Receive (all gone).
+- `packages/extension/src/popup/components/{MnemonicGrid,ChainBalanceCard}.{jsx,module.css}` — gone.
+- `packages/extension/src/popup/hooks/useAutoLock.js` — gone.
+- `packages/web/src/routes/*.{jsx,module.css}` — Locked, Loading, Onboarding, CreateWallet, ImportWallet, Home, Send (all gone).
+- `packages/web/src/components/MnemonicGrid.{jsx,module.css}` — gone.
+- `packages/web/src/components/ExtensionBanner.{jsx,module.css}` — retained (web-shell-specific chrome).
+
+### Tests
+
+- **New smoke** — `packages/core/test/shared-routes.smoke.js`. Asserts the core exports map, the 25 shared files exist, each route reads `useMessaging()` + calls its helpers via `messaging.X(...)` + drives `Screen` from `screenVariantFor`, both App.jsx wrap in `<MessagingProvider>` and import the 8 shared routes, the old per-shell duplicates are deleted, and both messaging modules expose the full surface (`unlockWallet`, `lockWallet`, `listWallets`, `getWalletBalances`, `getAddressesByChain`, `getNewestAddress`, `generateReceiveAddress`, `createWallet`, `importMnemonic`, `sendAsset`).
+- **Smokes updated** — `web-shell`, `web-send`, `web-onboarding`, `popup-shell`, `extension-onboarding`, `receive-view`, `home-lock`, `unlock-flow`, `e2e-harness` all re-target the shared paths and the `messaging.X` call convention. Behavioral assertions (real Vault round-trips against fake chrome.storage / fake IndexedDB) keep the same shape — only the static-regex checks moved.
+
+### Scope boundary
+
+- No new authoring features land in this piece. Token Creation Wizard (§40.1) + ISSUE/MINT/DESTROY (§40.2–§40.5) come next, building on the shared-routes surface.
+- Auto-lock stays popup-only for today (web shells opt out via `enabled: shell === 'popup' && !locking`). Cross-shell parity for auto-lock is a later polish.
+- Extension popup + web now both render the same `Home.jsx`. The full-screen Home uses a responsive grid of `ChainBalanceCard`s; the popup gets a single-column stack of the same cards — card internals unchanged.
+
 ## [0.45.0] - 2026-04-22
 
 Closes out Phase 1's buildable surface. One combined release covering Batch 5 (Vitest in core, Playwright harness, i18n scaffold, axe-core CI gate) + piece 19 (real SDK wiring), piece 20 (extension popup onboarding), piece 21 (threat-model artifact), and piece 22 (reproducible-build scaffold). Released as a single version because the pieces together cross the "Phase 1 shippable" line — the release-gate checklist in `IMPLEMENTATION_STATUS.md` drops from every-item-open to "external review + signed releases" as the remaining gate.

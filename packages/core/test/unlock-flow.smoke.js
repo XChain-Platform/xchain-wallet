@@ -46,22 +46,37 @@ const ext = join(wsRoot, 'packages', 'extension');
 
 // --- 1. Static surface -------------------------------------------------
 
+// Locked was hoisted from the popup into the shared-routes namespace
+// (piece 1 of the §40 shared-routes refactor). The popup App wires
+// <MessagingProvider shell="popup" messaging={messaging}> so this
+// shared route calls messaging.unlockWallet under the hood.
 const locked = readFileSync(
-    join(ext, 'src', 'popup', 'routes', 'Locked.jsx'),
+    join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', 'Locked.jsx'),
     'utf8',
 );
-assert.ok(locked.includes('unlockWallet'), 'Locked.jsx calls unlockWallet');
+assert.ok(
+    locked.includes('messaging.unlockWallet'),
+    'shared Locked.jsx calls messaging.unlockWallet',
+);
 assert.ok(
     locked.includes('type="password"'),
-    'Locked.jsx renders a password input',
+    'shared Locked.jsx renders a password input',
 );
 assert.ok(
     locked.includes("'InvalidPasswordError'"),
-    'Locked.jsx distinguishes InvalidPasswordError',
+    'shared Locked.jsx distinguishes InvalidPasswordError',
 );
 assert.ok(
     locked.includes('autoComplete="current-password"'),
-    'Locked.jsx password input has autoComplete hint',
+    'shared Locked.jsx password input has autoComplete hint',
+);
+const popupApp = readFileSync(
+    join(ext, 'src', 'popup', 'App.jsx'),
+    'utf8',
+);
+assert.ok(
+    popupApp.includes('shell="popup"') && popupApp.includes('MessagingProvider'),
+    'popup App.jsx wraps in MessagingProvider shell="popup"',
 );
 
 const msg = readFileSync(

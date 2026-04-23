@@ -38,22 +38,25 @@ assert.ok(
     'wallet.lock added to PRE_HOST_MESSAGE_TYPES',
 );
 
-const home = readFileSync(
-    join(ext, 'src', 'popup', 'routes', 'Home.jsx'),
-    'utf8',
-);
-for (const symbol of [
-    'lockWallet',
-    'listWallets',
-    'getWalletBalances',
-    'useAutoLock',
-    'ChainBalanceCard',
+// Home lives at @xchain-wallet/core/shared/routes/Home.jsx now. It
+// resolves lockWallet / listWallets / getWalletBalances off the
+// messaging module passed into <MessagingProvider>, and uses the
+// shared useAutoLock hook + ChainBalanceCard component.
+const sharedHome = join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', 'Home.jsx');
+const home = readFileSync(sharedHome, 'utf8');
+for (const call of [
+    'messaging.lockWallet',
+    'messaging.listWallets',
+    'messaging.getWalletBalances',
 ]) {
-    assert.ok(home.includes(symbol), `Home.jsx wires ${symbol}`);
+    assert.ok(home.includes(call), `shared Home.jsx wires ${call}`);
+}
+for (const symbol of ['useAutoLock', 'ChainBalanceCard']) {
+    assert.ok(home.includes(symbol), `shared Home.jsx imports ${symbol}`);
 }
 assert.ok(
     /registry as registryLib/.test(home),
-    'Home.jsx imports registry namespace for descriptor lookups',
+    'shared Home.jsx imports registry namespace for descriptor lookups',
 );
 
 const msg = readFileSync(
@@ -74,29 +77,29 @@ assert.ok(
 );
 
 const hook = readFileSync(
-    join(ext, 'src', 'popup', 'hooks', 'useAutoLock.js'),
+    join(wsRoot, 'packages', 'core', 'src', 'shared', 'hooks', 'useAutoLock.js'),
     'utf8',
 );
 assert.ok(
     /export function useAutoLock/.test(hook),
-    'useAutoLock.js exports the hook',
+    'shared useAutoLock.js exports the hook',
 );
 for (const ev of ['mousemove', 'keydown', 'scroll', 'click', 'touchstart']) {
     assert.ok(
         hook.includes(`'${ev}'`),
-        `useAutoLock listens for ${ev}`,
+        `shared useAutoLock listens for ${ev}`,
     );
 }
 
 const card = readFileSync(
-    join(ext, 'src', 'popup', 'components', 'ChainBalanceCard.jsx'),
+    join(wsRoot, 'packages', 'core', 'src', 'shared', 'components', 'ChainBalanceCard.jsx'),
     'utf8',
 );
 assert.ok(
     /export function ChainBalanceCard/.test(card),
-    'ChainBalanceCard exports the component',
+    'shared ChainBalanceCard exports the component',
 );
-assert.ok(card.includes('ChainBadge'), 'ChainBalanceCard uses ChainBadge');
+assert.ok(card.includes('ChainBadge'), 'shared ChainBalanceCard uses ChainBadge');
 
 const bg = readFileSync(join(ext, 'src', 'background.js'), 'utf8');
 assert.ok(bg.includes('tearDownHost'), 'background.js defines tearDownHost');

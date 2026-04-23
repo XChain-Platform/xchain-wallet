@@ -2,31 +2,46 @@
 //
 // Primary state (from the background):
 //   loading      -> no-wallet | locked | unlocked | error
-//   locked       -> unlocked            (piece 5's unlock flow)
-//   unlocked     -> locked              (user-triggered lock)
-//   no-wallet    -> locked              (onboarding → create/import → unlock)
+//   locked       -> unlocked
+//   unlocked     -> locked
+//   no-wallet    -> locked  (onboarding → create/import → unlock)
 //
 // Sub-routes:
 //   no-wallet   : welcome | create | import
-//   unlocked    : home | receive
+//   unlocked    : home | send | receive
+//
+// All routes render from @xchain-wallet/core/shared/routes/* via the
+// MessagingProvider context (shell="popup"). Popup-local wiring boils
+// down to session-state polling and sub-route navigation.
 
 import { useCallback, useEffect, useState } from 'react';
+import { MessagingProvider } from '@xchain-wallet/core/shared/MessagingProvider.jsx';
+import { Loading } from '@xchain-wallet/core/shared/routes/Loading.jsx';
+import { Onboarding } from '@xchain-wallet/core/shared/routes/Onboarding.jsx';
+import { CreateWallet } from '@xchain-wallet/core/shared/routes/CreateWallet.jsx';
+import { ImportWallet } from '@xchain-wallet/core/shared/routes/ImportWallet.jsx';
+import { Locked } from '@xchain-wallet/core/shared/routes/Locked.jsx';
+import { Home } from '@xchain-wallet/core/shared/routes/Home.jsx';
+import { Receive } from '@xchain-wallet/core/shared/routes/Receive.jsx';
+import { Send } from '@xchain-wallet/core/shared/routes/Send.jsx';
+import * as messaging from './messaging.js';
 import { getSessionStatus, listWallets } from './messaging.js';
-import { Loading } from './routes/Loading.jsx';
-import { Onboarding } from './routes/Onboarding.jsx';
-import { CreateWallet } from './routes/CreateWallet.jsx';
-import { ImportWallet } from './routes/ImportWallet.jsx';
-import { Locked } from './routes/Locked.jsx';
-import { Home } from './routes/Home.jsx';
-import { Receive } from './routes/Receive.jsx';
 
 export function App() {
+    return (
+        <MessagingProvider shell="popup" messaging={messaging}>
+            <AppInner />
+        </MessagingProvider>
+    );
+}
+
+function AppInner() {
     const [status, setStatus] = useState(/** @type {any} */ ({ state: 'loading' }));
     const [onboardingStep, setOnboardingStep] = useState(
         /** @type {'welcome' | 'create' | 'import'} */ ('welcome'),
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'receive'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive'} */ ('home'),
     );
     const [activeWalletId, setActiveWalletId] = useState(
         /** @type {string | null} */ (null),
@@ -43,9 +58,7 @@ export function App() {
             );
     }, []);
 
-    useEffect(() => {
-        refresh();
-    }, [refresh]);
+    useEffect(() => { refresh(); }, [refresh]);
 
     useEffect(() => {
         if (status.state !== 'unlocked') {
@@ -95,6 +108,14 @@ export function App() {
         case 'locked':
             return <Locked onUnlocked={refresh} />;
         case 'unlocked':
+            if (unlockedView === 'send' && activeWalletId) {
+                return (
+                    <Send
+                        walletId={activeWalletId}
+                        onBack={() => setUnlockedView('home')}
+                    />
+                );
+            }
             if (unlockedView === 'receive' && activeWalletId) {
                 return (
                     <Receive
@@ -106,7 +127,8 @@ export function App() {
             return (
                 <Home
                     onLocked={refresh}
-                    onReceive={() => setUnlockedView('receive')}
+                    onSend={activeWalletId ? () => setUnlockedView('send') : undefined}
+                    onReceive={activeWalletId ? () => setUnlockedView('receive') : undefined}
                 />
             );
         default:

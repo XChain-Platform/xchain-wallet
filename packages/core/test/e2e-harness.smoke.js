@@ -136,30 +136,15 @@ const expectedLabels = [
     'Back',
     'Import',
 ];
-const homeJsx = readFileSync(
-    join(wsRoot, 'packages', 'web', 'src', 'routes', 'Home.jsx'),
-    'utf8',
-);
-const onboardingJsx = readFileSync(
-    join(wsRoot, 'packages', 'web', 'src', 'routes', 'Onboarding.jsx'),
-    'utf8',
-);
-const createJsx = readFileSync(
-    join(wsRoot, 'packages', 'web', 'src', 'routes', 'CreateWallet.jsx'),
-    'utf8',
-);
-const importJsx = readFileSync(
-    join(wsRoot, 'packages', 'web', 'src', 'routes', 'ImportWallet.jsx'),
-    'utf8',
-);
-const sendJsx = readFileSync(
-    join(wsRoot, 'packages', 'web', 'src', 'routes', 'Send.jsx'),
-    'utf8',
-);
-const lockedJsx = readFileSync(
-    join(wsRoot, 'packages', 'web', 'src', 'routes', 'Locked.jsx'),
-    'utf8',
-);
+// Every Phase-1 route lives under @xchain-wallet/core/shared/routes/
+// post-refactor; the UI corpus cross-check reads them all from there.
+const sharedRoutes = join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes');
+const homeJsx = readFileSync(join(sharedRoutes, 'Home.jsx'), 'utf8');
+const onboardingJsx = readFileSync(join(sharedRoutes, 'Onboarding.jsx'), 'utf8');
+const createJsx = readFileSync(join(sharedRoutes, 'CreateWallet.jsx'), 'utf8');
+const importJsx = readFileSync(join(sharedRoutes, 'ImportWallet.jsx'), 'utf8');
+const sendJsx = readFileSync(join(sharedRoutes, 'Send.jsx'), 'utf8');
+const lockedJsx = readFileSync(join(sharedRoutes, 'Locked.jsx'), 'utf8');
 const uiCorpus = [homeJsx, onboardingJsx, createJsx, importJsx, sendJsx, lockedJsx].join('\n');
 for (const label of expectedLabels) {
     assert.ok(

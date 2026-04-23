@@ -1,0 +1,103 @@
+.card {
+    max-width: 560px;
+    margin: var(--xc-space-6) auto 0;
+    padding: var(--xc-space-6);
+    background: var(--xc-surface-raised);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-lg);
+    box-shadow: var(--xc-shadow-md);
+}
+
+.headPopup {
+    margin-bottom: var(--xc-space-3);
+}
+
+.headFull {
+    text-align: center;
+    margin-bottom: var(--xc-space-5);
+}
+
+.titlePopup {
+    font-size: var(--xc-text-lg);
+    font-weight: 700;
+    margin: 0 0 var(--xc-space-1);
+    color: var(--xc-text);
+}
+
+.titleFull {
+    font-size: var(--xc-text-xl);
+    font-weight: 700;
+    margin: 0 0 var(--xc-space-2);
+    color: var(--xc-text);
+}
+
+.subtitlePopup {
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    line-height: 1.4;
+    margin: 0;
+}
+
+.subtitleFull {
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text-muted);
+    line-height: 1.5;
+    margin: 0;
+}
+
+.mnemonicLabel {
+    display: block;
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text-muted);
+    font-weight: 500;
+    margin-bottom: var(--xc-space-1);
+}
+
+.mnemonicPopup {
+    width: 100%;
+    font-family: var(--xc-font-mono);
+    font-size: var(--xc-text-xs);
+    padding: var(--xc-space-2);
+    background: var(--xc-bg-muted);
+    border: 1px solid var(--xc-border-strong);
+    border-radius: var(--xc-radius-md);
+    color: var(--xc-text);
+    resize: vertical;
+    margin-bottom: var(--xc-space-3);
+    box-sizing: border-box;
+}
+
+.mnemonicFull {
+    width: 100%;
+    font-family: var(--xc-font-mono);
+    font-size: var(--xc-text-sm);
+    padding: var(--xc-space-3);
+    background: var(--xc-bg-muted);
+    border: 1px solid var(--xc-border-strong);
+    border-radius: var(--xc-radius-md);
+    color: var(--xc-text);
+    resize: vertical;
+    margin-bottom: var(--xc-space-3);
+    box-sizing: border-box;
+}
+
+.mnemonicPopup:focus,
+.mnemonicFull:focus {
+    outline: none;
+    border-color: var(--xc-accent-primary);
+    box-shadow: 0 0 0 3px var(--xc-focus-ring);
+}
+
+.actionsPopup {
+    display: flex;
+    gap: var(--xc-space-2);
+    justify-content: flex-end;
+    margin-top: var(--xc-space-3);
+}
+
+.actionsFull {
+    display: flex;
+    gap: var(--xc-space-2);
+    justify-content: flex-end;
+    margin-top: var(--xc-space-4);
+}

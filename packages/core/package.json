@@ -10,7 +10,9 @@
         "./ui": "./src/ui/index.js",
         "./ui/tokens.css": "./src/ui/tokens.css",
         "./ui/*": "./src/ui/*",
-        "./branding/*": "./src/branding/*"
+        "./branding/*": "./src/branding/*",
+        "./shared": "./src/shared/index.js",
+        "./shared/*": "./src/shared/*"
     },
     "scripts": {
         "test": "vitest run",

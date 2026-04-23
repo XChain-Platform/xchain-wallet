@@ -55,23 +55,29 @@ for (const fn of ['createWallet', 'importMnemonic']) {
     );
 }
 
-const create = readFileSync(
-    join(ext, 'src', 'popup', 'routes', 'CreateWallet.jsx'),
-    'utf8',
+// CreateWallet + ImportWallet are hoisted into @xchain-wallet/core/shared/routes.
+// The shared CreateWallet generates the mnemonic client-side and persists
+// post-confirm via messaging.importMnemonic — converged on the web shell's
+// post-confirm-commit pattern (§19.2: a user who bails at the display
+// stage leaves no vault behind).
+const sharedRoutes = join(
+    wsRoot, 'packages', 'core', 'src', 'shared', 'routes',
+);
+const create = readFileSync(join(sharedRoutes, 'CreateWallet.jsx'), 'utf8');
+assert.ok(
+    /messaging\.importMnemonic\(\{/.test(create),
+    'shared CreateWallet persists via messaging.importMnemonic',
 );
 assert.ok(
-    /createWallet\(\{/.test(create),
-    'popup CreateWallet calls createWallet helper',
+    /generateBip39Mnemonic/.test(create),
+    'shared CreateWallet generates BIP39 mnemonic client-side',
 );
-assert.ok(create.includes('MnemonicGrid'), 'popup CreateWallet shows MnemonicGrid');
+assert.ok(create.includes('MnemonicGrid'), 'shared CreateWallet shows MnemonicGrid');
 
-const imp = readFileSync(
-    join(ext, 'src', 'popup', 'routes', 'ImportWallet.jsx'),
-    'utf8',
-);
+const imp = readFileSync(join(sharedRoutes, 'ImportWallet.jsx'), 'utf8');
 assert.ok(
-    /importMnemonic\(\{/.test(imp),
-    'popup ImportWallet calls importMnemonic helper',
+    /messaging\.importMnemonic\(\{/.test(imp),
+    'shared ImportWallet calls messaging.importMnemonic',
 );
 
 // --- 2. Fake chrome.storage + runtime ------------------------------

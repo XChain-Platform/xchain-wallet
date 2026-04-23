@@ -94,3 +94,21 @@ export function getNewestAddress(walletId, chainId) {
 export function sendAsset(opts) {
     return /** @type {any} */ (sendMessage('action.send', opts));
 }
+
+/**
+ * Derive + persist the next unused external address for (wallet, chain).
+ * Requires the user's password because the signer re-derives the HD
+ * key material; the vault-level unlock doesn't cover the per-wallet
+ * seed decryption (§26 — password-never-stored posture).
+ *
+ * @param {object} opts
+ * @param {string} opts.walletId
+ * @param {string} opts.chainId
+ * @param {string} opts.password
+ * @param {string} [opts.bip39Passphrase]
+ * @param {string} [opts.addressType]
+ * @returns {Promise<{ id: string, address: string, label: string, addressType: string, derivationPath: string | null }>}
+ */
+export function generateReceiveAddress(opts) {
+    return /** @type {any} */ (sendMessage('receive.getAddress', opts));
+}

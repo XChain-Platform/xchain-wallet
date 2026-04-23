@@ -75,27 +75,47 @@ for (const state of ['loading', 'error', 'no-wallet', 'locked', 'unlocked']) {
 }
 assert.ok(app.includes('getSessionStatus'), 'App.jsx queries getSessionStatus');
 
-const locked = readFileSync(
-    join(webPkg, 'src', 'routes', 'Locked.jsx'),
+// Locked hoisted to @xchain-wallet/core/shared/routes — the shared
+// version unlocks via useMessaging(); the web App renders the
+// ExtensionBanner at App level, not inside the route.
+const sharedLocked = readFileSync(
+    join(webPkg, '..', 'core', 'src', 'shared', 'routes', 'Locked.jsx'),
     'utf8',
 );
-assert.ok(locked.includes('unlockWallet'), 'Locked.jsx calls unlockWallet');
 assert.ok(
-    locked.includes('<ExtensionBanner'),
-    'Locked.jsx renders ExtensionBanner',
+    sharedLocked.includes('messaging.unlockWallet'),
+    'shared Locked.jsx calls messaging.unlockWallet',
 );
 assert.ok(
-    locked.includes("'InvalidPasswordError'"),
-    'Locked.jsx distinguishes InvalidPasswordError',
+    sharedLocked.includes("'InvalidPasswordError'"),
+    'shared Locked.jsx distinguishes InvalidPasswordError',
+);
+assert.ok(
+    app.includes('<ExtensionBanner'),
+    'web App.jsx renders ExtensionBanner at App level',
 );
 
-const home = readFileSync(join(webPkg, 'src', 'routes', 'Home.jsx'), 'utf8');
-for (const fn of ['lockWallet', 'listWallets', 'getWalletBalances']) {
-    assert.ok(home.includes(fn), `Home.jsx wires ${fn}`);
+// Home is shared. The shell-variant driver (screenVariantFor) picks
+// Screen variant="full" when shell === 'web'; the web App wraps with
+// <MessagingProvider shell="web" ...>.
+const home = readFileSync(
+    join(webPkg, '..', 'core', 'src', 'shared', 'routes', 'Home.jsx'),
+    'utf8',
+);
+for (const call of [
+    'messaging.lockWallet',
+    'messaging.listWallets',
+    'messaging.getWalletBalances',
+]) {
+    assert.ok(home.includes(call), `shared Home.jsx wires ${call}`);
 }
 assert.ok(
-    /variant="full"/.test(home),
-    'Home.jsx renders Screen variant="full"',
+    /screenVariantFor/.test(home),
+    'shared Home.jsx drives Screen variant from shell',
+);
+assert.ok(
+    app.includes('shell="web"'),
+    'web App.jsx wraps in MessagingProvider shell="web"',
 );
 
 const banner = readFileSync(

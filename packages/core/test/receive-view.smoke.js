@@ -37,43 +37,50 @@ const ext = join(wsRoot, 'packages', 'extension');
 
 // --- 1. Static surface ------------------------------------------------
 
-const receive = readFileSync(
-    join(ext, 'src', 'popup', 'routes', 'Receive.jsx'),
-    'utf8',
+// Receive is shared-hoisted at @xchain-wallet/core/shared/routes/Receive.jsx.
+// Same data model as before (getAddressesByChain / getNewestAddress /
+// generateReceiveAddress), but routed through useMessaging().messaging.
+const sharedReceive = join(
+    wsRoot, 'packages', 'core', 'src', 'shared', 'routes', 'Receive.jsx',
 );
+const receive = readFileSync(sharedReceive, 'utf8');
 for (const symbol of [
     'QRCode',
     'encodeBip21Uri',
-    'getAddressesByChain',
-    'getNewestAddress',
-    'generateReceiveAddress',
     'ChainBadge',
     'AddressText',
     'CopyButton',
 ]) {
-    assert.ok(receive.includes(symbol), `Receive.jsx references ${symbol}`);
+    assert.ok(receive.includes(symbol), `shared Receive.jsx references ${symbol}`);
+}
+for (const call of [
+    'messaging.getAddressesByChain',
+    'messaging.getNewestAddress',
+    'messaging.generateReceiveAddress',
+]) {
+    assert.ok(receive.includes(call), `shared Receive.jsx wires ${call}`);
 }
 assert.ok(
     receive.includes("'InvalidPasswordError'"),
-    'Receive.jsx distinguishes InvalidPasswordError on derive',
+    'shared Receive.jsx distinguishes InvalidPasswordError on derive',
 );
 
-const home = readFileSync(
-    join(ext, 'src', 'popup', 'routes', 'Home.jsx'),
-    'utf8',
+const sharedHome = join(
+    wsRoot, 'packages', 'core', 'src', 'shared', 'routes', 'Home.jsx',
 );
+const home = readFileSync(sharedHome, 'utf8');
 assert.ok(
-    /props\.onReceive/.test(home) || /onReceive\s*\}/.test(home),
-    'Home.jsx accepts onReceive prop',
+    /onReceive/.test(home),
+    'shared Home.jsx accepts onReceive prop',
 );
-assert.ok(home.includes('onClick={onReceive}'), 'Home.jsx wires the Receive button');
+assert.ok(home.includes('onClick={onReceive}'), 'shared Home.jsx wires the Receive button');
 
 const app = readFileSync(
     join(ext, 'src', 'popup', 'App.jsx'),
     'utf8',
 );
-assert.ok(app.includes("'receive'"), 'App.jsx tracks receive sub-route');
-assert.ok(app.includes('<Receive'), 'App.jsx renders <Receive>');
+assert.ok(app.includes("'receive'"), 'popup App.jsx tracks receive sub-route');
+assert.ok(app.includes('<Receive'), 'popup App.jsx renders <Receive>');
 
 const msg = readFileSync(
     join(ext, 'src', 'popup', 'messaging.js'),

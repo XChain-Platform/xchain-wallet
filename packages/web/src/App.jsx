@@ -3,36 +3,51 @@
 //
 // Primary state (from getSessionStatus):
 //   loading      -> no-wallet | locked | unlocked | error
-//   locked       -> unlocked  (Locked screen fires onUnlocked on success)
+//   locked       -> unlocked  (Locked fires onUnlocked on success)
 //   unlocked     -> locked    (Home's Lock button fires onLocked)
-//   no-wallet    -> locked    (Create/Import complete; host is live; refresh())
+//   no-wallet    -> locked    (Create/Import complete; host is live)
 //
-// Sub-routes inside `no-wallet`:
-//   welcome | create | import
-// Sub-routes inside `unlocked`:
-//   home | send
+// Sub-routes inside `no-wallet`:  welcome | create | import
+// Sub-routes inside `unlocked`:   home | send | receive
 //
 // A successful create/import leaves the host live — the next
 // `getSessionStatus()` returns `unlocked` and the app transitions to
 // Home without a separate unlock step.
+//
+// The ExtensionBanner renders above the whole router so routes don't
+// need to know about web-only chrome. Auto-hides when `window.xchain`
+// isn't injected, or when the user dismisses it for the session.
 
 import { useCallback, useEffect, useState } from 'react';
+import { MessagingProvider } from '@xchain-wallet/core/shared/MessagingProvider.jsx';
+import { Loading } from '@xchain-wallet/core/shared/routes/Loading.jsx';
+import { Onboarding } from '@xchain-wallet/core/shared/routes/Onboarding.jsx';
+import { CreateWallet } from '@xchain-wallet/core/shared/routes/CreateWallet.jsx';
+import { ImportWallet } from '@xchain-wallet/core/shared/routes/ImportWallet.jsx';
+import { Locked } from '@xchain-wallet/core/shared/routes/Locked.jsx';
+import { Home } from '@xchain-wallet/core/shared/routes/Home.jsx';
+import { Send } from '@xchain-wallet/core/shared/routes/Send.jsx';
+import { Receive } from '@xchain-wallet/core/shared/routes/Receive.jsx';
+import * as messaging from './messaging.js';
 import { getSessionStatus, listWallets } from './messaging.js';
-import { Loading } from './routes/Loading.jsx';
-import { Onboarding } from './routes/Onboarding.jsx';
-import { CreateWallet } from './routes/CreateWallet.jsx';
-import { ImportWallet } from './routes/ImportWallet.jsx';
-import { Locked } from './routes/Locked.jsx';
-import { Home } from './routes/Home.jsx';
-import { Send } from './routes/Send.jsx';
+import { ExtensionBanner } from './components/ExtensionBanner.jsx';
 
 export function App() {
+    return (
+        <MessagingProvider shell="web" messaging={messaging}>
+            <ExtensionBanner />
+            <AppInner />
+        </MessagingProvider>
+    );
+}
+
+function AppInner() {
     const [status, setStatus] = useState(/** @type {any} */ ({ state: 'loading' }));
     const [onboardingStep, setOnboardingStep] = useState(
         /** @type {'welcome' | 'create' | 'import'} */ ('welcome'),
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive'} */ ('home'),
     );
     const [activeWalletId, setActiveWalletId] = useState(
         /** @type {string | null} */ (null),
@@ -49,12 +64,8 @@ export function App() {
             );
     }, []);
 
-    useEffect(() => {
-        refresh();
-    }, [refresh]);
+    useEffect(() => { refresh(); }, [refresh]);
 
-    // Cache the active wallet id at App level so sub-routes (Send) can
-    // reuse Home's single-wallet assumption without re-querying.
     useEffect(() => {
         if (status.state !== 'unlocked') {
             setActiveWalletId(null);
@@ -111,10 +122,19 @@ export function App() {
                     />
                 );
             }
+            if (unlockedView === 'receive' && activeWalletId) {
+                return (
+                    <Receive
+                        walletId={activeWalletId}
+                        onBack={() => setUnlockedView('home')}
+                    />
+                );
+            }
             return (
                 <Home
                     onLocked={refresh}
                     onSend={activeWalletId ? () => setUnlockedView('send') : undefined}
+                    onReceive={activeWalletId ? () => setUnlockedView('receive') : undefined}
                 />
             );
         default:

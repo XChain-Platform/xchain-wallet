@@ -61,7 +61,10 @@ assert.ok(
     'messaging.js targets session.status',
 );
 
-for (const route of ['Loading', 'Onboarding', 'Locked', 'Home']) {
+// Popup-local routes: Locked was hoisted into @xchain-wallet/core/shared/routes
+// (see shared-routes.smoke.js). Loading/Onboarding/Home stay popup-local
+// until Pieces 3 + 5 of the shared-routes refactor land.
+for (const route of ['Loading', 'Onboarding', 'Home']) {
     const src = readFileSync(
         join(ext, 'src', 'popup', 'routes', `${route}.jsx`),
         'utf8',
