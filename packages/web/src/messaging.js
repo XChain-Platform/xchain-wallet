@@ -129,6 +129,17 @@ export function destroyAsset(opts) {
 }
 
 /**
+ * Build, sign, and broadcast a BROADCAST action. See popup messaging.js
+ * for prop docs.
+ *
+ * @param {object} opts
+ * @returns {Promise<any>}
+ */
+export function broadcastAction(opts) {
+    return /** @type {any} */ (sendMessage('action.broadcast', opts));
+}
+
+/**
  * Persist a paired hardware signer (§17.6 / §18.3). See popup
  * messaging.js for prop docs.
  *

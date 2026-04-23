@@ -219,6 +219,29 @@ export function destroyAsset(opts) {
 }
 
 /**
+ * Build, sign, and broadcast a BROADCAST action — publishes arbitrary
+ * text / oracle value / feed reference on-chain, tied to the source
+ * address (§40.6). Version selection is the caller's responsibility:
+ * v0 plain message, v1 oracle (MESSAGE + VALUE + FEE), v2 feed
+ * (MESSAGE + FEE), v3 feed results (BROADCAST_ACTION_INDEX + VALUE).
+ *
+ * @param {object} opts
+ * @param {string} opts.walletId
+ * @param {string} opts.password
+ * @param {string} opts.chainId
+ * @param {{ address: string, publicKey: string, derivationPath?: string | null, addressId?: string }} opts.from
+ * @param {Record<string, string>} opts.params   BROADCAST field map (VERSION, MESSAGE or BROADCAST_ACTION_INDEX, optional VALUE, FEE, MEMO)
+ * @param {number} [opts.fee]
+ * @param {number} [opts.feePerKb]
+ * @param {boolean} [opts.rbf]
+ * @param {string} [opts.bip39Passphrase]
+ * @returns {Promise<any>}
+ */
+export function broadcastAction(opts) {
+    return /** @type {any} */ (sendMessage('action.broadcast', opts));
+}
+
+/**
  * Persist a paired hardware signer (§17.6 / §18.3). The caller runs
  * `pairTrezorSigner` (or the Ledger equivalent) in the renderer,
  * obtains the `pairingInfo` payload, and forwards it here. Idempotent

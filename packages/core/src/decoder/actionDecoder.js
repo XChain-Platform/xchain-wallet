@@ -152,7 +152,102 @@ export function decodeAction({ action, params, chainId, chainRegistry }) {
         return decodeBatch(p, chainId, chainName, chainSuffix, chainRegistry);
     }
 
+    if (action === 'BROADCAST') {
+        return decodeBroadcast(p, chainSuffix);
+    }
+
     return genericFallback(action, p, chainSuffix);
+}
+
+/**
+ * BROADCAST decoder — §40.6. Protocol BROADCAST.md defines four format
+ * versions; the wallet's authoring form emits v0/v1/v2 based on which
+ * fields the user filled (v3 — feed-results — is a resolve path reached
+ * from an existing feed, not a standalone authoring surface). Each
+ * version prints a different summary so the sign screen tells the user
+ * whether they're publishing a plain message, an oracle value, or a
+ * feed-URL announcement.
+ */
+function decodeBroadcast(p, chainSuffix) {
+    const version = str(p.VERSION) || '0';
+    const message = str(p.MESSAGE);
+    const value = str(p.VALUE);
+    const fee = str(p.FEE);
+    const memo = str(p.MEMO);
+    const actionIndex = str(p.BROADCAST_ACTION_INDEX);
+
+    const baseWarnings = [
+        ...(memo && /[|;]/.test(memo)
+            ? ['Memo contains | or ; — the protocol will reject this transaction.']
+            : []),
+        ...(message && /[|;]/.test(message)
+            ? ['Message contains | or ; — the protocol will reject this transaction.']
+            : []),
+    ];
+
+    if (version === '3') {
+        // Feed-results: publish a resolving value for a prior feed.
+        return {
+            summary: `Publish feed result${chainSuffix}${actionIndex ? ` (feed #${actionIndex})` : ''}`,
+            details: [
+                ...(actionIndex ? [{ label: 'Feed action index', value: actionIndex }] : []),
+                ...(value ? [{ label: 'Value', value }] : []),
+                ...(memo ? [{ label: 'Memo', value: memo }] : []),
+            ],
+            warnings: [
+                ...(!actionIndex ? ['Feed action index is empty.'] : []),
+                ...baseWarnings,
+            ],
+        };
+    }
+
+    if (version === '1') {
+        // Oracle: feed label + value + usage fee.
+        return {
+            summary: `Publish oracle value ${value || '?'} for ${message || '?'}${chainSuffix}`,
+            details: [
+                { label: 'Feed', value: message },
+                { label: 'Value', value },
+                ...(fee ? [{ label: 'Feed fee', value: `${fee}%` }] : []),
+                ...(memo ? [{ label: 'Memo', value: memo }] : []),
+            ],
+            warnings: [
+                ...(!message ? ['Feed name is empty.'] : []),
+                ...(!value ? ['Oracle value is empty.'] : []),
+                ...baseWarnings,
+            ],
+        };
+    }
+
+    if (version === '2') {
+        // Feed: URL + usage fee, no value.
+        return {
+            summary: `Publish feed ${message || '?'}${chainSuffix}`,
+            details: [
+                { label: 'Feed', value: message },
+                ...(fee ? [{ label: 'Feed fee', value: `${fee}%` }] : []),
+                ...(memo ? [{ label: 'Memo', value: memo }] : []),
+            ],
+            warnings: [
+                ...(!message ? ['Feed identifier is empty.'] : []),
+                ...baseWarnings,
+            ],
+        };
+    }
+
+    // Version 0 — plain broadcast message.
+    return {
+        summary: `Broadcast "${message || ''}"${chainSuffix}`,
+        details: [
+            { label: 'Message', value: message },
+            ...(value ? [{ label: 'Value', value }] : []),
+            ...(memo ? [{ label: 'Memo', value: memo }] : []),
+        ],
+        warnings: [
+            ...(!message ? ['Message is empty.'] : []),
+            ...baseWarnings,
+        ],
+    };
 }
 
 /**

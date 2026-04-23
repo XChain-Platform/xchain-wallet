@@ -7,6 +7,65 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.59.0] - 2026-04-23
+
+Phase 2 — Step 20 of 26 — piece 6. BROADCAST authoring form (§40.6). First Batch-2 feature to land after Piece 5 closed out Electron packaging. Reuses the Piece 3 (ISSUE / MINT / DESTROY) pattern end-to-end: shared form route, core flow, background handler, per-shell messaging helper, ActionsMenu entry, App.jsx sub-route.
+
+### Added
+
+**Core flow** (`packages/core/src/flows/broadcastAction.js`)
+
+- `broadcastAction(opts)` — mirrors `mintAsset` / `destroyAsset`. Validates that at least `MESSAGE` or `BROADCAST_ACTION_INDEX` is present (the protocol validator enforces the rest), normalizes the source address, and forwards to `submitAction` with `action: 'BROADCAST'`. `pendingTxMeta.actionSummary` reflects whether this is a plain broadcast, an oracle value, or a feed-result resolve.
+- Re-exported from `@xchain-wallet/core` via `flows/index.js`.
+
+**Decoder** (`packages/core/src/decoder/actionDecoder.js`)
+
+- New `decodeBroadcast` case covering all four protocol format versions:
+  - v0 plain message — summary quotes the text; warns on empty MESSAGE.
+  - v1 oracle — summary includes the value + feed label; surfaces "Feed fee" as a percentage.
+  - v2 feed — summary includes the feed identifier; surfaces "Feed fee".
+  - v3 feed results — summary announces the publish + feed index.
+- Warns on `|` / `;` in MESSAGE or MEMO so users see the protocol-level rejection risk before signing.
+
+**Shared form route** (`packages/core/src/shared/routes/BroadcastForm.jsx`)
+
+- Same three-stage state machine as MintForm / DestroyForm (`form → review → submitting → done`). Reuses `IssueTokenForm.module.css` for visual parity.
+- Fields: chain picker (when the wallet has addresses on >1 chain), source-address picker (defaults to newest external HD address on the chosen chain), Feed name (optional), Message (required unless Feed name is set), Value (optional numeric), Feed fee (optional %), "Prepend UTC timestamp to memo" checkbox.
+- Version selection auto-derived from filled fields: `{ VALUE, FEE } → v1`, `{ FEE } only → v2`, else `v0`.
+- MESSAGE composition: feed name wins if provided; text becomes MEMO (prefixed with an ISO timestamp when the checkbox is on). When only text is provided, it fills MESSAGE.
+- Review runs the composed params through `decoder.decodeAction` so the sign screen's summary + warnings match what will land on-chain. Wrong-password errors (`InvalidPasswordError`) surface inline without leaving the review stage.
+
+**Background handler** (`packages/extension/src/background/createBackgroundHost.js`)
+
+- `host.register('action.broadcast', …)` — forwards `vault + chainRegistry + sdkRegistry` into `broadcastAction`.
+
+**Shell messaging helpers**
+
+- `packages/extension/src/popup/messaging.js` — `broadcastAction(opts)` → `sendMessage('action.broadcast', opts)`.
+- `packages/web/src/messaging.js` — parity helper, same wire.
+- `packages/desktop/renderer/messaging.js` — parity helper, routes through the preload bridge.
+
+**ActionsMenu entry + App routing**
+
+- `popup/App.jsx`, `web/App.jsx`, `desktop/renderer/App.jsx` — new `'broadcast'` sub-route renders `<BroadcastForm />`; ActionsMenu's `buildActionEntries` now includes a "Broadcast" entry between "Transfer ownership" and "Pair hardware signer".
+
+### Smoke
+
+- `packages/core/test/broadcast-form.smoke.js` — new.
+  - File layout + export shape + CSS reuse.
+  - Three-stage state machine, decoder wiring with `action: 'BROADCAST'`, params composer correctness (MESSAGE/VALUE/FEE/MEMO conditional setting + timestamp injection).
+  - `messaging.broadcastAction` exported from all three shells; action.broadcast handler registered.
+  - Core flow validation guards (`opts`, `params`, `MESSAGE or BROADCAST_ACTION_INDEX`, `from`).
+  - Decoder coverage for all four format versions, including the pipe/semicolon warning.
+  - ActionsMenu + App.jsx wiring in popup + web + desktop.
+
+All 38 smokes green.
+
+### Known deferrals
+
+- Feed-results (v3) — no standalone authoring lane in this form. The resolve-a-feed path will land alongside the feed-detail page in a later step (likely after a dispensers / explorer surface exists to navigate from).
+- Feed discovery / recent broadcasts list — the form publishes; it doesn't yet surface an address's published feeds. That UI depends on explorer integration and is out of scope for §40.6.
+
 ## [0.58.0] - 2026-04-23
 
 Phase 2 — Step 19 of 26 — piece 5d. Electron-builder packaging pipeline for the desktop shell (§40.12, §51). Closes Piece 5 (Electron desktop shell). Ships the scaffolding needed to produce installable artifacts on all three target OSes — electron-builder config, Vite renderer bundle, Dockerfile-based reproducible builds (Level-2 scoped to the pre-signing artifact), URI scheme registration (Tier-1 `xchain:` claimed unconditionally + Tier-2 `bitcoin/litecoin/dogecoin` registered at install, claimed only via runtime opt-in), deep-link dispatch with BIP21 parsing, electron-updater wiring against `downloads.xchain.io`, CSP tightening + hardened-runtime entitlements. Code signing is structured but env-var-driven — no certs in-repo; `pnpm run dist` works without signing for dev builds.

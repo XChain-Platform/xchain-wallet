@@ -80,6 +80,11 @@ export function destroyAsset(opts) {
 }
 
 /** @param {object} opts */
+export function broadcastAction(opts) {
+    return /** @type {any} */ (sendMessage('action.broadcast', opts));
+}
+
+/** @param {object} opts */
 export function registerSigner(opts) {
     return /** @type {any} */ (sendMessage('signer.register', opts));
 }

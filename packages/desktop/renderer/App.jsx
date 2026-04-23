@@ -33,6 +33,7 @@ import { IssueTokenForm } from '@xchain-wallet/core/shared/routes/IssueTokenForm
 import { MintForm } from '@xchain-wallet/core/shared/routes/MintForm.jsx';
 import { DestroyForm } from '@xchain-wallet/core/shared/routes/DestroyForm.jsx';
 import { TokenAdminForm } from '@xchain-wallet/core/shared/routes/TokenAdminForm.jsx';
+import { BroadcastForm } from '@xchain-wallet/core/shared/routes/BroadcastForm.jsx';
 import { PairSignerForm } from '@xchain-wallet/core/shared/routes/PairSignerForm.jsx';
 import * as messaging from './messaging.js';
 import { getSessionStatus, listWallets } from './messaging.js';
@@ -53,7 +54,7 @@ function AppInner() {
         /** @type {'welcome' | 'create' | 'import'} */ ('welcome'),
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'pair-signer'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'pair-signer'} */ ('home'),
     );
     const [activeWalletId, setActiveWalletId] = useState(
         /** @type {string | null} */ (null),
@@ -182,6 +183,14 @@ function AppInner() {
                     />
                 );
             }
+            if (unlockedView === 'broadcast' && activeWalletId) {
+                return (
+                    <BroadcastForm
+                        walletId={activeWalletId}
+                        onBack={() => setUnlockedView('actions')}
+                    />
+                );
+            }
             if (unlockedView === 'pair-signer' && activeWalletId) {
                 return (
                     <PairSignerForm
@@ -203,6 +212,7 @@ function AppInner() {
                             onLock: () => setUnlockedView('lock'),
                             onUpdateDescription: () => setUnlockedView('description'),
                             onTransferOwnership: () => setUnlockedView('transfer'),
+                            onBroadcast: () => setUnlockedView('broadcast'),
                             onPairSigner: () => setUnlockedView('pair-signer'),
                         })}
                         onBack={() => setUnlockedView('home')}
@@ -226,6 +236,7 @@ function AppInner() {
 function buildActionEntries({
     onIssue, onMint, onDestroy,
     onLock, onUpdateDescription, onTransferOwnership,
+    onBroadcast,
     onPairSigner,
 }) {
     return [
@@ -264,6 +275,12 @@ function buildActionEntries({
             label: 'Transfer ownership',
             description: 'Hand token ownership to another address (§40.5).',
             onSelect: onTransferOwnership,
+        },
+        {
+            id: 'broadcast',
+            label: 'Broadcast',
+            description: 'Publish text, oracle value, or feed reference on-chain (§40.6).',
+            onSelect: onBroadcast,
         },
         {
             id: 'pair-signer',
