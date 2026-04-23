@@ -12,6 +12,7 @@ import { decodeWif } from '../crypto/wif.js';
 import { isValidBip39Mnemonic } from '../crypto/mnemonic.js';
 import { isValidCounterwalletMnemonic } from '../crypto/counterwallet.js';
 import { parseBip21Uri } from './bip21.js';
+import { parseXcwChunk, XCW_PREFIX } from './psbtQr.js';
 
 export const PSBT_HEX_PREFIX = '70736274ff';
 
@@ -20,6 +21,7 @@ export const PSBT_HEX_PREFIX = '70736274ff';
  *   | { type: 'bip21', scheme: string, address: string, parts: import('./bip21.js').Bip21Parts }
  *   | { type: 'xchain-uri', parts: import('./bip21.js').Bip21Parts }
  *   | { type: 'psbt-hex', psbtHex: string }
+ *   | { type: 'xcw-chunk', n: number, total: number, content: Uint8Array }
  *   | { type: 'wif', wif: string, decoded: ReturnType<typeof decodeWif> }
  *   | { type: 'mnemonic-bip39', mnemonic: string }
  *   | { type: 'mnemonic-counterwallet', mnemonic: string }
@@ -42,6 +44,24 @@ export function detectQrContent(input, opts = {}) {
     if (typeof input !== 'string') return { type: 'unknown' };
     const raw = input.trim();
     if (raw.length === 0) return { type: 'unknown' };
+
+    // --- Step 0: XCW chunked PSBT-over-QR (§20.3) ---
+    // Matched before generic URI detection because `XCW:` with a BIP21
+    // parser loosely applied would classify the chunk as a bip21 URI
+    // with `xcw` scheme.
+    if (raw.startsWith(XCW_PREFIX)) {
+        try {
+            const parsed = parseXcwChunk(raw);
+            return {
+                type: 'xcw-chunk',
+                n: parsed.n,
+                total: parsed.total,
+                content: parsed.content,
+            };
+        } catch {
+            // malformed XCW — fall through
+        }
+    }
 
     // --- Step 1: URI-like scheme:value ---
     const colonIdx = raw.indexOf(':');
