@@ -23,8 +23,9 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {() => void} [props.onSend]          navigate to Send sub-route
  * @param {() => void} [props.onReceive]       navigate to Receive sub-route
  * @param {() => void} [props.onCreateToken]   navigate to Token Wizard sub-route (§40.1)
+ * @param {() => void} [props.onActions]       navigate to the Actions menu (§40.2+)
  */
-export function Home({ onLocked, onSend, onReceive, onCreateToken }) {
+export function Home({ onLocked, onSend, onReceive, onCreateToken, onActions }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -177,6 +178,14 @@ export function Home({ onLocked, onSend, onReceive, onCreateToken }) {
                         disabled={!onCreateToken}
                     >
                         Create a token
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        block={!isFull}
+                        onClick={onActions}
+                        disabled={!onActions}
+                    >
+                        More actions
                     </Button>
                 </div>
             </div>

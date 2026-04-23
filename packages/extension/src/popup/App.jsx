@@ -25,6 +25,11 @@ import { Home } from '@xchain-wallet/core/shared/routes/Home.jsx';
 import { Receive } from '@xchain-wallet/core/shared/routes/Receive.jsx';
 import { Send } from '@xchain-wallet/core/shared/routes/Send.jsx';
 import { TokenWizard } from '@xchain-wallet/core/shared/routes/TokenWizard.jsx';
+import { ActionsMenu } from '@xchain-wallet/core/shared/routes/ActionsMenu.jsx';
+import { IssueTokenForm } from '@xchain-wallet/core/shared/routes/IssueTokenForm.jsx';
+import { MintForm } from '@xchain-wallet/core/shared/routes/MintForm.jsx';
+import { DestroyForm } from '@xchain-wallet/core/shared/routes/DestroyForm.jsx';
+import { TokenAdminForm } from '@xchain-wallet/core/shared/routes/TokenAdminForm.jsx';
 import * as messaging from './messaging.js';
 import { getSessionStatus, listWallets } from './messaging.js';
 
@@ -42,7 +47,7 @@ function AppInner() {
         /** @type {'welcome' | 'create' | 'import'} */ ('welcome'),
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'wizard'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer'} */ ('home'),
     );
     const [activeWalletId, setActiveWalletId] = useState(
         /** @type {string | null} */ (null),
@@ -133,15 +138,118 @@ function AppInner() {
                     />
                 );
             }
+            if (unlockedView === 'issue' && activeWalletId) {
+                return (
+                    <IssueTokenForm
+                        walletId={activeWalletId}
+                        onBack={() => setUnlockedView('actions')}
+                    />
+                );
+            }
+            if (unlockedView === 'mint' && activeWalletId) {
+                return (
+                    <MintForm
+                        walletId={activeWalletId}
+                        onBack={() => setUnlockedView('actions')}
+                    />
+                );
+            }
+            if (unlockedView === 'destroy' && activeWalletId) {
+                return (
+                    <DestroyForm
+                        walletId={activeWalletId}
+                        onBack={() => setUnlockedView('actions')}
+                    />
+                );
+            }
+            if (
+                (unlockedView === 'lock'
+                    || unlockedView === 'description'
+                    || unlockedView === 'transfer')
+                && activeWalletId
+            ) {
+                return (
+                    <TokenAdminForm
+                        walletId={activeWalletId}
+                        mode={unlockedView}
+                        onBack={() => setUnlockedView('actions')}
+                    />
+                );
+            }
+            if (unlockedView === 'actions' && activeWalletId) {
+                return (
+                    <ActionsMenu
+                        entries={buildActionEntries({
+                            onIssue: () => setUnlockedView('issue'),
+                            onMint: () => setUnlockedView('mint'),
+                            onDestroy: () => setUnlockedView('destroy'),
+                            onLock: () => setUnlockedView('lock'),
+                            onUpdateDescription: () => setUnlockedView('description'),
+                            onTransferOwnership: () => setUnlockedView('transfer'),
+                        })}
+                        onBack={() => setUnlockedView('home')}
+                    />
+                );
+            }
             return (
                 <Home
                     onLocked={refresh}
                     onSend={activeWalletId ? () => setUnlockedView('send') : undefined}
                     onReceive={activeWalletId ? () => setUnlockedView('receive') : undefined}
                     onCreateToken={activeWalletId ? () => setUnlockedView('wizard') : undefined}
+                    onActions={activeWalletId ? () => setUnlockedView('actions') : undefined}
                 />
             );
         default:
             return <Loading error={`unknown state "${status.state}"`} />;
     }
+}
+
+/**
+ * Build the Actions menu entries shared across both shells. Each entry
+ * maps a §40.2+ authoring surface to the host's sub-route. New entries
+ * land here as the standalone forms ship (MINT, DESTROY, admin, …).
+ */
+function buildActionEntries({
+    onIssue, onMint, onDestroy,
+    onLock, onUpdateDescription, onTransferOwnership,
+}) {
+    return [
+        {
+            id: 'issue',
+            label: 'Issue token',
+            description: 'Advanced ISSUE form — every field exposed (§40.2).',
+            onSelect: onIssue,
+        },
+        {
+            id: 'mint',
+            label: 'Mint',
+            description: 'Mint additional supply of a token you own (§40.3).',
+            onSelect: onMint,
+        },
+        {
+            id: 'destroy',
+            label: 'Destroy',
+            description: 'Burn part of your balance — irreversible (§40.4).',
+            onSelect: onDestroy,
+        },
+        {
+            id: 'lock',
+            label: 'Lock supply',
+            description: 'Freeze supply + minting for a token you own — permanent (§40.5).',
+            onSelect: onLock,
+        },
+        {
+            id: 'description',
+            label: 'Update description',
+            description: 'Change a token\'s on-chain description (§40.5).',
+            onSelect: onUpdateDescription,
+        },
+        {
+            id: 'transfer',
+            label: 'Transfer ownership',
+            description: 'Hand token ownership to another address (§40.5).',
+            onSelect: onTransferOwnership,
+        },
+    ];
 }

@@ -7,6 +7,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.51.0] - 2026-04-23
+
+Phase 2 — Steps 8–11 of 26 — pieces 3a + 3b + 3c + 3d. Closes out **Piece 3 (standalone ISSUE / MINT / DESTROY + token admin surfaces, §40.2–§40.5)** end-to-end. Home now opens a new Actions menu that reaches six authoring surfaces: standalone ISSUE, MINT, DESTROY, Lock supply, Update description, Transfer ownership. Each form reviews its draft through the shared action decoder (same preview the dApp-initiated sign screen uses) and signs through a background handler backed by a core flow.
+
+### Added
+
+**Piece 3a / Step 8 — standalone ISSUE (§40.2)**
+
+- `packages/core/src/shared/routes/IssueTokenForm.jsx` + `.module.css` — two-stage authoring surface (form → review/submitting → done) mirroring `Send.jsx`. Every ISSUE v0 field the wizard's Custom composer exposes is available on a single screen: ticker, supply, divisible, description, lock supply + minting, transfer ownership. Review step runs `decoder.decodeAction({ action: 'ISSUE', params })` so the plain-English summary matches the sign screen shown for dApp-initiated ISSUE. Sign uses the existing `messaging.issueToken` helper from v0.50.0 — no new flow or background handler needed.
+- `packages/core/src/shared/routes/ActionsMenu.jsx` + `.module.css` — secondary surface listing §40.2+ authoring forms. Entries are passed in as a prop so each shell controls which actions appear; one screen today, gains entries as Piece 3 progresses.
+- `packages/core/src/shared/routes/Home.jsx` — accepts a new `onActions` prop and renders a fourth "More actions" button below the Send / Receive / Create-a-token row.
+- `packages/extension/src/popup/App.jsx` + `packages/web/src/App.jsx` — new `'actions'` and `'issue'` sub-routes; a shared `buildActionEntries` helper in each shell wires each entry's `onSelect` back to `setUnlockedView`.
+- New smoke: `packages/core/test/issue-form.smoke.js` — exercises the two-stage state machine, ticker validation (A-Z/0-9), positive-supply validation, ISSUE v0 composer (MAX_SUPPLY + MINT_SUPPLY from supply, DECIMALS 8/0 from divisible, LOCK_MAX_SUPPLY + LOCK_MINT on lock, TRANSFER on transferTo), decoder wiring, messaging.issueToken call-site, ActionsMenu surface, Home onActions wiring, both App.jsx sub-routes.
+
+**Piece 3b / Step 9 — MINT form (§40.3)**
+
+- `packages/core/src/flows/mintAsset.js` — wraps `submitAction` with `action: 'MINT'`. Guard-rails reject missing opts / params / TICK / AMOUNT / from. Re-exported from `@xchain-wallet/core` flows.
+- `packages/extension/src/background/createBackgroundHost.js` — registers `action.mint`, forwarding to `mintAsset` with vault + registries injected.
+- `packages/extension/src/popup/messaging.js` + `packages/web/src/messaging.js` — each exports `mintAsset(opts)` routing to `action.mint`.
+- `packages/core/src/shared/routes/MintForm.jsx` — two-stage form (ticker + amount + optional destination) reusing `IssueTokenForm.module.css`. Ticker allows a period so subassets (`PARENT.CHILD`) can be minted. Empty DESTINATION renders in the preview as "broadcasting address" — matches protocol §MINT semantics. Wired into the Actions menu as "Mint" and into both `App.jsx` sub-routes.
+- New smoke: `packages/core/test/mint-form.smoke.js` — exercises the flow's guard-rails live, verifies the decoder wiring + messaging.mintAsset call-site + action.mint handler + both messaging helpers + ActionsMenu entry + popup/web sub-route wiring.
+
+**Piece 3c / Step 10 — DESTROY form (§40.4)**
+
+- `packages/core/src/flows/destroyAsset.js` — `submitAction` wrapper with `action: 'DESTROY'` and the same guard-rail shape as `mintAsset`.
+- `packages/extension/src/background/createBackgroundHost.js` — registers `action.destroy`.
+- `packages/extension/src/popup/messaging.js` + `packages/web/src/messaging.js` — each exports `destroyAsset(opts)` routing to `action.destroy`.
+- `packages/core/src/shared/routes/DestroyForm.jsx` — two-stage form (ticker + amount) with an explicit "Destroy is irreversible" warning rendered on the form stage (before composing, not just on review). Sign button uses the `danger` Button variant to visually reinforce the intent. Decoder smoke case 2h already covers the decoder's irreversibility warning; the form renders it prominently on review.
+- New smoke: `packages/core/test/destroy-form.smoke.js` — verifies irreversibility prose, danger variant, flow guard-rails, action.destroy handler, messaging helpers, ActionsMenu entry, and popup/web sub-routes.
+
+**Piece 3d / Step 11 — token admin (§40.5)**
+
+- `packages/core/src/shared/routes/TokenAdminForm.jsx` — single parameterized component driven by a `mode` prop (`'lock'` | `'description'` | `'transfer'`) delivering the three §40.5 surfaces:
+    - **Lock supply** — ISSUE v3 with `LOCK_MAX_SUPPLY` + `LOCK_MINT`. Renders a "Locking is permanent" warning on the form stage and uses the `danger` Button variant on the sign button.
+    - **Update description** — ISSUE v1 with a single `DESCRIPTION` field. Replaces the existing on-chain description.
+    - **Transfer ownership** — ISSUE v0 with only `TRANSFER` set. New owner address required.
+
+  All three reuse `messaging.issueToken` — no new background handler or core flow needed, since every admin action is ISSUE at the protocol level.
+- `packages/extension/src/popup/App.jsx` + `packages/web/src/App.jsx` — three new sub-routes (`'lock'`, `'description'`, `'transfer'`), all rendering `<TokenAdminForm mode={unlockedView} …/>`. `buildActionEntries` grows three more entries so the Actions menu surfaces all six of Piece 3.
+- New smoke: `packages/core/test/token-admin-form.smoke.js` — exercises the mode-driven composer (v3 + lock flags / v1 + DESCRIPTION / v0 + TRANSFER), lock-only permanence warning, danger-variant on lock sign, decoder wiring, messaging.issueToken reuse, and all three sub-routes in both shells.
+
+### Changed
+
+- `packages/core/src/shared/routes/Home.jsx` now exposes a fourth "More actions" button in addition to Send / Receive / Create-a-token, gated on `onActions`. Popup + web shells pass `onActions` when an `activeWalletId` is present.
+- `packages/core/src/flows/index.js` re-exports the two new flows: `mintAsset` and `destroyAsset`.
+- `packages/extension/src/background/createBackgroundHost.js` handler surface grows two entries: `action.mint` and `action.destroy`.
+
+### Developer notes
+
+- Across Piece 3, each form mirrors `Send.jsx`'s two-stage shape (form → review/submitting → done) rather than the wizard's five-stage shape — standalone forms don't need a template picker or chain picker screen. Chain picker is inline at the top when the wallet has addresses on more than one chain.
+- The Custom wizard template and the standalone ISSUE form are deliberately redundant surfaces: the wizard is the guided entry point; the standalone form is the escape hatch for power users (and eventually the Token detail page, which will link into it for specific tokens).
+- Admin modes pick ISSUE protocol versions based on what yields the cleanest decoded summary (see `action-decoder.smoke.js` cases 2b–2d). A pure lock uses v3, a pure description update uses v1, a pure transfer uses v0.
+- MintForm + DestroyForm accept tickers with a period so subasset mints / destroys work; the top-level wizard validator rejects periods because it joins `PARENT.CHILD` itself.
+- Smoke count: 29. vitest-setup smoke reports the new count; no existing smokes regressed.
+
 ## [0.50.0] - 2026-04-23
 
 Phase 2 — Steps 5-7 of 26 — pieces 2c + 2d + 2e. Closes out **Piece 2 (Token Creation Wizard, §40.1)** end-to-end. The wizard is now reachable from Home on both popup + web, all six templates are interactive with per-template field visibility + composition, and the sign stage runs through a real `action.issue` background handler backed by a new `issueToken` core flow. First Phase-2 user-visible feature shipped.

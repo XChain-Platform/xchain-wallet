@@ -24,6 +24,8 @@ const {
     sendAsset,
     sweepAsset,
     issueToken,
+    mintAsset,
+    destroyAsset,
     walletBalances,
     addressBalances,
     addressHistory,
@@ -205,6 +207,14 @@ export function createBackgroundHost(deps) {
 
     host.register('action.issue', async (req, { vault, chainRegistry, sdkRegistry }) => {
         return issueToken({ ...req, vault, chainRegistry, sdkRegistry });
+    });
+
+    host.register('action.mint', async (req, { vault, chainRegistry, sdkRegistry }) => {
+        return mintAsset({ ...req, vault, chainRegistry, sdkRegistry });
+    });
+
+    host.register('action.destroy', async (req, { vault, chainRegistry, sdkRegistry }) => {
+        return destroyAsset({ ...req, vault, chainRegistry, sdkRegistry });
     });
 
     // --- Reads ---------------------------------------------------------------

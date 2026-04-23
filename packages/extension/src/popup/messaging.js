@@ -176,3 +176,44 @@ export function sendAsset(opts) {
 export function issueToken(opts) {
     return /** @type {any} */ (sendMessage('action.issue', opts));
 }
+
+/**
+ * Build, sign, and broadcast a MINT action — mints additional supply of
+ * an existing mintable token. Per-mint-limit enforcement happens at the
+ * protocol level; this helper doesn't re-check it.
+ *
+ * @param {object} opts
+ * @param {string} opts.walletId
+ * @param {string} opts.password
+ * @param {string} opts.chainId
+ * @param {{ address: string, publicKey: string, derivationPath?: string | null, addressId?: string }} opts.from
+ * @param {Record<string, string>} opts.params        MINT field map (TICK, AMOUNT, optional DESTINATION)
+ * @param {number} [opts.fee]
+ * @param {number} [opts.feePerKb]
+ * @param {boolean} [opts.rbf]
+ * @param {string} [opts.bip39Passphrase]
+ * @returns {Promise<any>}
+ */
+export function mintAsset(opts) {
+    return /** @type {any} */ (sendMessage('action.mint', opts));
+}
+
+/**
+ * Build, sign, and broadcast a DESTROY action — burns `AMOUNT` of the
+ * caller's balance of `TICK`. Irreversible at the protocol level.
+ *
+ * @param {object} opts
+ * @param {string} opts.walletId
+ * @param {string} opts.password
+ * @param {string} opts.chainId
+ * @param {{ address: string, publicKey: string, derivationPath?: string | null, addressId?: string }} opts.from
+ * @param {Record<string, string>} opts.params        DESTROY field map (TICK, AMOUNT)
+ * @param {number} [opts.fee]
+ * @param {number} [opts.feePerKb]
+ * @param {boolean} [opts.rbf]
+ * @param {string} [opts.bip39Passphrase]
+ * @returns {Promise<any>}
+ */
+export function destroyAsset(opts) {
+    return /** @type {any} */ (sendMessage('action.destroy', opts));
+}

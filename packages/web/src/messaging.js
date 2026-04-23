@@ -107,6 +107,28 @@ export function issueToken(opts) {
 }
 
 /**
+ * Build, sign, and broadcast a MINT action. See popup messaging.js for
+ * prop docs.
+ *
+ * @param {object} opts
+ * @returns {Promise<any>}
+ */
+export function mintAsset(opts) {
+    return /** @type {any} */ (sendMessage('action.mint', opts));
+}
+
+/**
+ * Build, sign, and broadcast a DESTROY action. See popup messaging.js
+ * for prop docs.
+ *
+ * @param {object} opts
+ * @returns {Promise<any>}
+ */
+export function destroyAsset(opts) {
+    return /** @type {any} */ (sendMessage('action.destroy', opts));
+}
+
+/**
  * Derive + persist the next unused external address for (wallet, chain).
  * Requires the user's password because the signer re-derives the HD
  * key material; the vault-level unlock doesn't cover the per-wallet
