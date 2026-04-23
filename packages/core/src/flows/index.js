@@ -33,3 +33,4 @@ export {
     WrongPasswordError,
 } from './importWif.js';
 export { signMessageFlow, signPsbtFlow } from './signFlows.js';
+export { createDemoWallet } from './createDemoWallet.js';

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-04-22
+
+### Added
+
+**`createDemoWallet(opts)`** (§25.2) — ephemeral try-before-commit wallet
+- In-memory only (`InMemoryBackend`); nothing ever touches IndexedDB / chrome.storage / file
+- Auto-generated 64-char hex password (256 bits) returned to the caller — shell holds it for the session, drops it when the user exits demo
+- Intentionally weak KDF (`iterations: 1, memory: 8192`) — the ciphertext never reaches an attacker, so paying ~1s of Argon2id buys nothing and makes demo feel sluggish
+- Per-spec the shell does NOT display the mnemonic (nothing useful to back up for a throwaway wallet)
+- Default `activeChainIds` is the three regtest chains (no endpoint dependency, no mainnet confusion); overridable
+- Returned `{ vault, password, walletId, mnemonic, wallet, account, addresses }` drives every existing flow (unlockWallet / receiveAddress / walletBalances / sendAsset / …) unchanged — demo mode is the same code path with a different backend
+
 ## [0.14.0] - 2026-04-22
 
 ### Added
