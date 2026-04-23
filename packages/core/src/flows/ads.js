@@ -6,14 +6,32 @@
 // equal to the current accumulated amount; the accumulator then
 // resets and the donation is counted in `lifetimeDonatedSats`.
 //
-// This module ships the arithmetic + state-transition logic. The
-// submitAction integration (inject donation output into
-// encoderOpts.customOutputs, then call commitAdsStep after a
-// successful broadcast) needs a per-chain donation address, which is
-// a §5.5 placeholder for now — this module stays address-agnostic.
+// This module ships three layers:
 //
-// `stepAdsAccumulator` is pure; `commitAdsStep` is the vault-aware
-// wrapper that persists the updated Settings.
+//   • `resolveAdsForNextTx`   — pure arithmetic only, ignores the chain
+//                               descriptor. Returns the amount that
+//                               WOULD be donated if ADS were fully
+//                               configured. Kept for callers that
+//                               want the raw accounting.
+//
+//   • `resolveAdsPlanForNextTx` — adds the configuration check from
+//                               §5.5: if the chain descriptor's
+//                               `adsDonationAddress` is the
+//                               placeholder sentinel, `canSubmit` is
+//                               false and the submission integration
+//                               skips the output injection (counters
+//                               still advance normally so the user's
+//                               lifetimeTxCount reflects reality).
+//
+//   • `stepAdsAccumulator` + `commitAdsStep` — state transition after
+//                               a broadcast. Pure + vault-aware pair.
+//
+// The submitAction integration (inject donation output into
+// encoderOpts.customOutputs, then call commitAdsStep after a
+// successful broadcast) now uses `resolveAdsPlanForNextTx` + the
+// descriptor's `adsDonationAddress`.
+
+import { isDonationAddressConfigured } from '../registry/validate.js';
 
 /**
  * Check whether the NEXT transaction on `chainId` should include a
@@ -34,6 +52,75 @@ export function resolveAdsForNextTx(settings, chainId) {
         return { donationAmount: state.accumulatedSats };
     }
     return { donationAmount: 0 };
+}
+
+/**
+ * Configuration-aware plan for the NEXT transaction. Combines the
+ * arithmetic result from `resolveAdsForNextTx` with the chain
+ * descriptor's donation-address status. `canSubmit` is true only when
+ * both are met: the accumulator is over threshold AND the descriptor
+ * carries a real address (not the §5.5 placeholder sentinel).
+ *
+ * Callers that want to actually inject the output check `canSubmit`.
+ * Callers doing UI preview / stats use `donationAmount` directly.
+ *
+ * @param {import('../schemas/settings.js').Settings | null} settings
+ * @param {string} chainId
+ * @param {import('../registry/index.js').ChainRegistry} chainRegistry
+ * @returns {{ donationAmount: number, donationAddress: string | null, canSubmit: boolean, reason: 'ok' | 'ads-disabled' | 'chain-not-seeded' | 'trigger-not-reached' | 'address-not-configured' | 'unknown-chain' }}
+ */
+export function resolveAdsPlanForNextTx(settings, chainId, chainRegistry) {
+    const descriptor = chainRegistry?.get?.(chainId);
+    if (!descriptor) {
+        return {
+            donationAmount: 0,
+            donationAddress: null,
+            canSubmit: false,
+            reason: 'unknown-chain',
+        };
+    }
+    if (!settings || !settings.ads || !settings.ads.enabled) {
+        return {
+            donationAmount: 0,
+            donationAddress: null,
+            canSubmit: false,
+            reason: 'ads-disabled',
+        };
+    }
+    const state = settings.ads.perChain?.[chainId];
+    if (!state) {
+        return {
+            donationAmount: 0,
+            donationAddress: null,
+            canSubmit: false,
+            reason: 'chain-not-seeded',
+        };
+    }
+    if (state.accumulatedSats < state.triggerAmountSats) {
+        return {
+            donationAmount: 0,
+            donationAddress: null,
+            canSubmit: false,
+            reason: 'trigger-not-reached',
+        };
+    }
+    if (!isDonationAddressConfigured(descriptor)) {
+        // Arithmetic says donate, but the address is still the §5.5
+        // placeholder. Surface the amount so UI can show "pending
+        // donation $X — address not yet configured" but do NOT inject.
+        return {
+            donationAmount: state.accumulatedSats,
+            donationAddress: null,
+            canSubmit: false,
+            reason: 'address-not-configured',
+        };
+    }
+    return {
+        donationAmount: state.accumulatedSats,
+        donationAddress: descriptor.adsDonationAddress,
+        canSubmit: true,
+        reason: 'ok',
+    };
 }
 
 /**

@@ -3,6 +3,7 @@
 // Dogecoin's fork, but per-chain Settings still drive behavior.
 
 import { DOGECOIN_ACTIONS } from '../actions.js';
+import { ADS_DONATION_ADDRESS_PLACEHOLDER } from '../validate.js';
 
 const COMMON = {
     coin: 'dogecoin',
@@ -22,6 +23,7 @@ const COMMON = {
     },
     supportedActions: DOGECOIN_ACTIONS,
     uriScheme: 'dogecoin',
+    adsDonationAddress: ADS_DONATION_ADDRESS_PLACEHOLDER,
 };
 
 /** @type {import('../validate.js').ChainDescriptor[]} */

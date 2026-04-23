@@ -2,6 +2,7 @@
 // No staking / smart-contract actions at launch (BTC-exclusive).
 
 import { LITECOIN_ACTIONS } from '../actions.js';
+import { ADS_DONATION_ADDRESS_PLACEHOLDER } from '../validate.js';
 
 const COMMON = {
     coin: 'litecoin',
@@ -23,6 +24,7 @@ const COMMON = {
     },
     supportedActions: LITECOIN_ACTIONS,
     uriScheme: 'litecoin',
+    adsDonationAddress: ADS_DONATION_ADDRESS_PLACEHOLDER,
 };
 
 /** @type {import('../validate.js').ChainDescriptor[]} */

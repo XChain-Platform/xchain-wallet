@@ -17,6 +17,7 @@
 import { unlockWallet } from './unlockWallet.js';
 import { submitWithSigner } from '../sdk/submitWithSigner.js';
 import { createPendingTx } from '../schemas/pendingTx.js';
+import { commitAdsStep, resolveAdsPlanForNextTx } from './ads.js';
 
 /**
  * @typedef {Object} PendingTxMeta
@@ -77,6 +78,44 @@ export async function submitAction({
 }) {
     const descriptor = chainRegistry.get(chainId);
     if (!descriptor) throw new Error(`submitAction: unknown chain "${chainId}"`);
+
+    // §36.3 ADS — resolve the donation plan ONCE up front against the
+    // current settings snapshot. If `canSubmit`, inject a customOutput
+    // into encoderOpts so the encoder builds the donation into the
+    // same transaction. After a successful broadcast we call
+    // `commitAdsStep` with the resolved `donationIncluded` so the
+    // accumulator resets / lifetimeDonatedSats advances correctly.
+    //
+    // If ADS is enabled but not `canSubmit` (e.g. placeholder donation
+    // address still in the descriptor), we still advance the counter
+    // with `donationIncluded=false` — the user's lifetimeTxCount must
+    // reflect the actual tx that was broadcast, regardless of whether
+    // the donation fired.
+    const adsSettingsSnapshot = await vault.settings.get();
+    const adsPlan = resolveAdsPlanForNextTx(
+        adsSettingsSnapshot,
+        chainId,
+        chainRegistry,
+    );
+    const adsEnabledForChain =
+        adsSettingsSnapshot?.ads?.enabled === true &&
+        !!adsSettingsSnapshot?.ads?.perChain?.[chainId];
+
+    /** @type {typeof encoderOpts} */
+    let effectiveEncoderOpts = encoderOpts;
+    if (adsPlan.canSubmit) {
+        const donationOutput = {
+            address: adsPlan.donationAddress,
+            value: adsPlan.donationAmount,
+        };
+        effectiveEncoderOpts = {
+            ...encoderOpts,
+            customOutputs: [
+                ...(Array.isArray(encoderOpts?.customOutputs) ? encoderOpts.customOutputs : []),
+                donationOutput,
+            ],
+        };
+    }
 
     // If the caller supplied pendingTxMeta, set up lifecycle persistence.
     // The tracker mutates a mutable record and writes through to the vault
@@ -150,7 +189,7 @@ export async function submitAction({
                 sdkRegistry,
                 chainId,
                 actionData,
-                encoderOpts,
+                encoderOpts: effectiveEncoderOpts,
                 signer,
                 signingPaths,
                 waitForTxid,
@@ -168,6 +207,35 @@ export async function submitAction({
         }
     } finally {
         signer.lock();
+    }
+
+    // §36.3 — advance the ADS accumulator after a successful submit.
+    // Only fire when ADS is actually enabled for this chain; otherwise
+    // `stepAdsAccumulator` is identity but the extra vault write is
+    // wasted. `donationIncluded` mirrors `adsPlan.canSubmit` so the
+    // two code paths (injected + not-injected) advance the counters
+    // correctly.
+    if (adsEnabledForChain) {
+        try {
+            await commitAdsStep({
+                vault,
+                chainId,
+                donationIncluded: adsPlan.canSubmit,
+            });
+        } catch (e) {
+            // ADS accounting is non-critical — don't let a write failure
+            // here obscure the successful broadcast from the caller.
+            // The next tx will try again. Surface via onProgress for
+            // observability.
+            if (onProgress) {
+                try {
+                    onProgress('ads-commit-failed', {
+                        chainId,
+                        error: e && e.message ? String(e.message) : String(e),
+                    });
+                } catch { /* swallow */ }
+            }
+        }
     }
 
     // Settle: ensure the final txid and status reach the record even if

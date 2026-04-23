@@ -137,4 +137,9 @@ export {
     DOGECOIN_ACTIONS,
     LITECOIN_ACTIONS,
 } from './actions.js';
-export { FEE_UNITS, FEE_STRATEGY_NAMES } from './validate.js';
+export {
+    FEE_UNITS,
+    FEE_STRATEGY_NAMES,
+    ADS_DONATION_ADDRESS_PLACEHOLDER,
+    isDonationAddressConfigured,
+} from './validate.js';

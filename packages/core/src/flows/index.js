@@ -55,6 +55,7 @@ export { signMessageFlow, signPsbtFlow } from './signFlows.js';
 export { createDemoWallet } from './createDemoWallet.js';
 export {
     resolveAdsForNextTx,
+    resolveAdsPlanForNextTx,
     stepAdsAccumulator,
     commitAdsStep,
 } from './ads.js';

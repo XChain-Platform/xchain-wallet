@@ -16,6 +16,24 @@ import {
     result,
 } from '../schemas/validate.js';
 
+// §5.5 + §36.3: donation addresses are TBD per chain at launch. Any
+// descriptor with this literal string in `adsDonationAddress` is
+// treated as "not configured" — the ADS resolver refuses to submit a
+// donation output for that chain, and the submitAction integration
+// advances the accumulator as if ADS were disabled. A grep-replace
+// before mainnet release physically can't be missed because the
+// sentinel is an obvious non-address string.
+export const ADS_DONATION_ADDRESS_PLACEHOLDER = 'PLACEHOLDER_REPLACE_BEFORE_MAINNET';
+
+/**
+ * @param {Pick<ChainDescriptor, 'adsDonationAddress'>} descriptor
+ * @returns {boolean}
+ */
+export function isDonationAddressConfigured(descriptor) {
+    if (!descriptor || typeof descriptor.adsDonationAddress !== 'string') return false;
+    return descriptor.adsDonationAddress !== ADS_DONATION_ADDRESS_PLACEHOLDER;
+}
+
 export const FEE_UNITS = /** @type {const} */ ([
     'sats-per-vbyte',
     'sats-per-kbyte',
@@ -60,6 +78,7 @@ export const FEE_STRATEGY_NAMES = /** @type {const} */ ([
  * @property {EndpointConfig} explorer
  * @property {EndpointConfig} encoder
  * @property {EndpointConfig} hub
+ * @property {string} adsDonationAddress          §36.3 destination for Automatic Donation System output; `ADS_DONATION_ADDRESS_PLACEHOLDER` disables submission
  * @property {boolean} [isUserAdded]              set by registry for Developer Mode entries
  */
 
@@ -126,6 +145,12 @@ export function validateChainDescriptor(record) {
     check(errors, 'explorer', isEndpoint(r.explorer), 'malformed');
     check(errors, 'encoder', isEndpoint(r.encoder), 'malformed');
     check(errors, 'hub', isEndpoint(r.hub), 'malformed');
+    check(
+        errors,
+        'adsDonationAddress',
+        isNonEmptyString(r.adsDonationAddress),
+        `must be a non-empty string (use ADS_DONATION_ADDRESS_PLACEHOLDER "${ADS_DONATION_ADDRESS_PLACEHOLDER}" when unset)`,
+    );
     if (r.isUserAdded !== undefined) {
         check(errors, 'isUserAdded', isBoolean(r.isUserAdded), 'must be a boolean');
     }

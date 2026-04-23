@@ -4,6 +4,7 @@
 // — real endpoints resolve before launch.
 
 import { BITCOIN_ACTIONS } from '../actions.js';
+import { ADS_DONATION_ADDRESS_PLACEHOLDER } from '../validate.js';
 
 const COMMON = {
     coin: 'bitcoin',
@@ -26,6 +27,7 @@ const COMMON = {
     },
     supportedActions: BITCOIN_ACTIONS,
     uriScheme: 'bitcoin',
+    adsDonationAddress: ADS_DONATION_ADDRESS_PLACEHOLDER,
 };
 
 /** @type {import('../validate.js').ChainDescriptor[]} */
