@@ -65,6 +65,16 @@ export function sendAsset(opts) {
 }
 
 /** @param {object} opts */
+export function sendAssetHw(opts) {
+    return /** @type {any} */ (sendMessage('action.send.hw', opts));
+}
+
+/** @param {{ signerId: string, chainId?: string }} opts */
+export function getSignerStatus(opts) {
+    return /** @type {any} */ (sendMessage('signer.status', opts));
+}
+
+/** @param {object} opts */
 export function issueToken(opts) {
     return /** @type {any} */ (sendMessage('action.issue', opts));
 }

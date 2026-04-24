@@ -7,6 +7,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.68.0] - 2026-04-24
+
+HW Sign follow-up — shell integration slice one of three. Wires the core primitives from v0.66.0 + v0.67.0 into live background handlers + messaging helpers + the Send review/sign screen. After this step, the Send form renders `HwSignBlock` (not the password input) when the source address is a paired Trezor/Ledger, gates Submit on `status === 'available'`, and dispatches via `messaging.sendAssetHw` through a background handler that builds the `RemoteSigner` on demand.
+
+The one remaining piece to make this function end-to-end on hardware is the renderer↔background port RPC — the live `TrezorSigner` / `LedgerSigner` instances paired during §17.6 live in the renderer, and `signerBridge` stays empty until the renderer opens a port and calls `signerBridge.setTransport`. Until then, `action.send.hw` errors cleanly with `"Hardware signer is not connected"` and `signer.status` reports `{ status: 'idle', detail: 'signer bridge not connected' }`.
+
+### Added
+
+**Background — `packages/extension/src/background/signerBridge.js`**
+
+Module-scoped registry keyed by `signerId` → `RemoteSigner` transport function. Populated at pair/connect time by the renderer; consumed by `action.*.hw` handlers at sign time. Exposes `setTransport(id, fn)` / `getTransport(id)` / `clearTransport(id)` / `clearAll()` / `registeredIds()`. The module's doc comment lays out the full port-RPC protocol the wiring step will implement: renderer opens `chrome.runtime.connect({ name: 'signer-bridge' })`, posts `signer.register` with its live signer id, background wraps the port as a transport, sign-time calls propagate as `signer.sign.request` / `signer.sign.response`, and port disconnect drops the registration so in-flight requests reject with "signer bridge disconnected".
+
+**Background handlers — `createBackgroundHost.js`**
+
+- `action.send.hw` — HW-wallet SEND. Loads the source `Address` record, runs `flows.resolveSigner({ vault, address })` → HW descriptor, looks up the transport via `signerBridge.getTransport`, builds a `RemoteSigner` via `flows.buildRemoteSigner`, and calls `sendAsset({ ..., signer })` — no password, skips `unlockWallet`, skips `signer.lock()`. Drops the request's `password` field defensively in case a stale field comes through from a form draft.
+- `signer.status` — Lightweight signer-status probe. Routes directly through the bridge transport (no vault / SDK touch). Returns `{ status: 'idle', detail: 'signer bridge not connected' }` when the bridge isn't populated (distinct UX signal vs the signer actively reporting `'disconnected'`). Transport throws map to `{ status: 'disconnected', detail: msg }`.
+- New `loadAddressForHwSigning(vault, req)` helper — resolves the source `Address` record from `req.from.addressId` with a fallback to a by-address-string scan.
+- Imports `resolveSigner` + `buildRemoteSigner` from core flows.
+
+**Messaging helpers — all three shells**
+
+- `packages/extension/src/popup/messaging.js`: `sendAssetHw(opts)` + `getSignerStatus({ signerId, chainId? })` routing via `action.send.hw` / `signer.status`. JSDoc notes the handler's bridge-not-connected error.
+- `packages/web/src/messaging.js`: same two helpers.
+- `packages/desktop/renderer/messaging.js`: same two helpers.
+
+**UI — Send.jsx HW branch**
+
+- Detects HW source via `fromAddress.source === 'trezor' || fromAddress.source === 'ledger'`, flips the review/sign screen between two layouts:
+  - **Software**: existing password `<Input>`.
+  - **Hardware**: `<HwSignBlock>` rendering §18.5 `DerivationPathCrossCheck` + live device-status banner. `getStatus` is wired to `messaging.getSignerStatus({ signerId, chainId })`; `onStatusChange` exposes live state to the form so the Submit button gates on `hwStatus === 'available'`.
+- Submit button copy flips to `"Sign on Trezor"` / `"Sign on Ledger"` in the HW branch; disabled until the device reports ready.
+- Submit handler branches: software → `messaging.sendAsset({ ..., password })`; HW → `messaging.sendAssetHw({ ..., signerId })`. Error surface unified (HW path doesn't have a password field to refocus).
+- `source` + `signerId` are now forwarded in the `from` payload so the background can resolve the SignerRecord.
+
+### Changed
+
+- `packages/core/test/hw-sign-e2e.smoke.js` — extended to cover the new wiring:
+  - signerBridge module: live registry round-trip (set/get/clear), `registeredIds()` shape, guard-rails on bad input.
+  - createBackgroundHost: both handlers registered, `resolveSigner` + `buildRemoteSigner` imported, bridge lookup call, "Hardware signer is not connected" error present.
+  - Each of popup / web / desktop messaging: `sendAssetHw` + `getSignerStatus` exports, correct routing types.
+  - Send.jsx static checks: HwSignBlock import, `isHwSource` branch, call-sites, device-aware button copy, status-gated disable.
+- Smoke count holds at 47 (all new assertions land in the existing `hw-sign-e2e.smoke.js`).
+
+### Developer notes
+
+- The core `@xchain-wallet/core` package is unchanged by this step — only shell packages + the shared `Send.jsx` route pick up wiring. The version bump is synchronized per `feedback_wallet_versioning` convention.
+- `action.send.hw` loads the Address via `vault.addresses.get(fromAddressId)`; the form now forwards both `source` and `signerId` on the `from` payload so `resolveSigner` has the information it needs. Wallet-internal code that constructs `from` objects for HW addresses (e.g., Send's `handleSubmit` HW branch) should preserve these fields end-to-end.
+- Port-RPC TODO: popup / web / desktop each need a renderer-side bridge module that (a) opens a long-lived port at app boot, (b) calls `signerBridge.setTransport` from the background side when the renderer posts `signer.register` with a live signer id (constructed during `pairTrezorSigner` / `pairLedgerSigner`), (c) listens for `signer.sign.request` / `.response` from the background, dispatches to the local `TrezorSigner` / `LedgerSigner` by id, replies. The module scope is ~150 LOC; see `signerBridge.js`'s header for the full protocol sketch.
+- Form-replication TODO: the HW branch in `Send.jsx` is the exemplar. Issue, Mint, Destroy, Broadcast, Dispenser, Dividend, AirDrop, CreateList, Advanced, and Sweep each need the same branch (HwSignBlock + `sendAssetHw`-equivalent messaging call). Mechanical, ~30 LOC per form.
+
 ## [0.67.0] - 2026-04-24
 
 HW Sign — Step 5 of 5 — core primitives for hardware-signer integration with action flows. This step refactors `submitAction` to accept a pre-built signer (bypassing the software-wallet password-unlock path), loosens `normalizeSource` so HW-sourced addresses flow through the send/issue/... wrappers without explicit rejection, adds a `resolveSigner` / `buildRemoteSigner` helper pair that background handlers use to decide between software and remote signing, and lands the shared UI primitives (`useSignerStatus` hook + `HwSignBlock` component) every review/sign screen will render in the HW branch. End-to-end smoke proves the full chain runs: background `RemoteSigner.signPsbt` → transport → renderer-side `TrezorSigner.signPsbt` → `sdk.wallet.decomposePsbt` → `trezorFormat` → `connect.signTransaction` → serialized tx → `sdk.wallet.txidOf` → back.

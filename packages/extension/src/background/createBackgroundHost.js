@@ -15,6 +15,7 @@
 import { flows } from '@xchain-wallet/core';
 import { MessageHost } from './MessageHost.js';
 import { registerBridgeHandlers } from '../bridge/handlers.js';
+import * as signerBridge from './signerBridge.js';
 
 const {
     createWallet,
@@ -51,6 +52,8 @@ const {
     registerSigner,
     listSignersForWallet,
     unregisterSigner,
+    resolveSigner,
+    buildRemoteSigner,
     exportPrivateKey,
     walletBalances,
     addressBalances,
@@ -86,6 +89,33 @@ async function addressesByChain(req, { vault, chainRegistry }) {
         byChain[chainId].push(a);
     }
     return byChain;
+}
+
+/**
+ * Look up the Address record a `action.*.hw` handler needs to resolve
+ * the right SignerRecord. The request carries `from.addressId` (the
+ * Address record's id, filled by the form) OR a plain `from` triple
+ * from the form. We fetch the live Address so `resolveSigner` has
+ * the canonical `source` + `signerId` fields.
+ *
+ * @param {import('@xchain-wallet/core').storage.Vault} vault
+ * @param {any} req
+ * @returns {Promise<import('@xchain-wallet/core').schemas.Address>}
+ */
+async function loadAddressForHwSigning(vault, req) {
+    const fromAddressId = req?.from?.addressId;
+    if (typeof fromAddressId === 'string' && fromAddressId.length > 0) {
+        const addr = await vault.addresses.get(fromAddressId);
+        if (addr) return addr;
+    }
+    // Fallback — find by address string within this wallet. Handles
+    // edge cases where the form omits addressId.
+    if (req?.from?.address && req?.walletId) {
+        const all = await vault.addresses.list();
+        const match = all.find((a) => a.address === req.from.address);
+        if (match) return match;
+    }
+    throw new Error('action.*.hw: could not resolve source address record');
 }
 
 /**
@@ -225,6 +255,54 @@ export function createBackgroundHost(deps) {
 
     host.register('action.send', async (req, { vault, chainRegistry, sdkRegistry }) => {
         return sendAsset({ ...req, vault, chainRegistry, sdkRegistry });
+    });
+
+    // HW variant — no password. The renderer (popup / web / desktop)
+    // owns the live TrezorSigner / LedgerSigner instance, registered
+    // against `signerBridge` when the user paired. The handler
+    // resolves the address → HW descriptor → builds a RemoteSigner
+    // whose transport routes through the bridge.
+    host.register('action.send.hw', async (req, { vault, chainRegistry, sdkRegistry }) => {
+        const address = await loadAddressForHwSigning(vault, req);
+        const descriptor = await resolveSigner({ vault, address });
+        if (descriptor.kind !== 'trezor' && descriptor.kind !== 'ledger') {
+            throw new Error('action.send.hw: source address is not a hardware wallet');
+        }
+        const transport = signerBridge.getTransport(descriptor.signerRecord.id);
+        if (!transport) {
+            throw new Error(
+                'Hardware signer is not connected. Open the wallet UI, re-pair if needed, and try again.',
+            );
+        }
+        const signer = buildRemoteSigner(descriptor, transport);
+        const { password: _password, ...rest } = req;
+        return sendAsset({ ...rest, vault, chainRegistry, sdkRegistry, signer });
+    });
+
+    // Signer status probe — routes straight through the signer bridge
+    // without touching vault/SDK. Returns `'idle'` when the bridge
+    // isn't connected yet (renderer hasn't registered), giving the
+    // UI a distinct state vs. the signer actively reporting
+    // 'disconnected'.
+    host.register('signer.status', async (req) => {
+        const signerId = req?.signerId;
+        if (typeof signerId !== 'string' || signerId.length === 0) {
+            throw new Error('signer.status: signerId is required');
+        }
+        const transport = signerBridge.getTransport(signerId);
+        if (!transport) return { status: 'idle', detail: 'signer bridge not connected' };
+        try {
+            const res = await transport({
+                op: 'status',
+                payload: { signerId, chainId: req?.chainId },
+            });
+            return res;
+        } catch (err) {
+            return {
+                status: 'disconnected',
+                detail: err && err.message ? String(err.message) : String(err),
+            };
+        }
     });
 
     host.register('action.sweep', async (req, { vault, chainRegistry, sdkRegistry }) => {

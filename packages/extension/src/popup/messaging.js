@@ -155,6 +155,51 @@ export function sendAsset(opts) {
 }
 
 /**
+ * HW-wallet variant of sendAsset. No password (HW keys live on the
+ * device). The background handler resolves the `signerId` to a
+ * SignerRecord, builds a RemoteSigner wrapping a transport that
+ * routes `signer.sign.request` messages to the renderer-hosted
+ * Trezor/Ledger signer instance (registered at pair time via
+ * `signerBridge.connect`), and calls sendAsset with the injected
+ * signer — bypassing the software-wallet password-unlock path.
+ *
+ * Until the renderer↔background port RPC ships, the background
+ * handler throws "signer bridge not connected"; the Send form
+ * surfaces this at submit time so the UX is honest about which
+ * surface is wired.
+ *
+ * @param {object} opts
+ * @param {string} opts.walletId
+ * @param {string} opts.chainId
+ * @param {string} opts.signerId
+ * @param {{ address: string, publicKey: string, derivationPath: string, addressId: string, source: 'trezor'|'ledger' }} opts.from
+ * @param {string} opts.to
+ * @param {string} opts.asset
+ * @param {string | number} opts.amount
+ * @param {string} [opts.memo]
+ * @param {number} [opts.fee]
+ * @param {number} [opts.feePerKb]
+ * @param {boolean} [opts.rbf]
+ * @returns {Promise<any>}
+ */
+export function sendAssetHw(opts) {
+    return /** @type {any} */ (sendMessage('action.send.hw', opts));
+}
+
+/**
+ * Query the live status of a paired HW signer. Returns the same
+ * SignerStatus values the Signer interface defines
+ * (`'available' | 'wrong-app' | 'locked' | 'disconnected' | 'error'`).
+ * Used by sign screens to drive HwSignBlock's status banner.
+ *
+ * @param {{ signerId: string, chainId?: string }} opts
+ * @returns {Promise<string | { status: string, detail?: string }>}
+ */
+export function getSignerStatus(opts) {
+    return /** @type {any} */ (sendMessage('signer.status', opts));
+}
+
+/**
  * Build, sign, and broadcast an ISSUE action — creates or updates a
  * token on the XChain protocol. Fee-paid from the wallet's source
  * address (`from`); ticker + supply + lock flags + transfer targets

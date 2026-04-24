@@ -465,6 +465,123 @@ assert.ok(/DerivationPathCrossCheck/.test(blockSrc), 'HwSignBlock composes the �
 assert.ok(/useSignerStatus/.test(blockSrc), 'HwSignBlock uses the useSignerStatus hook');
 assert.ok(/wrong-app/.test(blockSrc), 'HwSignBlock handles wrong-app');
 
+// ---------------------------------------------------------------
+// 9. Extension background: signerBridge registry + action.send.hw
+//    + signer.status handlers (static + behavioral checks)
+// ---------------------------------------------------------------
+
+const ext = join(wsRoot, 'packages', 'extension');
+
+const bridgePath = join(ext, 'src', 'background', 'signerBridge.js');
+assert.ok(existsSync(bridgePath), 'signerBridge.js exists in extension background');
+const bridgeSrc = readFileSync(bridgePath, 'utf8');
+for (const sym of ['setTransport', 'getTransport', 'clearTransport', 'clearAll', 'registeredIds']) {
+    assert.ok(
+        new RegExp(`export function ${sym}\\b`).test(bridgeSrc),
+        `signerBridge exports ${sym}`,
+    );
+}
+
+// Runtime-check the module (import with file: URL since the test
+// runner doesn't resolve the @xchain-wallet/extension workspace
+// name).
+const signerBridge = await import(
+    `file://${bridgePath}`
+);
+assert.deepEqual(signerBridge.registeredIds(), []);
+const mockPortTransport = async () => 'available';
+signerBridge.setTransport('sig-x', mockPortTransport);
+assert.deepEqual(signerBridge.registeredIds(), ['sig-x']);
+assert.equal(signerBridge.getTransport('sig-x'), mockPortTransport);
+assert.equal(signerBridge.getTransport('sig-y'), null);
+signerBridge.clearTransport('sig-x');
+assert.equal(signerBridge.getTransport('sig-x'), null);
+signerBridge.setTransport('sig-x', mockPortTransport);
+signerBridge.setTransport('sig-y', mockPortTransport);
+signerBridge.clearAll();
+assert.deepEqual(signerBridge.registeredIds(), []);
+
+// Guard-rails.
+assert.throws(() => signerBridge.setTransport('', mockPortTransport), /signerId/);
+assert.throws(() => signerBridge.setTransport('sig-x', 'not a fn'), /must be a function/);
+
+const bgPath = join(ext, 'src', 'background', 'createBackgroundHost.js');
+const bgSrc = readFileSync(bgPath, 'utf8');
+for (const handler of ['action.send.hw', 'signer.status']) {
+    assert.ok(
+        new RegExp(`host\\.register\\('${handler.replace('.', '\\.')}'`).test(bgSrc),
+        `background host registers ${handler}`,
+    );
+}
+assert.ok(
+    /resolveSigner,\s*\n\s*buildRemoteSigner,/.test(bgSrc),
+    'createBackgroundHost imports resolveSigner + buildRemoteSigner from core flows',
+);
+assert.ok(
+    /signerBridge\.getTransport\(/.test(bgSrc),
+    'action.send.hw looks up the transport via signerBridge',
+);
+assert.ok(
+    /Hardware signer is not connected\./.test(bgSrc),
+    'action.send.hw has a clear "not connected" error message',
+);
+
+// ---------------------------------------------------------------
+// 10. Shell messaging helpers expose sendAssetHw + getSignerStatus
+// ---------------------------------------------------------------
+
+for (const [shell, msgPath] of [
+    ['popup', join(ext, 'src', 'popup', 'messaging.js')],
+    ['web', join(wsRoot, 'packages', 'web', 'src', 'messaging.js')],
+    ['desktop', join(wsRoot, 'packages', 'desktop', 'renderer', 'messaging.js')],
+]) {
+    const msg = readFileSync(msgPath, 'utf8');
+    for (const fn of ['sendAssetHw', 'getSignerStatus']) {
+        assert.ok(
+            new RegExp(`export function ${fn}\\b`).test(msg),
+            `${shell} messaging exports ${fn}`,
+        );
+    }
+    assert.ok(
+        /sendMessage\('action\.send\.hw'/.test(msg),
+        `${shell} sendAssetHw routes via action.send.hw`,
+    );
+    assert.ok(
+        /sendMessage\('signer\.status'/.test(msg),
+        `${shell} getSignerStatus routes via signer.status`,
+    );
+}
+
+// ---------------------------------------------------------------
+// 11. Send.jsx HW branch — renders HwSignBlock, not password
+// ---------------------------------------------------------------
+
+const sendSrc = readFileSync(
+    join(core, 'src', 'shared', 'routes', 'Send.jsx'), 'utf8',
+);
+assert.ok(/import \{ HwSignBlock \}/.test(sendSrc), 'Send.jsx imports HwSignBlock');
+assert.ok(/isHwSource/.test(sendSrc), 'Send.jsx gates on isHwSource');
+assert.ok(
+    /fromAddress\?\.source === 'trezor' \|\| fromAddress\?\.source === 'ledger'/.test(sendSrc),
+    'Send.jsx detects HW source',
+);
+assert.ok(
+    /messaging\.sendAssetHw\(/.test(sendSrc),
+    'Send.jsx calls messaging.sendAssetHw in HW branch',
+);
+assert.ok(
+    /messaging\.getSignerStatus\(/.test(sendSrc),
+    'Send.jsx polls signer status via messaging.getSignerStatus',
+);
+assert.ok(
+    /Sign on \$\{fromAddress\.source === 'trezor' \? 'Trezor' : 'Ledger'\}/.test(sendSrc),
+    'Send.jsx shows "Sign on Trezor" / "Sign on Ledger" button copy',
+);
+assert.ok(
+    /hwStatus !== 'available'/.test(sendSrc),
+    'Send.jsx disables Submit until status=available',
+);
+
 console.log(
-    'OK — hw-sign-e2e smoke (resolveSigner descriptor branches across software / HW / watch-only / mismatched; buildRemoteSigner constructs RemoteSigner with SignerRecord metadata; RemoteSigner.signPsbt routes through transport → TrezorSigner → sdk.decomposePsbt → trezorFormat → Connect → back; signMessage + getStatus round-trips; submitAction gains optional `signer` param bypassing password unlock; normalizeSource admits HW sources; HwSignBlock + useSignerStatus primitives in place)',
+    'OK — hw-sign-e2e smoke (resolveSigner descriptor branches; buildRemoteSigner; full RemoteSigner → TrezorSigner → sdk.decomposePsbt → trezorFormat → Connect chain; submitAction signer param bypass; normalizeSource admits HW; shared UI primitives; signerBridge registry; action.send.hw + signer.status handlers wired; sendAssetHw + getSignerStatus exposed in popup/web/desktop messaging; Send.jsx renders HwSignBlock for HW sources with "Sign on [device]" button)',
 );

@@ -96,6 +96,23 @@ export function sendAsset(opts) {
 }
 
 /**
+ * HW-wallet variant of sendAsset. No password. Background resolves
+ * the `signerId` + routes the sign request through the renderer-side
+ * signer bridge. See popup/messaging.js for the full shape.
+ *
+ * @param {object} opts
+ * @returns {Promise<any>}
+ */
+export function sendAssetHw(opts) {
+    return /** @type {any} */ (sendMessage('action.send.hw', opts));
+}
+
+/** @param {{ signerId: string, chainId?: string }} opts */
+export function getSignerStatus(opts) {
+    return /** @type {any} */ (sendMessage('signer.status', opts));
+}
+
+/**
  * Build, sign, and broadcast an ISSUE action — creates or updates a
  * token on the XChain protocol. See popup messaging.js for prop docs.
  *

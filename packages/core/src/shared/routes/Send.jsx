@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Screen,
     Button,
@@ -11,6 +11,7 @@ import {
     decoder as decoderLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { HwSignBlock } from '../components/HwSignBlock.jsx';
 import styles from './Send.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -160,27 +161,43 @@ export function Send({ walletId, onBack }) {
         setStage('review');
     }
 
+    const isHwSource = fromAddress?.source === 'trezor' || fromAddress?.source === 'ledger';
+    const [hwStatus, setHwStatus] = useState(/** @type {string} */ ('idle'));
+    const onHwStatusChange = useCallback(({ status }) => {
+        setHwStatus(status);
+    }, []);
+
     async function handleSubmit(event) {
         event.preventDefault();
-        if (stage === 'submitting' || password.length === 0) return;
+        if (stage === 'submitting') return;
+        if (!isHwSource && password.length === 0) return;
+        if (isHwSource && hwStatus !== 'available') return;
         setStage('submitting');
         setSubmitError(null);
         try {
-            const res = await messaging.sendAsset({
+            const base = {
                 walletId,
-                password,
                 chainId,
                 from: {
                     address: fromAddress.address,
                     publicKey: fromAddress.publicKey,
                     derivationPath: fromAddress.derivationPath,
                     addressId: fromAddress.id,
+                    source: fromAddress.source,
+                    signerId: fromAddress.signerId,
                 },
                 to: toAddress.trim(),
                 asset: asset.trim(),
                 amount: String(amount).trim(),
                 memo: memo.trim() || undefined,
-            });
+            };
+            // Software path: send password; background unlocks + signs.
+            // HW path: bypass password; background routes the sign
+            // request through the signer-bridge RPC to the renderer-
+            // hosted Trezor/Ledger signer identified by `signerId`.
+            const res = isHwSource
+                ? await messaging.sendAssetHw({ ...base, signerId: fromAddress.signerId })
+                : await messaging.sendAsset({ ...base, password });
             setResult(res);
             setPassword('');
             setStage('done');
@@ -192,8 +209,10 @@ export function Send({ walletId, onBack }) {
                     : err?.message || 'Send failed.',
             );
             setStage('review');
-            passwordRef.current?.focus();
-            passwordRef.current?.select();
+            if (!isHwSource) {
+                passwordRef.current?.focus();
+                passwordRef.current?.select();
+            }
         }
     }
 
@@ -275,20 +294,38 @@ export function Send({ walletId, onBack }) {
                         ))}
                     </div>
                 ) : null}
-                <Input
-                    ref={passwordRef}
-                    type="password"
-                    label="Password"
-                    hint="Required to sign."
-                    value={password}
-                    onChange={(e) => {
-                        setPassword(e.target.value);
-                        if (submitError) setSubmitError(null);
-                    }}
-                    autoComplete="current-password"
-                    disabled={stage === 'submitting'}
-                    error={submitError || undefined}
-                />
+                {isHwSource ? (
+                    <HwSignBlock
+                        signerKind={fromAddress.source}
+                        signerName={fromAddress.signerLabel || (fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger')}
+                        path={fromAddress.derivationPath || ''}
+                        address={fromAddress.address}
+                        chainId={chainId}
+                        getStatus={(opts) => messaging.getSignerStatus({
+                            signerId: fromAddress.signerId,
+                            chainId: opts?.chainId ?? chainId,
+                        })}
+                        onStatusChange={onHwStatusChange}
+                    />
+                ) : (
+                    <Input
+                        ref={passwordRef}
+                        type="password"
+                        label="Password"
+                        hint="Required to sign."
+                        value={password}
+                        onChange={(e) => {
+                            setPassword(e.target.value);
+                            if (submitError) setSubmitError(null);
+                        }}
+                        autoComplete="current-password"
+                        disabled={stage === 'submitting'}
+                        error={submitError || undefined}
+                    />
+                )}
+                {isHwSource && submitError ? (
+                    <div role="alert" className={styles.error}>{submitError}</div>
+                ) : null}
                 <div className={styles.actions}>
                     <Button
                         type="button"
@@ -302,9 +339,15 @@ export function Send({ walletId, onBack }) {
                         type="submit"
                         variant="primary"
                         loading={stage === 'submitting'}
-                        disabled={password.length === 0}
+                        disabled={
+                            isHwSource
+                                ? hwStatus !== 'available'
+                                : password.length === 0
+                        }
                     >
-                        Send
+                        {isHwSource
+                            ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                            : 'Send'}
                     </Button>
                 </div>
             </form>,
