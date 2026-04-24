@@ -58,6 +58,7 @@ const {
     contractBalance,
     executionsForContract,
     deployAction,
+    executeAction,
     contractValidate,
     contractCheckCodeSize,
     contractSuggestGasLimit,
@@ -340,6 +341,7 @@ export function createBackgroundHost(deps) {
     registerHwHandler('action.swap.hw', swapAction);
     registerHwHandler('action.message.hw', messageAction);
     registerHwHandler('action.deploy.hw', deployAction);
+    registerHwHandler('action.execute.hw', executeAction);
 
     // Signer status probe — routes straight through the signer bridge
     // without touching vault/SDK. Returns `'idle'` when the bridge
@@ -520,6 +522,10 @@ export function createBackgroundHost(deps) {
 
     host.register('action.deploy', async (req, { vault, chainRegistry, sdkRegistry }) => {
         return deployAction({ ...req, vault, chainRegistry, sdkRegistry });
+    });
+
+    host.register('action.execute', async (req, { vault, chainRegistry, sdkRegistry }) => {
+        return executeAction({ ...req, vault, chainRegistry, sdkRegistry });
     });
 
     host.register('contracts.validate', async (req, { sdkRegistry }) => {

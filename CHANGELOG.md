@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.77.0] - 2026-04-24
+
+Phase 4 — Step 5 of 23. EXECUTE method form (§42.4). Adds the "Call method" authoring surface on top of the Step 3 contract-detail page. No SDK bump — `sdk.execute` has been on SDK ≥ 1.3.0 and is already reachable.
+
+### Added
+
+- `packages/core/src/flows/executeAction.js` — EXECUTE composer. Takes vault + registries + chain + source + params (VERSION, CONTRACT_ACTION_INDEX, METHOD, optional PARAMS array, GAS_LIMIT). Guards CONTRACT_ACTION_INDEX + METHOD + params.
+- `packages/extension/src/background/createBackgroundHost.js` — `action.execute` + `action.execute.hw`.
+- Three-shell messaging helpers — `executeAction` / `executeActionHw` in popup + web + desktop `messaging.js`.
+- `packages/core/src/shared/routes/ExecuteContractForm.jsx` — §42.4 form. Method name + pipe-delimited params (split into an array on submit to satisfy the SDK validator's PARAMS-as-array expectation) + gas limit (default 50000). Auto-picks the most recently derived HD address on the chain as caller. Review screen lists each param in an ordered list with monospace font; sign screen reuses `SignCredentials` + HW branching.
+- Three App.jsx — new `'contract-execute'` sub-route. ContractDetail now passes `onExecute={() => setUnlockedView('contract-execute')}`; the form's Back returns to the detail page.
+
+### Notes
+
+- ABI-driven lane is deferred. §42.4 says "If a contract publishes an ABI (via a community convention or embedded metadata), the wallet populates a method selector and typed parameter inputs." The platform hasn't defined the ABI publishing convention yet — captured as FOLLOWUP 2 in `claude/reports/specs/2026-04-24_phase4-monaco-editor.md`. Step 5 ships the manual lane only.
+- `contracts.suggestGasLimit` is a source-code heuristic; the execute form doesn't have the contract source (only the DEPLOY action_index). Default 50000 is a conservative starting point — users override. Per-call gas estimation is a VM-side feature that would require the indexer to expose a "dry-run" endpoint, which is out of Phase 4 scope.
+
 ## [0.76.0] - 2026-04-24
 
 Phase 4 — Step 4 of 23. DEPLOY authoring form (§42.6). No SDK bump — `sdk.contracts.validate / checkCodeSize / suggestGasLimit` and the DEPLOY action composer are all on SDK 1.10.0 (via SDK 1.3.0's `ContractUtils`).

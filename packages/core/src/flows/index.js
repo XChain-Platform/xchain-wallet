@@ -62,6 +62,7 @@ export {
     executionsForContract,
 } from './contractDetail.js';
 export { deployAction } from './deployAction.js';
+export { executeAction } from './executeAction.js';
 export {
     contractValidate,
     contractCheckCodeSize,

@@ -49,6 +49,7 @@ import { ContactsList } from '@xchain-wallet/core/shared/routes/ContactsList.jsx
 import { ContractsList } from '@xchain-wallet/core/shared/routes/ContractsList.jsx';
 import { ContractDetail } from '@xchain-wallet/core/shared/routes/ContractDetail.jsx';
 import { DeployContractForm } from '@xchain-wallet/core/shared/routes/DeployContractForm.jsx';
+import { ExecuteContractForm } from '@xchain-wallet/core/shared/routes/ExecuteContractForm.jsx';
 import { PairSignerForm } from '@xchain-wallet/core/shared/routes/PairSignerForm.jsx';
 import { useBtcAddressesPresent } from '@xchain-wallet/core/shared/hooks/useBtcAddressesPresent.js';
 import { pairTrezorSigner } from '../signers/trezorFactory.js';
@@ -71,7 +72,7 @@ function AppInner() {
         /** @type {'welcome' | 'create' | 'import' | 'import-freewallet'} */ ('welcome'),
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'swap' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail' | 'contract-deploy'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'swap' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute'} */ ('home'),
     );
     const [resumeAirdropId, setResumeAirdropId] = useState(
         /** @type {string | null} */ (null),
@@ -437,6 +438,7 @@ function AppInner() {
                         walletId={activeWalletId}
                         chainId={contractRef.chainId}
                         contractActionIndex={contractRef.contractActionIndex}
+                        onExecute={() => setUnlockedView('contract-execute')}
                         onBack={() => setUnlockedView('contracts-list')}
                     />
                 );
@@ -446,6 +448,16 @@ function AppInner() {
                     <DeployContractForm
                         walletId={activeWalletId}
                         onBack={() => setUnlockedView('contracts-list')}
+                    />
+                );
+            }
+            if (unlockedView === 'contract-execute' && activeWalletId && contractRef) {
+                return (
+                    <ExecuteContractForm
+                        walletId={activeWalletId}
+                        chainId={contractRef.chainId}
+                        contractActionIndex={contractRef.contractActionIndex}
+                        onBack={() => setUnlockedView('contract-detail')}
                     />
                 );
             }

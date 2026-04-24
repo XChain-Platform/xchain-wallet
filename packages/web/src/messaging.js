@@ -271,6 +271,16 @@ export function deployActionHw(opts) {
     return /** @type {any} */ (sendMessage('action.deploy.hw', opts));
 }
 
+/** @param {object} opts */
+export function executeAction(opts) {
+    return /** @type {any} */ (sendMessage('action.execute', opts));
+}
+
+/** @param {object} opts */
+export function executeActionHw(opts) {
+    return /** @type {any} */ (sendMessage('action.execute.hw', opts));
+}
+
 /** @param {object} req */
 export function validateContractCode(req) {
     return /** @type {any} */ (sendMessage('contracts.validate', req));

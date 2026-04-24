@@ -499,6 +499,21 @@ export function deployActionHw(opts) {
 }
 
 /**
+ * Build, sign, and broadcast an EXECUTE action (§42.4). Calls a method
+ * on a deployed contract with optional pipe-delimited PARAMS.
+ *
+ * @param {object} opts
+ */
+export function executeAction(opts) {
+    return /** @type {any} */ (sendMessage('action.execute', opts));
+}
+
+/** @param {object} opts */
+export function executeActionHw(opts) {
+    return /** @type {any} */ (sendMessage('action.execute.hw', opts));
+}
+
+/**
  * Syntax-validate contract source (acorn parse + size check + float
  * warnings + reserved-identifier check). Pure; no network.
  *
