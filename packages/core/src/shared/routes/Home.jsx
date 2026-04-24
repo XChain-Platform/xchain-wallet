@@ -30,8 +30,9 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {() => void} [props.onCreateToken]   navigate to Token Wizard sub-route (§40.1)
  * @param {() => void} [props.onActions]       navigate to the Actions menu (§40.2+)
  * @param {(id: string) => void} [props.onResumeAirdrop]  navigate to AirdropForm with a pending id
+ * @param {() => void} [props.onMigrateToBip39]           navigate to the §40.13 migration wizard when the active wallet is counterwallet-legacy
  */
-export function Home({ onLocked, onSend, onReceive, onCreateToken, onActions, onResumeAirdrop }) {
+export function Home({ onLocked, onSend, onReceive, onCreateToken, onActions, onResumeAirdrop, onMigrateToBip39 }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -152,6 +153,22 @@ export function Home({ onLocked, onSend, onReceive, onCreateToken, onActions, on
 
                 {balances === null && !loadError ? (
                     <p className={styles.hint}>Loading balances…</p>
+                ) : null}
+
+                {activeWallet?.format === 'counterwallet-legacy' && onMigrateToBip39 ? (
+                    <button
+                        type="button"
+                        className={styles.legacyBanner}
+                        onClick={onMigrateToBip39}
+                    >
+                        <span className={styles.legacyBannerTitle}>
+                            Legacy FreeWallet format
+                        </span>
+                        <span className={styles.legacyBannerHint}>
+                            This wallet uses the 12-word Counterwallet format.
+                            Tap to migrate to BIP39 (§40.13).
+                        </span>
+                    </button>
                 ) : null}
 
                 {pendingAirdrops.length > 0 && onResumeAirdrop ? (

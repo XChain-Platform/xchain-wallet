@@ -1,0 +1,289 @@
+import { useEffect, useMemo, useState } from 'react';
+import {
+    Screen,
+    Button,
+    Input,
+    ChainBadge,
+    AddressText,
+} from '@xchain-wallet/core/ui';
+import { registry as registryLib } from '@xchain-wallet/core';
+import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import styles from './IssueTokenForm.module.css';
+
+const chainRegistry = registryLib.defaultRegistry();
+const MIN_PASSWORD_LENGTH = 8;
+
+/**
+ * Migrate-to-BIP39 wizard — §40.13.
+ *
+ * Creates a new BIP39 wallet alongside an existing
+ * counterwallet-legacy wallet, then hands the user back to the
+ * balances view with the addresses they need to sweep balances
+ * through the normal Send flow.
+ *
+ * Phase 2 scope deliberately stops short of an automated one-shot
+ * sweep — that requires a dedicated SweepForm surface that doesn't
+ * exist yet. The wizard instead lists each legacy address with its
+ * matching new-wallet destination so the user can sweep manually
+ * once the flow is complete.
+ *
+ * Stage machine: explain → create → done.
+ *
+ * @param {object} props
+ * @param {string} props.legacyWalletId       source wallet (counterwallet-legacy)
+ * @param {() => void} props.onBack
+ * @param {(newWalletId: string) => void} [props.onMigrated]  refreshes App.jsx
+ */
+export function MigrateToBip39({ legacyWalletId, onBack, onMigrated }) {
+    const { messaging, shell } = useMessaging();
+    const variant = screenVariantFor(shell);
+    const isFull = variant === 'full';
+
+    const [stage, setStage] = useState(
+        /** @type {'explain' | 'create' | 'submitting' | 'done'} */ ('explain'),
+    );
+    const [name, setName] = useState('XChain BIP39 Wallet');
+    const [password, setPassword] = useState('');
+    const [confirm, setConfirm] = useState('');
+    const [error, setError] = useState(/** @type {string | null} */ (null));
+    const [legacyAddrs, setLegacyAddrs] = useState(
+        /** @type {Record<string, any[]> | null} */ (null),
+    );
+    const [newWalletId, setNewWalletId] = useState(/** @type {string | null} */ (null));
+    const [newAddrs, setNewAddrs] = useState(
+        /** @type {Record<string, any[]> | null} */ (null),
+    );
+
+    // Load legacy wallet's addresses for the side-by-side preview.
+    useEffect(() => {
+        if (!legacyWalletId) return;
+        let cancelled = false;
+        messaging.getAddressesByChain(legacyWalletId)
+            .then((byChain) => { if (!cancelled) setLegacyAddrs(byChain); })
+            .catch(() => { /* non-fatal; stage preview falls back */ });
+        return () => { cancelled = true; };
+    }, [legacyWalletId, messaging]);
+
+    // Pull new-wallet addresses after creation so we can show the
+    // "sweep here" destinations on the done screen.
+    useEffect(() => {
+        if (!newWalletId) return;
+        let cancelled = false;
+        messaging.getAddressesByChain(newWalletId)
+            .then((byChain) => { if (!cancelled) setNewAddrs(byChain); })
+            .catch(() => { /* preview only */ });
+        return () => { cancelled = true; };
+    }, [newWalletId, messaging]);
+
+    const perChainPairs = useMemo(() => {
+        /** @type {Array<{ chainId: string, legacy: string | null, next: string | null }>} */
+        const rows = [];
+        const chains = new Set([
+            ...Object.keys(legacyAddrs || {}),
+            ...Object.keys(newAddrs || {}),
+        ]);
+        for (const chainId of chains) {
+            const legacy = (legacyAddrs?.[chainId] || []).find(
+                (a) => a.source === 'hd' && a.derivationPath?.split('/')?.[4] === '0',
+            );
+            const next = (newAddrs?.[chainId] || []).find(
+                (a) => a.source === 'hd' && a.derivationPath?.split('/')?.[4] === '0',
+            );
+            rows.push({
+                chainId,
+                legacy: legacy?.address || null,
+                next: next?.address || null,
+            });
+        }
+        return rows;
+    }, [legacyAddrs, newAddrs]);
+
+    async function handleCreate(event) {
+        event.preventDefault();
+        if (stage === 'submitting') return;
+        if (password.length < MIN_PASSWORD_LENGTH) {
+            setError(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
+            return;
+        }
+        if (password !== confirm) {
+            setError('Passwords do not match.');
+            return;
+        }
+        setStage('submitting');
+        setError(null);
+        try {
+            const result = await messaging.createWallet({ password, name });
+            const id = result?.walletId || result?.id || result?.wallet?.id;
+            if (!id) throw new Error('createWallet did not return a walletId.');
+            setNewWalletId(id);
+            setPassword('');
+            setConfirm('');
+            setStage('done');
+            if (onMigrated) onMigrated(id);
+        } catch (err) {
+            setError(err?.message || 'Failed to create BIP39 wallet.');
+            setStage('create');
+        }
+    }
+
+    const header = (
+        <div className={styles.header}>
+            <button
+                type="button"
+                onClick={onBack}
+                className={styles.back}
+                aria-label="Back"
+            >
+                ← Back
+            </button>
+            <span className={styles.title}>
+                {stage === 'done' ? 'BIP39 wallet created' : 'Migrate to BIP39'}
+            </span>
+            <span className={styles.spacer} />
+        </div>
+    );
+
+    const wrap = (children) => (
+        <Screen variant={variant} header={header}>
+            {isFull ? <div className={styles.card}>{children}</div> : children}
+        </Screen>
+    );
+
+    if (stage === 'explain') {
+        return wrap(
+            <>
+                <h2 className={styles.successTitle}>Why migrate?</h2>
+                <p className={styles.hint}>
+                    Your current wallet uses the Counterwallet / FreeWallet
+                    12-word legacy format. BIP39 is the modern standard: it
+                    interoperates with every other wallet, supports 25th-word
+                    passphrases, and ships with stronger derivation.
+                </p>
+                <p className={styles.hint}>
+                    This wizard creates a new BIP39 wallet. It does not touch
+                    your legacy wallet — that stays intact as a reference. After
+                    creation, you'll see a side-by-side list of your legacy
+                    addresses and the new BIP39 destinations. Sweep balances
+                    chain-by-chain via the normal Send flow when you're ready.
+                </p>
+                <p className={styles.hint}>
+                    Save your new BIP39 recovery phrase somewhere safe — it is
+                    the only way to restore this wallet on another device.
+                </p>
+                <div className={styles.actions}>
+                    <Button variant="ghost" onClick={onBack}>Not now</Button>
+                    <Button variant="primary" onClick={() => setStage('create')}>
+                        Continue
+                    </Button>
+                </div>
+            </>,
+        );
+    }
+
+    if (stage === 'done') {
+        return wrap(
+            <>
+                <h2 className={styles.successTitle}>New BIP39 wallet ready</h2>
+                <p className={styles.hint}>
+                    Your legacy wallet is untouched. To complete the migration,
+                    sweep balances from each legacy address below to the
+                    matching new-wallet address — use Send (§40.1) or an
+                    advanced SWEEP action (§40.10) per chain. Your legacy
+                    wallet stays available as long as you want.
+                </p>
+                <dl className={styles.detailsList}>
+                    {perChainPairs.map((row) => {
+                        const d = chainRegistry.get(row.chainId);
+                        return (
+                            <div key={row.chainId}>
+                                <dt className={styles.detailsLabel}>
+                                    {d ? <ChainBadge descriptor={d} size="sm" /> : row.chainId}
+                                </dt>
+                                <dd className={styles.detailsValue}>
+                                    {row.legacy ? (
+                                        <>
+                                            <div>
+                                                <strong>From</strong>{' '}
+                                                <AddressText address={row.legacy} />
+                                            </div>
+                                            <div>
+                                                <strong>To</strong>{' '}
+                                                {row.next
+                                                    ? <AddressText address={row.next} />
+                                                    : <em>generating…</em>}
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <em>No legacy address on this chain.</em>
+                                    )}
+                                </dd>
+                            </div>
+                        );
+                    })}
+                </dl>
+                <div className={styles.actions}>
+                    <Button variant="primary" onClick={onBack}>Done</Button>
+                </div>
+            </>,
+        );
+    }
+
+    // stage === 'create' | 'submitting'
+    return wrap(
+        <form onSubmit={handleCreate} noValidate>
+            <Input
+                label="New wallet name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                autoComplete="off"
+                disabled={stage === 'submitting'}
+            />
+            <Input
+                type="password"
+                label="Password"
+                hint={`At least ${MIN_PASSWORD_LENGTH} characters. Encrypts the new wallet on this device.`}
+                value={password}
+                onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (error) setError(null);
+                }}
+                autoComplete="new-password"
+                disabled={stage === 'submitting'}
+            />
+            <Input
+                type="password"
+                label="Confirm password"
+                value={confirm}
+                onChange={(e) => {
+                    setConfirm(e.target.value);
+                    if (error) setError(null);
+                }}
+                autoComplete="new-password"
+                disabled={stage === 'submitting'}
+                error={error || undefined}
+            />
+            <p className={styles.hint}>
+                We'll generate a fresh BIP39 recovery phrase when you submit.
+                Your legacy wallet password is not needed here.
+            </p>
+            <div className={styles.actions}>
+                <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => setStage('explain')}
+                    disabled={stage === 'submitting'}
+                >
+                    Back
+                </Button>
+                <Button
+                    type="submit"
+                    variant="primary"
+                    loading={stage === 'submitting'}
+                    disabled={password.length === 0 || confirm.length === 0}
+                >
+                    Create BIP39 wallet
+                </Button>
+            </div>
+        </form>,
+    );
+}

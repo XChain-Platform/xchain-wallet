@@ -117,3 +117,31 @@
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
 }
+
+.legacyBanner {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--xc-space-1);
+    padding: var(--xc-space-2) var(--xc-space-3);
+    border: 1px solid var(--xc-border-strong);
+    border-radius: var(--xc-radius-sm);
+    background: var(--xc-bg-muted);
+    margin-bottom: var(--xc-space-2);
+    width: 100%;
+    text-align: left;
+    cursor: pointer;
+}
+
+.legacyBanner:hover { background: var(--xc-bg); }
+
+.legacyBannerTitle {
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    color: var(--xc-text);
+}
+
+.legacyBannerHint {
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+}

@@ -40,6 +40,8 @@ import { DispenserDetail } from '@xchain-wallet/core/shared/routes/DispenserDeta
 import { DispenserExplorer } from '@xchain-wallet/core/shared/routes/DispenserExplorer.jsx';
 import { DividendForm } from '@xchain-wallet/core/shared/routes/DividendForm.jsx';
 import { AirdropForm } from '@xchain-wallet/core/shared/routes/AirdropForm.jsx';
+import { AdvancedActionsForm } from '@xchain-wallet/core/shared/routes/AdvancedActionsForm.jsx';
+import { MigrateToBip39 } from '@xchain-wallet/core/shared/routes/MigrateToBip39.jsx';
 import { PairSignerForm } from '@xchain-wallet/core/shared/routes/PairSignerForm.jsx';
 import * as messaging from './messaging.js';
 import { getSessionStatus, listWallets } from './messaging.js';
@@ -57,10 +59,10 @@ export function App() {
 function AppInner() {
     const [status, setStatus] = useState(/** @type {any} */ ({ state: 'loading' }));
     const [onboardingStep, setOnboardingStep] = useState(
-        /** @type {'welcome' | 'create' | 'import'} */ ('welcome'),
+        /** @type {'welcome' | 'create' | 'import' | 'import-freewallet'} */ ('welcome'),
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'pair-signer'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer'} */ ('home'),
     );
     const [resumeAirdropId, setResumeAirdropId] = useState(
         /** @type {string | null} */ (null),
@@ -124,10 +126,20 @@ function AppInner() {
                     />
                 );
             }
+            if (onboardingStep === 'import-freewallet') {
+                return (
+                    <ImportWallet
+                        variant="freewallet"
+                        onBack={() => setOnboardingStep('welcome')}
+                        onImported={refresh}
+                    />
+                );
+            }
             return (
                 <Onboarding
                     onCreate={() => setOnboardingStep('create')}
                     onImport={() => setOnboardingStep('import')}
+                    onImportFromFreeWallet={() => setOnboardingStep('import-freewallet')}
                 />
             );
         case 'locked':
@@ -264,6 +276,23 @@ function AppInner() {
                     />
                 );
             }
+            if (unlockedView === 'advanced' && activeWalletId) {
+                return (
+                    <AdvancedActionsForm
+                        walletId={activeWalletId}
+                        onBack={() => setUnlockedView('actions')}
+                    />
+                );
+            }
+            if (unlockedView === 'migrate-bip39' && activeWalletId) {
+                return (
+                    <MigrateToBip39
+                        legacyWalletId={activeWalletId}
+                        onBack={() => setUnlockedView('home')}
+                        onMigrated={refresh}
+                    />
+                );
+            }
             if (unlockedView === 'pair-signer' && activeWalletId) {
                 return (
                     <PairSignerForm
@@ -294,6 +323,7 @@ function AppInner() {
                                 setResumeAirdropId(null);
                                 setUnlockedView('airdrop');
                             },
+                            onAdvanced: () => setUnlockedView('advanced'),
                             onPairSigner: () => setUnlockedView('pair-signer'),
                         })}
                         onBack={() => setUnlockedView('home')}
@@ -311,6 +341,7 @@ function AppInner() {
                         setResumeAirdropId(id);
                         setUnlockedView('airdrop');
                     } : undefined}
+                    onMigrateToBip39={activeWalletId ? () => setUnlockedView('migrate-bip39') : undefined}
                 />
             );
         default:
@@ -327,6 +358,7 @@ function buildActionEntries({
     onBrowseDispensers,
     onPayDividend,
     onAirdrop,
+    onAdvanced,
     onPairSigner,
 }) {
     return [
@@ -401,6 +433,12 @@ function buildActionEntries({
             label: 'Airdrop tokens',
             description: 'Distribute a token to a pasted or uploaded list of addresses — signs a LIST then an AIRDROP (§40.9).',
             onSelect: onAirdrop,
+        },
+        {
+            id: 'advanced',
+            label: 'Advanced action',
+            description: 'Submit any action the SDK supports — power-user surface for LINK / ADDRESS / CALLBACK / SLEEP / raw MESSAGE (§40.10).',
+            onSelect: onAdvanced,
         },
         {
             id: 'pair-signer',

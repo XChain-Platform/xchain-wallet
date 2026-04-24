@@ -43,6 +43,11 @@ const {
     listPendingAirdropsForWallet,
     updatePendingAirdrop,
     clearPendingAirdrop,
+    advancedAction,
+    listActions,
+    getActionFormats,
+    getActionFields,
+    validateActionDryRun,
     registerSigner,
     listSignersForWallet,
     unregisterSigner,
@@ -318,6 +323,32 @@ export function createBackgroundHost(deps) {
 
     host.register('pendingAirdrops.clear', async (req, { vault }) => {
         return clearPendingAirdrop({ ...req, vault });
+    });
+
+    // §40.10 Advanced Actions Form — generic "submit any action"
+    // surface. Read-only SDK introspection handlers drive the form's
+    // schema-based field list and live validation. The write path
+    // accepts any (action, params) pair and forwards to submitAction,
+    // which runs the SDK's validator before signing.
+
+    host.register('action.advanced', async (req, { vault, chainRegistry, sdkRegistry }) => {
+        return advancedAction({ ...req, vault, chainRegistry, sdkRegistry });
+    });
+
+    host.register('sdk.listActions', async (req, { sdkRegistry }) => {
+        return listActions({ ...req, sdkRegistry });
+    });
+
+    host.register('sdk.getActionFormats', async (req, { sdkRegistry }) => {
+        return getActionFormats({ ...req, sdkRegistry });
+    });
+
+    host.register('sdk.getActionFields', async (req, { sdkRegistry }) => {
+        return getActionFields({ ...req, sdkRegistry });
+    });
+
+    host.register('sdk.validateAction', async (req, { sdkRegistry }) => {
+        return validateActionDryRun({ ...req, sdkRegistry });
     });
 
     // --- Signer registry -----------------------------------------------------

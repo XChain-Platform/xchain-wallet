@@ -449,6 +449,68 @@ export function clearPendingAirdrop(req) {
 }
 
 /**
+ * Submit any XChain action (§40.10 Advanced Actions Form). Takes the
+ * same shape as the dedicated per-action helpers but accepts an
+ * arbitrary (action, params) pair. The SDK validator runs inside the
+ * encoder at sign time — malformed params fail with a structured
+ * error rather than broadcasting bad data.
+ *
+ * @param {object} opts
+ * @param {string} opts.walletId
+ * @param {string} opts.password
+ * @param {string} opts.chainId
+ * @param {{ address: string, publicKey: string, derivationPath?: string | null, addressId?: string }} opts.from
+ * @param {string} opts.action     action name (e.g. "LINK", "CALLBACK", "ADDRESS")
+ * @param {Record<string, unknown>} opts.params
+ * @returns {Promise<any>}
+ */
+export function advancedAction(opts) {
+    return /** @type {any} */ (sendMessage('action.advanced', opts));
+}
+
+/**
+ * List every action the SDK supports on a given chain. Drives the
+ * Advanced Action form's action dropdown.
+ *
+ * @param {{ chainId: string }} req
+ */
+export function listActions(req) {
+    return /** @type {any} */ (sendMessage('sdk.listActions', req));
+}
+
+/**
+ * Fetch the format versions (map of version → format string) for an
+ * action — used to populate the optional version dropdown.
+ *
+ * @param {{ chainId: string, action: string }} req
+ */
+export function getActionFormats(req) {
+    return /** @type {any} */ (sendMessage('sdk.getActionFormats', req));
+}
+
+/**
+ * Fetch the field list for an action (union of all versions when
+ * `version` is omitted). Rest-fields keep their `...` prefix so the
+ * form can render them as array inputs.
+ *
+ * @param {{ chainId: string, action: string, version?: number | string }} req
+ */
+export function getActionFields(req) {
+    return /** @type {any} */ (sendMessage('sdk.getActionFields', req));
+}
+
+/**
+ * Dry-run validation — the SDK reports structured errors without
+ * building / serializing the action string. Drives the form's inline
+ * error display.
+ *
+ * @param {{ chainId: string, action: string, params: object }} req
+ */
+export function validateAction(req) {
+    return /** @type {any} */ (sendMessage('sdk.validateAction', req));
+}
+
+/**
  * Persist a paired hardware signer (§17.6 / §18.3). The caller runs
  * `pairTrezorSigner` (or the Ledger equivalent) in the renderer,
  * obtains the `pairingInfo` payload, and forwards it here. Idempotent

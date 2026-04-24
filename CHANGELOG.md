@@ -7,6 +7,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.65.0] - 2026-04-23
+
+Phase 2 — Step 25 of 26 — piece 10 + Step 26 of 26 — piece 11. **Phase 2 complete**: the remaining two §40 surfaces ship together — the generic Advanced Actions form that reflects the SDK's schema (§40.10) and the FreeWallet migration path (§40.13, §19.7). All 26 steps of the Phase 2 plan now on master; the wallet surface covers every §40 authoring path end-to-end.
+
+### Added
+
+**Advanced Actions form — §40.10**
+
+Generic "submit any XChain action" surface driven entirely by the SDK's introspection API. No per-action knowledge in the wallet beyond rendering rules for rest-fields (`...` prefix) and auto-fields (`VERSION` is never user-entered).
+
+- `packages/core/src/shared/routes/AdvancedActionsForm.jsx` — 4-stage state machine (`compose` → `review` → `submitting` → `done`). Chain + source picker, action dropdown, optional format-version dropdown, schema-driven field list. Rest-fields render as a textarea that splits on newlines/commas; scalars as `<Input>`. Live validation on every keystroke via `messaging.validateAction`. Decoder preview on review reuses whatever decoder case the action has (generic fallback for undecoded actions). Actions with dedicated forms are still listed but decorated with `(dedicated form available)`.
+- `packages/core/src/flows/advancedAction.js` — generic `submitAction` wrapper. Uppercases the action name, forwards `{ action, params }` unchanged. The SDK's validator still runs inside `createAction()` at sign time.
+- `packages/core/src/flows/sdkIntrospection.js` — thin passthroughs: `listActions`, `getActionFormats`, `getActionFields` (optional `version` arg — when set, returns that version's fields; otherwise union of all versions), `validateActionDryRun`. All guard required inputs.
+- Background handlers: `action.advanced`, `sdk.listActions`, `sdk.getActionFormats`, `sdk.getActionFields`, `sdk.validateAction`.
+- Three-shell messaging (popup / web / desktop): `advancedAction`, `listActions`, `getActionFormats`, `getActionFields`, `validateAction`.
+- ActionsMenu entry "Advanced action" (between "Airdrop tokens" and "Pair hardware signer"); `'advanced'` sub-route in every App.jsx.
+- Smoke `advanced-actions-form.smoke.js` — covers single-export, 4-stage machine, 5 messaging call-sites, rest-field + auto-field rendering, dedicated-form decoration, 5 core flow guards, mocked-SDK introspection happy paths, 5 BG handler registrations, 5 messaging exports × 3 shells, ActionsMenu + App.jsx wiring.
+
+**FreeWallet migration UI — §40.13 + §19.7**
+
+First-class onboarding entry for users migrating from FreeWallet, plus a guided "Migrate to BIP39" wizard for users who want to move off the Counterwallet-legacy format.
+
+- `packages/core/src/shared/routes/Onboarding.jsx` — third button "Coming from FreeWallet" alongside Create / Import; wired via optional `onImportFromFreeWallet` prop.
+- `packages/core/src/shared/routes/ImportWallet.jsx` — new `variant` prop (`'default' | 'freewallet'`). In FreeWallet mode: title reads "Import from FreeWallet", subtitle calls out the 12-word Counterwallet format explicitly, default wallet name is "FreeWallet", and the word-count validator tightens from `[12, 15, 18, 21, 24]` to `[12]` only (FreeWallet never used any other length). Format detection is unchanged — the import path still dispatches to the Counterwallet-legacy code path and creates the wallet with `origin: 'imported-freewallet'`, `format: 'counterwallet-legacy'`.
+- `packages/core/src/shared/routes/MigrateToBip39.jsx` — 4-stage guided wizard (explain → create → submitting → done). Creates a new BIP39 wallet alongside the legacy wallet (does not touch the existing one), then renders a per-chain side-by-side list of legacy addresses and new-wallet destinations for manual sweeping through the existing Send flow.
+- `packages/core/src/shared/routes/Home.jsx` — when the active wallet has `format === 'counterwallet-legacy'`, renders a dismissible banner above the balance grid linking to the migration wizard. New `onMigrateToBip39` prop; banner uses `.legacyBanner` / `.legacyBannerTitle` / `.legacyBannerHint` classes.
+- Three-shell App.jsx (popup / web / desktop): new `'import-freewallet'` onboarding step that renders `ImportWallet` with `variant="freewallet"`; new `'migrate-bip39'` unlocked sub-route rendering `MigrateToBip39`; Onboarding gets `onImportFromFreeWallet`; Home gets `onMigrateToBip39`.
+- Smoke `freewallet-migration.smoke.js` — Onboarding entry, ImportWallet variant behavior + tightened word-count + rebrand, MigrateToBip39 4-stage machine + createWallet wiring, Home legacy banner gating + CSS class, three-shell App.jsx wiring of both the onboarding sub-state and the unlocked sub-route.
+
+### Known deferrals
+
+- **Automated one-shot sweep** — §40.13 mentions an optional sweep that moves balances from every legacy address to the new BIP39 wallet in a single click. That requires a dedicated SweepForm surface (the `sweepAsset` flow exists but has no authoring UI yet). The migration wizard instead lists each chain's legacy→new pair so the user can sweep manually via the normal Send/SWEEP flow. Follow-up step adds the automated path.
+- **Batch SWEEP across chains** — same constraint. Each chain's sweep is a separate tx on that chain's network, so the UX is inherently N-click; the sweep form would sequence them with a single password prompt.
+- **Legacy address labels** — FreeWallet has no label export facility (noted in §19.7); addresses arrive with default "Address #N" labels for the user to relabel manually.
+- **"Settings → Migrate" entry** — the migration wizard is reachable only from the Home banner today. A dedicated Settings path would be nice for users who dismiss the banner; lands with the first Settings route to ship.
+- **Advanced form — value inspector** — for debugging, a "see the raw serialized action string" toggle before signing would be helpful. Defer until users ask.
+- **Advanced form — pre-populated params from a pasted action string** — round-trip for "I saw this action on chain, let me re-submit it with tweaks" use case. Defer.
+
+### Phase 2 closed
+
+All 26 steps of the Phase 2 plan (§40 authoring surfaces) are now on master:
+
+| Piece | Step(s) | §    | Feature                                           |
+| ----- | ------- | ---- | ------------------------------------------------- |
+| 1     | 1-2     | 39   | Shared routes + browser bundle                    |
+| 2     | 3-7     | 40.1 | Token Creation Wizard                             |
+| 3     | 8-11    | 40.2-5 | Standalone ISSUE / MINT / DESTROY / admin       |
+| 4     | 12-15   | 40.11, 17-18 | Hardware signer pairing infrastructure    |
+| 5     | 16-19   | 40.12 | Electron desktop shell                           |
+| 6     | 20      | 40.6 | BROADCAST                                         |
+| 7     | 21-22   | 40.7 | DISPENSER authoring + explorer                    |
+| 8     | 23      | 40.8 | DIVIDEND                                          |
+| 9     | 24      | 40.9 | AIRDROP (two-tx flow)                             |
+| 10    | 25      | 40.10 | Advanced Actions                                 |
+| 11    | 26      | 40.13 | FreeWallet migration                             |
+
+**Pending verification across Phase 2** (unchanged from prior ships): real hardware signer pairing end-to-end; Electron `pnpm run dist`; pending-airdrop resume on a live explorer; advanced-action signing for every action kind the SDK lists. Phase 3 (DEX + messaging, §41) is now unblocked.
+
 ## [0.64.0] - 2026-04-23
 
 Phase 2 — Step 24 of 26 — piece 9. AIRDROP authoring flow (§40.9). Distributes a token to every address on a pasted or uploaded list. Ships as a **two-transaction flow** rather than the single BATCH the spec suggested: a LIST action creates the on-chain address pool, and once it's indexed the AIRDROP references it by `LIST_ACTION_INDEX`. State is persisted to the vault so closing the wallet between the two signs is resumable.

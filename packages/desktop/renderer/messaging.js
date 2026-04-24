@@ -165,6 +165,31 @@ export function clearPendingAirdrop(req) {
 }
 
 /** @param {object} opts */
+export function advancedAction(opts) {
+    return /** @type {any} */ (sendMessage('action.advanced', opts));
+}
+
+/** @param {object} req */
+export function listActions(req) {
+    return /** @type {any} */ (sendMessage('sdk.listActions', req));
+}
+
+/** @param {object} req */
+export function getActionFormats(req) {
+    return /** @type {any} */ (sendMessage('sdk.getActionFormats', req));
+}
+
+/** @param {object} req */
+export function getActionFields(req) {
+    return /** @type {any} */ (sendMessage('sdk.getActionFields', req));
+}
+
+/** @param {object} req */
+export function validateAction(req) {
+    return /** @type {any} */ (sendMessage('sdk.validateAction', req));
+}
+
+/** @param {object} opts */
 export function registerSigner(opts) {
     return /** @type {any} */ (sendMessage('signer.register', opts));
 }

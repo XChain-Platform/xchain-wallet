@@ -11,16 +11,27 @@ const ACCEPTED_WORD_COUNTS = [12, 15, 18, 21, 24];
  * words) and Counterwallet-legacy (12 words) — the core
  * `importMnemonic` flow auto-detects format.
  *
+ * When `variant="freewallet"` (§40.13), the form rebrands for users
+ * migrating from FreeWallet: title + copy call out FreeWallet
+ * explicitly, the default wallet name is "FreeWallet", and the
+ * word-count validator tightens to 12 (FreeWallet only ever used a
+ * 12-word Counterwallet mnemonic). The import path is otherwise
+ * identical — the format detector still dispatches to the
+ * Counterwallet-legacy or BIP39 code path as appropriate.
+ *
  * @param {object} props
  * @param {() => void} props.onBack
- * @param {() => void} props.onImported  refreshes App.jsx state
+ * @param {() => void} props.onImported             refreshes App.jsx state
+ * @param {'default' | 'freewallet'} [props.variant]
  */
-export function ImportWallet({ onBack, onImported }) {
+export function ImportWallet({ onBack, onImported, variant: importVariant = 'default' }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
 
-    const [name, setName] = useState('Imported Wallet');
+    const isFreeWallet = importVariant === 'freewallet';
+    const acceptedWordCounts = isFreeWallet ? [12] : ACCEPTED_WORD_COUNTS;
+    const [name, setName] = useState(isFreeWallet ? 'FreeWallet' : 'Imported Wallet');
     const [mnemonic, setMnemonic] = useState('');
     const [password, setPassword] = useState('');
     const [confirm, setConfirm] = useState('');
@@ -41,8 +52,9 @@ export function ImportWallet({ onBack, onImported }) {
             return;
         }
         const wordCount = trimmed.split(' ').length;
-        if (!ACCEPTED_WORD_COUNTS.includes(wordCount)) {
-            setError(`Expected 12, 15, 18, 21, or 24 words — got ${wordCount}.`);
+        if (!acceptedWordCounts.includes(wordCount)) {
+            const expected = acceptedWordCounts.join(', ');
+            setError(`Expected ${expected} word${acceptedWordCounts.length === 1 ? '' : 's'} — got ${wordCount}.`);
             return;
         }
         if (password.length < MIN_PASSWORD_LENGTH) {
@@ -74,12 +86,18 @@ export function ImportWallet({ onBack, onImported }) {
         <form onSubmit={handleSubmit} noValidate>
             <header className={headClass}>
                 <h1 className={titleClass}>
-                    {isFull ? 'Import an existing wallet' : 'Import wallet'}
+                    {isFreeWallet
+                        ? (isFull ? 'Import from FreeWallet' : 'FreeWallet import')
+                        : (isFull ? 'Import an existing wallet' : 'Import wallet')}
                 </h1>
                 <p className={subtitleClass}>
-                    {isFull
-                        ? 'Enter a BIP39 recovery phrase (12, 15, 18, 21, or 24 words) or a Counterwallet 12-word mnemonic. The format is detected automatically.'
-                        : 'Paste a 12-, 15-, 18-, 21-, or 24-word recovery phrase.'}
+                    {isFreeWallet
+                        ? (isFull
+                            ? 'Paste your 12-word FreeWallet recovery phrase. We\'ll import it as a Counterwallet-legacy wallet — the same derivation FreeWallet used — so every address matches the one you already know.'
+                            : 'Paste your 12-word FreeWallet recovery phrase.')
+                        : (isFull
+                            ? 'Enter a BIP39 recovery phrase (12, 15, 18, 21, or 24 words) or a Counterwallet 12-word mnemonic. The format is detected automatically.'
+                            : 'Paste a 12-, 15-, 18-, 21-, or 24-word recovery phrase.')}
                 </p>
             </header>
             <label className={styles.mnemonicLabel} htmlFor="xc-mnemonic">

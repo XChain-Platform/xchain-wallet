@@ -38,6 +38,13 @@ export {
     updatePendingAirdrop,
     clearPendingAirdrop,
 } from './pendingAirdrops.js';
+export { advancedAction } from './advancedAction.js';
+export {
+    listActions,
+    getActionFormats,
+    getActionFields,
+    validateActionDryRun,
+} from './sdkIntrospection.js';
 export {
     registerSigner,
     listSignersForWallet,

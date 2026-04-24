@@ -5,14 +5,16 @@ import styles from './Onboarding.module.css';
 
 /**
  * Welcome screen — the entry point for users with no wallet yet.
- * Dispatches to `CreateWallet` or `ImportWallet` via the parent App's
+ * Dispatches to `CreateWallet`, `ImportWallet`, or (§40.13) the
+ * FreeWallet-branded `ImportWallet` variant via the parent App's
  * onboarding sub-route state.
  *
  * @param {object} props
  * @param {() => void} [props.onCreate]
  * @param {() => void} [props.onImport]
+ * @param {() => void} [props.onImportFromFreeWallet]
  */
-export function Onboarding({ onCreate, onImport }) {
+export function Onboarding({ onCreate, onImport, onImportFromFreeWallet }) {
     const { shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -47,6 +49,14 @@ export function Onboarding({ onCreate, onImport }) {
                     disabled={!onImport}
                 >
                     I already have a wallet
+                </Button>
+                <Button
+                    variant="ghost"
+                    block
+                    onClick={onImportFromFreeWallet}
+                    disabled={!onImportFromFreeWallet}
+                >
+                    Coming from FreeWallet
                 </Button>
             </div>
         </Screen>
