@@ -618,6 +618,39 @@ export function claimRewardsActionHw(opts) {
 }
 
 /**
+ * Build, sign, and broadcast a DELEGATE action (§42.7.2 delegation-
+ * lane). Points your hub-signing authority at a new Ed25519 pubkey
+ * without touching the stake amount. Protocol format:
+ * VERSION|NEW_SIGNING_PUBKEY.
+ *
+ * @param {object} opts
+ */
+export function delegateAction(opts) {
+    return /** @type {any} */ (sendMessage('action.delegate', opts));
+}
+
+/** @param {object} opts */
+export function delegateActionHw(opts) {
+    return /** @type {any} */ (sendMessage('action.delegate.hw', opts));
+}
+
+/**
+ * Build, sign, and broadcast a REVOKE_DELEGATION action (§42.7.2
+ * delegation-lane). Removes a previously-delegated signing pubkey.
+ * Protocol format: VERSION|SIGNING_PUBKEY.
+ *
+ * @param {object} opts
+ */
+export function revokeDelegationAction(opts) {
+    return /** @type {any} */ (sendMessage('action.revokeDelegation', opts));
+}
+
+/** @param {object} opts */
+export function revokeDelegationActionHw(opts) {
+    return /** @type {any} */ (sendMessage('action.revokeDelegation.hw', opts));
+}
+
+/**
  * Syntax-validate contract source (acorn parse + size check + float
  * warnings + reserved-identifier check). Pure; no network.
  *

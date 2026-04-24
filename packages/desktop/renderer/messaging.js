@@ -283,6 +283,26 @@ export function claimRewardsActionHw(opts) {
     return /** @type {any} */ (sendMessage('action.claimRewards.hw', opts));
 }
 
+/** @param {object} opts */
+export function delegateAction(opts) {
+    return /** @type {any} */ (sendMessage('action.delegate', opts));
+}
+
+/** @param {object} opts */
+export function delegateActionHw(opts) {
+    return /** @type {any} */ (sendMessage('action.delegate.hw', opts));
+}
+
+/** @param {object} opts */
+export function revokeDelegationAction(opts) {
+    return /** @type {any} */ (sendMessage('action.revokeDelegation', opts));
+}
+
+/** @param {object} opts */
+export function revokeDelegationActionHw(opts) {
+    return /** @type {any} */ (sendMessage('action.revokeDelegation.hw', opts));
+}
+
 /** @param {object} req */
 export function validateContractCode(req) {
     return /** @type {any} */ (sendMessage('contracts.validate', req));

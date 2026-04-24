@@ -72,6 +72,7 @@ export {
 } from './stakingQueries.js';
 export { stakeAction } from './stakeAction.js';
 export { unstakeAction, claimRewardsAction } from './unstakeClaimActions.js';
+export { delegateAction, revokeDelegationAction } from './delegateRevokeActions.js';
 export {
     contractValidate,
     contractCheckCodeSize,

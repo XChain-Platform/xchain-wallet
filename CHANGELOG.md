@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.82.0] - 2026-04-24
+
+Phase 4 — Step 10 of 23. DELEGATE + REVOKE_DELEGATION authoring forms (§42.7.2 delegation-lane). Both actions take a 64-hex Ed25519 pubkey and share a chassis, so they ship in one commit combined into `DelegationActionForm.jsx` with a `mode` prop (same pattern as Step 9's StakingActionForm).
+
+### Added
+
+- `packages/core/src/flows/delegateRevokeActions.js` — `delegateAction` + `revokeDelegationAction` composers. Both guard their 64-hex Ed25519 pubkey field (DELEGATE: `NEW_SIGNING_PUBKEY`, REVOKE_DELEGATION: `SIGNING_PUBKEY`) up-front before handing to the SDK encoder.
+- `packages/extension/src/background/createBackgroundHost.js` — `action.delegate` + `action.revokeDelegation` + both `.hw` variants (via `registerHwHandler`).
+- Three-shell messaging helpers — `delegateAction` / `delegateActionHw` / `revokeDelegationAction` / `revokeDelegationActionHw` in popup + web + desktop `messaging.js`.
+- `packages/core/src/shared/routes/DelegationActionForm.jsx` — one component, two modes via `mode` prop (`'delegate' | 'revoke'`). Delegate mode asks for a new pubkey and explains it replaces any currently-active delegation. Revoke mode pre-populates the pubkey input by reading the source address's delegations via `messaging.getDelegationsForAddress` (the read-side already in place from Step 7) — the user can override to revoke an older key. Review screen + SignCredentials + HW branch + 4-stage state machine are shared.
+- Three App.jsx — new `'staking-delegate'` + `'staking-revoke'` sub-routes. `StakingDashboard` now wires `onDelegate` + `onRevokeDelegation` through to the two routes. The existing Delegate / Revoke buttons on the dashboard (rendered disabled in Step 7) are now live.
+
+### Notes
+
+- Staking authoring surface (§42.7.1–§42.7.3) is now complete. Steps 8 (STAKE), 9 (UNSTAKE + CLAIM_REWARDS), and 10 (DELEGATE + REVOKE_DELEGATION) close out every write-side staking action. Step 11 (operator / validator dashboard §42.7.5) is the last staking sub-step.
+- Dashboard consistency: all five staking action buttons (Stake / Unstake / Claim / Delegate / Revoke) are now live when their preconditions are met (has stake, has pending rewards, has delegation).
+
 ## [0.81.0] - 2026-04-24
 
 Phase 4 — Step 9 of 23. UNSTAKE + CLAIM_REWARDS authoring forms (§42.7.2 unstake-lane + §42.7.3). Both actions are trivially small on-chain — UNSTAKE is `VERSION|TIER`, CLAIM_REWARDS is `VERSION` — so they ship in one commit, combined into `StakingActionForm.jsx` with a `mode` prop (same pattern as §42.5 ContractFundsForm).
