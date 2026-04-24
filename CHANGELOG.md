@@ -7,6 +7,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.72.0] - 2026-04-24
+
+Phase 3 — DEX Steps 8–11. Closes the DEX tail: the Market view now shows per-market trade history for the user's addresses; COINPAY obligations surface as a Home resume card and sign through a dedicated form; SWAP is available from the Actions menu; and MarketsList rows flag when a token has an open dispenser. Messaging (Steps 12–14) is out-of-scope here and lands in a subsequent release once the platform-side infra is verified on master.
+
+Bumps pinned `xchain-sdk` to `^1.9.1` (adds `getCoinpayObligations` for the COINPAY queue).
+
+### Added
+
+**Step 8 — Per-market trade history (§41.3.6)**
+
+- `packages/core/src/shared/components/TradeHistoryPanel.jsx` — collapsible panel below `OpenOrdersPanel`. Fans out `messaging.getMarketHistory({ chainId, tick1, tick2, address })` across every wallet address on the chain, de-duplicates and sorts by timestamp, renders time / price / size / side / owner-address; `onOpenTx` callback reserved for a future tx-detail route. No polling — manual Refresh button only, since trade history grows slowly and adding another 5s timer alongside the orderbook + open-orders pollers is overkill.
+- `packages/core/src/shared/routes/MarketView.jsx` — imports + renders `TradeHistoryPanel` below the PlaceOrder / OpenOrders row.
+- No new core flow, no new background handler, no new messaging helper — Step 1's `getMarketHistory` already accepts the optional `address` filter. Smoke: `packages/core/test/trade-history.smoke.js`.
+
+**Step 9 — COINPAY queue + sign (§41.4)**
+
+- `packages/core/src/flows/coinpayAction.js` — convenience wrapper for the COINPAY action. Validates `orderMatchActionIndex` / `payeeAddress` / `coinAmount` (positive integer, base units), composes `{ VERSION: '0', ORDER_MATCH_ACTION_INDEX }`, attaches `customOutputs: [{ address: payeeAddress, value: coinAmount }]` so the encoder builds the native-coin output to the seller into the same transaction.
+- `packages/core/src/flows/coinpayQueries.js` — `getCoinpayObligationsForAddress` / `getCoinpaysForAddress` passthroughs to the new xchain-sdk@1.9.1 `sdk.getCoinpayObligations` / `sdk.getCoinpays` methods.
+- `packages/extension/src/background/createBackgroundHost.js` — registers `action.coinpay` + `action.coinpay.hw` (HW variant re-using the existing `registerHwHandler` helper) + `coinpays.obligationsForAddress` + `coinpays.forAddress`.
+- Three-shell messaging helpers — `coinpayAction` + `coinpayActionHw` + `getCoinpayObligationsForAddress` + `getCoinpaysForAddress`.
+- `packages/core/src/shared/routes/CoinpayForm.jsx` — on mount, scans every `(chainId, address)` pair in the wallet for obligations filtered to `payer_address === address && coinpay_status === 'pending_coinpay'`. Renders a picker of all pending obligations, shows the obligation summary (chain / action index / payer / payee / coin amount / expiration), and signs via `SignCredentials` (HW path reuses the shared gate). `initialActionIndex` / `initialChainId` / `initialAddress` props auto-select the right row when opened from the Home resume card.
+- `packages/core/src/shared/routes/Home.jsx` — gains `onResumeCoinpay` prop + `pendingCoinpays` state. On mount (same `useEffect` that hydrates balances + pending airdrops), fans out across all wallet addresses, filters to `pending_coinpay` on the payer side, and renders one resume card per obligation using the existing `pendingAirdropCard` class. Card click fires `onResumeCoinpay({ chainId, address, orderMatchActionIndex })`.
+- Three-shell App.jsx — new `'coinpay'` sub-route + `resumeCoinpay` state + ActionsMenu `'coinpay'` entry ("Pay COINPAY"). `onResumeCoinpay` threaded to Home so the card deep-links into the form with the obligation preselected.
+- `packages/extension/package.json` + `packages/web/package.json` — bumped `xchain-sdk` pin to `^1.9.1`. `packages/core/test/sdk-bundle.smoke.js` asserts the new pin.
+- Smoke: `packages/core/test/coinpay-form.smoke.js` covers flow guards, form wiring, background handlers, 3-shell messaging, 3-shell App.jsx, Home resume card, and SDK pin.
+
+**Step 10 — SWAP form (§41.5)**
+
+- `packages/core/src/flows/swapAction.js` — convenience wrapper for the SWAP action. Validates v0 create baseline (GIVE_TICK / GIVE_AMOUNT / GET_TICK / GET_AMOUNT all required) and transparently supports v1 cancel / v2 edit via `SWAP_ACTION_INDEX` — the wrapper only gates create-mode fields and forwards whatever params the caller provides.
+- `packages/extension/src/background/createBackgroundHost.js` — registers `action.swap` + `action.swap.hw`.
+- Three-shell messaging helpers — `swapAction` + `swapActionHw`.
+- `packages/core/src/shared/routes/SwapForm.jsx` — single-chain v0 create form (GIVE_COIN = GET_COIN = current chain's native ticker, set automatically from the registry). Rejects native-coin tickers with a DISPENSER hint (SWAP does NOT work with native coin per protocol rules) and rejects same-ticker give/get pairs. Reuses `SignCredentials` + `isHwSource` for the sign gate.
+- Three-shell App.jsx — new `'swap'` sub-route + ActionsMenu `'swap'` entry ("Swap tokens").
+- Smoke: `packages/core/test/swap-form.smoke.js`.
+
+**Step 11 — Dispenser-available badge (§41.6)**
+
+- `packages/core/src/shared/components/DispenserBadge.jsx` — queries `messaging.getDispensersForToken({ chainId, tick })` with a module-level session-scoped cache keyed by `${chainId}::${tick}` so a MarketsList with many rows referencing the same ticker only fires one explorer request. Filters responses to rows whose `status` is `valid` / `open` / omitted; renders nothing when loading or count is 0; otherwise shows a small "Dispenser · TICK" pill with the count in the tooltip. `__clearDispenserBadgeCache` test hook exported for downstream unit-test runners.
+- `packages/core/src/shared/routes/MarketsList.jsx` — imports `DispenserBadge` and renders one per ticker in each market row (`tick1` + `tick2`).
+- Smoke: `packages/core/test/dispenser-badge.smoke.js`.
+
+### Changed
+
+- `packages/core/test/sdk-bundle.smoke.js` — asserts `xchain-sdk ^1.9.1` on extension + web instead of `^1.9.0`.
+
+### Notes
+
+- 60/60 smoke tests green at this commit (was 56 at v0.71.0; +4 for Steps 8 / 9 / 10 / 11).
+- Step 12 (Messaging inbox + thread, §41.7.2) is blocked until the 2026-04-07 `xchain-sdk` / `xchain-explorer` / `xchain-decoder` messaging work (captured in `project_messaging_feature.md`) lands on master. Verify with `git log` in those repos before picking it up.
+
 ## [0.71.0] - 2026-04-24
 
 Phase 3 — DEX Steps 1–7. Single-market trading UX is end-to-end functional: browse markets + pin a watchlist, open a market, see the chart + depth-visualized orderbook + recent trades, place limit orders, cancel open orders. All sign paths reuse the Phase 2 HW Sign primitives (SignCredentials + isHwSource), so Trezor/Ledger slot in behind the same form surfaces. Settlement (BTCPay + SWAP), dispenser badge integration, and Messaging remain for subsequent commits.

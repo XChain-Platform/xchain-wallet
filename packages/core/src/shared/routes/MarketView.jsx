@@ -11,6 +11,7 @@ import { OrderbookPanel } from '../components/OrderbookPanel.jsx';
 import { RecentTradesPanel } from '../components/RecentTradesPanel.jsx';
 import { PlaceOrderPanel } from '../components/PlaceOrderPanel.jsx';
 import { OpenOrdersPanel } from '../components/OpenOrdersPanel.jsx';
+import { TradeHistoryPanel } from '../components/TradeHistoryPanel.jsx';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -179,6 +180,13 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack }) {
                     tick2={tick2}
                 />
             </div>
+
+            <TradeHistoryPanel
+                walletId={walletId}
+                chainId={chainId}
+                tick1={tick1}
+                tick2={tick2}
+            />
 
             <div className={styles.actions}>
                 <Button variant="ghost" onClick={onBack}>Back</Button>

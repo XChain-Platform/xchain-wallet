@@ -45,6 +45,8 @@ import { AdvancedActionsForm } from '@xchain-wallet/core/shared/routes/AdvancedA
 import { MigrateToBip39 } from '@xchain-wallet/core/shared/routes/MigrateToBip39.jsx';
 import { MarketsList } from '@xchain-wallet/core/shared/routes/MarketsList.jsx';
 import { MarketView } from '@xchain-wallet/core/shared/routes/MarketView.jsx';
+import { CoinpayForm } from '@xchain-wallet/core/shared/routes/CoinpayForm.jsx';
+import { SwapForm } from '@xchain-wallet/core/shared/routes/SwapForm.jsx';
 import { PairSignerForm } from '@xchain-wallet/core/shared/routes/PairSignerForm.jsx';
 import { pairTrezorSigner } from './signers/trezorFactory.js';
 import { pairLedgerSigner } from './signers/ledgerFactory.js';
@@ -68,10 +70,13 @@ function AppInner() {
         /** @type {'welcome' | 'create' | 'import' | 'import-freewallet'} */ ('welcome'),
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'swap'} */ ('home'),
     );
     const [resumeAirdropId, setResumeAirdropId] = useState(
         /** @type {string | null} */ (null),
+    );
+    const [resumeCoinpay, setResumeCoinpay] = useState(
+        /** @type {{ chainId: string, address: string, orderMatchActionIndex: string } | null} */ (null),
     );
     const [activeWalletId, setActiveWalletId] = useState(
         /** @type {string | null} */ (null),
@@ -340,6 +345,29 @@ function AppInner() {
                     />
                 );
             }
+            if (unlockedView === 'coinpay' && activeWalletId) {
+                return (
+                    <CoinpayForm
+                        walletId={activeWalletId}
+                        chainId={resumeCoinpay?.chainId}
+                        address={resumeCoinpay?.address}
+                        orderMatchActionIndex={resumeCoinpay?.orderMatchActionIndex}
+                        onBack={() => {
+                            const cameFromResume = resumeCoinpay !== null;
+                            setResumeCoinpay(null);
+                            setUnlockedView(cameFromResume ? 'home' : 'actions');
+                        }}
+                    />
+                );
+            }
+            if (unlockedView === 'swap' && activeWalletId) {
+                return (
+                    <SwapForm
+                        walletId={activeWalletId}
+                        onBack={() => setUnlockedView('actions')}
+                    />
+                );
+            }
             if (unlockedView === 'actions' && activeWalletId) {
                 return (
                     <ActionsMenu
@@ -361,6 +389,11 @@ function AppInner() {
                             },
                             onAdvanced: () => setUnlockedView('advanced'),
                             onPairSigner: () => setUnlockedView('pair-signer'),
+                            onPayCoinpay: () => {
+                                setResumeCoinpay(null);
+                                setUnlockedView('coinpay');
+                            },
+                            onSwap: () => setUnlockedView('swap'),
                         })}
                         onBack={() => setUnlockedView('home')}
                     />
@@ -377,6 +410,10 @@ function AppInner() {
                     onResumeAirdrop={activeWalletId ? (id) => {
                         setResumeAirdropId(id);
                         setUnlockedView('airdrop');
+                    } : undefined}
+                    onResumeCoinpay={activeWalletId ? (ref) => {
+                        setResumeCoinpay(ref);
+                        setUnlockedView('coinpay');
                     } : undefined}
                     onMigrateToBip39={activeWalletId ? () => setUnlockedView('migrate-bip39') : undefined}
                 />
@@ -402,6 +439,8 @@ function buildActionEntries({
     onAirdrop,
     onAdvanced,
     onPairSigner,
+    onPayCoinpay,
+    onSwap,
 }) {
     return [
         {
@@ -475,6 +514,18 @@ function buildActionEntries({
             label: 'Airdrop tokens',
             description: 'Distribute a token to a pasted or uploaded list of addresses — signs a LIST then an AIRDROP (§40.9).',
             onSelect: onAirdrop,
+        },
+        {
+            id: 'coinpay',
+            label: 'Pay COINPAY',
+            description: 'Settle a pending token/coin order match by paying the native-coin leg (§41.4).',
+            onSelect: onPayCoinpay,
+        },
+        {
+            id: 'swap',
+            label: 'Swap tokens',
+            description: 'Atomic token-pair swap — no native coin, no COINPAY follow-up (§41.5).',
+            onSelect: onSwap,
         },
         {
             id: 'advanced',

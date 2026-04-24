@@ -31,6 +31,10 @@ const {
     dispenserAction,
     orderAction,
     cancelOrder,
+    coinpayAction,
+    swapAction,
+    getCoinpayObligationsForAddress,
+    getCoinpaysForAddress,
     dispensersForSource,
     dispensersForAddress,
     dispensersForToken,
@@ -311,6 +315,8 @@ export function createBackgroundHost(deps) {
     registerHwHandler('action.advanced.hw', advancedAction);
     registerHwHandler('action.order.hw', orderAction);
     registerHwHandler('action.cancelOrder.hw', cancelOrder);
+    registerHwHandler('action.coinpay.hw', coinpayAction);
+    registerHwHandler('action.swap.hw', swapAction);
 
     // Signer status probe — routes straight through the signer bridge
     // without touching vault/SDK. Returns `'idle'` when the bridge
@@ -368,6 +374,22 @@ export function createBackgroundHost(deps) {
     });
     host.register('action.cancelOrder', async (req, { vault, chainRegistry, sdkRegistry }) => {
         return cancelOrder({ ...req, vault, chainRegistry, sdkRegistry });
+    });
+
+    // §41.4 COINPAY — buyer-side settlement for token/native-coin matches.
+    host.register('action.coinpay', async (req, { vault, chainRegistry, sdkRegistry }) => {
+        return coinpayAction({ ...req, vault, chainRegistry, sdkRegistry });
+    });
+    host.register('coinpays.obligationsForAddress', async (req, { sdkRegistry }) => {
+        return getCoinpayObligationsForAddress({ ...req, sdkRegistry });
+    });
+    host.register('coinpays.forAddress', async (req, { sdkRegistry }) => {
+        return getCoinpaysForAddress({ ...req, sdkRegistry });
+    });
+
+    // §41.5 SWAP — atomic token-pair swap (no COINPAY follow-up).
+    host.register('action.swap', async (req, { vault, chainRegistry, sdkRegistry }) => {
+        return swapAction({ ...req, vault, chainRegistry, sdkRegistry });
     });
 
     // Dispenser discovery + detail — read-only explorer passthroughs

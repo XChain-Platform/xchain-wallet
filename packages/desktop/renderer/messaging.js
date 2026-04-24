@@ -221,6 +221,22 @@ export function cancelOrder(opts) { return /** @type {any} */ (sendMessage('acti
 /** @param {object} opts */
 export function cancelOrderHw(opts) { return /** @type {any} */ (sendMessage('action.cancelOrder.hw', opts)); }
 
+// §41.4 COINPAY
+/** @param {object} opts */
+export function coinpayAction(opts) { return /** @type {any} */ (sendMessage('action.coinpay', opts)); }
+/** @param {object} opts */
+export function coinpayActionHw(opts) { return /** @type {any} */ (sendMessage('action.coinpay.hw', opts)); }
+/** @param {{ chainId: string, address: string, opts?: object }} req */
+export function getCoinpayObligationsForAddress(req) { return /** @type {any} */ (sendMessage('coinpays.obligationsForAddress', req)); }
+/** @param {{ chainId: string, address: string, opts?: object }} req */
+export function getCoinpaysForAddress(req) { return /** @type {any} */ (sendMessage('coinpays.forAddress', req)); }
+
+// §41.5 SWAP
+/** @param {object} opts */
+export function swapAction(opts) { return /** @type {any} */ (sendMessage('action.swap', opts)); }
+/** @param {object} opts */
+export function swapActionHw(opts) { return /** @type {any} */ (sendMessage('action.swap.hw', opts)); }
+
 /** @param {object} opts */
 export function advancedAction(opts) {
     return /** @type {any} */ (sendMessage('action.advanced', opts));

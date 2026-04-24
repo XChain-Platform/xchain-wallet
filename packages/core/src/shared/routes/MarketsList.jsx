@@ -7,6 +7,7 @@ import {
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { DispenserBadge } from '../components/DispenserBadge.jsx';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -311,6 +312,8 @@ function MarketRow({ chainId, tick1, tick2, lastPrice, change24h, depth, starred
                 {typeof depth === 'number' && Number.isFinite(depth) ? (
                     <span>depth {depth}</span>
                 ) : null}
+                <DispenserBadge chainId={chainId} tick={tick1} />
+                <DispenserBadge chainId={chainId} tick={tick2} />
             </button>
         </li>
     );

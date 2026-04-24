@@ -22,6 +22,12 @@ export { destroyAsset } from './destroyAsset.js';
 export { broadcastAction } from './broadcastAction.js';
 export { dispenserAction } from './dispenserAction.js';
 export { orderAction, cancelOrder } from './orderAction.js';
+export { coinpayAction } from './coinpayAction.js';
+export { swapAction } from './swapAction.js';
+export {
+    getCoinpayObligationsForAddress,
+    getCoinpaysForAddress,
+} from './coinpayQueries.js';
 export {
     dispensersForSource,
     dispensersForAddress,
