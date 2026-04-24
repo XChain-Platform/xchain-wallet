@@ -305,6 +305,27 @@ export function swapAction(opts) { return /** @type {any} */ (sendMessage('actio
 /** @param {object} opts */
 export function swapActionHw(opts) { return /** @type {any} */ (sendMessage('action.swap.hw', opts)); }
 
+// §41.7.2 Messaging inbox
+/** @param {object} opts */
+export function getMessagingInbox(opts) { return /** @type {any} */ (sendMessage('messaging.inbox', opts)); }
+
+// §41.7.3 Compose
+/** @param {object} opts */
+export function messageAction(opts) { return /** @type {any} */ (sendMessage('action.message', opts)); }
+/** @param {object} opts */
+export function messageActionHw(opts) { return /** @type {any} */ (sendMessage('action.message.hw', opts)); }
+/** @param {{ chainId: string, address: string }} req */
+export function getRecipientPubkey(req) { return /** @type {any} */ (sendMessage('messaging.pubkey', req)); }
+
+// §41.7.4 Contacts
+export function listContacts() { return /** @type {any} */ (sendMessage('contacts.list', {})); }
+/** @param {{ chain: string, address: string }} req */
+export function findContactByAddress(req) { return /** @type {any} */ (sendMessage('contacts.findByAddress', req)); }
+/** @param {object} opts */
+export function saveContact(opts) { return /** @type {any} */ (sendMessage('contacts.save', opts)); }
+/** @param {{ id: string }} req */
+export function deleteContact(req) { return /** @type {any} */ (sendMessage('contacts.delete', req)); }
+
 /** @param {object} opts */
 export function advancedAction(opts) {
     return /** @type {any} */ (sendMessage('action.advanced', opts));

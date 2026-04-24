@@ -35,6 +35,13 @@ const {
     swapAction,
     getCoinpayObligationsForAddress,
     getCoinpaysForAddress,
+    getMessagingInbox,
+    messageAction,
+    getRecipientPubkey,
+    listContacts,
+    findContactByAddress,
+    saveContact,
+    deleteContact,
     dispensersForSource,
     dispensersForAddress,
     dispensersForToken,
@@ -317,6 +324,7 @@ export function createBackgroundHost(deps) {
     registerHwHandler('action.cancelOrder.hw', cancelOrder);
     registerHwHandler('action.coinpay.hw', coinpayAction);
     registerHwHandler('action.swap.hw', swapAction);
+    registerHwHandler('action.message.hw', messageAction);
 
     // Signer status probe — routes straight through the signer bridge
     // without touching vault/SDK. Returns `'idle'` when the bridge
@@ -390,6 +398,34 @@ export function createBackgroundHost(deps) {
     // §41.5 SWAP — atomic token-pair swap (no COINPAY follow-up).
     host.register('action.swap', async (req, { vault, chainRegistry, sdkRegistry }) => {
         return swapAction({ ...req, vault, chainRegistry, sdkRegistry });
+    });
+
+    // §41.7.2 Messaging inbox — password-gated decrypt of MESSAGE
+    // actions for one of the wallet's own addresses.
+    host.register('messaging.inbox', async (req, { vault, chainRegistry, sdkRegistry }) => {
+        return getMessagingInbox({ ...req, vault, chainRegistry, sdkRegistry });
+    });
+
+    // §41.7.3 Compose — MESSAGE action signing + recipient pubkey lookup.
+    host.register('action.message', async (req, { vault, chainRegistry, sdkRegistry }) => {
+        return messageAction({ ...req, vault, chainRegistry, sdkRegistry });
+    });
+    host.register('messaging.pubkey', async (req, { sdkRegistry }) => {
+        return getRecipientPubkey({ ...req, sdkRegistry });
+    });
+
+    // §41.7.4 Contacts — local address book CRUD. Shared across wallets.
+    host.register('contacts.list', async (_req, { vault }) => {
+        return listContacts({ vault });
+    });
+    host.register('contacts.findByAddress', async (req, { vault }) => {
+        return findContactByAddress({ ...req, vault });
+    });
+    host.register('contacts.save', async (req, { vault }) => {
+        return saveContact({ ...req, vault });
+    });
+    host.register('contacts.delete', async (req, { vault }) => {
+        return deleteContact({ ...req, vault });
     });
 
     // Dispenser discovery + detail — read-only explorer passthroughs

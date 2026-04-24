@@ -605,6 +605,43 @@ export function swapActionHw(opts) {
     return /** @type {any} */ (sendMessage('action.swap.hw', opts));
 }
 
+// §41.7.2 Messaging inbox — password-gated decrypt.
+/** @param {object} opts */
+export function getMessagingInbox(opts) {
+    return /** @type {any} */ (sendMessage('messaging.inbox', opts));
+}
+
+// §41.7.3 Compose — ECIES encrypt + MESSAGE action signing.
+/** @param {object} opts */
+export function messageAction(opts) {
+    return /** @type {any} */ (sendMessage('action.message', opts));
+}
+/** @param {object} opts */
+export function messageActionHw(opts) {
+    return /** @type {any} */ (sendMessage('action.message.hw', opts));
+}
+/** @param {{ chainId: string, address: string }} req */
+export function getRecipientPubkey(req) {
+    return /** @type {any} */ (sendMessage('messaging.pubkey', req));
+}
+
+// §41.7.4 Contacts — local address book.
+export function listContacts() {
+    return /** @type {any} */ (sendMessage('contacts.list', {}));
+}
+/** @param {{ chain: string, address: string }} req */
+export function findContactByAddress(req) {
+    return /** @type {any} */ (sendMessage('contacts.findByAddress', req));
+}
+/** @param {object} opts */
+export function saveContact(opts) {
+    return /** @type {any} */ (sendMessage('contacts.save', opts));
+}
+/** @param {{ id: string }} req */
+export function deleteContact(req) {
+    return /** @type {any} */ (sendMessage('contacts.delete', req));
+}
+
 /**
  * Submit any XChain action (§40.10 Advanced Actions Form). Takes the
  * same shape as the dedicated per-action helpers but accepts an

@@ -32,9 +32,10 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {() => void} [props.onMarkets]       navigate to the Markets list (§41.2)
  * @param {(id: string) => void} [props.onResumeAirdrop]  navigate to AirdropForm with a pending id
  * @param {(ref: { chainId: string, address: string, orderMatchActionIndex: string }) => void} [props.onResumeCoinpay]  navigate to CoinpayForm with a pending obligation (§41.4)
+ * @param {() => void} [props.onMessaging]     navigate to the Messaging inbox (§41.7.2)
  * @param {() => void} [props.onMigrateToBip39]           navigate to the §40.13 migration wizard when the active wallet is counterwallet-legacy
  */
-export function Home({ onLocked, onSend, onReceive, onCreateToken, onActions, onMarkets, onResumeAirdrop, onResumeCoinpay, onMigrateToBip39 }) {
+export function Home({ onLocked, onSend, onReceive, onCreateToken, onActions, onMarkets, onResumeAirdrop, onResumeCoinpay, onMessaging, onMigrateToBip39 }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -310,6 +311,14 @@ export function Home({ onLocked, onSend, onReceive, onCreateToken, onActions, on
                         disabled={!onMarkets}
                     >
                         Markets
+                    </Button>
+                    <Button
+                        variant="secondary"
+                        block={!isFull}
+                        onClick={onMessaging}
+                        disabled={!onMessaging}
+                    >
+                        Messaging
                     </Button>
                     <Button
                         variant="ghost"

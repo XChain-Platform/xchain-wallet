@@ -43,6 +43,9 @@ import { MarketsList } from '@xchain-wallet/core/shared/routes/MarketsList.jsx';
 import { MarketView } from '@xchain-wallet/core/shared/routes/MarketView.jsx';
 import { CoinpayForm } from '@xchain-wallet/core/shared/routes/CoinpayForm.jsx';
 import { SwapForm } from '@xchain-wallet/core/shared/routes/SwapForm.jsx';
+import { MessagingInbox } from '@xchain-wallet/core/shared/routes/MessagingInbox.jsx';
+import { ComposeMessage } from '@xchain-wallet/core/shared/routes/ComposeMessage.jsx';
+import { ContactsList } from '@xchain-wallet/core/shared/routes/ContactsList.jsx';
 import { PairSignerForm } from '@xchain-wallet/core/shared/routes/PairSignerForm.jsx';
 import { pairTrezorSigner } from '../signers/trezorFactory.js';
 import { pairLedgerSigner } from '../signers/ledgerFactory.js';
@@ -64,13 +67,16 @@ function AppInner() {
         /** @type {'welcome' | 'create' | 'import' | 'import-freewallet'} */ ('welcome'),
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'swap'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'swap' | 'messaging' | 'compose-message' | 'contacts'} */ ('home'),
     );
     const [resumeAirdropId, setResumeAirdropId] = useState(
         /** @type {string | null} */ (null),
     );
     const [resumeCoinpay, setResumeCoinpay] = useState(
         /** @type {{ chainId: string, address: string, orderMatchActionIndex: string } | null} */ (null),
+    );
+    const [composePrefill, setComposePrefill] = useState(
+        /** @type {{ chainId?: string, fromAddressId?: string, toAddress?: string } | null} */ (null),
     );
     const [activeWalletId, setActiveWalletId] = useState(
         /** @type {string | null} */ (null),
@@ -362,6 +368,45 @@ function AppInner() {
                     />
                 );
             }
+            if (unlockedView === 'messaging' && activeWalletId) {
+                return (
+                    <MessagingInbox
+                        walletId={activeWalletId}
+                        onCompose={(prefill) => {
+                            setComposePrefill(prefill || null);
+                            setUnlockedView('compose-message');
+                        }}
+                        onBack={() => setUnlockedView('home')}
+                    />
+                );
+            }
+            if (unlockedView === 'compose-message' && activeWalletId) {
+                return (
+                    <ComposeMessage
+                        walletId={activeWalletId}
+                        chainId={composePrefill?.chainId}
+                        fromAddressId={composePrefill?.fromAddressId}
+                        toAddress={composePrefill?.toAddress}
+                        onBack={() => {
+                            const from = composePrefill?.__from || 'messaging';
+                            setComposePrefill(null);
+                            setUnlockedView(from);
+                        }}
+                    />
+                );
+            }
+            if (unlockedView === 'contacts' && activeWalletId) {
+                return (
+                    <ContactsList
+                        walletId={activeWalletId}
+                        onSendMessage={(prefill) => {
+                            setComposePrefill({ ...prefill, __from: 'contacts' });
+                            setUnlockedView('compose-message');
+                        }}
+                        onBack={() => setUnlockedView('actions')}
+                    />
+                );
+            }
             if (unlockedView === 'actions' && activeWalletId) {
                 return (
                     <ActionsMenu
@@ -388,6 +433,7 @@ function AppInner() {
                                 setUnlockedView('coinpay');
                             },
                             onSwap: () => setUnlockedView('swap'),
+                            onContacts: () => setUnlockedView('contacts'),
                         })}
                         onBack={() => setUnlockedView('home')}
                     />
@@ -401,6 +447,7 @@ function AppInner() {
                     onCreateToken={activeWalletId ? () => setUnlockedView('wizard') : undefined}
                     onActions={activeWalletId ? () => setUnlockedView('actions') : undefined}
                     onMarkets={activeWalletId ? () => setUnlockedView('markets') : undefined}
+                    onMessaging={activeWalletId ? () => setUnlockedView('messaging') : undefined}
                     onResumeAirdrop={activeWalletId ? (id) => {
                         setResumeAirdropId(id);
                         setUnlockedView('airdrop');
@@ -435,6 +482,7 @@ function buildActionEntries({
     onPairSigner,
     onPayCoinpay,
     onSwap,
+    onContacts,
 }) {
     return [
         {
@@ -520,6 +568,12 @@ function buildActionEntries({
             label: 'Swap tokens',
             description: 'Atomic token-pair swap — no native coin, no COINPAY follow-up (§41.5).',
             onSelect: onSwap,
+        },
+        {
+            id: 'contacts',
+            label: 'Contacts',
+            description: 'Local address book — label counterparties, quick-compose to saved recipients (§41.7.4).',
+            onSelect: onContacts,
         },
         {
             id: 'advanced',

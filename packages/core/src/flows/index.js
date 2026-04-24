@@ -24,6 +24,18 @@ export { dispenserAction } from './dispenserAction.js';
 export { orderAction, cancelOrder } from './orderAction.js';
 export { coinpayAction } from './coinpayAction.js';
 export { swapAction } from './swapAction.js';
+export { getMessagingInbox } from './messagingInbox.js';
+export {
+    messageAction,
+    getRecipientPubkey,
+    PubkeyNotFoundError,
+} from './messageAction.js';
+export {
+    listContacts,
+    findContactByAddress,
+    saveContact,
+    deleteContact,
+} from './contacts.js';
 export {
     getCoinpayObligationsForAddress,
     getCoinpaysForAddress,

@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.73.0] - 2026-04-24
+
+Phase 3 — DEX and Messaging Steps 12–14. Closes Phase 3 in full: encrypted MESSAGE action signing + inbox + compose + contacts integration. No platform-side changes this release — the pinned `xchain-sdk ^1.9.1` already exposes the messaging surface (SDK 1.6.0 added `MessagingUtils`; SDK 1.7.0 added cross-chain; SDK 1.8.0/1.9.x rounded out the explorer client). `xchain-decoder` 1.9.0 populates the `pubkeys` table and `xchain-explorer` 1.14.0 exposes the pubkey lookup API — both verified live on master before building.
+
+### Added
+
+**Step 12 — Messaging inbox + thread (§41.7.2)**
+
+- `packages/core/src/flows/messagingInbox.js` — `getMessagingInbox({ vault, walletId, password, chainRegistry, sdkRegistry, addressId, type?, opts? })`. Delegates WIF derivation to the existing `exportPrivateKey` (same unlock + error surface as §17.7), then calls `sdk.getMessagesForAddress(address, { wif, type })` so the SDK auto-decrypts ECIES (method 1) entries in-process. ECDH (2) and AES (3) entries come back `encrypted: true / text: null` — the UI labels them "🔒 Encrypted (session key required)" since sessions are out of Phase 3 scope. Read-only; no vault mutation.
+- `packages/extension/src/background/createBackgroundHost.js` — registers `messaging.inbox`.
+- Three-shell messaging helpers — `getMessagingInbox`.
+- `packages/core/src/shared/routes/MessagingInbox.jsx` — 4-stage state machine (`pick → password → submitting → inbox`). Address picker for multi-address wallets; password re-prompt on wrong-password with focus/select. Two-pane Conversations/Thread layout matching the spec's ASCII mock: left pane lists counterparties sorted by most-recent activity; right pane shows an ordered thread with outgoing/incoming styling. Hydrates contacts-by-address map on mount (auto-association per §41.7.4).
+- Three-shell App.jsx — new `'messaging'` sub-route; `onMessaging` threaded to `Home`. `Home.jsx` grows a "Messaging" button alongside Markets.
+
+**Step 13 — Compose flow (§41.7.3)**
+
+- `packages/core/src/flows/messageAction.js` — `messageAction` core flow. On ECIES path, looks up recipient pubkey via `sdk.getPublicKey(destination)`, encrypts in-process via `sdk.messaging.eciesEncrypt`, builds MESSAGE v2 `{ VERSION: '2', COIN, DESTINATION, ENCRYPTED_MESSAGE }`. On plaintext-fallback path (`method: null`), builds MESSAGE v3 `{ VERSION: '3', COIN, DESTINATION, PLAINTEXT_MESSAGE }`. Throws typed `PubkeyNotFoundError` when the recipient has no on-chain pubkey — UI recovers by offering the unencrypted fallback checkbox per spec wording. `getRecipientPubkey` query flow wraps `sdk.getPublicKey` for the compose-form preview.
+- `packages/extension/src/background/createBackgroundHost.js` — registers `action.message` + `action.message.hw` (HW variant reuses `registerHwHandler`) + `messaging.pubkey`.
+- Three-shell messaging helpers — `messageAction` + `messageActionHw` + `getRecipientPubkey`.
+- `packages/core/src/shared/routes/ComposeMessage.jsx` — chain + from-address pickers, recipient input with debounced (400ms) pubkey lookup, 4-state UI banner (`idle` / `checking` / `found` / `missing`), message textarea, `SignCredentials` gate. On `missing`, offers the spec's verbatim "Continue anyway with an unencrypted message" checkbox.
+- `MessagingInbox.jsx` — gains `onCompose` prop and Reply / New-conversation buttons that navigate to compose with the current counterparty pre-filled.
+- Three-shell App.jsx — new `'compose-message'` sub-route + `composePrefill` state; back-link threads through an optional `__from` so the Cancel/Back key returns to whichever surface opened the form (Inbox or Contacts).
+
+**Step 14 — Contacts integration (§41.7.4)**
+
+- `packages/core/src/flows/contacts.js` — CRUD on the existing `vault.contacts` collection + `Contact` schema (both already present from §11.3.4): `listContacts`, `findContactByAddress({ vault, chain, address })`, `saveContact({ vault, record | input })`, `deleteContact({ vault, id })`. `saveContact` accepts either an existing `record` (updates in place, bumps `updatedAt`) or an `input` shape (creates a new Contact via `createContact`).
+- `packages/extension/src/background/createBackgroundHost.js` — registers `contacts.list` / `contacts.findByAddress` / `contacts.save` / `contacts.delete`.
+- Three-shell messaging helpers — `listContacts` / `findContactByAddress` / `saveContact` / `deleteContact`.
+- `packages/core/src/shared/routes/ContactsList.jsx` — single-route 3-mode state machine (`list` / `detail` / `edit`). Edit mode supports multiple (chain, address, label) entries per contact. Detail mode renders a "Send message" button that routes through ComposeMessage with the primary entry pre-filled. Delete is confirmed via `window.confirm`.
+- `MessagingInbox.jsx` — hydrates a `contactsByAddress` map on mount and uses it in the Conversations pane: known counterparties render as `Name (bc1q…abc)` instead of just the address.
+- Three-shell App.jsx — new `'contacts'` sub-route + ActionsMenu entry "Contacts". `onSendMessage` from ContactsList navigates to ComposeMessage with prefill.
+
+### Notes
+
+- 63/63 smoke tests green at this commit (was 60 at v0.72.0; +3 for messaging-inbox / compose-message / contacts).
+- Phase 3 is now complete. Phase 4 starts the Contracts / Staking / Cross-Chain / Multisig surfaces (§42+).
+
 ## [0.72.0] - 2026-04-24
 
 Phase 3 — DEX Steps 8–11. Closes the DEX tail: the Market view now shows per-market trade history for the user's addresses; COINPAY obligations surface as a Home resume card and sign through a dedicated form; SWAP is available from the Actions menu; and MarketsList rows flag when a token has an open dispenser. Messaging (Steps 12–14) is out-of-scope here and lands in a subsequent release once the platform-side infra is verified on master.
