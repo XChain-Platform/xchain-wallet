@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.87.0] - 2026-04-24
+
+Phase 4 — Step 15 of 23. Cross-chain swap form (§42.8.3). Reuses the §41.5 `swapAction` core flow with one structural change at the form level: `GIVE_COIN ≠ GET_COIN`. Same SWAP encoder produces both same-chain and cross-chain offers; this is purely a UI separation.
+
+### Added
+
+- `packages/core/src/shared/routes/CrossChainSwapForm.jsx` — §42.8.3 surface. Two side panels (You give / You get): give-chain picker + from-address selector + give-ticker / give-amount; get-chain picker + receiver address (auto-filled via `messaging.getNewestAddress`) + get-ticker / get-amount. Expiration field (block-height delta forwarded as the `EXPIRATION` SWAP param). Standard 3-stage flow (form → submitting → done). Validation: rejects same-chain pairs (with a pointer to the §41.5 `Swap tokens` form), rejects native-coin tickers on either side (DISPENSER lane), requires non-empty receiver and integer expiration.
+- ActionsMenu — new "Cross-chain swap" entry across all three shells.
+- Three App.jsx — new `'cross-chain-swap'` sub-route. Reachable from the actions menu; Back returns to the menu.
+
+### Notes
+
+- The receiver address auto-fill uses `messaging.getNewestAddress(walletId, getChainId)` — the same helper Receive uses to surface the wallet's newest external HD index. Once the user types into the field, the auto-fill pauses (`getAddressTouched`) so re-renders don't clobber a custom destination. Switching the get-chain resets `touched` so the new chain's auto-fill takes over.
+- Same-chain swaps stay routed to `SwapForm` (§41.5). The cross-chain form refuses identical give/get coin tickers with a pointer to the same-chain form — keeps the §41.5 surface focused on the common single-chain case and avoids growing a "cross-chain mode" toggle there.
+- Native-coin rule preserved on both sides. `GIVE_TICK` cannot be the give-chain's coin ticker (BTC / DOGE / LTC), and `GET_TICK` cannot be the get-chain's coin ticker. Token ↔ native-coin trading is the DISPENSER lane (§40.7), not SWAP.
+- The wallet does not consult the give-chain's tip to convert "blocks-from-now" into an absolute block height. The form forwards the raw `EXPIRATION` value verbatim and the SDK validator + indexer enforce the absolute-vs-relative semantics (the indexer treats EXPIRATION as a delta from the SWAP's confirmation block; the SDK validator only requires a positive integer).
+- Live cross-chain status via WebSocket (the spec line "Status is live on both chains") is deferred — the form's done screen is a single broadcast confirmation. Adding a "watch this swap" surface would mean wiring SWAP-match streaming into the wallet, which is its own follow-up.
+
 ## [0.86.0] - 2026-04-24
 
 Phase 4 — Step 14 of 23. Parallel cross-chain composer (§42.8.2). Multi-row draft list spanning any combination of chains, signed sequentially through the existing §40.10 `advancedAction` core flow. No new submit primitives — Step 14 is mostly UX.

@@ -62,6 +62,7 @@ import { OperatorDashboard } from '@xchain-wallet/core/shared/routes/OperatorDas
 import { History } from '@xchain-wallet/core/shared/routes/History.jsx';
 import { LinkForm } from '@xchain-wallet/core/shared/routes/LinkForm.jsx';
 import { ParallelComposer } from '@xchain-wallet/core/shared/routes/ParallelComposer.jsx';
+import { CrossChainSwapForm } from '@xchain-wallet/core/shared/routes/CrossChainSwapForm.jsx';
 import { PairSignerForm } from '@xchain-wallet/core/shared/routes/PairSignerForm.jsx';
 import { useBtcAddressesPresent } from '@xchain-wallet/core/shared/hooks/useBtcAddressesPresent.js';
 import * as messaging from './messaging.js';
@@ -84,7 +85,7 @@ function AppInner() {
         /** @type {'welcome' | 'create' | 'import' | 'import-freewallet'} */ ('welcome'),
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'swap' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'staking-dashboard' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'link-form' | 'parallel-compose'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'swap' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'staking-dashboard' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'link-form' | 'parallel-compose' | 'cross-chain-swap'} */ ('home'),
     );
     const [resumeAirdropId, setResumeAirdropId] = useState(
         /** @type {string | null} */ (null),
@@ -411,6 +412,14 @@ function AppInner() {
                     />
                 );
             }
+            if (unlockedView === 'cross-chain-swap' && activeWalletId) {
+                return (
+                    <CrossChainSwapForm
+                        walletId={activeWalletId}
+                        onBack={() => setUnlockedView('actions')}
+                    />
+                );
+            }
             if (unlockedView === 'messaging' && activeWalletId) {
                 return (
                     <MessagingInbox
@@ -643,6 +652,7 @@ function AppInner() {
                             onSwap: () => setUnlockedView('swap'),
                             onLink: () => setUnlockedView('link-form'),
                             onParallel: () => setUnlockedView('parallel-compose'),
+                            onCrossChainSwap: () => setUnlockedView('cross-chain-swap'),
                             onContacts: () => setUnlockedView('contacts'),
                         })}
                         onBack={() => setUnlockedView('home')}
@@ -692,6 +702,7 @@ function buildActionEntries({
     onSwap,
     onLink,
     onParallel,
+    onCrossChainSwap,
     onContacts,
 }) {
     return [
@@ -790,6 +801,12 @@ function buildActionEntries({
             label: 'Parallel cross-chain actions',
             description: 'Compose multiple independent actions across any chains and sign them sequentially (§42.8.2). Not atomic — failures do not roll back.',
             onSelect: onParallel,
+        },
+        {
+            id: 'cross-chain-swap',
+            label: 'Cross-chain swap',
+            description: 'Open a SWAP that gives a token on one chain and gets a token on another (§42.8.3). Settles atomically when a counterparty fills the offer.',
+            onSelect: onCrossChainSwap,
         },
         {
             id: 'contacts',
