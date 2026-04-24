@@ -384,6 +384,56 @@ export function getDispenses(req) {
 }
 
 /**
+ * List contracts deployed by a given address. Backs the §42.2 "My
+ * contracts" section.
+ *
+ * @param {{ chainId: string, address: string, opts?: object }} req
+ */
+export function getContractsForSource(req) {
+    return /** @type {any} */ (sendMessage('contracts.forSource', req));
+}
+
+/**
+ * List contracts where the address is either source OR contract
+ * address. Preserved for future surfaces that need the broader lane.
+ *
+ * @param {{ chainId: string, address: string, opts?: object }} req
+ */
+export function getContractsForAddress(req) {
+    return /** @type {any} */ (sendMessage('contracts.forAddress', req));
+}
+
+/**
+ * Paginated list of all contracts on a chain. Backs the §42.2 "Browse
+ * all contracts" section.
+ *
+ * @param {{ chainId: string, opts?: object }} req
+ */
+export function getContractsBrowseAll(req) {
+    return /** @type {any} */ (sendMessage('contracts.browseAll', req));
+}
+
+/**
+ * List DEPOSIT actions for an address. Merged with withdrawals to
+ * compose §42.2 "My interactions".
+ *
+ * @param {{ chainId: string, address: string, opts?: object }} req
+ */
+export function getDepositsForAddress(req) {
+    return /** @type {any} */ (sendMessage('deposits.forAddress', req));
+}
+
+/**
+ * List WITHDRAW actions for an address. Paired with deposits to
+ * compose §42.2 "My interactions".
+ *
+ * @param {{ chainId: string, address: string, opts?: object }} req
+ */
+export function getWithdrawalsForAddress(req) {
+    return /** @type {any} */ (sendMessage('withdrawals.forAddress', req));
+}
+
+/**
  * Build, sign, and broadcast a DIVIDEND action (§40.8). Distributes
  * AMOUNT of DIVIDEND_TICK to every holder of TICK at the snapshot
  * block. Source is excluded from receiving.

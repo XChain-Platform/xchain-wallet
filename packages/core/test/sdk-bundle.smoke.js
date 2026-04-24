@@ -133,8 +133,8 @@ for (const [shell, viteConfigPath, pkgPath] of [
     const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
     assert.equal(
         pkg.dependencies?.['xchain-sdk'],
-        '^1.9.1',
-        `${shell} pins xchain-sdk ^1.9.1 (adds getCoinpayObligations for §41.4 COINPAY queue)`,
+        '^1.10.0',
+        `${shell} pins xchain-sdk ^1.10.0 (Phase 4 Step 1 — MuSig2 primitives + staking read-side passthroughs)`,
     );
     assert.match(
         pkg.devDependencies?.['vite-plugin-node-polyfills'] || '',

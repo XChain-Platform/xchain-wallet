@@ -50,7 +50,9 @@ import { SwapForm } from '@xchain-wallet/core/shared/routes/SwapForm.jsx';
 import { MessagingInbox } from '@xchain-wallet/core/shared/routes/MessagingInbox.jsx';
 import { ComposeMessage } from '@xchain-wallet/core/shared/routes/ComposeMessage.jsx';
 import { ContactsList } from '@xchain-wallet/core/shared/routes/ContactsList.jsx';
+import { ContractsList } from '@xchain-wallet/core/shared/routes/ContractsList.jsx';
 import { PairSignerForm } from '@xchain-wallet/core/shared/routes/PairSignerForm.jsx';
+import { useBtcAddressesPresent } from '@xchain-wallet/core/shared/hooks/useBtcAddressesPresent.js';
 import { pairTrezorSigner } from './signers/trezorFactory.js';
 import { pairLedgerSigner } from './signers/ledgerFactory.js';
 import { registerSigner as registerLocalSigner } from './signerBridge.js';
@@ -73,7 +75,7 @@ function AppInner() {
         /** @type {'welcome' | 'create' | 'import' | 'import-freewallet'} */ ('welcome'),
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'swap' | 'messaging' | 'compose-message' | 'contacts'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'swap' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list'} */ ('home'),
     );
     const [resumeAirdropId, setResumeAirdropId] = useState(
         /** @type {string | null} */ (null),
@@ -123,6 +125,10 @@ function AppInner() {
             .catch(() => { /* Home surfaces load errors */ });
         return () => { cancelled = true; };
     }, [status.state]);
+
+    // §42.2 Contracts nav — show only when a BTC wallet address exists
+    // (VM actions are BTC-only at launch per BITCOIN_ACTIONS).
+    const hasBtcAddress = useBtcAddressesPresent(activeWalletId);
 
     switch (status.state) {
         case 'loading':
@@ -413,6 +419,17 @@ function AppInner() {
                     />
                 );
             }
+            if (unlockedView === 'contracts-list' && activeWalletId) {
+                return (
+                    <ContractsList
+                        walletId={activeWalletId}
+                        onOpenContract={(_chainId, _actionIndex) => {
+                            // Step 3 wires contract detail navigation.
+                        }}
+                        onBack={() => setUnlockedView('home')}
+                    />
+                );
+            }
             if (unlockedView === 'actions' && activeWalletId) {
                 return (
                     <ActionsMenu
@@ -454,6 +471,7 @@ function AppInner() {
                     onActions={activeWalletId ? () => setUnlockedView('actions') : undefined}
                     onMarkets={activeWalletId ? () => setUnlockedView('markets') : undefined}
                     onMessaging={activeWalletId ? () => setUnlockedView('messaging') : undefined}
+                    onContracts={activeWalletId && hasBtcAddress ? () => setUnlockedView('contracts-list') : undefined}
                     onResumeAirdrop={activeWalletId ? (id) => {
                         setResumeAirdropId(id);
                         setUnlockedView('airdrop');

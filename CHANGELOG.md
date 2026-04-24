@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.74.0] - 2026-04-24
+
+Phase 4 — Step 2 of 23. Contracts nav item + browse landing (§42.2). Bumps the pinned SDK to `^1.10.0` (the SDK v1.10.0 pre-phase release that landed `sdk.getStakes/getDelegations/getValidators/getValidatorRewards` and the `sdk.musig2` primitives).
+
+### Added
+
+- `packages/core/src/flows/contractQueries.js` — five read-only flows scoped to a single chain + sdkRegistry:
+  - `contractsForSource({ sdkRegistry, chainId, address, opts? })` — contracts the address deployed, backs "My contracts".
+  - `contractsForAddress(…)` — the broader "source OR contract address" lane, preserved for future surfaces.
+  - `contractsBrowseAll({ sdkRegistry, chainId, opts? })` — paginated all-contracts list for the "Browse all" section.
+  - `depositsForAddress(…)` / `withdrawalsForAddress(…)` — backing "My interactions" via client-side union + dedupe by CONTRACT_ACTION_INDEX.
+- `packages/extension/src/background/createBackgroundHost.js` — registers five explorer passthroughs (`contracts.forSource` / `contracts.forAddress` / `contracts.browseAll` / `deposits.forAddress` / `withdrawals.forAddress`).
+- Three-shell messaging helpers — `getContractsForSource` / `getContractsForAddress` / `getContractsBrowseAll` / `getDepositsForAddress` / `getWithdrawalsForAddress` in popup / web / desktop `messaging.js`.
+- `packages/core/src/shared/routes/ContractsList.jsx` — the §42.2 landing surface. Header + back, BTC-only chain-filter bar (mainnet/testnet/regtest appear when the wallet has an address on them), client-side name/action_index search, three sections:
+  - **My contracts (deployed by me)** — fan-out `contractsForSource` over every BTC address, merge, dedupe, newest-first.
+  - **My interactions (deposits / withdrawals)** — union of deposits + withdrawals on each BTC address, grouped by CONTRACT_ACTION_INDEX, with the set of interaction kinds (`deposit` / `withdraw`) and the most recent block. EXECUTE-only interactions (method calls with no deposit) are not yet listed — documented limitation (the SDK's `getExecutions` is contract-scoped today; that lane lives on the contract detail page in Step 3).
+  - **Browse all contracts** — `contractsBrowseAll` per active chain.
+- `packages/core/src/shared/hooks/useBtcAddressesPresent.js` — shared hook that resolves once the wallet's addresses load and returns `true | false | null` depending on whether any BTC-family chain has at least one address. Used to gate the Contracts nav entry.
+- `packages/core/src/shared/routes/Home.jsx` — new `onContracts` prop + button (variant="secondary"). Rendered only when the prop is passed; the three shell App.jsx files pass it only when `activeWalletId && hasBtcAddress` resolves true.
+- Three-shell App.jsx — new `'contracts-list'` sub-route; `useBtcAddressesPresent(activeWalletId)` drives conditional prop-passing; `onOpenContract` placeholder in the route handler leaves a no-op for Step 3 to wire the detail page.
+
+### Notes
+
+- VM is BTC-only at launch per `registry/actions.js` `BITCOIN_ACTIONS` (DEPLOY / EXECUTE / DEPOSIT / WITHDRAW are bitcoin-exclusive), so the Contracts nav is gated on BTC address presence rather than always-visible. Step 7 (Staking) will reuse `useBtcAddressesPresent` for the same reason.
+- No Deploy-new-contract button in this step's browse surface; it lands in Step 4 when the DEPLOY authoring form ships. Rendering the button now would require a disabled-stub flow that gets unwound in Step 4 for no gain.
+- Search is client-side: filters loaded rows by NAME substring or action_index prefix. The explorer doesn't expose server-side contract-name search today — a potential future indexer widening, not a Phase 4 blocker.
+
 ## [0.73.0] - 2026-04-24
 
 Phase 3 — DEX and Messaging Steps 12–14. Closes Phase 3 in full: encrypted MESSAGE action signing + inbox + compose + contacts integration. No platform-side changes this release — the pinned `xchain-sdk ^1.9.1` already exposes the messaging surface (SDK 1.6.0 added `MessagingUtils`; SDK 1.7.0 added cross-chain; SDK 1.8.0/1.9.x rounded out the explorer client). `xchain-decoder` 1.9.0 populates the `pubkeys` table and `xchain-explorer` 1.14.0 exposes the pubkey lookup API — both verified live on master before building.

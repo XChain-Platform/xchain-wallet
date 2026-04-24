@@ -33,9 +33,10 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {(id: string) => void} [props.onResumeAirdrop]  navigate to AirdropForm with a pending id
  * @param {(ref: { chainId: string, address: string, orderMatchActionIndex: string }) => void} [props.onResumeCoinpay]  navigate to CoinpayForm with a pending obligation (§41.4)
  * @param {() => void} [props.onMessaging]     navigate to the Messaging inbox (§41.7.2)
+ * @param {() => void} [props.onContracts]     navigate to the Contracts list (§42.2) — BTC-only, App.jsx gates the prop
  * @param {() => void} [props.onMigrateToBip39]           navigate to the §40.13 migration wizard when the active wallet is counterwallet-legacy
  */
-export function Home({ onLocked, onSend, onReceive, onCreateToken, onActions, onMarkets, onResumeAirdrop, onResumeCoinpay, onMessaging, onMigrateToBip39 }) {
+export function Home({ onLocked, onSend, onReceive, onCreateToken, onActions, onMarkets, onResumeAirdrop, onResumeCoinpay, onMessaging, onContracts, onMigrateToBip39 }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -320,6 +321,15 @@ export function Home({ onLocked, onSend, onReceive, onCreateToken, onActions, on
                     >
                         Messaging
                     </Button>
+                    {onContracts ? (
+                        <Button
+                            variant="secondary"
+                            block={!isFull}
+                            onClick={onContracts}
+                        >
+                            Contracts
+                        </Button>
+                    ) : null}
                     <Button
                         variant="ghost"
                         block={!isFull}

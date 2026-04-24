@@ -47,6 +47,11 @@ const {
     dispensersForToken,
     dispenserByActionIndex,
     dispensesFor,
+    contractsForSource,
+    contractsForAddress,
+    contractsBrowseAll,
+    depositsForAddress,
+    withdrawalsForAddress,
     dividendAction,
     holdersFor,
     createList,
@@ -450,6 +455,30 @@ export function createBackgroundHost(deps) {
 
     host.register('dispenses.query', async (req, { sdkRegistry }) => {
         return dispensesFor({ ...req, sdkRegistry });
+    });
+
+    // VM / contract discovery — read-only explorer passthroughs for the
+    // §42.2 Contracts browse surface (My contracts / My interactions /
+    // Browse all) and §42.3 detail page.
+
+    host.register('contracts.forSource', async (req, { sdkRegistry }) => {
+        return contractsForSource({ ...req, sdkRegistry });
+    });
+
+    host.register('contracts.forAddress', async (req, { sdkRegistry }) => {
+        return contractsForAddress({ ...req, sdkRegistry });
+    });
+
+    host.register('contracts.browseAll', async (req, { sdkRegistry }) => {
+        return contractsBrowseAll({ ...req, sdkRegistry });
+    });
+
+    host.register('deposits.forAddress', async (req, { sdkRegistry }) => {
+        return depositsForAddress({ ...req, sdkRegistry });
+    });
+
+    host.register('withdrawals.forAddress', async (req, { sdkRegistry }) => {
+        return withdrawalsForAddress({ ...req, sdkRegistry });
     });
 
     host.register('action.dividend', async (req, { vault, chainRegistry, sdkRegistry }) => {

@@ -211,6 +211,31 @@ export function getDispenses(req) {
     return /** @type {any} */ (sendMessage('dispenses.query', req));
 }
 
+/** @param {object} req */
+export function getContractsForSource(req) {
+    return /** @type {any} */ (sendMessage('contracts.forSource', req));
+}
+
+/** @param {object} req */
+export function getContractsForAddress(req) {
+    return /** @type {any} */ (sendMessage('contracts.forAddress', req));
+}
+
+/** @param {object} req */
+export function getContractsBrowseAll(req) {
+    return /** @type {any} */ (sendMessage('contracts.browseAll', req));
+}
+
+/** @param {object} req */
+export function getDepositsForAddress(req) {
+    return /** @type {any} */ (sendMessage('deposits.forAddress', req));
+}
+
+/** @param {object} req */
+export function getWithdrawalsForAddress(req) {
+    return /** @type {any} */ (sendMessage('withdrawals.forAddress', req));
+}
+
 /** @param {object} opts */
 export function dividendAction(opts) {
     return /** @type {any} */ (sendMessage('action.dividend', opts));

@@ -47,6 +47,13 @@ export {
     dispenserByActionIndex,
     dispensesFor,
 } from './dispenserQueries.js';
+export {
+    contractsForSource,
+    contractsForAddress,
+    contractsBrowseAll,
+    depositsForAddress,
+    withdrawalsForAddress,
+} from './contractQueries.js';
 export { dividendAction, holdersFor } from './dividendAction.js';
 export { createList } from './createList.js';
 export { airdropAction } from './airdropAction.js';
