@@ -546,6 +546,31 @@ export function withdrawActionHw(opts) {
 }
 
 /**
+ * Fetch STAKE entries for an address. Backs the §42.7.4 dashboard's
+ * "Your stake" row.
+ *
+ * @param {{ chainId: string, address: string, opts?: object }} req
+ */
+export function getStakesForAddress(req) {
+    return /** @type {any} */ (sendMessage('stakes.forAddress', req));
+}
+
+/** @param {{ chainId: string, address: string, opts?: object }} req */
+export function getDelegationsForAddress(req) {
+    return /** @type {any} */ (sendMessage('delegations.forAddress', req));
+}
+
+/** @param {{ chainId: string, address: string, opts?: object }} req */
+export function getRewardsForAddress(req) {
+    return /** @type {any} */ (sendMessage('rewards.forAddress', req));
+}
+
+/** @param {{ chainId: string, opts?: object }} req */
+export function getValidatorsForChain(req) {
+    return /** @type {any} */ (sendMessage('validators.forChain', req));
+}
+
+/**
  * Syntax-validate contract source (acorn parse + size check + float
  * warnings + reserved-identifier check). Pure; no network.
  *

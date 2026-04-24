@@ -61,6 +61,10 @@ const {
     executeAction,
     depositAction,
     withdrawAction,
+    stakesForAddress,
+    delegationsForAddress,
+    rewardsForAddress,
+    validatorsForChain,
     contractValidate,
     contractCheckCodeSize,
     contractSuggestGasLimit,
@@ -538,6 +542,25 @@ export function createBackgroundHost(deps) {
 
     host.register('action.withdraw', async (req, { vault, chainRegistry, sdkRegistry }) => {
         return withdrawAction({ ...req, vault, chainRegistry, sdkRegistry });
+    });
+
+    // §42.7 Staking — four read-only explorer passthroughs backing
+    // the dashboard + operator dashboard.
+
+    host.register('stakes.forAddress', async (req, { sdkRegistry }) => {
+        return stakesForAddress({ ...req, sdkRegistry });
+    });
+
+    host.register('delegations.forAddress', async (req, { sdkRegistry }) => {
+        return delegationsForAddress({ ...req, sdkRegistry });
+    });
+
+    host.register('rewards.forAddress', async (req, { sdkRegistry }) => {
+        return rewardsForAddress({ ...req, sdkRegistry });
+    });
+
+    host.register('validators.forChain', async (req, { sdkRegistry }) => {
+        return validatorsForChain({ ...req, sdkRegistry });
     });
 
     host.register('contracts.validate', async (req, { sdkRegistry }) => {

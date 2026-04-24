@@ -302,6 +302,26 @@ export function withdrawActionHw(opts) {
 }
 
 /** @param {object} req */
+export function getStakesForAddress(req) {
+    return /** @type {any} */ (sendMessage('stakes.forAddress', req));
+}
+
+/** @param {object} req */
+export function getDelegationsForAddress(req) {
+    return /** @type {any} */ (sendMessage('delegations.forAddress', req));
+}
+
+/** @param {object} req */
+export function getRewardsForAddress(req) {
+    return /** @type {any} */ (sendMessage('rewards.forAddress', req));
+}
+
+/** @param {object} req */
+export function getValidatorsForChain(req) {
+    return /** @type {any} */ (sendMessage('validators.forChain', req));
+}
+
+/** @param {object} req */
 export function validateContractCode(req) {
     return /** @type {any} */ (sendMessage('contracts.validate', req));
 }

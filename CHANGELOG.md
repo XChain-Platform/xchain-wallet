@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.79.0] - 2026-04-24
+
+Phase 4 — Step 7 of 23. Staking dashboard (§42.7.4). Nav guard + read-only dashboard; STAKE / UNSTAKE / DELEGATE / REVOKE / CLAIM authoring forms land in Steps 8–10.
+
+### Added
+
+- `packages/core/src/flows/stakingQueries.js` — four read-only wrappers over the staking-side explorer passthroughs landed in xchain-sdk 1.10.0: `stakesForAddress`, `delegationsForAddress`, `rewardsForAddress` (all address-typed), and `validatorsForChain` (no-args roster lookup for the §42.7.5 operator dashboard).
+- `packages/extension/src/background/createBackgroundHost.js` — four new read-only passthroughs (`stakes.forAddress` / `delegations.forAddress` / `rewards.forAddress` / `validators.forChain`).
+- Three-shell messaging helpers — `getStakesForAddress` / `getDelegationsForAddress` / `getRewardsForAddress` / `getValidatorsForChain` in popup + web + desktop `messaging.js`.
+- `packages/core/src/shared/routes/StakingDashboard.jsx` — §42.7.4 dashboard. Per BTC chain with addresses, loads stakes + delegations + rewards across all addresses in parallel (fan-out, merge, sort newest-first). Renders Your stake / Delegated pubkey / Chains (Tier 2 only) / Pending rewards (+ Claim button) / Lifetime rewards / action buttons (Stake if not staked; Unstake / Delegate new key / Revoke delegation when staked + appropriate) / Recent reward events list (top 10).
+- `packages/core/src/shared/routes/Home.jsx` — new `onStaking` prop + Staking button, rendered only when the prop is passed.
+- Three App.jsx — new `'staking-dashboard'` sub-route. `useBtcAddressesPresent` (the hook added in Step 2) drives conditional prop-passing on Home: `onStaking={activeWalletId && hasBtcAddress ? …}`.
+
+### Notes
+
+- BTC-only gate reuses `useBtcAddressesPresent` — the same hook introduced for the Contracts nav in Step 2. §10.3 says "SDK staking actions are BTC-only" and the dashboard respects that.
+- Action buttons follow the Step 3 pattern: optional `on*` props from App.jsx drive their disabled state. Step 8 (STAKE form), Step 9 (UNSTAKE + CLAIM_REWARDS), and Step 10 (DELEGATE + REVOKE_DELEGATION) will thread the real handlers through as each form lands, without re-touching the dashboard's internals.
+- No operator / validator dashboard (§42.7.5) yet — that's Step 11 and also needs a bump to `xchain-hub` to expose validator-performance metrics via HTTP API (the hub's `RewardTracker` / `ValidatorIdentity` / `SlashDetector` / `PeerManager` internals are complete but the HTTP surface only exposes `hub-db/snapshot/oracle_prices` + `/snapshot/price_snapshots` today). Hub bump deferred to just before Step 11 per the Phase 3 Step 9 pattern — ship platform-side bumps against the concrete consumer.
+
 ## [0.78.0] - 2026-04-24
 
 Phase 4 — Step 6 of 23. DEPOSIT + WITHDRAW forms (§42.5). Closes the Contracts surface (§42.1–§42.6) — browse, detail, deploy, execute, deposit, withdraw all ship. No SDK bump.
