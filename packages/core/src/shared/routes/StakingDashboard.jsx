@@ -43,6 +43,7 @@ const STAKING_COIN = 'bitcoin';
  * @param {(ref: { chainId: string, address: string }) => void} [props.onDelegate]
  * @param {(ref: { chainId: string, address: string }) => void} [props.onRevokeDelegation]
  * @param {(ref: { chainId: string, address: string }) => void} [props.onClaimRewards]
+ * @param {(ref: { chainId: string, address: string }) => void} [props.onOpenOperatorDashboard]
  * @param {() => void} props.onBack
  */
 export function StakingDashboard({
@@ -52,6 +53,7 @@ export function StakingDashboard({
     onDelegate,
     onRevokeDelegation,
     onClaimRewards,
+    onOpenOperatorDashboard,
     onBack,
 }) {
     const { messaging, shell } = useMessaging();
@@ -290,6 +292,15 @@ export function StakingDashboard({
                                     disabled={!onRevokeDelegation || !primaryDelegation || !primaryAddress}
                                 >
                                     Revoke delegation
+                                </Button>
+                                <Button
+                                    variant="secondary"
+                                    onClick={onOpenOperatorDashboard && primaryStake && primaryAddress
+                                        ? () => onOpenOperatorDashboard({ chainId: cid, address: primaryAddress })
+                                        : undefined}
+                                    disabled={!onOpenOperatorDashboard || !primaryStake || !primaryAddress}
+                                >
+                                    Operator view
                                 </Button>
                             </div>
 

@@ -303,6 +303,11 @@ export function revokeDelegationActionHw(opts) {
     return /** @type {any} */ (sendMessage('action.revokeDelegation.hw', opts));
 }
 
+/** @param {{ chainId: string, address: string, opts?: object }} req */
+export function getBroadcastsForAddress(req) {
+    return /** @type {any} */ (sendMessage('broadcasts.forAddress', req));
+}
+
 /** @param {object} req */
 export function validateContractCode(req) {
     return /** @type {any} */ (sendMessage('contracts.validate', req));

@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.83.0] - 2026-04-24
+
+Phase 4 — Step 11 of 23. Operator / validator dashboard (§42.7.5, Devi persona). Closes the Staking surface (§42.7) — Steps 7–11 cover dashboard, all five write-side actions, and the operator view.
+
+### Added
+
+- `packages/core/src/flows/broadcastQueries.js` — `broadcastsForAddress` thin wrapper over `sdk.getBroadcasts(address, 'address', opts)`.
+- `packages/extension/src/background/createBackgroundHost.js` — `broadcasts.forAddress` read-only passthrough.
+- Three-shell messaging — `getBroadcastsForAddress` in popup + web + desktop `messaging.js`.
+- `packages/core/src/shared/routes/OperatorDashboard.jsx` — §42.7.5 dashboard. Five parallel-loaded read sections (Staking status / Delegation chain / Validator performance / Rewards trajectory / Publishing activity) plus an inline Publisher mode quick-compose. Validator performance auto-joins the address's most recent delegation pubkey against `getValidators` to pick out the operator's own row.
+- Publisher mode (inline `<PublisherMode>` sub-component) — v3 BROADCAST feed-result quick-compose. Pre-fills `BROADCAST_ACTION_INDEX` from the address's most recent v2 feed-create. Single value input + sign → calls `messaging.broadcastAction` (HW branch wired). Clears the value field after each successful submit so successive updates are one keystroke + Sign. Password / HW status persist across submits within the dashboard session.
+- `packages/core/src/shared/routes/StakingDashboard.jsx` — new `onOpenOperatorDashboard` prop + "Operator view" button rendered next to the existing action buttons. Disabled when there's no active stake or when the prop isn't passed.
+- Three App.jsx — new `'operator-dashboard'` sub-route. `StakingDashboard.onOpenOperatorDashboard` transitions; the operator dashboard's Back returns to the staking dashboard.
+
+### Notes
+
+- §42.7 staking surface is now complete. Steps 7 (dashboard), 8 (STAKE), 9 (UNSTAKE + CLAIM_REWARDS), 10 (DELEGATE + REVOKE_DELEGATION), and 11 (operator dashboard + Publisher mode) cover every staking sub-section. Phase 4 progress: 11 / 23.
+- No SDK / explorer / hub bumps needed for Step 11 — every read endpoint (`getStakes`, `getDelegations`, `getValidatorRewards`, `getValidators`, `getBroadcasts`) was already on the SDK 1.10.0 surface audited in Step 1.
+- Validator metric field names (`uptime` / `score` / `votes` / `missed` / `last_seen_block`) are speculative — the dashboard renders whichever of those keys come back from `getValidators`. If the hub's actual field names diverge, the section will silently render empty rather than throw, and the field mapping can be tightened in a follow-up after the operator dashboard has live data flowing through it.
+
 ## [0.82.0] - 2026-04-24
 
 Phase 4 — Step 10 of 23. DELEGATE + REVOKE_DELEGATION authoring forms (§42.7.2 delegation-lane). Both actions take a 64-hex Ed25519 pubkey and share a chassis, so they ship in one commit combined into `DelegationActionForm.jsx` with a `mode` prop (same pattern as Step 9's StakingActionForm).

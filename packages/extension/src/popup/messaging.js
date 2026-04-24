@@ -651,6 +651,16 @@ export function revokeDelegationActionHw(opts) {
 }
 
 /**
+ * List BROADCAST actions published by an address. Backs the §42.7.5
+ * Operator dashboard's Publishing activity section.
+ *
+ * @param {{ chainId: string, address: string, opts?: object }} req
+ */
+export function getBroadcastsForAddress(req) {
+    return /** @type {any} */ (sendMessage('broadcasts.forAddress', req));
+}
+
+/**
  * Syntax-validate contract source (acorn parse + size check + float
  * warnings + reserved-identifier check). Pure; no network.
  *
