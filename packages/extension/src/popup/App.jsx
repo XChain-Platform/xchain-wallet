@@ -57,6 +57,7 @@ import { StakingActionForm } from '@xchain-wallet/core/shared/routes/StakingActi
 import { DelegationActionForm } from '@xchain-wallet/core/shared/routes/DelegationActionForm.jsx';
 import { OperatorDashboard } from '@xchain-wallet/core/shared/routes/OperatorDashboard.jsx';
 import { History } from '@xchain-wallet/core/shared/routes/History.jsx';
+import { LinkForm } from '@xchain-wallet/core/shared/routes/LinkForm.jsx';
 import { PairSignerForm } from '@xchain-wallet/core/shared/routes/PairSignerForm.jsx';
 import { useBtcAddressesPresent } from '@xchain-wallet/core/shared/hooks/useBtcAddressesPresent.js';
 import { pairTrezorSigner } from '../signers/trezorFactory.js';
@@ -79,7 +80,7 @@ function AppInner() {
         /** @type {'welcome' | 'create' | 'import' | 'import-freewallet'} */ ('welcome'),
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'swap' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'staking-dashboard' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'swap' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'staking-dashboard' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'link-form'} */ ('home'),
     );
     const [resumeAirdropId, setResumeAirdropId] = useState(
         /** @type {string | null} */ (null),
@@ -390,6 +391,14 @@ function AppInner() {
                     />
                 );
             }
+            if (unlockedView === 'link-form' && activeWalletId) {
+                return (
+                    <LinkForm
+                        walletId={activeWalletId}
+                        onBack={() => setUnlockedView('actions')}
+                    />
+                );
+            }
             if (unlockedView === 'messaging' && activeWalletId) {
                 return (
                     <MessagingInbox
@@ -620,6 +629,7 @@ function AppInner() {
                                 setUnlockedView('coinpay');
                             },
                             onSwap: () => setUnlockedView('swap'),
+                            onLink: () => setUnlockedView('link-form'),
                             onContacts: () => setUnlockedView('contacts'),
                         })}
                         onBack={() => setUnlockedView('home')}
@@ -672,6 +682,7 @@ function buildActionEntries({
     onPairSigner,
     onPayCoinpay,
     onSwap,
+    onLink,
     onContacts,
 }) {
     return [
@@ -760,6 +771,12 @@ function buildActionEntries({
             onSelect: onSwap,
         },
         {
+            id: 'link',
+            label: 'Link cross-chain actions',
+            description: 'Anchor two existing actions across chains with a LINK action (§42.8.1). Both sides thread together in History.',
+            onSelect: onLink,
+        },
+        {
             id: 'contacts',
             label: 'Contacts',
             description: 'Local address book — label counterparties, quick-compose to saved recipients (§41.7.4).',
@@ -768,7 +785,7 @@ function buildActionEntries({
         {
             id: 'advanced',
             label: 'Advanced action',
-            description: 'Submit any action the SDK supports — power-user surface for LINK / ADDRESS / CALLBACK / SLEEP / raw MESSAGE (§40.10).',
+            description: 'Submit any action the SDK supports — power-user surface for ADDRESS / CALLBACK / SLEEP / raw MESSAGE (§40.10).',
             onSelect: onAdvanced,
         },
         {

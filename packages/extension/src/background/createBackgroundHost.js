@@ -33,6 +33,7 @@ const {
     cancelOrder,
     coinpayAction,
     swapAction,
+    linkAction,
     getCoinpayObligationsForAddress,
     getCoinpaysForAddress,
     getMessagingInbox,
@@ -352,6 +353,7 @@ export function createBackgroundHost(deps) {
     registerHwHandler('action.cancelOrder.hw', cancelOrder);
     registerHwHandler('action.coinpay.hw', coinpayAction);
     registerHwHandler('action.swap.hw', swapAction);
+    registerHwHandler('action.link.hw', linkAction);
     registerHwHandler('action.message.hw', messageAction);
     registerHwHandler('action.deploy.hw', deployAction);
     registerHwHandler('action.execute.hw', executeAction);
@@ -435,6 +437,11 @@ export function createBackgroundHost(deps) {
     // §41.5 SWAP — atomic token-pair swap (no COINPAY follow-up).
     host.register('action.swap', async (req, { vault, chainRegistry, sdkRegistry }) => {
         return swapAction({ ...req, vault, chainRegistry, sdkRegistry });
+    });
+
+    // §42.8.1 LINK — anchor two existing actions across chains.
+    host.register('action.link', async (req, { vault, chainRegistry, sdkRegistry }) => {
+        return linkAction({ ...req, vault, chainRegistry, sdkRegistry });
     });
 
     // §41.7.2 Messaging inbox — password-gated decrypt of MESSAGE

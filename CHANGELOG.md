@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.85.0] - 2026-04-24
+
+Phase 4 — Step 13 of 23. LINK two-panel creation form (§42.8.1). First write-side cross-chain action — anchors a pair of existing actions across two chains. Both sides thread together in History via the §23.5 rendering shipped in Step 12.
+
+### Added
+
+- `packages/core/src/flows/linkAction.js` — LINK composer over `submitAction`. Guards `coin1` / `coin2` non-empty, `coin1ActionIndex` / `coin2ActionIndex` integer-strings, and rejects identical (coin, action_index) pairs. Builds the v0 LINK params (`VERSION|COIN1|COIN1_ACTION_INDEX|COIN2|COIN2_ACTION_INDEX|MEMO`) per the SDK format.
+- `packages/extension/src/background/createBackgroundHost.js` — `action.link` + `action.link.hw` handlers (the latter via `registerHwHandler`).
+- Three-shell messaging helpers — `linkAction` / `linkActionHw` in popup + web + desktop `messaging.js`.
+- `packages/core/src/shared/routes/LinkForm.jsx` — §42.8.1 two-panel composer. Two side panels (Chain A / Chain B), each with a chain picker + action_index input. Per-side decoded preview fetched via `messaging.getActionByIndex` (350ms debounce, cached per (chainId, actionIndex) pair) so the user can confirm what they're linking before signing. "Submit LINK on" radio defaults to chain A; switches the signing-chain context (and therefore the from-address pool) when the user picks chain B. Standard 4-stage flow (form → submitting → done) with `SignCredentials` + HW vs software branch.
+- ActionsMenu — new "Link cross-chain actions" entry across all three shells.
+- Three App.jsx — new `'link-form'` sub-route. Reachable from the actions menu; Back returns to the menu.
+- `packages/core/src/shared/routes/AdvancedActionsForm.jsx` — `LINK` added to `ACTIONS_WITH_DEDICATED_FORMS` so the Advanced dropdown decorates LINK with "(dedicated form available)" rather than presenting it as the canonical surface. The Advanced action description across all three shells dropped the `LINK` mention since LINK now has a curated UX.
+
+### Notes
+
+- LINK is a free-standing cross-chain anchor — it does not consume or produce tokens. The on-chain LINK action lives on a single chain, but the indexer's `links` table records both (coin1, action_index1) and (coin2, action_index2) so History can thread either side regardless of which chain hosts the LINK transaction.
+- The form's "Submit LINK on" defaults to chain A. If the user wants the LINK action itself recorded on chain B, switching the radio re-selects a from-address from chain B's pool — the LINK transaction signs on whichever chain owns the picked address.
+- Decoded preview is best-effort. The form recognizes ISSUE / SEND / BROADCAST and falls back to the bare action name otherwise; the goal is "is this the right action?" confirmation, not a full action viewer (the History detail card already covers that).
+- No SDK / explorer / hub bumps — `getAction(actionIndex)` and the SDK's LINK encoder were both on the SDK 1.10.0 surface audited in Step 1.
+
 ## [0.84.0] - 2026-04-24
 
 Phase 4 — Step 12 of 23. History route + §23.5 cross-chain thread rendering. First Cross-Chain (§42.8) step — ships the History surface so the §42.8.1–§42.8.4 LINK / parallel / swap / templates flows have somewhere to land in the timeline.

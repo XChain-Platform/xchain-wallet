@@ -938,6 +938,16 @@ export function swapActionHw(opts) {
     return /** @type {any} */ (sendMessage('action.swap.hw', opts));
 }
 
+// §42.8.1 LINK — anchor two existing actions across chains.
+/** @param {object} opts */
+export function linkAction(opts) {
+    return /** @type {any} */ (sendMessage('action.link', opts));
+}
+/** @param {object} opts */
+export function linkActionHw(opts) {
+    return /** @type {any} */ (sendMessage('action.link.hw', opts));
+}
+
 // §41.7.2 Messaging inbox — password-gated decrypt.
 /** @param {object} opts */
 export function getMessagingInbox(opts) {

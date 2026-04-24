@@ -24,6 +24,7 @@ export { dispenserAction } from './dispenserAction.js';
 export { orderAction, cancelOrder } from './orderAction.js';
 export { coinpayAction } from './coinpayAction.js';
 export { swapAction } from './swapAction.js';
+export { linkAction } from './linkAction.js';
 export { getMessagingInbox } from './messagingInbox.js';
 export {
     messageAction,
