@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.78.0] - 2026-04-24
+
+Phase 4 — Step 6 of 23. DEPOSIT + WITHDRAW forms (§42.5). Closes the Contracts surface (§42.1–§42.6) — browse, detail, deploy, execute, deposit, withdraw all ship. No SDK bump.
+
+### Added
+
+- `packages/core/src/flows/contractFundsActions.js` — two flows `depositAction` + `withdrawAction` sharing one composer helper. Both actions take the same field shape (CONTRACT_ACTION_INDEX + TICK + QUANTITY) per the protocol formats (`VERSION|CONTRACT_ACTION_INDEX|TICK|QUANTITY`), so the branching is only at the action-name string and the pending-tx summary verb.
+- `packages/extension/src/background/createBackgroundHost.js` — `action.deposit` + `action.deposit.hw` + `action.withdraw` + `action.withdraw.hw` handlers.
+- Three-shell messaging helpers — `depositAction` / `depositActionHw` / `withdrawAction` / `withdrawActionHw` in popup + web + desktop `messaging.js`.
+- `packages/core/src/shared/routes/ContractFundsForm.jsx` — one component, two modes via the required `mode: 'deposit' | 'withdraw'` prop. Header / summary / submit-button verb switch on the prop; everything else (state machine, address loading, SignCredentials, HW branching, form validation) is shared. Token input upper-cases on change; quantity is decimal-inputmode. Withdraw's hint calls out that it "Only succeeds if the contract permits it" — on-chain rejection isn't a wallet-side bug.
+- Three App.jsx — new `'contract-deposit'` + `'contract-withdraw'` sub-routes. ContractDetail now passes all three action-button props (`onExecute` + `onDeposit` + `onWithdraw`); each button's back navigation returns to the detail page.
+
+### Notes
+
+- §42.1–§42.6 now ship end-to-end: browse → detail → deploy → execute → deposit → withdraw. The next step (Step 7) starts the §42.7 Staking surface with the dashboard.
+
 ## [0.77.0] - 2026-04-24
 
 Phase 4 — Step 5 of 23. EXECUTE method form (§42.4). Adds the "Call method" authoring surface on top of the Step 3 contract-detail page. No SDK bump — `sdk.execute` has been on SDK ≥ 1.3.0 and is already reachable.

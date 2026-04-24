@@ -514,6 +514,38 @@ export function executeActionHw(opts) {
 }
 
 /**
+ * Build, sign, and broadcast a DEPOSIT action (§42.5). Sends TICK /
+ * QUANTITY to the contract at CONTRACT_ACTION_INDEX.
+ *
+ * @param {object} opts
+ */
+export function depositAction(opts) {
+    return /** @type {any} */ (sendMessage('action.deposit', opts));
+}
+
+/** @param {object} opts */
+export function depositActionHw(opts) {
+    return /** @type {any} */ (sendMessage('action.deposit.hw', opts));
+}
+
+/**
+ * Build, sign, and broadcast a WITHDRAW action (§42.5). Pulls TICK /
+ * QUANTITY out of the contract at CONTRACT_ACTION_INDEX back to the
+ * caller's address. Rejected on-chain if the caller isn't authorized
+ * by the contract's internal rules.
+ *
+ * @param {object} opts
+ */
+export function withdrawAction(opts) {
+    return /** @type {any} */ (sendMessage('action.withdraw', opts));
+}
+
+/** @param {object} opts */
+export function withdrawActionHw(opts) {
+    return /** @type {any} */ (sendMessage('action.withdraw.hw', opts));
+}
+
+/**
  * Syntax-validate contract source (acorn parse + size check + float
  * warnings + reserved-identifier check). Pure; no network.
  *

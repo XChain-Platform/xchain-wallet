@@ -63,6 +63,7 @@ export {
 } from './contractDetail.js';
 export { deployAction } from './deployAction.js';
 export { executeAction } from './executeAction.js';
+export { depositAction, withdrawAction } from './contractFundsActions.js';
 export {
     contractValidate,
     contractCheckCodeSize,

@@ -281,6 +281,26 @@ export function executeActionHw(opts) {
     return /** @type {any} */ (sendMessage('action.execute.hw', opts));
 }
 
+/** @param {object} opts */
+export function depositAction(opts) {
+    return /** @type {any} */ (sendMessage('action.deposit', opts));
+}
+
+/** @param {object} opts */
+export function depositActionHw(opts) {
+    return /** @type {any} */ (sendMessage('action.deposit.hw', opts));
+}
+
+/** @param {object} opts */
+export function withdrawAction(opts) {
+    return /** @type {any} */ (sendMessage('action.withdraw', opts));
+}
+
+/** @param {object} opts */
+export function withdrawActionHw(opts) {
+    return /** @type {any} */ (sendMessage('action.withdraw.hw', opts));
+}
+
 /** @param {object} req */
 export function validateContractCode(req) {
     return /** @type {any} */ (sendMessage('contracts.validate', req));
