@@ -61,6 +61,12 @@ export {
     contractBalance,
     executionsForContract,
 } from './contractDetail.js';
+export { deployAction } from './deployAction.js';
+export {
+    contractValidate,
+    contractCheckCodeSize,
+    contractSuggestGasLimit,
+} from './contractUtilities.js';
 export { dividendAction, holdersFor } from './dividendAction.js';
 export { createList } from './createList.js';
 export { airdropAction } from './airdropAction.js';

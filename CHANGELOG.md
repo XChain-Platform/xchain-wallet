@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.76.0] - 2026-04-24
+
+Phase 4 — Step 4 of 23. DEPLOY authoring form (§42.6). No SDK bump — `sdk.contracts.validate / checkCodeSize / suggestGasLimit` and the DEPLOY action composer are all on SDK 1.10.0 (via SDK 1.3.0's `ContractUtils`).
+
+### Added
+
+- `packages/core/src/flows/deployAction.js` — DEPLOY composer. Takes vault + registries + chain + source + `params` (VERSION / CODE / GAS_LIMIT, optional NAME + CONSTRUCTOR_PARAMS), forwards to `submitAction`. Hex-encoding of the contract source is handled by the SDK validator chain — callers pass raw UTF-8 as `params.CODE`.
+- `packages/core/src/flows/contractUtilities.js` — three wrappers over `sdk.contracts.*`: `contractValidate`, `contractCheckCodeSize`, `contractSuggestGasLimit`. Pure; no network. Routed through the messaging layer for consistency with the "UI never imports an SDK directly" discipline.
+- `packages/extension/src/background/createBackgroundHost.js` — `action.deploy` + `action.deploy.hw` (via `registerHwHandler`) + three pure-function passthroughs (`contracts.validate`, `contracts.checkCodeSize`, `contracts.suggestGasLimit`).
+- Three-shell messaging helpers — `deployAction` / `deployActionHw` / `validateContractCode` / `checkContractCodeSize` / `suggestContractGasLimit` in popup + web + desktop `messaging.js`.
+- `packages/core/src/shared/routes/DeployContractForm.jsx` — §42.6 form:
+  - Chain picker (BTC-only; auto-selects first BTC chain with an address).
+  - Name (optional) / Code source (monospace textarea) / Gas limit / Constructor params (optional).
+  - Three action buttons: **Validate code** (acorn parse + size check + float-literal warnings), **Estimate size** (shows byte count + 64KB-limit flag), **Suggest gas** (fills the Gas limit input on first tap if empty).
+  - Review screen: composed summary, chain badge, source address, name, byte count, gas limit, constructor params, validation warnings, `SignCredentials` (password + HW `getSignerStatus` wiring), primary button labelled `Deploy on <chain>` / `Sign on Trezor|Ledger` per source type.
+  - Done screen: post-broadcast txid + Done button.
+  - BTC-only gate: renders a clear "Contracts are BTC-only at launch. Use Receive on a Bitcoin network…" message when the wallet has no BTC address. Mirrors ContractsList's gate.
+- `packages/core/src/shared/routes/ContractsList.jsx` — gains optional `onDeploy` prop. When the host passes it, renders a primary `+ Deploy new contract` button in the filter-bar row. Hidden when prop omitted.
+- Three-shell App.jsx — new `'contract-deploy'` sub-route. `ContractsList.onDeploy` transitions to it; the form's Back returns to the list.
+
+### Notes
+
+- Monaco editor is deferred. The spec's §42.6 language ("Monaco editor — full-screen mode available") is aspirational but ships a 5MB+ dependency with a CDN trust-posture trade-off that needs its own discussion. Spec follow-ups captured in `claude/reports/specs/2026-04-24_phase4-monaco-editor.md` — CodeMirror 6 recommended for the v1.0 RC cycle; the swap is a drop-in replacement of the `<textarea>` with a `<CodeEditor>` component under `packages/core/src/shared/components/` that wraps `EditorView`. Validate / Size / Suggest-gas already hit `sdk.contracts.*` and don't care about editor chrome.
+- Review-screen summary is handwritten rather than routed through `decoderLib.decodeAction`. DEPLOY isn't wired into `packages/core/src/decoder/` yet; polish captured in the Monaco follow-up doc (FOLLOWUP 3).
+- ABI / typed method selection (§42.4) is not addressed here — the DEPLOY form doesn't write ABIs yet because the platform-level ABI convention is undecided. Captured in the Monaco follow-up doc (FOLLOWUP 2); needs an `xchain-documentation` change first.
+
 ## [0.75.0] - 2026-04-24
 
 Phase 4 — Step 3 of 23. Contract detail page (§42.3). No SDK bump needed — all five read surfaces used here were already in SDK ≥ 1.3.0 and are exposed through the 1.10.0 pin landed in v0.74.0.

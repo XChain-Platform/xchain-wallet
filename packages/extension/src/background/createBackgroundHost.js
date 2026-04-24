@@ -57,6 +57,10 @@ const {
     contractState,
     contractBalance,
     executionsForContract,
+    deployAction,
+    contractValidate,
+    contractCheckCodeSize,
+    contractSuggestGasLimit,
     dividendAction,
     holdersFor,
     createList,
@@ -335,6 +339,7 @@ export function createBackgroundHost(deps) {
     registerHwHandler('action.coinpay.hw', coinpayAction);
     registerHwHandler('action.swap.hw', swapAction);
     registerHwHandler('action.message.hw', messageAction);
+    registerHwHandler('action.deploy.hw', deployAction);
 
     // Signer status probe — routes straight through the signer bridge
     // without touching vault/SDK. Returns `'idle'` when the bridge
@@ -507,6 +512,26 @@ export function createBackgroundHost(deps) {
 
     host.register('executions.forContract', async (req, { sdkRegistry }) => {
         return executionsForContract({ ...req, sdkRegistry });
+    });
+
+    // §42.6 DEPLOY authoring — action composer + three pure-function
+    // passthroughs over sdk.contracts.* for the validate / size /
+    // suggest-gas buttons.
+
+    host.register('action.deploy', async (req, { vault, chainRegistry, sdkRegistry }) => {
+        return deployAction({ ...req, vault, chainRegistry, sdkRegistry });
+    });
+
+    host.register('contracts.validate', async (req, { sdkRegistry }) => {
+        return contractValidate({ ...req, sdkRegistry });
+    });
+
+    host.register('contracts.checkCodeSize', async (req, { sdkRegistry }) => {
+        return contractCheckCodeSize({ ...req, sdkRegistry });
+    });
+
+    host.register('contracts.suggestGasLimit', async (req, { sdkRegistry }) => {
+        return contractSuggestGasLimit({ ...req, sdkRegistry });
     });
 
     host.register('action.dividend', async (req, { vault, chainRegistry, sdkRegistry }) => {

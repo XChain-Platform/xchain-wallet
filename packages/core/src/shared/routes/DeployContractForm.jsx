@@ -1,0 +1,539 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+    Screen,
+    Button,
+    Input,
+    ChainBadge,
+    AddressText,
+} from '@xchain-wallet/core/ui';
+import { registry as registryLib } from '@xchain-wallet/core';
+import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { SignCredentials } from '../components/SignCredentials.jsx';
+import styles from './IssueTokenForm.module.css';
+
+const chainRegistry = registryLib.defaultRegistry();
+
+// VM is BTC-only at launch; BITCOIN_ACTIONS carries DEPLOY.
+const VM_COIN = 'bitcoin';
+
+/**
+ * DEPLOY authoring form — §42.6.
+ *
+ * Surface:
+ *
+ *   Name:               [ … ]
+ *   Code source:        [ textarea — multi-line JS ]
+ *   Gas limit:          [ input, auto-suggested ]
+ *   Constructor params: [ pipe-delimited ]
+ *
+ *   [Validate code]   sdk.contracts.validate
+ *   [Estimate size]   sdk.contracts.checkCodeSize
+ *   [Suggest gas]     sdk.contracts.suggestGasLimit
+ *
+ *   [Preview] [Sign]
+ *
+ * The spec calls for Monaco for JavaScript authoring; Phase 4 Step 4
+ * ships a plain textarea as the minimal authoring surface, routes the
+ * validate / size / suggest-gas helpers through the SDK, and defers
+ * the Monaco editor integration (its bundle weight + CDN trust
+ * posture need their own discussion) to a follow-up captured in
+ * `claude/reports/specs/2026-04-24_phase4-monaco-editor.md`.
+ *
+ * Hex-encoding of the source happens inside the SDK validator chain —
+ * callers pass raw UTF-8 as `params.CODE`. GAS_LIMIT is a decimal
+ * string per the protocol. NAME + CONSTRUCTOR_PARAMS are optional.
+ *
+ * @param {object} props
+ * @param {string} props.walletId
+ * @param {() => void} props.onBack
+ */
+export function DeployContractForm({ walletId, onBack }) {
+    const { messaging, shell } = useMessaging();
+    const variant = screenVariantFor(shell);
+    const isFull = variant === 'full';
+
+    const btcChainIds = useMemo(
+        () => chainRegistry.byCoin(VM_COIN).map((d) => d.id),
+        [],
+    );
+
+    const [addressesByChain, setAddressesByChain] = useState(
+        /** @type {Record<string, any[]> | null} */ (null),
+    );
+    const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
+
+    const [chainId, setChainId] = useState(/** @type {string | null} */ (null));
+    const [fromAddressId, setFromAddressId] = useState(/** @type {string | null} */ (null));
+
+    const [name, setName] = useState('');
+    const [code, setCode] = useState('');
+    const [gasLimit, setGasLimit] = useState('');
+    const [constructorParams, setConstructorParams] = useState('');
+    const [password, setPassword] = useState('');
+
+    const [validation, setValidation] = useState(
+        /** @type {{ ok: boolean, msg: string, warnings?: string[] } | null} */ (null),
+    );
+    const [sizeInfo, setSizeInfo] = useState(
+        /** @type {{ bytes: number, withinLimit: boolean } | null} */ (null),
+    );
+    const [suggestedGas, setSuggestedGas] = useState(/** @type {number | null} */ (null));
+
+    const [stage, setStage] = useState(
+        /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
+    );
+    const [formError, setFormError] = useState(/** @type {string | null} */ (null));
+    const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
+    const [result, setResult] = useState(/** @type {any | null} */ (null));
+    const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+
+    useEffect(() => {
+        let cancelled = false;
+        messaging.getAddressesByChain(walletId)
+            .then((byChain) => {
+                if (cancelled) return;
+                setAddressesByChain(byChain || {});
+                const firstBtc = btcChainIds.find(
+                    (cid) => Array.isArray(byChain?.[cid]) && byChain[cid].length > 0,
+                );
+                if (!firstBtc) {
+                    setLoadError(
+                        'Contracts are BTC-only at launch. Use Receive on a Bitcoin network to generate an address before deploying.',
+                    );
+                    return;
+                }
+                setChainId(firstBtc);
+            })
+            .catch((err) => {
+                if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
+            });
+        return () => { cancelled = true; };
+    }, [walletId, messaging, btcChainIds]);
+
+    useEffect(() => {
+        if (!chainId || !addressesByChain) return;
+        const addrs = (addressesByChain[chainId] || []).filter(
+            (a) => a.source === 'hd' && a.derivationPath?.split('/')?.[4] === '0',
+        );
+        if (addrs.length > 0) {
+            const sorted = [...addrs].sort((a, b) => {
+                const ai = Number(a.derivationPath?.split('/')?.[5] ?? -1);
+                const bi = Number(b.derivationPath?.split('/')?.[5] ?? -1);
+                return bi - ai;
+            });
+            setFromAddressId(sorted[0].id);
+        } else {
+            setFromAddressId(null);
+        }
+    }, [chainId, addressesByChain]);
+
+    useEffect(() => {
+        if (stage === 'review') setTimeout(() => passwordRef.current?.focus(), 0);
+    }, [stage]);
+
+    const descriptor = chainId ? chainRegistry.get(chainId) : null;
+    const fromAddress = useMemo(() => {
+        if (!chainId || !fromAddressId || !addressesByChain) return null;
+        return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
+    }, [chainId, fromAddressId, addressesByChain]);
+
+    const btcChainsWithAddresses = useMemo(() => {
+        if (!addressesByChain) return [];
+        return btcChainIds.filter((cid) => Array.isArray(addressesByChain[cid]) && addressesByChain[cid].length > 0);
+    }, [btcChainIds, addressesByChain]);
+
+    const isHwSource = fromAddress?.source === 'trezor' || fromAddress?.source === 'ledger';
+    const [hwStatus, setHwStatus] = useState('idle');
+    const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
+
+    const actionParams = useMemo(() => {
+        /** @type {Record<string, string>} */
+        const p = {
+            VERSION: '0',
+            CODE: code,
+            GAS_LIMIT: String(gasLimit || suggestedGas || ''),
+        };
+        if (name.trim()) p.NAME = name.trim();
+        if (constructorParams.trim()) p.CONSTRUCTOR_PARAMS = constructorParams.trim();
+        return p;
+    }, [code, gasLimit, suggestedGas, name, constructorParams]);
+
+    async function handleValidate() {
+        if (!chainId) return;
+        setFormError(null);
+        try {
+            const res = await messaging.validateContractCode({ chainId, code });
+            if (res?.valid) {
+                setValidation({ ok: true, msg: 'Syntax OK.', warnings: res.warnings });
+            } else {
+                setValidation({ ok: false, msg: res?.error || 'Validation failed.' });
+            }
+        } catch (e) {
+            setValidation({ ok: false, msg: e?.message || 'Validation failed.' });
+        }
+    }
+
+    async function handleCheckSize() {
+        if (!chainId) return;
+        try {
+            const res = await messaging.checkContractCodeSize({ chainId, code });
+            setSizeInfo(res);
+        } catch (e) {
+            setFormError(e?.message || 'Size check failed.');
+        }
+    }
+
+    async function handleSuggestGas() {
+        if (!chainId) return;
+        try {
+            const suggested = await messaging.suggestContractGasLimit({ chainId, code });
+            setSuggestedGas(suggested);
+            if (!gasLimit) setGasLimit(String(suggested));
+        } catch (e) {
+            setFormError(e?.message || 'Gas suggestion failed.');
+        }
+    }
+
+    function handleReview(event) {
+        event.preventDefault();
+        if (!chainId || !fromAddress) {
+            setFormError('No Bitcoin address available to deploy from.');
+            return;
+        }
+        if (!code.trim()) {
+            setFormError('Contract source is required.');
+            return;
+        }
+        const gas = String(gasLimit).trim() || (suggestedGas ? String(suggestedGas) : '');
+        if (!gas || Number.isNaN(Number(gas)) || Number(gas) <= 0) {
+            setFormError('Gas limit must be a positive number. Tap "Suggest gas" for a heuristic estimate.');
+            return;
+        }
+        if (validation?.ok === false) {
+            setFormError('Fix the syntax error before previewing (see Validate code).');
+            return;
+        }
+        setFormError(null);
+        setStage('review');
+    }
+
+    async function handleSubmit(event) {
+        event.preventDefault();
+        if (stage === 'submitting') return;
+        if (!isHwSource && password.length === 0) return;
+        if (isHwSource && hwStatus !== 'available') return;
+        setStage('submitting');
+        setSubmitError(null);
+        try {
+            const base = {
+                walletId,
+                chainId,
+                from: {
+                    address: fromAddress.address,
+                    publicKey: fromAddress.publicKey,
+                    derivationPath: fromAddress.derivationPath,
+                    addressId: fromAddress.id,
+                    source: fromAddress.source,
+                    signerId: fromAddress.signerId,
+                },
+                params: actionParams,
+            };
+            const res = isHwSource
+                ? await messaging.deployActionHw({ ...base, signerId: fromAddress.signerId })
+                : await messaging.deployAction({ ...base, password });
+            setResult(res);
+            setPassword('');
+            setStage('done');
+        } catch (err) {
+            const isBadPassword = err?.name === 'InvalidPasswordError';
+            setSubmitError(
+                isBadPassword
+                    ? 'Incorrect password.'
+                    : err?.message || 'Deploy failed.',
+            );
+            setStage('review');
+            if (!isHwSource) {
+                passwordRef.current?.focus();
+                passwordRef.current?.select();
+            }
+        }
+    }
+
+    const header = (
+        <div className={styles.header}>
+            <button
+                type="button"
+                onClick={onBack}
+                className={styles.back}
+                aria-label="Back"
+            >
+                ← Back
+            </button>
+            <span className={styles.title}>
+                {stage === 'review' || stage === 'submitting'
+                    ? 'Review deploy'
+                    : `Deploy contract${descriptor ? ` on ${descriptor.displayName}` : ''}`}
+            </span>
+            <span className={styles.spacer} />
+        </div>
+    );
+
+    const wrap = (children) => (
+        <Screen variant={variant} header={header}>
+            {children}
+        </Screen>
+    );
+
+    if (loadError) {
+        return wrap(
+            <>
+                <div role="alert" className={styles.error}>{loadError}</div>
+                <div className={styles.actions}><Button variant="ghost" onClick={onBack}>Back</Button></div>
+            </>,
+        );
+    }
+    if (!addressesByChain) {
+        return wrap(<p>Loading addresses…</p>);
+    }
+
+    if (stage === 'done' && result) {
+        return wrap(
+            <>
+                <p className={styles.summary}>
+                    Contract deployed. The transaction was broadcast; the indexer will record it shortly.
+                </p>
+                <dl className={styles.detailsList}>
+                    <dt className={styles.detailsLabel}>Txid</dt>
+                    <dd className={styles.detailsValue}>{String(result?.txid || result?.tx_hash || '—')}</dd>
+                </dl>
+                <div className={styles.actions}>
+                    <Button variant="primary" onClick={onBack}>Done</Button>
+                </div>
+            </>,
+        );
+    }
+
+    if (stage === 'review' || stage === 'submitting') {
+        return wrap(
+            <form onSubmit={handleSubmit} noValidate>
+                <p className={styles.summary}>
+                    Deploy contract {actionParams.NAME ? `"${actionParams.NAME}"` : ''} to{' '}
+                    {descriptor?.displayName || chainId} — gas limit {actionParams.GAS_LIMIT}.
+                </p>
+                <dl className={styles.detailsList}>
+                    <dt className={styles.detailsLabel}>Chain</dt>
+                    <dd className={styles.detailsValue}>
+                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
+                    </dd>
+                    <dt className={styles.detailsLabel}>From</dt>
+                    <dd className={styles.detailsValue}>
+                        <AddressText address={fromAddress.address} />
+                    </dd>
+                    <dt className={styles.detailsLabel}>Name</dt>
+                    <dd className={styles.detailsValue}>{actionParams.NAME || '(unnamed)'}</dd>
+                    <dt className={styles.detailsLabel}>Code</dt>
+                    <dd className={styles.detailsValue}>
+                        {sizeInfo ? `${sizeInfo.bytes} bytes` : `${new Blob([code]).size} bytes`}
+                    </dd>
+                    <dt className={styles.detailsLabel}>Gas limit</dt>
+                    <dd className={styles.detailsValue}>{actionParams.GAS_LIMIT}</dd>
+                    {actionParams.CONSTRUCTOR_PARAMS ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Constructor</dt>
+                            <dd className={styles.detailsValue}>{actionParams.CONSTRUCTOR_PARAMS}</dd>
+                        </>
+                    ) : null}
+                </dl>
+                {validation?.warnings && validation.warnings.length > 0 ? (
+                    <div role="alert" className={styles.warnings}>
+                        {validation.warnings.map((w, i) => (
+                            <p key={i} className={styles.warning}>{w}</p>
+                        ))}
+                    </div>
+                ) : null}
+                <SignCredentials
+                    fromAddress={fromAddress}
+                    chainId={chainId}
+                    password={password}
+                    onPasswordChange={(v) => {
+                        setPassword(v);
+                        if (submitError) setSubmitError(null);
+                    }}
+                    onStatusChange={onHwStatusChange}
+                    passwordRef={passwordRef}
+                    submitError={submitError}
+                    disabled={stage === 'submitting'}
+                    getSignerStatus={messaging.getSignerStatus}
+                />
+                {isHwSource && submitError ? (
+                    <div role="alert" className={styles.error}>{submitError}</div>
+                ) : null}
+                <div className={styles.actions}>
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => setStage('form')}
+                        disabled={stage === 'submitting'}
+                    >
+                        Back
+                    </Button>
+                    <Button
+                        type="submit"
+                        variant="primary"
+                        loading={stage === 'submitting'}
+                        disabled={
+                            isHwSource ? hwStatus !== 'available' : password.length === 0
+                        }
+                    >
+                        {isHwSource
+                            ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                            : (descriptor ? `Deploy on ${descriptor.displayName}` : 'Deploy')}
+                    </Button>
+                </div>
+            </form>,
+        );
+    }
+
+    return wrap(
+        <form onSubmit={handleReview} noValidate>
+            {btcChainsWithAddresses.length > 1 ? (
+                <label className={styles.pickerLabel}>
+                    Chain
+                    <select
+                        className={styles.picker}
+                        value={chainId || ''}
+                        onChange={(e) => setChainId(e.target.value)}
+                    >
+                        {btcChainsWithAddresses.map((cid) => {
+                            const d = chainRegistry.get(cid);
+                            return (
+                                <option key={cid} value={cid}>
+                                    {d ? `${d.displayName} (${d.networkKind})` : cid}
+                                </option>
+                            );
+                        })}
+                    </select>
+                </label>
+            ) : descriptor ? (
+                <div className={styles.chainLine}>
+                    <ChainBadge descriptor={descriptor} size="sm" />
+                </div>
+            ) : null}
+
+            {fromAddress ? (
+                <div className={styles.fromLine}>
+                    <span className={styles.fromLabel}>Fee paid by</span>
+                    <AddressText address={fromAddress.address} />
+                </div>
+            ) : (
+                <div role="alert" className={styles.error}>
+                    No address on this Bitcoin chain yet. Use Receive to generate one first.
+                </div>
+            )}
+
+            <Input
+                label="Name (optional)"
+                hint="Display name for this contract. Appears in My contracts and the detail page."
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                autoComplete="off"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+            />
+
+            <label className={styles.pickerLabel}>
+                Code source
+                <textarea
+                    value={code}
+                    onChange={(e) => {
+                        setCode(e.target.value);
+                        setValidation(null);
+                        setSizeInfo(null);
+                    }}
+                    rows={isFull ? 20 : 10}
+                    spellCheck={false}
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    autoComplete="off"
+                    placeholder="// JavaScript contract source…"
+                    style={{
+                        width: '100%',
+                        fontFamily: 'monospace',
+                        fontSize: '0.85rem',
+                        padding: '0.5rem',
+                    }}
+                />
+            </label>
+
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
+                <Button type="button" variant="ghost" onClick={handleValidate} disabled={!code.trim()}>
+                    Validate code
+                </Button>
+                <Button type="button" variant="ghost" onClick={handleCheckSize} disabled={!code.trim()}>
+                    Estimate size
+                </Button>
+                <Button type="button" variant="ghost" onClick={handleSuggestGas} disabled={!code.trim()}>
+                    Suggest gas
+                </Button>
+            </div>
+
+            {validation ? (
+                <p
+                    role={validation.ok ? undefined : 'alert'}
+                    className={validation.ok ? styles.summary : styles.error}
+                >
+                    {validation.msg}
+                    {validation.warnings && validation.warnings.length > 0 ? (
+                        <> — {validation.warnings.length} warning(s)</>
+                    ) : null}
+                </p>
+            ) : null}
+            {sizeInfo ? (
+                <p
+                    role={sizeInfo.withinLimit ? undefined : 'alert'}
+                    className={sizeInfo.withinLimit ? styles.summary : styles.error}
+                >
+                    {sizeInfo.bytes} bytes{sizeInfo.withinLimit ? ' (within 64KB limit)' : ' — exceeds 64KB limit'}
+                </p>
+            ) : null}
+            {suggestedGas !== null ? (
+                <p className={styles.summary}>
+                    Suggested gas limit: {suggestedGas}
+                    {gasLimit !== String(suggestedGas) ? ' — applied' : ''}
+                </p>
+            ) : null}
+
+            <Input
+                label="Gas limit"
+                hint="Upper bound of VM gas the deployer and subsequent calls may consume."
+                inputMode="numeric"
+                value={gasLimit}
+                onChange={(e) => setGasLimit(e.target.value)}
+                autoComplete="off"
+            />
+
+            <Input
+                label="Constructor params (optional)"
+                hint="Pipe-delimited values passed to the contract's constructor."
+                value={constructorParams}
+                onChange={(e) => setConstructorParams(e.target.value)}
+                autoComplete="off"
+            />
+
+            {formError ? (
+                <div role="alert" className={styles.error}>{formError}</div>
+            ) : null}
+            <div className={styles.actions}>
+                <Button type="button" variant="ghost" onClick={onBack}>Cancel</Button>
+                <Button
+                    type="submit"
+                    variant="primary"
+                    disabled={!fromAddress || !code.trim()}
+                >
+                    Preview
+                </Button>
+            </div>
+        </form>,
+    );
+}

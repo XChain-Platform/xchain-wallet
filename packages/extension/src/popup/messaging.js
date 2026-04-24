@@ -483,6 +483,42 @@ export function getExecutionsForContract(req) {
 }
 
 /**
+ * Build, sign, and broadcast a DEPLOY action (§42.6). Hex-encoding of
+ * the contract source is handled by the SDK validator chain — pass
+ * raw UTF-8 source as params.CODE.
+ *
+ * @param {object} opts
+ */
+export function deployAction(opts) {
+    return /** @type {any} */ (sendMessage('action.deploy', opts));
+}
+
+/** @param {object} opts */
+export function deployActionHw(opts) {
+    return /** @type {any} */ (sendMessage('action.deploy.hw', opts));
+}
+
+/**
+ * Syntax-validate contract source (acorn parse + size check + float
+ * warnings + reserved-identifier check). Pure; no network.
+ *
+ * @param {{ chainId: string, code: string }} req
+ */
+export function validateContractCode(req) {
+    return /** @type {any} */ (sendMessage('contracts.validate', req));
+}
+
+/** @param {{ chainId: string, code: string }} req */
+export function checkContractCodeSize(req) {
+    return /** @type {any} */ (sendMessage('contracts.checkCodeSize', req));
+}
+
+/** @param {{ chainId: string, code: string }} req */
+export function suggestContractGasLimit(req) {
+    return /** @type {any} */ (sendMessage('contracts.suggestGasLimit', req));
+}
+
+/**
  * Build, sign, and broadcast a DIVIDEND action (§40.8). Distributes
  * AMOUNT of DIVIDEND_TICK to every holder of TICK at the snapshot
  * block. Source is excluded from receiving.

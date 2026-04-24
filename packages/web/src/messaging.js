@@ -262,6 +262,31 @@ export function getExecutionsForContract(req) {
 }
 
 /** @param {object} opts */
+export function deployAction(opts) {
+    return /** @type {any} */ (sendMessage('action.deploy', opts));
+}
+
+/** @param {object} opts */
+export function deployActionHw(opts) {
+    return /** @type {any} */ (sendMessage('action.deploy.hw', opts));
+}
+
+/** @param {object} req */
+export function validateContractCode(req) {
+    return /** @type {any} */ (sendMessage('contracts.validate', req));
+}
+
+/** @param {object} req */
+export function checkContractCodeSize(req) {
+    return /** @type {any} */ (sendMessage('contracts.checkCodeSize', req));
+}
+
+/** @param {object} req */
+export function suggestContractGasLimit(req) {
+    return /** @type {any} */ (sendMessage('contracts.suggestGasLimit', req));
+}
+
+/** @param {object} opts */
 export function dividendAction(opts) {
     return /** @type {any} */ (sendMessage('action.dividend', opts));
 }

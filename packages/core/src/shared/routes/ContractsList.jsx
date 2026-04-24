@@ -41,9 +41,10 @@ const VM_COIN = 'bitcoin';
  * @param {object} props
  * @param {string} props.walletId
  * @param {(chainId: string, actionIndex: string) => void} props.onOpenContract
+ * @param {() => void} [props.onDeploy]   navigate to the §42.6 deploy form (Phase 4 Step 4+); when omitted the button is hidden
  * @param {() => void} props.onBack
  */
-export function ContractsList({ walletId, onOpenContract, onBack }) {
+export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -308,6 +309,11 @@ export function ContractsList({ walletId, onOpenContract, onBack }) {
                     aria-label="Filter contracts"
                     style={{ flex: '1 1 200px', minWidth: 0 }}
                 />
+                {onDeploy ? (
+                    <Button variant="primary" onClick={onDeploy}>
+                        + Deploy new contract
+                    </Button>
+                ) : null}
             </div>
             <Section title="My contracts (deployed by me)">
                 {activeChains.map((cid) => {
