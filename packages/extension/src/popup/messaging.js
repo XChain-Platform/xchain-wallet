@@ -571,6 +571,22 @@ export function getValidatorsForChain(req) {
 }
 
 /**
+ * Build, sign, and broadcast a STAKE action (§42.7.1). Tier 1 +
+ * Tier 2 authoring surfaces supported; Tier 3 (oracle publisher,
+ * requires DOGE_ADDRESS) deferred pending SDK format update.
+ *
+ * @param {object} opts
+ */
+export function stakeAction(opts) {
+    return /** @type {any} */ (sendMessage('action.stake', opts));
+}
+
+/** @param {object} opts */
+export function stakeActionHw(opts) {
+    return /** @type {any} */ (sendMessage('action.stake.hw', opts));
+}
+
+/**
  * Syntax-validate contract source (acorn parse + size check + float
  * warnings + reserved-identifier check). Pure; no network.
  *

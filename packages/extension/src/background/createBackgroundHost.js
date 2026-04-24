@@ -65,6 +65,7 @@ const {
     delegationsForAddress,
     rewardsForAddress,
     validatorsForChain,
+    stakeAction,
     contractValidate,
     contractCheckCodeSize,
     contractSuggestGasLimit,
@@ -350,6 +351,7 @@ export function createBackgroundHost(deps) {
     registerHwHandler('action.execute.hw', executeAction);
     registerHwHandler('action.deposit.hw', depositAction);
     registerHwHandler('action.withdraw.hw', withdrawAction);
+    registerHwHandler('action.stake.hw', stakeAction);
 
     // Signer status probe — routes straight through the signer bridge
     // without touching vault/SDK. Returns `'idle'` when the bridge
@@ -561,6 +563,10 @@ export function createBackgroundHost(deps) {
 
     host.register('validators.forChain', async (req, { sdkRegistry }) => {
         return validatorsForChain({ ...req, sdkRegistry });
+    });
+
+    host.register('action.stake', async (req, { vault, chainRegistry, sdkRegistry }) => {
+        return stakeAction({ ...req, vault, chainRegistry, sdkRegistry });
     });
 
     host.register('contracts.validate', async (req, { sdkRegistry }) => {

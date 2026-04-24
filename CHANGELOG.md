@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.80.0] - 2026-04-24
+
+Phase 4 — Step 8 of 23. STAKE authoring form (§42.7.1). Tier 1 (Oracle) + Tier 2 (Cross-chain validator) lanes ship; Tier 3 (Oracle publisher) deferred pending SDK format update — see `claude/reports/specs/2026-04-24_phase4-staking-followups.md`.
+
+### Added
+
+- `packages/core/src/flows/stakeAction.js` — STAKE composer. Guards TIER + SIGNING_PUBKEY (64-hex Ed25519) + CHAINS (when Tier 2). Composes VERSION=0, TIER, CHAINS, SIGNING_PUBKEY. Amount is not a user-chosen field — the protocol fixes it per tier (STAKE.md "Tier Stake Amounts").
+- `packages/extension/src/background/createBackgroundHost.js` — `action.stake` + `action.stake.hw` handlers.
+- Three-shell messaging helpers — `stakeAction` / `stakeActionHw` in popup + web + desktop `messaging.js`.
+- `packages/core/src/shared/routes/StakeForm.jsx` — §42.7.1 form. Tier radio (1 / 2), 64-char hex Ed25519 signing-pubkey input, Tier-2-only Chains multi-checkbox (BTC / LTC / DOGE, default BTC+DOGE), display-only Amount line per tier, review screen with full pubkey + SignCredentials + HW branch, done screen mentioning the 6-BTC-block activation delay per STAKE.md.
+- Three App.jsx — new `'stake-form'` sub-route. `stakingRef` state `{ chainId, address }` carries context from the dashboard's Stake button. StakingDashboard.onStake now transitions; the form's Back returns to the dashboard.
+
+### Notes
+
+- Tier 3 deferred. STAKE.md documents Tier 3 (Oracle publisher, 500 XCHAIN, requires DOGE_ADDRESS) but the SDK's `formats.js` STAKE entry is `VERSION|TIER|CHAINS|SIGNING_PUBKEY` without DOGE_ADDRESS. Shipping a Tier 3 lane now would produce STAKE actions that fail encoder round-trip. FOLLOWUP 1 in the staking followups doc captures the one-line SDK fix + the conditional DOGE_ADDRESS validation.
+- Signing-key generation UX is also deferred (FOLLOWUP 3): users paste a pre-generated 64-hex Ed25519 pubkey today. `@noble/curves@1.9.1` is already a transitive dep via xchain-sdk 1.10.0 and exports ed25519 — generating a fresh keypair inline is a small follow-up.
+
 ## [0.79.0] - 2026-04-24
 
 Phase 4 — Step 7 of 23. Staking dashboard (§42.7.4). Nav guard + read-only dashboard; STAKE / UNSTAKE / DELEGATE / REVOKE / CLAIM authoring forms land in Steps 8–10.

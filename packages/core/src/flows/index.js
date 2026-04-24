@@ -70,6 +70,7 @@ export {
     rewardsForAddress,
     validatorsForChain,
 } from './stakingQueries.js';
+export { stakeAction } from './stakeAction.js';
 export {
     contractValidate,
     contractCheckCodeSize,

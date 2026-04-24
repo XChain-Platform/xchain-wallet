@@ -52,6 +52,7 @@ import { DeployContractForm } from '@xchain-wallet/core/shared/routes/DeployCont
 import { ExecuteContractForm } from '@xchain-wallet/core/shared/routes/ExecuteContractForm.jsx';
 import { ContractFundsForm } from '@xchain-wallet/core/shared/routes/ContractFundsForm.jsx';
 import { StakingDashboard } from '@xchain-wallet/core/shared/routes/StakingDashboard.jsx';
+import { StakeForm } from '@xchain-wallet/core/shared/routes/StakeForm.jsx';
 import { PairSignerForm } from '@xchain-wallet/core/shared/routes/PairSignerForm.jsx';
 import { useBtcAddressesPresent } from '@xchain-wallet/core/shared/hooks/useBtcAddressesPresent.js';
 import { pairTrezorSigner } from '../signers/trezorFactory.js';
@@ -74,7 +75,7 @@ function AppInner() {
         /** @type {'welcome' | 'create' | 'import' | 'import-freewallet'} */ ('welcome'),
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'swap' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'staking-dashboard'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'swap' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'staking-dashboard' | 'stake-form'} */ ('home'),
     );
     const [resumeAirdropId, setResumeAirdropId] = useState(
         /** @type {string | null} */ (null),
@@ -93,6 +94,9 @@ function AppInner() {
     );
     const [contractRef, setContractRef] = useState(
         /** @type {{ chainId: string, contractActionIndex: string } | null} */ (null),
+    );
+    const [stakingRef, setStakingRef] = useState(
+        /** @type {{ chainId: string, address: string } | null} */ (null),
     );
     const [activeMarket, setActiveMarket] = useState(
         /** @type {{ chainId: string, tick1: string, tick2: string } | null} */ (null),
@@ -491,7 +495,20 @@ function AppInner() {
                 return (
                     <StakingDashboard
                         walletId={activeWalletId}
+                        onStake={(ref) => {
+                            setStakingRef(ref);
+                            setUnlockedView('stake-form');
+                        }}
                         onBack={() => setUnlockedView('home')}
+                    />
+                );
+            }
+            if (unlockedView === 'stake-form' && activeWalletId && stakingRef) {
+                return (
+                    <StakeForm
+                        walletId={activeWalletId}
+                        chainId={stakingRef.chainId}
+                        onBack={() => setUnlockedView('staking-dashboard')}
                     />
                 );
             }

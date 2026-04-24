@@ -321,6 +321,16 @@ export function getValidatorsForChain(req) {
     return /** @type {any} */ (sendMessage('validators.forChain', req));
 }
 
+/** @param {object} opts */
+export function stakeAction(opts) {
+    return /** @type {any} */ (sendMessage('action.stake', opts));
+}
+
+/** @param {object} opts */
+export function stakeActionHw(opts) {
+    return /** @type {any} */ (sendMessage('action.stake.hw', opts));
+}
+
 /** @param {object} req */
 export function validateContractCode(req) {
     return /** @type {any} */ (sendMessage('contracts.validate', req));
