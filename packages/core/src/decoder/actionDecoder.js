@@ -11,9 +11,11 @@
 // params, edit-callback, edit-lists), MINT, DESTROY (v0 single; v1/v2
 // multi-destroy falls through to the generic decoder), and BATCH (which
 // recurses into its COMMANDS array and composes sub-decoder output).
-// Every other ACTION type still gets the generic fallback — dedicated
-// decoders for DISPENSER / DIVIDEND / AIRDROP / etc. land alongside
-// their authoring forms in Phase 2 sub-pieces or Phase 3.
+// Step 20 adds BROADCAST (v0/v1/v2/v3), Step 21 adds DISPENSER
+// (v0/v1/v2), Step 23 adds DIVIDEND (v0), and Step 24 adds LIST
+// (v0/v1) + AIRDROP (v0/v1/v2/v3). Every other ACTION type still gets
+// the generic fallback — dedicated decoders for the remaining kinds
+// land alongside their authoring forms in later phases.
 
 /**
  * @typedef {Object} DecodedAction
@@ -164,7 +166,166 @@ export function decodeAction({ action, params, chainId, chainRegistry }) {
         return decodeDividend(p, chainSuffix);
     }
 
+    if (action === 'LIST') {
+        return decodeList(p, chainSuffix);
+    }
+
+    if (action === 'AIRDROP') {
+        return decodeAirdrop(p, chainSuffix);
+    }
+
     return genericFallback(action, p, chainSuffix);
+}
+
+/**
+ * LIST decoder — §40.9 / LIST.md. Two format versions:
+ *
+ *   - v0 Create — VERSION|TYPE|ITEM (ITEM repeats). TYPE 1 = TICK list,
+ *     TYPE 2 = ADDRESS list. The wallet's AIRDROP authoring flow emits
+ *     v0 with TYPE=2 (address pool).
+ *   - v1 Edit — VERSION|EDIT|LIST_ACTION_INDEX|ITEM (ITEM repeats).
+ *     Clones an existing list and adds (EDIT=1) or removes (EDIT=2)
+ *     the listed items. No authoring UI in Step 24, but the decoder
+ *     case lands so imports / pasted raw actions read sensibly.
+ */
+function decodeList(p, chainSuffix) {
+    const version = str(p.VERSION) || '0';
+    const items = toArray(p.ITEM);
+    const count = items.length;
+
+    if (version === '1') {
+        const edit = str(p.EDIT);
+        const parent = str(p.LIST_ACTION_INDEX);
+        const verb = edit === '1' ? 'Add' : edit === '2' ? 'Remove' : 'Edit';
+        const prep = edit === '2' ? 'from' : 'to';
+        const summary = `${verb} ${count || '?'} item${count === 1 ? '' : 's'} ${prep} list${parent ? ` #${parent}` : ''}${chainSuffix}`;
+        return {
+            summary,
+            details: [
+                { label: 'Edit', value: edit === '1' ? 'Add' : edit === '2' ? 'Remove' : edit },
+                ...(parent ? [{ label: 'Parent list action index', value: parent }] : []),
+                { label: 'Items', value: String(count) },
+                ...(count > 0 && count <= 5
+                    ? [{ label: 'Sample', value: items.join(', ') }]
+                    : []),
+            ],
+            warnings: [
+                ...(!edit ? ['Edit direction is empty — specify add (1) or remove (2).'] : []),
+                ...(!parent ? ['Parent list action index is empty.'] : []),
+                ...(count === 0 ? ['List has no items.'] : []),
+            ],
+        };
+    }
+
+    // Version 0 — create.
+    const type = str(p.TYPE);
+    const kind = type === '1' ? 'token' : type === '2' ? 'address' : 'item';
+    const summary = `Create ${kind} list of ${count || '?'} item${count === 1 ? '' : 's'}${chainSuffix}`;
+    return {
+        summary,
+        details: [
+            { label: 'Type', value: type === '1' ? 'TICK (token)' : type === '2' ? 'ADDRESS' : type },
+            { label: 'Items', value: String(count) },
+            ...(count > 0 && count <= 5
+                ? [{ label: 'Sample', value: items.join(', ') }]
+                : []),
+        ],
+        warnings: [
+            ...(!type ? ['List type is empty — specify 1 (TICK) or 2 (ADDRESS).'] : []),
+            ...(count === 0 ? ['List has no items.'] : []),
+        ],
+    };
+}
+
+/**
+ * AIRDROP decoder — §40.9 / AIRDROP.md. Four format versions:
+ *
+ *   - v0 Single — one TICK, one AMOUNT, one LIST_ACTION_INDEX, MEMO.
+ *     The wallet's §40.9 two-tx flow emits v0; the prior LIST action's
+ *     ACTION_INDEX is resolved after indexing and baked in here.
+ *   - v1 Multi-token, single list — repeating TICK/AMOUNT pairs to one
+ *     LIST_ACTION_INDEX.
+ *   - v2 Multi-token, multi-list — repeating TICK/AMOUNT/LIST triples.
+ *   - v3 Same as v2 plus per-tuple MEMO.
+ *
+ * The decoder cannot know whether the referenced LIST is a TICK list
+ * (airdrop to holders of each ticker) or an ADDRESS list (airdrop to
+ * each address) without a DB lookup — the summary stays neutral.
+ */
+function decodeAirdrop(p, chainSuffix) {
+    const version = str(p.VERSION) || '0';
+    const memo = str(p.MEMO);
+    const memoArr = toArray(p.MEMO);
+    const memoWarning = memo && /[|;]/.test(memo)
+        ? ['Memo contains | or ; — the protocol will reject this transaction.']
+        : memoArr.some((m) => /[|;]/.test(String(m)))
+            ? ['A memo contains | or ; — the protocol will reject this transaction.']
+            : [];
+
+    if (version === '0') {
+        const tick = str(p.TICK);
+        const amount = str(p.AMOUNT);
+        const listIdx = str(p.LIST_ACTION_INDEX);
+        return {
+            summary: `Airdrop ${amount || '?'} ${tick || '?'}${chainSuffix} to list${listIdx ? ` #${listIdx}` : ''}`,
+            details: [
+                { label: 'Token', value: tick },
+                { label: 'Per-recipient amount', value: amount },
+                { label: 'List action index', value: listIdx ? `#${listIdx}` : '' },
+                ...(memo ? [{ label: 'Memo', value: memo }] : []),
+            ],
+            warnings: [
+                ...(!tick ? ['Token ticker is empty.'] : []),
+                ...(!amount || Number(amount) <= 0
+                    ? ['Per-recipient amount is not positive.']
+                    : []),
+                ...(!listIdx ? ['List action index is empty.'] : []),
+                ...memoWarning,
+            ],
+        };
+    }
+
+    // Multi-airdrop variants (v1 / v2 / v3). Fields arrive as arrays
+    // when the SDK serializes repeating slots.
+    const ticks = toArray(p.TICK);
+    const amounts = toArray(p.AMOUNT);
+    const lists = toArray(p.LIST_ACTION_INDEX);
+    const n = Math.max(ticks.length, amounts.length, 1);
+
+    const drops = [];
+    for (let i = 0; i < n; i += 1) {
+        const t = str(ticks[i] ?? '');
+        const a = str(amounts[i] ?? '');
+        // v1 reuses a single LIST_ACTION_INDEX across all TICK/AMOUNT
+        // pairs; v2/v3 carry one per tuple.
+        const li = version === '1'
+            ? str(lists[0] ?? '')
+            : str(lists[i] ?? '');
+        const m = version === '3' ? str(memoArr[i] ?? '') : '';
+        drops.push({ tick: t, amount: a, list: li, memo: m });
+    }
+
+    const summaryLine = drops
+        .map((d) => `${d.amount || '?'} ${d.tick || '?'} → list${d.list ? ` #${d.list}` : ''}`)
+        .join(', ');
+    const summary = `Airdrop${chainSuffix}: ${summaryLine}`;
+
+    const details = drops.flatMap((d, i) => [
+        { label: `Drop ${i + 1}`, value: `${d.amount || '?'} ${d.tick || '?'} to list${d.list ? ` #${d.list}` : ''}` },
+        ...(d.memo ? [{ label: `  Memo`, value: d.memo }] : []),
+    ]);
+    if (memo && version !== '3') details.push({ label: 'Memo', value: memo });
+
+    const warnings = [
+        ...(drops.some((d) => !d.tick) ? ['One or more token tickers are empty.'] : []),
+        ...(drops.some((d) => !d.amount || Number(d.amount) <= 0)
+            ? ['One or more per-recipient amounts are not positive.']
+            : []),
+        ...(drops.some((d) => !d.list) ? ['One or more list action indexes are empty.'] : []),
+        ...memoWarning,
+    ];
+
+    return { summary, details, warnings };
 }
 
 /**
@@ -696,6 +857,12 @@ function genericFallback(action, p, chainSuffix) {
 function str(v) {
     if (v === undefined || v === null) return '';
     return String(v);
+}
+
+function toArray(v) {
+    if (v === undefined || v === null || v === '') return [];
+    if (Array.isArray(v)) return v.filter((x) => x !== undefined && x !== null && x !== '');
+    return [v];
 }
 
 function safeJson(v) {

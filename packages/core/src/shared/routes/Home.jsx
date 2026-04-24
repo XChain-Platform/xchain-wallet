@@ -14,6 +14,11 @@ const chainRegistry = registryLib.defaultRegistry();
  * wallet name + Lock button; body renders a per-chain balance card
  * grid; footer exposes Send / Receive / Create-a-token action buttons.
  *
+ * When the wallet has pending §40.9 airdrops (LIST signed but AIRDROP
+ * still pending, either waiting for the LIST to be indexed or ready
+ * to sign), Home surfaces a resume card above the balance grid so the
+ * user can pick up where they left off.
+ *
  * Auto-lock is foreground-only and enabled for the popup shell only;
  * web tabs opt out today because their session lifetime already caps
  * with tab close. See `useAutoLock` for the scope limitation.
@@ -24,8 +29,9 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {() => void} [props.onReceive]       navigate to Receive sub-route
  * @param {() => void} [props.onCreateToken]   navigate to Token Wizard sub-route (§40.1)
  * @param {() => void} [props.onActions]       navigate to the Actions menu (§40.2+)
+ * @param {(id: string) => void} [props.onResumeAirdrop]  navigate to AirdropForm with a pending id
  */
-export function Home({ onLocked, onSend, onReceive, onCreateToken, onActions }) {
+export function Home({ onLocked, onSend, onReceive, onCreateToken, onActions, onResumeAirdrop }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -36,6 +42,9 @@ export function Home({ onLocked, onSend, onReceive, onCreateToken, onActions }) 
     );
     const [balances, setBalances] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
+    );
+    const [pendingAirdrops, setPendingAirdrops] = useState(
+        /** @type {any[]} */ ([]),
     );
     const [loadError, setLoadError] = useState(
         /** @type {string | null} */ (null),
@@ -61,6 +70,19 @@ export function Home({ onLocked, onSend, onReceive, onCreateToken, onActions }) 
                 } catch (err) {
                     if (!cancelled) {
                         setLoadError(err?.message || 'Failed to load balances.');
+                    }
+                }
+                if (typeof messaging.listPendingAirdropsForWallet === 'function') {
+                    try {
+                        const records = await messaging.listPendingAirdropsForWallet({ walletId });
+                        if (!cancelled) {
+                            const resumable = (records || []).filter(
+                                (r) => r.stage === 'waiting-index' || r.stage === 'ready-to-airdrop',
+                            );
+                            setPendingAirdrops(resumable);
+                        }
+                    } catch (err) {
+                        // Non-fatal — resume card is a convenience, not core functionality.
                     }
                 }
             } catch (err) {
@@ -130,6 +152,28 @@ export function Home({ onLocked, onSend, onReceive, onCreateToken, onActions }) 
 
                 {balances === null && !loadError ? (
                     <p className={styles.hint}>Loading balances…</p>
+                ) : null}
+
+                {pendingAirdrops.length > 0 && onResumeAirdrop ? (
+                    <div role="group" aria-label="Pending airdrops">
+                        {pendingAirdrops.map((rec) => (
+                            <button
+                                key={rec.id}
+                                type="button"
+                                className={styles.pendingAirdropCard}
+                                onClick={() => onResumeAirdrop(rec.id)}
+                            >
+                                <span className={styles.pendingAirdropTitle}>
+                                    Resume airdrop: {rec.amountPer} {rec.token} × {rec.recipients.length}
+                                </span>
+                                <span className={styles.pendingAirdropHint}>
+                                    {rec.stage === 'waiting-index'
+                                        ? 'LIST broadcast — waiting for index'
+                                        : 'Ready to sign AIRDROP'}
+                                </span>
+                            </button>
+                        ))}
+                    </div>
                 ) : null}
 
                 {balances ? (

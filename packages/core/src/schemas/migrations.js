@@ -13,6 +13,7 @@ import { CURRENT_VERSION as SETTINGS_VERSION } from './settings.js';
 import { CURRENT_VERSION as PENDING_TX_VERSION } from './pendingTx.js';
 import { CURRENT_VERSION as MULTISIG_VERSION } from './multisigConfig.js';
 import { CURRENT_VERSION as SIGNER_VERSION } from './signer.js';
+import { CURRENT_VERSION as PENDING_AIRDROP_VERSION } from './pendingAirdrop.js';
 
 /**
  * @typedef {(record: any) => any} MigrationStep
@@ -44,6 +45,8 @@ export const pendingTxMigrations = {};
 export const multisigConfigMigrations = {};
 /** @type {MigrationMap} */
 export const signerMigrations = {};
+/** @type {MigrationMap} */
+export const pendingAirdropMigrations = {};
 
 /**
  * Walk `record` forward through `migrations` until it reaches `target`.
@@ -95,3 +98,5 @@ export const migratePendingTx = (r) => migrate(r, pendingTxMigrations, PENDING_T
 export const migrateMultisigConfig = (r) =>
     migrate(r, multisigConfigMigrations, MULTISIG_VERSION);
 export const migrateSigner = (r) => migrate(r, signerMigrations, SIGNER_VERSION);
+export const migratePendingAirdrop = (r) =>
+    migrate(r, pendingAirdropMigrations, PENDING_AIRDROP_VERSION);

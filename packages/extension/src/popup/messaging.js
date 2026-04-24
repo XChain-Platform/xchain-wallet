@@ -344,6 +344,111 @@ export function getHoldersForToken(req) {
 }
 
 /**
+ * Build, sign, and broadcast a LIST action (§40.9 stage 3). The
+ * §40.9 AIRDROP authoring flow signs LIST first, waits for it to be
+ * indexed, then signs an AIRDROP referencing the assigned
+ * ACTION_INDEX.
+ *
+ * @param {object} opts
+ * @param {string} opts.walletId
+ * @param {string} opts.password
+ * @param {string} opts.chainId
+ * @param {{ address: string, publicKey: string, derivationPath?: string | null, addressId?: string }} opts.from
+ * @param {Record<string, string | string[]>} opts.params   LIST field map (VERSION, TYPE, ITEM[])
+ * @param {number} [opts.fee]
+ * @param {number} [opts.feePerKb]
+ * @param {boolean} [opts.rbf]
+ * @param {string} [opts.bip39Passphrase]
+ * @returns {Promise<any>}
+ */
+export function createList(opts) {
+    return /** @type {any} */ (sendMessage('action.createList', opts));
+}
+
+/**
+ * Build, sign, and broadcast an AIRDROP action (§40.9 stage 6).
+ * References a pre-existing LIST via LIST_ACTION_INDEX — the wallet
+ * resolves that index from the LIST txid between stages 3 and 5.
+ *
+ * @param {object} opts
+ * @param {string} opts.walletId
+ * @param {string} opts.password
+ * @param {string} opts.chainId
+ * @param {{ address: string, publicKey: string, derivationPath?: string | null, addressId?: string }} opts.from
+ * @param {Record<string, string>} opts.params   AIRDROP field map (VERSION, TICK, AMOUNT, LIST_ACTION_INDEX, optional MEMO)
+ * @param {number} [opts.fee]
+ * @param {number} [opts.feePerKb]
+ * @param {boolean} [opts.rbf]
+ * @param {string} [opts.bip39Passphrase]
+ * @returns {Promise<any>}
+ */
+export function airdropAction(opts) {
+    return /** @type {any} */ (sendMessage('action.airdrop', opts));
+}
+
+/**
+ * Resolve an indexed action by tx hash. AirdropForm polls this on
+ * stage 4 to learn the LIST's ACTION_INDEX once the LIST is indexed;
+ * returns null while still unindexed.
+ *
+ * @param {{ chainId: string, txid: string }} req
+ */
+export function getActionByTxid(req) {
+    return /** @type {any} */ (sendMessage('actions.byTxid', req));
+}
+
+/**
+ * Fetch a LIST action by its ACTION_INDEX — used by stage 5 to
+ * confirm the list's TYPE + item count on the AIRDROP review screen.
+ *
+ * @param {{ chainId: string, actionIndex: string }} req
+ */
+export function getListByActionIndex(req) {
+    return /** @type {any} */ (sendMessage('lists.byActionIndex', req));
+}
+
+/**
+ * Persist a pending-airdrop record after the LIST tx is broadcast.
+ * AirdropForm writes here at the stage-3 → stage-4 transition so a
+ * crash or close mid-wait is resumable.
+ *
+ * @param {{ record: import('@xchain-wallet/core').schemas.pendingAirdrop.PendingAirdrop }} req
+ */
+export function savePendingAirdrop(req) {
+    return /** @type {any} */ (sendMessage('pendingAirdrops.save', req));
+}
+
+/**
+ * Fetch all in-flight airdrops for a wallet. Used by the Home resume
+ * card and by AirdropForm when resuming a specific record.
+ *
+ * @param {{ walletId: string }} req
+ */
+export function listPendingAirdropsForWallet(req) {
+    return /** @type {any} */ (sendMessage('pendingAirdrops.listForWallet', req));
+}
+
+/**
+ * Merge a patch into a pending-airdrop record (stage transitions,
+ * listActionIndex / airdropTxid updates).
+ *
+ * @param {{ id: string, patch: object }} req
+ */
+export function updatePendingAirdrop(req) {
+    return /** @type {any} */ (sendMessage('pendingAirdrops.update', req));
+}
+
+/**
+ * Delete a pending-airdrop record. Called from the Home resume card
+ * when the user acknowledges a `done` entry.
+ *
+ * @param {{ id: string }} req
+ */
+export function clearPendingAirdrop(req) {
+    return /** @type {any} */ (sendMessage('pendingAirdrops.clear', req));
+}
+
+/**
  * Persist a paired hardware signer (§17.6 / §18.3). The caller runs
  * `pairTrezorSigner` (or the Ledger equivalent) in the renderer,
  * obtains the `pairingInfo` payload, and forwards it here. Idempotent

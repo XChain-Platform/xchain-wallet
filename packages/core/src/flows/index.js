@@ -29,6 +29,15 @@ export {
     dispensesFor,
 } from './dispenserQueries.js';
 export { dividendAction, holdersFor } from './dividendAction.js';
+export { createList } from './createList.js';
+export { airdropAction } from './airdropAction.js';
+export { actionByTxid, listByActionIndex } from './listQueries.js';
+export {
+    savePendingAirdrop,
+    listPendingAirdropsForWallet,
+    updatePendingAirdrop,
+    clearPendingAirdrop,
+} from './pendingAirdrops.js';
 export {
     registerSigner,
     listSignersForWallet,

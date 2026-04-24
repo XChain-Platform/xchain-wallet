@@ -95,23 +95,21 @@ const chainRegistry = registryLib.defaultRegistry();
 }
 
 // 1e. Unknown / not-yet-decoded action falls back with the "no
-// plain-English" warning. Using AIRDROP — decoded actions now cover
-// SEND, SWEEP, ISSUE (v0/v1-v5), MINT, DESTROY, BATCH, BROADCAST,
-// DISPENSER, and DIVIDEND; AIRDROP + ORDER + SWAP + etc. still route
-// here.
+// plain-English" warning. Using ORDER — Step 24 adds LIST + AIRDROP,
+// so the fallback now exercises ORDER / SWAP / etc.
 {
     const d = decoderLib.decodeAction({
-        action: 'AIRDROP',
-        params: { TICK: 'MYTOKEN', AMOUNT: '10', LIST_ACTION_INDEX: '42' },
+        action: 'ORDER',
+        params: { GIVE_TICK: 'XCP', GIVE_AMOUNT: '10', GET_COIN: 'BTC', GET_AMOUNT: '1' },
         chainId: 'bitcoin-mainnet',
         chainRegistry,
     });
-    assert.match(d.summary, /Sign AIRDROP on Bitcoin/);
+    assert.match(d.summary, /Sign ORDER on Bitcoin/);
     assert.ok(
         d.warnings.some((w) => /no plain-english summary is available/i.test(w)),
         'fallback surfaces the "not decoded" warning',
     );
-    assert.equal(d.details.length, 3, 'fallback pretty-prints every param');
+    assert.equal(d.details.length, 4, 'fallback pretty-prints every param');
 }
 
 // 1f. Missing chain registry still yields a sensible summary.
@@ -355,6 +353,161 @@ const chainRegistry = registryLib.defaultRegistry();
     );
 }
 
+// --- 2.5. Step 24 decoders — LIST v0/v1 + AIRDROP v0/v1/v2/v3 --------
+
+// 2l. LIST v0 create — address list.
+{
+    const d = decoderLib.decodeAction({
+        action: 'LIST',
+        params: {
+            VERSION: '0',
+            TYPE: '2',
+            ITEM: ['bc1qa', 'bc1qb', 'bc1qc'],
+        },
+        chainId: 'bitcoin-mainnet',
+        chainRegistry,
+    });
+    assert.equal(d.summary, 'Create address list of 3 items on Bitcoin');
+    assert.ok(
+        d.details.some((r) => r.label === 'Type' && /ADDRESS/.test(r.value)),
+        'LIST v0 type row reads ADDRESS',
+    );
+    assert.ok(
+        d.details.some((r) => r.label === 'Items' && r.value === '3'),
+    );
+    assert.equal(d.warnings.length, 0, 'happy LIST v0 has no warnings');
+}
+
+// 2m. LIST v0 create — TICK list, empty items warns.
+{
+    const d = decoderLib.decodeAction({
+        action: 'LIST',
+        params: { VERSION: '0', TYPE: '1', ITEM: [] },
+    });
+    assert.match(d.summary, /Create token list/);
+    assert.ok(
+        d.warnings.some((w) => /no items/i.test(w)),
+        'empty LIST warns',
+    );
+}
+
+// 2n. LIST v0 missing type warns.
+{
+    const d = decoderLib.decodeAction({
+        action: 'LIST',
+        params: { VERSION: '0', ITEM: ['X'] },
+    });
+    assert.ok(
+        d.warnings.some((w) => /type is empty/i.test(w)),
+        'LIST v0 without TYPE warns',
+    );
+}
+
+// 2o. LIST v1 add — summary names the parent list.
+{
+    const d = decoderLib.decodeAction({
+        action: 'LIST',
+        params: {
+            VERSION: '1',
+            EDIT: '1',
+            LIST_ACTION_INDEX: '1234',
+            ITEM: ['bc1qa', 'bc1qb'],
+        },
+        chainId: 'litecoin-mainnet',
+        chainRegistry,
+    });
+    assert.equal(d.summary, 'Add 2 items to list #1234 on Litecoin');
+    assert.ok(
+        d.details.some((r) => r.label === 'Edit' && r.value === 'Add'),
+    );
+}
+
+// 2p. LIST v1 remove — preposition switches to "from".
+{
+    const d = decoderLib.decodeAction({
+        action: 'LIST',
+        params: {
+            VERSION: '1', EDIT: '2', LIST_ACTION_INDEX: '4321', ITEM: ['bc1qa'],
+        },
+        chainId: 'bitcoin-mainnet',
+        chainRegistry,
+    });
+    assert.match(d.summary, /Remove 1 item from list #4321/);
+}
+
+// 2q. AIRDROP v0 — single happy path.
+{
+    const d = decoderLib.decodeAction({
+        action: 'AIRDROP',
+        params: {
+            VERSION: '0', TICK: 'MYTOKEN', AMOUNT: '10',
+            LIST_ACTION_INDEX: '1234',
+        },
+        chainId: 'bitcoin-mainnet',
+        chainRegistry,
+    });
+    assert.equal(d.summary, 'Airdrop 10 MYTOKEN on Bitcoin to list #1234');
+    assert.ok(
+        d.details.some((r) => r.label === 'List action index' && r.value === '#1234'),
+    );
+    assert.equal(d.warnings.length, 0, 'happy AIRDROP v0 has no warnings');
+}
+
+// 2r. AIRDROP v0 — missing list index warns.
+{
+    const d = decoderLib.decodeAction({
+        action: 'AIRDROP',
+        params: { VERSION: '0', TICK: 'MYTOKEN', AMOUNT: '10' },
+    });
+    assert.ok(
+        d.warnings.some((w) => /list action index is empty/i.test(w)),
+    );
+}
+
+// 2s. AIRDROP v0 — memo pipe is rejected.
+{
+    const d = decoderLib.decodeAction({
+        action: 'AIRDROP',
+        params: {
+            VERSION: '0', TICK: 'X', AMOUNT: '1', LIST_ACTION_INDEX: '1',
+            MEMO: 'bad|memo',
+        },
+    });
+    assert.ok(
+        d.warnings.some((w) => /\| or ;/.test(w)),
+    );
+}
+
+// 2t. AIRDROP v1 — multi-token, single list.
+{
+    const d = decoderLib.decodeAction({
+        action: 'AIRDROP',
+        params: {
+            VERSION: '1',
+            LIST_ACTION_INDEX: '1234',
+            TICK: ['GAS', 'BRRR'],
+            AMOUNT: ['1', '2'],
+        },
+        chainId: 'bitcoin-mainnet',
+        chainRegistry,
+    });
+    assert.match(d.summary, /Airdrop on Bitcoin: 1 GAS → list #1234, 2 BRRR → list #1234/);
+}
+
+// 2u. AIRDROP v2 — multi-token, multi-list.
+{
+    const d = decoderLib.decodeAction({
+        action: 'AIRDROP',
+        params: {
+            VERSION: '2',
+            TICK: ['GAS', 'BRRR'],
+            AMOUNT: ['1', '2'],
+            LIST_ACTION_INDEX: ['1234', '4321'],
+        },
+    });
+    assert.match(d.summary, /1 GAS → list #1234, 2 BRRR → list #4321/);
+}
+
 // --- 3. Static wiring -------------------------------------------------
 
 const coreIdx = readFileSync(
@@ -395,5 +548,5 @@ assert.ok(signCss.includes('.warnings'), 'warnings block has a style');
 assert.ok(signCss.includes('.detailsList'), 'details list has a style');
 
 console.log(
-    'OK — action decoder smoke (18 cases: SEND + SWEEP + ISSUE v0/v1/v3 + MINT + DESTROY v0 + DESTROY multi-fallback + BATCH + fallback + null-safety + SignApproval wiring)',
+    'OK — action decoder smoke (28 cases: SEND + SWEEP + ISSUE v0/v1/v3 + MINT + DESTROY v0 + DESTROY multi-fallback + BATCH + LIST v0/v1 + AIRDROP v0/v1/v2 + fallback + null-safety + SignApproval wiring)',
 );

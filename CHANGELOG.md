@@ -7,6 +7,89 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.64.0] - 2026-04-23
+
+Phase 2 — Step 24 of 26 — piece 9. AIRDROP authoring flow (§40.9). Distributes a token to every address on a pasted or uploaded list. Ships as a **two-transaction flow** rather than the single BATCH the spec suggested: a LIST action creates the on-chain address pool, and once it's indexed the AIRDROP references it by `LIST_ACTION_INDEX`. State is persisted to the vault so closing the wallet between the two signs is resumable.
+
+### Added
+
+**Core flows** (`packages/core/src/flows/`)
+
+- `createList(opts)` — signs + broadcasts a LIST action. v0 (create, TYPE=1/2) or v1 (edit-existing, EDIT=1/2 + LIST_ACTION_INDEX). Guards: non-empty `ITEM[]`, valid TYPE/EDIT per version.
+- `airdropAction(opts)` — signs + broadcasts an AIRDROP v0 referencing a pre-existing LIST. Guards: TICK, AMOUNT, LIST_ACTION_INDEX.
+- `actionByTxid({ sdkRegistry, chainId, txid })` — thin wrapper over `sdk.getTransaction(txid, 'hash')`. 404 → `null` so polling loops can use `result === null ? keep polling : done`. Any non-404 error propagates.
+- `listByActionIndex({ sdkRegistry, chainId, actionIndex })` — thin wrapper over `sdk.getAction(actionIndex)` for stage-5 confirmation display.
+- Pending-airdrop CRUD: `savePendingAirdrop`, `listPendingAirdropsForWallet`, `updatePendingAirdrop` (re-reads before merging), `clearPendingAirdrop`.
+- All re-exported from `@xchain-wallet/core` via `flows/index.js`.
+
+**Parser module** (`packages/core/src/airdrop/parseRecipients.js`)
+
+- `parsePaste(text)` — splits on newlines/commas, strips wrapping quotes + whitespace.
+- `parseCsv(text)` — first-column extractor; detects + skips a lowercase `"address"` header row. Not a full RFC 4180 parser — good enough for address-in-column-1 CSVs.
+- `isPlausibleAddress(addr)` — length (matches SDK `util.isCryptoAddress`) + base58/bech32 charset guard. Catches paste artifacts like commas, spaces, zero-width chars; anything subtler gets caught at sign time by the encoder.
+- `classifyRecipients(candidates)` — order-preserving dedup returning `{ valid, invalid, duplicates }`.
+- Exposed at `@xchain-wallet/core` as the `airdrop` namespace.
+
+**Decoder** (`packages/core/src/decoder/actionDecoder.js`)
+
+- `decodeList` case — v0 `"Create address/token list of N items on <chain>"`, v1 `"Add/Remove N items to/from list #N on <chain>"`. Warns on empty TYPE, missing EDIT direction, empty parent list reference, or zero items. Samples items inline when ≤5 to keep the sign screen tidy for large pastes.
+- `decodeAirdrop` case — v0 `"Airdrop AMOUNT TICK on <chain> to list #N"`; v1/v2/v3 render per-tuple summary lines (e.g. `"Airdrop: 1 GAS → list #1234, 2 BRRR → list #1234"`). Warns on empty tickers, non-positive amounts, empty list reference, and `|`/`;` in MEMO. The decoder stays neutral about whether the referenced LIST is TICK or ADDRESS — no DB lookup at decode time.
+
+**Schema + vault** (`packages/core/src/schemas/pendingAirdrop.js`, `packages/core/src/storage/`)
+
+- New `PendingAirdrop` record: `{ id, walletId, chainId, fromAddress, token, amountPer, recipients[], listTxid, listActionIndex, airdropTxid, stage, createdAt, memo }`.
+- `PENDING_AIRDROP_STAGES = ['waiting-index', 'ready-to-airdrop', 'done']`.
+- Empty `pendingAirdropMigrations` + `migratePendingAirdrop` wrapper (forward-only, grows when schema changes).
+- `vault.pendingAirdrops` collection handle wired via the existing `makeCollection` harness. Codec defensive-merge means older persisted blobs transparently read the new collection as `[]` — no `DOCUMENT_VERSION` bump.
+
+**UI — AirdropForm** (`packages/core/src/shared/routes/AirdropForm.jsx`)
+
+- 5-stage state machine: `compose` → `review-list` → `wait-index` → `review-airdrop` → `done`.
+- Stage 1 compose: chain + source picker, token + per-recipient amount inputs, paste textarea + CSV file input, live recipient-count banner (`"147 valid addresses · 3 duplicates removed · 2 invalid skipped"`), expandable invalid list, memo field.
+- Stage 2 review-list: decoder-rendered LIST summary + "two-transaction" banner + password prompt. Signs LIST via `messaging.createList`, persists the pending record to the vault, advances to wait-index.
+- Stage 3 wait-index: `setInterval(10_000)` polling against `messaging.getActionByTxid`; pauses on `document.visibilityState === 'hidden'`. Shows LIST txid + elapsed counter; renders a "taking longer than usual" hint after 5 min. `"Close (keep waiting)"` and `"Cancel airdrop"` exits.
+- Stage 4 review-airdrop: decoder-rendered AIRDROP (with resolved LIST_ACTION_INDEX), recipient count, total distribution estimate. Second password prompt. Signs AIRDROP via `messaging.airdropAction`, writes `stage='done'` + airdropTxid to the vault.
+- Stage 5 done: both txids shown, "Done" clears the vault record.
+- Accepts optional `resumeId` prop: hydrates from `listPendingAirdropsForWallet` and jumps to the right stage.
+
+**Home resume card** (`packages/core/src/shared/routes/Home.jsx`, `Home.module.css`)
+
+- `Home` accepts an optional `onResumeAirdrop(id)` prop. On mount it calls `messaging.listPendingAirdropsForWallet` and filters to `waiting-index` + `ready-to-airdrop` stages. Each resumable record renders a click-to-resume card above the balance grid showing `"{amount} {token} × {N recipients}"` + stage description.
+
+**Background handlers** (`packages/extension/src/background/createBackgroundHost.js`)
+
+- Write: `action.createList`, `action.airdrop`.
+- Read: `actions.byTxid`, `lists.byActionIndex`.
+- Pending-airdrop CRUD: `pendingAirdrops.save`, `pendingAirdrops.listForWallet`, `pendingAirdrops.update`, `pendingAirdrops.clear`.
+
+**Three-shell messaging** (popup / web / desktop)
+
+- `createList`, `airdropAction`, `getActionByTxid`, `getListByActionIndex`, `savePendingAirdrop`, `listPendingAirdropsForWallet`, `updatePendingAirdrop`, `clearPendingAirdrop` exports added to each shell's `messaging.js`.
+
+**Actions menu + App.jsx routing**
+
+- "Airdrop tokens" entry added between "Pay dividend" and "Pair hardware signer" in all three shells.
+- `'airdrop'` sub-route in each App.jsx; `resumeAirdropId` state threaded between Home's resume card and AirdropForm; back navigation returns to Home if resumed, Actions menu if entered fresh.
+
+**Smoke test** (`packages/core/test/airdrop-form.smoke.js`)
+
+- 12 assertion groups: file + single-export, 5-stage machine, decoder wiring, 7 messaging call-sites with password-error handling, 10s poll interval + visibility-gated polling, parser round-trips (paste + CSV + header detection + charset + dedup), 8 core flow re-exports with required-input guards + `actionByTxid` 404→null round-trip, decoder LIST v0 + AIRDROP v0 summaries, 8 BG handler registrations, 8 messaging exports × 3 shells with route assertions, ActionsMenu entry + App.jsx sub-route + Home resume card in all three shells, vault round-trip including stage transition + persistence reload + validator rejection.
+- `action-decoder.smoke.js` gains 10 new cases covering LIST v0 (ADDRESS + TICK + missing type + empty items), LIST v1 (add + remove), AIRDROP v0 (happy + missing list + bad memo), AIRDROP v1/v2 multi-variant summaries. The previous "AIRDROP falls through to generic" case now uses ORDER.
+
+### Known deferrals
+
+- **AIRDROP v1 / v2 / v3 authoring** — the decoder surfaces them, but the form only emits v0 (single TICK + single LIST). Multi-token / multi-list airdrops need a separate authoring flow.
+- **LIST v1 authoring** (edit an existing list) — decoder ships; no authoring UI yet. Waits for a dedicated LIST-management surface.
+- **TICK LIST airdrops** (airdrop to holders of tokens X, Y, Z) — the protocol supports LIST TYPE=1, but this form only emits TYPE=2 (ADDRESS).
+- **"I already have a LIST" shortcut** — users with a pre-existing LIST still go through stages 1-4 rather than typing a LIST_ACTION_INDEX directly. Straightforward follow-up.
+- **Cross-device resume** — pending-airdrop state is per-device. A user who signs the LIST on their desktop can't pick up the AIRDROP on their phone until the phone re-fetches the same vault blob.
+- **Fee pre-estimate** — the AIRDROP fee is `recipients × 2 + 3` DB hits (or unified-gas `AIRDROP_PER_RECIPIENT`), computed by the indexer at execute time. The form shows the recipient count as a proxy; a precise pre-estimate waits for an SDK helper.
+- **Balance pre-check** — the review screens don't block on "do you actually have enough TOKEN + fee asset." The encoder catches it at sign time, but a friendlier compose-time warning is cheap to add later.
+
+### Protocol-level note
+
+§40.9 in `XCHAIN_WALLET_SPEC.md` describes signing the LIST + AIRDROP together as a single BATCH. That's not buildable today: AIRDROP's `LIST_ACTION_INDEX` param must be baked into the signed tx, but ACTION_INDEX is assigned by the indexer at processing time — so the sender can't know the LIST's index at sign time when both actions are composed in one BATCH. This ship keeps the two actions as sequential transactions coordinated by a resumable wallet state machine. A future protocol change (sentinel index for "previous LIST in same batch", say) would unlock the single-BATCH shape.
+
 ## [0.63.0] - 2026-04-23
 
 Phase 2 — Step 23 of 26 — piece 8. DIVIDEND authoring form (§40.8). Distributes AMOUNT of DIVIDEND_TICK to every holder of TICK at the snapshot block, pro rata. Spec §40.8 shows holder count + total distribution on the review screen so the user sees the cost before signing; this form delivers both via the explorer's `getHolders` query.

@@ -35,6 +35,14 @@ const {
     dispensesFor,
     dividendAction,
     holdersFor,
+    createList,
+    airdropAction,
+    actionByTxid,
+    listByActionIndex,
+    savePendingAirdrop,
+    listPendingAirdropsForWallet,
+    updatePendingAirdrop,
+    clearPendingAirdrop,
     registerSigner,
     listSignersForWallet,
     unregisterSigner,
@@ -268,6 +276,48 @@ export function createBackgroundHost(deps) {
 
     host.register('holders.forTick', async (req, { sdkRegistry }) => {
         return holdersFor({ ...req, sdkRegistry });
+    });
+
+    // §40.9 AIRDROP two-transaction flow — LIST create + AIRDROP
+    // reference, plus the two read-only passthroughs AirdropForm uses
+    // to (a) resolve the LIST's ACTION_INDEX after it's indexed and
+    // (b) confirm the LIST on the AIRDROP review screen.
+
+    host.register('action.createList', async (req, { vault, chainRegistry, sdkRegistry }) => {
+        return createList({ ...req, vault, chainRegistry, sdkRegistry });
+    });
+
+    host.register('action.airdrop', async (req, { vault, chainRegistry, sdkRegistry }) => {
+        return airdropAction({ ...req, vault, chainRegistry, sdkRegistry });
+    });
+
+    host.register('actions.byTxid', async (req, { sdkRegistry }) => {
+        return actionByTxid({ ...req, sdkRegistry });
+    });
+
+    host.register('lists.byActionIndex', async (req, { sdkRegistry }) => {
+        return listByActionIndex({ ...req, sdkRegistry });
+    });
+
+    // Pending-airdrop CRUD — crash-safe state for the §40.9 stage
+    // machine (LIST-broadcast → wait-for-index → AIRDROP-broadcast).
+    // The renderer persists progress here so closing the wallet
+    // between stages is recoverable.
+
+    host.register('pendingAirdrops.save', async (req, { vault }) => {
+        return savePendingAirdrop({ ...req, vault });
+    });
+
+    host.register('pendingAirdrops.listForWallet', async (req, { vault }) => {
+        return listPendingAirdropsForWallet({ ...req, vault });
+    });
+
+    host.register('pendingAirdrops.update', async (req, { vault }) => {
+        return updatePendingAirdrop({ ...req, vault });
+    });
+
+    host.register('pendingAirdrops.clear', async (req, { vault }) => {
+        return clearPendingAirdrop({ ...req, vault });
     });
 
     // --- Signer registry -----------------------------------------------------

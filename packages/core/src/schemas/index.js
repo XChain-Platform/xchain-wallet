@@ -13,6 +13,7 @@ export * as multisigConfig from './multisigConfig.js';
 export * as settings from './settings.js';
 export * as pendingTx from './pendingTx.js';
 export * as signer from './signer.js';
+export * as pendingAirdrop from './pendingAirdrop.js';
 export * as migrations from './migrations.js';
 
 export { createWallet, validateWallet } from './wallet.js';
@@ -30,6 +31,11 @@ export {
 export { createPendingTx, validatePendingTx } from './pendingTx.js';
 export { createSignerRecord, validateSignerRecord, SIGNER_KINDS } from './signer.js';
 export {
+    createPendingAirdrop,
+    validatePendingAirdrop,
+    PENDING_AIRDROP_STAGES,
+} from './pendingAirdrop.js';
+export {
     migrate,
     migrateWallet,
     migrateAccount,
@@ -40,4 +46,5 @@ export {
     migratePendingTx,
     migrateMultisigConfig,
     migrateSigner,
+    migratePendingAirdrop,
 } from './migrations.js';

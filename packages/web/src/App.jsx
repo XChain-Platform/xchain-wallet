@@ -40,6 +40,7 @@ import { DispensersList } from '@xchain-wallet/core/shared/routes/DispensersList
 import { DispenserDetail } from '@xchain-wallet/core/shared/routes/DispenserDetail.jsx';
 import { DispenserExplorer } from '@xchain-wallet/core/shared/routes/DispenserExplorer.jsx';
 import { DividendForm } from '@xchain-wallet/core/shared/routes/DividendForm.jsx';
+import { AirdropForm } from '@xchain-wallet/core/shared/routes/AirdropForm.jsx';
 import { PairSignerForm } from '@xchain-wallet/core/shared/routes/PairSignerForm.jsx';
 import { pairTrezorSigner } from './signers/trezorFactory.js';
 import { pairLedgerSigner } from './signers/ledgerFactory.js';
@@ -62,7 +63,10 @@ function AppInner() {
         /** @type {'welcome' | 'create' | 'import'} */ ('welcome'),
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'pair-signer'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'pair-signer'} */ ('home'),
+    );
+    const [resumeAirdropId, setResumeAirdropId] = useState(
+        /** @type {string | null} */ (null),
     );
     const [activeWalletId, setActiveWalletId] = useState(
         /** @type {string | null} */ (null),
@@ -251,6 +255,18 @@ function AppInner() {
                     />
                 );
             }
+            if (unlockedView === 'airdrop' && activeWalletId) {
+                return (
+                    <AirdropForm
+                        walletId={activeWalletId}
+                        resumeId={resumeAirdropId}
+                        onBack={() => {
+                            setResumeAirdropId(null);
+                            setUnlockedView(resumeAirdropId ? 'home' : 'actions');
+                        }}
+                    />
+                );
+            }
             if (unlockedView === 'pair-signer' && activeWalletId) {
                 return (
                     <PairSignerForm
@@ -277,6 +293,10 @@ function AppInner() {
                             onMyDispensers: () => setUnlockedView('dispensers-list'),
                             onBrowseDispensers: () => setUnlockedView('dispenser-explorer'),
                             onPayDividend: () => setUnlockedView('dividend'),
+                            onAirdrop: () => {
+                                setResumeAirdropId(null);
+                                setUnlockedView('airdrop');
+                            },
                             onPairSigner: () => setUnlockedView('pair-signer'),
                         })}
                         onBack={() => setUnlockedView('home')}
@@ -290,6 +310,10 @@ function AppInner() {
                     onReceive={activeWalletId ? () => setUnlockedView('receive') : undefined}
                     onCreateToken={activeWalletId ? () => setUnlockedView('wizard') : undefined}
                     onActions={activeWalletId ? () => setUnlockedView('actions') : undefined}
+                    onResumeAirdrop={activeWalletId ? (id) => {
+                        setResumeAirdropId(id);
+                        setUnlockedView('airdrop');
+                    } : undefined}
                 />
             );
         default:
@@ -310,6 +334,7 @@ function buildActionEntries({
     onMyDispensers,
     onBrowseDispensers,
     onPayDividend,
+    onAirdrop,
     onPairSigner,
 }) {
     return [
@@ -378,6 +403,12 @@ function buildActionEntries({
             label: 'Pay dividend',
             description: 'Distribute a dividend asset to holders of a token pro rata (§40.8).',
             onSelect: onPayDividend,
+        },
+        {
+            id: 'airdrop',
+            label: 'Airdrop tokens',
+            description: 'Distribute a token to a pasted or uploaded list of addresses — signs a LIST then an AIRDROP (§40.9).',
+            onSelect: onAirdrop,
         },
         {
             id: 'pair-signer',

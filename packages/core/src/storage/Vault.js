@@ -29,6 +29,7 @@ import {
     migrateAddress,
     migrateConnectedSite,
     migrateContact,
+    migratePendingAirdrop,
     migratePendingTx,
     migrateSettings,
     migrateSigner,
@@ -38,6 +39,7 @@ import { validateAccount } from '../schemas/account.js';
 import { validateAddress } from '../schemas/address.js';
 import { validateConnectedSite } from '../schemas/connectedSite.js';
 import { validateContact } from '../schemas/contact.js';
+import { validatePendingAirdrop } from '../schemas/pendingAirdrop.js';
 import { validatePendingTx } from '../schemas/pendingTx.js';
 import { validateSettings } from '../schemas/settings.js';
 import { validateSignerRecord } from '../schemas/signer.js';
@@ -103,6 +105,12 @@ export class Vault {
             'signers',
             migrateSigner,
             validateSignerRecord,
+        );
+        this.pendingAirdrops = makeCollection(
+            this,
+            'pendingAirdrops',
+            migratePendingAirdrop,
+            validatePendingAirdrop,
         );
         this.settings = makeSingleton(this, 'settings', migrateSettings, validateSettings);
     }

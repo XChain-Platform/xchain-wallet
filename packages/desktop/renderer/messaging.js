@@ -125,6 +125,46 @@ export function getHoldersForToken(req) {
 }
 
 /** @param {object} opts */
+export function createList(opts) {
+    return /** @type {any} */ (sendMessage('action.createList', opts));
+}
+
+/** @param {object} opts */
+export function airdropAction(opts) {
+    return /** @type {any} */ (sendMessage('action.airdrop', opts));
+}
+
+/** @param {object} req */
+export function getActionByTxid(req) {
+    return /** @type {any} */ (sendMessage('actions.byTxid', req));
+}
+
+/** @param {object} req */
+export function getListByActionIndex(req) {
+    return /** @type {any} */ (sendMessage('lists.byActionIndex', req));
+}
+
+/** @param {object} req */
+export function savePendingAirdrop(req) {
+    return /** @type {any} */ (sendMessage('pendingAirdrops.save', req));
+}
+
+/** @param {object} req */
+export function listPendingAirdropsForWallet(req) {
+    return /** @type {any} */ (sendMessage('pendingAirdrops.listForWallet', req));
+}
+
+/** @param {object} req */
+export function updatePendingAirdrop(req) {
+    return /** @type {any} */ (sendMessage('pendingAirdrops.update', req));
+}
+
+/** @param {object} req */
+export function clearPendingAirdrop(req) {
+    return /** @type {any} */ (sendMessage('pendingAirdrops.clear', req));
+}
+
+/** @param {object} opts */
 export function registerSigner(opts) {
     return /** @type {any} */ (sendMessage('signer.register', opts));
 }
