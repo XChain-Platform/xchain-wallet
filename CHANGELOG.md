@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.70.0] - 2026-04-24
+
+HW Sign follow-up slice 4 of 4 — HW branches for the remaining multi-stage action forms (`DispenserForm` + `DispenserDetail` + `AirdropForm`) and the **desktop** renderer↔main port RPC. Closes the wallet-side HW sign work: every action surface (flat + multi-stage) now swaps in `<SignCredentials>` for paired Trezor/Ledger addresses, and Electron joins the extension popup + web shell as a signer-bridge-capable host. Real-device walkthrough remains the only outstanding deferral (Trezor in hand, Ledger pending).
+
+### Added
+
+**Slice 4a — DispenserForm HW branch (§40.7.1)**
+
+- `packages/core/src/shared/routes/DispenserForm.jsx` — swaps the password `<Input>` for `<SignCredentials>`, gates submit on `hwStatus === 'available'`, and branches `messaging.dispenserAction` / `messaging.dispenserActionHw` based on `isHwSource(fromAddress)`. `from` payload carries `source` + `signerId` on the HW path. Button copy flips to "Sign on Trezor" / "Sign on Ledger".
+- `packages/core/src/shared/routes/DispenserDetail.jsx` — both owner-cancel (§40.7.1 v1 lane) and non-owner buy-fill (token-paid) gain independent HW branches with their own `hwStatus` tracking (`buyHwStatus` + `cancelHwStatus`). Owner-cancel routes via `messaging.dispenserActionHw`; buy-fill routes via `messaging.sendAssetHw`. Button copy flips on each path.
+
+**Slice 4b — AirdropForm HW branch (§40.9)**
+
+- `packages/core/src/shared/routes/AirdropForm.jsx` — the resumable two-transaction LIST → AIRDROP flow now exposes an HW branch on **both** sign points. Step 1 routes via `messaging.createListHw`; step 2 routes via `messaging.airdropActionHw`. `pendingAirdrop` vault records don't need a schema bump — on resume the wallet re-looks-up `fromAddress` from `addressesByChain` which already carries `.source` + `.signerId`. The review-list hint now explains "confirm on your hardware device twice" for HW users.
+
+**Slice 4c — Desktop renderer↔main port RPC**
+
+- `packages/desktop/preload.js` — gains a second `contextBridge` surface `xchainWalletSignerBridge` alongside the existing `xchainWalletBridge`. Exposes `postMessage(msg)` (renderer→main) + `onMessage(listener)` (main→renderer, returns unsubscribe). Duplex shape is deliberately minimal — enough to back the neutral `{ postMessage, onMessage }` adapter that `signerPortProtocol.js` already expects.
+- `packages/desktop/renderer/signerBridge.js` — desktop-renderer-side mirror of the extension popup's `signerBridge`. Holds a module-scoped `Map<signerId, Signer>`, lazily wraps `window.xchainWalletSignerBridge` into a `PortLike`, and calls the core `bindRendererPortBridge`. Exposes `registerSigner` / `unregisterSigner` / `registeredIds` + a `_resetForTests` hook. Announces ids to main so `signerBridge.setTransport` lights up on the other side.
+- `packages/desktop/main/signerBridgeListener.js` — ipcMain-side listener. Each first message from a new `event.sender` (BrowserWindow `webContents`) lazily constructs a synthetic port, wraps via `createBackgroundTransport`, and registers `kind:'register'` signer ids against the shared `signerBridge` registry. Forwards to `webContents.send` for outbound. Listens for `webContents.once('destroyed')` so window close / renderer crash rejects in-flight transport calls with `"signer bridge disconnected"` and clears owned registrations. Accepts a test-fake `ipcMain` for the smoke — Electron imports are confined to `main/index.js`.
+- `packages/desktop/main/index.js` — calls `attachSignerBridgeListener({ ipcMain })` on `app.whenReady`, next to the existing `ipcMain.handle(IPC_CHANNEL, …)` wiring. Listener attaches once and stays for the process lifetime.
+- `packages/desktop/renderer/App.jsx` — imports `registerSigner as registerLocalSigner` from the new bridge and passes it as `onSignerPaired={registerLocalSigner}` to `PairSignerForm`, bringing desktop to parity with extension popup + web.
+- `packages/core/test/desktop-signer-bridge.smoke.js` — runtime smoke against a fake ipcMain + fake webContents (no Electron). Exercises: lazy per-sender entry creation, register populates `signerBridge`, transport round-trip (outbound `request` reaches `webContents.send`, inbound `response` correlates via `reqId`), unregister clears the registry, `webContents.destroyed` rejects in-flight + clears owned ids, `detach()` drops all state.
+
+### Changed
+
+- `packages/core/test/hw-sign-e2e.smoke.js` — extended with slice-4 assertions:
+  - `DispenserForm` + `DispenserDetail` + `AirdropForm` each import `SignCredentials` + `isHwSource`, route through the appropriate `*Hw` messaging variant, and gate submit on HW status.
+  - Desktop `renderer/signerBridge.js` + `main/signerBridgeListener.js` exist and export the expected symbols.
+  - Desktop `preload.js` exposes `xchainWalletSignerBridge` with `postMessage` + `onMessage`.
+  - Desktop `main/index.js` attaches the listener; `renderer/App.jsx` threads `registerLocalSigner` into `PairSignerForm`.
+- Smoke count: 49 (+1: `desktop-signer-bridge.smoke.js`). 49/49 green.
+
+### Deferred
+
+- Real-device walkthrough. User has a Trezor; Ledger pending. All three shells are wired; only physical-device verification remains.
+- Address-picker UI so users can actively choose a HW source address on the review-and-sign forms. Every form's default-from-address logic filters to `source === 'hd'`; HW addresses register correctly in the vault but the forms' Submit path only kicks into the HW branch when `fromAddress.source` is `'trezor'` or `'ledger'`. A future step adds a per-form from-address picker so the user can explicitly choose.
+- macOS + Windows reproducible desktop builds (Linux-only today; platform-runner work).
+
 ## [0.69.0] - 2026-04-24
 
 HW Sign follow-up slices 2–3 — renderer↔background port RPC (extension + web) and HW-branch replication across six more action forms. Slice 4 (DispenserForm + AirdropForm + desktop ipc port RPC) still deferred. After this commit every flat-layout review/sign form (SEND / ISSUE / MINT / DESTROY / LOCK / UPDATE DESC / TRANSFER / BROADCAST / DIVIDEND / ADVANCED) renders `HwSignBlock` when the source is a paired Trezor/Ledger, routes the sign request over a real port RPC in the extension popup (or directly in-process in web), and flips Submit copy to "Sign on Trezor"/"Sign on Ledger" gated on `status === 'available'`.

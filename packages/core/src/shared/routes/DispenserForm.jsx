@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Screen,
     Button,
@@ -11,6 +11,7 @@ import {
     decoder as decoderLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -266,24 +267,34 @@ export function DispenserForm({ walletId, onBack }) {
         setStage('review');
     }
 
+    const hw = isHwSource(fromAddress);
+    const [hwStatus, setHwStatus] = useState('idle');
+    const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
+
     async function handleSubmit(event) {
         event.preventDefault();
-        if (stage === 'submitting' || password.length === 0) return;
+        if (stage === 'submitting') return;
+        if (!hw && password.length === 0) return;
+        if (hw && hwStatus !== 'available') return;
         setStage('submitting');
         setSubmitError(null);
         try {
-            const res = await messaging.dispenserAction({
+            const base = {
                 walletId,
-                password,
                 chainId,
                 from: {
                     address: fromAddress.address,
                     publicKey: fromAddress.publicKey,
                     derivationPath: fromAddress.derivationPath,
                     addressId: fromAddress.id,
+                    source: fromAddress.source,
+                    signerId: fromAddress.signerId,
                 },
                 params: actionParams,
-            });
+            };
+            const res = hw
+                ? await messaging.dispenserActionHw({ ...base, signerId: fromAddress.signerId })
+                : await messaging.dispenserAction({ ...base, password });
             setResult(res);
             setPassword('');
             setStage('done');
@@ -295,8 +306,10 @@ export function DispenserForm({ walletId, onBack }) {
                     : err?.message || 'Dispenser creation failed.',
             );
             setStage('review');
-            passwordRef.current?.focus();
-            passwordRef.current?.select();
+            if (!hw) {
+                passwordRef.current?.focus();
+                passwordRef.current?.select();
+            }
         }
     }
 
@@ -378,20 +391,23 @@ export function DispenserForm({ walletId, onBack }) {
                         ))}
                     </div>
                 ) : null}
-                <Input
-                    ref={passwordRef}
-                    type="password"
-                    label="Password"
-                    hint="Required to sign."
-                    value={password}
-                    onChange={(e) => {
-                        setPassword(e.target.value);
+                <SignCredentials
+                    fromAddress={fromAddress}
+                    chainId={chainId}
+                    password={password}
+                    onPasswordChange={(v) => {
+                        setPassword(v);
                         if (submitError) setSubmitError(null);
                     }}
-                    autoComplete="current-password"
+                    onStatusChange={onHwStatusChange}
+                    passwordRef={passwordRef}
+                    submitError={submitError}
                     disabled={stage === 'submitting'}
-                    error={submitError || undefined}
+                    getSignerStatus={messaging.getSignerStatus}
                 />
+                {hw && submitError ? (
+                    <div role="alert" className={styles.error}>{submitError}</div>
+                ) : null}
                 <div className={styles.actions}>
                     <Button
                         type="button"
@@ -405,9 +421,11 @@ export function DispenserForm({ walletId, onBack }) {
                         type="submit"
                         variant="primary"
                         loading={stage === 'submitting'}
-                        disabled={password.length === 0}
+                        disabled={hw ? hwStatus !== 'available' : password.length === 0}
                     >
-                        {descriptor ? `Sign on ${descriptor.displayName}` : 'Sign'}
+                        {hw
+                            ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                            : (descriptor ? `Sign on ${descriptor.displayName}` : 'Sign')}
                     </Button>
                 </div>
             </form>,

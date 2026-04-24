@@ -46,6 +46,7 @@ import {
     attachDeepLinkHandlers,
     registerProtocolClients,
 } from './protocol.js';
+import { attachSignerBridgeListener } from './signerBridgeListener.js';
 import { attachUpdater } from './updater.js';
 import {
     createRuntime,
@@ -184,6 +185,12 @@ app.whenReady().then(async () => {
         }
         return handleIpcMessage(runtime, message);
     });
+
+    // Wire the signer-bridge ipc listener so renderer-hosted HW
+    // signers (paired via PairSignerForm) become reachable from the
+    // main-process MessageHost. `action.*.hw` handlers consult the
+    // same process-wide `signerBridge` registry this listener feeds.
+    attachSignerBridgeListener({ ipcMain });
 
     createMainWindow();
 

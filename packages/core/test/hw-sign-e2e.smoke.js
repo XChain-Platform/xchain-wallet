@@ -700,6 +700,146 @@ assert.ok(
     'popup App passes onSignerPaired={registerLocalSigner} to PairSignerForm',
 );
 
+// ---------------------------------------------------------------
+// 13. Slice-4 multi-stage form HW branches
+// ---------------------------------------------------------------
+
+// 13a. DispenserForm — create path.
+const dispFormSrc = readFileSync(
+    join(core, 'src', 'shared', 'routes', 'DispenserForm.jsx'), 'utf8',
+);
+assert.ok(
+    /SignCredentials/.test(dispFormSrc) && /isHwSource/.test(dispFormSrc),
+    'DispenserForm imports SignCredentials + isHwSource',
+);
+assert.ok(
+    /messaging\.dispenserActionHw\(/.test(dispFormSrc),
+    'DispenserForm calls messaging.dispenserActionHw in HW branch',
+);
+assert.ok(
+    /hwStatus !== 'available'/.test(dispFormSrc),
+    'DispenserForm gates submit on HW status=available',
+);
+
+// 13b. DispenserDetail — owner-cancel + non-owner-buy submit points.
+const dispDetailSrc = readFileSync(
+    join(core, 'src', 'shared', 'routes', 'DispenserDetail.jsx'), 'utf8',
+);
+assert.ok(
+    /SignCredentials/.test(dispDetailSrc) && /isHwSource/.test(dispDetailSrc),
+    'DispenserDetail imports SignCredentials + isHwSource',
+);
+assert.ok(
+    /messaging\.sendAssetHw\(/.test(dispDetailSrc),
+    'DispenserDetail buy path calls messaging.sendAssetHw for HW buyers',
+);
+assert.ok(
+    /messaging\.dispenserActionHw\(/.test(dispDetailSrc),
+    'DispenserDetail cancel path calls messaging.dispenserActionHw for HW owners',
+);
+assert.ok(
+    /buyHwStatus/.test(dispDetailSrc) && /cancelHwStatus/.test(dispDetailSrc),
+    'DispenserDetail tracks buy + cancel HW statuses separately',
+);
+
+// 13c. AirdropForm — two independent sign points.
+const airdropFormSrc = readFileSync(
+    join(core, 'src', 'shared', 'routes', 'AirdropForm.jsx'), 'utf8',
+);
+assert.ok(
+    /SignCredentials/.test(airdropFormSrc) && /isHwSource/.test(airdropFormSrc),
+    'AirdropForm imports SignCredentials + isHwSource',
+);
+assert.ok(
+    /messaging\.createListHw\(/.test(airdropFormSrc),
+    'AirdropForm LIST sign calls messaging.createListHw in HW branch',
+);
+assert.ok(
+    /messaging\.airdropActionHw\(/.test(airdropFormSrc),
+    'AirdropForm AIRDROP sign calls messaging.airdropActionHw in HW branch',
+);
+assert.ok(
+    /confirm on your hardware device twice/.test(airdropFormSrc),
+    'AirdropForm explains two-sign cadence to HW users',
+);
+
+// ---------------------------------------------------------------
+// 14. Desktop ipc port RPC — signerBridge + listener + App wiring
+// ---------------------------------------------------------------
+
+const desktop = join(wsRoot, 'packages', 'desktop');
+
+// 14a. Renderer-side bridge module.
+const desktopBridgePath = join(desktop, 'renderer', 'signerBridge.js');
+assert.ok(existsSync(desktopBridgePath), 'desktop renderer signerBridge.js exists');
+const desktopBridgeSrc = readFileSync(desktopBridgePath, 'utf8');
+for (const sym of ['registerSigner', 'unregisterSigner', 'registeredIds']) {
+    assert.ok(
+        new RegExp(`export function ${sym}\\b`).test(desktopBridgeSrc),
+        `desktop signerBridge exports ${sym}`,
+    );
+}
+assert.ok(
+    /bindRendererPortBridge/.test(desktopBridgeSrc),
+    'desktop signerBridge uses the core port-bridge binder',
+);
+assert.ok(
+    /xchainWalletSignerBridge/.test(desktopBridgeSrc),
+    'desktop signerBridge reads the preload-exposed window bridge',
+);
+
+// 14b. Main-process listener.
+const desktopListenerPath = join(desktop, 'main', 'signerBridgeListener.js');
+assert.ok(existsSync(desktopListenerPath), 'desktop main signerBridgeListener.js exists');
+const desktopListenerSrc = readFileSync(desktopListenerPath, 'utf8');
+assert.ok(
+    /export function attachSignerBridgeListener/.test(desktopListenerSrc),
+    'desktop listener exports attachSignerBridgeListener',
+);
+assert.ok(
+    /createBackgroundTransport/.test(desktopListenerSrc),
+    'desktop listener wraps ipc into createBackgroundTransport',
+);
+assert.ok(
+    /signerBridge\.setTransport/.test(desktopListenerSrc)
+    && /signerBridge\.clearTransport/.test(desktopListenerSrc),
+    'desktop listener populates + clears signerBridge transports',
+);
+assert.ok(
+    /xchain-wallet:signer-bridge/.test(desktopListenerSrc),
+    'desktop listener uses the agreed ipc channel name',
+);
+
+// 14c. Preload exposes the duplex bridge surface.
+const preloadSrc = readFileSync(join(desktop, 'preload.js'), 'utf8');
+assert.ok(
+    /xchainWalletSignerBridge/.test(preloadSrc)
+    && /contextBridge\.exposeInMainWorld/.test(preloadSrc),
+    'desktop preload exposes xchainWalletSignerBridge via contextBridge',
+);
+assert.ok(
+    /postMessage/.test(preloadSrc) && /onMessage/.test(preloadSrc),
+    'desktop preload exposes postMessage + onMessage',
+);
+
+// 14d. Main index wires the listener at startup.
+const desktopMainSrc = readFileSync(join(desktop, 'main', 'index.js'), 'utf8');
+assert.ok(
+    /attachSignerBridgeListener\(\{ ipcMain \}\)/.test(desktopMainSrc),
+    'desktop main index calls attachSignerBridgeListener with ipcMain',
+);
+
+// 14e. Desktop App.jsx threads registerLocalSigner into PairSignerForm.
+const desktopAppSrc = readFileSync(join(desktop, 'renderer', 'App.jsx'), 'utf8');
+assert.ok(
+    /registerSigner as registerLocalSigner/.test(desktopAppSrc),
+    'desktop App imports the bridge registerSigner',
+);
+assert.ok(
+    /onSignerPaired=\{registerLocalSigner\}/.test(desktopAppSrc),
+    'desktop App passes onSignerPaired={registerLocalSigner} to PairSignerForm',
+);
+
 console.log(
-    'OK — hw-sign-e2e smoke (resolveSigner descriptor branches; buildRemoteSigner; full RemoteSigner → TrezorSigner → sdk.decomposePsbt → trezorFormat → Connect chain; submitAction signer param bypass; normalizeSource admits HW; shared UI primitives; signerBridge registry; action.send.hw + signer.status handlers wired; sendAssetHw + getSignerStatus exposed in popup/web/desktop messaging; Send.jsx renders HwSignBlock for HW sources with "Sign on [device]" button; signerPortProtocol bridge both ends + popup bridge + background listener wired; PairSignerForm + popup App register live signer with the bridge)',
+    'OK — hw-sign-e2e smoke (resolveSigner descriptor branches; buildRemoteSigner; full RemoteSigner → TrezorSigner → sdk.decomposePsbt → trezorFormat → Connect chain; submitAction signer param bypass; normalizeSource admits HW; shared UI primitives; signerBridge registry; action.send.hw + signer.status handlers wired; sendAssetHw + getSignerStatus exposed in popup/web/desktop messaging; Send.jsx renders HwSignBlock for HW sources with "Sign on [device]" button; signerPortProtocol bridge both ends + popup bridge + background listener wired; PairSignerForm + popup App register live signer with the bridge; slice-4 HW branches on DispenserForm + DispenserDetail (cancel + buy) + AirdropForm (LIST + AIRDROP); desktop ipc port RPC — renderer signerBridge + main signerBridgeListener + preload duplex bridge + desktop App onSignerPaired)',
 );

@@ -13,6 +13,7 @@ import {
     schemas as schemasLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -319,24 +320,34 @@ export function AirdropForm({ walletId, resumeId = null, onBack }) {
         setStage('review-list');
     }
 
+    const hw = isHwSource(fromAddress);
+    const [hwStatus, setHwStatus] = useState('idle');
+    const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
+
     async function handleSignList(event) {
         event.preventDefault();
-        if (submitting || password.length === 0) return;
+        if (submitting) return;
+        if (!hw && password.length === 0) return;
+        if (hw && hwStatus !== 'available') return;
         setSubmitting(true);
         setSubmitError(null);
         try {
-            const res = await messaging.createList({
+            const base = {
                 walletId,
-                password,
                 chainId,
                 from: {
                     address: fromAddress.address,
                     publicKey: fromAddress.publicKey,
                     derivationPath: fromAddress.derivationPath,
                     addressId: fromAddress.id,
+                    source: fromAddress.source,
+                    signerId: fromAddress.signerId,
                 },
                 params: listParams,
-            });
+            };
+            const res = hw
+                ? await messaging.createListHw({ ...base, signerId: fromAddress.signerId })
+                : await messaging.createList({ ...base, password });
             const txid = res?.txid || res?.broadcast?.txid;
             if (!txid) throw new Error('LIST broadcast did not return a txid.');
             const record = schemasLib.createPendingAirdrop({
@@ -361,8 +372,10 @@ export function AirdropForm({ walletId, resumeId = null, onBack }) {
                     ? 'Incorrect password.'
                     : err?.message || 'LIST broadcast failed.',
             );
-            passwordRef.current?.focus();
-            passwordRef.current?.select();
+            if (!hw) {
+                passwordRef.current?.focus();
+                passwordRef.current?.select();
+            }
         } finally {
             setSubmitting(false);
         }
@@ -370,22 +383,28 @@ export function AirdropForm({ walletId, resumeId = null, onBack }) {
 
     async function handleSignAirdrop(event) {
         event.preventDefault();
-        if (submitting || password.length === 0) return;
+        if (submitting) return;
+        if (!hw && password.length === 0) return;
+        if (hw && hwStatus !== 'available') return;
         setSubmitting(true);
         setSubmitError(null);
         try {
-            const res = await messaging.airdropAction({
+            const base = {
                 walletId,
-                password,
                 chainId,
                 from: {
                     address: fromAddress.address,
                     publicKey: fromAddress.publicKey,
                     derivationPath: fromAddress.derivationPath,
                     addressId: fromAddress.id,
+                    source: fromAddress.source,
+                    signerId: fromAddress.signerId,
                 },
                 params: airdropParams,
-            });
+            };
+            const res = hw
+                ? await messaging.airdropActionHw({ ...base, signerId: fromAddress.signerId })
+                : await messaging.airdropAction({ ...base, password });
             const txid = res?.txid || res?.broadcast?.txid;
             if (!txid) throw new Error('AIRDROP broadcast did not return a txid.');
             setAirdropTxid(txid);
@@ -406,8 +425,10 @@ export function AirdropForm({ walletId, resumeId = null, onBack }) {
                     ? 'Incorrect password.'
                     : err?.message || 'AIRDROP broadcast failed.',
             );
-            passwordRef.current?.focus();
-            passwordRef.current?.select();
+            if (!hw) {
+                passwordRef.current?.focus();
+                passwordRef.current?.select();
+            }
         } finally {
             setSubmitting(false);
         }
@@ -535,22 +556,27 @@ export function AirdropForm({ walletId, resumeId = null, onBack }) {
                 <p className={styles.hint}>
                     Airdrop is a two-transaction flow. Step 1 broadcasts the
                     address list; once it's indexed, step 2 signs the AIRDROP
-                    that references it. You will enter your password twice.
+                    that references it. {hw
+                        ? 'You will confirm on your hardware device twice.'
+                        : 'You will enter your password twice.'}
                 </p>
-                <Input
-                    ref={passwordRef}
-                    type="password"
-                    label="Password"
-                    hint="Required to sign the LIST transaction."
-                    value={password}
-                    onChange={(e) => {
-                        setPassword(e.target.value);
+                <SignCredentials
+                    fromAddress={fromAddress}
+                    chainId={chainId}
+                    password={password}
+                    onPasswordChange={(v) => {
+                        setPassword(v);
                         if (submitError) setSubmitError(null);
                     }}
-                    autoComplete="current-password"
+                    onStatusChange={onHwStatusChange}
+                    passwordRef={passwordRef}
+                    submitError={submitError}
                     disabled={submitting}
-                    error={submitError || undefined}
+                    getSignerStatus={messaging.getSignerStatus}
                 />
+                {hw && submitError ? (
+                    <div role="alert" className={styles.error}>{submitError}</div>
+                ) : null}
                 <div className={styles.actions}>
                     <Button
                         type="button"
@@ -564,9 +590,11 @@ export function AirdropForm({ walletId, resumeId = null, onBack }) {
                         type="submit"
                         variant="primary"
                         loading={submitting}
-                        disabled={password.length === 0}
+                        disabled={hw ? hwStatus !== 'available' : password.length === 0}
                     >
-                        {descriptor ? `Sign LIST on ${descriptor.displayName}` : 'Sign LIST'}
+                        {hw
+                            ? `Sign LIST on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                            : (descriptor ? `Sign LIST on ${descriptor.displayName}` : 'Sign LIST')}
                     </Button>
                 </div>
             </form>,
@@ -614,20 +642,23 @@ export function AirdropForm({ walletId, resumeId = null, onBack }) {
                     enough of {token.trim().toUpperCase() || 'the token'} +
                     fee asset to cover the full distribution.
                 </p>
-                <Input
-                    ref={passwordRef}
-                    type="password"
-                    label="Password"
-                    hint="Required to sign the AIRDROP transaction."
-                    value={password}
-                    onChange={(e) => {
-                        setPassword(e.target.value);
+                <SignCredentials
+                    fromAddress={fromAddress}
+                    chainId={chainId}
+                    password={password}
+                    onPasswordChange={(v) => {
+                        setPassword(v);
                         if (submitError) setSubmitError(null);
                     }}
-                    autoComplete="current-password"
+                    onStatusChange={onHwStatusChange}
+                    passwordRef={passwordRef}
+                    submitError={submitError}
                     disabled={submitting}
-                    error={submitError || undefined}
+                    getSignerStatus={messaging.getSignerStatus}
                 />
+                {hw && submitError ? (
+                    <div role="alert" className={styles.error}>{submitError}</div>
+                ) : null}
                 <div className={styles.actions}>
                     <Button type="button" variant="ghost" onClick={onBack} disabled={submitting}>
                         Close (resume later)
@@ -636,9 +667,14 @@ export function AirdropForm({ walletId, resumeId = null, onBack }) {
                         type="submit"
                         variant="primary"
                         loading={submitting}
-                        disabled={password.length === 0 || !listActionIndex}
+                        disabled={
+                            !listActionIndex
+                            || (hw ? hwStatus !== 'available' : password.length === 0)
+                        }
                     >
-                        {descriptor ? `Sign AIRDROP on ${descriptor.displayName}` : 'Sign AIRDROP'}
+                        {hw
+                            ? `Sign AIRDROP on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                            : (descriptor ? `Sign AIRDROP on ${descriptor.displayName}` : 'Sign AIRDROP')}
                     </Button>
                 </div>
             </form>,

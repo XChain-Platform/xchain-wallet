@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Screen,
     Button,
@@ -11,6 +11,7 @@ import {
     decoder as decoderLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -236,27 +237,40 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         return buyerAddresses.find((a) => a.id === buyerAddressId) || null;
     }, [buyerAddressId, buyerAddresses]);
 
+    const buyHw = isHwSource(buyerAddress);
+    const cancelHw = isHwSource(ownerAddress);
+    const [buyHwStatus, setBuyHwStatus] = useState('idle');
+    const [cancelHwStatus, setCancelHwStatus] = useState('idle');
+    const onBuyHwStatusChange = useCallback(({ status }) => setBuyHwStatus(status), []);
+    const onCancelHwStatusChange = useCallback(({ status }) => setCancelHwStatus(status), []);
+
     async function handleBuy(event) {
         event.preventDefault();
-        if (buyStage === 'submitting' || buyPassword.length === 0 || !buyerAddress) return;
+        if (buyStage === 'submitting' || !buyerAddress) return;
+        if (!buyHw && buyPassword.length === 0) return;
+        if (buyHw && buyHwStatus !== 'available') return;
         if (!isTokenPaid || !dispAddr || !totalPayAmount) return;
         setBuyStage('submitting');
         setBuyError(null);
         try {
-            const res = await messaging.sendAsset({
+            const base = {
                 walletId,
-                password: buyPassword,
                 chainId,
                 from: {
                     address: buyerAddress.address,
                     publicKey: buyerAddress.publicKey,
                     derivationPath: buyerAddress.derivationPath,
                     addressId: buyerAddress.id,
+                    source: buyerAddress.source,
+                    signerId: buyerAddress.signerId,
                 },
                 to: dispAddr,
                 asset: getTick,
                 amount: totalPayAmount,
-            });
+            };
+            const res = buyHw
+                ? await messaging.sendAssetHw({ ...base, signerId: buyerAddress.signerId })
+                : await messaging.sendAsset({ ...base, password: buyPassword });
             setBuyResult(res);
             setBuyPassword('');
             setBuyStage('done');
@@ -268,29 +282,37 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     : err?.message || 'Buy failed.',
             );
             setBuyStage('confirm');
-            buyPasswordRef.current?.focus();
-            buyPasswordRef.current?.select();
+            if (!buyHw) {
+                buyPasswordRef.current?.focus();
+                buyPasswordRef.current?.select();
+            }
         }
     }
 
     async function handleCancel(event) {
         event.preventDefault();
-        if (cancelStage === 'submitting' || password.length === 0 || !ownerAddress) return;
+        if (cancelStage === 'submitting' || !ownerAddress) return;
+        if (!cancelHw && password.length === 0) return;
+        if (cancelHw && cancelHwStatus !== 'available') return;
         setCancelStage('submitting');
         setCancelError(null);
         try {
-            const res = await messaging.dispenserAction({
+            const base = {
                 walletId,
-                password,
                 chainId,
                 from: {
                     address: ownerAddress.address,
                     publicKey: ownerAddress.publicKey,
                     derivationPath: ownerAddress.derivationPath,
                     addressId: ownerAddress.id,
+                    source: ownerAddress.source,
+                    signerId: ownerAddress.signerId,
                 },
                 params: cancelParams,
-            });
+            };
+            const res = cancelHw
+                ? await messaging.dispenserActionHw({ ...base, signerId: ownerAddress.signerId })
+                : await messaging.dispenserAction({ ...base, password });
             setCancelResult(res);
             setPassword('');
             setCancelStage('done');
@@ -303,8 +325,10 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     : err?.message || 'Cancel failed.',
             );
             setCancelStage('confirm');
-            passwordRef.current?.focus();
-            passwordRef.current?.select();
+            if (!cancelHw) {
+                passwordRef.current?.focus();
+                passwordRef.current?.select();
+            }
         }
     }
 
@@ -411,20 +435,23 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     or runs out before confirmation, the payment reaches the creator but
                     no {giveTick} is released — an inherent risk of UTXO-chain buys.
                 </p>
-                <Input
-                    ref={buyPasswordRef}
-                    type="password"
-                    label="Password"
-                    hint="Required to sign."
-                    value={buyPassword}
-                    onChange={(e) => {
-                        setBuyPassword(e.target.value);
+                <SignCredentials
+                    fromAddress={buyerAddress}
+                    chainId={chainId}
+                    password={buyPassword}
+                    onPasswordChange={(v) => {
+                        setBuyPassword(v);
                         if (buyError) setBuyError(null);
                     }}
-                    autoComplete="current-password"
+                    onStatusChange={onBuyHwStatusChange}
+                    passwordRef={buyPasswordRef}
+                    submitError={buyError}
                     disabled={buyStage === 'submitting'}
-                    error={buyError || undefined}
+                    getSignerStatus={messaging.getSignerStatus}
                 />
+                {buyHw && buyError ? (
+                    <div role="alert" className={styles.error}>{buyError}</div>
+                ) : null}
                 <div className={styles.actions}>
                     <Button
                         type="button"
@@ -438,9 +465,11 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                         type="submit"
                         variant="primary"
                         loading={buyStage === 'submitting'}
-                        disabled={buyPassword.length === 0}
+                        disabled={buyHw ? buyHwStatus !== 'available' : buyPassword.length === 0}
                     >
-                        {descriptor ? `Sign buy on ${descriptor.displayName}` : 'Sign buy'}
+                        {buyHw
+                            ? `Sign buy on ${buyerAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                            : (descriptor ? `Sign buy on ${descriptor.displayName}` : 'Sign buy')}
                     </Button>
                 </div>
             </form>,
@@ -471,20 +500,23 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                         ))}
                     </div>
                 ) : null}
-                <Input
-                    ref={passwordRef}
-                    type="password"
-                    label="Password"
-                    hint="Required to sign the cancel."
-                    value={password}
-                    onChange={(e) => {
-                        setPassword(e.target.value);
+                <SignCredentials
+                    fromAddress={ownerAddress}
+                    chainId={chainId}
+                    password={password}
+                    onPasswordChange={(v) => {
+                        setPassword(v);
                         if (cancelError) setCancelError(null);
                     }}
-                    autoComplete="current-password"
+                    onStatusChange={onCancelHwStatusChange}
+                    passwordRef={passwordRef}
+                    submitError={cancelError}
                     disabled={cancelStage === 'submitting'}
-                    error={cancelError || undefined}
+                    getSignerStatus={messaging.getSignerStatus}
                 />
+                {cancelHw && cancelError ? (
+                    <div role="alert" className={styles.error}>{cancelError}</div>
+                ) : null}
                 <div className={styles.actions}>
                     <Button
                         type="button"
@@ -498,9 +530,11 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                         type="submit"
                         variant="danger"
                         loading={cancelStage === 'submitting'}
-                        disabled={password.length === 0}
+                        disabled={cancelHw ? cancelHwStatus !== 'available' : password.length === 0}
                     >
-                        Sign cancel
+                        {cancelHw
+                            ? `Sign cancel on ${ownerAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                            : 'Sign cancel'}
                     </Button>
                 </div>
             </form>,
