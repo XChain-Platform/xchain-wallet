@@ -54,6 +54,13 @@ export {
     depositsForAddress,
     withdrawalsForAddress,
 } from './contractQueries.js';
+export {
+    contractByActionIndex,
+    actionByIndex,
+    contractState,
+    contractBalance,
+    executionsForContract,
+} from './contractDetail.js';
 export { dividendAction, holdersFor } from './dividendAction.js';
 export { createList } from './createList.js';
 export { airdropAction } from './airdropAction.js';

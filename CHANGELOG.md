@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.75.0] - 2026-04-24
+
+Phase 4 — Step 3 of 23. Contract detail page (§42.3). No SDK bump needed — all five read surfaces used here were already in SDK ≥ 1.3.0 and are exposed through the 1.10.0 pin landed in v0.74.0.
+
+### Added
+
+- `packages/core/src/flows/contractDetail.js` — five single-contract read flows:
+  - `contractByActionIndex` — `sdk.getContract(contractActionIndex)` for the header block (owner / deploy block / gas limit / status / code hash).
+  - `actionByIndex` — `sdk.getAction(actionIndex)` for the originating DEPLOY action (carries NAME / CODE_HASH / CONSTRUCTOR_PARAMS that don't live on the contract row).
+  - `contractState` — `sdk.getContractState(idx, key?)`; `key` optional so the page can load the full state map and render it expandable.
+  - `contractBalance` — `sdk.getContractBalance(idx, tick?)`; `tick` optional so the page lists every token the contract holds.
+  - `executionsForContract` — `sdk.getExecutions(contractActionIndex, opts)` for the paginated EXECUTE-history section.
+- `packages/extension/src/background/createBackgroundHost.js` — registers five new read-only passthroughs (`contracts.byActionIndex`, `actions.byIndex`, `contracts.state`, `contracts.balance`, `executions.forContract`).
+- Three-shell messaging helpers — `getContractByActionIndex` / `getActionByIndex` / `getContractState` / `getContractBalance` / `getExecutionsForContract` in popup + web + desktop `messaging.js`.
+- `packages/core/src/shared/routes/ContractDetail.jsx` — §42.3 page:
+  - Header: `Contract #<idx> — "<NAME>"` + large ChainBadge. Owner / Deployed block / Gas limit / Status / Code hash rendered from the `contracts` table, with NAME / CODE_HASH / GAS_LIMIT falling back to the DEPLOY action when the contract row omits them.
+  - "State (expandable)": loads eagerly but shows a one-line count by default; Expand button renders the full key/value table. Key / value cells monospaced; long values wrap with `word-break: break-all`.
+  - "Balances": per-token table (`Token` / `Amount`).
+  - "Execution history": paginated list (Prev / Next) via `executionsForContract({ opts: { page } })`; pagination heuristic handles both total-known and total-unknown response shapes.
+  - Action buttons: `Call method` / `Deposit` / `Withdraw`. Each accepts an optional `onExecute / onDeposit / onWithdraw` prop — when omitted the button renders disabled and a one-line descriptor explains the forms land in upcoming Phase 4 steps. Keeps the detail page complete in Step 3 without a half-baked signing path.
+  - "(you)" suffix next to Owner when the contract's source address matches one of the wallet's addresses on this chain (via `getAddressesByChain`).
+- Three-shell App.jsx — new `'contract-detail'` sub-route, `contractRef` state `{ chainId, contractActionIndex }`. `ContractsList.onOpenContract` now sets `contractRef` and transitions. ContractDetail's Back returns to the list.
+
+### Notes
+
+- No EXECUTE / DEPOSIT / WITHDRAW signing in this step — Steps 5 + 6 land the authoring forms. The prop-gated button disable is intentional: the route handler in App.jsx passes no signing props today, the buttons render disabled, and Step 5/6 will thread the real handlers through from App.jsx without re-touching ContractDetail's internals.
+- State and balance response shapes are defensively unwrapped (`{ data: [...] }` / `{ data: {...} }` / `{ state: {...} }` / flat object) so the page tolerates minor explorer-side shape changes without silent blanking.
+
 ## [0.74.0] - 2026-04-24
 
 Phase 4 — Step 2 of 23. Contracts nav item + browse landing (§42.2). Bumps the pinned SDK to `^1.10.0` (the SDK v1.10.0 pre-phase release that landed `sdk.getStakes/getDelegations/getValidators/getValidatorRewards` and the `sdk.musig2` primitives).

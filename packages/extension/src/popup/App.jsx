@@ -47,6 +47,7 @@ import { MessagingInbox } from '@xchain-wallet/core/shared/routes/MessagingInbox
 import { ComposeMessage } from '@xchain-wallet/core/shared/routes/ComposeMessage.jsx';
 import { ContactsList } from '@xchain-wallet/core/shared/routes/ContactsList.jsx';
 import { ContractsList } from '@xchain-wallet/core/shared/routes/ContractsList.jsx';
+import { ContractDetail } from '@xchain-wallet/core/shared/routes/ContractDetail.jsx';
 import { PairSignerForm } from '@xchain-wallet/core/shared/routes/PairSignerForm.jsx';
 import { useBtcAddressesPresent } from '@xchain-wallet/core/shared/hooks/useBtcAddressesPresent.js';
 import { pairTrezorSigner } from '../signers/trezorFactory.js';
@@ -69,7 +70,7 @@ function AppInner() {
         /** @type {'welcome' | 'create' | 'import' | 'import-freewallet'} */ ('welcome'),
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'swap' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'swap' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail'} */ ('home'),
     );
     const [resumeAirdropId, setResumeAirdropId] = useState(
         /** @type {string | null} */ (null),
@@ -85,6 +86,9 @@ function AppInner() {
     );
     const [dispenserRef, setDispenserRef] = useState(
         /** @type {{ chainId: string, actionIndex: string } | null} */ (null),
+    );
+    const [contractRef, setContractRef] = useState(
+        /** @type {{ chainId: string, contractActionIndex: string } | null} */ (null),
     );
     const [activeMarket, setActiveMarket] = useState(
         /** @type {{ chainId: string, tick1: string, tick2: string } | null} */ (null),
@@ -417,10 +421,21 @@ function AppInner() {
                 return (
                     <ContractsList
                         walletId={activeWalletId}
-                        onOpenContract={(_chainId, _actionIndex) => {
-                            // Step 3 wires contract detail navigation.
+                        onOpenContract={(cid, actionIndex) => {
+                            setContractRef({ chainId: cid, contractActionIndex: String(actionIndex) });
+                            setUnlockedView('contract-detail');
                         }}
                         onBack={() => setUnlockedView('home')}
+                    />
+                );
+            }
+            if (unlockedView === 'contract-detail' && activeWalletId && contractRef) {
+                return (
+                    <ContractDetail
+                        walletId={activeWalletId}
+                        chainId={contractRef.chainId}
+                        contractActionIndex={contractRef.contractActionIndex}
+                        onBack={() => setUnlockedView('contracts-list')}
                     />
                 );
             }

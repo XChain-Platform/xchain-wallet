@@ -434,6 +434,55 @@ export function getWithdrawalsForAddress(req) {
 }
 
 /**
+ * Contract metadata by action index — owner, deploy block, gas limit,
+ * status, code hash. Backs the §42.3 detail header.
+ *
+ * @param {{ chainId: string, contractActionIndex: string }} req
+ */
+export function getContractByActionIndex(req) {
+    return /** @type {any} */ (sendMessage('contracts.byActionIndex', req));
+}
+
+/**
+ * Fetch the originating DEPLOY action (NAME / CODE_HASH /
+ * CONSTRUCTOR_PARAMS) for the §42.3 detail page. Generic action_index
+ * lookup behind the scenes.
+ *
+ * @param {{ chainId: string, actionIndex: string }} req
+ */
+export function getActionByIndex(req) {
+    return /** @type {any} */ (sendMessage('actions.byIndex', req));
+}
+
+/**
+ * Fetch expandable contract state. Omit `key` to get all keys.
+ *
+ * @param {{ chainId: string, contractActionIndex: string, key?: string }} req
+ */
+export function getContractState(req) {
+    return /** @type {any} */ (sendMessage('contracts.state', req));
+}
+
+/**
+ * Fetch per-token balances held by the contract. Omit `tick` to get
+ * every balance.
+ *
+ * @param {{ chainId: string, contractActionIndex: string, tick?: string }} req
+ */
+export function getContractBalance(req) {
+    return /** @type {any} */ (sendMessage('contracts.balance', req));
+}
+
+/**
+ * Paginated EXECUTE-action history scoped to one contract.
+ *
+ * @param {{ chainId: string, contractActionIndex: string, opts?: object }} req
+ */
+export function getExecutionsForContract(req) {
+    return /** @type {any} */ (sendMessage('executions.forContract', req));
+}
+
+/**
  * Build, sign, and broadcast a DIVIDEND action (§40.8). Distributes
  * AMOUNT of DIVIDEND_TICK to every holder of TICK at the snapshot
  * block. Source is excluded from receiving.

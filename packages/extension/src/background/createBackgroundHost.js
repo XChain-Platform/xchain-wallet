@@ -52,6 +52,11 @@ const {
     contractsBrowseAll,
     depositsForAddress,
     withdrawalsForAddress,
+    contractByActionIndex,
+    actionByIndex,
+    contractState,
+    contractBalance,
+    executionsForContract,
     dividendAction,
     holdersFor,
     createList,
@@ -479,6 +484,29 @@ export function createBackgroundHost(deps) {
 
     host.register('withdrawals.forAddress', async (req, { sdkRegistry }) => {
         return withdrawalsForAddress({ ...req, sdkRegistry });
+    });
+
+    // §42.3 Contract detail page — metadata / state / balances /
+    // executions + the originating DEPLOY action.
+
+    host.register('contracts.byActionIndex', async (req, { sdkRegistry }) => {
+        return contractByActionIndex({ ...req, sdkRegistry });
+    });
+
+    host.register('actions.byIndex', async (req, { sdkRegistry }) => {
+        return actionByIndex({ ...req, sdkRegistry });
+    });
+
+    host.register('contracts.state', async (req, { sdkRegistry }) => {
+        return contractState({ ...req, sdkRegistry });
+    });
+
+    host.register('contracts.balance', async (req, { sdkRegistry }) => {
+        return contractBalance({ ...req, sdkRegistry });
+    });
+
+    host.register('executions.forContract', async (req, { sdkRegistry }) => {
+        return executionsForContract({ ...req, sdkRegistry });
     });
 
     host.register('action.dividend', async (req, { vault, chainRegistry, sdkRegistry }) => {

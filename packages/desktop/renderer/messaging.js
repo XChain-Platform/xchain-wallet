@@ -168,6 +168,31 @@ export function getWithdrawalsForAddress(req) {
     return /** @type {any} */ (sendMessage('withdrawals.forAddress', req));
 }
 
+/** @param {object} req */
+export function getContractByActionIndex(req) {
+    return /** @type {any} */ (sendMessage('contracts.byActionIndex', req));
+}
+
+/** @param {object} req */
+export function getActionByIndex(req) {
+    return /** @type {any} */ (sendMessage('actions.byIndex', req));
+}
+
+/** @param {object} req */
+export function getContractState(req) {
+    return /** @type {any} */ (sendMessage('contracts.state', req));
+}
+
+/** @param {object} req */
+export function getContractBalance(req) {
+    return /** @type {any} */ (sendMessage('contracts.balance', req));
+}
+
+/** @param {object} req */
+export function getExecutionsForContract(req) {
+    return /** @type {any} */ (sendMessage('executions.forContract', req));
+}
+
 /** @param {object} opts */
 export function dividendAction(opts) {
     return /** @type {any} */ (sendMessage('action.dividend', opts));
