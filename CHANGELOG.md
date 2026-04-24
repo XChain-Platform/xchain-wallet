@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.86.0] - 2026-04-24
+
+Phase 4 — Step 14 of 23. Parallel cross-chain composer (§42.8.2). Multi-row draft list spanning any combination of chains, signed sequentially through the existing §40.10 `advancedAction` core flow. No new submit primitives — Step 14 is mostly UX.
+
+### Added
+
+- `packages/core/src/shared/routes/ParallelComposer.jsx` — §42.8.2 four-stage flow:
+  - **Compose**: `[+ Add action]` button seeds a row with the wallet's first chain and a default JSON params skeleton (`{"VERSION":"0"}`). Each row carries `{chainId, fromAddressId, action, paramsJson, status, txid, error}`. Per-row Edit (in-place fields) and Remove. Action dropdown is hydrated from `messaging.listActions` with a static fallback list when SDK introspection fails. Compose-level validator surfaces row-numbered errors (chain unset / address unset / action unset / invalid JSON / non-object params).
+  - **Review**: counts actions across distinct chains, lists them, surfaces the §42.8.2 spec warning (each action signs and broadcasts independently — failures do NOT roll back successes). Required ack checkbox gates the "Sign all" button.
+  - **Signing**: per-row sign loop. The active row shows a `RowDetail` block (chain / from / action / params) plus `SignCredentials` (HW vs software branch). Software-signed rows reuse a single password entered once at the top of the run; HW-signed rows prompt independently. Per-row status transitions `pending → submitting → success | failed`; failed rows can be retried in place; pending rows after a failure can be skipped. After a row succeeds the composer auto-advances to the next non-success row.
+  - **Done**: lists every row with its final status (✅ broadcast / ⚠ failed / ↷ skipped) and txid where applicable.
+- ActionsMenu — new "Parallel cross-chain actions" entry across all three shells.
+- Three App.jsx — new `'parallel-compose'` sub-route. Reachable from the actions menu; Back returns to the menu.
+
+### Notes
+
+- Step 14 deliberately reuses `messaging.advancedAction` per row rather than introducing a new "parallel.batch" core flow. The on-chain effect of "n parallel actions" is exactly "n independent ACTIONs," so a batch flow would be a thin loop wrapper that doesn't earn its weight. The composer is the loop, with per-row UX guarantees the SDK doesn't owe.
+- Params are entered as a JSON object per row. This is consistent with how the §40.10 Advanced form treats unknown actions (raw fields), and lets the composer span every supported action in one surface without growing per-action knowledge here. Future Steps may layer a per-action-type renderer on top, but the JSON path stays as the power-user fallback.
+- The skip/retry semantics matter: a software-signed run with three rows where row 2 fails should not strand the user. Skip moves on; Retry signs the failed row again with the in-flight password (or the next HW prompt). The Done screen reports the run truthfully so users can compose a follow-up to clean up.
+- No SDK / explorer / hub bumps — `advancedAction` and `listActions` were both on the SDK 1.10.0 surface audited in Step 1. The cross-chain helper's `parallel()` method is not used; `advancedAction` already routes through the per-chain SDK instance via `sdkRegistry`, which is the same dispatch.
+
 ## [0.85.0] - 2026-04-24
 
 Phase 4 — Step 13 of 23. LINK two-panel creation form (§42.8.1). First write-side cross-chain action — anchors a pair of existing actions across two chains. Both sides thread together in History via the §23.5 rendering shipped in Step 12.
