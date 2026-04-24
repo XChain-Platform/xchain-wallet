@@ -35,9 +35,10 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {() => void} [props.onMessaging]     navigate to the Messaging inbox (§41.7.2)
  * @param {() => void} [props.onContracts]     navigate to the Contracts list (§42.2) — BTC-only, App.jsx gates the prop
  * @param {() => void} [props.onStaking]       navigate to the Staking dashboard (§42.7.4) — BTC-only, App.jsx gates the prop
+ * @param {() => void} [props.onHistory]       navigate to the History route (§23 + §23.5 cross-chain threading)
  * @param {() => void} [props.onMigrateToBip39]           navigate to the §40.13 migration wizard when the active wallet is counterwallet-legacy
  */
-export function Home({ onLocked, onSend, onReceive, onCreateToken, onActions, onMarkets, onResumeAirdrop, onResumeCoinpay, onMessaging, onContracts, onStaking, onMigrateToBip39 }) {
+export function Home({ onLocked, onSend, onReceive, onCreateToken, onActions, onMarkets, onResumeAirdrop, onResumeCoinpay, onMessaging, onContracts, onStaking, onHistory, onMigrateToBip39 }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -321,6 +322,14 @@ export function Home({ onLocked, onSend, onReceive, onCreateToken, onActions, on
                         disabled={!onMessaging}
                     >
                         Messaging
+                    </Button>
+                    <Button
+                        variant="secondary"
+                        block={!isFull}
+                        onClick={onHistory}
+                        disabled={!onHistory}
+                    >
+                        History
                     </Button>
                     {onContracts ? (
                         <Button

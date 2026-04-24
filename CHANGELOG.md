@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.84.0] - 2026-04-24
+
+Phase 4 — Step 12 of 23. History route + §23.5 cross-chain thread rendering. First Cross-Chain (§42.8) step — ships the History surface so the §42.8.1–§42.8.4 LINK / parallel / swap / templates flows have somewhere to land in the timeline.
+
+### Added
+
+- `packages/core/src/flows/linkQueries.js` — `linksForAddress` thin wrapper over `sdk.getLinks(address, 'address', opts)`.
+- `packages/extension/src/background/createBackgroundHost.js` — `links.address` read-only passthrough. (`history.address` was already registered in Phase 1; Step 12 is the first surface to consume it.)
+- Three-shell messaging helpers — `getAddressHistory` / `getLinksForAddress` / `getActionByIndex` in popup + web + desktop `messaging.js`. (`history.address` is now reachable from the UI; `actions.byIndex` already had a bg handler from Step 3 but no shell helper.)
+- `packages/core/src/shared/routes/History.jsx` — unified §23 timeline + §23.5 cross-chain threading. Per (chain, address) the route fans out `getAddressHistory` + `getLinksForAddress` in parallel, merges results into a single time-sorted list, and builds a `(chainId, action_index) -> peer` link map. Rows carry a 🔗 badge when they're one side of a LINK pairing. Adjacent rows that are peers of the same LINK (both sides visible) get a vertical connector. Click → inline detail card; for linked rows the card renders side-by-side, fetching the peer ACTION via `messaging.getActionByIndex` (cached per peer key). "Cross-chain actions" filter chip isolates the threaded subset; per-chain chips toggle individual chains.
+- `packages/core/src/shared/routes/Home.jsx` — new `onHistory` prop + History button in the home actions strip.
+- Three App.jsx — new `'history'` sub-route. Mounted from the Home button, Back returns to Home.
+
+### Notes
+
+- LINK coin-ticker → chain mapping is local: `{ BTC: 'bitcoin', DOGE: 'dogecoin', LTC: 'litecoin' }`. Unknown tickers degrade gracefully — the row still renders with the raw coin code in the peer label, the dual-side card shows a "peer chain not bundled" hint, and the rest of History keeps working. When a future chain is added to `BUNDLED_DESCRIPTORS` the map needs the new ticker entry.
+- The vertical connector only draws when both peers happen to be adjacent in the visible list (DESC by block_index). For LINKs whose peer is outside the address's history (cross-account, archived, or filtered out by the active chain chips) the connector is suppressed but the 🔗 badge still appears — that's the §23.5 behavior: the badge is the marker, the connector is the accent when the layout supports it.
+- `summarizeRow` covers SEND / ISSUE / LINK explicitly and falls back to the row's memo or just the action name. Other action shapes (DISPENSE, ORDER fills, STAKE, etc.) render with the bare action label in the row header — full decoded data is one click away in the detail card. Tightening per-action summaries is a follow-up across the whole timeline rather than a Step 12 concern.
+- No SDK / explorer / hub bumps needed for Step 12 — `getLinks(addr, 'address')`, `getHistory(addr, 'address')`, and `getAction(actionIndex)` were all already on the SDK 1.10.0 surface audited in Step 1.
+
 ## [0.83.0] - 2026-04-24
 
 Phase 4 — Step 11 of 23. Operator / validator dashboard (§42.7.5, Devi persona). Closes the Staking surface (§42.7) — Steps 7–11 cover dashboard, all five write-side actions, and the operator view.

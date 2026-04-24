@@ -71,6 +71,7 @@ const {
     delegateAction,
     revokeDelegationAction,
     broadcastsForAddress,
+    linksForAddress,
     contractValidate,
     contractCheckCodeSize,
     contractSuggestGasLimit,
@@ -596,6 +597,10 @@ export function createBackgroundHost(deps) {
 
     host.register('broadcasts.forAddress', async (req, { sdkRegistry }) => {
         return broadcastsForAddress({ ...req, sdkRegistry });
+    });
+
+    host.register('links.address', async (req, { sdkRegistry }) => {
+        return linksForAddress({ ...req, sdkRegistry });
     });
 
     host.register('contracts.validate', async (req, { sdkRegistry }) => {

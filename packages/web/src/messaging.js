@@ -376,6 +376,21 @@ export function getBroadcastsForAddress(req) {
     return /** @type {any} */ (sendMessage('broadcasts.forAddress', req));
 }
 
+/** @param {{ chainId: string, address: string, opts?: object }} req */
+export function getAddressHistory(req) {
+    return /** @type {any} */ (sendMessage('history.address', req));
+}
+
+/** @param {{ chainId: string, address: string, opts?: object }} req */
+export function getLinksForAddress(req) {
+    return /** @type {any} */ (sendMessage('links.address', req));
+}
+
+/** @param {{ chainId: string, actionIndex: string | number }} req */
+export function getActionByIndex(req) {
+    return /** @type {any} */ (sendMessage('actions.byIndex', req));
+}
+
 /** @param {object} req */
 export function validateContractCode(req) {
     return /** @type {any} */ (sendMessage('contracts.validate', req));

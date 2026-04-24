@@ -661,6 +661,42 @@ export function getBroadcastsForAddress(req) {
 }
 
 /**
+ * Mixed-action history for a single address (sends, issues, dispenses,
+ * orders, links, …). Backs the §23 History timeline. Each entry
+ * carries `action`, `action_index`, `block_index`, `timestamp`,
+ * `tx_hash`, plus per-action fields the explorer joins in.
+ *
+ * @param {{ chainId: string, address: string, opts?: object }} req
+ */
+export function getAddressHistory(req) {
+    return /** @type {any} */ (sendMessage('history.address', req));
+}
+
+/**
+ * List LINK actions where `address` is the source. Backs the §23.5
+ * cross-chain thread rendering — a LINK row pairs (coin1,
+ * coin1_action_index) with (coin2, coin2_action_index), and the
+ * History route uses these pairings to show 🔗 badges, vertical
+ * connectors, and the dual-side detail card.
+ *
+ * @param {{ chainId: string, address: string, opts?: object }} req
+ */
+export function getLinksForAddress(req) {
+    return /** @type {any} */ (sendMessage('links.address', req));
+}
+
+/**
+ * Fetch a single ACTION by its action_index. Backs the §23.5 dual-side
+ * detail card — when a LINK threads two actions, the card fetches each
+ * peer to render full decoded ACTION data side-by-side.
+ *
+ * @param {{ chainId: string, actionIndex: string | number }} req
+ */
+export function getActionByIndex(req) {
+    return /** @type {any} */ (sendMessage('actions.byIndex', req));
+}
+
+/**
  * Syntax-validate contract source (acorn parse + size check + float
  * warnings + reserved-identifier check). Pure; no network.
  *

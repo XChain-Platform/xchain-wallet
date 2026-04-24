@@ -74,6 +74,7 @@ export { stakeAction } from './stakeAction.js';
 export { unstakeAction, claimRewardsAction } from './unstakeClaimActions.js';
 export { delegateAction, revokeDelegationAction } from './delegateRevokeActions.js';
 export { broadcastsForAddress } from './broadcastQueries.js';
+export { linksForAddress } from './linkQueries.js';
 export {
     contractValidate,
     contractCheckCodeSize,
