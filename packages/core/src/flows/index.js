@@ -76,6 +76,7 @@ export { unstakeAction, claimRewardsAction } from './unstakeClaimActions.js';
 export { delegateAction, revokeDelegationAction } from './delegateRevokeActions.js';
 export { broadcastsForAddress } from './broadcastQueries.js';
 export { linksForAddress } from './linkQueries.js';
+export { createMultisigConfig } from './createMultisigConfig.js';
 export {
     contractValidate,
     contractCheckCodeSize,

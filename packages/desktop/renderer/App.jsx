@@ -64,6 +64,7 @@ import { LinkForm } from '@xchain-wallet/core/shared/routes/LinkForm.jsx';
 import { ParallelComposer } from '@xchain-wallet/core/shared/routes/ParallelComposer.jsx';
 import { CrossChainSwapForm } from '@xchain-wallet/core/shared/routes/CrossChainSwapForm.jsx';
 import { CrossChainTemplates } from '@xchain-wallet/core/shared/routes/CrossChainTemplates.jsx';
+import { MultisigCreate } from '@xchain-wallet/core/shared/routes/MultisigCreate.jsx';
 import { PairSignerForm } from '@xchain-wallet/core/shared/routes/PairSignerForm.jsx';
 import { useBtcAddressesPresent } from '@xchain-wallet/core/shared/hooks/useBtcAddressesPresent.js';
 import * as messaging from './messaging.js';
@@ -86,7 +87,7 @@ function AppInner() {
         /** @type {'welcome' | 'create' | 'import' | 'import-freewallet'} */ ('welcome'),
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'swap' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'staking-dashboard' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'link-form' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'swap' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'staking-dashboard' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'link-form' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create'} */ ('home'),
     );
     const [resumeAirdropId, setResumeAirdropId] = useState(
         /** @type {string | null} */ (null),
@@ -440,6 +441,14 @@ function AppInner() {
                     />
                 );
             }
+            if (unlockedView === 'multisig-create' && activeWalletId) {
+                return (
+                    <MultisigCreate
+                        walletId={activeWalletId}
+                        onBack={() => setUnlockedView('actions')}
+                    />
+                );
+            }
             if (unlockedView === 'messaging' && activeWalletId) {
                 return (
                     <MessagingInbox
@@ -674,6 +683,7 @@ function AppInner() {
                             onParallel: () => setUnlockedView('parallel-compose'),
                             onCrossChainSwap: () => setUnlockedView('cross-chain-swap'),
                             onCrossChainTemplates: () => setUnlockedView('cross-chain-templates'),
+                            onMultisigCreate: hasBtcAddress ? () => setUnlockedView('multisig-create') : undefined,
                             onContacts: () => setUnlockedView('contacts'),
                         })}
                         onBack={() => setUnlockedView('home')}
@@ -725,6 +735,7 @@ function buildActionEntries({
     onParallel,
     onCrossChainSwap,
     onCrossChainTemplates,
+    onMultisigCreate,
     onContacts,
 }) {
     return [
@@ -835,6 +846,12 @@ function buildActionEntries({
             label: 'Cross-chain templates',
             description: 'Pre-baked multi-chain flows (§42.8.4): launch token + metadata, bridge token pair, cross-chain airdrop. Pre-fills the Parallel composer.',
             onSelect: onCrossChainTemplates,
+        },
+        {
+            id: 'multisig-create',
+            label: 'Create multisig',
+            description: 'Configure a §22 multisig wallet (§42.9): pick N cosigners, choose P2SH / P2WSH / Taproot-MuSig2, set threshold. BTC-only at launch.',
+            onSelect: onMultisigCreate,
         },
         {
             id: 'contacts',

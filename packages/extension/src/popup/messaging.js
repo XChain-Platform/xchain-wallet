@@ -686,14 +686,15 @@ export function getLinksForAddress(req) {
 }
 
 /**
- * Fetch a single ACTION by its action_index. Backs the §23.5 dual-side
- * detail card — when a LINK threads two actions, the card fetches each
- * peer to render full decoded ACTION data side-by-side.
+ * Persist a §22 + §42.9 multisig configuration onto a Wallet record's
+ * `.multisig` slot. For taproot-musig2 the bg handler aggregates the
+ * cosigner pubkeys via `sdk.musig2.aggregateKeys` before encoding the
+ * scriptTemplate.
  *
- * @param {{ chainId: string, actionIndex: string | number }} req
+ * @param {object} req
  */
-export function getActionByIndex(req) {
-    return /** @type {any} */ (sendMessage('actions.byIndex', req));
+export function createMultisigConfig(req) {
+    return /** @type {any} */ (sendMessage('multisig.create', req));
 }
 
 /**

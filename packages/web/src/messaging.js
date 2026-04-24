@@ -386,9 +386,9 @@ export function getLinksForAddress(req) {
     return /** @type {any} */ (sendMessage('links.address', req));
 }
 
-/** @param {{ chainId: string, actionIndex: string | number }} req */
-export function getActionByIndex(req) {
-    return /** @type {any} */ (sendMessage('actions.byIndex', req));
+/** @param {object} req */
+export function createMultisigConfig(req) {
+    return /** @type {any} */ (sendMessage('multisig.create', req));
 }
 
 /** @param {object} req */

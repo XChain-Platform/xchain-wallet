@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.89.0] - 2026-04-24
+
+Phase 4 — Step 17 of 23. Multisig wallet creation coordinator (§22 + §42.9). Opens the multisig surface (Steps 17–22). All three schemes (P2SH / P2WSH / Taproot-MuSig2) configurable from this single coordinator; address derivation, PSBT construction, QR transport, HW MuSig2 wiring, and surface-wide badging follow in Steps 18–22.
+
+### Added
+
+- `packages/core/src/schemas/multisigConfig.js` — Cosigner schema brought in line with §22.2: `name` + `pubkey` + `fingerprint` + `origin` + `localSignerId` + `xpub` + `derivationPath` + `addedAt`. The previous skeleton had `localAccountId` and was missing `fingerprint` / `derivationPath` / `addedAt`. `COSIGNER_ORIGINS` renamed `hardware` → `external-hardware` per spec. `validateMultisigConfig` enforces ≥2 cosigners, threshold ≤ N, and unique pubkeys. New `buildMultisigConfig` factory assembles the record and encodes `scriptTemplate` (P2SH/P2WSH: `multi:<T>:<pk1>:<pk2>:...`; Taproot-MuSig2: `musig2:<aggregatedXOnlyPubkey>`).
+- `packages/core/src/flows/createMultisigConfig.js` — coordinator core flow. Validates cosigner inputs (hex pubkey, 8-hex fingerprint, derivation path, origin-specific required fields), aggregates keys via `sdk.musig2.aggregateKeys` for the Taproot-MuSig2 path, persists the resulting `MultisigConfig` onto the chosen Wallet record's `multisig` slot via `vault.wallets.put`. Refuses to overwrite an existing multisig configuration.
+- `packages/extension/src/background/createBackgroundHost.js` — `multisig.create` handler.
+- Three-shell messaging — `createMultisigConfig` helpers in popup + web + desktop `messaging.js`.
+- `packages/core/src/shared/routes/MultisigCreate.jsx` — coordinator UI. BTC-only network picker (multisig is BTC-only at launch per §10.3 + §22). Cosigner row editor: per-row name + origin (local / external-xpub / external-hardware) + pubkey + fingerprint + derivation path. For local cosigners, dropdown of the wallet's BTC addresses auto-fills pubkey + derivationPath from the address record. Scheme picker (radio: all three live). Threshold input. Review summary block + "Create multisig" submit. Done screen surfaces the persisted scriptTemplate.
+- ActionsMenu — new "Create multisig" entry across all three shells, BTC-gated via `useBtcAddressesPresent` (same gate Contracts and Staking use).
+- Three App.jsx — new `'multisig-create'` sub-route. Reachable from the actions menu when `hasBtcAddress` is true; Back returns to the menu.
+
+### Fixed
+
+- Three-shell `messaging.js` had a duplicate `getActionByIndex` export (one from Step 3, one from Step 12). Vite would have caught this at build time; smoke tests don't bundle. Removed the duplicate so each helper is exported exactly once.
+
+### Notes
+
+- `xchain-sdk` 1.10.0 already ships `MuSig2` wired onto `XChainSDK.musig2`. The Phase 4 step plan called for an SDK 1.11 bump for MuSig2 primitives; that bump turned out to be unnecessary because Step 1's audit (and its commit `862cab1` in the SDK repo) had already landed the module ahead of Phase 4. The wallet's pin stays at `^1.10.0`.
+- BIP32 master fingerprint isn't auto-computed for local cosigners. The coordinator UI asks the user to type it. Computing it from the unlocked seed is a small enhancement that could land alongside Step 18's address derivation work — fingerprint resolution and derivation are adjacent concerns.
+- PSBT construction (Step 19), QR transport (Step 20), HW MuSig2 wiring (Step 21), and surface-wide multisig badges (Step 22) all consume the `MultisigConfig` this step persists. Step 17 is structural; the operational surface lands in those four follow-up steps.
+
 ## [0.88.0] - 2026-04-24
 
 Phase 4 — Step 16 of 23. Cross-chain templates (§42.8.4). Closes the §42.8 Cross-Chain surface (Steps 12 → 16). Templates are JSON config files in `packages/core/src/templates/cross-chain/*.json` plus a `Templates` route that pre-fills the §42.8.2 Parallel composer.

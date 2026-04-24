@@ -73,6 +73,7 @@ const {
     revokeDelegationAction,
     broadcastsForAddress,
     linksForAddress,
+    createMultisigConfig,
     contractValidate,
     contractCheckCodeSize,
     contractSuggestGasLimit,
@@ -608,6 +609,12 @@ export function createBackgroundHost(deps) {
 
     host.register('links.address', async (req, { sdkRegistry }) => {
         return linksForAddress({ ...req, sdkRegistry });
+    });
+
+    // §22 + §42.9 multisig wallet creation coordinator (Step 17). Writes
+    // a MultisigConfig onto the chosen Wallet record's `multisig` slot.
+    host.register('multisig.create', async (req, { vault, sdkRegistry }) => {
+        return createMultisigConfig({ ...req, vault, sdkRegistry });
     });
 
     host.register('contracts.validate', async (req, { sdkRegistry }) => {

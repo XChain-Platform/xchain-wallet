@@ -22,7 +22,7 @@ export { createAccount, validateAccount } from './account.js';
 export { createAddress, validateAddress } from './address.js';
 export { createContact, validateContact } from './contact.js';
 export { createConnectedSite, validateConnectedSite } from './connectedSite.js';
-export { validateMultisigConfig } from './multisigConfig.js';
+export { validateMultisigConfig, buildMultisigConfig } from './multisigConfig.js';
 export {
     createDefaultSettings,
     createDefaultAdsChainState,
