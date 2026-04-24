@@ -587,6 +587,37 @@ export function stakeActionHw(opts) {
 }
 
 /**
+ * Build, sign, and broadcast an UNSTAKE action (§42.7.2 unstake-lane).
+ * Withdraws the FULL tier stake — protocol format carries VERSION|TIER
+ * only, not an amount.
+ *
+ * @param {object} opts
+ */
+export function unstakeAction(opts) {
+    return /** @type {any} */ (sendMessage('action.unstake', opts));
+}
+
+/** @param {object} opts */
+export function unstakeActionHw(opts) {
+    return /** @type {any} */ (sendMessage('action.unstake.hw', opts));
+}
+
+/**
+ * Build, sign, and broadcast a CLAIM_REWARDS action (§42.7.3). One-click
+ * from the Staking dashboard — protocol format is just VERSION.
+ *
+ * @param {object} opts
+ */
+export function claimRewardsAction(opts) {
+    return /** @type {any} */ (sendMessage('action.claimRewards', opts));
+}
+
+/** @param {object} opts */
+export function claimRewardsActionHw(opts) {
+    return /** @type {any} */ (sendMessage('action.claimRewards.hw', opts));
+}
+
+/**
  * Syntax-validate contract source (acorn parse + size check + float
  * warnings + reserved-identifier check). Pure; no network.
  *

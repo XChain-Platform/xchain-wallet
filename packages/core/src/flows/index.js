@@ -71,6 +71,7 @@ export {
     validatorsForChain,
 } from './stakingQueries.js';
 export { stakeAction } from './stakeAction.js';
+export { unstakeAction, claimRewardsAction } from './unstakeClaimActions.js';
 export {
     contractValidate,
     contractCheckCodeSize,

@@ -57,6 +57,7 @@ import { ExecuteContractForm } from '@xchain-wallet/core/shared/routes/ExecuteCo
 import { ContractFundsForm } from '@xchain-wallet/core/shared/routes/ContractFundsForm.jsx';
 import { StakingDashboard } from '@xchain-wallet/core/shared/routes/StakingDashboard.jsx';
 import { StakeForm } from '@xchain-wallet/core/shared/routes/StakeForm.jsx';
+import { StakingActionForm } from '@xchain-wallet/core/shared/routes/StakingActionForm.jsx';
 import { PairSignerForm } from '@xchain-wallet/core/shared/routes/PairSignerForm.jsx';
 import { useBtcAddressesPresent } from '@xchain-wallet/core/shared/hooks/useBtcAddressesPresent.js';
 import { pairTrezorSigner } from './signers/trezorFactory.js';
@@ -81,7 +82,7 @@ function AppInner() {
         /** @type {'welcome' | 'create' | 'import' | 'import-freewallet'} */ ('welcome'),
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'swap' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'staking-dashboard' | 'stake-form'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'swap' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'staking-dashboard' | 'stake-form' | 'staking-unstake' | 'staking-claim'} */ ('home'),
     );
     const [resumeAirdropId, setResumeAirdropId] = useState(
         /** @type {string | null} */ (null),
@@ -505,6 +506,14 @@ function AppInner() {
                             setStakingRef(ref);
                             setUnlockedView('stake-form');
                         }}
+                        onUnstake={(ref) => {
+                            setStakingRef(ref);
+                            setUnlockedView('staking-unstake');
+                        }}
+                        onClaimRewards={(ref) => {
+                            setStakingRef(ref);
+                            setUnlockedView('staking-claim');
+                        }}
                         onBack={() => setUnlockedView('home')}
                     />
                 );
@@ -512,6 +521,26 @@ function AppInner() {
             if (unlockedView === 'stake-form' && activeWalletId && stakingRef) {
                 return (
                     <StakeForm
+                        walletId={activeWalletId}
+                        chainId={stakingRef.chainId}
+                        onBack={() => setUnlockedView('staking-dashboard')}
+                    />
+                );
+            }
+            if (unlockedView === 'staking-unstake' && activeWalletId && stakingRef) {
+                return (
+                    <StakingActionForm
+                        mode="unstake"
+                        walletId={activeWalletId}
+                        chainId={stakingRef.chainId}
+                        onBack={() => setUnlockedView('staking-dashboard')}
+                    />
+                );
+            }
+            if (unlockedView === 'staking-claim' && activeWalletId && stakingRef) {
+                return (
+                    <StakingActionForm
+                        mode="claim-rewards"
                         walletId={activeWalletId}
                         chainId={stakingRef.chainId}
                         onBack={() => setUnlockedView('staking-dashboard')}

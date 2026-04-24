@@ -331,6 +331,26 @@ export function stakeActionHw(opts) {
     return /** @type {any} */ (sendMessage('action.stake.hw', opts));
 }
 
+/** @param {object} opts */
+export function unstakeAction(opts) {
+    return /** @type {any} */ (sendMessage('action.unstake', opts));
+}
+
+/** @param {object} opts */
+export function unstakeActionHw(opts) {
+    return /** @type {any} */ (sendMessage('action.unstake.hw', opts));
+}
+
+/** @param {object} opts */
+export function claimRewardsAction(opts) {
+    return /** @type {any} */ (sendMessage('action.claimRewards', opts));
+}
+
+/** @param {object} opts */
+export function claimRewardsActionHw(opts) {
+    return /** @type {any} */ (sendMessage('action.claimRewards.hw', opts));
+}
+
 /** @param {object} req */
 export function validateContractCode(req) {
     return /** @type {any} */ (sendMessage('contracts.validate', req));

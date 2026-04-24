@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.81.0] - 2026-04-24
+
+Phase 4 — Step 9 of 23. UNSTAKE + CLAIM_REWARDS authoring forms (§42.7.2 unstake-lane + §42.7.3). Both actions are trivially small on-chain — UNSTAKE is `VERSION|TIER`, CLAIM_REWARDS is `VERSION` — so they ship in one commit, combined into `StakingActionForm.jsx` with a `mode` prop (same pattern as §42.5 ContractFundsForm).
+
+### Added
+
+- `packages/core/src/flows/unstakeClaimActions.js` — `unstakeAction` + `claimRewardsAction` composers. `unstakeAction` guards `TIER`; `claimRewardsAction` is just a `params` object guard. Both call `submitAction` with their own pending-tx summary verb.
+- `packages/extension/src/background/createBackgroundHost.js` — `action.unstake` + `action.claimRewards` + both `.hw` variants (via `registerHwHandler`).
+- Three-shell messaging helpers — `unstakeAction` / `unstakeActionHw` / `claimRewardsAction` / `claimRewardsActionHw` in popup + web + desktop `messaging.js`.
+- `packages/core/src/shared/routes/StakingActionForm.jsx` — one component, two modes via `mode` prop (`'unstake' | 'claim-rewards'`). Unstake-mode shows a Tier 1 / Tier 2 radio with an explanation that unstake returns the full tier stake (no partial amount). Claim-mode is a confirm-and-sign surface with no input fields. Review screen + SignCredentials + HW branch + 4-stage state machine are shared.
+- Three App.jsx — new `'staking-unstake'` + `'staking-claim'` sub-routes. `StakingDashboard` now wires `onUnstake` + `onClaimRewards` through to the two routes. The existing Unstake / Claim buttons on the dashboard (rendered disabled in Step 7) are now live.
+
+### Notes
+
+- §42.7.2 spec / SDK format divergence. `XCHAIN_WALLET_SPEC.md` §42.7.2 describes UNSTAKE as amount-based, but the SDK's `formats.js` UNSTAKE entry is `VERSION|TIER` (no AMOUNT). Per STAKE.md, UNSTAKE withdraws the **full tier stake** — partial unstakes aren't a protocol concept. Step 9 ships tier-only, matching the on-chain format, and calls out the behavior in the form UI. FOLLOWUP 4 in `claude/reports/specs/2026-04-24_phase4-staking-followups.md` captures the spec-vs-format decision needed before v1.0 (either widen the SDK format or drop the amount language from §42.7.2).
+- Tier 3 stays deferred (FOLLOWUP 1 in the same doc). StakingActionForm's tier picker mirrors StakeForm — Tier 1 + Tier 2 only.
+
 ## [0.80.0] - 2026-04-24
 
 Phase 4 — Step 8 of 23. STAKE authoring form (§42.7.1). Tier 1 (Oracle) + Tier 2 (Cross-chain validator) lanes ship; Tier 3 (Oracle publisher) deferred pending SDK format update — see `claude/reports/specs/2026-04-24_phase4-staking-followups.md`.
