@@ -21,6 +21,8 @@
  * @property {Object} wallet
  * @property {(publicKey: string, opts: { type: string }) => string} wallet.deriveAddress
  * @property {(psbtHex: string, wif: string) => { txHex: string, txid: string, psbtHex: string }} wallet.signPsbt
+ * @property {(psbtHex: string) => import('../signers/types').DecomposedPsbt} wallet.decomposePsbt
+ * @property {(txHex: string) => string} wallet.txidOf
  * @property {(address: string, network?: string) => { valid: boolean, type: string|null, network: string|null, error: string|null }} wallet.validateAddress
  * @property {(txHex: string, encoder?: unknown) => Promise<{ txid: string }>} wallet.broadcastTx
  * @property {Object} auth

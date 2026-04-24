@@ -20,5 +20,7 @@ export {
     modelFromLedgerTransport,
 } from './LedgerSigner.js';
 
+export { RemoteSigner } from './RemoteSigner.js';
+
 export { checkFirmware, compareVersions } from './checkFirmware.js';
 export { FIRMWARE_MANIFEST } from './firmware-manifest.js';

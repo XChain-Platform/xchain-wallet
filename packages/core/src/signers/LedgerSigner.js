@@ -23,12 +23,20 @@
 //     app, parameterized by `currency`). The signer's `chainId` →
 //     `currency` mapping mirrors Trezor's `chainIdToTrezorCoin`.
 //
-// Step 14 scope parallels Step 13 for Trezor: getStatus / getAddresses
-// / getPublicKey are wired; signPsbt + signMessage throw
-// NotImplementedError (PSBT↔Ledger input/output conversion is
-// non-trivial and depends on xchain-sdk's PSBT utilities).
+// HW Sign Step 3 wires signPsbt + signMessage: signPsbt pipes the PSBT
+// through `sdk.wallet.decomposePsbt`, translates into the
+// `createPaymentTransaction` envelope via `ledgerFormat.js`, runs the
+// resulting prev-tx hexes through `app.splitTransaction`, and
+// broadcasts whatever serializedTx the device produces. signMessage
+// composes the device's `{ v, r, s }` result into the base64 compact
+// Bitcoin-message signature xchain-sdk's `auth.verifyMessage`
+// accepts.
 
-import { NotImplementedError, Signer, SignerStatusError } from './Signer.js';
+import { Signer, SignerStatusError } from './Signer.js';
+import {
+    composeBitcoinCompactSignature,
+    toLedgerCreatePayment,
+} from './ledgerFormat.js';
 
 /**
  * Minimal shape of the injected Ledger Bitcoin app instance.
@@ -39,8 +47,9 @@ import { NotImplementedError, Signer, SignerStatusError } from './Signer.js';
  * @typedef {Object} LedgerBtcApp
  * @property {() => Promise<{ name: string, version: string, flags?: number }>} getAppAndVersion
  * @property {(path: string, opts?: { verify?: boolean, format?: string }) => Promise<{ publicKey: string, bitcoinAddress: string, chainCode: string }>} getWalletPublicKey
- * @property {(path: string, messageHex: string) => Promise<{ v: number, r: string, s: string }>} signMessage
+ * @property {(path: string, messageHex: string) => Promise<{ v: number, r: string, s: string }>} signMessageNew
  * @property {(args: any) => Promise<string>} createPaymentTransaction
+ * @property {(rawTxHex: string, isSegwitSupported?: boolean, hasTimestamp?: boolean, hasExtraData?: boolean, additionals?: string[]) => any} splitTransaction
  */
 
 /**
@@ -81,8 +90,9 @@ export class LedgerSigner extends Signer {
      * @param {string} opts.model              Matches firmware-manifest keys (nanoS, nanoSP, nanoX, stax)
      * @param {string} opts.deviceIdentifier
      * @param {LedgerBtcApp} opts.app          Ledger Bitcoin app client
+     * @param {import('../sdk/index.js').SDKRegistry} [opts.sdkRegistry]   Optional — required for signPsbt
      */
-    constructor({ id, displayName, model, deviceIdentifier, app }) {
+    constructor({ id, displayName, model, deviceIdentifier, app, sdkRegistry }) {
         super();
         if (!id) throw new Error('LedgerSigner: id is required');
         if (!displayName) throw new Error('LedgerSigner: displayName is required');
@@ -96,6 +106,7 @@ export class LedgerSigner extends Signer {
         this._model = model;
         this._deviceIdentifier = deviceIdentifier;
         this._app = app;
+        this._sdkRegistry = sdkRegistry;
     }
 
     get id() { return this._id; }
@@ -201,36 +212,101 @@ export class LedgerSigner extends Signer {
     }
 
     /**
-     * PSBT signing. Mirrors TrezorSigner's deferral: Ledger's
-     * `createPaymentTransaction` takes its own input/output shape
-     * (not PSBT), and the PSBT↔Ledger converter depends on
-     * xchain-sdk's PSBT utilities. That integration belongs in its
-     * own step — the class throws NotImplementedError today so
-     * callers fail loudly instead of silently.
+     * PSBT signing. Pipes the PSBT through `sdk.wallet.decomposePsbt`,
+     * translates via `toLedgerCreatePayment` into the Ledger envelope,
+     * splits each input's prev-tx hex via `app.splitTransaction`, and
+     * returns the signed raw transaction the device produces.
+     * `signedPsbtHex` is returned empty — Ledger hands back a fully
+     * serialized tx, not a PSBT.
      *
-     * @param {import('./Signer.js').SignPsbtParams} _params
+     * @param {import('./Signer.js').SignPsbtParams} params
      * @returns {Promise<import('./Signer.js').SignPsbtReturn>}
      */
-    async signPsbt(_params) {
-        throw new NotImplementedError(
-            'LedgerSigner.signPsbt — PSBT↔Ledger conversion lands in a later step. '
-            + 'See §17.4 for the pending work.',
+    async signPsbt({ psbtHex, chainId, signingPaths }) {
+        this._assertSdkRegistry('signPsbt');
+        if (typeof psbtHex !== 'string' || psbtHex.length === 0) {
+            throw new Error('LedgerSigner.signPsbt: psbtHex is required');
+        }
+        const sdk = this._sdkRegistry.get(chainId);
+        const decomposed = sdk.wallet.decomposePsbt(psbtHex);
+        const payload = toLedgerCreatePayment({ decomposed, chainId, signingPaths });
+
+        const splitInputs = payload.inputs.map((i) => {
+            const split = this._app.splitTransaction(
+                i.prevTxHex, true, false, false, payload.additionals,
+            );
+            const entry = [split, i.vout];
+            if (i.redeemScriptHex) entry.push(i.redeemScriptHex);
+            else entry.push(undefined);
+            entry.push(i.sequence);
+            return entry;
+        });
+
+        const txHex = await runLedger(this._id, 'createPaymentTransaction', () =>
+            this._app.createPaymentTransaction({
+                inputs: splitInputs,
+                associatedKeysets: payload.associatedKeysets,
+                outputScriptHex: payload.outputScriptHex,
+                lockTime: payload.lockTime,
+                segwit: payload.segwit,
+                additionals: payload.additionals,
+            }),
         );
+        if (typeof txHex !== 'string' || txHex.length === 0) {
+            throw new SignerStatusError(
+                this._id, 'error', 'createPaymentTransaction: Ledger returned no signed tx',
+            );
+        }
+        const txid = sdk.wallet.txidOf(txHex);
+        return { signedPsbtHex: '', txHex, txid };
     }
 
     /**
-     * Message signing. Ledger's `signMessage` returns `{ v, r, s }`
-     * fields that need combining into a compact signature + address-
-     * recovery byte in the xchain-sdk convention. Deferred.
+     * Message signing via Ledger's `signMessageNew`. The device
+     * returns `{ v, r, s }` as the compact ECDSA signature plus
+     * recovery id; `composeBitcoinCompactSignature` packs these into
+     * the 65-byte base64 envelope xchain-sdk's `auth.verifyMessage`
+     * accepts. The header byte's script-type base (31 / 35 / 39) is
+     * derived from the BIP44 purpose on the path.
      *
-     * @param {import('./Signer.js').SignMessageParams} _params
+     * @param {import('./Signer.js').SignMessageParams} params
      * @returns {Promise<import('./Signer.js').SignMessageReturn>}
      */
-    async signMessage(_params) {
-        throw new NotImplementedError(
-            'LedgerSigner.signMessage — v/r/s → xchain-sdk signature format conversion lands in a later step.',
+    async signMessage({ message, path }) {
+        if (typeof message !== 'string') {
+            throw new Error('LedgerSigner.signMessage: message is required');
+        }
+        if (typeof path !== 'string' || !path.startsWith('m/')) {
+            throw new Error('LedgerSigner.signMessage: path is required');
+        }
+        const messageHex = messageToHex(message);
+        const sig = await runLedger(this._id, 'signMessageNew', () =>
+            this._app.signMessageNew(path, messageHex),
         );
+        const signature = composeBitcoinCompactSignature(sig, path);
+        return { signature };
     }
+
+    _assertSdkRegistry(method) {
+        if (!this._sdkRegistry) {
+            throw new Error(
+                `LedgerSigner.${method}: requires an sdkRegistry; construct with { ..., sdkRegistry }`,
+            );
+        }
+    }
+}
+
+/**
+ * UTF-8 encode a message string into a hex blob Ledger accepts.
+ *
+ * @param {string} message
+ * @returns {string}
+ */
+function messageToHex(message) {
+    const bytes = new TextEncoder().encode(message);
+    let out = '';
+    for (const b of bytes) out += b.toString(16).padStart(2, '0');
+    return out;
 }
 
 function ledgerFormatFor(addressType, chainId) {

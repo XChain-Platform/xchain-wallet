@@ -171,16 +171,189 @@ assert.ok(pk.publicKey);
 assert.equal(pk.chainCode, 'mockchaincode');
 assert.equal(pk.fingerprint, '', 'Ledger does not expose a fingerprint directly');
 
-// --- 6. signPsbt + signMessage deferred -------------------------------
+// --- 6. signPsbt + signMessage live wiring (HW Sign Step 3) ----------
 
 await assert.rejects(
-    signer.signPsbt({ psbtHex: '', chainId: 'bitcoin-mainnet', signingPaths: [] }),
-    /NotImplementedError.*signPsbt/,
+    signer.signPsbt({ psbtHex: 'deadbeef', chainId: 'bitcoin-mainnet', signingPaths: [{ inputIndex: 0, path: "m/84'/0'/0'/0/0" }] }),
+    /requires an sdkRegistry/,
+    'signPsbt without sdkRegistry is rejected',
 );
+
+function makeMockSdkRegistry({ decomposed }) {
+    return {
+        get() {
+            return {
+                wallet: {
+                    decomposePsbt: () => decomposed,
+                    txidOf: (txHex) => `txid-of-${txHex}`,
+                },
+            };
+        },
+    };
+}
+
+const segwitDecomposed = {
+    txVersion: 2,
+    locktime: 0,
+    network: 'bitcoin-mainnet',
+    inputs: [
+        {
+            prevTxHash: 'ab'.repeat(32),
+            prevTxIndex: 0,
+            sequence: 0xfffffffd,
+            value: 100_000,
+            scriptPubKeyHex: '0014' + 'bb'.repeat(20),
+            scriptType: 'p2wpkh',
+            sighashType: null,
+            nonWitnessUtxoHex: null,
+            witnessUtxoScriptHex: '0014' + 'bb'.repeat(20),
+            redeemScriptHex: null,
+            witnessScriptHex: null,
+            address: 'bc1qmockinput',
+            prevTxInfo: null,
+        },
+    ],
+    outputs: [
+        {
+            address: 'bc1qmockoutput',
+            scriptPubKeyHex: '0014' + 'cc'.repeat(20),
+            scriptType: 'p2wpkh',
+            value: 90_000,
+        },
+    ],
+};
+
+let capturedCreateArgs = null;
+let capturedSplitCalls = [];
+const signApp = makeMockApp({
+    splitTransaction(rawTxHex, isSegwitSupported, hasTimestamp, hasExtraData, additionals) {
+        capturedSplitCalls.push({ rawTxHex, isSegwitSupported, additionals });
+        return { version: Buffer.alloc(4), outputs: [], inputs: [], locktime: Buffer.alloc(4) };
+    },
+    async createPaymentTransaction(args) {
+        capturedCreateArgs = args;
+        return '02deadbeef';
+    },
+});
+const wiredSigner = new LedgerSigner({
+    id: 'ledger-wired',
+    displayName: 'Wired Ledger',
+    model: 'nanoX',
+    deviceIdentifier: 'mockid',
+    app: signApp,
+    sdkRegistry: makeMockSdkRegistry({ decomposed: segwitDecomposed }),
+});
+
+const signResult = await wiredSigner.signPsbt({
+    psbtHex: '70736274ff01',
+    chainId: 'bitcoin-mainnet',
+    signingPaths: [{ inputIndex: 0, path: "m/84'/0'/0'/0/5" }],
+});
+assert.equal(signResult.txHex, '02deadbeef');
+assert.equal(signResult.txid, 'txid-of-02deadbeef');
+assert.equal(signResult.signedPsbtHex, '');
+assert.ok(capturedCreateArgs, 'createPaymentTransaction was called');
+assert.equal(capturedCreateArgs.segwit, true, 'p2wpkh → segwit');
+assert.deepEqual(capturedCreateArgs.additionals, ['bech32'], 'native segwit → bech32 additional');
+assert.equal(capturedCreateArgs.associatedKeysets[0], "m/84'/0'/0'/0/5");
+assert.equal(capturedSplitCalls.length, 1, 'one input → one splitTransaction call');
+assert.match(capturedSplitCalls[0].rawTxHex, /^01000000/, 'synthesized prev tx starts with version=1 LE');
+
+// Legacy lane: p2pkh input uses nonWitnessUtxoHex directly.
+const legacyDecomposed = {
+    ...segwitDecomposed,
+    inputs: [{
+        ...segwitDecomposed.inputs[0],
+        scriptType: 'p2pkh',
+        witnessUtxoScriptHex: null,
+        nonWitnessUtxoHex: '01000000deadbeef',
+    }],
+};
+let legacyCreate = null;
+let legacySplit = [];
+const legacyApp = makeMockApp({
+    splitTransaction(rawTxHex) { legacySplit.push(rawTxHex); return {}; },
+    async createPaymentTransaction(args) { legacyCreate = args; return 'aa' + 'bb'.repeat(4); },
+});
+const legacySigner = new LedgerSigner({
+    id: 'ledger-legacy', displayName: 'L', model: 'nanoX', deviceIdentifier: 'mockid',
+    app: legacyApp, sdkRegistry: makeMockSdkRegistry({ decomposed: legacyDecomposed }),
+});
+await legacySigner.signPsbt({
+    psbtHex: '70736274ff02',
+    chainId: 'dogecoin-mainnet',
+    signingPaths: [{ inputIndex: 0, path: "m/44'/3'/0'/0/0" }],
+});
+assert.equal(legacyCreate.segwit, false, 'all-p2pkh → not segwit');
+assert.deepEqual(legacyCreate.additionals, [], 'no native segwit → no bech32');
+assert.equal(legacySplit[0], '01000000deadbeef', 'legacy lane uses real nonWitnessUtxoHex');
+
+// createPaymentTransaction failure surfaces via SignerStatusError.
+const failSignApp = makeMockApp({
+    splitTransaction() { return {}; },
+    async createPaymentTransaction() {
+        const e = new Error('user rejected');
+        e.statusCode = 0x6985;
+        throw e;
+    },
+});
+const failSignSigner = new LedgerSigner({
+    id: 'ledger-signfail', displayName: 'X', model: 'nanoX', deviceIdentifier: 'mockid',
+    app: failSignApp, sdkRegistry: makeMockSdkRegistry({ decomposed: segwitDecomposed }),
+});
 await assert.rejects(
-    signer.signMessage({ message: 'hi', chainId: 'bitcoin-mainnet', path: "m/84'/0'/0'/0/0" }),
-    /NotImplementedError.*signMessage/,
+    failSignSigner.signPsbt({
+        psbtHex: '70736274ff03',
+        chainId: 'bitcoin-mainnet',
+        signingPaths: [{ inputIndex: 0, path: "m/84'/0'/0'/0/0" }],
+    }),
+    /user rejected/,
 );
+
+// signMessage: device returns { v, r, s }; signer composes the
+// bitcoin-message compact base64 envelope using the path's BIP44
+// purpose to select the header base (39 for p2wpkh).
+let msgCapturedPath = null;
+let msgCapturedHex = null;
+const msgApp = makeMockApp({
+    async signMessageNew(path, messageHex) {
+        msgCapturedPath = path;
+        msgCapturedHex = messageHex;
+        return { v: 1, r: '11'.repeat(32), s: '22'.repeat(32) };
+    },
+});
+const msgSigner = new LedgerSigner({
+    id: 'ledger-msg', displayName: 'X', model: 'nanoX', deviceIdentifier: 'mockid',
+    app: msgApp,
+});
+const msgResult = await msgSigner.signMessage({
+    message: 'hello',
+    chainId: 'bitcoin-mainnet',
+    path: "m/84'/0'/0'/0/0",
+});
+assert.equal(msgCapturedPath, "m/84'/0'/0'/0/0");
+assert.equal(msgCapturedHex, '68656c6c6f', 'message UTF-8 hex');
+// Decode the base64 back to bytes; first byte must be 39 + recId(1) = 40.
+const sigBytes = Buffer.from(msgResult.signature, 'base64');
+assert.equal(sigBytes.length, 65, 'compact signature is 65 bytes');
+assert.equal(sigBytes[0], 40, 'header = 39 (p2wpkh) + recId(1) = 40');
+assert.equal(sigBytes.slice(1, 33).toString('hex'), '11'.repeat(32));
+assert.equal(sigBytes.slice(33, 65).toString('hex'), '22'.repeat(32));
+
+// p2sh-p2wpkh path produces header base 35.
+const msgApp2 = makeMockApp({
+    async signMessageNew() { return { v: 0, r: '11'.repeat(32), s: '22'.repeat(32) }; },
+});
+const msgSigner2 = new LedgerSigner({
+    id: 'ledger-msg2', displayName: 'X', model: 'nanoX', deviceIdentifier: 'mockid',
+    app: msgApp2,
+});
+const msgResult2 = await msgSigner2.signMessage({
+    message: 'hi',
+    chainId: 'bitcoin-mainnet',
+    path: "m/49'/0'/0'/0/0",
+});
+assert.equal(Buffer.from(msgResult2.signature, 'base64')[0], 35, 'header = 35 + recId(0) = 35');
 
 // --- 7. deriveLedgerDeviceIdentifier ---------------------------------
 
@@ -312,6 +485,25 @@ assert.ok(
     'LedgerSigner class does NOT import any @ledgerhq package',
 );
 
+// --- 12. ledgerFormat.js envelope builder exists + exports -----------
+
+const fmtPath = join(core, 'src', 'signers', 'ledgerFormat.js');
+assert.ok(existsSync(fmtPath), 'ledgerFormat.js exists');
+const fmtSrc = readFileSync(fmtPath, 'utf8');
+for (const sym of [
+    'chainIdToLedgerCurrency',
+    'serializeOutputs',
+    'synthesizeMinimalPrevTx',
+    'toLedgerCreatePayment',
+    'addressTypeFromPath',
+    'composeBitcoinCompactSignature',
+]) {
+    assert.ok(
+        new RegExp(`export (?:function|const) ${sym}\\b`).test(fmtSrc),
+        `ledgerFormat.js exports ${sym}`,
+    );
+}
+
 console.log(
-    'OK — ledger signer smoke (class conforms to Signer interface against DI mock; getStatus distinguishes wrong-app / disconnected / available; getAddresses path derivation for BTC/LTC/DOGE; deriveLedgerDeviceIdentifier deterministic; signPsbt + signMessage deferred; factories declared in both shells; core has zero Ledger SDK imports)',
+    'OK — ledger signer smoke (class conforms to Signer interface against DI mock; getStatus distinguishes wrong-app / disconnected / available; getAddresses path derivation for BTC/LTC/DOGE; deriveLedgerDeviceIdentifier deterministic; signPsbt pipes through sdk.decomposePsbt → Ledger envelope builder → createPaymentTransaction; signMessage composes base64 compact sig with address-type header base; factories declared in both shells; core has zero Ledger SDK imports)',
 );

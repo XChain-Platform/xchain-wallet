@@ -15,13 +15,13 @@
 // with the wallet's Trezor Connect manifest, and constructs a
 // TrezorSigner wrapping the initialized instance.
 //
-// Step 13 scope: getStatus / getAddresses / getPublicKey are wired.
-// signPsbt + signMessage throw NotImplementedError — PSBT↔Trezor
-// input/output conversion is non-trivial and depends on xchain-sdk's
-// PSBT utilities; that integration belongs in its own step (see
-// CHANGELOG at v0.53.0 + the Step-13 smoke's guard).
+// signPsbt / signMessage also require `sdkRegistry` so the signer can
+// ask `sdk.wallet.decomposePsbt` to turn an encoder-produced PSBT into
+// the normalized shape the Trezor envelope builder consumes. That
+// keeps `bitcoinjs-lib` out of core (per SDKRegistry.js's rationale).
 
-import { AbstractMethodError, NotImplementedError, Signer, SignerStatusError } from './Signer.js';
+import { Signer, SignerStatusError } from './Signer.js';
+import { chainIdToTrezorCoin, toTrezorSignTransaction } from './trezorFormat.js';
 
 /**
  * @typedef {Object} TrezorConnectResponse
@@ -45,26 +45,6 @@ import { AbstractMethodError, NotImplementedError, Signer, SignerStatusError } f
  * @property {(args: { path: string, coin: string, message: string }) => Promise<TrezorConnectResponse>} signMessage
  */
 
-/**
- * Maps a wallet chainId to the Trezor Connect `coin` string the SDK
- * expects. Kept local so the Trezor mapping doesn't leak out of the
- * signer. If the chainId isn't known the signer refuses to act —
- * there's no safe default.
- *
- * @param {string} chainId
- * @returns {string}
- */
-function chainIdToTrezorCoin(chainId) {
-    switch (chainId) {
-        case 'bitcoin-mainnet': return 'btc';
-        case 'bitcoin-testnet': return 'test';
-        case 'litecoin-mainnet': return 'ltc';
-        case 'dogecoin-mainnet': return 'doge';
-        default:
-            throw new Error(`TrezorSigner: unsupported chainId "${chainId}"`);
-    }
-}
-
 export class TrezorSigner extends Signer {
     /**
      * @param {Object} opts
@@ -73,8 +53,9 @@ export class TrezorSigner extends Signer {
      * @param {string} opts.model             Model code — matches SignerRecord.model + firmware-manifest keys
      * @param {string} opts.deviceIdentifier  Opaque per-device id
      * @param {TrezorConnect} opts.connect    Injected Connect instance (production: @trezor/connect-web post-init; tests: fake)
+     * @param {import('../sdk/index.js').SDKRegistry} [opts.sdkRegistry]   Optional — required for signPsbt (decomposePsbt lookup)
      */
-    constructor({ id, displayName, model, deviceIdentifier, connect }) {
+    constructor({ id, displayName, model, deviceIdentifier, connect, sdkRegistry }) {
         super();
         if (!id) throw new Error('TrezorSigner: id is required');
         if (!displayName) throw new Error('TrezorSigner: displayName is required');
@@ -88,6 +69,7 @@ export class TrezorSigner extends Signer {
         this._model = model;
         this._deviceIdentifier = deviceIdentifier;
         this._connect = connect;
+        this._sdkRegistry = sdkRegistry;
     }
 
     get id() { return this._id; }
@@ -190,38 +172,75 @@ export class TrezorSigner extends Signer {
     }
 
     /**
-     * PSBT signing. Trezor Connect takes its own inputs/outputs shape,
-     * not a raw PSBT — we need a PSBT↔Trezor converter that draws on
-     * xchain-sdk's PSBT utilities. That integration lives in a later
-     * step; TrezorSigner intentionally throws NotImplementedError
-     * today so callers get a loud message instead of silent wrong
-     * signatures.
+     * PSBT signing. Pipes the PSBT through `sdk.wallet.decomposePsbt`
+     * to get a vendor-agnostic shape, translates it into Trezor
+     * Connect's `signTransaction` envelope, then returns the signed
+     * raw transaction the device produces. Trezor returns the final
+     * serialized tx directly (not a signed PSBT), so `signedPsbtHex`
+     * is returned empty — the caller broadcasts `txHex`.
      *
-     * See `Signer.signPsbt` for the contract the real implementation
-     * must meet.
-     *
-     * @param {import('./Signer.js').SignPsbtParams} _params
+     * @param {import('./Signer.js').SignPsbtParams} params
      * @returns {Promise<import('./Signer.js').SignPsbtReturn>}
      */
-    async signPsbt(_params) {
-        throw new NotImplementedError(
-            'TrezorSigner.signPsbt — PSBT↔Trezor conversion lands in a later step. '
-            + 'See firmware-manifest.js + §17.3 for the pending work.',
-        );
+    async signPsbt({ psbtHex, chainId, signingPaths }) {
+        this._assertSdkRegistry('signPsbt');
+        if (typeof psbtHex !== 'string' || psbtHex.length === 0) {
+            throw new Error('TrezorSigner.signPsbt: psbtHex is required');
+        }
+        const coin = chainIdToTrezorCoin(chainId);
+        const sdk = this._sdkRegistry.get(chainId);
+        const decomposed = sdk.wallet.decomposePsbt(psbtHex);
+        const payload = toTrezorSignTransaction({ decomposed, coin, signingPaths });
+        const res = await this._connect.signTransaction(payload);
+        if (!res?.success) {
+            throw signerFailure(this._id, 'signTransaction', res);
+        }
+        const txHex = res.payload?.serializedTx;
+        if (typeof txHex !== 'string' || txHex.length === 0) {
+            throw new SignerStatusError(
+                this._id, 'error', 'signTransaction: Trezor returned no serializedTx',
+            );
+        }
+        const txid = sdk.wallet.txidOf(txHex);
+        return { signedPsbtHex: '', txHex, txid };
     }
 
     /**
-     * Message signing. Same deferral as signPsbt — Trezor Connect's
-     * `signMessage` returns its own envelope shape and needs protocol-
-     * level wrapping to match xchain-sdk's message-auth expectations.
+     * Message signing via Trezor Connect's `signMessage`. The device
+     * returns a base64-encoded compact signature in the Bitcoin
+     * message-signing convention — the same shape xchain-sdk's
+     * `auth.signMessage` produces, so no protocol wrapping is needed.
      *
-     * @param {import('./Signer.js').SignMessageParams} _params
+     * @param {import('./Signer.js').SignMessageParams} params
      * @returns {Promise<import('./Signer.js').SignMessageReturn>}
      */
-    async signMessage(_params) {
-        throw new NotImplementedError(
-            'TrezorSigner.signMessage — protocol-level envelope wrapping lands in a later step.',
-        );
+    async signMessage({ message, chainId, path }) {
+        if (typeof message !== 'string') {
+            throw new Error('TrezorSigner.signMessage: message is required');
+        }
+        if (typeof path !== 'string' || !path.startsWith('m/')) {
+            throw new Error('TrezorSigner.signMessage: path is required (HW signers have no imported WIFs)');
+        }
+        const coin = chainIdToTrezorCoin(chainId);
+        const res = await this._connect.signMessage({ path, coin, message });
+        if (!res?.success) {
+            throw signerFailure(this._id, 'signMessage', res);
+        }
+        const signature = res.payload?.signature;
+        if (typeof signature !== 'string' || signature.length === 0) {
+            throw new SignerStatusError(
+                this._id, 'error', 'signMessage: Trezor returned no signature',
+            );
+        }
+        return { signature };
+    }
+
+    _assertSdkRegistry(method) {
+        if (!this._sdkRegistry) {
+            throw new Error(
+                `TrezorSigner.${method}: requires an sdkRegistry; construct with { ..., sdkRegistry }`,
+            );
+        }
     }
 }
 
@@ -340,7 +359,3 @@ function signerFailure(signerId, method, res) {
     const msg = res?.payload?.error ?? res?.error?.error ?? 'unknown Trezor Connect failure';
     return new SignerStatusError(signerId, 'error', `${method} failed: ${msg}${code ? ` (${code})` : ''}`);
 }
-
-// Re-export for the signers/index.js barrel's benefit; referenced
-// only by error paths within this file.
-export { AbstractMethodError };

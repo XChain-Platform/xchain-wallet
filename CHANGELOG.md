@@ -7,6 +7,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.66.0] - 2026-04-23
+
+HW Sign — Steps 1–4 of 5 — hardware-signer primitives. Phase 2 closed at v0.65.0 with `TrezorSigner.signPsbt` / `LedgerSigner.signPsbt` / `signMessage` throwing `NotImplementedError` ("Known deferrals" in v0.53.0 CHANGELOG). This batch fills the four pieces called out there: **PSBT↔Trezor conversion**, **PSBT↔Ledger conversion**, **message-signing envelopes**, and the **renderer↔background signing bridge shim**. Step 5 of 5 (sign-screen HW context, `submitAction` refactor, end-to-end smoke) lands in a follow-up; the primitives here are all pure converters + Signer-interface compliance + smoke-level coverage, unused by live action flows yet.
+
+### Added
+
+**Step 1 / xchain-sdk side (committed separately, v1.9.0)**
+
+- `WalletUtils.decomposePsbt(psbtHex)` returns a vendor-agnostic normalized PSBT shape with per-input `prevTxHash`, `prevTxIndex`, `sequence`, `value`, `scriptPubKeyHex`, `scriptType`, `sighashType`, `nonWitnessUtxoHex`, `witnessUtxoScriptHex`, `redeemScriptHex`, `witnessScriptHex`, `address`, and a pre-parsed `prevTxInfo` in Trezor-`refTxs` shape. Keeps `bitcoinjs-lib` out of `@xchain-wallet/core` — the wallet's converters consume this normalized shape directly.
+- `WalletUtils.txidOf(txHex)` computes the display-order txid for signed raw transactions returned by HW devices (segwit-safe via bitcoinjs-lib's `Transaction.fromHex.getId()`).
+- Both exposed through `XChainSDKLike` in `packages/core/src/sdk/SDKRegistry.js` so HW signers can reach them via the existing SDK DI pattern.
+
+**Step 2 — TrezorSigner sign paths (§17.3)**
+
+- `packages/core/src/signers/trezorFormat.js` — pure data transform: `pathToAddressN(path)` (BIP32 path → Trezor `address_n[]` with hardening bits set); `chainIdToTrezorCoin(chainId)` (single source of truth, was duplicated in TrezorSigner); `toTrezorSignTransaction({ decomposed, coin, signingPaths })` → complete `signTransaction` payload with SPENDWITNESS / SPENDP2SHWITNESS / SPENDADDRESS script_types, PAYTOADDRESS outputs, amounts stringified, and `refTxs` auto-collected from `decomposed.inputs[i].prevTxInfo` for legacy inputs (deduped by prev-tx hash).
+- `TrezorSigner.signPsbt` wired: asserts `sdkRegistry`, calls `sdk.wallet.decomposePsbt`, runs `toTrezorSignTransaction`, calls `connect.signTransaction`, returns `{ signedPsbtHex: '', txHex: payload.serializedTx, txid: sdk.wallet.txidOf(txHex) }`. Trezor returns a serialized tx (not a signed PSBT), so `signedPsbtHex` is intentionally empty — callers broadcast `txHex`.
+- `TrezorSigner.signMessage` wired: calls `connect.signMessage({ path, coin, message })`; pass-through of the device's base64 signature. No envelope wrapping needed — Trezor's output already matches xchain-sdk's `auth.signMessage` shape.
+- Constructor takes a new optional `sdkRegistry` DI param — mirrors `SoftwareSigner`'s shape. The old inline `chainIdToTrezorCoin` in `TrezorSigner.js` was deleted; the class now imports it from `trezorFormat.js`.
+- `trezor-signer.smoke.js` — the "signPsbt/signMessage throw NotImplementedError" assertions are replaced with live-wiring coverage: happy-path segwit, legacy-input refTxs emission, connect-failure surfacing, signMessage payload shape, `sdkRegistry` guard.
+
+**Step 3 — LedgerSigner sign paths (§17.4)**
+
+- `packages/core/src/signers/ledgerFormat.js` — pure data transform: `chainIdToLedgerCurrency(chainId)`, `serializeOutputs(outputs)` (varint + LE value + script — pure JS), `synthesizeMinimalPrevTx(vout, value, scriptPubKeyHex)` (PSBT segwit lanes only carry a `witnessUtxo`, but Ledger's `createPaymentTransaction` needs a splittable prev tx for BIP143 sighashes — this synthesizes a minimal valid raw tx with the real output at the right vout and placeholders elsewhere), `toLedgerCreatePayment({ decomposed, chainId, signingPaths, lockTime })` → `{ inputs, associatedKeysets, outputScriptHex, lockTime, segwit, additionals, currency }`, `addressTypeFromPath(path)` (BIP44 purpose → `'p2pkh' | 'p2sh-p2wpkh' | 'p2wpkh'`), `composeBitcoinCompactSignature({ v, r, s }, path)` (Ledger returns `{ v, r, s }`; this packs them into the 65-byte base64 envelope with script-type-aware header base: 31 for p2pkh, 35 for p2sh-p2wpkh, 39 for p2wpkh, plus recovery id).
+- `LedgerSigner.signPsbt` wired: `sdk.wallet.decomposePsbt` → `toLedgerCreatePayment` → `app.splitTransaction(prevTxHex, true, false, false, additionals)` for each input → `app.createPaymentTransaction({ inputs: splitInputs, associatedKeysets, outputScriptHex, lockTime, segwit, additionals })` → `{ signedPsbtHex: '', txHex, txid }`. All-p2wpkh inputs → `segwit: true, additionals: ['bech32']`; mixed / all-p2pkh → `segwit: false, additionals: []`.
+- `LedgerSigner.signMessage` wired: calls `app.signMessageNew(path, messageHex)`, runs `composeBitcoinCompactSignature` with the address type inferred from the path's BIP44 purpose. Output matches xchain-sdk's `auth.verifyMessage` input so round-trip verification works across software + Ledger signers.
+- Constructor takes optional `sdkRegistry`. The `signMessage` typedef on `LedgerBtcApp` was renamed to `signMessageNew` to match the actual hw-app-btc 10.x method.
+- `ledger-signer.smoke.js` — replaced deferred-error assertions with live wiring: segwit lane (one `splitTransaction` call with synthesized prev tx starting `01000000`), legacy lane (real `nonWitnessUtxoHex`, `segwit: false`, empty additionals), createPaymentTransaction failure surfacing, signMessage happy-path with `p2wpkh` header-base assertion (39 + recId), nested-segwit path producing header-base 35.
+
+**Step 4 — RemoteSigner shim (§17.x, new)**
+
+- `packages/core/src/signers/RemoteSigner.js` — Signer-interface shim that forwards every call (`getStatus`, `getAddresses`, `getPublicKey`, `signPsbt`, `signMessage`) over an injected `transport({ op, payload }) -> Promise<any>` function. Threads the shim's `id` into every payload so the remote side can look up the live signer instance. Wraps transport throws as `SignerStatusError`; `getStatus` degrades to `'disconnected'` on transport error. Validates remote response shapes (signPsbt must return `{ txHex, txid }`, signMessage must return `{ signature }`, getAddresses must return an array).
+- Exists so HW signing can physically run in the renderer (WebHID transports + Trezor Connect popups need user gestures + tab anchors — neither work in MV3 service workers) while `submitWithSigner` keeps running in the background. Wire protocol is documented inline at the top of the file. No shell-side wiring yet — that lands in Step 5 alongside the `submitAction` refactor.
+- `signers/index.js` re-exports `RemoteSigner` from the `@xchain-wallet/core` barrel.
+- `remote-signer.smoke.js` — new smoke exercising constructor guard-rails, all five ops against a recording mock transport, transport-throw → SignerStatusError mapping, malformed-response rejection, subscribe inheritance from the base class.
+
+### Changed
+
+- `packages/core/src/sdk/SDKRegistry.js` `XChainSDKLike` typedef grows `wallet.decomposePsbt` + `wallet.txidOf` entries.
+- `packages/core/src/signers/types.js` — new module holding shared JSDoc typedefs (`DecomposedPsbt`, `DecomposedPsbtInput`, `DecomposedPsbtOutput`, `PrevTxInfo`, `ScriptType`). Keeps cross-file `@typedef` references resolvable in editors without each file redefining the shapes.
+- `packages/core/src/signers/index.js` — re-exports `RemoteSigner` alongside the existing signer classes + firmware helpers.
+- `packages/core/test/sdk-bundle.smoke.js` — peer-dep pin assertion bumps from `^1.8.1` to `^1.9.0` (the decomposePsbt + txidOf additions are load-bearing for the HW sign path).
+- `TrezorSigner.js` no longer re-exports `AbstractMethodError` (the barrel exports it from `Signer.js` directly).
+
+### Developer notes
+
+- Smoke count: 46 (+1: `remote-signer.smoke.js`). 46/46 green.
+- Nothing in the shell packages changed — `packages/extension`, `packages/web`, `packages/desktop` don't gain new code. The synchronized version bump is purely so the root + all `packages/*` track the `@xchain-wallet/core` change for distribution.
+- Hardware sign **integration** (live flow wiring, per-screen HW branches, end-to-end smoke) is the Step 5 scope. That step refactors `submitAction` / `unlockWallet` to accept a pre-built signer (bypass password KDF when the signer is `RemoteSigner`), adds a background `resolveSigner(walletId, address)` helper, wires a `signer.sign.request` / `.response` round-trip protocol across extension + web + desktop messaging layers, and updates each Phase 1+2 review/sign screen with an HW branch (`<DerivationPathCrossCheck />` + device-status banner + "Sign on [device]" button copy + status-gated enable). Until that lands, HW signers pass smokes against mocks but remain unreachable from production flows.
+- Real-device E2E is still pending across both steps (no way to exercise WebHID / Trezor Connect popups from Node); the v0.53.0 "Manual verification pending" note still applies.
+
 ## [0.65.0] - 2026-04-23
 
 Phase 2 — Step 25 of 26 — piece 10 + Step 26 of 26 — piece 11. **Phase 2 complete**: the remaining two §40 surfaces ship together — the generic Advanced Actions form that reflects the SDK's schema (§40.10) and the FreeWallet migration path (§40.13, §19.7). All 26 steps of the Phase 2 plan now on master; the wallet surface covers every §40 authoring path end-to-end.

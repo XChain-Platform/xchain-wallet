@@ -1,14 +1,18 @@
 // Smoke for Phase 2 — Step 13 (piece 4b) — TrezorSigner class +
-// per-target transport factories.
+// per-target transport factories, plus HW Sign Step 2 — live
+// signPsbt + signMessage wiring through the Trezor envelope builder.
 //
-// Coverage strategy (matches the user's directive for Step 13):
+// Coverage strategy:
 //   1. Run the TrezorSigner class against a hand-written mock Connect
 //      — no hardware, no @trezor/connect-web dependency exercised by
 //      the smoke. Covers the shape the class demands of the transport.
 //   2. Static-check the factories: extension ships the real path,
 //      web re-exports it via a cross-package relative import.
-//   3. Confirm signPsbt + signMessage throw NotImplementedError with
-//      clear messages — PSBT↔Trezor conversion is explicitly deferred.
+//   3. signPsbt pipes a mock-decomposed PSBT through the Trezor
+//      envelope builder into connect.signTransaction, and returns the
+//      resulting serializedTx + txid.
+//   4. signMessage passes through the device's base64 signature.
+//   5. The class refuses to signPsbt without an injected sdkRegistry.
 
 import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
@@ -249,16 +253,209 @@ assert.ok(pk.publicKey);
 assert.equal(pk.chainCode, 'mockchaincode');
 assert.equal(pk.fingerprint, '3735928559', 'fingerprint stringified');
 
-// --- 6. signPsbt + signMessage deferred -------------------------------
+// --- 6. signPsbt + signMessage live wiring (HW Sign Step 2) ----------
 
+// 6a. signPsbt without an sdkRegistry is rejected — consistent with
+//     SoftwareSigner's own posture.
 await assert.rejects(
-    signer.signPsbt({ psbtHex: '', chainId: 'bitcoin-mainnet', signingPaths: [] }),
-    /NotImplementedError.*signPsbt/,
-    'signPsbt throws NotImplementedError with a clear deferral message',
+    signer.signPsbt({ psbtHex: 'deadbeef', chainId: 'bitcoin-mainnet', signingPaths: [{ inputIndex: 0, path: "m/84'/0'/0'/0/0" }] }),
+    /requires an sdkRegistry/,
+    'signPsbt without sdkRegistry is rejected',
 );
+
+// 6b. Build a mock sdkRegistry whose decomposePsbt / txidOf return
+//     fixtures the envelope builder can consume. The signer should
+//     thread these into connect.signTransaction and return a proper
+//     { txHex, txid, signedPsbtHex } trio.
+function makeMockSdkRegistry({ decomposed }) {
+    return {
+        get() {
+            return {
+                wallet: {
+                    decomposePsbt: (_psbtHex) => decomposed,
+                    txidOf: (txHex) => `txid-of-${txHex}`,
+                },
+            };
+        },
+    };
+}
+
+const decomposedFixture = {
+    txVersion: 2,
+    locktime: 0,
+    network: 'bitcoin-mainnet',
+    inputs: [
+        {
+            prevTxHash: 'aa'.repeat(32),
+            prevTxIndex: 1,
+            sequence: 0xfffffffd,
+            value: 100_000,
+            scriptPubKeyHex: '0014' + 'bb'.repeat(20),
+            scriptType: 'p2wpkh',
+            sighashType: null,
+            nonWitnessUtxoHex: null,
+            witnessUtxoScriptHex: '0014' + 'bb'.repeat(20),
+            redeemScriptHex: null,
+            witnessScriptHex: null,
+            address: 'bc1qmockinput',
+            prevTxInfo: null,
+        },
+    ],
+    outputs: [
+        {
+            address: 'bc1qmockoutput',
+            scriptPubKeyHex: '0014' + 'cc'.repeat(20),
+            scriptType: 'p2wpkh',
+            value: 90_000,
+        },
+    ],
+};
+
+let capturedSignTxArgs = null;
+const signConnect = makeMockConnect({
+    async signTransaction(args) {
+        capturedSignTxArgs = args;
+        return {
+            success: true,
+            payload: { serializedTx: '0200000001deadbeef', signatures: ['3045sig'] },
+        };
+    },
+});
+const wiredSigner = new TrezorSigner({
+    id: 'trezor-wired',
+    displayName: 'Wired Trezor',
+    model: 'T2T1',
+    deviceIdentifier: 'mock-device-id',
+    connect: signConnect,
+    sdkRegistry: makeMockSdkRegistry({ decomposed: decomposedFixture }),
+});
+
+const signResult = await wiredSigner.signPsbt({
+    psbtHex: '70736274ff01',
+    chainId: 'bitcoin-mainnet',
+    signingPaths: [{ inputIndex: 0, path: "m/84'/0'/0'/0/5" }],
+});
+
+assert.equal(signResult.txHex, '0200000001deadbeef', 'passes serializedTx through as txHex');
+assert.equal(signResult.txid, 'txid-of-0200000001deadbeef', 'routes through sdk.wallet.txidOf');
+assert.equal(signResult.signedPsbtHex, '', 'Trezor does not return a signed PSBT');
+
+assert.ok(capturedSignTxArgs, 'signTransaction was called');
+assert.equal(capturedSignTxArgs.coin, 'btc', 'bitcoin-mainnet → btc');
+assert.deepEqual(
+    capturedSignTxArgs.inputs[0].address_n,
+    [
+        (84 | 0x80000000) >>> 0,
+        (0 | 0x80000000) >>> 0,
+        (0 | 0x80000000) >>> 0,
+        0,
+        5,
+    ],
+    'path "m/84\'/0\'/0\'/0/5" becomes the expected address_n array',
+);
+assert.equal(capturedSignTxArgs.inputs[0].prev_hash, 'aa'.repeat(32));
+assert.equal(capturedSignTxArgs.inputs[0].prev_index, 1);
+assert.equal(capturedSignTxArgs.inputs[0].amount, '100000', 'amounts are stringified');
+assert.equal(capturedSignTxArgs.inputs[0].script_type, 'SPENDWITNESS');
+assert.equal(capturedSignTxArgs.outputs[0].address, 'bc1qmockoutput');
+assert.equal(capturedSignTxArgs.outputs[0].amount, '90000');
+assert.equal(capturedSignTxArgs.outputs[0].script_type, 'PAYTOADDRESS');
+assert.equal(capturedSignTxArgs.refTxs, undefined, 'segwit-only inputs → no refTxs');
+
+// 6c. Legacy p2pkh input emits refTxs from prevTxInfo.
+const legacyFixture = {
+    ...decomposedFixture,
+    inputs: [
+        {
+            ...decomposedFixture.inputs[0],
+            scriptType: 'p2pkh',
+            nonWitnessUtxoHex: '0100000001aabb',
+            witnessUtxoScriptHex: null,
+            prevTxInfo: {
+                hash: 'aa'.repeat(32),
+                version: 1,
+                locktime: 0,
+                inputs: [{ prev_hash: 'cc'.repeat(32), prev_index: 0, script_sig: '', sequence: 0xffffffff }],
+                bin_outputs: [{ amount: '100000', script_pubkey: '76a914' + 'dd'.repeat(20) + '88ac' }],
+            },
+        },
+    ],
+};
+
+let legacyCaptured = null;
+const legacySigner = new TrezorSigner({
+    id: 'trezor-legacy',
+    displayName: 'Legacy',
+    model: 'T2T1',
+    deviceIdentifier: 'mock-device-id',
+    connect: makeMockConnect({
+        async signTransaction(args) {
+            legacyCaptured = args;
+            return { success: true, payload: { serializedTx: '01deadbeef', signatures: [] } };
+        },
+    }),
+    sdkRegistry: makeMockSdkRegistry({ decomposed: legacyFixture }),
+});
+await legacySigner.signPsbt({
+    psbtHex: '70736274ff02',
+    chainId: 'dogecoin-mainnet',
+    signingPaths: [{ inputIndex: 0, path: "m/44'/3'/0'/0/0" }],
+});
+assert.equal(legacyCaptured.coin, 'doge');
+assert.equal(legacyCaptured.inputs[0].script_type, 'SPENDADDRESS');
+assert.ok(Array.isArray(legacyCaptured.refTxs), 'legacy inputs emit refTxs');
+assert.equal(legacyCaptured.refTxs.length, 1);
+assert.equal(legacyCaptured.refTxs[0].hash, 'aa'.repeat(32));
+
+// 6d. Connect failure surfaces as SignerStatusError.
+const failSignConnect = makeMockConnect({
+    async signTransaction() { return { success: false, payload: { error: 'user rejected' } }; },
+});
+const failSignSigner = new TrezorSigner({
+    id: 'trezor-sign-fail',
+    displayName: 'X',
+    model: 'T2T1',
+    deviceIdentifier: 'mock-device-id',
+    connect: failSignConnect,
+    sdkRegistry: makeMockSdkRegistry({ decomposed: decomposedFixture }),
+});
 await assert.rejects(
-    signer.signMessage({ message: 'hi', chainId: 'bitcoin-mainnet', path: "m/84'/0'/0'/0/0" }),
-    /NotImplementedError.*signMessage/,
+    failSignSigner.signPsbt({
+        psbtHex: '70736274ff03',
+        chainId: 'bitcoin-mainnet',
+        signingPaths: [{ inputIndex: 0, path: "m/84'/0'/0'/0/0" }],
+    }),
+    /user rejected/,
+);
+
+// 6e. signMessage passes through the device's base64 signature.
+let msgCaptured = null;
+const msgSigner = new TrezorSigner({
+    id: 'trezor-msg',
+    displayName: 'X',
+    model: 'T2T1',
+    deviceIdentifier: 'mock-device-id',
+    connect: makeMockConnect({
+        async signMessage(args) {
+            msgCaptured = args;
+            return { success: true, payload: { signature: 'IGmockbase64sig==' } };
+        },
+    }),
+});
+const msgResult = await msgSigner.signMessage({
+    message: 'hello',
+    chainId: 'bitcoin-mainnet',
+    path: "m/84'/0'/0'/0/0",
+});
+assert.equal(msgResult.signature, 'IGmockbase64sig==');
+assert.equal(msgCaptured.coin, 'btc');
+assert.equal(msgCaptured.path, "m/84'/0'/0'/0/0");
+assert.equal(msgCaptured.message, 'hello');
+
+// Without a path or with bad-shape path, signMessage rejects.
+await assert.rejects(
+    msgSigner.signMessage({ message: 'hi', chainId: 'bitcoin-mainnet' }),
+    /path is required/,
 );
 
 // --- 7. Features → SignerRecord field extractors ----------------------
@@ -460,6 +657,18 @@ assert.ok(
     'TrezorSigner class has no Trezor SDK imports at all',
 );
 
+// --- 12. trezorFormat.js envelope builder exists + exports -----------
+
+const fmtPath = join(core, 'src', 'signers', 'trezorFormat.js');
+assert.ok(existsSync(fmtPath), 'trezorFormat.js exists');
+const fmtSrc = readFileSync(fmtPath, 'utf8');
+for (const sym of ['pathToAddressN', 'toTrezorSignTransaction', 'chainIdToTrezorCoin']) {
+    assert.ok(
+        new RegExp(`export (?:function|const) ${sym}\\b`).test(fmtSrc),
+        `trezorFormat.js exports ${sym}`,
+    );
+}
+
 console.log(
-    'OK — trezor signer smoke (class conforms to Signer interface against DI mock; getStatus / getAddresses / getPublicKey covered; signPsbt + signMessage deferred with clear messages; factories declared in both shells; core has zero Trezor SDK imports)',
+    'OK — trezor signer smoke (class conforms to Signer interface against DI mock; getStatus / getAddresses / getPublicKey covered; signPsbt pipes through sdk.decomposePsbt → Trezor envelope builder → connect.signTransaction; signMessage wired; legacy lane emits refTxs; factories declared in both shells; core has zero Trezor SDK imports)',
 );
