@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.67.0] - 2026-04-24
+
+HW Sign — Step 5 of 5 — core primitives for hardware-signer integration with action flows. This step refactors `submitAction` to accept a pre-built signer (bypassing the software-wallet password-unlock path), loosens `normalizeSource` so HW-sourced addresses flow through the send/issue/... wrappers without explicit rejection, adds a `resolveSigner` / `buildRemoteSigner` helper pair that background handlers use to decide between software and remote signing, and lands the shared UI primitives (`useSignerStatus` hook + `HwSignBlock` component) every review/sign screen will render in the HW branch. End-to-end smoke proves the full chain runs: background `RemoteSigner.signPsbt` → transport → renderer-side `TrezorSigner.signPsbt` → `sdk.wallet.decomposePsbt` → `trezorFormat` → `connect.signTransaction` → serialized tx → `sdk.wallet.txidOf` → back.
+
+The remaining HW-sign work is pure shell infrastructure, no architectural decisions left: (a) per-form wiring — each of the 10 action review/sign screens checks `fromAddress.source === 'trezor' | 'ledger'` and renders `<HwSignBlock>` instead of the password input, gating Submit on `status === 'available'`; (b) production `renderer↔background` RPC over `chrome.runtime.connect` ports (extension / web) or `ipcMain`/`ipcRenderer` (desktop) — the `transport` function RemoteSigner takes needs a concrete implementation; (c) `messaging.sendAsset` (and siblings) branch on address source, routing HW paths through a new `action.*.hw` handler that constructs the RemoteSigner on the background side; (d) real-device E2E walkthrough (Trezor in hand, Ledger pending).
+
+### Changed
+
+- `packages/core/src/flows/submitAction.js` — accepts an optional `signer: Signer` param. When supplied, the flow skips `unlockWallet` entirely (no password KDF, no software-seed decryption) and skips the trailing `.lock()` — the caller owns the signer's lifecycle. Either `password` OR `signer` must be supplied; both paths still run through the same `submitWithSigner` / ADS / pendingTx lifecycle machinery.
+- `packages/core/src/flows/sendAsset.js` — `normalizeSource` no longer rejects addresses with `source === 'trezor' | 'ledger'`. The old behavior was an explicit refusal with "this signer cannot produce signatures here" — now HW sources pass through with the same shape as HD sources (`{ address, publicKey, derivationPath }`). Watch-only is still rejected. `sendAsset` itself gains an optional `signer` forwarded to `submitAction`; callers that have a `RemoteSigner` in hand pass it here and omit `password`.
+
+### Added
+
+**Flow helper — `packages/core/src/flows/resolveSigner.js`**
+
+- `resolveSigner({ vault, address })` inspects an Address record and returns a descriptor telling the caller which signing path applies. HD + imported-WIF addresses → `{ kind: 'software', address }`. Addresses persisted during HW pairing (§17.6) with `source: 'trezor' | 'ledger'` + a `signerId` → `{ kind: 'trezor' | 'ledger', address, signerRecord }`. Rejects watch-only addresses, HW addresses with no `signerId`, HW addresses pointing at a missing `SignerRecord`, and mismatched-kind corruption (address says `'trezor'` but the record says `'ledger'`) with a new `SignerResolutionError` carrying `addressId` / `signerId` / `source` / `signerKind` fields.
+- `buildRemoteSigner(descriptor, transport)` constructs a `RemoteSigner` for an HW descriptor, using the SignerRecord's `label` (or `"vendor model"` fallback when the label is empty) for the display name. Refuses non-HW descriptors and non-function transports.
+- Rationale: separating "which kind?" from "build it" keeps `resolveSigner` pure + testable. Callers (background handlers) own the transport function — in production it wraps the renderer-side RPC channel; in the E2E smoke it dispatches straight into a mock renderer-signer map.
+- Re-exported from `@xchain-wallet/core/flows` alongside the other HW helpers.
+
+**Shared UI primitives — `packages/core/src/shared/`**
+
+- `hooks/useSignerStatus.js` — polls a signer's `getStatus()` at two cadences: fast (2000ms) when the status is anything other than `'available'` (user is acting on the device — wrong-app, locked, disconnected), steady (10000ms) once the device reports ready. First poll fires immediately on mount so callers don't flash through `'idle'`. Returns `{ status, detail, refresh }` — the `refresh` callback is the handle for explicit re-polls ("I opened the Bitcoin app, retry now"). Accepts `getStatus: null` to disable polling (useful when the active wallet hasn't selected an HW source).
+- `components/HwSignBlock.jsx` + `.module.css` — composite sign-screen block that every review/sign form will render in the HW branch instead of the password input. Composes the existing §18.5 `DerivationPathCrossCheck` with a live device-status banner. Copy variants for `'available'` / `'wrong-app'` / `'locked'` / `'disconnected'` / `'error'`, with vendor-aware details (Trezor says "enter your PIN on the Trezor", Ledger's `'wrong-app'` gets chain-specific "Open the Bitcoin app on your Ledger"). Status dot colors via CSS data-attributes. Exposes live state to the parent form via an `onStatusChange` callback so the Submit button can gate on `status === 'available'` without re-polling.
+
+**Smoke — `packages/core/test/hw-sign-e2e.smoke.js`**
+
+- Proves the full hardware-signer chain runs end-to-end against mocks. Constructs a mock renderer (signer-instance map) holding a real `TrezorSigner` wired to a mock Connect + mock sdkRegistry. The mock transport simulates the `renderer↔background` RPC by dispatching ops from payloads' `signerId` into the signer map. A background-side `RemoteSigner` calls the mock transport; the whole signPsbt chain runs: `RemoteSigner.signPsbt` → transport → `TrezorSigner.signPsbt` → `sdk.wallet.decomposePsbt` (mocked with a P2WPKH fixture) → `trezorFormat.toTrezorSignTransaction` → `connect.signTransaction` (mocked with a canned serializedTx) → back up the chain, with `sdk.wallet.txidOf` producing the final txid. Asserts the Trezor envelope has the right `coin` / `script_type` / `address_n` / `amount`.
+- Also covers: `resolveSigner` descriptor branches across HD / imported-WIF / trezor / watch-only / missing-signerId / missing-SignerRecord / mismatched-kind; `SignerResolutionError` carries `addressId` / `signerId` / `source`; `buildRemoteSigner` refuses non-HW descriptors and non-function transports; `RemoteSigner.signMessage` + `getStatus` round-trips; `submitAction` JSDoc advertises the `signer` param and the source code wires the skip-unlock path correctly; `normalizeSource` admits HW sources and still rejects watch-only; shared UI primitives are in place (`useSignerStatus` + `HwSignBlock` files + key symbols).
+
+### Developer notes
+
+- Smoke count: 47 (+1: `hw-sign-e2e.smoke.js`). 47/47 green.
+- Nothing in the shell packages changed. The synchronized version bump is purely so the root + all `packages/*` track the `@xchain-wallet/core` change for distribution.
+- The `submitAction` refactor is backward-compatible: existing callers (all current action flows) still pass `password`, the old path runs unchanged. Only callers that opt into the new `signer` param take the HW route.
+- `normalizeSource`'s loosened behavior means that if a caller builds a `sendAsset` call with a `from.source === 'trezor'` address but forgets to inject a signer, `submitAction` will reject early with "either `password` or `signer` is required" — still loud, just at a different layer than before.
+- HwSignBlock depends on CSS custom properties (`--xc-success`, `--xc-warning`, `--xc-danger`, plus their `-soft` variants) that may or may not be in `tokens.css` yet. The CSS includes fallbacks to `var(--xc-surface-raised)` / `var(--xc-border)` so the block renders cleanly on older token sets; per-form wiring can add the specific palette entries in a follow-up if the design system grows.
+
 ## [0.66.0] - 2026-04-23
 
 HW Sign — Steps 1–4 of 5 — hardware-signer primitives. Phase 2 closed at v0.65.0 with `TrezorSigner.signPsbt` / `LedgerSigner.signPsbt` / `signMessage` throwing `NotImplementedError` ("Known deferrals" in v0.53.0 CHANGELOG). This batch fills the four pieces called out there: **PSBT↔Trezor conversion**, **PSBT↔Ledger conversion**, **message-signing envelopes**, and the **renderer↔background signing bridge shim**. Step 5 of 5 (sign-screen HW context, `submitAction` refactor, end-to-end smoke) lands in a follow-up; the primitives here are all pure converters + Signer-interface compliance + smoke-level coverage, unused by live action flows yet.

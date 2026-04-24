@@ -20,7 +20,7 @@ import { submitAction } from './submitAction.js';
  * @typedef {Object} SendAssetOpts
  * @property {import('../storage/Vault.js').Vault} vault
  * @property {string} walletId
- * @property {string} password
+ * @property {string} [password]                     required for software wallets; omit when `signer` is supplied
  * @property {string} [bip39Passphrase]
  * @property {import('../registry/index.js').ChainRegistry} chainRegistry
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
@@ -33,6 +33,7 @@ import { submitAction } from './submitAction.js';
  * @property {number} [fee]                           absolute sats
  * @property {number} [feePerKb]
  * @property {boolean} [rbf]
+ * @property {import('../signers/Signer.js').Signer} [signer]    pre-built signer (RemoteSigner for HW)
  * @property {(txid: string, opts?: object) => Promise<unknown>} [waitForTxid]
  * @property {object} [waitOpts]
  * @property {(phase: string, data: object) => void} [onProgress]
@@ -84,6 +85,7 @@ export async function sendAsset(opts) {
         signingPaths: [source.derivationPath
             ? { inputIndex: 0, path: source.derivationPath }
             : { inputIndex: 0, addressId: source.addressId }],
+        signer: opts.signer,
         pendingTxMeta,
         waitForTxid: opts.waitForTxid,
         waitOpts: opts.waitOpts,
@@ -118,11 +120,15 @@ export function normalizeSource(from, fnName = 'flow') {
     if (typeof publicKey !== 'string' || publicKey.length === 0) {
         throw new Error(`${fnName}: from.publicKey must be a non-empty string`);
     }
-    if (source.source === 'watch-only' || source.source === 'trezor' || source.source === 'ledger') {
+    if (source.source === 'watch-only') {
         throw new Error(
-            `${fnName}: from.source = "${source.source}" — this signer cannot produce signatures here`,
+            `${fnName}: from.source = "watch-only" — this address has no signer`,
         );
     }
+    // HW sources ('trezor' / 'ledger') are valid here — the caller is
+    // expected to supply a pre-built RemoteSigner via submitAction's
+    // `signer` param so the action flow routes signing over the
+    // renderer↔background bridge instead of the password-unlock path.
     if (typeof derivationPath === 'string' && derivationPath.length > 0) {
         return { address, publicKey, derivationPath };
     }

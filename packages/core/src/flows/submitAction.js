@@ -30,7 +30,7 @@ import { commitAdsStep, resolveAdsPlanForNextTx } from './ads.js';
  * @typedef {Object} SubmitActionOpts
  * @property {import('../storage/Vault.js').Vault} vault
  * @property {string} walletId
- * @property {string} password
+ * @property {string} [password]                    required for software-wallet signing; skipped when `signer` is supplied
  * @property {string} [bip39Passphrase]
  * @property {import('../registry/index.js').ChainRegistry} chainRegistry
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
@@ -38,6 +38,7 @@ import { commitAdsStep, resolveAdsPlanForNextTx } from './ads.js';
  * @property {{ action: string, params: object }} actionData
  * @property {import('../sdk/submitWithSigner.js').SubmitEncoderOpts} encoderOpts
  * @property {Array<{ inputIndex: number, path: string, sighashType?: number }>} signingPaths
+ * @property {import('../signers/Signer.js').Signer} [signer]   pre-built signer (RemoteSigner for HW). When supplied, the flow skips unlockWallet entirely — no password KDF — and does not call `.lock()` at the end (signer lifecycle is the caller's responsibility).
  * @property {PendingTxMeta} [pendingTxMeta]     when set, the flow persists + updates a PendingTx record
  * @property {(txid: string, opts?: object) => Promise<unknown>} [waitForTxid]
  * @property {object} [waitOpts]
@@ -71,11 +72,15 @@ export async function submitAction({
     actionData,
     encoderOpts,
     signingPaths,
+    signer: injectedSigner,
     pendingTxMeta,
     waitForTxid,
     waitOpts,
     onProgress,
 }) {
+    if (!injectedSigner && (typeof password !== 'string' || password.length === 0)) {
+        throw new Error('submitAction: either `password` or `signer` is required');
+    }
     const descriptor = chainRegistry.get(chainId);
     if (!descriptor) throw new Error(`submitAction: unknown chain "${chainId}"`);
 
@@ -173,14 +178,21 @@ export async function submitAction({
         }
     };
 
-    const signer = await unlockWallet({
-        vault,
-        walletId,
-        password,
-        bip39Passphrase,
-        chainRegistry,
-        sdkRegistry,
-    });
+    // When the caller supplies a pre-built signer (e.g., a RemoteSigner
+    // forwarding to a renderer-hosted HW signer), skip unlockWallet
+    // entirely — no password KDF, no software-seed decryption. The
+    // caller owns the signer's lifecycle in that case, so we also
+    // skip the trailing `.lock()`.
+    const signer = injectedSigner
+        ? injectedSigner
+        : await unlockWallet({
+            vault,
+            walletId,
+            password,
+            bip39Passphrase,
+            chainRegistry,
+            sdkRegistry,
+        });
 
     let result;
     try {
@@ -206,7 +218,9 @@ export async function submitAction({
             throw err;
         }
     } finally {
-        signer.lock();
+        if (!injectedSigner && typeof signer.lock === 'function') {
+            signer.lock();
+        }
     }
 
     // §36.3 — advance the ADS accumulator after a successful submit.

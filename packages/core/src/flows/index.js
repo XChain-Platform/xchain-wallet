@@ -51,6 +51,11 @@ export {
     unregisterSigner,
     findSigner,
 } from './registerSigner.js';
+export {
+    resolveSigner,
+    buildRemoteSigner,
+    SignerResolutionError,
+} from './resolveSigner.js';
 export { seedSettingsForChains, ensureSettings } from './seedSettings.js';
 export { receiveAddress, NoMatchingAccountError } from './receiveAddress.js';
 export {

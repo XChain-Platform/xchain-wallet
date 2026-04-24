@@ -1,0 +1,78 @@
+.root {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    margin-bottom: var(--xc-space-3);
+}
+
+.statusRow {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    padding: var(--xc-space-2) var(--xc-space-3);
+    border-radius: var(--xc-radius-sm);
+    background: var(--xc-surface-raised);
+    border: 1px solid var(--xc-border);
+    font-size: var(--xc-text-sm);
+}
+
+.statusRow[data-status="available"] {
+    background: var(--xc-success-soft, var(--xc-surface-raised));
+    border-color: var(--xc-success, var(--xc-border));
+}
+
+.statusRow[data-status="wrong-app"],
+.statusRow[data-status="locked"] {
+    background: var(--xc-warning-soft, var(--xc-surface-raised));
+    border-color: var(--xc-warning, var(--xc-border));
+}
+
+.statusRow[data-status="disconnected"],
+.statusRow[data-status="error"] {
+    background: var(--xc-danger-soft, var(--xc-surface-raised));
+    border-color: var(--xc-danger, var(--xc-border));
+}
+
+.statusDot {
+    display: inline-block;
+    width: 0.625rem;
+    height: 0.625rem;
+    border-radius: 50%;
+    background: var(--xc-muted);
+    flex: 0 0 auto;
+}
+
+.statusRow[data-status="available"] .statusDot {
+    background: var(--xc-success, #20a020);
+}
+
+.statusRow[data-status="wrong-app"] .statusDot,
+.statusRow[data-status="locked"] .statusDot {
+    background: var(--xc-warning, #e08a00);
+}
+
+.statusRow[data-status="disconnected"] .statusDot,
+.statusRow[data-status="error"] .statusDot {
+    background: var(--xc-danger, #c53030);
+}
+
+.statusText {
+    flex: 1;
+    color: var(--xc-text);
+    line-height: 1.4;
+}
+
+.refresh {
+    appearance: none;
+    border: 1px solid var(--xc-border);
+    background: var(--xc-surface);
+    color: var(--xc-text);
+    padding: 0.25rem 0.6rem;
+    border-radius: var(--xc-radius-sm);
+    font-size: var(--xc-text-xs);
+    cursor: pointer;
+}
+
+.refresh:hover {
+    background: var(--xc-surface-raised);
+}

@@ -1,0 +1,123 @@
+// HwSignBlock — composite sign-screen block for hardware-wallet sign
+// flows. Renders the §18.5 derivation-path cross-check plus a live
+// device-status banner so the user knows when to expect the device
+// prompt. Meant to slot into every review/sign screen in place of
+// the software-signer password input when the source address is HW.
+//
+// Status banner variants:
+//   - 'available'     → quiet "Ready to sign — confirm on device" line
+//   - 'wrong-app'     → "Open the [coin] app on your Ledger" warning
+//   - 'disconnected'  → "Device not detected — plug in and unlock"
+//   - 'locked'        → "Device is locked — enter PIN" (Trezor path)
+//   - 'idle'          → no banner (pre-first-poll)
+//   - 'error'         → generic "Couldn't reach device" with detail
+//
+// The parent form is responsible for the Submit button copy + enable
+// state — `HwSignBlock` exposes the status via the `useSignerStatus`
+// hook so the parent can gate Submit on `status === 'available'`.
+
+import { useSignerStatus } from '../hooks/useSignerStatus.js';
+import { DerivationPathCrossCheck } from './DerivationPathCrossCheck.jsx';
+import styles from './HwSignBlock.module.css';
+
+/**
+ * @param {object} props
+ * @param {'trezor'|'ledger'} props.signerKind
+ * @param {string} props.signerName                   e.g. "Trezor Model T (My Trezor)"
+ * @param {string} props.path                         BIP32 path for the source address
+ * @param {string} props.address                      the source address string
+ * @param {string} [props.chainId]                    forwarded to getStatus (Ledger uses it for wrong-app detection)
+ * @param {((opts?: object) => Promise<any>) | null} props.getStatus   signer.getStatus; pass null to disable polling
+ * @param {(state: { status: string, detail: string | null, refresh: () => void }) => void} [props.onStatusChange]   parent subscribes to status
+ */
+export function HwSignBlock({
+    signerKind,
+    signerName,
+    path,
+    address,
+    chainId,
+    getStatus,
+    onStatusChange,
+}) {
+    const { status, detail, refresh } = useSignerStatus({ getStatus, chainId });
+
+    // Surface the live state so the parent form can gate its Submit
+    // button without re-polling. A memoized snapshot via useRef would
+    // make this a zero-render no-op; a simple call each render is
+    // fine for the poll cadence we use.
+    if (onStatusChange) onStatusChange({ status, detail, refresh });
+
+    return (
+        <div className={styles.root}>
+            <DerivationPathCrossCheck
+                signerKind={signerKind}
+                signerName={signerName}
+                path={path}
+                address={address}
+            />
+            {status !== 'idle' ? (
+                <div className={styles.statusRow} data-status={status} role="status">
+                    <span className={styles.statusDot} aria-hidden="true" />
+                    <span className={styles.statusText}>
+                        {statusCopy(status, signerKind, chainId, detail)}
+                    </span>
+                    {status !== 'available' ? (
+                        <button
+                            type="button"
+                            onClick={refresh}
+                            className={styles.refresh}
+                        >
+                            Retry
+                        </button>
+                    ) : null}
+                </div>
+            ) : null}
+        </div>
+    );
+}
+
+/**
+ * @param {string} status
+ * @param {'trezor'|'ledger'} signerKind
+ * @param {string | undefined} chainId
+ * @param {string | null} detail
+ */
+function statusCopy(status, signerKind, chainId, detail) {
+    switch (status) {
+        case 'available':
+            return 'Ready to sign — confirm on your device when you tap Send.';
+        case 'wrong-app':
+            return `Open the ${coinNameFor(chainId) || 'correct'} app on your Ledger and try again.`;
+        case 'locked':
+            return signerKind === 'trezor'
+                ? 'Device is locked — enter your PIN on the Trezor.'
+                : 'Device is locked — unlock it and try again.';
+        case 'disconnected':
+            return detail
+                ? `Device not detected. ${detail}`
+                : 'Device not detected — plug in and unlock.';
+        case 'error':
+            return detail
+                ? `Couldn't reach device. ${detail}`
+                : "Couldn't reach device.";
+        default:
+            return '';
+    }
+}
+
+/** @param {string | undefined} chainId */
+function coinNameFor(chainId) {
+    switch (chainId) {
+        case 'bitcoin-mainnet':
+        case 'bitcoin-testnet':
+        case 'bitcoin-regtest':
+            return 'Bitcoin';
+        case 'litecoin-mainnet':
+        case 'litecoin-testnet':
+            return 'Litecoin';
+        case 'dogecoin-mainnet':
+            return 'Dogecoin';
+        default:
+            return null;
+    }
+}
