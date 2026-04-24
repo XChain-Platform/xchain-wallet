@@ -12,6 +12,7 @@
 //     pendingTxs: PendingTx[],
 //     signers: SignerRecord[],
 //     pendingAirdrops: PendingAirdrop[],
+//     watchlistEntries: WatchlistEntry[],
 //     settings: Settings | null,      // singleton slot
 //   }
 //
@@ -35,6 +36,7 @@ export function emptyDocument() {
         pendingTxs: [],
         signers: [],
         pendingAirdrops: [],
+        watchlistEntries: [],
         settings: null,
     };
 }
@@ -50,6 +52,7 @@ export function emptyDocument() {
  * @property {import('../schemas/pendingTx.js').PendingTx[]} pendingTxs
  * @property {import('../schemas/signer.js').SignerRecord[]} signers
  * @property {import('../schemas/pendingAirdrop.js').PendingAirdrop[]} pendingAirdrops
+ * @property {import('../schemas/watchlistEntry.js').WatchlistEntry[]} watchlistEntries
  * @property {import('../schemas/settings.js').Settings | null} settings
  */
 
@@ -111,6 +114,7 @@ export async function decodeDocument(masterKey, blob, aad) {
         pendingTxs: parsed.pendingTxs ?? empty.pendingTxs,
         signers: parsed.signers ?? empty.signers,
         pendingAirdrops: parsed.pendingAirdrops ?? empty.pendingAirdrops,
+        watchlistEntries: parsed.watchlistEntries ?? empty.watchlistEntries,
         settings: parsed.settings ?? empty.settings,
     };
 }

@@ -7,6 +7,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.71.0] - 2026-04-24
+
+Phase 3 — DEX Steps 1–7. Single-market trading UX is end-to-end functional: browse markets + pin a watchlist, open a market, see the chart + depth-visualized orderbook + recent trades, place limit orders, cancel open orders. All sign paths reuse the Phase 2 HW Sign primitives (SignCredentials + isHwSource), so Trezor/Ledger slot in behind the same form surfaces. Settlement (BTCPay + SWAP), dispenser badge integration, and Messaging remain for subsequent commits.
+
+### Added
+
+**Step 1 — Markets list scaffold (§41.2)**
+
+- `packages/core/src/schemas/watchlistEntry.js` — per-wallet pinned market record (chainId + tick1 + tick2). `createWatchlistEntry` / `validateWatchlistEntry` / `watchlistEntryKey` helpers.
+- `packages/core/src/flows/watchlist.js` — `listWatchlistForWallet` / `saveWatchlistEntry` (idempotent by the canonical key) / `clearWatchlistEntry`.
+- `packages/core/src/flows/marketQueries.js` — SDK-explorer passthroughs: `getMarkets` / `getMarket` / `getMarketHistory` / `getMarketOrders` / `getOrderbook`.
+- `packages/core/src/storage/Vault.js` + `codec.js` — new `watchlistEntries` collection; `emptyDocument` + `decodeDocument` defensively merge the array so older persisted docs stay loadable.
+- `packages/extension/src/background/createBackgroundHost.js` — registers 5 `markets.*` read-only handlers + 3 `watchlist.*` CRUD handlers.
+- Messaging helpers on popup / web / desktop — 5 market-query + 3 watchlist helpers each.
+- `packages/core/src/shared/routes/MarketsList.jsx` — landing view with watchlist + popular-markets sections, chain filter + search, star toggle to pin/unpin. Per-chain fan-out with isolated failure (one broken explorer doesn't blank the page).
+- Three-shell App.jsx wiring — new `'markets'` sub-route + reserved `'market'` sub-route + activeMarket state. `Home.jsx` gains an `onMarkets` button between "Create a token" and "More actions".
+
+**Step 2 — Market view shell (§41.3)**
+
+- `packages/core/src/shared/routes/MarketView.jsx` — four-panel layout (chart | orderbook | recent trades) above (place order | open orders). Header renders the market summary from `messaging.getMarket`. Popup variant stacks the panels vertically; full variant uses a 3-up + 2-up grid.
+
+**Step 3 — Chart panel (§41.3.1)**
+
+- `lightweight-charts` declared as a dep in extension + web + desktop package.json.
+- `packages/core/src/market/bucketize.js` — pure OHLCV bucketing. `bucketizeMatches(rows, { tick1, tick2, periodSeconds })` aggregates `getMarketHistory` match rows into candles with correct buy/sell price orientation (`give_tick === tick1` vs reversed) and tick1-denominated volume. Period constants + labels: 1m / 5m / 15m / 1h / 4h / 1d / 1w (default 1h).
+- `packages/core/src/shared/components/MarketChart.jsx` — lazily `await import('lightweight-charts')` so the module loads clean in Node (smoke tests + SSR). Dynamic-import failure falls through to a "run pnpm install" hint rather than blowing up MarketView. Period toggle row rebuckets the same match dataset client-side.
+
+**Step 4 — Orderbook panel (§41.3.2)**
+
+- `packages/core/src/market/orderbook.js` — pure `normalizeOrderbook(resp)`. Accepts both the explorer's wrapped `[{ asks, bids }]` shape and the plain object form. Parses `[price, amount]` tuples or `{ price, amount/size }` objects. Sorts bids descending + asks ascending, attaches cumulative sums, computes `maxCumulative` across both sides for depth-bar normalisation. Malformed rows (non-numeric price/size) drop silently.
+- `packages/core/src/shared/components/OrderbookPanel.jsx` — two-column bids/asks with a proportional depth bar per row (teal bids left-anchored, red asks right-anchored). 5s polling pauses when `document.visibilityState === 'hidden'`. Clicking a price level fires `onPickPrice(displayPrice)` — MarketView threads that through `prefillPrice` into the Place Order panel.
+
+**Step 5 — Recent trades panel (§41.3.3)**
+
+- `packages/core/src/shared/components/RecentTradesPanel.jsx` — chronological feed of the last 30 matches. Side inferred from pair orientation, price coloured teal/red. `onOpenTx(txid)` callback reserved for a future tx-detail route.
+
+**Step 6 — Place order form (§41.3.4)**
+
+- `packages/core/src/flows/orderAction.js` — wraps `submitAction` for the ORDER action. Required-field validation (`GIVE_TICK` + `GIVE_AMOUNT` + `GET_TICK` + `GET_AMOUNT`); optional EXPIRATION / FEE_REQUIRED / FEE_PROVIDED pass through. Same file exports `cancelOrder` for §41.3.5 — CANCEL composes from `orderActionIndex`.
+- Background handlers: `action.order`, `action.cancelOrder`, `action.order.hw`, `action.cancelOrder.hw` (two HW variants landed via `registerHwHandler`).
+- Messaging helpers on 3 shells: `orderAction` / `orderActionHw` / `cancelOrder` / `cancelOrderHw`.
+- `packages/core/src/shared/components/PlaceOrderPanel.jsx` — buy/sell toggle maps to GIVE/GET orientation on the (tick1, tick2) pair; price + size + total auto-calc; expiration in blocks with presets (1d / 1w / 1m / never / custom); `prefillPrice` from orderbook click populates the price field. Reuses Phase 2's `<SignCredentials>` gate so HW addresses swap the password input for the HW sign block + status banner.
+
+**Step 7 — Open orders + cancel (§41.3.5)**
+
+- `packages/core/src/shared/components/OpenOrdersPanel.jsx` — per-market list of the user's open orders. Fetches via `messaging.getMarketOrders({ chainId, tick1, tick2, address })` across every wallet address on the chain in parallel. 5s polling with visibilitychange pause (same cadence as the orderbook). Cancel button opens an inline sign form; signs via `cancelOrder` / `cancelOrderHw` against the order's source address, using `<SignCredentials>` so HW owners can cancel without changing surface. Removes the cancelled row on success.
+
+### Changed
+
+- `packages/core/src/flows/index.js` — exports `getMarkets`, `getMarket`, `getMarketHistory`, `getMarketOrders`, `getOrderbook`, `listWatchlistForWallet`, `saveWatchlistEntry`, `clearWatchlistEntry`, `orderAction`, `cancelOrder`.
+- `packages/core/src/schemas/index.js` — exports `watchlistEntry` module + `createWatchlistEntry` / `validateWatchlistEntry` / `watchlistEntryKey` + `migrateWatchlistEntry`.
+- Smoke count: 56 (+6 from v0.70.0: `markets-list.smoke.js`, `market-view.smoke.js`, `chart-panel.smoke.js`, `orderbook-panel.smoke.js`, `recent-trades.smoke.js`, `place-order.smoke.js`, `open-orders.smoke.js` — seven new files, and the earlier-added two round up to six net since some consolidated). 56/56 green.
+
+### Deferred (remaining Phase 3 scope)
+
+- Step 8 — Per-market trade history (§41.3.6).
+- Step 9 — BTCPay queue + sign (§41.4).
+- Step 10 — SWAP form (§41.5).
+- Step 11 — Dispenser-available badge on market rows (§41.6).
+- Steps 12–14 — Messaging inbox + thread + compose + contacts (§41.7).
+- Decoder cases for ORDER and CANCEL. Sign screens work today because the review surface reads the composed params directly; a dedicated decoder case would give nicer summaries on the Advanced-Actions-Form decoder preview and on imported / pasted raw actions. Low priority.
+
+### Notes
+
+- `lightweight-charts` is a fresh dep added to three shells. `pnpm install` in each package is required before the chart panel renders (falls through to a clean hint otherwise).
+- WS push for orderbook + open orders is out of scope. Once the explorer exposes a push channel (Phase 4+) we flip both panels from polling to subscribe; today's 5s polling with visibilitychange pause matches the existing AirdropForm cadence.
+
 ## [0.70.0] - 2026-04-24
 
 HW Sign follow-up slice 4 of 4 — HW branches for the remaining multi-stage action forms (`DispenserForm` + `DispenserDetail` + `AirdropForm`) and the **desktop** renderer↔main port RPC. Closes the wallet-side HW sign work: every action surface (flat + multi-stage) now swaps in `<SignCredentials>` for paired Trezor/Ledger addresses, and Electron joins the extension popup + web shell as a signer-bridge-capable host. Real-device walkthrough remains the only outstanding deferral (Trezor in hand, Ledger pending).

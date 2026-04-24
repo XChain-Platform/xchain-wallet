@@ -34,6 +34,7 @@ import {
     migrateSettings,
     migrateSigner,
     migrateWallet,
+    migrateWatchlistEntry,
 } from '../schemas/migrations.js';
 import { validateAccount } from '../schemas/account.js';
 import { validateAddress } from '../schemas/address.js';
@@ -44,6 +45,7 @@ import { validatePendingTx } from '../schemas/pendingTx.js';
 import { validateSettings } from '../schemas/settings.js';
 import { validateSignerRecord } from '../schemas/signer.js';
 import { validateWallet } from '../schemas/wallet.js';
+import { validateWatchlistEntry } from '../schemas/watchlistEntry.js';
 
 export class VaultStateError extends Error {
     constructor(msg) {
@@ -111,6 +113,12 @@ export class Vault {
             'pendingAirdrops',
             migratePendingAirdrop,
             validatePendingAirdrop,
+        );
+        this.watchlistEntries = makeCollection(
+            this,
+            'watchlistEntries',
+            migrateWatchlistEntry,
+            validateWatchlistEntry,
         );
         this.settings = makeSingleton(this, 'settings', migrateSettings, validateSettings);
     }

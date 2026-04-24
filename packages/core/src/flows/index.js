@@ -21,6 +21,7 @@ export { mintAsset } from './mintAsset.js';
 export { destroyAsset } from './destroyAsset.js';
 export { broadcastAction } from './broadcastAction.js';
 export { dispenserAction } from './dispenserAction.js';
+export { orderAction, cancelOrder } from './orderAction.js';
 export {
     dispensersForSource,
     dispensersForAddress,
@@ -39,6 +40,18 @@ export {
     clearPendingAirdrop,
 } from './pendingAirdrops.js';
 export { advancedAction } from './advancedAction.js';
+export {
+    getMarkets,
+    getMarket,
+    getMarketHistory,
+    getMarketOrders,
+    getOrderbook,
+} from './marketQueries.js';
+export {
+    listWatchlistForWallet,
+    saveWatchlistEntry,
+    clearWatchlistEntry,
+} from './watchlist.js';
 export {
     listActions,
     getActionFormats,

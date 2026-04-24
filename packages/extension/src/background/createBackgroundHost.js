@@ -29,6 +29,8 @@ const {
     destroyAsset,
     broadcastAction,
     dispenserAction,
+    orderAction,
+    cancelOrder,
     dispensersForSource,
     dispensersForAddress,
     dispensersForToken,
@@ -58,6 +60,14 @@ const {
     walletBalances,
     addressBalances,
     addressHistory,
+    getMarkets,
+    getMarket,
+    getMarketHistory,
+    getMarketOrders,
+    getOrderbook,
+    listWatchlistForWallet,
+    saveWatchlistEntry,
+    clearWatchlistEntry,
 } = flows;
 
 /**
@@ -299,6 +309,8 @@ export function createBackgroundHost(deps) {
     registerHwHandler('action.createList.hw', createList);
     registerHwHandler('action.airdrop.hw', airdropAction);
     registerHwHandler('action.advanced.hw', advancedAction);
+    registerHwHandler('action.order.hw', orderAction);
+    registerHwHandler('action.cancelOrder.hw', cancelOrder);
 
     // Signer status probe — routes straight through the signer bridge
     // without touching vault/SDK. Returns `'idle'` when the bridge
@@ -348,6 +360,14 @@ export function createBackgroundHost(deps) {
 
     host.register('action.dispenser', async (req, { vault, chainRegistry, sdkRegistry }) => {
         return dispenserAction({ ...req, vault, chainRegistry, sdkRegistry });
+    });
+
+    // §41.3.4 ORDER / §41.3.5 CANCEL — DEX signing lanes.
+    host.register('action.order', async (req, { vault, chainRegistry, sdkRegistry }) => {
+        return orderAction({ ...req, vault, chainRegistry, sdkRegistry });
+    });
+    host.register('action.cancelOrder', async (req, { vault, chainRegistry, sdkRegistry }) => {
+        return cancelOrder({ ...req, vault, chainRegistry, sdkRegistry });
     });
 
     // Dispenser discovery + detail — read-only explorer passthroughs
@@ -422,6 +442,38 @@ export function createBackgroundHost(deps) {
 
     host.register('pendingAirdrops.clear', async (req, { vault }) => {
         return clearPendingAirdrop({ ...req, vault });
+    });
+
+    // §41.2–§41.3 DEX market queries — passthroughs to the SDK's
+    // explorer client. Read-only; no vault, no signing.
+
+    host.register('markets.list', async (req, { sdkRegistry }) => {
+        return getMarkets({ ...req, sdkRegistry });
+    });
+    host.register('markets.byPair', async (req, { sdkRegistry }) => {
+        return getMarket({ ...req, sdkRegistry });
+    });
+    host.register('markets.history', async (req, { sdkRegistry }) => {
+        return getMarketHistory({ ...req, sdkRegistry });
+    });
+    host.register('markets.orders', async (req, { sdkRegistry }) => {
+        return getMarketOrders({ ...req, sdkRegistry });
+    });
+    host.register('markets.orderbook', async (req, { sdkRegistry }) => {
+        return getOrderbook({ ...req, sdkRegistry });
+    });
+
+    // §41.2 watchlist CRUD — per-wallet pinned markets. No signing;
+    // vault-local state only.
+
+    host.register('watchlist.listForWallet', async (req, { vault }) => {
+        return listWatchlistForWallet({ ...req, vault });
+    });
+    host.register('watchlist.save', async (req, { vault }) => {
+        return saveWatchlistEntry({ ...req, vault });
+    });
+    host.register('watchlist.clear', async (req, { vault }) => {
+        return clearWatchlistEntry({ ...req, vault });
     });
 
     // §40.10 Advanced Actions Form — generic "submit any action"

@@ -43,6 +43,8 @@ import { DividendForm } from '@xchain-wallet/core/shared/routes/DividendForm.jsx
 import { AirdropForm } from '@xchain-wallet/core/shared/routes/AirdropForm.jsx';
 import { AdvancedActionsForm } from '@xchain-wallet/core/shared/routes/AdvancedActionsForm.jsx';
 import { MigrateToBip39 } from '@xchain-wallet/core/shared/routes/MigrateToBip39.jsx';
+import { MarketsList } from '@xchain-wallet/core/shared/routes/MarketsList.jsx';
+import { MarketView } from '@xchain-wallet/core/shared/routes/MarketView.jsx';
 import { PairSignerForm } from '@xchain-wallet/core/shared/routes/PairSignerForm.jsx';
 import { pairTrezorSigner } from './signers/trezorFactory.js';
 import { pairLedgerSigner } from './signers/ledgerFactory.js';
@@ -66,7 +68,7 @@ function AppInner() {
         /** @type {'welcome' | 'create' | 'import' | 'import-freewallet'} */ ('welcome'),
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market'} */ ('home'),
     );
     const [resumeAirdropId, setResumeAirdropId] = useState(
         /** @type {string | null} */ (null),
@@ -76,6 +78,9 @@ function AppInner() {
     );
     const [dispenserRef, setDispenserRef] = useState(
         /** @type {{ chainId: string, actionIndex: string } | null} */ (null),
+    );
+    const [activeMarket, setActiveMarket] = useState(
+        /** @type {{ chainId: string, tick1: string, tick2: string } | null} */ (null),
     );
 
     const refresh = useCallback(() => {
@@ -309,6 +314,32 @@ function AppInner() {
                     />
                 );
             }
+            if (unlockedView === 'markets' && activeWalletId) {
+                return (
+                    <MarketsList
+                        walletId={activeWalletId}
+                        onOpenMarket={(chainId, tick1, tick2) => {
+                            setActiveMarket({ chainId, tick1, tick2 });
+                            setUnlockedView('market');
+                        }}
+                        onBack={() => setUnlockedView('home')}
+                    />
+                );
+            }
+            if (unlockedView === 'market' && activeMarket && activeWalletId) {
+                return (
+                    <MarketView
+                        walletId={activeWalletId}
+                        chainId={activeMarket.chainId}
+                        tick1={activeMarket.tick1}
+                        tick2={activeMarket.tick2}
+                        onBack={() => {
+                            setActiveMarket(null);
+                            setUnlockedView('markets');
+                        }}
+                    />
+                );
+            }
             if (unlockedView === 'actions' && activeWalletId) {
                 return (
                     <ActionsMenu
@@ -342,6 +373,7 @@ function AppInner() {
                     onReceive={activeWalletId ? () => setUnlockedView('receive') : undefined}
                     onCreateToken={activeWalletId ? () => setUnlockedView('wizard') : undefined}
                     onActions={activeWalletId ? () => setUnlockedView('actions') : undefined}
+                    onMarkets={activeWalletId ? () => setUnlockedView('markets') : undefined}
                     onResumeAirdrop={activeWalletId ? (id) => {
                         setResumeAirdropId(id);
                         setUnlockedView('airdrop');

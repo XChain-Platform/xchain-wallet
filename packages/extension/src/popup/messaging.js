@@ -519,6 +519,64 @@ export function clearPendingAirdrop(req) {
     return /** @type {any} */ (sendMessage('pendingAirdrops.clear', req));
 }
 
+// ─────────────────────────────────────────────────────────────────────
+// §41.2 – §41.3 DEX market queries — read-only passthroughs to the
+// explorer. No signing. All signatures mirror the core flow.
+// ─────────────────────────────────────────────────────────────────────
+
+/** @param {{ chainId: string, tick?: string }} req */
+export function getMarkets(req) {
+    return /** @type {any} */ (sendMessage('markets.list', req));
+}
+/** @param {{ chainId: string, tick1: string, tick2: string }} req */
+export function getMarket(req) {
+    return /** @type {any} */ (sendMessage('markets.byPair', req));
+}
+/** @param {{ chainId: string, tick1: string, tick2: string, address?: string, opts?: object }} req */
+export function getMarketHistory(req) {
+    return /** @type {any} */ (sendMessage('markets.history', req));
+}
+/** @param {{ chainId: string, tick1: string, tick2: string, address?: string, opts?: object }} req */
+export function getMarketOrders(req) {
+    return /** @type {any} */ (sendMessage('markets.orders', req));
+}
+/** @param {{ chainId: string, tick1: string, tick2: string }} req */
+export function getOrderbook(req) {
+    return /** @type {any} */ (sendMessage('markets.orderbook', req));
+}
+
+// §41.2 watchlist CRUD
+/** @param {{ walletId: string }} req */
+export function listWatchlistForWallet(req) {
+    return /** @type {any} */ (sendMessage('watchlist.listForWallet', req));
+}
+/** @param {{ walletId: string, chainId: string, tick1: string, tick2: string }} req */
+export function saveWatchlistEntry(req) {
+    return /** @type {any} */ (sendMessage('watchlist.save', req));
+}
+/** @param {{ id: string }} req */
+export function clearWatchlistEntry(req) {
+    return /** @type {any} */ (sendMessage('watchlist.clear', req));
+}
+
+// §41.3.4 ORDER + §41.3.5 CANCEL signing lanes.
+/** @param {object} opts */
+export function orderAction(opts) {
+    return /** @type {any} */ (sendMessage('action.order', opts));
+}
+/** @param {object} opts */
+export function orderActionHw(opts) {
+    return /** @type {any} */ (sendMessage('action.order.hw', opts));
+}
+/** @param {object} opts */
+export function cancelOrder(opts) {
+    return /** @type {any} */ (sendMessage('action.cancelOrder', opts));
+}
+/** @param {object} opts */
+export function cancelOrderHw(opts) {
+    return /** @type {any} */ (sendMessage('action.cancelOrder.hw', opts));
+}
+
 /**
  * Submit any XChain action (§40.10 Advanced Actions Form). Takes the
  * same shape as the dedicated per-action helpers but accepts an

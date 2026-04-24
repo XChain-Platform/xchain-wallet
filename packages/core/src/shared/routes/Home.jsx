@@ -29,10 +29,11 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {() => void} [props.onReceive]       navigate to Receive sub-route
  * @param {() => void} [props.onCreateToken]   navigate to Token Wizard sub-route (§40.1)
  * @param {() => void} [props.onActions]       navigate to the Actions menu (§40.2+)
+ * @param {() => void} [props.onMarkets]       navigate to the Markets list (§41.2)
  * @param {(id: string) => void} [props.onResumeAirdrop]  navigate to AirdropForm with a pending id
  * @param {() => void} [props.onMigrateToBip39]           navigate to the §40.13 migration wizard when the active wallet is counterwallet-legacy
  */
-export function Home({ onLocked, onSend, onReceive, onCreateToken, onActions, onResumeAirdrop, onMigrateToBip39 }) {
+export function Home({ onLocked, onSend, onReceive, onCreateToken, onActions, onMarkets, onResumeAirdrop, onMigrateToBip39 }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -239,6 +240,14 @@ export function Home({ onLocked, onSend, onReceive, onCreateToken, onActions, on
                         disabled={!onCreateToken}
                     >
                         Create a token
+                    </Button>
+                    <Button
+                        variant="secondary"
+                        block={!isFull}
+                        onClick={onMarkets}
+                        disabled={!onMarkets}
+                    >
+                        Markets
                     </Button>
                     <Button
                         variant="ghost"

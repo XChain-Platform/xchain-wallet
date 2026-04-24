@@ -261,6 +261,34 @@ export function clearPendingAirdrop(req) {
     return /** @type {any} */ (sendMessage('pendingAirdrops.clear', req));
 }
 
+// §41.2–§41.3 DEX market queries + watchlist CRUD
+/** @param {{ chainId: string, tick?: string }} req */
+export function getMarkets(req) { return /** @type {any} */ (sendMessage('markets.list', req)); }
+/** @param {{ chainId: string, tick1: string, tick2: string }} req */
+export function getMarket(req) { return /** @type {any} */ (sendMessage('markets.byPair', req)); }
+/** @param {{ chainId: string, tick1: string, tick2: string, address?: string, opts?: object }} req */
+export function getMarketHistory(req) { return /** @type {any} */ (sendMessage('markets.history', req)); }
+/** @param {{ chainId: string, tick1: string, tick2: string, address?: string, opts?: object }} req */
+export function getMarketOrders(req) { return /** @type {any} */ (sendMessage('markets.orders', req)); }
+/** @param {{ chainId: string, tick1: string, tick2: string }} req */
+export function getOrderbook(req) { return /** @type {any} */ (sendMessage('markets.orderbook', req)); }
+/** @param {{ walletId: string }} req */
+export function listWatchlistForWallet(req) { return /** @type {any} */ (sendMessage('watchlist.listForWallet', req)); }
+/** @param {{ walletId: string, chainId: string, tick1: string, tick2: string }} req */
+export function saveWatchlistEntry(req) { return /** @type {any} */ (sendMessage('watchlist.save', req)); }
+/** @param {{ id: string }} req */
+export function clearWatchlistEntry(req) { return /** @type {any} */ (sendMessage('watchlist.clear', req)); }
+
+// §41.3.4 ORDER + §41.3.5 CANCEL
+/** @param {object} opts */
+export function orderAction(opts) { return /** @type {any} */ (sendMessage('action.order', opts)); }
+/** @param {object} opts */
+export function orderActionHw(opts) { return /** @type {any} */ (sendMessage('action.order.hw', opts)); }
+/** @param {object} opts */
+export function cancelOrder(opts) { return /** @type {any} */ (sendMessage('action.cancelOrder', opts)); }
+/** @param {object} opts */
+export function cancelOrderHw(opts) { return /** @type {any} */ (sendMessage('action.cancelOrder.hw', opts)); }
+
 /** @param {object} opts */
 export function advancedAction(opts) {
     return /** @type {any} */ (sendMessage('action.advanced', opts));

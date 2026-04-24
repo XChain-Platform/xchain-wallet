@@ -14,6 +14,7 @@ export * as settings from './settings.js';
 export * as pendingTx from './pendingTx.js';
 export * as signer from './signer.js';
 export * as pendingAirdrop from './pendingAirdrop.js';
+export * as watchlistEntry from './watchlistEntry.js';
 export * as migrations from './migrations.js';
 
 export { createWallet, validateWallet } from './wallet.js';
@@ -36,6 +37,11 @@ export {
     PENDING_AIRDROP_STAGES,
 } from './pendingAirdrop.js';
 export {
+    createWatchlistEntry,
+    validateWatchlistEntry,
+    watchlistEntryKey,
+} from './watchlistEntry.js';
+export {
     migrate,
     migrateWallet,
     migrateAccount,
@@ -47,4 +53,5 @@ export {
     migrateMultisigConfig,
     migrateSigner,
     migratePendingAirdrop,
+    migrateWatchlistEntry,
 } from './migrations.js';
