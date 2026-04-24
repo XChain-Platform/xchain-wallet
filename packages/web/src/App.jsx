@@ -46,6 +46,7 @@ import { MigrateToBip39 } from '@xchain-wallet/core/shared/routes/MigrateToBip39
 import { PairSignerForm } from '@xchain-wallet/core/shared/routes/PairSignerForm.jsx';
 import { pairTrezorSigner } from './signers/trezorFactory.js';
 import { pairLedgerSigner } from './signers/ledgerFactory.js';
+import { registerSigner as registerLocalSigner } from './signerBridge.js';
 import * as messaging from './messaging.js';
 import { getSessionStatus, listWallets } from './messaging.js';
 import { ExtensionBanner } from './components/ExtensionBanner.jsx';
@@ -304,6 +305,7 @@ function AppInner() {
                         pairLedger={pairLedgerSigner}
                         onBack={() => setUnlockedView('actions')}
                         onPaired={() => setUnlockedView('actions')}
+                        onSignerPaired={registerLocalSigner}
                     />
                 );
             }

@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.69.0] - 2026-04-24
+
+HW Sign follow-up slices 2–3 — renderer↔background port RPC (extension + web) and HW-branch replication across six more action forms. Slice 4 (DispenserForm + AirdropForm + desktop ipc port RPC) still deferred. After this commit every flat-layout review/sign form (SEND / ISSUE / MINT / DESTROY / LOCK / UPDATE DESC / TRANSFER / BROADCAST / DIVIDEND / ADVANCED) renders `HwSignBlock` when the source is a paired Trezor/Ledger, routes the sign request over a real port RPC in the extension popup (or directly in-process in web), and flips Submit copy to "Sign on Trezor"/"Sign on Ledger" gated on `status === 'available'`.
+
+### Added
+
+**Slice 2 — port RPC plumbing**
+
+- `packages/core/src/signers/signerPortProtocol.js` — neutral `{ postMessage, onMessage }` protocol for the renderer↔background signer bridge. `bindRendererPortBridge(port, { getSigner })` dispatches `signer.sign.request` op messages from the background to the right local Signer by id and posts matching `response` messages. `createBackgroundTransport(port)` wraps a port into the `RemoteSignerTransport` shape, correlates responses via a monotonic `reqId`, and rejects in-flight promises with `"signer bridge disconnected"` on port disconnect. Both exported from `@xchain-wallet/core/signers`.
+- `packages/extension/src/popup/signerBridge.js` — opens `chrome.runtime.connect({ name: 'signer-bridge' })` lazily on first `registerSigner`, holds the live `Map<signerId, Signer>` (populated by PairSignerForm after pair), wires `bindRendererPortBridge` to the port. Announces signer ids to the background so `signerBridge.setTransport` lights up on the other side.
+- `packages/extension/src/background/signerBridgeListener.js` — `chrome.runtime.onConnect` listener filtered on `port.name === 'signer-bridge'`. Wraps each port via `createBackgroundTransport`, listens for `signer.register` / `signer.unregister` messages, populates / clears `signerBridge`. On port disconnect, drops only the ids that specific port registered (per-port ownership).
+- `packages/extension/src/background.js` — calls `attachSignerBridgeListener()` at service-worker boot, independent of vault unlock state.
+- `packages/web/src/signerBridge.js` — web's "background" runs in the same JS context as the renderer (via `hostBridge`), so the transport is a direct function-call closure against a module-scoped live-signer Map. Calls `bgSignerBridge.setTransport` directly — no port needed.
+- `packages/core/src/shared/routes/PairSignerForm.jsx` — now captures the live `signer` alongside `pairingInfo` (both returned by the pair factory; previously only `pairingInfo` was destructured) and calls a new optional `onSignerPaired(record.id, signer)` prop after the SignerRecord is persisted. Extension popup App + web App both pass the shell's `registerSigner` here.
+- `packages/core/test/signer-port-protocol.smoke.js` — in-memory port-pair mock exercises both sides of the protocol: round-trip signPsbt/signMessage/getStatus, unknown-signerId surfaces `SignerNotRegisteredError`, thrown errors propagate with name, port disconnect rejects in-flight + future requests, `announce()` posts register messages. No chrome.runtime, no hardware.
+
+**Slice 3 — per-form HW branches + shared credential block**
+
+- `packages/core/src/shared/components/SignCredentials.jsx` — shared sign-screen block that picks between the software password `<Input>` and `<HwSignBlock>` based on `fromAddress.source`. Every review/sign form uses it; the form owns its Submit button + flow, but the credential-gathering UX is now one component. Also exports `isHwSource(fromAddress)` as the canonical detection helper.
+- `packages/extension/src/background/createBackgroundHost.js` — new `registerHwHandler(type, flow)` helper closure. Wraps the HW signing path (load Address → `resolveSigner` → `signerBridge.getTransport` → `buildRemoteSigner` → drop `password` → delegate) so adding more `.hw` handlers is a one-liner each. Registers **10** `.hw` handlers: `action.send.hw` (refactored from v0.68), plus new `action.issue.hw` / `action.mint.hw` / `action.destroy.hw` / `action.broadcast.hw` / `action.dispenser.hw` / `action.dividend.hw` / `action.createList.hw` / `action.airdrop.hw` / `action.advanced.hw`.
+- Messaging helpers — popup + web + desktop each gain `issueTokenHw` / `mintAssetHw` / `destroyAssetHw` / `broadcastActionHw` / `dispenserActionHw` / `dividendActionHw` / `createListHw` / `airdropActionHw` / `advancedActionHw`.
+- Six action forms gain the HW branch using the `SignCredentials` component + matching `.Hw` messaging variant: `IssueTokenForm` (§40.2), `MintForm` (§40.3), `DestroyForm` (§40.4), `TokenAdminForm` (§40.5 lock / description / transfer — shares `issueTokenHw`), `BroadcastForm` (§40.6), `DividendForm` (§40.8), `AdvancedActionsForm` (§40.10). Each branches Submit on `isHwSource`, gates the button on `hwStatus === 'available'`, flips copy to "Sign on Trezor"/"Sign on Ledger", and forwards `source` + `signerId` on the `from` payload so the background can resolve the SignerRecord.
+
+### Changed
+
+- `packages/core/src/signers/index.js` — re-exports `bindRendererPortBridge` + `createBackgroundTransport`.
+- `packages/core/test/hw-sign-e2e.smoke.js` — extended to cover the new wiring:
+  - All **10** `.hw` handlers are registered via `registerHwHandler` (not the old per-handler `host.register` pattern).
+  - Core `signerPortProtocol` module exists + exports the two symbols.
+  - Popup `signerBridge.js` exists, opens `chrome.runtime.connect` with the agreed port name, imports the core binder.
+  - Background `signerBridgeListener.js` exists, filters on port name, calls `signerBridge.setTransport` on register and `clearTransport` on disconnect, wraps via `createBackgroundTransport`.
+  - Background entrypoint calls `attachSignerBridgeListener()` at startup.
+  - `PairSignerForm` threads the live signer through `onSignerPaired`.
+  - Popup App imports + passes `onSignerPaired={registerLocalSigner}`.
+- Smoke count: 49 (+1: `signer-port-protocol.smoke.js`). 49/49 green.
+
+### Deferred (slice 4 — next session)
+
+- `DispenserForm` (§40.7.1) + `AirdropForm` (§40.9) — multi-stage flows with their own sign gates (create dispenser vs buy fill; resumable list→airdrop two-tx sequence). Each needs careful treatment because the HW branch isn't a single swap — the flow has multiple submit points.
+- Desktop ipc port RPC — `packages/desktop/renderer/signerBridge.js` + `packages/desktop/main/signerBridgeListener.js` using `ipcRenderer`/`ipcMain` pair. Pattern matches the extension; different transport.
+- Real-device walkthrough (Trezor in hand; Ledger pending).
+
 ## [0.68.0] - 2026-04-24
 
 HW Sign follow-up — shell integration slice one of three. Wires the core primitives from v0.66.0 + v0.67.0 into live background handlers + messaging helpers + the Send review/sign screen. After this step, the Send form renders `HwSignBlock` (not the password input) when the source address is a paired Trezor/Ledger, gates Submit on `status === 'available'`, and dispatches via `messaging.sendAssetHw` through a background handler that builds the `RemoteSigner` on demand.

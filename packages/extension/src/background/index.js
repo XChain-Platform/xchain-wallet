@@ -13,3 +13,5 @@ export {
 } from './sessionMeta.js';
 export { ApprovalBroker } from './approvalBroker.js';
 export { resolveSdkFactory, createDevMockSdk } from './sdkFactory.js';
+export { attachSignerBridgeListener } from './signerBridgeListener.js';
+export * as signerBridge from './signerBridge.js';

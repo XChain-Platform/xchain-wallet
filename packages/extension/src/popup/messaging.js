@@ -199,6 +199,32 @@ export function getSignerStatus(opts) {
     return /** @type {any} */ (sendMessage('signer.status', opts));
 }
 
+// HW variants for every action flow. Semantics mirror the software
+// counterparts above, minus the `password` field — HW signing keys
+// live on the device. The background handler resolves the
+// `from.addressId` → Address record → SignerRecord, builds a
+// RemoteSigner wrapping the signer-bridge transport, and calls the
+// same core flow with the signer injected.
+
+/** @param {object} opts */
+export function issueTokenHw(opts) { return /** @type {any} */ (sendMessage('action.issue.hw', opts)); }
+/** @param {object} opts */
+export function mintAssetHw(opts) { return /** @type {any} */ (sendMessage('action.mint.hw', opts)); }
+/** @param {object} opts */
+export function destroyAssetHw(opts) { return /** @type {any} */ (sendMessage('action.destroy.hw', opts)); }
+/** @param {object} opts */
+export function broadcastActionHw(opts) { return /** @type {any} */ (sendMessage('action.broadcast.hw', opts)); }
+/** @param {object} opts */
+export function dispenserActionHw(opts) { return /** @type {any} */ (sendMessage('action.dispenser.hw', opts)); }
+/** @param {object} opts */
+export function dividendActionHw(opts) { return /** @type {any} */ (sendMessage('action.dividend.hw', opts)); }
+/** @param {object} opts */
+export function createListHw(opts) { return /** @type {any} */ (sendMessage('action.createList.hw', opts)); }
+/** @param {object} opts */
+export function airdropActionHw(opts) { return /** @type {any} */ (sendMessage('action.airdrop.hw', opts)); }
+/** @param {object} opts */
+export function advancedActionHw(opts) { return /** @type {any} */ (sendMessage('action.advanced.hw', opts)); }
+
 /**
  * Build, sign, and broadcast an ISSUE action — creates or updates a
  * token on the XChain protocol. Fee-paid from the wallet's source

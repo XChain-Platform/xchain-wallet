@@ -507,10 +507,27 @@ assert.throws(() => signerBridge.setTransport('sig-x', 'not a fn'), /must be a f
 
 const bgPath = join(ext, 'src', 'background', 'createBackgroundHost.js');
 const bgSrc = readFileSync(bgPath, 'utf8');
-for (const handler of ['action.send.hw', 'signer.status']) {
+// signer.status is registered directly; the `.hw` action handlers go
+// through the shared `registerHwHandler` helper.
+assert.ok(
+    /host\.register\('signer\.status'/.test(bgSrc),
+    'background host registers signer.status',
+);
+for (const action of [
+    'action.send.hw',
+    'action.issue.hw',
+    'action.mint.hw',
+    'action.destroy.hw',
+    'action.broadcast.hw',
+    'action.dispenser.hw',
+    'action.dividend.hw',
+    'action.createList.hw',
+    'action.airdrop.hw',
+    'action.advanced.hw',
+]) {
     assert.ok(
-        new RegExp(`host\\.register\\('${handler.replace('.', '\\.')}'`).test(bgSrc),
-        `background host registers ${handler}`,
+        new RegExp(`registerHwHandler\\('${action.replace(/\./g, '\\.')}'`).test(bgSrc),
+        `background host registers ${action} via registerHwHandler`,
     );
 }
 assert.ok(
@@ -582,6 +599,107 @@ assert.ok(
     'Send.jsx disables Submit until status=available',
 );
 
+// ---------------------------------------------------------------
+// 12. Port-RPC wiring (core protocol + extension adapters)
+// ---------------------------------------------------------------
+
+// 12a. Core protocol module exports.
+const protoPath = join(core, 'src', 'signers', 'signerPortProtocol.js');
+assert.ok(existsSync(protoPath), 'signerPortProtocol.js exists in core');
+const protoSrc = readFileSync(protoPath, 'utf8');
+for (const sym of ['bindRendererPortBridge', 'createBackgroundTransport']) {
+    assert.ok(
+        new RegExp(`export function ${sym}\\b`).test(protoSrc),
+        `signerPortProtocol exports ${sym}`,
+    );
+}
+// Core barrel re-exports both.
+assert.equal(typeof signers.bindRendererPortBridge, 'function');
+assert.equal(typeof signers.createBackgroundTransport, 'function');
+
+// 12b. Popup-side bridge module.
+const popupBridgePath = join(ext, 'src', 'popup', 'signerBridge.js');
+assert.ok(existsSync(popupBridgePath), 'popup signerBridge.js exists');
+const popupBridgeSrc = readFileSync(popupBridgePath, 'utf8');
+for (const sym of ['registerSigner', 'unregisterSigner', 'registeredIds']) {
+    assert.ok(
+        new RegExp(`export function ${sym}\\b`).test(popupBridgeSrc),
+        `popup signerBridge exports ${sym}`,
+    );
+}
+assert.ok(
+    /chrome\.runtime\.connect/.test(popupBridgeSrc) || /chromeRuntime\.connect/.test(popupBridgeSrc),
+    'popup signerBridge opens chrome.runtime.connect',
+);
+assert.ok(
+    /name: 'signer-bridge'/.test(popupBridgeSrc),
+    'popup signerBridge uses the agreed port name',
+);
+assert.ok(
+    /bindRendererPortBridge/.test(popupBridgeSrc),
+    'popup signerBridge imports the core bridge binder',
+);
+
+// 12c. Background-side port listener.
+const bgListenerPath = join(ext, 'src', 'background', 'signerBridgeListener.js');
+assert.ok(existsSync(bgListenerPath), 'background signerBridgeListener.js exists');
+const bgListenerSrc = readFileSync(bgListenerPath, 'utf8');
+assert.ok(
+    /export function attachSignerBridgeListener/.test(bgListenerSrc),
+    'attachSignerBridgeListener exported',
+);
+assert.ok(
+    /onConnect/.test(bgListenerSrc) && /signer-bridge/.test(bgListenerSrc),
+    'listener filters on the signer-bridge port name',
+);
+assert.ok(
+    /signerBridge\.setTransport/.test(bgListenerSrc),
+    'listener populates signerBridge.setTransport on register',
+);
+assert.ok(
+    /signerBridge\.clearTransport/.test(bgListenerSrc),
+    'listener drops registrations on disconnect',
+);
+assert.ok(
+    /createBackgroundTransport/.test(bgListenerSrc),
+    'listener wraps the port via createBackgroundTransport',
+);
+
+// 12d. Background entrypoint calls attachSignerBridgeListener.
+const bgEntryPath = join(ext, 'src', 'background.js');
+const bgEntrySrc = readFileSync(bgEntryPath, 'utf8');
+assert.ok(
+    /attachSignerBridgeListener\(\)/.test(bgEntrySrc),
+    'background.js attaches the signer-bridge listener at startup',
+);
+
+// 12e. PairSignerForm threads the live signer through onSignerPaired.
+const pairSrc = readFileSync(
+    join(core, 'src', 'shared', 'routes', 'PairSignerForm.jsx'), 'utf8',
+);
+assert.ok(/onSignerPaired/.test(pairSrc), 'PairSignerForm accepts onSignerPaired');
+assert.ok(
+    /setLiveSigner\(signer\)/.test(pairSrc),
+    'PairSignerForm captures the live signer from the pair factory',
+);
+assert.ok(
+    /onSignerPaired\(record\.id, liveSigner\)/.test(pairSrc),
+    'PairSignerForm calls onSignerPaired after the SignerRecord is persisted',
+);
+
+// 12f. Popup App.jsx wires the signer bridge as onSignerPaired.
+const popupAppSrc = readFileSync(
+    join(ext, 'src', 'popup', 'App.jsx'), 'utf8',
+);
+assert.ok(
+    /registerSigner as registerLocalSigner/.test(popupAppSrc),
+    'popup App imports the bridge registerSigner',
+);
+assert.ok(
+    /onSignerPaired=\{registerLocalSigner\}/.test(popupAppSrc),
+    'popup App passes onSignerPaired={registerLocalSigner} to PairSignerForm',
+);
+
 console.log(
-    'OK — hw-sign-e2e smoke (resolveSigner descriptor branches; buildRemoteSigner; full RemoteSigner → TrezorSigner → sdk.decomposePsbt → trezorFormat → Connect chain; submitAction signer param bypass; normalizeSource admits HW; shared UI primitives; signerBridge registry; action.send.hw + signer.status handlers wired; sendAssetHw + getSignerStatus exposed in popup/web/desktop messaging; Send.jsx renders HwSignBlock for HW sources with "Sign on [device]" button)',
+    'OK — hw-sign-e2e smoke (resolveSigner descriptor branches; buildRemoteSigner; full RemoteSigner → TrezorSigner → sdk.decomposePsbt → trezorFormat → Connect chain; submitAction signer param bypass; normalizeSource admits HW; shared UI primitives; signerBridge registry; action.send.hw + signer.status handlers wired; sendAssetHw + getSignerStatus exposed in popup/web/desktop messaging; Send.jsx renders HwSignBlock for HW sources with "Sign on [device]" button; signerPortProtocol bridge both ends + popup bridge + background listener wired; PairSignerForm + popup App register live signer with the bridge)',
 );

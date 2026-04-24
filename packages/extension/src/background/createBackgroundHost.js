@@ -108,6 +108,12 @@ async function loadAddressForHwSigning(vault, req) {
         const addr = await vault.addresses.get(fromAddressId);
         if (addr) return addr;
     }
+    if (req?.source === 'trezor' || req?.source === 'ledger') {
+        // Air-gapped / pending-airdrop flows that drive HW signing
+        // without a persisted Address record (rare) can carry the
+        // source + derivationPath inline on the request. Not used
+        // today; keeps the resolver door open for future callers.
+    }
     // Fallback — find by address string within this wallet. Handles
     // edge cases where the form omits addressId.
     if (req?.from?.address && req?.walletId) {
@@ -257,27 +263,42 @@ export function createBackgroundHost(deps) {
         return sendAsset({ ...req, vault, chainRegistry, sdkRegistry });
     });
 
-    // HW variant — no password. The renderer (popup / web / desktop)
+    // HW variants — no password. The renderer (popup / web / desktop)
     // owns the live TrezorSigner / LedgerSigner instance, registered
-    // against `signerBridge` when the user paired. The handler
+    // against `signerBridge` when the user paired. Each handler
     // resolves the address → HW descriptor → builds a RemoteSigner
-    // whose transport routes through the bridge.
-    host.register('action.send.hw', async (req, { vault, chainRegistry, sdkRegistry }) => {
-        const address = await loadAddressForHwSigning(vault, req);
-        const descriptor = await resolveSigner({ vault, address });
-        if (descriptor.kind !== 'trezor' && descriptor.kind !== 'ledger') {
-            throw new Error('action.send.hw: source address is not a hardware wallet');
-        }
-        const transport = signerBridge.getTransport(descriptor.signerRecord.id);
-        if (!transport) {
-            throw new Error(
-                'Hardware signer is not connected. Open the wallet UI, re-pair if needed, and try again.',
-            );
-        }
-        const signer = buildRemoteSigner(descriptor, transport);
-        const { password: _password, ...rest } = req;
-        return sendAsset({ ...rest, vault, chainRegistry, sdkRegistry, signer });
-    });
+    // whose transport routes through the bridge, then delegates to
+    // the same core flow with the signer injected.
+    function registerHwHandler(type, flow) {
+        host.register(type, async (req, deps) => {
+            const { vault } = deps;
+            const address = await loadAddressForHwSigning(vault, req);
+            const descriptor = await resolveSigner({ vault, address });
+            if (descriptor.kind !== 'trezor' && descriptor.kind !== 'ledger') {
+                throw new Error(`${type}: source address is not a hardware wallet`);
+            }
+            const transport = signerBridge.getTransport(descriptor.signerRecord.id);
+            if (!transport) {
+                throw new Error(
+                    'Hardware signer is not connected. Open the wallet UI, re-pair if needed, and try again.',
+                );
+            }
+            const signer = buildRemoteSigner(descriptor, transport);
+            const { password: _password, ...rest } = req;
+            return flow({ ...rest, ...deps, signer });
+        });
+    }
+
+    registerHwHandler('action.send.hw', sendAsset);
+    registerHwHandler('action.issue.hw', issueToken);
+    registerHwHandler('action.mint.hw', mintAsset);
+    registerHwHandler('action.destroy.hw', destroyAsset);
+    registerHwHandler('action.broadcast.hw', broadcastAction);
+    registerHwHandler('action.dispenser.hw', dispenserAction);
+    registerHwHandler('action.dividend.hw', dividendAction);
+    registerHwHandler('action.createList.hw', createList);
+    registerHwHandler('action.airdrop.hw', airdropAction);
+    registerHwHandler('action.advanced.hw', advancedAction);
 
     // Signer status probe — routes straight through the signer bridge
     // without touching vault/SDK. Returns `'idle'` when the bridge

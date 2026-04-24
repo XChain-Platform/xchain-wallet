@@ -39,6 +39,7 @@ const { checkFirmware } = signersLib;
  * @param {null | (() => Promise<{ signer: any, pairingInfo: PairingInfo }>)} [props.pairLedger]
  * @param {() => void} props.onBack
  * @param {() => void} [props.onPaired]
+ * @param {(signerId: string, signer: any) => void} [props.onSignerPaired]   called after the SignerRecord is persisted — the shell registers the live Signer instance with its port bridge so background sign requests can reach it
  *
  * @typedef {{ vendor: 'trezor' | 'ledger', model: string, deviceIdentifier: string, firmwareVersion: string | null }} PairingInfo
  */
@@ -48,6 +49,7 @@ export function PairSignerForm({
     pairLedger,
     onBack,
     onPaired,
+    onSignerPaired,
 }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
@@ -58,6 +60,7 @@ export function PairSignerForm({
     );
     const [vendor, setVendor] = useState(/** @type {'trezor' | 'ledger' | null} */ (null));
     const [pairingInfo, setPairingInfo] = useState(/** @type {PairingInfo | null} */ (null));
+    const [liveSigner, setLiveSigner] = useState(/** @type {any | null} */ (null));
     const [label, setLabel] = useState('');
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [savedRecord, setSavedRecord] = useState(/** @type {any | null} */ (null));
@@ -72,8 +75,9 @@ export function PairSignerForm({
         setStage('pairing');
         setError(null);
         try {
-            const { pairingInfo: info } = await factory();
+            const { pairingInfo: info, signer } = await factory();
             setPairingInfo(info);
+            setLiveSigner(signer);
             setLabel(`${labelFor(v)} #1`);
             setStage('confirm');
         } catch (err) {
@@ -98,6 +102,9 @@ export function PairSignerForm({
                 label: label.trim() || undefined,
             });
             setSavedRecord(record);
+            if (onSignerPaired && record?.id && liveSigner) {
+                try { onSignerPaired(record.id, liveSigner); } catch { /* shell swallow */ }
+            }
             setStage('done');
         } catch (err) {
             setError(err?.message || 'Save failed.');

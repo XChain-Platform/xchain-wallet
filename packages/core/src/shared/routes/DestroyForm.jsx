@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Screen,
     Button,
@@ -11,6 +11,7 @@ import {
     decoder as decoderLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { SignCredentials } from '../components/SignCredentials.jsx';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -150,24 +151,34 @@ export function DestroyForm({ walletId, onBack }) {
         setStage('review');
     }
 
+    const isHwSource = fromAddress?.source === 'trezor' || fromAddress?.source === 'ledger';
+    const [hwStatus, setHwStatus] = useState('idle');
+    const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
+
     async function handleSubmit(event) {
         event.preventDefault();
-        if (stage === 'submitting' || password.length === 0) return;
+        if (stage === 'submitting') return;
+        if (!isHwSource && password.length === 0) return;
+        if (isHwSource && hwStatus !== 'available') return;
         setStage('submitting');
         setSubmitError(null);
         try {
-            const res = await messaging.destroyAsset({
+            const base = {
                 walletId,
-                password,
                 chainId,
                 from: {
                     address: fromAddress.address,
                     publicKey: fromAddress.publicKey,
                     derivationPath: fromAddress.derivationPath,
                     addressId: fromAddress.id,
+                    source: fromAddress.source,
+                    signerId: fromAddress.signerId,
                 },
                 params: actionParams,
-            });
+            };
+            const res = isHwSource
+                ? await messaging.destroyAssetHw({ ...base, signerId: fromAddress.signerId })
+                : await messaging.destroyAsset({ ...base, password });
             setResult(res);
             setPassword('');
             setStage('done');
@@ -179,8 +190,10 @@ export function DestroyForm({ walletId, onBack }) {
                     : err?.message || 'Destroy failed.',
             );
             setStage('review');
-            passwordRef.current?.focus();
-            passwordRef.current?.select();
+            if (!isHwSource) {
+                passwordRef.current?.focus();
+                passwordRef.current?.select();
+            }
         }
     }
 
@@ -261,20 +274,23 @@ export function DestroyForm({ walletId, onBack }) {
                         ))}
                     </div>
                 ) : null}
-                <Input
-                    ref={passwordRef}
-                    type="password"
-                    label="Password"
-                    hint="Required to sign."
-                    value={password}
-                    onChange={(e) => {
-                        setPassword(e.target.value);
+                <SignCredentials
+                    fromAddress={fromAddress}
+                    chainId={chainId}
+                    password={password}
+                    onPasswordChange={(v) => {
+                        setPassword(v);
                         if (submitError) setSubmitError(null);
                     }}
-                    autoComplete="current-password"
+                    onStatusChange={onHwStatusChange}
+                    passwordRef={passwordRef}
+                    submitError={submitError}
                     disabled={stage === 'submitting'}
-                    error={submitError || undefined}
+                    getSignerStatus={messaging.getSignerStatus}
                 />
+                {isHwSource && submitError ? (
+                    <div role="alert" className={styles.error}>{submitError}</div>
+                ) : null}
                 <div className={styles.actions}>
                     <Button
                         type="button"
@@ -288,9 +304,15 @@ export function DestroyForm({ walletId, onBack }) {
                         type="submit"
                         variant="danger"
                         loading={stage === 'submitting'}
-                        disabled={password.length === 0}
+                        disabled={
+                            isHwSource
+                                ? hwStatus !== 'available'
+                                : password.length === 0
+                        }
                     >
-                        {descriptor ? `Destroy on ${descriptor.displayName}` : 'Destroy'}
+                        {isHwSource
+                            ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                            : (descriptor ? `Destroy on ${descriptor.displayName}` : 'Destroy')}
                     </Button>
                 </div>
             </form>,

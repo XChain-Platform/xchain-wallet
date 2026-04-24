@@ -75,6 +75,25 @@ export function getSignerStatus(opts) {
 }
 
 /** @param {object} opts */
+export function issueTokenHw(opts) { return /** @type {any} */ (sendMessage('action.issue.hw', opts)); }
+/** @param {object} opts */
+export function mintAssetHw(opts) { return /** @type {any} */ (sendMessage('action.mint.hw', opts)); }
+/** @param {object} opts */
+export function destroyAssetHw(opts) { return /** @type {any} */ (sendMessage('action.destroy.hw', opts)); }
+/** @param {object} opts */
+export function broadcastActionHw(opts) { return /** @type {any} */ (sendMessage('action.broadcast.hw', opts)); }
+/** @param {object} opts */
+export function dispenserActionHw(opts) { return /** @type {any} */ (sendMessage('action.dispenser.hw', opts)); }
+/** @param {object} opts */
+export function dividendActionHw(opts) { return /** @type {any} */ (sendMessage('action.dividend.hw', opts)); }
+/** @param {object} opts */
+export function createListHw(opts) { return /** @type {any} */ (sendMessage('action.createList.hw', opts)); }
+/** @param {object} opts */
+export function airdropActionHw(opts) { return /** @type {any} */ (sendMessage('action.airdrop.hw', opts)); }
+/** @param {object} opts */
+export function advancedActionHw(opts) { return /** @type {any} */ (sendMessage('action.advanced.hw', opts)); }
+
+/** @param {object} opts */
 export function issueToken(opts) {
     return /** @type {any} */ (sendMessage('action.issue', opts));
 }

@@ -22,6 +22,7 @@ import {
     ApprovalBroker,
     attachChromeRuntime,
     attachSessionMetaListener,
+    attachSignerBridgeListener,
     createBackgroundHost,
     createDevMockSdk,
     resolveSdkFactory,
@@ -120,6 +121,13 @@ attachSessionMetaListener({
         tearDownHost();
     },
 });
+
+// Signer bridge — always on, independent of vault unlock state. The
+// popup opens a long-lived 'signer-bridge' port when the user pairs
+// a HW device; this listener wraps the port as a transport in
+// `signerBridge` so `action.send.hw` / `signer.status` handlers can
+// route sign requests to the renderer-hosted signer.
+attachSignerBridgeListener();
 
 // Kick ensureHost on startup — no-ops when there's no session.
 ensureHost().catch((err) => {
