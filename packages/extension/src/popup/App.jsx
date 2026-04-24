@@ -60,6 +60,7 @@ import { History } from '@xchain-wallet/core/shared/routes/History.jsx';
 import { LinkForm } from '@xchain-wallet/core/shared/routes/LinkForm.jsx';
 import { ParallelComposer } from '@xchain-wallet/core/shared/routes/ParallelComposer.jsx';
 import { CrossChainSwapForm } from '@xchain-wallet/core/shared/routes/CrossChainSwapForm.jsx';
+import { CrossChainTemplates } from '@xchain-wallet/core/shared/routes/CrossChainTemplates.jsx';
 import { PairSignerForm } from '@xchain-wallet/core/shared/routes/PairSignerForm.jsx';
 import { useBtcAddressesPresent } from '@xchain-wallet/core/shared/hooks/useBtcAddressesPresent.js';
 import { pairTrezorSigner } from '../signers/trezorFactory.js';
@@ -82,7 +83,7 @@ function AppInner() {
         /** @type {'welcome' | 'create' | 'import' | 'import-freewallet'} */ ('welcome'),
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'swap' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'staking-dashboard' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'link-form' | 'parallel-compose' | 'cross-chain-swap'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'swap' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'staking-dashboard' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'link-form' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates'} */ ('home'),
     );
     const [resumeAirdropId, setResumeAirdropId] = useState(
         /** @type {string | null} */ (null),
@@ -101,6 +102,9 @@ function AppInner() {
     );
     const [contractRef, setContractRef] = useState(
         /** @type {{ chainId: string, contractActionIndex: string } | null} */ (null),
+    );
+    const [parallelPrefill, setParallelPrefill] = useState(
+        /** @type {Array<{ chainId: string, action: string, params: Record<string, string>, note?: string }> | null} */ (null),
     );
     const [stakingRef, setStakingRef] = useState(
         /** @type {{ chainId: string, address: string } | null} */ (null),
@@ -405,7 +409,11 @@ function AppInner() {
                 return (
                     <ParallelComposer
                         walletId={activeWalletId}
-                        onBack={() => setUnlockedView('actions')}
+                        initialRows={parallelPrefill || undefined}
+                        onBack={() => {
+                            setParallelPrefill(null);
+                            setUnlockedView('actions');
+                        }}
                     />
                 );
             }
@@ -413,6 +421,18 @@ function AppInner() {
                 return (
                     <CrossChainSwapForm
                         walletId={activeWalletId}
+                        onBack={() => setUnlockedView('actions')}
+                    />
+                );
+            }
+            if (unlockedView === 'cross-chain-templates' && activeWalletId) {
+                return (
+                    <CrossChainTemplates
+                        walletId={activeWalletId}
+                        onLaunch={(prefill) => {
+                            setParallelPrefill(prefill);
+                            setUnlockedView('parallel-compose');
+                        }}
                         onBack={() => setUnlockedView('actions')}
                     />
                 );
@@ -650,6 +670,7 @@ function AppInner() {
                             onLink: () => setUnlockedView('link-form'),
                             onParallel: () => setUnlockedView('parallel-compose'),
                             onCrossChainSwap: () => setUnlockedView('cross-chain-swap'),
+                            onCrossChainTemplates: () => setUnlockedView('cross-chain-templates'),
                             onContacts: () => setUnlockedView('contacts'),
                         })}
                         onBack={() => setUnlockedView('home')}
@@ -705,6 +726,7 @@ function buildActionEntries({
     onLink,
     onParallel,
     onCrossChainSwap,
+    onCrossChainTemplates,
     onContacts,
 }) {
     return [
@@ -809,6 +831,12 @@ function buildActionEntries({
             label: 'Cross-chain swap',
             description: 'Open a SWAP that gives a token on one chain and gets a token on another (§42.8.3). Settles atomically when a counterparty fills the offer.',
             onSelect: onCrossChainSwap,
+        },
+        {
+            id: 'cross-chain-templates',
+            label: 'Cross-chain templates',
+            description: 'Pre-baked multi-chain flows (§42.8.4): launch token + metadata, bridge token pair, cross-chain airdrop. Pre-fills the Parallel composer.',
+            onSelect: onCrossChainTemplates,
         },
         {
             id: 'contacts',

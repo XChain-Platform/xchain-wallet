@@ -40,11 +40,20 @@ const newRowId = () => `row-${++nextRowId}`;
  * rows can be retried in place; pending rows after a failure can be
  * skipped or re-attempted from the Review screen.
  *
+ * Prefill (§42.8.4 templates). When `initialRows` is supplied the
+ * composer seeds with those rows instead of one blank row. Each
+ * prefill row carries a resolved `chainId` and a stringified
+ * `paramsJson`; the composer treats them as ordinary rows from then
+ * on (full edit / remove / re-order). Callers (CrossChainTemplates)
+ * are responsible for resolving each template's `chainHint` to a
+ * concrete chainId from the wallet's available chains.
+ *
  * @param {object} props
  * @param {string} props.walletId
  * @param {() => void} props.onBack
+ * @param {Array<{ chainId: string, action: string, params: Record<string, string>, note?: string }>} [props.initialRows]
  */
-export function ParallelComposer({ walletId, onBack }) {
+export function ParallelComposer({ walletId, onBack, initialRows }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -98,8 +107,23 @@ export function ParallelComposer({ walletId, onBack }) {
                     );
                     return;
                 }
-                // Seed with one empty row pre-filled to the first chain.
-                setRows([blankRow(chains[0], byChain)]);
+                // Seed rows: prefer the caller-supplied prefill (template
+                // launch), otherwise drop a single blank row anchored to
+                // the wallet's first chain.
+                if (Array.isArray(initialRows) && initialRows.length > 0) {
+                    setRows(initialRows.map((r) => ({
+                        id: newRowId(),
+                        chainId: r.chainId,
+                        fromAddressId: pickDefaultAddressId(byChain[r.chainId] || []),
+                        action: r.action,
+                        paramsJson: JSON.stringify(r.params || {}, null, 2),
+                        status: 'pending',
+                        txid: null,
+                        error: null,
+                    })));
+                } else {
+                    setRows([blankRow(chains[0], byChain)]);
+                }
             })
             .catch((err) => {
                 if (!cancelled) setLoadError(err?.message || 'Failed to load wallet.');

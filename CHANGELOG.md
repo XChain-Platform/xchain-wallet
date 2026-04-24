@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.88.0] - 2026-04-24
+
+Phase 4 — Step 16 of 23. Cross-chain templates (§42.8.4). Closes the §42.8 Cross-Chain surface (Steps 12 → 16). Templates are JSON config files in `packages/core/src/templates/cross-chain/*.json` plus a `Templates` route that pre-fills the §42.8.2 Parallel composer.
+
+### Added
+
+- `packages/core/src/templates/cross-chain/launch-token-with-metadata.json` — Jin's "Launch token with cross-chain metadata" reference template (ISSUE on chain A + FILE on chain B + LINK).
+- `packages/core/src/templates/cross-chain/bridge-token-pair.json` — "Bridge token pair" reference template (ISSUE on each chain + LINK).
+- `packages/core/src/templates/cross-chain/cross-chain-airdrop.json` — Jin's "Cross-chain airdrop" reference template (parallel AIRDROP on multiple chains).
+- `packages/core/src/templates/cross-chain/validate.js` — `validateCrossChainTemplate` pure function; checks `id` / `name` / `description` non-empty, `actions` non-empty array, per-row `chainHint ∈ {primary, secondary, tertiary}`, `action` non-empty, `params` is an object.
+- `packages/core/src/templates/cross-chain/index.js` — bundled-template registry. Imports the three JSONs (Vite handles JSON imports natively), validates each at module-load via `validateCrossChainTemplate`, throws on malformed templates, exports the frozen list as `CROSS_CHAIN_TEMPLATES` plus a `templateById(id)` lookup. `validate.js` is a sibling so Node smokes can validate JSONs via `fs` without loading `index.js` (Node 18 lacks JSON-module support without `--experimental-json-modules`).
+- `packages/core/src/shared/routes/CrossChainTemplates.jsx` — list route. Loads the wallet's chains via `messaging.getAddressesByChain`, then renders each template with name + description + per-row preview + "Use template" launcher. The launcher resolves each row's `chainHint` to a concrete `chainId` (primary → chains[0], secondary → chains[1], tertiary → chains[2], with fallback to the last available chain), substitutes resolved tickers into LINK rows' `COIN1` / `COIN2` placeholders, and calls `onLaunch(prefill)`.
+- `packages/core/src/shared/routes/ParallelComposer.jsx` — new `initialRows` prop. When supplied, the composer seeds with those rows (each carrying a resolved `chainId`, action name, params object) instead of one blank row. Rows behave identically to user-added rows from then on (full edit / remove / status tracking).
+- ActionsMenu — new "Cross-chain templates" entry across all three shells.
+- Three App.jsx — new `'cross-chain-templates'` sub-route + `parallelPrefill` state slot. The templates route's `onLaunch` callback writes the prefill into `parallelPrefill` and navigates to `'parallel-compose'`; the parallel composer's Back clears the prefill so the next entry starts blank.
+
+### Notes
+
+- §42.8 surface complete: Step 12 (History thread rendering §23.5), Step 13 (LINK form §42.8.1), Step 14 (Parallel composer §42.8.2), Step 15 (Cross-chain swap §42.8.3), Step 16 (Templates §42.8.4). Phase 4 progress: 16 / 23.
+- Action indices in LINK rows stay as placeholder strings (`<ISSUE action_index from row 1>`) by design. The user fills them in after rows 1–2 confirm and an action_index is known. A future enhancement could auto-substitute these from the running pendingTx state, but that's a richer composer feature than Step 16's scope.
+- Templates are config, not code. Adding a new template means dropping a new `<id>.json` next to the bundled three and adding it to `index.js`'s import list. Per-template structure is enforced at module load, so a malformed addition surfaces at startup rather than as a broken row in the composer.
+- No SDK / explorer / hub bumps — Step 16 is pure UX over the existing `advancedAction` surface (via Step 14's composer).
+
 ## [0.87.0] - 2026-04-24
 
 Phase 4 — Step 15 of 23. Cross-chain swap form (§42.8.3). Reuses the §41.5 `swapAction` core flow with one structural change at the form level: `GIVE_COIN ≠ GET_COIN`. Same SWAP encoder produces both same-chain and cross-chain offers; this is purely a UI separation.

@@ -1,0 +1,45 @@
+{
+    "id": "bridge-token-pair",
+    "name": "Bridge token pair",
+    "description": "ISSUE matching tokens on two chains and LINK them as a cross-chain pair. Useful for protocols that intend a token to be redeemable across chains via off-chain bridging.",
+    "personas": ["Jin", "Devi"],
+    "actions": [
+        {
+            "chainHint": "primary",
+            "action": "ISSUE",
+            "params": {
+                "VERSION": "0",
+                "TICK": "BRIDGEME",
+                "AMOUNT": "1000000",
+                "DIVISIBLE": "true",
+                "DESCRIPTION": "BRIDGEME on chain A — paired with chain B via LINK"
+            },
+            "note": "Issue the canonical supply on chain A (typically the chain with the most liquidity)."
+        },
+        {
+            "chainHint": "secondary",
+            "action": "ISSUE",
+            "params": {
+                "VERSION": "0",
+                "TICK": "BRIDGEME",
+                "AMOUNT": "1000000",
+                "DIVISIBLE": "true",
+                "DESCRIPTION": "BRIDGEME on chain B — paired with chain A via LINK"
+            },
+            "note": "Issue the mirror supply on chain B. The supplies are independent on-chain — the LINK is metadata, not a balance bridge."
+        },
+        {
+            "chainHint": "primary",
+            "action": "LINK",
+            "params": {
+                "VERSION": "0",
+                "COIN1": "BTC",
+                "COIN1_ACTION_INDEX": "<ISSUE action_index from row 1>",
+                "COIN2": "DOGE",
+                "COIN2_ACTION_INDEX": "<ISSUE action_index from row 2>",
+                "MEMO": "BRIDGEME pair"
+            },
+            "note": "Fill the COIN1/COIN2 tickers and action indices after rows 1 + 2 confirm."
+        }
+    ]
+}
