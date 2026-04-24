@@ -698,6 +698,19 @@ export function createMultisigConfig(req) {
 }
 
 /**
+ * Render the multisig output address for the given wallet's persisted
+ * MultisigConfig (P2SH / P2WSH / Taproot-MuSig2). Backs the §22 +
+ * §42.9 Receive integration. Returns the address plus N-of-M label,
+ * scheme tag, and cosigner names so Receive can show the multisig
+ * indicator alongside the QR.
+ *
+ * @param {{ walletId: string, chainId: string }} req
+ */
+export function getMultisigReceiveAddress(req) {
+    return /** @type {any} */ (sendMessage('multisig.receiveAddress', req));
+}
+
+/**
  * Syntax-validate contract source (acorn parse + size check + float
  * warnings + reserved-identifier check). Pure; no network.
  *

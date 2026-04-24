@@ -74,6 +74,7 @@ const {
     broadcastsForAddress,
     linksForAddress,
     createMultisigConfig,
+    receiveMultisigAddress,
     contractValidate,
     contractCheckCodeSize,
     contractSuggestGasLimit,
@@ -615,6 +616,10 @@ export function createBackgroundHost(deps) {
     // a MultisigConfig onto the chosen Wallet record's `multisig` slot.
     host.register('multisig.create', async (req, { vault, sdkRegistry }) => {
         return createMultisigConfig({ ...req, vault, sdkRegistry });
+    });
+
+    host.register('multisig.receiveAddress', async (req, { vault, sdkRegistry }) => {
+        return receiveMultisigAddress({ ...req, vault, sdkRegistry });
     });
 
     host.register('contracts.validate', async (req, { sdkRegistry }) => {

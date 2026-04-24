@@ -391,6 +391,11 @@ export function createMultisigConfig(req) {
     return /** @type {any} */ (sendMessage('multisig.create', req));
 }
 
+/** @param {{ walletId: string, chainId: string }} req */
+export function getMultisigReceiveAddress(req) {
+    return /** @type {any} */ (sendMessage('multisig.receiveAddress', req));
+}
+
 /** @param {object} req */
 export function validateContractCode(req) {
     return /** @type {any} */ (sendMessage('contracts.validate', req));

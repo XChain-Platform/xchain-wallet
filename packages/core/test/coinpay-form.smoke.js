@@ -175,8 +175,8 @@ for (const [shell, pkgPath] of [
     ['web', join(web, 'package.json')],
 ]) {
     const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
-    assert.equal(pkg.dependencies['xchain-sdk'], '^1.10.0',
-        `${shell} pins xchain-sdk ^1.10.0 (bumped Phase 4 Step 1; still carries getCoinpayObligations from ^1.9.1)`);
+    assert.equal(pkg.dependencies['xchain-sdk'], '^1.11.0',
+        `${shell} pins xchain-sdk ^1.11.0 (Phase 4 Step 18: deriveMultisigAddress for P2SH/P2WSH/Taproot-MuSig2)`);
 }
 
 console.log(

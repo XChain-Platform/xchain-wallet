@@ -52,6 +52,15 @@ export function Receive({ walletId, onBack }) {
     const [genBusy, setGenBusy] = useState(false);
     const genInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
+    // §22 + §42.9 multisig receive integration. When the wallet has a
+    // persisted MultisigConfig (Step 17) and the active chain is a
+    // valid network for that config, we fetch and surface the
+    // multisig output address alongside the regular single-key QR.
+    const [multisig, setMultisig] = useState(
+        /** @type {null | { address: string, schemeLabel: string, threshold: number, cosignerCount: number, cosignerNames: string[], scheme: string }} */ (null),
+    );
+    const [multisigQr, setMultisigQr] = useState(/** @type {string | null} */ (null));
+
     useEffect(() => {
         let cancelled = false;
         (async () => {
@@ -92,6 +101,59 @@ export function Receive({ walletId, onBack }) {
         })();
         return () => { cancelled = true; };
     }, [walletId, activeChainId, messaging]);
+
+    // Derive the multisig output address whenever chain changes, if
+    // this wallet has a MultisigConfig. Failures are non-fatal — we
+    // simply don't render the multisig panel (e.g. wallet has no
+    // multisig config, or the active chain doesn't match the config's
+    // network kind). The single-key flow continues to work either way.
+    useEffect(() => {
+        if (!activeChainId) {
+            setMultisig(null);
+            setMultisigQr(null);
+            return undefined;
+        }
+        if (typeof messaging.getMultisigReceiveAddress !== 'function') {
+            // Older shell pin without the multisig helper — keep
+            // backward compat by silently skipping the panel.
+            return undefined;
+        }
+        let cancelled = false;
+        messaging.getMultisigReceiveAddress({ walletId, chainId: activeChainId })
+            .then((rec) => {
+                if (cancelled) return;
+                setMultisig(rec || null);
+            })
+            .catch(() => {
+                if (cancelled) return;
+                setMultisig(null);
+            });
+        return () => { cancelled = true; };
+    }, [walletId, activeChainId, messaging]);
+
+    useEffect(() => {
+        if (!multisig) {
+            setMultisigQr(null);
+            return undefined;
+        }
+        const descriptor = chainRegistry.get(activeChainId ?? '');
+        const uri = descriptor
+            ? uriLib.encodeBip21Uri({
+                scheme: descriptor.uriScheme,
+                address: multisig.address,
+            })
+            : multisig.address;
+        let cancelled = false;
+        QRCode.toDataURL(uri, {
+            errorCorrectionLevel: 'M',
+            margin: 2,
+            width: 200,
+            color: { dark: '#0F172A', light: '#FFFFFF' },
+        })
+            .then((dataUrl) => { if (!cancelled) setMultisigQr(dataUrl); })
+            .catch(() => { if (!cancelled) setMultisigQr(null); });
+        return () => { cancelled = true; };
+    }, [multisig, activeChainId]);
 
     useEffect(() => {
         if (!address) {
@@ -219,6 +281,59 @@ export function Receive({ walletId, onBack }) {
                 </div>
             ) : !loadError ? (
                 <p className={styles.hint}>Loading address…</p>
+            ) : null}
+
+            {multisig ? (
+                <section
+                    role="group"
+                    aria-label="Multisig receive address"
+                    style={{
+                        marginTop: 'var(--xc-space-3)',
+                        padding: 'var(--xc-space-3)',
+                        border: '1px solid var(--xc-border)',
+                        borderRadius: 'var(--xc-radius-md)',
+                        background: 'var(--xc-bg-muted)',
+                    }}
+                >
+                    <header style={{ display: 'flex', alignItems: 'center', gap: 'var(--xc-space-2)', marginBottom: 'var(--xc-space-2)' }}>
+                        <span style={{
+                            display: 'inline-block',
+                            padding: '0 var(--xc-space-1)',
+                            borderRadius: 'var(--xc-radius-sm)',
+                            background: 'var(--xc-accent-secondary, var(--xc-accent-primary))',
+                            color: 'var(--xc-on-accent, #fff)',
+                            fontSize: '0.75rem',
+                            fontWeight: 600,
+                        }}>
+                            {multisig.threshold}-of-{multisig.cosignerCount}
+                        </span>
+                        <strong>{multisig.schemeLabel}</strong>
+                    </header>
+                    {multisigQr ? (
+                        <div className={styles.qrBox}>
+                            <img
+                                src={multisigQr}
+                                alt={`Multisig QR code for ${multisig.address}`}
+                                width={200}
+                                height={200}
+                                className={styles.qr}
+                            />
+                        </div>
+                    ) : (
+                        <div className={styles.qrBox} aria-hidden="true">
+                            <div className={styles.qrPlaceholder}>Rendering multisig QR…</div>
+                        </div>
+                    )}
+                    <div className={styles.addressBox}>
+                        <AddressText address={multisig.address} truncate={false} size="sm" />
+                        <CopyButton value={multisig.address} />
+                    </div>
+                    {multisig.cosignerNames?.length > 0 ? (
+                        <p className={styles.hint} style={{ marginTop: 'var(--xc-space-2)' }}>
+                            Cosigners: {multisig.cosignerNames.join(' · ')}
+                        </p>
+                    ) : null}
+                </section>
             ) : null}
 
             {genOpen ? (

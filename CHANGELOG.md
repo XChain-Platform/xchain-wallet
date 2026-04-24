@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.90.0] - 2026-04-24
+
+Phase 4 — Step 18 of 23. Multisig address derivation + Receive integration (§22 + §42.9). Closes the read-side multisig surface; PSBT construction (Step 19), QR transport (Step 20), and HW MuSig2 (Step 21) follow.
+
+### Cross-repo
+
+- `xchain-sdk` 1.10.0 → 1.11.0 (commit `34292f8` in `xchain-sdk`). New `XChainWallet.deriveMultisigAddress({ scriptTemplate, scheme, network? })` consumes the `scriptTemplate` field that this wallet persists on `MultisigConfig` (Step 17) and renders the output address. P2SH-multisig: `bitcoin.payments.p2sh({ redeem: p2ms({ m, pubkeys }) })`. P2WSH-multisig: `bitcoin.payments.p2wsh({ redeem: p2ms(...) })`. Taproot-MuSig2: `bitcoin.payments.p2tr({ pubkey: aggregatedXOnly })` — key-path-only with no further BIP341 tweaking, because `sdk.musig2.aggregateKeys` already produced the final output key. Returns `{ address, scheme, redeemScript, witnessScript, outputPubkey }`. Manually verified end-to-end: `aggregateKeys` → `deriveMultisigAddress({ scheme: 'taproot-musig2', ... })` produces a `bc1p…` bech32m address; the same cosigner pubkeys with `scheme: 'p2sh-multisig'` produce a `3…` base58 P2SH address; with `scheme: 'p2wsh-multisig'` produce a `bc1q…` 32-byte witness-program bech32 address.
+
+### Added
+
+- `packages/core/src/flows/multisigAddress.js` — `receiveMultisigAddress({ vault, sdkRegistry, walletId, chainId })`. Reads the persisted `MultisigConfig` off the Wallet record, dispatches to `sdk.deriveMultisigAddress`, and returns `{ address, scheme, threshold, cosignerCount, cosignerNames, schemeLabel, redeemScript | witnessScript | outputPubkey }`. Fails loudly when the wallet has no `multisig` config yet, when no SDK is registered for the chainId, or when the SDK is too old (`< 1.11.0`) to expose the method.
+- `packages/extension/src/background/createBackgroundHost.js` — `multisig.receiveAddress` read-only handler.
+- Three-shell messaging — `getMultisigReceiveAddress` helpers in popup + web + desktop `messaging.js`.
+- `packages/core/src/shared/routes/Receive.jsx` — multisig section. When the active wallet has a persisted `MultisigConfig` and a multisig address derives successfully for the active chain, Receive renders a labeled section below the single-key QR with: an N-of-M chip indicator, the scheme label ("2-of-3 P2WSH multisig"), a separate QR for the multisig address, copy-to-clipboard, and the cosigner names below. Failures are silent — the single-key flow keeps working when multisig isn't configured (or the chain doesn't support it).
+
+### Changed
+
+- `packages/extension/package.json`, `packages/web/package.json` — `xchain-sdk` pin bumped `^1.10.0` → `^1.11.0`.
+- `packages/core/test/coinpay-form.smoke.js`, `packages/core/test/sdk-bundle.smoke.js` — pin assertions updated to match the new SDK version.
+
+### Notes
+
+- The Receive section is render-only — no PSBT, no signing. PSBT construction against the persisted `MultisigConfig` is the §22.3 flow that lands in Step 19; this step closes the structural prerequisite (a wallet with a `MultisigConfig` can show its receive address).
+- Network selection follows the active Receive chain. Multisig is BTC-only at launch (§22 + §10.3); the Receive chain picker still lists every chain with addresses, but the multisig section only renders when the active chain's network maps to a valid multisig output (the SDK's `deriveMultisigAddress` throws with a clear error otherwise; the route swallows the error and skips the section).
+- `redeemScript` (P2SH) and `witnessScript` (P2WSH) come back from the SDK and are stored in the result, ready for Step 19's PSBT construction. Taproot-MuSig2 returns the `outputPubkey` for symmetry; PSBT construction will use it directly.
+
 ## [0.89.0] - 2026-04-24
 
 Phase 4 — Step 17 of 23. Multisig wallet creation coordinator (§22 + §42.9). Opens the multisig surface (Steps 17–22). All three schemes (P2SH / P2WSH / Taproot-MuSig2) configurable from this single coordinator; address derivation, PSBT construction, QR transport, HW MuSig2 wiring, and surface-wide badging follow in Steps 18–22.
