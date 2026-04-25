@@ -38,7 +38,7 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {() => void} [props.onHistory]       navigate to the History route (§23 + §23.5 cross-chain threading)
  * @param {() => void} [props.onMigrateToBip39]           navigate to the §40.13 migration wizard when the active wallet is counterwallet-legacy
  */
-export function Home({ onLocked, onSend, onReceive, onCreateToken, onActions, onMarkets, onResumeAirdrop, onResumeCoinpay, onMessaging, onContracts, onStaking, onHistory, onMigrateToBip39 }) {
+export function Home({ onLocked, onSend, onReceive, onCreateToken, onActions, onMarkets, onResumeAirdrop, onResumeCoinpay, onMessaging, onContracts, onStaking, onHistory, onAddresses, onMigrateToBip39 }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -360,6 +360,14 @@ export function Home({ onLocked, onSend, onReceive, onCreateToken, onActions, on
                         disabled={!onHistory}
                     >
                         History
+                    </Button>
+                    <Button
+                        variant="secondary"
+                        block={!isFull}
+                        onClick={onAddresses}
+                        disabled={!onAddresses}
+                    >
+                        Addresses
                     </Button>
                     {onContracts ? (
                         <Button

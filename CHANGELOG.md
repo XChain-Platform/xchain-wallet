@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.97.0] - 2026-04-24
+
+§56.3 Pre-launch — Step 2 of 7. Standalone Addresses route (closes FOLLOWUP 4 from `claude/reports/specs/2026-04-24_phase4-close.md`). The wallet now has a single dedicated surface listing every address it has generated, with per-address multisig badging and a "Multisig only" filter — what the §22 spec called for in passing but no Phase 4 step claimed.
+
+### Added
+
+- `packages/core/src/shared/routes/AddressList.jsx` — new flat list aggregating every address across every chain. Each row carries chain badge + label + shortened address + copy button; rows whose address matches the wallet's `getMultisigReceiveAddress` output get an inline `<MultisigBadge>` indicator. Filter chips: per-chain toggles (re-using History's chip styling) plus a "🔐 Multisig only" chip that's disabled when no multisig is configured. The multisig receive row is synthesized when the address isn't persisted in the wallet's address table — Receive derives it on-demand and doesn't necessarily save it.
+
+- `packages/core/test/address-list.smoke.js` — new smoke. Asserts route exports + `getAddressesByChain` aggregation + `getMultisigReceiveAddress` prefetch + multisig row badging + filter chip + synthetic-row behaviour + Home's `onAddresses` nav prop + the `'addresses'` sub-route wiring across all three shells.
+
+### Changed
+
+- `Home.jsx` — accepts a new `onAddresses` nav prop, surfaces an "Addresses" button between History and Contracts in the secondary nav strip.
+- `packages/extension/src/popup/App.jsx`, `packages/web/src/App.jsx`, `packages/desktop/renderer/App.jsx` — each tracks `'addresses'` as a sub-route, mounts `<AddressList walletId>`, and passes `onAddresses` through to Home.
+
+### Notes
+
+- `xchain-sdk` pin stays at `^1.12.0`. Pure UI / wallet-side step.
+- All 86 smokes pass.
+
 ## [0.96.0] - 2026-04-24
 
 §56.3 Pre-launch — Step 1 of 7. Camera scanner for the multisig paste-inbox (closes FOLLOWUP 2 from `claude/reports/specs/2026-04-24_phase4-close.md`). The sign-screen now offers camera scanning as a first-class path alongside the existing paste-text flow; scanner-driven frames route through the same XCW chunk collector that the paste flow already drives, so there's one verify-and-dispatch path regardless of how chunks arrive.
