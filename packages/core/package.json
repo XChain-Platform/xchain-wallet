@@ -1,6 +1,6 @@
 {
     "name": "@xchain-wallet/core",
-    "version": "1.0.0-rc.1",
+    "version": "1.0.0-rc.2",
     "private": true,
     "description": "Platform-agnostic components, state, SDK integration, and signer implementations for XChain Wallet",
     "type": "module",
@@ -33,8 +33,12 @@
         "react-dom": "^18.3.0"
     },
     "peerDependenciesMeta": {
-        "react": { "optional": true },
-        "react-dom": { "optional": true }
+        "react": {
+            "optional": true
+        },
+        "react-dom": {
+            "optional": true
+        }
     },
     "devDependencies": {
         "@testing-library/dom": "^10.4.0",

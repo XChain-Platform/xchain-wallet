@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0-rc.2] - 2026-04-24
+
+§56.3 Pre-launch — user-initiated track, Step 1 of 5 — Chrome Web Store manifest hardening. First pre-GA slice of the Chrome Web Store submission track.
+
+### Added
+
+- `packages/core/scripts/derive-extension-version.js` — maps wallet semver → Chrome-manifest `version` tuple. Chrome requires 1–4 dot-separated integers 0–65535; wallet RC tags like `1.0.0-rc.1` are rejected. Rule: stable `M.m.p` → `M.m.p`; prerelease `M.m.p-rc.N` → `0.M.m.N`. The leading `0` pins every prerelease strictly below every stable tuple with M≥1, so the CWS upgrade ordering stays monotonic across the RC → GA cut.
+
+- `packages/core/scripts/extension-manifest-audit.js` — 11-rule static audit: MV3 set; `version` CWS-valid; `version` equals `deriveExtensionVersion(root.version)`; `version_name` mirrors `root.version`; `packages/extension/package.json` version matches `root.version`; `description` present and ≤132 chars; `homepage_url` set; 128-px icon present; action toolbar icon set; `content_scripts` entries well-formed; no broad host_permissions (`<all_urls>` / `*://*/*`) without recorded justification. Exits 0 on a clean tree, exits 1 with a per-rule failure report otherwise.
+
+- `packages/core/test/extension-manifest-audit.smoke.js` — smoke gate. Imports `runExtensionManifestAudit()`, asserts every rule passes. Bumps the smoke count to 91.
+
+### Changed
+
+- `packages/extension/manifest.json` — `version` now `0.1.0.2` (derived from wallet `1.0.0-rc.2`). New `version_name: "1.0.0-rc.2"` carries the human-readable semver into Chrome. New `homepage_url: "https://github.com/XChain-platform/xchain-wallet"`. Description expanded from 55 → 110 chars to list the launch chains (still well under the 132-char CWS listing limit). Every future wallet bump must re-derive the manifest version; the smoke fails CI if it doesn't.
+
+### Decided
+
+- **`version_name` for the human semver, `version` for Chrome's ordering.** Chrome's `version` field is integer-tuple-only (no prerelease suffix). We keep the wallet's semver as the CWS submitter-visible string via `version_name` and derive a strictly-monotonic `version` tuple for the upgrade key. Alternative considered (keep them equal by dropping semver prerelease tags entirely during RC) would have coupled wallet versioning to Chrome's rules — rejected.
+
+### Notes
+
+- xchain-sdk pin stays at `^1.13.0`. Pure wallet-side step — no source changes outside the new audit + smoke + manifest fields + version bump.
+- 91 smokes pass (was 90).
+
 ## [1.0.0-rc.1] - 2026-04-24
 
 §56.3 Pre-launch — Step 7 of 7. **Pre-launch CLOSED.** All 7 autonomous steps shipped across v0.96.0 → v1.0.0-rc.1 (camera scanner, AddressList route, hardware-friendly multisig PSBT path + SDK 1.13, per-address multisig configs / Wallet schema v2, static a11y audit gate, reproducible-build scaffolding gate, this RC cut). xchain-sdk pinned at `^1.13.0`. 90 smokes pass.
