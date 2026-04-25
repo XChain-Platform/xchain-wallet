@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.96.0] - 2026-04-24
+
+§56.3 Pre-launch — Step 1 of 7. Camera scanner for the multisig paste-inbox (closes FOLLOWUP 2 from `claude/reports/specs/2026-04-24_phase4-close.md`). The sign-screen now offers camera scanning as a first-class path alongside the existing paste-text flow; scanner-driven frames route through the same XCW chunk collector that the paste flow already drives, so there's one verify-and-dispatch path regardless of how chunks arrive.
+
+### Added
+
+- `packages/core/src/ui/QrScanner.jsx` — generic camera-scanner component. Wraps the native `BarcodeDetector` API against a live `<video>` + `MediaStream`. Requests the environment-facing camera, runs detection on a `requestAnimationFrame` loop, stops every MediaStreamTrack on unmount (no dangling camera LED). Emits each detected QR string through `onFrame`; intentionally does not de-duplicate — callers feeding a chunked transport already no-op on duplicate chunks. Graceful "Camera scanning isn't supported on this browser" fallback when `BarcodeDetector` is unavailable (Firefox, older Safari), pointing users back to the paste-chunk path.
+
+- `packages/core/test/qr-scanner.smoke.js` — new smoke. Asserts the component exports + BarcodeDetector + environment-camera + RAF loop + track cleanup; sign-screen's "Scan with camera" toggle, scanner-open state, `handleScannerFrame` handler, and XCW-collector routing; the legacy "Step 21 will wire the camera scanner" hint has been removed from the paste-inbox copy.
+
+### Changed
+
+- `MultisigSigningSession.jsx` paste-inbox view — new `scannerOpen` state + "Scan with camera" button that mounts `<QrScanner onFrame={handleScannerFrame}>`. The scanner handler feeds each detected string through `addChunkToCollector`, appends it to the visible textarea for the user's sanity, and dispatches the decoded envelope through the same `contributeMultisigNonce` / `contributeMultisigSignature` path the paste flow uses once the collector completes. Scanner closes automatically on completion.
+
+### Notes
+
+- `xchain-sdk` pin stays at `^1.12.0`. Pure wallet-side step.
+- Manifest permissions for the extension popup remain unchanged — MV3 popups get camera access via the browser's `getUserMedia` permission prompt at runtime, without an explicit manifest entry. If camera prompts in the popup turn out to be janky, adding a dedicated permissions page is a follow-up.
+- Chromium-based browsers (Chrome, Edge, modern Opera, Electron-based desktop shell) are the primary target; Firefox + Safari don't expose `BarcodeDetector` yet (as of Q2 2026) and will fall back to the paste-chunk UX via the unsupported message.
+- All 85 smokes pass.
+
 ## [0.95.0] - 2026-04-24
 
 Phase 4 — Step 23 of 23. **Phase 4 CLOSED.** All 23 steps shipped across v0.74.0 → v0.95.0 over a single 2026-04-24 build day. xchain-sdk landed at 1.12.0 (three bumps during the phase: 1.10 MuSig2 primitives, 1.11 deriveMultisigAddress, 1.12 signEcdsa). 84 smokes pass.

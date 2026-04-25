@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Screen, Button, Input, AnimatedQrFrames, MultisigBadge } from '@xchain-wallet/core/ui';
+import { Screen, Button, Input, AnimatedQrFrames, MultisigBadge, QrScanner } from '@xchain-wallet/core/ui';
 import { schemas, uri as uriLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './IssueTokenForm.module.css';
@@ -56,6 +56,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
     const [pasteInput, setPasteInput] = useState('');
     const [collectorState, setCollectorState] = useState(() => createXcwCollector());
     const [pasteResult, setPasteResult] = useState(/** @type {string | null} */ (null));
+    const [scannerOpen, setScannerOpen] = useState(false);
     const [signPassword, setSignPassword] = useState('');
     const [signResult, setSignResult] = useState(/** @type {string | null} */ (null));
 
@@ -179,6 +180,68 @@ export function MultisigSigningSession({ walletId, onBack }) {
         setPasteInput('');
         setPasteResult(null);
     }
+
+    // Camera scanner frame handler — each detected QR string goes
+    // through the same collector the paste path uses, so whichever
+    // transport completes the envelope first wins. Once the collector
+    // completes we dispatch via the existing submit path so UX is
+    // identical.
+    const handleScannerFrame = useCallback(async (text) => {
+        if (!active || busy) return;
+        let next = addChunkToCollector(collectorState, text);
+        if (next === collectorState) {
+            // addChunkToCollector mutates the same object; re-check.
+            next = { ...collectorState };
+        }
+        if (next.error) {
+            setError(next.error);
+            setCollectorState(next);
+            return;
+        }
+        setCollectorState(next);
+        setPasteInput((cur) => (cur.length > 0 ? `${cur}\n${text}` : text));
+        if (!next.complete || !next.psbt) return;
+        // Close scanner + let the normal submit path handle the
+        // decoded envelope (reuses verification + contributeMultisig*
+        // dispatch + busy / refresh choreography).
+        setScannerOpen(false);
+        setBusy(true);
+        try {
+            const envelope = decodeMultisigEnvelope(next.psbt);
+            if (envelope.kind === 'multisig-round-1-reply') {
+                await messaging.contributeMultisigNonce({
+                    sessionId: active.id,
+                    pubkey: envelope.contribution.pubkey,
+                    publicNonceHex: envelope.contribution.publicNonce,
+                });
+                setPasteResult(`Round 1 nonce from ${shortPk(envelope.contribution.pubkey)} scanned.`);
+            } else if (envelope.kind === 'multisig-round-2-reply') {
+                await messaging.contributeMultisigSignature({
+                    sessionId: active.id,
+                    pubkey: envelope.contribution.pubkey,
+                    signatureHex: envelope.contribution.sig,
+                });
+                setPasteResult(`Round 2 partial sig from ${shortPk(envelope.contribution.pubkey)} scanned.`);
+            } else if (envelope.kind === 'multisig-classical-reply') {
+                await messaging.contributeMultisigSignature({
+                    sessionId: active.id,
+                    pubkey: envelope.contribution.pubkey,
+                    signatureHex: envelope.contribution.sig,
+                });
+                setPasteResult(`ECDSA signature from ${shortPk(envelope.contribution.pubkey)} scanned.`);
+            } else {
+                setError(`Scanned envelope kind "${envelope.kind}" is not a cosigner reply.`);
+            }
+            await refreshActive(active.id);
+            await refreshList();
+            setCollectorState(createXcwCollector());
+            setPasteInput('');
+        } catch (err) {
+            setError(err?.message || 'Failed to apply scanned contribution.');
+        } finally {
+            setBusy(false);
+        }
+    }, [active, busy, collectorState, messaging, refreshActive, refreshList]);
 
     async function handleSignLocally() {
         if (!active || signPassword.length === 0) return;
@@ -474,11 +537,14 @@ export function MultisigSigningSession({ walletId, onBack }) {
             <>
                 <p className={styles.successTitle}>Scan cosigner reply</p>
                 <p className={styles.hint}>
-                    Paste each XCW chunk on its own line — the wallet reassembles
-                    the envelope, validates the fingerprint against this session,
-                    and applies the contribution. Step 21 will wire the camera
-                    scanner that fills this textarea automatically.
+                    Scan the cosigner's animated QR with your camera, or paste
+                    each XCW chunk on its own line. The wallet reassembles the
+                    envelope, validates the fingerprint against this session,
+                    and applies the contribution.
                 </p>
+                {scannerOpen ? (
+                    <QrScanner onFrame={handleScannerFrame} alt="Cosigner reply QR scanner" />
+                ) : null}
                 <textarea
                     aria-label="Cosigner reply chunks"
                     value={pasteInput}
@@ -493,13 +559,20 @@ export function MultisigSigningSession({ walletId, onBack }) {
                 {pasteResult ? <p className={styles.hint}>{pasteResult}</p> : null}
                 {error ? <div role="alert" className={styles.error}>{error}</div> : null}
                 <div className={styles.actions}>
+                    <Button
+                        variant={scannerOpen ? 'ghost' : 'primary'}
+                        onClick={() => setScannerOpen((v) => !v)}
+                        disabled={busy}
+                    >
+                        {scannerOpen ? 'Stop scanner' : 'Scan with camera'}
+                    </Button>
                     <Button onClick={handlePasteSubmit} disabled={busy || pasteInput.trim().length === 0}>
                         {busy ? 'Processing…' : 'Submit chunks'}
                     </Button>
                     <Button variant="ghost" onClick={resetCollector} disabled={busy}>
                         Reset collector
                     </Button>
-                    <Button variant="ghost" onClick={() => setView('tracker')}>
+                    <Button variant="ghost" onClick={() => { setScannerOpen(false); setView('tracker'); }}>
                         Back to tracker
                     </Button>
                 </div>
