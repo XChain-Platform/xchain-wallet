@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0-rc.6] - 2026-04-24
+
+§56.3 Pre-launch — user-initiated track, Step 5 of 5 — accessibility audit readiness packet. Closes the autonomous portion of the user-initiated track. Pure-documentation slice; the user (Dankest, LLC) hands the packet to an external accessibility-audit vendor when they're ready to engage.
+
+### Added
+
+- `claude/reports/specs/2026-04-24_a11y-audit-readiness.md` (in the platform repo, gitignored) — readiness packet. Sections:
+  - **Scope** — what the static gate already covers (button label / img alt / input label / textarea label / div-onclick role+tabIndex; 0 violations across 64 shared routes + 9 UI primitives) vs. what the external audit covers (color contrast, focus-visible, live-region timing, keyboard traps, screen-reader walkthroughs, reduced-motion verification, touch-target sizing per WCAG 2.5.5, forced-colors / Windows high-contrast, reflow + zoom per WCAG 1.4.10). Out-of-scope: i18n / RTL, audio/video, dApp pages.
+  - **Surface inventory + walkthrough targets** — per-route AT expectations across 7 surface groups (Onboarding, Lock/unlock, Home/send/receive, Sign-screen with all 8+ action types separated, Multisig coordinator, Approval popup, Settings + key management). The sign-screen entries pin what AT should announce per action so the auditor can grade exhaustively.
+  - **Assistive technologies** — NVDA + JAWS + VoiceOver (macOS + iOS) mandatory; TalkBack + Orca recommended. Four-shell coverage matrix (popup / full-screen / web / desktop renderer).
+  - **Already-addressed during pre-launch** — the static-gate baseline, the v1.0.0-rc.4 reduced-motion implementation, multisig session round labels, sign-screen safety-rail rendering, MultisigBadge aria. Vendor doesn't waste hours rediscovering these.
+  - **Audit deliverables we expect** — WCAG-success-criterion-keyed findings with severity + reproduction including AT version + viewport, screen-reader transcripts, coverage matrix, regression test recommendations, per-criterion pass/fail at WCAG 2.2 AA so the GA release notes can claim conformance.
+  - **Coordination** — scope-lock at rc.N tag, weekly check-ins for engagements > 2 weeks, no fixed disclosure window (a11y findings are not security-sensitive).
+  - **Vendor inquiry template** — paste-ready email; recommended starting-point vendor list (Deque, Knowbility, TPGi, Tenon, Microsoft Accessibility, SSB BART, Equally AI) with the explicit caveat that the user should cross-reference published wallet / fintech audits before selection.
+  - **Post-audit close-out checklist** — Critical resolved before GA, Major resolved-or-rationalized, Minor/Advisory issue-tracked, conformance statement attached to release notes, static gate extended with any new rules the audit suggests.
+
+### Decided
+
+- **WCAG 2.2 AA target.** 2.1 AA is the legacy baseline most U.S. compliance tools test against; 2.2 AA is the current standard and includes new criteria that matter for crypto-wallet UX (e.g., 2.5.7 Dragging Movements — relevant for QR-frame stepping; 3.3.7 Redundant Entry — relevant for multisig participant-list re-entry across sessions). Targeting 2.2 AA up front avoids re-auditing in 2027.
+- **Per-criterion pass/fail in the deliverable.** Lets the GA release notes claim "WCAG 2.2 AA conformant per [vendor], dated [DATE]" — material to potential institutional users who require an accessibility statement before adopting.
+- **Pre-launch user-initiated track CLOSED at this commit (autonomous portion).** Three items remain that only the user can drive: external security audit engagement (packet ready at v1.0.0-rc.5), external accessibility audit engagement (packet ready at this rc.6), Chrome Web Store submission (manifest hardened at rc.2, privacy policy + checklist drafted at rc.3). Plus the byte-for-byte run-twice repro-build verification on a clean dev machine at GA cut.
+
+### Notes
+
+- xchain-sdk pin stays at `^1.13.0`. No source changes; documentation + version bump only.
+- 92 smokes pass.
+- Pre-launch user-initiated autonomous portion CLOSED at v1.0.0-rc.6. See `claude/reports/specs/2026-04-24_prelaunch-userinit-close.md` for the track-level retrospective (separate commit if needed; otherwise this CHANGELOG entry is the close marker).
+
 ## [1.0.0-rc.5] - 2026-04-24
 
 §56.3 Pre-launch — user-initiated track, Step 4 of 5 — security audit readiness packet. Pure-documentation slice that packages everything an external audit vendor needs to scope, build, and execute the engagement.
