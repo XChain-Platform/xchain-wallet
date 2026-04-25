@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Screen, Button, Input, AnimatedQrFrames } from '@xchain-wallet/core/ui';
+import { Screen, Button, Input, AnimatedQrFrames, MultisigBadge } from '@xchain-wallet/core/ui';
 import { schemas, uri as uriLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './IssueTokenForm.module.css';
@@ -345,7 +345,14 @@ export function MultisigSigningSession({ walletId, onBack }) {
                                     className={styles.row}
                                     onClick={() => setActiveId(s.id)}
                                 >
-                                    <span className={styles.rowTitle}>{schemeLabel(s)}</span>
+                                    <span className={styles.rowTitle}>
+                                        <MultisigBadge
+                                            threshold={s.threshold}
+                                            cosignerCount={s.cosignerPubkeys.length}
+                                            scheme={s.scheme}
+                                            size="sm"
+                                        />
+                                    </span>
                                     <span className={styles.rowMeta}>
                                         {summary?.label}: {summary?.current} of {summary?.threshold}
                                         {' · '}{s.status}
@@ -518,7 +525,12 @@ export function MultisigSigningSession({ walletId, onBack }) {
                 {summary?.label}: {summary?.current} of {summary?.threshold}
             </p>
             <p className={styles.hint}>
-                {schemeLabel(active)} · status: {active.status}
+                <MultisigBadge
+                    threshold={active.threshold}
+                    cosignerCount={active.cosignerPubkeys.length}
+                    scheme={active.scheme}
+                />
+                {' · status: '}{active.status}
             </p>
             {isMusig2 ? (
                 <p className={styles.hint}>

@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.94.0] - 2026-04-24
+
+Phase 4 — Step 22 of 23. Multisig badges surface-wide (§22 + §22.4). The N-of-M / scheme indicator now appears on every surface where a single-key surface would normally show a plain address: Receive, History, Home balances, and the multisig sign-screen tracker. Step 23 closes Phase 4.
+
+### Added
+
+- `packages/core/src/ui/MultisigBadge.jsx` — small chip component. Props: `{ threshold, cosignerCount, scheme, size? }`. Renders `"<T>-of-<N> <P2SH | P2WSH | MuSig2>"` with a scheme-tinted background (amber for P2SH, blue for P2WSH, violet for taproot-MuSig2 — distinct enough that a glance tells the schemes apart without reading the tag). `aria-label` is the human form `"2 of 3 multisig (P2WSH multisig)"`. Carries `data-testid="multisig-badge"` + `data-scheme` so layered smokes / e2e tests can assert presence on each surface.
+
+- History route — new `🔐 Multisig only` filter chip alongside the existing `🔗 Cross-chain actions` chip. Filter resolves the wallet's multisig address via `messaging.getMultisigReceiveAddress` once on mount; chip is disabled (with explanatory tooltip) when no multisig is configured. When active, filters entries to those with source/dest matching the multisig address.
+
+### Changed
+
+- `Receive.jsx` — replaced the inline N-of-M pill (a hand-styled `<span>`) with `<MultisigBadge>`. Same visible information, but consistent with every other multisig surface and exercised by a single component-level smoke instead of per-surface assertions.
+
+- `MultisigSigningSession.jsx` — the session list and the detail-view header now render `<MultisigBadge>` instead of the inline `schemeLabel` text. The list view's badge is `size="sm"` so it sits inline with the meta row; the header badge is the default `size="md"` next to the status text.
+
+- `ChainBalanceCard.jsx` — accepts an optional `multisig` prop (`{ threshold, cosignerCount, scheme }`) and renders the badge in the card header alongside the chain badge + address-count meta. `Home.jsx` resolves the wallet's multisig at mount and passes the resolved record only to BTC chain cards (multisig is BTC-only at launch per §10.3 / §22.4). The badge sits in the header so the multisig nature of a chain card is visible at a glance, alongside the chain's existing identity badge.
+
+### Smoked
+
+- New `packages/core/test/multisig-badge.smoke.js`. Asserts the component exports + 3-scheme tone map + ARIA label + `data-testid` + `data-scheme`; Receive integration; History "Multisig only" filter chip + the `getMultisigReceiveAddress` prefetch + the chip's `aria-pressed` state; ChainBalanceCard's `multisig` prop + Home's BTC-only badge gate; MultisigSigningSession's header + list-row badge wiring against the session's `threshold` + `cosignerPubkeys.length`.
+
+- `multisig-address.smoke.js` (Step 18) — softened the "N-of-M indicator on Receive" assertion to accept either the original inline pill OR the new `<MultisigBadge>` form. The component-level smoke owns the strict shape assertion now.
+
+### Notes
+
+- xchain-sdk pin stays at `^1.12.0`. Pure UI / wallet-side step.
+- All 84 smokes pass.
+
 ## [0.93.0] - 2026-04-24
 
 Phase 4 — Step 21 of 23. MuSig2 hardware-signer integration + local-cosigner contribution flow (§22.3 + §42.9). The wallet now has the full local-signing path for both MuSig2 and classical (P2SH/P2WSH) multisig: software signer produces real cryptographic contributions; hardware signers surface the spec-required "Update firmware to use MuSig2 on this device" error. Step 22 surfaces multisig badges across the rest of the UI (Addresses, History, Balances).

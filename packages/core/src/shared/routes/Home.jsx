@@ -56,6 +56,9 @@ export function Home({ onLocked, onSend, onReceive, onCreateToken, onActions, on
     const [pendingCoinpays, setPendingCoinpays] = useState(
         /** @type {any[]} */ ([]),
     );
+    const [multisig, setMultisig] = useState(
+        /** @type {{ threshold: number, cosignerCount: number, scheme: string } | null} */ (null),
+    );
     const [loadError, setLoadError] = useState(
         /** @type {string | null} */ (null),
     );
@@ -80,6 +83,26 @@ export function Home({ onLocked, onSend, onReceive, onCreateToken, onActions, on
                 } catch (err) {
                     if (!cancelled) {
                         setLoadError(err?.message || 'Failed to load balances.');
+                    }
+                }
+                // §22 multisig indicator (Step 22). Best-effort — the
+                // call fails when no multisig is configured, which is
+                // the typical state for a fresh wallet.
+                if (typeof messaging.getMultisigReceiveAddress === 'function') {
+                    const btcChain = chainRegistry.byCoin('bitcoin')[0]?.id;
+                    if (btcChain) {
+                        messaging.getMultisigReceiveAddress({ walletId, chainId: btcChain })
+                            .then((r) => {
+                                if (cancelled) return;
+                                if (r && Number.isInteger(r.threshold)) {
+                                    setMultisig({
+                                        threshold: r.threshold,
+                                        cosignerCount: r.cosignerCount,
+                                        scheme: r.scheme,
+                                    });
+                                }
+                            })
+                            .catch(() => { /* no multisig configured — silent */ });
                     }
                 }
                 if (typeof messaging.listPendingAirdropsForWallet === 'function') {
@@ -265,11 +288,18 @@ export function Home({ onLocked, onSend, onReceive, onCreateToken, onActions, on
                         {Object.entries(balances).map(([chainId, entries]) => {
                             const descriptor = chainRegistry.get(chainId);
                             if (!descriptor) return null;
+                            // §22.4: multisig is BTC-only at launch
+                            // (§10.3) so the badge only renders on the
+                            // BTC card. When the wallet supports
+                            // multiple multisig configs in the future
+                            // the indicator becomes per-address.
+                            const isBtc = descriptor.coin === 'bitcoin';
                             return (
                                 <ChainBalanceCard
                                     key={chainId}
                                     descriptor={descriptor}
                                     entries={entries}
+                                    multisig={isBtc ? multisig : null}
                                 />
                             );
                         })}

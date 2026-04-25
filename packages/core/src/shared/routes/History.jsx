@@ -63,6 +63,8 @@ export function History({ walletId, onBack }) {
     const [loadingChains, setLoadingChains] = useState(/** @type {Set<string>} */ (new Set()));
     const [enabledChains, setEnabledChains] = useState(/** @type {Set<string>} */ (new Set()));
     const [crossChainOnly, setCrossChainOnly] = useState(false);
+    const [multisigOnly, setMultisigOnly] = useState(false);
+    const [multisigAddress, setMultisigAddress] = useState(/** @type {string | null} */ (null));
     const [selectedKey, setSelectedKey] = useState(/** @type {string | null} */ (null));
     const [peerCache, setPeerCache] = useState(
         /** @type {Record<string, { loading: boolean, action: any | null, error: string | null }>} */ ({}),
@@ -85,6 +87,25 @@ export function History({ walletId, onBack }) {
             .catch((err) => {
                 if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
             });
+        return () => { cancelled = true; };
+    }, [walletId, messaging]);
+
+    // §22 Multisig-only filter (Step 22). Resolve the wallet's
+    // multisig receive address up-front so the chip can filter
+    // entries by exact match without re-running deriveMultisigAddress
+    // on every render. Best-effort — silently leaves the chip
+    // disabled when no multisig is configured or when the BTC chain
+    // isn't in the registry.
+    useEffect(() => {
+        let cancelled = false;
+        const btcChain = chainRegistry.byCoin('bitcoin')[0]?.id;
+        if (!btcChain) return undefined;
+        messaging.getMultisigReceiveAddress({ walletId, chainId: btcChain })
+            .then((r) => {
+                if (cancelled) return;
+                if (r && typeof r.address === 'string') setMultisigAddress(r.address);
+            })
+            .catch(() => { /* no multisig configured — chip stays disabled */ });
         return () => { cancelled = true; };
     }, [walletId, messaging]);
 
@@ -179,8 +200,15 @@ export function History({ walletId, onBack }) {
     const visibleEntries = useMemo(() => {
         let list = entries.filter((e) => enabledChains.has(e.chainId));
         if (crossChainOnly) list = list.filter((e) => Boolean(e.link));
+        if (multisigOnly && multisigAddress) {
+            const lower = multisigAddress.toLowerCase();
+            list = list.filter((e) => {
+                const a = (e.address || e.source || e.dest || '').toLowerCase();
+                return a === lower;
+            });
+        }
         return list;
-    }, [entries, enabledChains, crossChainOnly]);
+    }, [entries, enabledChains, crossChainOnly, multisigOnly, multisigAddress]);
 
     // For drawing the vertical connector: an entry is "threaded with
     // the entry above it" iff both sides are linked AND the row above
@@ -316,6 +344,18 @@ export function History({ walletId, onBack }) {
                     title="Show only entries that are one side of a LINK pairing (§23.5)."
                 >
                     🔗 Cross-chain actions
+                </button>
+                <button
+                    type="button"
+                    onClick={() => setMultisigOnly((v) => !v)}
+                    disabled={!multisigAddress}
+                    className={`${styles.chip} ${styles.chipCrossChain} ${multisigOnly ? styles.chipActive : ''}`}
+                    aria-pressed={multisigOnly}
+                    title={multisigAddress
+                        ? 'Show only entries on this wallet\'s multisig address (§22).'
+                        : 'No multisig address configured for this wallet.'}
+                >
+                    🔐 Multisig only
                 </button>
             </div>
 

@@ -7,6 +7,7 @@ import {
     ChainBadge,
     AddressText,
     CopyButton,
+    MultisigBadge,
 } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
@@ -296,17 +297,11 @@ export function Receive({ walletId, onBack }) {
                     }}
                 >
                     <header style={{ display: 'flex', alignItems: 'center', gap: 'var(--xc-space-2)', marginBottom: 'var(--xc-space-2)' }}>
-                        <span style={{
-                            display: 'inline-block',
-                            padding: '0 var(--xc-space-1)',
-                            borderRadius: 'var(--xc-radius-sm)',
-                            background: 'var(--xc-accent-secondary, var(--xc-accent-primary))',
-                            color: 'var(--xc-on-accent, #fff)',
-                            fontSize: '0.75rem',
-                            fontWeight: 600,
-                        }}>
-                            {multisig.threshold}-of-{multisig.cosignerCount}
-                        </span>
+                        <MultisigBadge
+                            threshold={multisig.threshold}
+                            cosignerCount={multisig.cosignerCount}
+                            scheme={multisig.scheme}
+                        />
                         <strong>{multisig.schemeLabel}</strong>
                     </header>
                     {multisigQr ? (
