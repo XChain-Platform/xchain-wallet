@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.95.0] - 2026-04-24
+
+Phase 4 — Step 23 of 23. **Phase 4 CLOSED.** All 23 steps shipped across v0.74.0 → v0.95.0 over a single 2026-04-24 build day. xchain-sdk landed at 1.12.0 (three bumps during the phase: 1.10 MuSig2 primitives, 1.11 deriveMultisigAddress, 1.12 signEcdsa). 84 smokes pass.
+
+### Phase 4 retrospective
+
+§42 Contracts / Staking / Cross-Chain / Multisig + §22 Multisig Foundations are all in. The wallet now has:
+
+- **Smart contracts (§42.1–§42.6).** Browse / detail / EXECUTE / DEPOSIT / WITHDRAW / DEPLOY (Monaco editor) flows wired to `xchain-vm` via SDK (Steps 2–6).
+- **BTC Staking (§42.7).** Dashboard + STAKE / UNSTAKE / DELEGATE / REVOKE_DELEGATION / CLAIM_REWARDS forms + operator/validator dashboard (Steps 7–11).
+- **Cross-chain (§42.8).** History route + cross-chain thread rendering, LINK two-panel form, parallel composer, cross-chain swap, cross-chain templates (Steps 12–16).
+- **Multisig (§22 + §42.9).** All three schemes (P2SH, P2WSH, Taproot-MuSig2). Wallet creation coordinator → address derivation + Receive integration → sign-round persistence with dual-mode tracker → PSBT-QR cosigner round-trip → MuSig2 hardware-signer abstracts + software-signer impl + local-cosigner contribution flow → multisig badges surface-wide (Steps 17–22).
+
+### Hand-off to §56.3 pre-launch track
+
+Phase 4 closes the §42 surface. **§56.3 pre-launch is its own track, not a Phase 5.** Items queued behind Phase 4:
+
+- External security audit (cryptography in xchain-sdk; wallet flows; shell wiring).
+- A11y audit for sign-screen + multisig surfaces.
+- Reproducible-build verification (`packages/desktop/REPRODUCIBLE_BUILDS.md` already documents the procedure).
+- Chrome Web Store submission.
+- Four small follow-ups documented in `claude/reports/specs/2026-04-24_phase4-close.md` (hardware classical multisig path, camera scanner for paste-inbox, per-address multisig configs, standalone `<AddressList>` route).
+
+### Reference
+
+- Phase 4 close report: [`claude/reports/specs/2026-04-24_phase4-close.md`](../../claude/reports/specs/2026-04-24_phase4-close.md) — full step ledger, spec deltas surfaced during build, MuSig2 hardware-signer compat matrix, and the four follow-ups deferred to §56.3.
+
+This commit is a marker; no source changes (other than the version bump).
+
 ## [0.94.0] - 2026-04-24
 
 Phase 4 — Step 22 of 23. Multisig badges surface-wide (§22 + §22.4). The N-of-M / scheme indicator now appears on every surface where a single-key surface would normally show a plain address: Receive, History, Home balances, and the multisig sign-screen tracker. Step 23 closes Phase 4.
