@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0-rc.4] - 2026-04-24
+
+§56.3 Pre-launch — user-initiated track, Step 3 of 5 — `prefers-reduced-motion` on `AnimatedQrFrames`. Closes the deferred a11y polish item recorded in `claude/reports/specs/2026-04-24_prelaunch-close.md` § "Things deferred from autonomous work" — previously queued for the external a11y audit; the fix is autonomously tractable and the audit gets a cleaner starting point.
+
+### Changed
+
+- `packages/core/src/ui/AnimatedQrFrames.jsx` — when the user has `prefers-reduced-motion: reduce` set at the OS level, the auto-advance interval is suspended and Prev / Next buttons render below the QR for manual stepping. The cadence label flips from `3 fps` to `manual`. The wrapper's `aria-label` is augmented with `; advance manually`. A new `data-reduced-motion` attribute is exposed for downstream styling/tests. The change is observed via `window.matchMedia('(prefers-reduced-motion: reduce)')` with both modern (`addEventListener`) and Safari-<14 (`addListener`) listener wiring; the preference can flip mid-session and the component reacts. Single-frame inputs continue to render statically (no controls needed).
+
+### Added
+
+- `packages/core/test/animated-qr-reduced-motion.smoke.js` — eight static-text checks over the component source: matchMedia subscription, useState hook, change-listener wiring with Safari fallback, interval suspension on `reducedMotion`, gated prev/next rendering, button aria-labels, cadence label flip, wrapper aria-label augmentation, `data-reduced-motion` attribute. Bumps the smoke count to 92.
+
+### Decided
+
+- **Manual stepping over a frozen first frame.** `prefers-reduced-motion` could be honored by simply pinning the QR to frame 1 and showing nothing else, but multi-frame PSBT QRs (used for §22.3 multisig PSBT-QR cosigner round-trips and §20.3 chunked PSBT transport) are non-functional if you can't reach frames 2…N. Manual prev/next preserves the function while removing the motion. Alternative considered (slow the auto-advance to ~0.5 fps) was rejected — vestibular-trigger users still perceive the motion at any auto-advance rate, and "no motion" is the documented intent of the media-query value.
+
+### Notes
+
+- xchain-sdk pin stays at `^1.13.0`. UI-package change only.
+- 92 smokes pass.
+
 ## [1.0.0-rc.3] - 2026-04-24
 
 §56.3 Pre-launch — user-initiated track, Step 2 of 5 — Chrome Web Store privacy policy + submission checklist. Pure documentation slice; the user (Dankest, LLC) is the only one who can host the policy URL and file the CWS submission, so this step packages everything they'll need into one place.

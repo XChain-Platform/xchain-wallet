@@ -1,6 +1,6 @@
 {
     "name": "@xchain-wallet/extension",
-    "version": "1.0.0-rc.3",
+    "version": "1.0.0-rc.4",
     "private": true,
     "description": "Chrome MV3 extension shell for XChain Wallet — popup, full-screen, background service worker, content script, injected provider",
     "main": "./src/index.js",
