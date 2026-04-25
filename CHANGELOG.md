@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.93.0] - 2026-04-24
+
+Phase 4 — Step 21 of 23. MuSig2 hardware-signer integration + local-cosigner contribution flow (§22.3 + §42.9). The wallet now has the full local-signing path for both MuSig2 and classical (P2SH/P2WSH) multisig: software signer produces real cryptographic contributions; hardware signers surface the spec-required "Update firmware to use MuSig2 on this device" error. Step 22 surfaces multisig badges across the rest of the UI (Addresses, History, Balances).
+
+### Cross-repo
+
+- `xchain-sdk` 1.11.0 → 1.12.0 (commit `2d69b2c` in `xchain-sdk`). New `WalletUtils.signEcdsa(msgHash, secretKey)` returns a DER-encoded signature over a 32-byte sighash with a 32-byte secret key. Used by `SoftwareSigner.signMultisigClassical` for P2SH / P2WSH single-round contributions. Compact-to-DER conversion follows BIP-66; no sighash flag byte appended (caller's PSBT finalizer handles the suffix). Smoked manually: 32-byte privkey + 32-byte hash → 70-byte DER starting `0x30`. Wallet pin bumped `^1.11.0` → `^1.12.0` in `extension` and `web`.
+
+### Added
+
+- `packages/core/src/signers/Signer.js` — three new abstract methods on the base `Signer`:
+  - `signMusig2Round1({ chainId, path, sessionRef })` — BIP327 round 1 publicNonce generation.
+  - `signMusig2Round2({ chainId, path, sessionRef, aggNonceHex })` — BIP327 round 2 partial signature.
+  - `signMultisigClassical({ chainId, path, msgHash })` — DER-encoded ECDSA over the input's sighash for P2SH / P2WSH.
+  Each carries its own JSDoc typedef block (`MultisigSessionRef`, `SignMusig2Round1Params`/`Return`, etc.). Subclasses override.
+
+- `packages/core/src/signers/SoftwareSigner.js` — real implementations:
+  - `signMusig2Round1` calls `sdk.musig2.aggregateKeys` (binds the nonce to the aggregated x-only pubkey) followed by `sdk.musig2.generateNonce`. Uses a deterministic `sessionId` derived as `sha256(text || sessionRef.fingerprint || privKey)` so round 2 can re-cache the same secret nonce without persisting secret state — needed because the SDK's MuSig2 module stashes secret nonces in an internal Map keyed by publicNonce, and the wallet's SDK instance is fresh after a lock+unlock cycle.
+  - `signMusig2Round2` re-runs the same `generateNonce` (re-cached secret) then `startSession` + `partialSign`, returns the 32-byte partial sig + the (deterministic) publicNonce.
+  - `signMultisigClassical` derives the privKey at the cosigner's path, calls `sdk.wallet.signEcdsa` (new in SDK 1.12.0), returns the DER-encoded signature + the signing key's compressed pubkey.
+
+- `packages/core/src/signers/TrezorSigner.js` + `LedgerSigner.js` — three throwing stubs each. Trezor surfaces "hardware MuSig2 is not supported on Trezor — update firmware to use MuSig2 on this device, or use the wallet's software signer." Ledger surfaces the same message tailored to the Ledger Bitcoin app. Classical multisig deferred to Step 22+ with its own clear error per device.
+
+- `packages/core/src/flows/multisigSignLocally.js` — `signMultisigLocally({ vault, chainRegistry, sdkRegistry, sessionId, password })`. One entry point that finds the local cosigner on the persisted `MultisigConfig`, gates by `(scheme, status)`, dispatches to `signMusig2Round1` / `signMusig2Round2` / `signMultisigClassical`, and pipes the result through the Step 19 `contributeMultisigNonce` / `contributeMultisigSignature` APIs. Pre-checks duplicate-cosigner conditions before unlocking the wallet — fast-fails on stale invocations without paying the Argon2id KDF cost.
+
+- `packages/extension/src/background/createBackgroundHost.js` — new `multisigSign.signLocally` handler.
+
+- `packages/extension/src/popup/messaging.js`, `packages/web/src/messaging.js`, `packages/desktop/renderer/messaging.js` — matching `signMultisigLocally` helpers.
+
+- `packages/core/src/shared/routes/MultisigSigningSession.jsx` — new `sign-locally` view state with a wallet-password input and a "Sign with my key" button. Surfaces the §22.3 firmware-too-old guidance inline so users know to fall back to the software signer when their HW device's firmware doesn't support MuSig2 yet. Reachable from the tracker view via a "Sign with my key" button.
+
+- `packages/core/test/multisig-signer.smoke.js` — new smoke. Asserts the Signer base class exposes the three new methods as abstracts that throw `AbstractMethodError`; `TrezorSigner` + `LedgerSigner` surface the spec firmware-too-old + classical-deferred errors with the exact wording; `flows.signMultisigLocally` is re-exported with the right guards (vault / chainRegistry / sdkRegistry / sessionId / password); status-gating still rejects partial-sig contributions during round 1; bg handler registers `multisigSign.signLocally`; all three shells export `signMultisigLocally`; sign-screen route surfaces "Sign with my key" + the firmware-too-old guidance copy + `sign-locally` view state; SDK pin is `^1.12.0`. All 83 smokes pass.
+
+### Changed
+
+- `packages/core/test/multisig-address.smoke.js`, `multisig-signing.smoke.js`, `coinpay-form.smoke.js`, `sdk-bundle.smoke.js` — SDK-pin assertions softened from "exactly `^1.11.0`" to "at least `^1.11.0`" via a single regex (`/^\^1\.(?:1[1-9]|[2-9]\d)\.0$/`). Hardcoding the exact pin meant every later step's bump rippled into a smoke patch; the regex form keeps the assertion (we still catch a downgrade or accidental pin removal) without forcing churn on every legitimate bump.
+
+### Decided
+
+- **Local-signing is software-only this step.** Real hardware MuSig2 wiring requires vendor firmware that exposes BIP327 nonce + partial-sign primitives through Connect / hw-app-btc. As of Q2 2026 neither vendor exposes this in a stable form (Ledger added taproot to the Bitcoin app at 2.4.0 but the JS client surface lags; Trezor firmware is still in development). Surfacing the spec-required error so users know to update firmware or fall back to software is the right shape today; the throwing stubs are exactly where the real wiring will land when vendor support is ready.
+
+- **Classical multisig signing routed through SDK rather than re-implementing in core.** The wallet has no `@noble/curves` dep today. Adding `WalletUtils.signEcdsa` to the SDK (one method, ~25 lines including DER-encode helper) keeps secp256k1 access centralized in the SDK's audit surface and lets the wallet stay light. Same Phase 3 Step 9 (`getCoinpayObligations`) cross-repo pattern.
+
+- **Deterministic MuSig2 sessionId, no secret-nonce persistence.** BIP327 secret nonces are NOT cross-process or cross-instance — the SDK's musig2 module stashes them in an internal Map keyed by publicNonce. By computing `sessionId = sha256(text || fingerprint || privKey)`, round 2 can re-derive the same publicNonce + same secret nonce on a fresh SDK instance. This means the wallet doesn't have to persist secret nonce material across lock/unlock cycles — round 1 emits a publicNonce, the user can lock the wallet, unlock weeks later, and round 2 still works because the secret is recomputable from privKey + fingerprint. (Anti-replay still holds: the fingerprint changes if the underlying multisig session changes, so the same path doesn't re-use a nonce across sessions.)
+
 ## [0.92.0] - 2026-04-24
 
 Phase 4 — Step 20 of 23. Multisig PSBT-QR cosigner round-trip (§22.3 reuses §20 chunked-QR transport). The wallet now has a complete envelope protocol on top of the existing chunked-QR transport: coordinator wallets request, cosigner wallets reply, both differentiate round 1 (MuSig2 nonces) from round 2 (MuSig2 partial sigs) from the single round (P2SH/P2WSH classical). Step 21 wires the hardware-MuSig2 path; Step 22 surfaces multisig badges across the rest of the UI.

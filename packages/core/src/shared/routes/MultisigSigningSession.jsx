@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Screen, Button, AnimatedQrFrames } from '@xchain-wallet/core/ui';
+import { Screen, Button, Input, AnimatedQrFrames } from '@xchain-wallet/core/ui';
 import { schemas, uri as uriLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './IssueTokenForm.module.css';
@@ -52,10 +52,12 @@ export function MultisigSigningSession({ walletId, onBack }) {
     const [active, setActive] = useState(/** @type {any | null} */ (null));
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState(/** @type {string | null} */ (null));
-    const [view, setView] = useState(/** @type {'tracker' | 'export-qr' | 'paste-inbox'} */ ('tracker'));
+    const [view, setView] = useState(/** @type {'tracker' | 'export-qr' | 'paste-inbox' | 'sign-locally'} */ ('tracker'));
     const [pasteInput, setPasteInput] = useState('');
     const [collectorState, setCollectorState] = useState(() => createXcwCollector());
     const [pasteResult, setPasteResult] = useState(/** @type {string | null} */ (null));
+    const [signPassword, setSignPassword] = useState('');
+    const [signResult, setSignResult] = useState(/** @type {string | null} */ (null));
 
     const refreshList = useCallback(async () => {
         try {
@@ -176,6 +178,29 @@ export function MultisigSigningSession({ walletId, onBack }) {
         setCollectorState(createXcwCollector());
         setPasteInput('');
         setPasteResult(null);
+    }
+
+    async function handleSignLocally() {
+        if (!active || signPassword.length === 0) return;
+        setBusy(true);
+        setError(null);
+        setSignResult(null);
+        try {
+            const result = await messaging.signMultisigLocally({
+                sessionId: active.id,
+                password:  signPassword,
+            });
+            setSignResult(
+                `Contributed ${result?.contributionKind || 'signature'} from ${shortPk(result?.pubkey || '')}.`,
+            );
+            setSignPassword('');
+            await refreshActive(active.id);
+            await refreshList();
+        } catch (err) {
+            setError(err?.message || 'Local-signing failed.');
+        } finally {
+            setBusy(false);
+        }
     }
 
     async function handlePasteSubmit() {
@@ -401,6 +426,42 @@ export function MultisigSigningSession({ walletId, onBack }) {
         );
     }
 
+    if (view === 'sign-locally') {
+        return wrap(
+            <>
+                <p className={styles.successTitle}>Sign with my key</p>
+                <p className={styles.hint}>
+                    {roundLabel || 'Contribute the local cosigner\'s signature for this session.'}
+                </p>
+                <p className={styles.hint}>
+                    Wallet password unlocks the software signer; the corresponding
+                    primitive runs based on the session's scheme + round
+                    (§22.3). Hardware MuSig2 paths surface a clear "Update
+                    firmware to use MuSig2 on this device" error per spec —
+                    use the software signer instead until firmware ships
+                    BIP327 nonce + partial-sign primitives.
+                </p>
+                <Input
+                    type="password"
+                    aria-label="Wallet password"
+                    value={signPassword}
+                    onChange={(e) => setSignPassword(e.target.value)}
+                    placeholder="Wallet password"
+                />
+                {signResult ? <p className={styles.hint}>{signResult}</p> : null}
+                {error ? <div role="alert" className={styles.error}>{error}</div> : null}
+                <div className={styles.actions}>
+                    <Button onClick={handleSignLocally} disabled={busy || signPassword.length === 0}>
+                        {busy ? 'Signing…' : 'Sign with my key'}
+                    </Button>
+                    <Button variant="ghost" onClick={() => { setSignPassword(''); setView('tracker'); }}>
+                        Back to tracker
+                    </Button>
+                </div>
+            </>,
+        );
+    }
+
     if (view === 'paste-inbox') {
         return wrap(
             <>
@@ -501,6 +562,11 @@ export function MultisigSigningSession({ walletId, onBack }) {
                 {!isTerminal ? (
                     <Button variant="ghost" onClick={() => { resetCollector(); setView('paste-inbox'); }}>
                         Scan cosigner reply
+                    </Button>
+                ) : null}
+                {!isTerminal ? (
+                    <Button variant="ghost" onClick={() => { setSignResult(null); setView('sign-locally'); }}>
+                        Sign with my key
                     </Button>
                 ) : null}
                 {!isTerminal ? (

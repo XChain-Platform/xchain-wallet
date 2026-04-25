@@ -758,6 +758,19 @@ export function finalizeMultisigSigningSession(req) {
 }
 
 /**
+ * Local-cosigner contribution (Phase 4 Step 21). Dispatches by
+ * `(scheme, status)` of the session: MuSig2 round 1 → publicNonce,
+ * MuSig2 round 2 → 32-byte partial sig, P2SH/P2WSH → DER-encoded
+ * ECDSA signature. Handles unlock + signer routing + contribute call
+ * inside the bg handler.
+ *
+ * @param {{ sessionId: string, password: string, bip39Passphrase?: string }} req
+ */
+export function signMultisigLocally(req) {
+    return /** @type {any} */ (sendMessage('multisigSign.signLocally', req));
+}
+
+/**
  * Syntax-validate contract source (acorn parse + size check + float
  * warnings + reserved-identifier check). Pure; no network.
  *

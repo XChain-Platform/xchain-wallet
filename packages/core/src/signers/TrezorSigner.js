@@ -242,6 +242,38 @@ export class TrezorSigner extends Signer {
             );
         }
     }
+
+    // §22.3 + §42.9 multisig-cosigner methods. Trezor firmware does
+    // not yet expose BIP327 nonce generation or partial signing
+    // through Connect's signTransaction surface (as of firmware
+    // releases through Q2 2026). Surface a clear error so the sign
+    // screen can prompt the user to update; SoftwareSigner remains
+    // the supported MuSig2 path on this device.
+    /** @returns {Promise<import('./Signer.js').SignMusig2Round1Return>} */
+    async signMusig2Round1() {
+        throw new Error(
+            'TrezorSigner.signMusig2Round1: hardware MuSig2 is not supported on Trezor — update firmware to use MuSig2 on this device, or use the wallet\'s software signer for the MuSig2 cosigner.',
+        );
+    }
+
+    /** @returns {Promise<import('./Signer.js').SignMusig2Round2Return>} */
+    async signMusig2Round2() {
+        throw new Error(
+            'TrezorSigner.signMusig2Round2: hardware MuSig2 is not supported on Trezor — update firmware to use MuSig2 on this device, or use the wallet\'s software signer for the MuSig2 cosigner.',
+        );
+    }
+
+    // P2SH / P2WSH classical multisig signing isn't wired through
+    // Trezor's Connect bridge yet — Trezor expects to drive the full
+    // multisig PSBT, not produce a single-input partial sig from a
+    // raw msgHash. Surface the limit clearly until the proper
+    // signTransaction-based multisig path lands (Step 22+).
+    /** @returns {Promise<import('./Signer.js').SignMultisigClassicalReturn>} */
+    async signMultisigClassical() {
+        throw new Error(
+            'TrezorSigner.signMultisigClassical: classical multisig signing on Trezor is not yet wired — use the wallet\'s software signer for this cosigner, or wait for the §22 hardware-multisig PSBT path.',
+        );
+    }
 }
 
 /**

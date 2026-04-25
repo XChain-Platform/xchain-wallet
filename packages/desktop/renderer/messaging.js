@@ -369,6 +369,11 @@ export function finalizeMultisigSigningSession(req) {
     return /** @type {any} */ (sendMessage('multisigSign.finalize', req));
 }
 
+/** @param {{ sessionId: string, password: string, bip39Passphrase?: string }} req */
+export function signMultisigLocally(req) {
+    return /** @type {any} */ (sendMessage('multisigSign.signLocally', req));
+}
+
 /** @param {object} req */
 export function validateContractCode(req) {
     return /** @type {any} */ (sendMessage('contracts.validate', req));

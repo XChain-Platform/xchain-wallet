@@ -83,6 +83,7 @@ const {
     contributeMultisigSignature,
     aggregateMultisigSession,
     finalizeMultisigSigningSession,
+    signMultisigLocally,
     contractValidate,
     contractCheckCodeSize,
     contractSuggestGasLimit,
@@ -664,6 +665,14 @@ export function createBackgroundHost(deps) {
 
     host.register('multisigSign.finalize', async (req, { vault }) => {
         return finalizeMultisigSigningSession({ ...req, vault });
+    });
+
+    // §22.3 + §42.9 local-cosigner contribution (Step 21). Unlocks
+    // the wallet's software signer, dispatches to the right round
+    // based on session.scheme + session.status, and pipes the
+    // contribution through the Step 19 contribute APIs.
+    host.register('multisigSign.signLocally', async (req, { vault, chainRegistry, sdkRegistry }) => {
+        return signMultisigLocally({ ...req, vault, chainRegistry, sdkRegistry });
     });
 
     host.register('contracts.validate', async (req, { sdkRegistry }) => {

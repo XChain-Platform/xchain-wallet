@@ -516,15 +516,15 @@ for (const [shell, appPath] of [
         `${shell} ActionsMenu surfaces a "Multisig signing" entry`);
 }
 
-// ─── SDK pin still 1.11.0 (no SDK bump for Step 19) ──────────────
+// ─── SDK pin ≥ 1.11.0 (Step 19 needed no bump; later steps may have) ─
 
 for (const [shell, pkgPath] of [
     ['extension', join(ext, 'package.json')],
     ['web', join(web, 'package.json')],
 ]) {
     const pkg = readFileSync(pkgPath, 'utf8');
-    assert.ok(/"xchain-sdk":\s*"\^1\.11\.0"/.test(pkg),
-        `${shell} pkg still pins xchain-sdk ^1.11.0 (no bump for Step 19)`);
+    assert.ok(/"xchain-sdk":\s*"\^1\.(?:1[1-9]|[2-9]\d)\.0"/.test(pkg),
+        `${shell} pkg pins xchain-sdk ≥ ^1.11.0`);
 }
 
 console.log(

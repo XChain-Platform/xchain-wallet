@@ -15,6 +15,7 @@ import {
     counterwalletMnemonicToSeedBytes,
     isValidCounterwalletMnemonic,
 } from '../crypto/counterwallet.js';
+import { sha256 } from '@noble/hashes/sha2';
 import { derive, hdKeyFromSeed, zeroDerivedKey } from '../crypto/hd.js';
 import { encodeWif } from '../crypto/wif.js';
 import {
@@ -438,6 +439,166 @@ export class SoftwareSigner extends Signer {
     }
 
     /**
+     * §22.3 MuSig2 round 1 — generate this signer's publicNonce for
+     * the multisig session described by `sessionRef`. Wraps
+     * `sdk.musig2.aggregateKeys` (to bind the nonce to the aggregated
+     * x-only pubkey) and `sdk.musig2.generateNonce`. The nonce is
+     * bound to a deterministic `sessionId` derived from the signer's
+     * privKey + the session fingerprint, so round 2 can re-cache the
+     * secret nonce without persisting secret state — see
+     * `signMusig2Round2`.
+     *
+     * @param {import('./Signer.js').SignMusig2Round1Params} params
+     * @returns {Promise<import('./Signer.js').SignMusig2Round1Return>}
+     */
+    async signMusig2Round1({ chainId, path, sessionRef }) {
+        const { publicNonce } = this._musig2Round1Internal({ chainId, path, sessionRef });
+        return { publicNonce };
+    }
+
+    /**
+     * §22.3 MuSig2 round 2 — produce a 32-byte partial signature given
+     * the aggregated nonce from round 1. The deterministic sessionId
+     * means re-running `generateNonce` re-caches the same secret
+     * nonce inside the SDK module, so `partialSign` can find it. The
+     * returned `publicNonce` matches round 1's output bit-for-bit and
+     * is exposed for sanity-checking by the caller.
+     *
+     * @param {import('./Signer.js').SignMusig2Round2Params} params
+     * @returns {Promise<import('./Signer.js').SignMusig2Round2Return>}
+     */
+    async signMusig2Round2({ chainId, path, sessionRef, aggNonceHex }) {
+        if (!isHex(aggNonceHex) || aggNonceHex.length !== 132) {
+            throw new Error('SoftwareSigner.signMusig2Round2: aggNonceHex must be 66-byte hex');
+        }
+        const { publicNonce, secretKeyBytes, publicKeyBytes, sdk } =
+            this._musig2Round1Internal({ chainId, path, sessionRef });
+        try {
+            const aggNonceBytes = hexToBytes(aggNonceHex);
+            const msgBytes = hexToBytes(sessionRef.msgHash);
+            const cosignerKeys = sessionRef.cosignerPubkeys.map(hexToBytes);
+            const sessionKey = sdk.musig2.startSession(aggNonceBytes, msgBytes, cosignerKeys);
+            const partial = sdk.musig2.partialSign({
+                secretKey:   secretKeyBytes,
+                publicNonce: hexToBytes(publicNonce),
+                sessionKey,
+                verify:      true,
+            });
+            return { publicNonce, partialSig: bytesToHex(partial) };
+        } finally {
+            secretKeyBytes.fill(0);
+            publicKeyBytes.fill(0);
+        }
+    }
+
+    /**
+     * Internal: aggregate keys + generate the (deterministic) nonce.
+     * Returns the publicNonce alongside the still-live secretKeyBytes
+     * so `signMusig2Round2` can call `partialSign` on the same SDK
+     * instance without re-deriving the private key.
+     *
+     * @param {import('./Signer.js').SignMusig2Round1Params} opts
+     */
+    _musig2Round1Internal({ chainId, path, sessionRef }) {
+        this._assertUnlocked();
+        this._assertSdkRegistry('signMusig2Round1');
+        assertSessionRefShape(sessionRef);
+        const sdk = this._sdkRegistry.get(chainId);
+        if (!sdk || !sdk.musig2) {
+            throw new Error(
+                `SoftwareSigner.signMusig2Round1: sdk.musig2 unavailable on chainId "${chainId}" — bump xchain-sdk to 1.10+`,
+            );
+        }
+        if (typeof path !== 'string' || !path.startsWith('m/')) {
+            throw new Error(`SoftwareSigner.signMusig2Round1: invalid path "${path}"`);
+        }
+        const root = hdKeyFromSeed(this._unlocked.seed);
+        const dk = derive(root, path);
+        try {
+            if (!dk.privateKey) {
+                throw new Error(`SoftwareSigner.signMusig2Round1: no private key at path ${path}`);
+            }
+            const cosignerKeys = sessionRef.cosignerPubkeys.map(hexToBytes);
+            // BIP327 keyAgg gives us the aggregated x-only pubkey; the
+            // nonce-gen call binds the secret nonce to that key so the
+            // resulting partial sig is unforgeable across key changes.
+            const ctx = sdk.musig2.aggregateKeys(cosignerKeys);
+            const xOnlyPublicKey = ctx.xOnlyPubkey;
+            const msg = hexToBytes(sessionRef.msgHash);
+            // Deterministic sessionId so round 2 can re-derive the
+            // same secret nonce without persisting it. Mixes
+            // privKey + fingerprint + path so two cosigners on the
+            // same wallet (theoretical) get distinct nonces, and the
+            // same cosigner across two MuSig2 sessions also gets
+            // distinct nonces — both are necessary BIP327 properties.
+            const sessionId = sha256(
+                concatBytes(
+                    new TextEncoder().encode(`xcw-musig2:${path}:`),
+                    hexToBytes(sessionRef.fingerprint),
+                    dk.privateKey,
+                ),
+            );
+            const secretKeyBytes = new Uint8Array(dk.privateKey);
+            const publicKeyBytes = new Uint8Array(dk.publicKey);
+            const publicNonce = sdk.musig2.generateNonce({
+                publicKey:      publicKeyBytes,
+                secretKey:      secretKeyBytes,
+                sessionId,
+                xOnlyPublicKey,
+                msg,
+            });
+            return {
+                publicNonce: bytesToHex(publicNonce),
+                secretKeyBytes,
+                publicKeyBytes,
+                sdk,
+            };
+        } finally {
+            zeroDerivedKey(dk);
+        }
+    }
+
+    /**
+     * §22.3 P2SH / P2WSH single-round contribution. Derives the WIF
+     * for the given path, asks the SDK to produce a DER-encoded ECDSA
+     * signature over the supplied msgHash, and returns the signature
+     * plus the signing key's compressed pubkey.
+     *
+     * @param {import('./Signer.js').SignMultisigClassicalParams} params
+     * @returns {Promise<import('./Signer.js').SignMultisigClassicalReturn>}
+     */
+    async signMultisigClassical({ chainId, path, msgHash }) {
+        this._assertUnlocked();
+        this._assertSdkRegistry('signMultisigClassical');
+        if (!isHex(msgHash) || msgHash.length !== 64) {
+            throw new Error('SoftwareSigner.signMultisigClassical: msgHash must be 32-byte hex');
+        }
+        if (typeof path !== 'string' || !path.startsWith('m/')) {
+            throw new Error(`SoftwareSigner.signMultisigClassical: invalid path "${path}"`);
+        }
+        const sdk = this._sdkRegistry.get(chainId);
+        if (!sdk || !sdk.wallet || typeof sdk.wallet.signEcdsa !== 'function') {
+            throw new Error(
+                `SoftwareSigner.signMultisigClassical: sdk.wallet.signEcdsa unavailable on chainId "${chainId}"`,
+            );
+        }
+        const root = hdKeyFromSeed(this._unlocked.seed);
+        const dk = derive(root, path);
+        try {
+            if (!dk.privateKey) {
+                throw new Error(`SoftwareSigner.signMultisigClassical: no private key at path ${path}`);
+            }
+            const sigBytes = sdk.wallet.signEcdsa(hexToBytes(msgHash), new Uint8Array(dk.privateKey));
+            return {
+                sig: bytesToHex(sigBytes),
+                publicKey: dk.publicKeyHex,
+            };
+        } finally {
+            zeroDerivedKey(dk);
+        }
+    }
+
+    /**
      * Derive a public key at the given path. Chain-agnostic — the
      * caller supplies the concrete path (resolve via ChainRegistry
      * before calling).
@@ -468,6 +629,48 @@ function toHex(bytes) {
     let s = '';
     for (const b of bytes) s += b.toString(16).padStart(2, '0');
     return s;
+}
+
+const HEX_RE = /^[0-9a-fA-F]+$/;
+function isHex(v) { return typeof v === 'string' && HEX_RE.test(v); }
+function hexToBytes(hex) {
+    const clean = hex.toLowerCase();
+    const out = new Uint8Array(clean.length / 2);
+    for (let i = 0; i < out.length; i += 1) {
+        out[i] = parseInt(clean.slice(i * 2, i * 2 + 2), 16);
+    }
+    return out;
+}
+function bytesToHex(bytes) {
+    let s = '';
+    for (const b of bytes) s += b.toString(16).padStart(2, '0');
+    return s;
+}
+function concatBytes(...parts) {
+    let total = 0;
+    for (const p of parts) total += p.length;
+    const out = new Uint8Array(total);
+    let off = 0;
+    for (const p of parts) { out.set(p, off); off += p.length; }
+    return out;
+}
+
+function assertSessionRefShape(ref) {
+    if (!ref || typeof ref !== 'object') {
+        throw new Error('SoftwareSigner: sessionRef is required');
+    }
+    if (!['p2sh-multisig', 'p2wsh-multisig', 'taproot-musig2'].includes(ref.scheme)) {
+        throw new Error(`SoftwareSigner: sessionRef.scheme "${ref.scheme}" is invalid`);
+    }
+    if (!Array.isArray(ref.cosignerPubkeys) || ref.cosignerPubkeys.length < 2) {
+        throw new Error('SoftwareSigner: sessionRef.cosignerPubkeys must be ≥ 2 entries');
+    }
+    if (!isHex(ref.msgHash) || ref.msgHash.length !== 64) {
+        throw new Error('SoftwareSigner: sessionRef.msgHash must be 32-byte hex');
+    }
+    if (!isHex(ref.fingerprint) || ref.fingerprint.length !== 64) {
+        throw new Error('SoftwareSigner: sessionRef.fingerprint must be 32-byte hex');
+    }
 }
 
 // Decrypt every entry in `importedKeys` into a Map<addressId,

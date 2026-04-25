@@ -294,6 +294,37 @@ export class LedgerSigner extends Signer {
             );
         }
     }
+
+    // §22.3 + §42.9 multisig-cosigner methods. The Ledger Bitcoin app
+    // gained taproot + MuSig2 primitives at v2.4.0, but the
+    // @ledgerhq/hw-app-btc client surface used here does not yet
+    // expose nonce generation or partial signing as first-class
+    // methods. Surface a clear error so the sign screen can prompt
+    // the user to update or fall back to the wallet's software signer.
+    /** @returns {Promise<import('./Signer.js').SignMusig2Round1Return>} */
+    async signMusig2Round1() {
+        throw new Error(
+            'LedgerSigner.signMusig2Round1: hardware MuSig2 is not supported on this Ledger Bitcoin app — update firmware to use MuSig2 on this device, or use the wallet\'s software signer for the MuSig2 cosigner.',
+        );
+    }
+
+    /** @returns {Promise<import('./Signer.js').SignMusig2Round2Return>} */
+    async signMusig2Round2() {
+        throw new Error(
+            'LedgerSigner.signMusig2Round2: hardware MuSig2 is not supported on this Ledger Bitcoin app — update firmware to use MuSig2 on this device, or use the wallet\'s software signer for the MuSig2 cosigner.',
+        );
+    }
+
+    // P2SH / P2WSH classical multisig signing on Ledger goes through
+    // the full createPaymentTransaction + registerWallet flow, not a
+    // raw msgHash. Surface the limit until the proper hardware
+    // multisig PSBT path lands (Step 22+).
+    /** @returns {Promise<import('./Signer.js').SignMultisigClassicalReturn>} */
+    async signMultisigClassical() {
+        throw new Error(
+            'LedgerSigner.signMultisigClassical: classical multisig signing on Ledger is not yet wired — use the wallet\'s software signer for this cosigner, or wait for the §22 hardware-multisig PSBT path.',
+        );
+    }
 }
 
 /**

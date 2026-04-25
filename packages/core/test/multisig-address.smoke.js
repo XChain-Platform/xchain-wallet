@@ -157,15 +157,15 @@ assert.ok(/multisig\.schemeLabel/.test(receive),
 assert.ok(/cosignerNames/.test(receive),
     'Receive surfaces cosigner names');
 
-// --- SDK pin bumped to 1.11.0 ---
+// --- SDK pin ≥ 1.11.0 (Step 18 baseline; later steps bump further) ---
 
 for (const [shell, pkgPath] of [
     ['extension', join(ext, 'package.json')],
     ['web', join(web, 'package.json')],
 ]) {
     const pkg = readFileSync(pkgPath, 'utf8');
-    assert.ok(/"xchain-sdk":\s*"\^1\.11\.0"/.test(pkg),
-        `${shell} pkg pins xchain-sdk ^1.11.0`);
+    assert.ok(/"xchain-sdk":\s*"\^1\.(?:1[1-9]|[2-9]\d)\.0"/.test(pkg),
+        `${shell} pkg pins xchain-sdk ≥ ^1.11.0`);
 }
 
 console.log(

@@ -89,6 +89,7 @@ export {
     finalizeMultisigSigningSession,
     pendingCosignerPubkeys,
 } from './multisigSigning.js';
+export { signMultisigLocally } from './multisigSignLocally.js';
 export {
     contractValidate,
     contractCheckCodeSize,
