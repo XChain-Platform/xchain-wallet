@@ -29,6 +29,7 @@ import {
     migrateAddress,
     migrateConnectedSite,
     migrateContact,
+    migrateMultisigSigningSession,
     migratePendingAirdrop,
     migratePendingTx,
     migrateSettings,
@@ -42,6 +43,7 @@ import { validateConnectedSite } from '../schemas/connectedSite.js';
 import { validateContact } from '../schemas/contact.js';
 import { validatePendingAirdrop } from '../schemas/pendingAirdrop.js';
 import { validatePendingTx } from '../schemas/pendingTx.js';
+import { validateMultisigSigningSession } from '../schemas/multisigSigningSession.js';
 import { validateSettings } from '../schemas/settings.js';
 import { validateSignerRecord } from '../schemas/signer.js';
 import { validateWallet } from '../schemas/wallet.js';
@@ -119,6 +121,12 @@ export class Vault {
             'watchlistEntries',
             migrateWatchlistEntry,
             validateWatchlistEntry,
+        );
+        this.multisigSigningSessions = makeCollection(
+            this,
+            'multisigSigningSessions',
+            migrateMultisigSigningSession,
+            validateMultisigSigningSession,
         );
         this.settings = makeSingleton(this, 'settings', migrateSettings, validateSettings);
     }

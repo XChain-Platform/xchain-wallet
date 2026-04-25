@@ -79,6 +79,17 @@ export { linksForAddress } from './linkQueries.js';
 export { createMultisigConfig } from './createMultisigConfig.js';
 export { receiveMultisigAddress } from './multisigAddress.js';
 export {
+    startMultisigSigningSession,
+    getMultisigSigningSession,
+    listMultisigSigningSessions,
+    cancelMultisigSigningSession,
+    contributeMultisigNonce,
+    contributeMultisigSignature,
+    aggregateMultisigSession,
+    finalizeMultisigSigningSession,
+    pendingCosignerPubkeys,
+} from './multisigSigning.js';
+export {
     contractValidate,
     contractCheckCodeSize,
     contractSuggestGasLimit,

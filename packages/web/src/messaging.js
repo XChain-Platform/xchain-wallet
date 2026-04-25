@@ -396,6 +396,47 @@ export function getMultisigReceiveAddress(req) {
     return /** @type {any} */ (sendMessage('multisig.receiveAddress', req));
 }
 
+// §22.3 + §42.9 multisig sign-round persistence (Phase 4 Step 19).
+/** @param {object} req */
+export function startMultisigSigningSession(req) {
+    return /** @type {any} */ (sendMessage('multisigSign.start', req));
+}
+
+/** @param {{ sessionId: string }} req */
+export function getMultisigSigningSession(req) {
+    return /** @type {any} */ (sendMessage('multisigSign.get', req));
+}
+
+/** @param {{ walletId: string }} req */
+export function listMultisigSigningSessions(req) {
+    return /** @type {any} */ (sendMessage('multisigSign.list', req));
+}
+
+/** @param {{ sessionId: string }} req */
+export function cancelMultisigSigningSession(req) {
+    return /** @type {any} */ (sendMessage('multisigSign.cancel', req));
+}
+
+/** @param {{ sessionId: string, pubkey: string, publicNonceHex: string }} req */
+export function contributeMultisigNonce(req) {
+    return /** @type {any} */ (sendMessage('multisigSign.contributeNonce', req));
+}
+
+/** @param {{ sessionId: string, pubkey: string, signatureHex: string }} req */
+export function contributeMultisigSignature(req) {
+    return /** @type {any} */ (sendMessage('multisigSign.contributeSignature', req));
+}
+
+/** @param {{ sessionId: string }} req */
+export function aggregateMultisigSession(req) {
+    return /** @type {any} */ (sendMessage('multisigSign.aggregate', req));
+}
+
+/** @param {{ sessionId: string, finalizedTxHex: string, txid?: string }} req */
+export function finalizeMultisigSigningSession(req) {
+    return /** @type {any} */ (sendMessage('multisigSign.finalize', req));
+}
+
 /** @param {object} req */
 export function validateContractCode(req) {
     return /** @type {any} */ (sendMessage('contracts.validate', req));

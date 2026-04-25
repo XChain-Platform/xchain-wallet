@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.91.0] - 2026-04-24
+
+Phase 4 — Step 19 of 23. Multisig-aware sign-round persistence + dual-mode partial-signature tracking (§22.3 + §42.9). The wallet now owns the state machine that keeps a multisig spend coherent across cosigner contributions and across wallet reloads. Step 20 wires the §20 PSBT-QR transport that pumps contributions into this layer; Step 21 wires the hardware-MuSig2 path; Step 22 surfaces multisig badges across the rest of the UI.
+
+### Added
+
+- `packages/core/src/schemas/multisigSigningSession.js` — new `MultisigSigningSession` record with a six-status state machine (`collecting-nonces` → `collecting-sigs` → `ready-to-finalize` → `finalized` → `broadcast`, plus terminal `cancelled`). One record covers both schemes; the `scheme` field discriminates which contribution lane is populated. P2SH/P2WSH track `signatures[]` (DER-encoded ECDSA, single round). Taproot-MuSig2 tracks `nonces[]` (66-byte BIP327 publicNonces, round 1) and `partialSigs[]` (32-byte BIP327 partials, round 2), plus `aggNonce` and `aggregatedSchnorrSig` outputs. Helpers `pendingCosignerPubkeys(session)` and `progressSummary(session)` drive the dual-mode tracker UI ("Signatures collected: 2 of 3" for P2SH/P2WSH; "Nonces collected: 2 of 3" → "Partial sigs collected: 2 of 3" → aggregated 64-byte Schnorr for MuSig2).
+
+- `packages/core/src/storage/codec.js` + `storage/Vault.js` — new `multisigSigningSessions` collection. New documents include the slot; older documents read it as `[]` via the existing defensive merge in `decodeDocument`. No schema-version bump for the document codec — collection adds at `documentVersion: 1` are forward-compatible.
+
+- `packages/core/src/flows/multisigSigning.js` — eight flow operations:
+  - `startMultisigSigningSession({ vault, walletId, chainId, msgHash, psbtHex?, actionSummary? })` — snapshots the wallet's persisted `MultisigConfig` (scheme + threshold + cosigner pubkey list) onto the new session so the active config can mutate without affecting an in-flight spend. Initial status is `collecting-nonces` for MuSig2 and `collecting-sigs` for P2SH/P2WSH.
+  - `contributeMultisigNonce({ vault, sessionId, pubkey, publicNonceHex })` — round 1 only; rejects duplicate cosigners and wrong-length nonces.
+  - `contributeMultisigSignature({ vault, sessionId, pubkey, signatureHex })` — single round (P2SH/P2WSH) or round 2 partial sig (MuSig2). For P2SH/P2WSH the threshold-meeting contribution auto-flips status to `ready-to-finalize`; for MuSig2 the caller drives the transition explicitly via `aggregateMultisigSession`.
+  - `aggregateMultisigSession({ vault, sdkRegistry, sessionId })` — idempotent two-step transition for MuSig2. When `status='collecting-nonces'` and threshold is met it calls `sdk.musig2.aggregateNonces` and persists `aggNonce` + advances to `'collecting-sigs'`. When `status='collecting-sigs'` and threshold partial sigs are present it calls `sdk.musig2.startSession` + `aggregateSignatures` and persists `aggregatedSchnorrSig` + advances to `'ready-to-finalize'`.
+  - `finalizeMultisigSigningSession({ vault, sessionId, finalizedTxHex, txid? })` — caller-supplied tx hex transition stub; Step 20 supplies real tx bytes once PSBT finalization lands.
+  - `cancelMultisigSigningSession({ vault, sessionId })` — terminal cancel; idempotent for already-terminal records.
+  - `getMultisigSigningSession` / `listMultisigSigningSessions` — reads.
+
+- `packages/extension/src/background/createBackgroundHost.js` — eight new `multisigSign.*` handlers (start / get / list / cancel / contributeNonce / contributeSignature / aggregate / finalize) wired through the same vault + sdkRegistry deps the Step 17/18 multisig handlers use.
+
+- `packages/extension/src/popup/messaging.js`, `packages/web/src/messaging.js`, `packages/desktop/renderer/messaging.js` — eight matching helpers in each shell so the sign-screen UI doesn't have to build envelopes by hand.
+
+- `packages/core/src/shared/routes/MultisigSigningSession.jsx` — list-or-detail tracker route. The list shows every multisig session for the active wallet with status + scheme label + N-of-M progress. The detail view renders the dual-mode tracker per the spec: P2SH/P2WSH shows a single counter; MuSig2 shows two counters ("Round 1 — Nonces collected" + "Round 2 — Partial sigs collected") plus indicators for aggNonce and aggregated Schnorr availability. Pending-cosigners list, Aggregate button (gated on threshold + valid status), and Cancel-session button. Reachable from ActionsMenu via "Multisig signing", BTC-gated by `useBtcAddressesPresent`.
+
+- `packages/core/test/multisig-signing.smoke.js` — new smoke. Drives a 2-of-3 P2WSH single-round flow end-to-end against an in-memory fake vault, plus a 2-of-2 MuSig2 two-round flow against a stubbed `sdk.musig2.{aggregateNonces, startSession, aggregateSignatures}` to verify state transitions, contribution shape guards, threshold gating, and persistence. Also asserts schema status alphabet + dual-mode `progressSummary` labels + bg-handler registration of all 8 routes + 3-shell messaging exports + sign-screen route renders the dual-mode tracker copy + 3-shell App.jsx wiring + BTC gate + that the SDK pin stays at `^1.11.0` (no SDK bump needed for Step 19; the MuSig2 primitives that landed at 1.10 cover the aggregation paths).
+
+### Decided
+
+- **Wallet-side path, no SDK extension this step.** The Step 19 prompt left it open whether to extend `xchain-sdk` with multisig PSBT helpers or to build the multisig path wallet-side using the `redeemScript` / `witnessScript` / `outputPubkey` Step 18's `receiveMultisigAddress` already returns. Going wallet-side. The state-machine + persistence is not crypto — it's bookkeeping — and the cryptographic primitives that *do* belong in the SDK already live there as `sdk.musig2.*`. PSBT byte-level construction is deferred to Step 20 along with QR transport, where the right SDK shape will be obvious. Until then `MultisigSigningSession.psbtHex` carries an opaque transport payload that round-trips through the wallet without it needing PSBT-manipulation primitives.
+
+- **Multisig PSBT-finalization is a stub at this step.** `finalizeMultisigSigningSession` accepts a caller-supplied `finalizedTxHex` and flips the status. Step 20's QR transport will produce real signed-tx bytes from the threshold contributions stored on the session. Smoke exercises the full state machine end-to-end with placeholder bytes to keep the regression net tight.
+
+- **Caller-driven aggregation, no auto-advance on threshold.** When the threshold-th MuSig2 partial sig lands, status stays at `collecting-sigs` until the caller invokes `aggregateMultisigSession` — by design. The caller may still want to collect more signatures than the threshold (for redundancy / audit trail) before the user explicitly "finalizes the round." P2SH/P2WSH single-round behaviour is the same in spirit: status advances to `ready-to-finalize` on threshold, but the actual PSBT finalization is a separate step.
+
+### Notes
+
+- `xchain-sdk` pin stays at `^1.11.0` across `extension` and `web`. Step 18 already shipped the SDK bump that this step builds on (`deriveMultisigAddress` + `musig2.*`). No platform-side changes for Step 19.
+
 ## [0.90.0] - 2026-04-24
 
 Phase 4 — Step 18 of 23. Multisig address derivation + Receive integration (§22 + §42.9). Closes the read-side multisig surface; PSBT construction (Step 19), QR transport (Step 20), and HW MuSig2 (Step 21) follow.

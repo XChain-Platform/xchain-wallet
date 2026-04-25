@@ -10,6 +10,7 @@ export * as address from './address.js';
 export * as contact from './contact.js';
 export * as connectedSite from './connectedSite.js';
 export * as multisigConfig from './multisigConfig.js';
+export * as multisigSigningSession from './multisigSigningSession.js';
 export * as settings from './settings.js';
 export * as pendingTx from './pendingTx.js';
 export * as signer from './signer.js';
@@ -23,6 +24,13 @@ export { createAddress, validateAddress } from './address.js';
 export { createContact, validateContact } from './contact.js';
 export { createConnectedSite, validateConnectedSite } from './connectedSite.js';
 export { validateMultisigConfig, buildMultisigConfig } from './multisigConfig.js';
+export {
+    createMultisigSigningSession,
+    validateMultisigSigningSession,
+    pendingCosignerPubkeys,
+    progressSummary,
+    MULTISIG_SESSION_STATUSES,
+} from './multisigSigningSession.js';
 export {
     createDefaultSettings,
     createDefaultAdsChainState,
@@ -51,6 +59,7 @@ export {
     migrateSettings,
     migratePendingTx,
     migrateMultisigConfig,
+    migrateMultisigSigningSession,
     migrateSigner,
     migratePendingAirdrop,
     migrateWatchlistEntry,

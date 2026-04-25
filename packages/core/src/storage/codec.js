@@ -37,6 +37,7 @@ export function emptyDocument() {
         signers: [],
         pendingAirdrops: [],
         watchlistEntries: [],
+        multisigSigningSessions: [],
         settings: null,
     };
 }
@@ -53,6 +54,7 @@ export function emptyDocument() {
  * @property {import('../schemas/signer.js').SignerRecord[]} signers
  * @property {import('../schemas/pendingAirdrop.js').PendingAirdrop[]} pendingAirdrops
  * @property {import('../schemas/watchlistEntry.js').WatchlistEntry[]} watchlistEntries
+ * @property {import('../schemas/multisigSigningSession.js').MultisigSigningSession[]} multisigSigningSessions
  * @property {import('../schemas/settings.js').Settings | null} settings
  */
 
@@ -115,6 +117,7 @@ export async function decodeDocument(masterKey, blob, aad) {
         signers: parsed.signers ?? empty.signers,
         pendingAirdrops: parsed.pendingAirdrops ?? empty.pendingAirdrops,
         watchlistEntries: parsed.watchlistEntries ?? empty.watchlistEntries,
+        multisigSigningSessions: parsed.multisigSigningSessions ?? empty.multisigSigningSessions,
         settings: parsed.settings ?? empty.settings,
     };
 }

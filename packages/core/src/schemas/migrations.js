@@ -12,6 +12,7 @@ import { CURRENT_VERSION as CONNECTED_SITE_VERSION } from './connectedSite.js';
 import { CURRENT_VERSION as SETTINGS_VERSION } from './settings.js';
 import { CURRENT_VERSION as PENDING_TX_VERSION } from './pendingTx.js';
 import { CURRENT_VERSION as MULTISIG_VERSION } from './multisigConfig.js';
+import { CURRENT_VERSION as MULTISIG_SIGNING_SESSION_VERSION } from './multisigSigningSession.js';
 import { CURRENT_VERSION as SIGNER_VERSION } from './signer.js';
 import { CURRENT_VERSION as PENDING_AIRDROP_VERSION } from './pendingAirdrop.js';
 import { CURRENT_VERSION as WATCHLIST_VERSION } from './watchlistEntry.js';
@@ -44,6 +45,8 @@ export const settingsMigrations = {};
 export const pendingTxMigrations = {};
 /** @type {MigrationMap} */
 export const multisigConfigMigrations = {};
+/** @type {MigrationMap} */
+export const multisigSigningSessionMigrations = {};
 /** @type {MigrationMap} */
 export const signerMigrations = {};
 /** @type {MigrationMap} */
@@ -100,6 +103,8 @@ export const migrateSettings = (r) => migrate(r, settingsMigrations, SETTINGS_VE
 export const migratePendingTx = (r) => migrate(r, pendingTxMigrations, PENDING_TX_VERSION);
 export const migrateMultisigConfig = (r) =>
     migrate(r, multisigConfigMigrations, MULTISIG_VERSION);
+export const migrateMultisigSigningSession = (r) =>
+    migrate(r, multisigSigningSessionMigrations, MULTISIG_SIGNING_SESSION_VERSION);
 export const migrateSigner = (r) => migrate(r, signerMigrations, SIGNER_VERSION);
 export const migratePendingAirdrop = (r) =>
     migrate(r, pendingAirdropMigrations, PENDING_AIRDROP_VERSION);

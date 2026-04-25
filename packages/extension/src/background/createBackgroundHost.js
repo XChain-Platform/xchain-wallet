@@ -75,6 +75,14 @@ const {
     linksForAddress,
     createMultisigConfig,
     receiveMultisigAddress,
+    startMultisigSigningSession,
+    getMultisigSigningSession,
+    listMultisigSigningSessions,
+    cancelMultisigSigningSession,
+    contributeMultisigNonce,
+    contributeMultisigSignature,
+    aggregateMultisigSession,
+    finalizeMultisigSigningSession,
     contractValidate,
     contractCheckCodeSize,
     contractSuggestGasLimit,
@@ -620,6 +628,42 @@ export function createBackgroundHost(deps) {
 
     host.register('multisig.receiveAddress', async (req, { vault, sdkRegistry }) => {
         return receiveMultisigAddress({ ...req, vault, sdkRegistry });
+    });
+
+    // §22.3 + §42.9 multisig sign-round persistence + state machine
+    // (Step 19). One register per surface so each handler keeps a
+    // tight, single-responsibility shape — same pattern the staking
+    // handlers use.
+    host.register('multisigSign.start', async (req, { vault }) => {
+        return startMultisigSigningSession({ ...req, vault });
+    });
+
+    host.register('multisigSign.get', async (req, { vault }) => {
+        return getMultisigSigningSession({ ...req, vault });
+    });
+
+    host.register('multisigSign.list', async (req, { vault }) => {
+        return listMultisigSigningSessions({ ...req, vault });
+    });
+
+    host.register('multisigSign.cancel', async (req, { vault }) => {
+        return cancelMultisigSigningSession({ ...req, vault });
+    });
+
+    host.register('multisigSign.contributeNonce', async (req, { vault }) => {
+        return contributeMultisigNonce({ ...req, vault });
+    });
+
+    host.register('multisigSign.contributeSignature', async (req, { vault }) => {
+        return contributeMultisigSignature({ ...req, vault });
+    });
+
+    host.register('multisigSign.aggregate', async (req, { vault, sdkRegistry }) => {
+        return aggregateMultisigSession({ ...req, vault, sdkRegistry });
+    });
+
+    host.register('multisigSign.finalize', async (req, { vault }) => {
+        return finalizeMultisigSigningSession({ ...req, vault });
     });
 
     host.register('contracts.validate', async (req, { sdkRegistry }) => {
