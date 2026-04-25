@@ -293,15 +293,15 @@ assert.ok(/Update[\s\S]*firmware to use MuSig2 on this device/.test(route),
 assert.ok(/sign-locally/.test(route),
     'sign-screen has a sign-locally view state');
 
-// ─── SDK pin bumped to 1.12.0 ──────────────────────────────────
+// ─── SDK pin ≥ 1.12.0 (Step 21 baseline; later steps may bump further) ─
 
 for (const [shell, pkgPath] of [
     ['extension', join(ext, 'package.json')],
     ['web', join(web, 'package.json')],
 ]) {
     const pkg = readFileSync(pkgPath, 'utf8');
-    assert.ok(/"xchain-sdk":\s*"\^1\.12\.0"/.test(pkg),
-        `${shell} pkg pins xchain-sdk ^1.12.0`);
+    assert.ok(/"xchain-sdk":\s*"\^1\.(?:1[2-9]|[2-9]\d)\.0"/.test(pkg),
+        `${shell} pkg pins xchain-sdk ≥ ^1.12.0`);
 }
 
 // ─── Signer subclasses still pass the rest of their existing smoke ──

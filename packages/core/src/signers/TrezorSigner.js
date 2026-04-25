@@ -274,6 +274,21 @@ export class TrezorSigner extends Signer {
             'TrezorSigner.signMultisigClassical: classical multisig signing on Trezor is not yet wired — use the wallet\'s software signer for this cosigner, or wait for the §22 hardware-multisig PSBT path.',
         );
     }
+
+    // Trezor's classical-multisig signing flow requires the
+    // signTransaction envelope with a `multisig` parameter on each
+    // input (redeemScript / witnessScript / signatures array). The
+    // envelope builder in trezorFormat.js is single-key today; wiring
+    // the multisig envelope + the public-key-order bookkeeping that
+    // Connect's multisig flow requires is a separate substantial
+    // piece of work. Surface the limit with a clear path to the
+    // software signer until the full envelope lands.
+    /** @returns {Promise<import('./Signer.js').SignMultisigPsbtReturn>} */
+    async signMultisigPsbt() {
+        throw new Error(
+            'TrezorSigner.signMultisigPsbt: hardware multisig PSBT signing on Trezor is not yet wired — the signTransaction envelope requires multisig `signatures` arrays + public-key-ordering plumbing that isn\'t in trezorFormat.js today. Use the wallet\'s software signer for this cosigner.',
+        );
+    }
 }
 
 /**

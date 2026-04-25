@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.98.0] - 2026-04-24
+
+§56.3 Pre-launch — Step 3 of 7. Hardware-friendly classical multisig PSBT path (closes FOLLOWUP 1 from `claude/reports/specs/2026-04-24_phase4-close.md`). The wallet now has a clean `signMultisigPsbt` abstract on the Signer interface — software-signer implements it for real (delegating to the SDK's new `signMultisigPsbt` / `finalizeMultisigPsbt`); hardware signers throw with the specific reason their multisig path isn't wired (Trezor: signTransaction multisig envelope plumbing; Ledger: registerWallet wallet-policy provisioning).
+
+### Cross-repo
+
+- `xchain-sdk` 1.12.0 → 1.13.0 (commit `3ea1b83` in `xchain-sdk`). New `WalletUtils.signMultisigPsbt(psbtHex, wif)` and `WalletUtils.finalizeMultisigPsbt(psbtHex)`. The "sign without finalizing → merge → finalize once threshold met" split is the natural N-of-M workflow because bitcoinjs-lib's PSBT format stacks `partialSig` entries under each input, so two cosigner-signed PSBTs merge by union. Wallet pin bumped `^1.12.0` → `^1.13.0` in `extension` and `web`.
+
+### Added
+
+- `Signer.signMultisigPsbt({ chainId, psbtHex, signingPaths })` — new abstract on the base `Signer` class. Returns the PSBT with this signer's partial sigs added but NOT finalized. Two new typedef blocks in `Signer.js` (`SignMultisigPsbtParams`, `SignMultisigPsbtReturn`).
+
+- `SoftwareSigner.signMultisigPsbt` — real implementation. Derives the WIF for the cosigner's path via `_resolveWifForEntry`, calls `sdk.wallet.signMultisigPsbt(psbtHex, wif)`, returns the resulting PSBT. Surfaces a clear "bump xchain-sdk to ^1.13.0" message when the SDK is too old.
+
+- `TrezorSigner.signMultisigPsbt` — throwing stub: "hardware multisig PSBT signing on Trezor is not yet wired — the signTransaction envelope requires multisig `signatures` arrays + public-key-ordering plumbing that isn't in trezorFormat.js today."
+
+- `LedgerSigner.signMultisigPsbt` — throwing stub: "hardware multisig PSBT signing on Ledger requires a registered wallet policy (Bitcoin app ≥ 2.1.0 registerWallet flow) which this wallet hasn't provisioned yet."
+
+- `packages/core/test/multisig-psbt-signing.smoke.js` — new smoke. Asserts the abstract throws AbstractMethodError; Trezor + Ledger throw their specific deferral errors; SoftwareSigner guards the locked / empty psbtHex / empty signingPaths / SDK-too-old paths; the happy path forwards the PSBT + WIF through `sdk.wallet.signMultisigPsbt` and returns the SDK's signed PSBT verbatim; new typedefs are present; SDK pin is `^1.13.0`.
+
+### Changed
+
+- `packages/core/test/multisig-signer.smoke.js` — softened the SDK-pin assertion from exact `^1.12.0` to `≥ ^1.12.0` regex (same pattern Step 19's smoke uses) so future bumps don't ripple.
+
+### Decided
+
+- **Two parallel methods, not one with flags.** The Step 21 `signMultisigClassical(msgHash, path)` stays — it produces a single DER signature given a sighash, useful when the wallet has the sighash already (e.g., from a §22.3 envelope-style flow). The new `signMultisigPsbt(psbtHex, signingPaths)` is the HW-friendly variant that takes a full PSBT. Both compose: a future flow can call `signMultisigPsbt` for HW signers and `signMultisigClassical` for the local software cosigner depending on what's most efficient. No flag-based branching.
+
+- **Hardware paths are stubs, not nothing.** Surfacing a vendor-specific deferral error is more useful than `AbstractMethodError` because the user gets a path forward (use the software signer; what to wait for). The Step 21 vendor-firmware compatibility matrix in the Phase 4 close report grows a row for each vendor's classical-multisig path the next time vendor support changes.
+
+### Notes
+
+- 87 smokes pass.
+- Integration into the `signMultisigLocally` flow + sign-screen UX is intentionally not in this step. Step 4 (per-address multisig configs) will reshape the Wallet schema enough that wiring the PSBT path through `signMultisigLocally` is cleaner to do after that lands.
+
 ## [0.97.0] - 2026-04-24
 
 §56.3 Pre-launch — Step 2 of 7. Standalone Addresses route (closes FOLLOWUP 4 from `claude/reports/specs/2026-04-24_phase4-close.md`). The wallet now has a single dedicated surface listing every address it has generated, with per-address multisig badging and a "Multisig only" filter — what the §22 spec called for in passing but no Phase 4 step claimed.

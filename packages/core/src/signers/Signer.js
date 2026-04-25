@@ -163,6 +163,23 @@ export class NotImplementedError extends Error {
  * @property {string} publicKey             33-byte hex of the signing key (for the sign-screen confirmation step)
  */
 
+/**
+ * §22.3 P2SH / P2WSH multisig PSBT signing (pre-launch Step 3). This
+ * is the HW-friendly variant of `signMultisigClassical` — takes a
+ * full PSBT and returns the signed-but-unfinalized PSBT. Hardware
+ * signers that don't yet support multisig surface a clear error.
+ *
+ * @typedef {Object} SignMultisigPsbtParams
+ * @property {string} chainId
+ * @property {string} psbtHex                       unsigned PSBT (or partially signed by other cosigners)
+ * @property {SigningPathEntry[]} signingPaths      which inputs to sign + under which path
+ */
+
+/**
+ * @typedef {Object} SignMultisigPsbtReturn
+ * @property {string} psbtHex                       PSBT with this signer's partial sigs added (NOT finalized)
+ */
+
 /** @typedef {(status: SignerStatus, detail?: string) => void} StatusListener */
 
 export class Signer {
@@ -269,6 +286,20 @@ export class Signer {
      */
     async signMultisigClassical(_params) {
         throw new AbstractMethodError('signMultisigClassical');
+    }
+
+    /**
+     * §22.3 P2SH / P2WSH multisig PSBT signing — full-PSBT variant.
+     * Returns the PSBT with this signer's partial sigs added but NOT
+     * finalized; the coordinator merges + finalizes once threshold is
+     * met. Hardware signers that lack multisig support throw a clear
+     * "use the software signer or register a wallet policy" error.
+     *
+     * @param {SignMultisigPsbtParams} _params
+     * @returns {Promise<SignMultisigPsbtReturn>}
+     */
+    async signMultisigPsbt(_params) {
+        throw new AbstractMethodError('signMultisigPsbt');
     }
 
     /**

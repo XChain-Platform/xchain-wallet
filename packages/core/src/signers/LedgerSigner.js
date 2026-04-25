@@ -325,6 +325,19 @@ export class LedgerSigner extends Signer {
             'LedgerSigner.signMultisigClassical: classical multisig signing on Ledger is not yet wired — use the wallet\'s software signer for this cosigner, or wait for the §22 hardware-multisig PSBT path.',
         );
     }
+
+    // Ledger's Bitcoin app requires a registered wallet policy
+    // (registerWallet + the resulting policy hmac) before it will
+    // sign a multisig PSBT. The app gained the wallet-policy API at
+    // 2.1.0 but registering + storing the hmac is a separate
+    // provisioning flow the wallet hasn't built yet. Surface the
+    // limit with guidance until the provisioning flow lands.
+    /** @returns {Promise<import('./Signer.js').SignMultisigPsbtReturn>} */
+    async signMultisigPsbt() {
+        throw new Error(
+            'LedgerSigner.signMultisigPsbt: hardware multisig PSBT signing on Ledger requires a registered wallet policy (Bitcoin app ≥ 2.1.0 registerWallet flow) which this wallet hasn\'t provisioned yet. Use the wallet\'s software signer for this cosigner.',
+        );
+    }
 }
 
 /**

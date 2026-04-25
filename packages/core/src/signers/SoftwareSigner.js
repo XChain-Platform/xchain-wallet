@@ -599,6 +599,38 @@ export class SoftwareSigner extends Signer {
     }
 
     /**
+     * §22.3 P2SH / P2WSH multisig PSBT signing. Takes a full PSBT
+     * (with redeem/witness scripts populated on each input) and a
+     * signing path, derives the WIF, and calls
+     * `sdk.wallet.signMultisigPsbt` to add this cosigner's partial
+     * sigs without finalizing. Returns the PSBT with the new sigs.
+     *
+     * @param {import('./Signer.js').SignMultisigPsbtParams} params
+     * @returns {Promise<import('./Signer.js').SignMultisigPsbtReturn>}
+     */
+    async signMultisigPsbt({ chainId, psbtHex, signingPaths }) {
+        this._assertUnlocked();
+        this._assertSdkRegistry('signMultisigPsbt');
+        if (typeof psbtHex !== 'string' || psbtHex.length === 0) {
+            throw new Error('SoftwareSigner.signMultisigPsbt: psbtHex is required');
+        }
+        if (!Array.isArray(signingPaths) || signingPaths.length === 0) {
+            throw new Error('SoftwareSigner.signMultisigPsbt: signingPaths must be non-empty');
+        }
+        assertSameSigningSource(signingPaths, 'signMultisigPsbt');
+        const entry = signingPaths[0];
+        const wif = this._resolveWifForEntry(chainId, entry);
+        const sdk = this._sdkRegistry.get(chainId);
+        if (!sdk?.wallet || typeof sdk.wallet.signMultisigPsbt !== 'function') {
+            throw new Error(
+                `SoftwareSigner.signMultisigPsbt: sdk.wallet.signMultisigPsbt unavailable on chainId "${chainId}" — bump xchain-sdk to ^1.13.0`,
+            );
+        }
+        const { psbtHex: signedPsbtHex } = sdk.wallet.signMultisigPsbt(psbtHex, wif);
+        return { psbtHex: signedPsbtHex };
+    }
+
+    /**
      * Derive a public key at the given path. Chain-agnostic — the
      * caller supplies the concrete path (resolve via ChainRegistry
      * before calling).
