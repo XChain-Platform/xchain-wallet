@@ -394,6 +394,7 @@ function ChainFilterBar({ chains, value, onChange }) {
                         role="tab"
                         key={cid}
                         aria-selected={value === cid}
+                        aria-label={d?.displayName || cid}
                         onClick={() => onChange(cid)}
                         className={styles.entry}
                         style={{ padding: '0.25rem 0.5rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
@@ -428,6 +429,7 @@ function ChainGroup({ descriptor, chainId, state, emptyText, onOpenContract, ren
                         key={String(rowKey(row)) + ':' + i}
                         type="button"
                         className={styles.entry}
+                        aria-label={row.name || row.NAME || `Contract ${rowKey(row)}`}
                         onClick={() => onOpenContract(chainId, String(rowKey(row)))}
                     >
                         {renderRow(row)}

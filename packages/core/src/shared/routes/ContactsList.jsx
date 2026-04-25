@@ -230,6 +230,7 @@ export function ContactsList({ walletId, onSendMessage, onBack }) {
                             type="button"
                             variant="ghost"
                             size="sm"
+                            aria-label={`Remove address ${i + 1}`}
                             onClick={() => {
                                 if (formEntries.length === 1) return;
                                 setFormEntries(formEntries.filter((_, idx) => idx !== i));

@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.100.0] - 2026-04-24
+
+§56.3 Pre-launch — Step 5 of 7. Static a11y audit gate. Every shared route + UI primitive now passes a five-rule mechanical audit (button label / img alt / input label / textarea label / div onClick role + tabIndex). The smoke gate fails CI if any new surface introduces a regression. Full report at `claude/reports/specs/2026-04-24_a11y-audit.md`.
+
+### Added
+
+- `packages/core/scripts/a11y-audit.js` — static a11y audit. Walks every JSX file under `src/shared/` + `src/ui/`, parses tags with a brace-balancing reader (so `onClick={(e) => ...}` arrow functions inside attributes don't trip the parser), and surfaces violations of five rules: button-needs-text-or-aria-label, img-needs-alt, input-needs-label, textarea-needs-label, div-onclick-needs-role. The button rule accepts both static text content AND any bare-identifier or string-literal expression child as "presumed text" — `{p.label}`, `{busy ? 'Loading…' : 'Save'}`, or `Send` all count. Inputs accept `label=` / `aria-label` / `aria-labelledby` / `placeholder` / matching `<label htmlFor>` (literal or `useId()`-style dynamic). Exits 0 with `a11y-audit: 0 violations` on a clean tree; exits 1 with a per-file violation report otherwise.
+
+- `packages/core/test/a11y-audit.smoke.js` — smoke gate. Imports `runA11yAudit()`, asserts `violations.length === 0`. New surfaces that introduce regressions fail this smoke alongside the rest of the suite.
+
+- `claude/reports/specs/2026-04-24_a11y-audit.md` — audit report. Documents what the audit covers, what it explicitly DOESN'T cover (color contrast, focus-visible styling, live-region timing, keyboard traps, screen-reader walkthroughs — all queued for the external a11y audit), the violations surfaced and fixed during this pass, and a follow-up checklist for the external audit.
+
+### Changed
+
+- `ContactsList.jsx` — `×` remove-row button gained `aria-label={`Remove address ${i + 1}`}` so screen readers announce its purpose rather than the multiplication-sign codepoint.
+- `ContractsList.jsx` chain-tab buttons — gained `aria-label={d?.displayName \|\| cid}` so chain-icon-only tabs announce the chain name.
+- `ContractsList.jsx` contract-row buttons — gained `aria-label={row.name \|\| row.NAME \|\| `Contract ${rowKey(row)}`}` so row buttons announce the contract identity rather than "button" with no further context.
+- `AdvancedActionsForm.jsx` rest-params textarea — gained an explicit `aria-label` matching the on-screen label text. The wrapping `<label>` element provides the same association in modern UAs but adding the explicit label is robust across legacy assistive tech.
+
+### Notes
+
+- xchain-sdk pin stays at `^1.13.0`. Pure wallet-side step.
+- The audit's parser caught a class of false positives the first naive regex couldn't — `<textarea`s that have multi-line attribute blocks containing arrow functions look unlabeled to a regex that splits on the first `>`. The brace-balancing reader treats `=>` inside `{...}` as opaque content and only stops at top-level closing brackets.
+- 88 smokes pass. 89 with the new a11y-audit.smoke.
+
 ## [0.99.0] - 2026-04-24
 
 §56.3 Pre-launch — Step 4 of 7. Per-address (per-config) multisig (closes FOLLOWUP 3 from `claude/reports/specs/2026-04-24_phase4-close.md`). The `Wallet.multisig` single-slot field is now `Wallet.multisigs: MultisigConfig[]`, so a wallet can hold multiple multisig configurations side by side (different N-of-M groups, different schemes, different cosigner sets). Existing wallets migrate transparently — the v1→v2 migration synthesizes a `legacy-`-prefixed id for the existing config and wraps it in an array.

@@ -519,6 +519,7 @@ export function AdvancedActionsForm({ walletId, onBack }) {
                                 spellCheck={false}
                                 autoCapitalize="none"
                                 autoCorrect="off"
+                                aria-label={`${base} — list values, one per line or comma-separated`}
                             />
                         </label>
                     );
