@@ -15,3 +15,16 @@ export {
     XCW_PREFIX,
     DEFAULT_CHUNK_BYTES,
 } from './psbtQr.js';
+export {
+    ENVELOPE_VERSION as MULTISIG_ENVELOPE_VERSION,
+    ENVELOPE_PREFIX as MULTISIG_ENVELOPE_PREFIX,
+    MULTISIG_ENVELOPE_KINDS,
+    MultisigEnvelopeError,
+    fingerprintSessionRef,
+    buildRequestEnvelope,
+    buildReplyEnvelope,
+    buildFinalizedEnvelope,
+    validateEnvelope as validateMultisigEnvelope,
+    encodeEnvelope as encodeMultisigEnvelope,
+    decodeEnvelope as decodeMultisigEnvelope,
+} from './multisigPsbtEnvelope.js';

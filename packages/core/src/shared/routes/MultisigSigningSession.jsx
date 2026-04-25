@@ -1,10 +1,19 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Screen, Button } from '@xchain-wallet/core/ui';
-import { schemas } from '@xchain-wallet/core';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Screen, Button, AnimatedQrFrames } from '@xchain-wallet/core/ui';
+import { schemas, uri as uriLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './IssueTokenForm.module.css';
 
 const { progressSummary, pendingCosignerPubkeys } = schemas.multisigSigningSession;
+const {
+    encodeXcwChunks,
+    createXcwCollector,
+    addChunkToCollector,
+    buildRequestEnvelope,
+    buildFinalizedEnvelope,
+    decodeMultisigEnvelope,
+    encodeMultisigEnvelope,
+} = uriLib;
 
 /**
  * §22.3 + §42.9 multisig sign-screen tracker (Phase 4 Step 19).
@@ -43,6 +52,10 @@ export function MultisigSigningSession({ walletId, onBack }) {
     const [active, setActive] = useState(/** @type {any | null} */ (null));
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState(/** @type {string | null} */ (null));
+    const [view, setView] = useState(/** @type {'tracker' | 'export-qr' | 'paste-inbox'} */ ('tracker'));
+    const [pasteInput, setPasteInput] = useState('');
+    const [collectorState, setCollectorState] = useState(() => createXcwCollector());
+    const [pasteResult, setPasteResult] = useState(/** @type {string | null} */ (null));
 
     const refreshList = useCallback(async () => {
         try {
@@ -96,6 +109,146 @@ export function MultisigSigningSession({ walletId, onBack }) {
             await refreshList();
         } catch (err) {
             setError(err?.message || 'Cancel failed.');
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    // §20.3 chunked QR frames for the current outbound envelope.
+    // Coordinator's request kind switches with the session's status:
+    // round 1 (MuSig2 nonces) vs round 2 (MuSig2 partials, carries
+    // aggNonce) vs P2SH/P2WSH single round vs finalized broadcast.
+    const exportFrames = useMemo(() => {
+        if (!active) return null;
+        try {
+            const sessionRef = {
+                scheme: active.scheme,
+                threshold: active.threshold,
+                cosignerPubkeys: active.cosignerPubkeys,
+                msgHash: active.msgHash,
+                psbtHex: active.psbtHex || '',
+            };
+            let envelope;
+            if (active.scheme === 'taproot-musig2') {
+                if (active.status === 'collecting-nonces') {
+                    envelope = buildRequestEnvelope({
+                        kind: 'multisig-request-nonce',
+                        sessionRef,
+                    });
+                } else if (active.status === 'collecting-sigs' && active.aggNonce) {
+                    envelope = buildRequestEnvelope({
+                        kind: 'multisig-request-partial',
+                        sessionRef,
+                        aggNonceHex: active.aggNonce,
+                    });
+                } else if (active.status === 'finalized' && active.finalizedTxHex) {
+                    envelope = buildFinalizedEnvelope({
+                        sessionRef,
+                        txHex: active.finalizedTxHex,
+                        ...(active.txid ? { txid: active.txid } : {}),
+                    });
+                } else {
+                    return null;
+                }
+            } else if (active.status === 'collecting-sigs') {
+                envelope = buildRequestEnvelope({
+                    kind: 'multisig-request-signature',
+                    sessionRef,
+                });
+            } else if (active.status === 'finalized' && active.finalizedTxHex) {
+                envelope = buildFinalizedEnvelope({
+                    sessionRef,
+                    txHex: active.finalizedTxHex,
+                    ...(active.txid ? { txid: active.txid } : {}),
+                });
+            } else {
+                return null;
+            }
+            return encodeXcwChunks(encodeMultisigEnvelope(envelope));
+        } catch (e) {
+            // Surface in the UI rather than crashing — sessions with
+            // malformed state still let the user cancel them.
+            return { error: e?.message || String(e) };
+        }
+    }, [active]);
+
+    function resetCollector() {
+        setCollectorState(createXcwCollector());
+        setPasteInput('');
+        setPasteResult(null);
+    }
+
+    async function handlePasteSubmit() {
+        if (!active) return;
+        setBusy(true);
+        setError(null);
+        setPasteResult(null);
+        // Accept both single chunks and newline-separated batches —
+        // some users will paste the whole capture log at once rather
+        // than frame-by-frame.
+        const lines = pasteInput
+            .split(/[\r\n]+/)
+            .map((line) => line.trim())
+            .filter((line) => line.length > 0);
+        let state = collectorState;
+        for (const line of lines) {
+            state = addChunkToCollector(state, line);
+            if (state.error) {
+                setError(state.error);
+                setCollectorState(state);
+                setBusy(false);
+                return;
+            }
+            if (state.complete) break;
+        }
+        setCollectorState(state);
+        if (!state.complete || !state.psbt) {
+            setBusy(false);
+            return;
+        }
+        // All chunks in. Decode the envelope and dispatch.
+        let envelope;
+        try {
+            envelope = decodeMultisigEnvelope(state.psbt);
+        } catch (e) {
+            setError(e?.message || 'Failed to parse envelope.');
+            setBusy(false);
+            return;
+        }
+        try {
+            if (envelope.kind === 'multisig-round-1-reply') {
+                await messaging.contributeMultisigNonce({
+                    sessionId: active.id,
+                    pubkey: envelope.contribution.pubkey,
+                    publicNonceHex: envelope.contribution.publicNonce,
+                });
+                setPasteResult(`Round 1 nonce from ${shortPk(envelope.contribution.pubkey)} accepted.`);
+            } else if (envelope.kind === 'multisig-round-2-reply') {
+                await messaging.contributeMultisigSignature({
+                    sessionId: active.id,
+                    pubkey: envelope.contribution.pubkey,
+                    signatureHex: envelope.contribution.sig,
+                });
+                setPasteResult(`Round 2 partial sig from ${shortPk(envelope.contribution.pubkey)} accepted.`);
+            } else if (envelope.kind === 'multisig-classical-reply') {
+                await messaging.contributeMultisigSignature({
+                    sessionId: active.id,
+                    pubkey: envelope.contribution.pubkey,
+                    signatureHex: envelope.contribution.sig,
+                });
+                setPasteResult(`ECDSA signature from ${shortPk(envelope.contribution.pubkey)} accepted.`);
+            } else {
+                setError(`Envelope kind "${envelope.kind}" is not a cosigner reply.`);
+                setBusy(false);
+                return;
+            }
+            await refreshActive(active.id);
+            await refreshList();
+            // Reset for the next paste.
+            setCollectorState(createXcwCollector());
+            setPasteInput('');
+        } catch (err) {
+            setError(err?.message || 'Failed to apply contribution.');
         } finally {
             setBusy(false);
         }
@@ -194,6 +347,98 @@ export function MultisigSigningSession({ walletId, onBack }) {
     const summary = progressSummary(active);
     const pending = pendingCosignerPubkeys(active);
     const isMusig2 = active.scheme === 'taproot-musig2';
+    const roundLabel = isMusig2
+        ? (active.status === 'collecting-nonces'
+            ? 'Round 1 — Collect nonces'
+            : (active.status === 'collecting-sigs'
+                ? 'Round 2 — Collect signatures'
+                : null))
+        : (active.status === 'collecting-sigs' ? 'Collect signatures' : null);
+
+    if (view === 'export-qr') {
+        return wrap(
+            <>
+                <p className={styles.successTitle}>
+                    {roundLabel || (active.status === 'finalized' ? 'Finalized broadcast' : 'Export envelope')}
+                </p>
+                <p className={styles.hint}>
+                    Show this animated QR to a cosigner's wallet. Each frame is an
+                    XCW chunk (§20.3); the cosigner's wallet reassembles the
+                    envelope on its side.
+                </p>
+                {exportFrames && exportFrames.error ? (
+                    <div role="alert" className={styles.error}>{exportFrames.error}</div>
+                ) : exportFrames && Array.isArray(exportFrames) ? (
+                    <AnimatedQrFrames
+                        frames={exportFrames}
+                        alt="Multisig PSBT request envelope"
+                    />
+                ) : (
+                    <p className={styles.hint}>
+                        Nothing to export from this status. {active.status === 'cancelled'
+                            ? 'Session is cancelled.'
+                            : active.status === 'ready-to-finalize'
+                                ? 'Aggregate the round, then finalize, before exporting the broadcast envelope.'
+                                : 'Aggregate the current round to advance.'}
+                    </p>
+                )}
+                {Array.isArray(exportFrames) ? (
+                    <details>
+                        <summary className={styles.hint}>Plain-text chunks (paste into the cosigner's wallet)</summary>
+                        <textarea
+                            readOnly
+                            aria-label="Multisig envelope chunks"
+                            value={exportFrames.join('\n')}
+                            rows={6}
+                            style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.75rem' }}
+                        />
+                    </details>
+                ) : null}
+                <div className={styles.actions}>
+                    <Button variant="ghost" onClick={() => setView('tracker')}>Back to tracker</Button>
+                </div>
+            </>,
+        );
+    }
+
+    if (view === 'paste-inbox') {
+        return wrap(
+            <>
+                <p className={styles.successTitle}>Scan cosigner reply</p>
+                <p className={styles.hint}>
+                    Paste each XCW chunk on its own line — the wallet reassembles
+                    the envelope, validates the fingerprint against this session,
+                    and applies the contribution. Step 21 will wire the camera
+                    scanner that fills this textarea automatically.
+                </p>
+                <textarea
+                    aria-label="Cosigner reply chunks"
+                    value={pasteInput}
+                    onChange={(e) => setPasteInput(e.target.value)}
+                    rows={6}
+                    style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.75rem' }}
+                />
+                <p className={styles.hint}>
+                    Frames received: {collectorState.receivedCount} of{' '}
+                    {collectorState.total ?? '?'}
+                </p>
+                {pasteResult ? <p className={styles.hint}>{pasteResult}</p> : null}
+                {error ? <div role="alert" className={styles.error}>{error}</div> : null}
+                <div className={styles.actions}>
+                    <Button onClick={handlePasteSubmit} disabled={busy || pasteInput.trim().length === 0}>
+                        {busy ? 'Processing…' : 'Submit chunks'}
+                    </Button>
+                    <Button variant="ghost" onClick={resetCollector} disabled={busy}>
+                        Reset collector
+                    </Button>
+                    <Button variant="ghost" onClick={() => setView('tracker')}>
+                        Back to tracker
+                    </Button>
+                </div>
+            </>,
+        );
+    }
+
     const canAggregate =
         isMusig2 && (
             (active.status === 'collecting-nonces'
@@ -238,11 +483,24 @@ export function MultisigSigningSession({ walletId, onBack }) {
             ) : (
                 <p className={styles.hint}>All cosigners have contributed.</p>
             )}
+            {roundLabel ? (
+                <p className={styles.hint} data-testid="multisig-round-label">{roundLabel}</p>
+            ) : null}
             {error ? <div role="alert" className={styles.error}>{error}</div> : null}
             <div className={styles.actions}>
                 {canAggregate && !isTerminal ? (
                     <Button onClick={handleAggregate} disabled={busy}>
                         {busy ? 'Aggregating…' : 'Aggregate'}
+                    </Button>
+                ) : null}
+                {!isTerminal && Array.isArray(exportFrames) ? (
+                    <Button variant="ghost" onClick={() => setView('export-qr')}>
+                        Export PSBT QR
+                    </Button>
+                ) : null}
+                {!isTerminal ? (
+                    <Button variant="ghost" onClick={() => { resetCollector(); setView('paste-inbox'); }}>
+                        Scan cosigner reply
                     </Button>
                 ) : null}
                 {!isTerminal ? (
@@ -256,6 +514,11 @@ export function MultisigSigningSession({ walletId, onBack }) {
             </div>
         </>,
     );
+}
+
+function shortPk(pk) {
+    if (typeof pk !== 'string' || pk.length < 12) return pk;
+    return `${pk.slice(0, 8)}…${pk.slice(-4)}`;
 }
 
 function schemeLabel(s) {

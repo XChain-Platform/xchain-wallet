@@ -9,3 +9,4 @@ export { Input } from './Input.jsx';
 export { ChainBadge } from './ChainBadge.jsx';
 export { AddressText } from './AddressText.jsx';
 export { CopyButton } from './CopyButton.jsx';
+export { AnimatedQrFrames } from './AnimatedQrFrames.jsx';

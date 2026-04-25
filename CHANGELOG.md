@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.92.0] - 2026-04-24
+
+Phase 4 — Step 20 of 23. Multisig PSBT-QR cosigner round-trip (§22.3 reuses §20 chunked-QR transport). The wallet now has a complete envelope protocol on top of the existing chunked-QR transport: coordinator wallets request, cosigner wallets reply, both differentiate round 1 (MuSig2 nonces) from round 2 (MuSig2 partial sigs) from the single round (P2SH/P2WSH classical). Step 21 wires the hardware-MuSig2 path; Step 22 surfaces multisig badges across the rest of the UI.
+
+### Added
+
+- `packages/core/src/uri/multisigPsbtEnvelope.js` — multisig envelope module. Seven envelope kinds covering the full protocol: `multisig-request-nonce` / `multisig-round-1-reply` (MuSig2 round 1), `multisig-request-partial` (carries `aggNonce`) / `multisig-round-2-reply` (MuSig2 round 2), `multisig-request-signature` / `multisig-classical-reply` (P2SH/P2WSH single round), `multisig-finalized` (broadcast-of-record). Every envelope carries a `fingerprint` derived from `sha256(canonicalized(sessionRef))` so cosigner wallets can route incoming envelopes into the right local session without shipping a UUID on the wire. `validateMultisigEnvelope` cross-checks the carried fingerprint against the carried `sessionRef`, catching tampering before the contribution reaches the state machine.
+
+- `packages/core/src/ui/AnimatedQrFrames.jsx` — generic React component that renders an array of strings as animated QR codes at 3 fps per §20.3. Pre-renders the next frame in the background so frame transitions don't flash. Caches data URLs to avoid re-rendering on every interval tick. Reusable: not multisig-specific — anything that wants to display chunked QR (cold-storage PSBT export, large URI shares) can compose with `encodeXcwChunks` to drive frames.
+
+- `packages/core/src/shared/routes/MultisigSigningSession.jsx` — three new view states layered onto the Step 19 tracker:
+  - `tracker` (existing) — adds `Round 1 — Collect nonces` / `Round 2 — Collect signatures` / `Collect signatures` round labels per the §22.3 + §22.4 spec.
+  - `export-qr` — picks the right envelope kind for the current `(scheme, status)` tuple (round-1-nonce request for MuSig2 collecting-nonces; round-2-partial request for MuSig2 collecting-sigs once aggNonce is set; signature request for P2SH/P2WSH; finalized broadcast for terminal). Encodes the envelope, runs it through `encodeXcwChunks`, and renders the chunks via `AnimatedQrFrames`. A `<details>` block surfaces the raw frames as a textarea so wallet-to-wallet copy-paste works while camera scanners are still un-shipped.
+  - `paste-inbox` — accepts pasted XCW chunks (one per line or batch), feeds them through `addChunkToCollector`, and on completion runs `decodeMultisigEnvelope` + dispatches the contribution to `contributeMultisigNonce` / `contributeMultisigSignature` via the existing Step 19 messaging helpers. Frame counter shows progress; resetting the collector starts a new capture.
+
+- `packages/core/test/multisig-psbt-qr.smoke.js` — new smoke. Asserts the seven envelope kinds enumerate the full protocol; canonicalized + case-insensitive fingerprint; round-1 / round-2 / classical / finalized builders + their shape guards; encode→XCW chunks→reassemble→decode round-trip for every kind; tampered-envelope detection (fingerprint mismatch when the underlying sessionRef is swapped); envelope-version rejection; `AnimatedQrFrames` export from core/ui; sign-screen route renders both round labels per spec; sign-screen builds outbound envelopes + decodes inbound ones + pipes the contribution through messaging; uri barrel exposes the 9 new helpers; Step 19 helpers still present in all 3 shells. All 82 smokes pass.
+
+### Decided
+
+- **Envelope-on-bytes, not envelope-as-PSBT.** The §22.3 multisig protocol carries strictly more state than a vanilla PSBT (per-cosigner publicNonces, aggregated nonce, per-cosigner partials, the eventual aggregated Schnorr sig). Encoding all of that into BIP-0373 PSBT v2 fields is doable but pulls a heavyweight PSBT manipulation library into the wallet's audit surface for a flow that's purely wallet-to-wallet. Going with a small versioned JSON envelope wrapped inside `encodeXcwChunks`. The same chunked-QR transport (`XCW:<n>/<total>:<crc32>:<base64>`) already proven for PSBT-as-bytes carries the envelopes verbatim. Future ecosystem-interop work (Sparrow / Specter / Coldcard) per §20.3 can layer BBQr or UR formats on top of this same envelope shape.
+
+- **Camera scanner deferred to a later step.** §20.4 / §20.5 specify a full air-gapped signer-mode UX with camera capture; Step 20's deliverable per the Phase 4 plan is the cosigner round-trip protocol, not the broader signer-mode wiring. The paste-inbox accepts pasted XCW chunks today; the camera scanner will fill the same textarea automatically when it lands. Smoke notes the deferral inline so the follow-up is discoverable.
+
+### Notes
+
+- `xchain-sdk` pin still at `^1.11.0`. No platform-side changes for Step 20 — the envelope layer is wallet-only and the cryptographic primitives that drive aggregation already shipped at SDK 1.10/1.11.
+- Step 19's smoke continues to pass against the modified sign-screen route; the round-label additions sit alongside the existing dual-mode tracker copy without disturbing it.
+
 ## [0.91.0] - 2026-04-24
 
 Phase 4 — Step 19 of 23. Multisig-aware sign-round persistence + dual-mode partial-signature tracking (§22.3 + §42.9). The wallet now owns the state machine that keeps a multisig spend coherent across cosigner contributions and across wallet reloads. Step 20 wires the §20 PSBT-QR transport that pumps contributions into this layer; Step 21 wires the hardware-MuSig2 path; Step 22 surfaces multisig badges across the rest of the UI.
