@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `README.md` — rewritten in the standard XChain component README format used by every sibling repo (encoder, decoder, indexer, explorer, hub, utxo-tracker, vm, sdk, node, regtest-miner, indexer-sync, e2e-test). Adds the shields header, a feature list with bracketed bold items, a Documentation table linking to `xchain-documentation/components/wallet/`, per-shell Quick Start, root + per-package Scripts, a Test Suite breakdown by group, and the standard Copyright trailer. Replaces the previous bespoke pre-implementation README. No source changes.
+
 ## [1.0.0-rc.6] - 2026-04-24
 
 §56.3 Pre-launch — user-initiated track, Step 5 of 5 — accessibility audit readiness packet. Closes the autonomous portion of the user-initiated track. Pure-documentation slice; the user (Dankest, LLC) hands the packet to an external accessibility-audit vendor when they're ready to engage.
