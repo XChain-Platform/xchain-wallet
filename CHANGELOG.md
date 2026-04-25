@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0-rc.3] - 2026-04-24
+
+§56.3 Pre-launch — user-initiated track, Step 2 of 5 — Chrome Web Store privacy policy + submission checklist. Pure documentation slice; the user (Dankest, LLC) is the only one who can host the policy URL and file the CWS submission, so this step packages everything they'll need into one place.
+
+### Added
+
+- `packages/extension/PRIVACY_POLICY.md` — public-facing privacy policy. Covers what's stored on-device (encrypted wallet material via Argon2id-derived key, addresses, contacts, dApp grants, queued PSBTs), what leaves the device (only user-configured RPC endpoints + optional vendor hardware-bridge calls), permissions justifications, the camera-scanner flow's `getUserMedia` runtime prompt, the absence of analytics / advertising / crash-reporting SDKs, the absence of Google API integration, and the CWS-mandated single-purpose + limited-use disclosures. Authored to be hosted as-is on a public URL — GitHub Pages from this repo or `https://dankest.llc/xchain-wallet/privacy` are both acceptable; the submission checklist documents the recommended setup.
+
+- `claude/reports/specs/2026-04-24_cws-submission.md` (in the platform repo, gitignored) — submission playbook. Sections: build artifact + zip procedure, listing copy with verbatim strings, screenshot dimensions + capture procedure for the five required surfaces (Home, Send, Sign-screen, Multisig Receive, Settings → Security), promo tile spec, privacy practices form answers, common rejection reasons + dry-run greps, single-purpose statement to paste, pre-submission smoke + audit run, post-approval automation roadmap, Edge / Firefox variants. Designed so the submitter can work top-to-bottom without referring back to CWS docs.
+
+### Decided
+
+- **Privacy policy lives in the extension package.** Putting it at `packages/extension/PRIVACY_POLICY.md` keeps it discoverable next to the manifest it disclaims, and lets GitHub Pages serve the same file as both source and listing URL. Alternative considered (host only on dankest.llc) was rejected because the GitHub-hosted copy provides a permanent record tied to a specific git revision — useful when CWS asks "show the policy that was active at the time the v1.0.4 update was published".
+
+- **Submission checklist gitignored in the platform repo.** Per existing convention (`claude/reports/` is gitignored). The checklist points at concrete file paths and rule numbers in the wallet repo, so it stays useful as a private working doc; the user-facing parts (privacy policy, listing copy templates) live in the wallet repo where the public can read them.
+
+### Notes
+
+- xchain-sdk pin stays at `^1.13.0`. No source changes; documentation + version bump only.
+- 91 smokes pass.
+
 ## [1.0.0-rc.2] - 2026-04-24
 
 §56.3 Pre-launch — user-initiated track, Step 1 of 5 — Chrome Web Store manifest hardening. First pre-GA slice of the Chrome Web Store submission track.
