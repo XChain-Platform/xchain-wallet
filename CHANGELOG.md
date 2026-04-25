@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0-rc.1] - 2026-04-24
+
+§56.3 Pre-launch — Step 7 of 7. **Pre-launch CLOSED.** All 7 autonomous steps shipped across v0.96.0 → v1.0.0-rc.1 (camera scanner, AddressList route, hardware-friendly multisig PSBT path + SDK 1.13, per-address multisig configs / Wallet schema v2, static a11y audit gate, reproducible-build scaffolding gate, this RC cut). xchain-sdk pinned at `^1.13.0`. 90 smokes pass.
+
+### What's done
+
+- All four Phase 4 follow-ups (FOLLOWUPS 1–4 from `2026-04-24_phase4-close.md`).
+- Static a11y audit + smoke gate. CI fails on regression.
+- Reproducible-build scaffolding audit + smoke gate. CI fails on regression.
+- Wallet schema v2 migration (`Wallet.multisig` → `Wallet.multisigs[]`). Transparent for legacy v1 records.
+- Hardware-friendly classical multisig PSBT abstract on the Signer interface; SoftwareSigner real impl via `sdk.wallet.signMultisigPsbt`; Trezor + Ledger surface vendor-specific deferral errors with a path to the software signer.
+- Camera scanner for the multisig paste-inbox.
+- Standalone `<AddressList>` route with multisig badging + Multisig-only filter.
+
+### Remaining before v1.0.0 GA
+
+User-initiated:
+- **External security audit.** Cryptography (xchain-sdk MuSig2 + signEcdsa + ECPair / WIF / kdf), wallet flows (unlockWallet, signers, multisig session state machine, signMultisigPsbt path), shell IPC.
+- **External a11y audit.** Color contrast verification, focus-visible review, live-region timing, keyboard traps, screen-reader walkthroughs (NVDA + JAWS + VoiceOver), reduced-motion preference for `AnimatedQrFrames`.
+- **Chrome Web Store submission.** Manifest review + screenshots + privacy disclosures.
+
+Release-cut deliverable:
+- **Byte-for-byte reproducible-build verification** on a clean dev machine. Run `packages/desktop/scripts/reproduce.sh v1.0.0-rc.1` twice; diff `RELEASE_HASHES.txt`. Procedure documented at `claude/reports/specs/2026-04-24_repro-build.md`.
+
+### Reference
+
+- Pre-launch close report: `claude/reports/specs/2026-04-24_prelaunch-close.md` — full step ledger, track-level state, deferral justifications, GA cut recommendation.
+- Phase 4 close report: `claude/reports/specs/2026-04-24_phase4-close.md` — predecessor; lists the four pre-launch follow-ups.
+
+This commit is a marker; no source changes other than the version bump.
+
 ## [0.101.0] - 2026-04-24
 
 §56.3 Pre-launch — Step 6 of 7. Reproducible-build scaffolding gate. Every ingredient required for Level-2 reproducibility is now CI-gated by a static audit script + smoke. The byte-for-byte run-twice verification still has to happen on a clean dev machine before v1.0.0 GA — see `claude/reports/specs/2026-04-24_repro-build.md` for the procedure.
