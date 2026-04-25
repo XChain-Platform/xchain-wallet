@@ -77,7 +77,7 @@ export { delegateAction, revokeDelegationAction } from './delegateRevokeActions.
 export { broadcastsForAddress } from './broadcastQueries.js';
 export { linksForAddress } from './linkQueries.js';
 export { createMultisigConfig } from './createMultisigConfig.js';
-export { receiveMultisigAddress } from './multisigAddress.js';
+export { receiveMultisigAddress, listMultisigReceiveAddresses } from './multisigAddress.js';
 export {
     startMultisigSigningSession,
     getMultisigSigningSession,

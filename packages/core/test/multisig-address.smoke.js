@@ -2,9 +2,14 @@
 // Receive integration (§22 + §42.9).
 
 import { strict as assert } from 'node:assert';
+import { webcrypto } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+if (!globalThis.crypto) {
+    globalThis.crypto = webcrypto;
+}
 
 import { flows } from '../src/index.js';
 
@@ -40,7 +45,7 @@ await assert.rejects(
     async () => flows.receiveMultisigAddress({
         vault: {
             wallets: {
-                async get(id) { return { id, multisig: null }; },
+                async get(id) { return { id, multisigs: [] }; },
             },
         },
         sdkRegistry: { get: () => ({ deriveMultisigAddress: () => ({ address: 'x' }) }) },
@@ -58,14 +63,15 @@ await assert.rejects(
                 async get(id) {
                     return {
                         id,
-                        multisig: {
+                        multisigs: [{
+                            id: 'cfg-1',
                             scheme: 'p2wsh-multisig',
                             threshold: 2,
                             scriptTemplate: 'multi:2:02ab:03cd',
                             cosigners: [
                                 { name: 'A' }, { name: 'B' },
                             ],
-                        },
+                        }],
                     };
                 },
             },
@@ -84,7 +90,8 @@ const happy = await flows.receiveMultisigAddress({
             async get(id) {
                 return {
                     id,
-                    multisig: {
+                    multisigs: [{
+                        id: 'cfg-2',
                         scheme: 'p2wsh-multisig',
                         threshold: 2,
                         scriptTemplate: 'multi:2:02ab:03cd',
@@ -93,7 +100,7 @@ const happy = await flows.receiveMultisigAddress({
                             { name: 'Bob' },
                             { name: 'Carol' },
                         ],
-                    },
+                    }],
                 };
             },
         },

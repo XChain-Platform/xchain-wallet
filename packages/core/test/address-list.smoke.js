@@ -2,9 +2,14 @@
 // (Phase 4 FOLLOWUP 4 from 2026-04-24_phase4-close.md).
 
 import { strict as assert } from 'node:assert';
+import { webcrypto } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+if (!globalThis.crypto) {
+    globalThis.crypto = webcrypto;
+}
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -28,7 +33,7 @@ assert.ok(/messaging\.getMultisigReceiveAddress/.test(route),
     'AddressList resolves the multisig receive address for badging');
 assert.ok(/MultisigBadge/.test(route),
     'AddressList imports MultisigBadge');
-assert.ok(/<MultisigBadge[\s\S]*?threshold=\{multisig\.threshold\}/.test(route),
+assert.ok(/<MultisigBadge[\s\S]*?threshold=\{(?:row\.)?multisig\.threshold\}/.test(route),
     'AddressList renders the badge inline on matching rows');
 assert.ok(/Multisig only/.test(route),
     'AddressList exposes a "Multisig only" filter chip');

@@ -40,8 +40,8 @@ export function AddressList({ walletId, onBack }) {
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [enabledChains, setEnabledChains] = useState(/** @type {Set<string>} */ (new Set()));
     const [multisigOnly, setMultisigOnly] = useState(false);
-    const [multisig, setMultisig] = useState(
-        /** @type {{ address: string, threshold: number, cosignerCount: number, scheme: string } | null} */ (null),
+    const [multisigs, setMultisigs] = useState(
+        /** @type {Array<{ multisigConfigId: string, address: string, threshold: number, cosignerCount: number, scheme: string }>} */ ([]),
     );
 
     useEffect(() => {
@@ -66,18 +66,18 @@ export function AddressList({ walletId, onBack }) {
     useEffect(() => {
         let cancelled = false;
         const btc = chainRegistry.byCoin('bitcoin')[0]?.id;
-        if (!btc || typeof messaging.getMultisigReceiveAddress !== 'function') return undefined;
-        messaging.getMultisigReceiveAddress({ walletId, chainId: btc })
-            .then((r) => {
+        if (!btc) return undefined;
+        const fetcher = typeof messaging.listMultisigReceiveAddresses === 'function'
+            ? messaging.listMultisigReceiveAddresses({ walletId, chainId: btc })
+                .then((list) => Array.isArray(list) ? list : [])
+            : (typeof messaging.getMultisigReceiveAddress === 'function'
+                ? messaging.getMultisigReceiveAddress({ walletId, chainId: btc })
+                    .then((r) => (r && typeof r.address === 'string' ? [r] : []))
+                : Promise.resolve([]));
+        fetcher
+            .then((list) => {
                 if (cancelled) return;
-                if (r && typeof r.address === 'string') {
-                    setMultisig({
-                        address: r.address,
-                        threshold: r.threshold,
-                        cosignerCount: r.cosignerCount,
-                        scheme: r.scheme,
-                    });
-                }
+                setMultisigs(list);
             })
             .catch(() => { /* no multisig configured — silent */ });
         return () => { cancelled = true; };
@@ -85,43 +85,50 @@ export function AddressList({ walletId, onBack }) {
 
     const rows = useMemo(() => {
         if (!addressesByChain) return [];
-        const multisigLower = multisig ? multisig.address.toLowerCase() : null;
-        /** @type {Array<{ key: string, chainId: string, address: string, label: string, isMultisig: boolean }>} */
+        // Map of lower-case address → matching multisig config so each
+        // row knows which (if any) config it belongs to.
+        const multisigByAddress = new Map(
+            multisigs
+                .filter((m) => typeof m.address === 'string')
+                .map((m) => [m.address.toLowerCase(), m]),
+        );
+        /** @type {Array<{ key: string, chainId: string, address: string, label: string, multisig: any }>} */
         const out = [];
         for (const [chainId, addrs] of Object.entries(addressesByChain)) {
             if (!enabledChains.has(chainId)) continue;
             if (!Array.isArray(addrs)) continue;
             for (const a of addrs) {
-                const isMultisig = multisigLower !== null
-                    && a.address?.toLowerCase() === multisigLower;
+                const matched = multisigByAddress.get((a.address || '').toLowerCase()) || null;
                 out.push({
                     key: `${chainId}:${a.address}`,
                     chainId,
                     address: a.address,
                     label: a.label || '',
-                    isMultisig,
+                    multisig: matched,
                 });
             }
         }
-        // Synthesize a row for the multisig address if it isn't
-        // already in the wallet's address table — Receive derives it
-        // on-demand and doesn't necessarily persist it.
-        if (multisig) {
-            const btc = chainRegistry.byCoin('bitcoin')[0]?.id;
-            if (btc && enabledChains.has(btc)
-                && !out.some((r) => r.address.toLowerCase() === multisig.address.toLowerCase())) {
-                out.push({
-                    key: `${btc}:${multisig.address}:synthetic`,
-                    chainId: btc,
-                    address: multisig.address,
-                    label: 'Multisig receive',
-                    isMultisig: true,
-                });
+        // Synthesize one row per multisig config when its derived
+        // address isn't already in the wallet's address table —
+        // Receive derives them on-demand and doesn't necessarily
+        // persist them.
+        const btc = chainRegistry.byCoin('bitcoin')[0]?.id;
+        if (btc && enabledChains.has(btc)) {
+            for (const m of multisigs) {
+                if (!out.some((r) => r.address?.toLowerCase() === m.address.toLowerCase())) {
+                    out.push({
+                        key: `${btc}:${m.address}:synthetic`,
+                        chainId: btc,
+                        address: m.address,
+                        label: 'Multisig receive',
+                        multisig: m,
+                    });
+                }
             }
         }
-        if (multisigOnly) return out.filter((r) => r.isMultisig);
+        if (multisigOnly) return out.filter((r) => r.multisig);
         return out;
-    }, [addressesByChain, enabledChains, multisig, multisigOnly]);
+    }, [addressesByChain, enabledChains, multisigs, multisigOnly]);
 
     const toggleChain = (cid) => {
         setEnabledChains((prev) => {
@@ -203,11 +210,11 @@ export function AddressList({ walletId, onBack }) {
                 <button
                     type="button"
                     onClick={() => setMultisigOnly((v) => !v)}
-                    disabled={!multisig}
+                    disabled={multisigs.length === 0}
                     className={`${styles.chip} ${styles.chipCrossChain} ${multisigOnly ? styles.chipActive : ''}`}
                     aria-pressed={multisigOnly}
-                    title={multisig
-                        ? 'Show only this wallet\'s multisig receive address (§22).'
+                    title={multisigs.length > 0
+                        ? 'Show only this wallet\'s multisig receive addresses (§22).'
                         : 'No multisig address configured for this wallet.'}
                 >
                     🔐 Multisig only
@@ -232,11 +239,11 @@ export function AddressList({ walletId, onBack }) {
                                 {row.label ? (
                                     <span className={styles.rowTitle}>{row.label}</span>
                                 ) : null}
-                                {row.isMultisig && multisig ? (
+                                {row.multisig ? (
                                     <MultisigBadge
-                                        threshold={multisig.threshold}
-                                        cosignerCount={multisig.cosignerCount}
-                                        scheme={multisig.scheme}
+                                        threshold={row.multisig.threshold}
+                                        cosignerCount={row.multisig.cosignerCount}
+                                        scheme={row.multisig.scheme}
                                         size="sm"
                                     />
                                 ) : null}

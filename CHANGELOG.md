@@ -7,6 +7,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.99.0] - 2026-04-24
+
+§56.3 Pre-launch — Step 4 of 7. Per-address (per-config) multisig (closes FOLLOWUP 3 from `claude/reports/specs/2026-04-24_phase4-close.md`). The `Wallet.multisig` single-slot field is now `Wallet.multisigs: MultisigConfig[]`, so a wallet can hold multiple multisig configurations side by side (different N-of-M groups, different schemes, different cosigner sets). Existing wallets migrate transparently — the v1→v2 migration synthesizes a `legacy-`-prefixed id for the existing config and wraps it in an array.
+
+### Schema migrations
+
+- `Wallet` schemaVersion 1 → 2. New `multisigs: MultisigConfig[]` replaces `multisig: MultisigConfig | null`. Migration: `wallet.multisig` (if non-null) becomes `wallet.multisigs[0]` with a synthetic `legacy-${uuid}` id; `null` becomes `[]`. The legacy `multisig` slot is stripped on migration. Validator now enforces unique config ids within `multisigs`.
+
+- `MultisigConfig` schemaVersion 1 → 2. New `id: string` field. Migration synthesizes `legacy-${uuid}` when the v1 record has no id (it didn't, since v1 was a single slot with no need for one). `buildMultisigConfig` accepts a caller-supplied `id` (used by code paths that already have a stable identifier) or auto-assigns `crypto.randomUUID()`.
+
+### Added
+
+- `flows.listMultisigReceiveAddresses({ vault, sdkRegistry, walletId, chainId })` — plural variant of `receiveMultisigAddress`; returns one entry per config in `wallet.multisigs[]`. Each entry mirrors the singular result with an added `multisigConfigId`. Misconfigured configs are skipped silently rather than failing the whole list.
+
+- `multisig.listAddresses` background handler + matching `listMultisigReceiveAddresses` helpers in `popup` / `web` / `desktop` messaging.
+
+- `Receive.jsx` — renders one multisig section per config in `multisigs[]`, each with its own QR + badge + cosigner names. The first config still appears in the same place as before; additional configs stack below it.
+
+- `AddressList.jsx` — synthesizes one row per multisig config when the derived address isn't in the persisted address table. Each row carries its own `<MultisigBadge>` indicator. The `🔐 Multisig only` filter is enabled when *any* config exists.
+
+### Changed
+
+- `flows.receiveMultisigAddress` — accepts an optional `multisigConfigId` parameter; defaults to `multisigs[0]` when omitted. Returns `multisigConfigId` in the result so callers can disambiguate when multiple configs exist.
+
+- `flows.createMultisigConfig` — appends to `multisigs[]` rather than overwriting `multisig`. The duplicate-detection check is now keyed on `scriptTemplate` (same cosigners + same scheme = same address; legitimate to want a different N-of-M with the same cosigner set, which gets a different scriptTemplate and lands as a separate config).
+
+- `flows.startMultisigSigningSession` (Step 19) — accepts optional `multisigConfigId`; defaults to the first config.
+
+- `flows.signMultisigLocally` (Step 21) — finds the matching config in `wallet.multisigs[]` by pubkey-set equality against `session.cosignerPubkeys`. This is robust to wallets that carry multiple configs.
+
+- `toSafeWallet` projection in `createBackgroundHost.js` — returns `multisigs` array (defaulted to `[]`) rather than the legacy single slot.
+
+- `popup/messaging.js` `listWallets` JSDoc — return type updated to surface the new `multisigs` array.
+
+- Four pre-existing smokes (`multisig-create.smoke.js`, `multisig-address.smoke.js`, `multisig-signing.smoke.js`, `address-list.smoke.js`) — updated their fake-vault `Wallet` records to use `multisigs: [...]` instead of `multisig: {...}`. Polyfilled `globalThis.crypto = webcrypto` in three of them (the new schema factories are exercised at module load now that `buildMultisigConfig` runs `crypto.randomUUID()`).
+
+### Added — smoke
+
+- `packages/core/test/multisig-multi-config.smoke.js` — drives the full migration path. Exercises Wallet v1→v2 migration (single config + null cases), standalone `MultisigConfig` migration, duplicate-id validator rejection, `createMultisigConfig` appending two distinct configs to one wallet, duplicate-`scriptTemplate` guard, `receiveMultisigAddress` routing on `multisigConfigId`, `listMultisigReceiveAddresses` returning every config, bg/messaging registration, and Receive/AddressList multi-config render assertions. All 88 smokes pass.
+
+### Decided
+
+- **Migrate, don't dual-read.** The legacy `multisig` field is stripped on migration rather than left behind as a synonym for `multisigs[0]`. Single source of truth keeps the surface clean; the `legacy-`-prefixed config ids make pre-migration data identifiable in case any debugging-by-id-prefix is ever needed.
+
+- **Default to first config when no id is supplied.** `receiveMultisigAddress({ walletId, chainId })` without a `multisigConfigId` returns the first config in the array. This keeps callers that don't care about per-config routing (the singular helper, Step 18-era code paths) working unchanged. New code paths that need precision pass `multisigConfigId` explicitly.
+
+- **Home + History show "first config" for now.** Home's BTC-card multisig badge and History's "Multisig only" filter both use the singular helper today, which means they show the first config. A multi-config wallet still works — the user can drill into Receive or AddressList for the per-config view. Widening Home + History to show per-config breakdowns is straightforward but felt like polish, not v1.0 blocker — flagged as a follow-up.
+
+### Notes
+
+- xchain-sdk pin stays at `^1.13.0`. Pure wallet-side step.
+- 88 smokes pass.
+
 ## [0.98.0] - 2026-04-24
 
 §56.3 Pre-launch — Step 3 of 7. Hardware-friendly classical multisig PSBT path (closes FOLLOWUP 1 from `claude/reports/specs/2026-04-24_phase4-close.md`). The wallet now has a clean `signMultisigPsbt` abstract on the Signer interface — software-signer implements it for real (delegating to the SDK's new `signMultisigPsbt` / `finalizeMultisigPsbt`); hardware signers throw with the specific reason their multisig path isn't wired (Trezor: signTransaction multisig envelope plumbing; Ledger: registerWallet wallet-policy provisioning).

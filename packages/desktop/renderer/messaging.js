@@ -328,6 +328,11 @@ export function getMultisigReceiveAddress(req) {
     return /** @type {any} */ (sendMessage('multisig.receiveAddress', req));
 }
 
+/** @param {{ walletId: string, chainId: string }} req */
+export function listMultisigReceiveAddresses(req) {
+    return /** @type {any} */ (sendMessage('multisig.listAddresses', req));
+}
+
 // §22.3 + §42.9 multisig sign-round persistence (Phase 4 Step 19).
 /** @param {object} req */
 export function startMultisigSigningSession(req) {

@@ -196,7 +196,8 @@ function makeFakeVault({ wallet }) {
 {
     const wallet = {
         id: 'w-p2wsh',
-        multisig: {
+        multisigs: [{
+            id: 'cfg-p2wsh',
             scheme: 'p2wsh-multisig',
             threshold: 2,
             scriptTemplate: `multi:2:${alicePk}:${bobPk}:${carolPk}`,
@@ -205,7 +206,7 @@ function makeFakeVault({ wallet }) {
                 { pubkey: bobPk },
                 { pubkey: carolPk },
             ],
-        },
+        }],
     };
     const vault = makeFakeVault({ wallet });
 
@@ -272,7 +273,8 @@ function makeFakeVault({ wallet }) {
 {
     const wallet = {
         id: 'w-musig2',
-        multisig: {
+        multisigs: [{
+            id: 'cfg-musig2',
             scheme: 'taproot-musig2',
             threshold: 2,
             scriptTemplate: 'musig2:' + 'cd'.repeat(32),
@@ -280,7 +282,7 @@ function makeFakeVault({ wallet }) {
                 { pubkey: alicePk },
                 { pubkey: bobPk },
             ],
-        },
+        }],
     };
     const vault = makeFakeVault({ wallet });
 

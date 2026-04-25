@@ -111,7 +111,18 @@ export async function startMultisigSigningSession(opts) {
     if (!wallet) {
         throw new Error(`startMultisigSigningSession: wallet "${opts.walletId}" not found`);
     }
-    const config = wallet.multisig;
+    const configs = Array.isArray(wallet.multisigs) ? wallet.multisigs : [];
+    let config;
+    if (typeof opts.multisigConfigId === 'string' && opts.multisigConfigId.length > 0) {
+        config = configs.find((c) => c.id === opts.multisigConfigId);
+        if (!config) {
+            throw new Error(
+                `startMultisigSigningSession: wallet "${opts.walletId}" has no multisig config with id "${opts.multisigConfigId}"`,
+            );
+        }
+    } else {
+        config = configs[0];
+    }
     if (!config) {
         throw new Error(
             `startMultisigSigningSession: wallet "${opts.walletId}" has no multisig configuration`,

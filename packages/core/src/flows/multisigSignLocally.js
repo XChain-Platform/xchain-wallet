@@ -69,10 +69,21 @@ export async function signMultisigLocally(opts) {
     if (!wallet) {
         throw new Error(`signMultisigLocally: wallet "${session.walletId}" not found`);
     }
-    const config = wallet.multisig;
+    // Match the session's cosigner pubkey list against the wallet's
+    // multisigs[] (Step 4 schema migration). The session record
+    // snapshots `cosignerPubkeys` at start time, so picking the
+    // matching config by pubkey-set equality is robust to wallets
+    // that carry multiple configs.
+    const configs = Array.isArray(wallet.multisigs) ? wallet.multisigs : [];
+    const sessionPubkeys = new Set(session.cosignerPubkeys.map((p) => p.toLowerCase()));
+    const config = configs.find((c) => {
+        if (!c || !Array.isArray(c.cosigners)) return false;
+        if (c.cosigners.length !== sessionPubkeys.size) return false;
+        return c.cosigners.every((cs) => sessionPubkeys.has(cs.pubkey.toLowerCase()));
+    });
     if (!config) {
         throw new Error(
-            `signMultisigLocally: wallet "${session.walletId}" has no MultisigConfig — coordinator wallet must own the same config the session was started against`,
+            `signMultisigLocally: wallet "${session.walletId}" has no MultisigConfig matching this session's cosigners — coordinator wallet must own the same config the session was started against`,
         );
     }
     const localCosigner = config.cosigners.find((c) => c.origin === 'local');

@@ -19,6 +19,7 @@
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
  * @property {string} walletId
  * @property {string} chainId
+ * @property {string} [multisigConfigId]    optional; defaults to the first config in `wallet.multisigs`
  */
 
 /**
@@ -53,7 +54,18 @@ export async function receiveMultisigAddress(opts) {
     if (!wallet) {
         throw new Error(`receiveMultisigAddress: wallet "${opts.walletId}" not found`);
     }
-    const config = wallet.multisig;
+    const configs = Array.isArray(wallet.multisigs) ? wallet.multisigs : [];
+    let config;
+    if (typeof opts.multisigConfigId === 'string' && opts.multisigConfigId.length > 0) {
+        config = configs.find((c) => c.id === opts.multisigConfigId);
+        if (!config) {
+            throw new Error(
+                `receiveMultisigAddress: wallet "${opts.walletId}" has no multisig config with id "${opts.multisigConfigId}"`,
+            );
+        }
+    } else {
+        config = configs[0];
+    }
     if (!config) {
         throw new Error(
             `receiveMultisigAddress: wallet "${opts.walletId}" has no multisig configuration — run the §22 coordinator first`,
@@ -79,6 +91,7 @@ export async function receiveMultisigAddress(opts) {
     }
 
     return {
+        multisigConfigId: config.id,
         address:        derived.address,
         scheme:         config.scheme,
         threshold:      config.threshold,
@@ -89,6 +102,46 @@ export async function receiveMultisigAddress(opts) {
         witnessScript:  derived.witnessScript || null,
         outputPubkey:   derived.outputPubkey || null,
     };
+}
+
+/**
+ * §56.3 pre-launch Step 4 plural variant — render every multisig
+ * receive address the wallet has configured for the given chain.
+ * Returns an array (possibly empty); each entry mirrors the
+ * single-config `receiveMultisigAddress` return shape.
+ *
+ * @param {{ vault: any, sdkRegistry: any, walletId: string, chainId: string }} opts
+ * @returns {Promise<Array<ReceiveMultisigAddressResult>>}
+ */
+export async function listMultisigReceiveAddresses(opts) {
+    if (!opts) throw new Error('listMultisigReceiveAddresses: opts is required');
+    if (!opts.vault) throw new Error('listMultisigReceiveAddresses: vault is required');
+    if (!opts.sdkRegistry) throw new Error('listMultisigReceiveAddresses: sdkRegistry is required');
+    if (typeof opts.walletId !== 'string' || opts.walletId.length === 0) {
+        throw new Error('listMultisigReceiveAddresses: walletId is required');
+    }
+    if (typeof opts.chainId !== 'string' || opts.chainId.length === 0) {
+        throw new Error('listMultisigReceiveAddresses: chainId is required');
+    }
+    const wallet = await opts.vault.wallets.get(opts.walletId);
+    if (!wallet) return [];
+    const configs = Array.isArray(wallet.multisigs) ? wallet.multisigs : [];
+    const out = [];
+    for (const c of configs) {
+        try {
+            const r = await receiveMultisigAddress({
+                vault: opts.vault,
+                sdkRegistry: opts.sdkRegistry,
+                walletId: opts.walletId,
+                chainId: opts.chainId,
+                multisigConfigId: c.id,
+            });
+            out.push(r);
+        } catch {
+            // A misconfigured config shouldn't blow up the whole list — skip it.
+        }
+    }
+    return out;
 }
 
 function formatSchemeLabel(config) {

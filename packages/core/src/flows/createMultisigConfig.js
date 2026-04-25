@@ -118,12 +118,13 @@ export async function createMultisigConfig(opts) {
     if (!existing) {
         throw new Error(`createMultisigConfig: wallet "${opts.walletId}" not found`);
     }
-    if (existing.multisig) {
+    const currentConfigs = Array.isArray(existing.multisigs) ? existing.multisigs : [];
+    if (currentConfigs.some((c) => c.scriptTemplate === config.scriptTemplate)) {
         throw new Error(
-            `createMultisigConfig: wallet "${opts.walletId}" already has a multisig configuration; remove it before re-running this flow`,
+            `createMultisigConfig: wallet "${opts.walletId}" already has a multisig configuration with this scriptTemplate; remove it before re-running this flow`,
         );
     }
-    const next = { ...existing, multisig: config };
+    const next = { ...existing, multisigs: [...currentConfigs, config] };
     await opts.vault.wallets.put(next);
     return { wallet: next, config };
 }

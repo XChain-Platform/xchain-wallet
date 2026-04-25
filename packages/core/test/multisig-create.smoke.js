@@ -2,9 +2,14 @@
 // coordinator (§22 + §42.9).
 
 import { strict as assert } from 'node:assert';
+import { webcrypto } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+if (!globalThis.crypto) {
+    globalThis.crypto = webcrypto;
+}
 
 import {
     buildMultisigConfig,

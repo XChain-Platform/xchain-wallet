@@ -19,7 +19,7 @@ import {
 } from './validate.js';
 import { validateMultisigConfig } from './multisigConfig.js';
 
-export const CURRENT_VERSION = 1;
+export const CURRENT_VERSION = 2;
 
 export const WALLET_ORIGINS = /** @type {const} */ ([
     'created',
@@ -53,7 +53,7 @@ export const WALLET_FORMATS = /** @type {const} */ ([
 
 /**
  * @typedef {Object} Wallet
- * @property {1} schemaVersion
+ * @property {2} schemaVersion
  * @property {string} id
  * @property {string} name
  * @property {string} createdAt
@@ -64,7 +64,7 @@ export const WALLET_FORMATS = /** @type {const} */ ([
  * @property {string} encryptedSeed   base64 ciphertext
  * @property {KdfParams} kdfParams
  * @property {ImportedKey[]} importedKeys
- * @property {import('./multisigConfig.js').MultisigConfig | null} multisig
+ * @property {import('./multisigConfig.js').MultisigConfig[]} multisigs   §22 — multiple per wallet (BTC-only at launch)
  */
 
 /**
@@ -90,7 +90,7 @@ export function createWallet(input) {
         encryptedSeed: input.encryptedSeed,
         kdfParams: input.kdfParams,
         importedKeys: [],
-        multisig: null,
+        multisigs: [],
     };
 }
 
@@ -145,11 +145,23 @@ export function validateWallet(record) {
         errors.push('passphraseEnabled: wif-only wallet has no mnemonic; must be false');
     }
 
-    if (r.multisig !== null && !isNull(r.multisig)) {
-        const m = validateMultisigConfig(r.multisig);
-        if (!m.ok) m.errors.forEach((e) => errors.push(`multisig.${e}`));
-    } else if (r.multisig !== null) {
-        errors.push('multisig: must be null or a MultisigConfig');
+    if (!isArray(r.multisigs)) {
+        errors.push('multisigs: must be an array');
+    } else {
+        r.multisigs.forEach((m, i) => {
+            const res = validateMultisigConfig(m);
+            if (!res.ok) res.errors.forEach((e) => errors.push(`multisigs[${i}].${e}`));
+        });
+        const seenIds = new Set();
+        for (const m of r.multisigs) {
+            if (m && typeof m.id === 'string') {
+                if (seenIds.has(m.id)) {
+                    errors.push(`multisigs: duplicate id "${m.id}"`);
+                    break;
+                }
+                seenIds.add(m.id);
+            }
+        }
     }
 
     return result(errors);

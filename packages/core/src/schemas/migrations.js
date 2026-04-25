@@ -23,7 +23,34 @@ import { CURRENT_VERSION as WATCHLIST_VERSION } from './watchlistEntry.js';
  */
 
 /** @type {MigrationMap} */
-export const walletMigrations = {};
+export const walletMigrations = {
+    // v1 → v2: §56.3 pre-launch Step 4. Single-slot `multisig` becomes
+    // a `multisigs` array so a wallet can carry multiple multisig
+    // configurations (different N-of-M groups, different schemes,
+    // different cosigner sets). Existing wallets keep their config —
+    // we synthesize an `id` if the v1 record didn't carry one (it
+    // didn't, since v1 MultisigConfig had no `id` field), wrap in an
+    // array, and strip the legacy `multisig` slot. Legacy null →
+    // empty array.
+    1: (r) => {
+        const legacy = r.multisig;
+        const next = { ...r, schemaVersion: 2 };
+        delete next.multisig;
+        if (!legacy) {
+            next.multisigs = [];
+        } else {
+            const id = typeof legacy.id === 'string' && legacy.id.length > 0
+                ? legacy.id
+                : `legacy-${crypto.randomUUID()}`;
+            next.multisigs = [{
+                ...legacy,
+                id,
+                schemaVersion: 2,
+            }];
+        }
+        return next;
+    },
+};
 /** @type {MigrationMap} */
 export const accountMigrations = {};
 /** @type {MigrationMap} */
@@ -44,7 +71,20 @@ export const settingsMigrations = {};
 /** @type {MigrationMap} */
 export const pendingTxMigrations = {};
 /** @type {MigrationMap} */
-export const multisigConfigMigrations = {};
+export const multisigConfigMigrations = {
+    // v1 → v2: §56.3 pre-launch Step 4. Add `id` so a wallet can
+    // distinguish multiple configs. Synthetic id when missing. The
+    // wallet migration above also runs on read, so this fires for
+    // any embedded multisig record not already migrated by the
+    // wallet pass.
+    1: (r) => ({
+        ...r,
+        schemaVersion: 2,
+        id: typeof r.id === 'string' && r.id.length > 0
+            ? r.id
+            : `legacy-${crypto.randomUUID()}`,
+    }),
+};
 /** @type {MigrationMap} */
 export const multisigSigningSessionMigrations = {};
 /** @type {MigrationMap} */

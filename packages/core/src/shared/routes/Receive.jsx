@@ -57,10 +57,14 @@ export function Receive({ walletId, onBack }) {
     // persisted MultisigConfig (Step 17) and the active chain is a
     // valid network for that config, we fetch and surface the
     // multisig output address alongside the regular single-key QR.
-    const [multisig, setMultisig] = useState(
-        /** @type {null | { address: string, schemeLabel: string, threshold: number, cosignerCount: number, cosignerNames: string[], scheme: string }} */ (null),
+    // §56.3 pre-launch Step 4 — multiple multisig configs per wallet.
+    // Receive renders one section per config; the QR map keys QR data
+    // URLs by config id so each section shows its own QR alongside
+    // the badge + cosigner names.
+    const [multisigs, setMultisigs] = useState(
+        /** @type {Array<{ multisigConfigId: string, address: string, schemeLabel: string, threshold: number, cosignerCount: number, cosignerNames: string[], scheme: string }>} */ ([]),
     );
-    const [multisigQr, setMultisigQr] = useState(/** @type {string | null} */ (null));
+    const [multisigQrs, setMultisigQrs] = useState(/** @type {Record<string, string>} */ ({}));
 
     useEffect(() => {
         let cancelled = false;
@@ -110,51 +114,61 @@ export function Receive({ walletId, onBack }) {
     // network kind). The single-key flow continues to work either way.
     useEffect(() => {
         if (!activeChainId) {
-            setMultisig(null);
-            setMultisigQr(null);
-            return undefined;
-        }
-        if (typeof messaging.getMultisigReceiveAddress !== 'function') {
-            // Older shell pin without the multisig helper — keep
-            // backward compat by silently skipping the panel.
+            setMultisigs([]);
+            setMultisigQrs({});
             return undefined;
         }
         let cancelled = false;
-        messaging.getMultisigReceiveAddress({ walletId, chainId: activeChainId })
-            .then((rec) => {
-                if (cancelled) return;
-                setMultisig(rec || null);
-            })
-            .catch(() => {
-                if (cancelled) return;
-                setMultisig(null);
-            });
+        if (typeof messaging.listMultisigReceiveAddresses === 'function') {
+            messaging.listMultisigReceiveAddresses({ walletId, chainId: activeChainId })
+                .then((list) => {
+                    if (cancelled) return;
+                    setMultisigs(Array.isArray(list) ? list : []);
+                })
+                .catch(() => { if (!cancelled) setMultisigs([]); });
+        } else if (typeof messaging.getMultisigReceiveAddress === 'function') {
+            // Backward compat: shells pinned before pre-launch Step 4
+            // ship only the singular helper.
+            messaging.getMultisigReceiveAddress({ walletId, chainId: activeChainId })
+                .then((rec) => {
+                    if (cancelled) return;
+                    setMultisigs(rec ? [rec] : []);
+                })
+                .catch(() => { if (!cancelled) setMultisigs([]); });
+        }
         return () => { cancelled = true; };
     }, [walletId, activeChainId, messaging]);
 
     useEffect(() => {
-        if (!multisig) {
-            setMultisigQr(null);
+        if (!multisigs || multisigs.length === 0) {
+            setMultisigQrs({});
             return undefined;
         }
         const descriptor = chainRegistry.get(activeChainId ?? '');
-        const uri = descriptor
-            ? uriLib.encodeBip21Uri({
-                scheme: descriptor.uriScheme,
-                address: multisig.address,
-            })
-            : multisig.address;
         let cancelled = false;
-        QRCode.toDataURL(uri, {
-            errorCorrectionLevel: 'M',
-            margin: 2,
-            width: 200,
-            color: { dark: '#0F172A', light: '#FFFFFF' },
-        })
-            .then((dataUrl) => { if (!cancelled) setMultisigQr(dataUrl); })
-            .catch(() => { if (!cancelled) setMultisigQr(null); });
+        Promise.all(multisigs.map(async (m) => {
+            const uri = descriptor
+                ? uriLib.encodeBip21Uri({ scheme: descriptor.uriScheme, address: m.address })
+                : m.address;
+            try {
+                const dataUrl = await QRCode.toDataURL(uri, {
+                    errorCorrectionLevel: 'M',
+                    margin: 2,
+                    width: 200,
+                    color: { dark: '#0F172A', light: '#FFFFFF' },
+                });
+                return [m.multisigConfigId, dataUrl];
+            } catch {
+                return [m.multisigConfigId, null];
+            }
+        })).then((entries) => {
+            if (cancelled) return;
+            const next = {};
+            for (const [id, url] of entries) if (url) next[id] = url;
+            setMultisigQrs(next);
+        });
         return () => { cancelled = true; };
-    }, [multisig, activeChainId]);
+    }, [multisigs, activeChainId]);
 
     useEffect(() => {
         if (!address) {
@@ -284,8 +298,9 @@ export function Receive({ walletId, onBack }) {
                 <p className={styles.hint}>Loading address…</p>
             ) : null}
 
-            {multisig ? (
+            {multisigs.map((multisig) => (
                 <section
+                    key={multisig.multisigConfigId}
                     role="group"
                     aria-label="Multisig receive address"
                     style={{
@@ -304,10 +319,10 @@ export function Receive({ walletId, onBack }) {
                         />
                         <strong>{multisig.schemeLabel}</strong>
                     </header>
-                    {multisigQr ? (
+                    {multisigQrs[multisig.multisigConfigId] ? (
                         <div className={styles.qrBox}>
                             <img
-                                src={multisigQr}
+                                src={multisigQrs[multisig.multisigConfigId]}
                                 alt={`Multisig QR code for ${multisig.address}`}
                                 width={200}
                                 height={200}
@@ -329,7 +344,7 @@ export function Receive({ walletId, onBack }) {
                         </p>
                     ) : null}
                 </section>
-            ) : null}
+            ))}
 
             {genOpen ? (
                 <form onSubmit={handleGenerate} className={styles.genForm}>

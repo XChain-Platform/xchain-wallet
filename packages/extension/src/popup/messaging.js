@@ -72,7 +72,7 @@ export function lockWallet() {
  * List all persisted wallets, safe-projected (no encryptedSeed / kdfParams /
  * importedKeys). Populates the Home screen's wallet picker.
  *
- * @returns {Promise<Array<{ id: string, name: string, createdAt: string, origin: string, format: string, passphraseEnabled: boolean, multisig: boolean | null }>>}
+ * @returns {Promise<Array<{ id: string, name: string, createdAt: string, origin: string, format: string, passphraseEnabled: boolean, multisigs: Array<{ id: string, scheme: string, threshold: number }> }>>}
  */
 export function listWallets() {
     return /** @type {any} */ (sendMessage('wallet.list'));
@@ -708,6 +708,17 @@ export function createMultisigConfig(req) {
  */
 export function getMultisigReceiveAddress(req) {
     return /** @type {any} */ (sendMessage('multisig.receiveAddress', req));
+}
+
+/**
+ * Plural variant — returns every multisig receive address the wallet
+ * has configured for the given chain (§56.3 pre-launch Step 4). Each
+ * entry mirrors the single-result shape with an added `multisigConfigId`.
+ *
+ * @param {{ walletId: string, chainId: string }} req
+ */
+export function listMultisigReceiveAddresses(req) {
+    return /** @type {any} */ (sendMessage('multisig.listAddresses', req));
 }
 
 /**

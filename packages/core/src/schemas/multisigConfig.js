@@ -14,7 +14,7 @@ import {
     result,
 } from './validate.js';
 
-export const CURRENT_VERSION = 1;
+export const CURRENT_VERSION = 2;
 
 export const MULTISIG_SCHEMES = /** @type {const} */ ([
     'p2sh-multisig',
@@ -48,7 +48,8 @@ export const COSIGNER_ORIGINS = /** @type {const} */ ([
 
 /**
  * @typedef {Object} MultisigConfig
- * @property {1} schemaVersion
+ * @property {2} schemaVersion
+ * @property {string} id                                  uuid; stable across config edits and wallet reloads (§56.3 pre-launch — supports multiple configs per wallet)
  * @property {typeof MULTISIG_SCHEMES[number]} scheme
  * @property {number} threshold
  * @property {Cosigner[]} cosigners
@@ -72,6 +73,7 @@ export function validateMultisigConfig(record) {
         return result(errors);
     const r = /** @type {MultisigConfig} */ (record);
     check(errors, 'schemaVersion', r.schemaVersion === CURRENT_VERSION, `must be ${CURRENT_VERSION}`);
+    check(errors, 'id', isNonEmptyString(r.id), 'must be a non-empty string');
     check(errors, 'scheme', isOneOf(r.scheme, MULTISIG_SCHEMES), `must be one of ${MULTISIG_SCHEMES.join(', ')}`);
     check(errors, 'threshold', isNonNegativeInteger(r.threshold) && r.threshold > 0, 'must be a positive integer');
     checkEach(errors, 'cosigners', r.cosigners, isCosigner, 'malformed');
@@ -172,6 +174,9 @@ export function buildMultisigConfig(input) {
     /** @type {MultisigConfig} */
     const config = {
         schemaVersion: CURRENT_VERSION,
+        id: typeof input.id === 'string' && input.id.length > 0
+            ? input.id
+            : crypto.randomUUID(),
         scheme: input.scheme,
         threshold: input.threshold,
         cosigners,

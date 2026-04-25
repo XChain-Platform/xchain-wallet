@@ -75,6 +75,7 @@ const {
     linksForAddress,
     createMultisigConfig,
     receiveMultisigAddress,
+    listMultisigReceiveAddresses,
     startMultisigSigningSession,
     getMultisigSigningSession,
     listMultisigSigningSessions,
@@ -251,7 +252,7 @@ function toSafeWallet(w) {
         origin: w.origin,
         format: w.format,
         passphraseEnabled: w.passphraseEnabled,
-        multisig: w.multisig,
+        multisigs: Array.isArray(w.multisigs) ? w.multisigs : [],
     };
 }
 
@@ -629,6 +630,10 @@ export function createBackgroundHost(deps) {
 
     host.register('multisig.receiveAddress', async (req, { vault, sdkRegistry }) => {
         return receiveMultisigAddress({ ...req, vault, sdkRegistry });
+    });
+
+    host.register('multisig.listAddresses', async (req, { vault, sdkRegistry }) => {
+        return listMultisigReceiveAddresses({ ...req, vault, sdkRegistry });
     });
 
     // §22.3 + §42.9 multisig sign-round persistence + state machine
