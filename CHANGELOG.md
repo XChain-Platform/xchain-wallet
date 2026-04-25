@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.101.0] - 2026-04-24
+
+§56.3 Pre-launch — Step 6 of 7. Reproducible-build scaffolding gate. Every ingredient required for Level-2 reproducibility is now CI-gated by a static audit script + smoke. The byte-for-byte run-twice verification still has to happen on a clean dev machine before v1.0.0 GA — see `claude/reports/specs/2026-04-24_repro-build.md` for the procedure.
+
+### Added
+
+- `packages/core/scripts/repro-build-audit.js` — 18-rule static audit covering Dockerfile (digest-pinned base, NODE_VERSION pinned, locale + TZ pinned), `build.sh` (asserts SOURCE_DATE_EPOCH, uses `--frozen-lockfile`, emits a `RELEASE_HASHES.txt` sha256 manifest), `reproduce.sh` (derives SOURCE_DATE_EPOCH from `git log -1 --pretty=%ct`, builds from a fresh worktree), `electron-builder.config.cjs` (asar: true, references SOURCE_DATE_EPOCH, pins AppImage compression to xz), and `REPRODUCIBLE_BUILDS.md` (mentions Level-2 + RELEASE_HASHES). Exits 0 on a clean tree, exits 1 with a per-rule failure report otherwise.
+
+- `packages/core/test/repro-build-audit.smoke.js` — smoke gate. Imports `runReproBuildAudit()`, asserts every rule returns `ok: true`. Future PRs that drop a digest pin / un-freeze the lockfile / introduce non-determinism in the build config fail this smoke.
+
+- `claude/reports/specs/2026-04-24_repro-build.md` — full report. Documents the scaffolding audit (all 18 rules pass at v0.101.0), the run-twice-and-compare verification procedure that has to happen on a clean dev machine, the typical sources of reproducibility drift to watch for, and the recommendation to run the procedure on at least two independent dev machines at v1.0.0 GA.
+
+### Decided
+
+- **Scaffolding audit now, byte-for-byte verification at release-cut time.** Two halves of the same property: the audit catches regressions in the scaffolding automatically on every commit; the byte-for-byte verification catches subtler drift (build tool version bumps that quietly lose determinism) but requires a clean Docker host that this build environment doesn't have. Splitting the work makes both halves enforceable.
+
+### Notes
+
+- xchain-sdk pin stays at `^1.13.0`. Pure wallet-side step — no source changes outside the new audit script + smoke + version bump.
+- 90 smokes pass.
+
 ## [0.100.0] - 2026-04-24
 
 §56.3 Pre-launch — Step 5 of 7. Static a11y audit gate. Every shared route + UI primitive now passes a five-rule mechanical audit (button label / img alt / input label / textarea label / div onClick role + tabIndex). The smoke gate fails CI if any new surface introduces a regression. Full report at `claude/reports/specs/2026-04-24_a11y-audit.md`.
