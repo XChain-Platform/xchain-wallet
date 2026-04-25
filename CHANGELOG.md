@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0-rc.5] - 2026-04-24
+
+§56.3 Pre-launch — user-initiated track, Step 4 of 5 — security audit readiness packet. Pure-documentation slice that packages everything an external audit vendor needs to scope, build, and execute the engagement.
+
+### Added
+
+- `claude/reports/specs/2026-04-24_security-audit-readiness.md` (in the platform repo, gitignored) — readiness packet. Sections:
+  - **Scope** — three layers (cryptography, wallet flows, shell IPC) with a per-layer file inventory pinning every relevant path and LOC count. ~7,000 LOC total in scope, mapped from `xchain-sdk@1.13.0` + `@xchain-wallet/core` + `@xchain-wallet/extension` + `@xchain-wallet/desktop`.
+  - **Per-layer audit asks** — what we want the vendor to verify, written as targets rather than hypotheses (Argon2id parameters meet OWASP 2023+ guidance; MuSig2 nonce reuse impossible; service-worker rejects unapproved-origin RPC; contextBridge surface enumerable + minimal; auto-updater verifies signature before swap).
+  - **Build & reproduce instructions** — pnpm + frozen lockfile + smoke + repro-build hooks. Auditor walks from `git clone` to byte-for-byte verifiable artifact.
+  - **Threat model summary** — adversaries (malicious dApp, tab-injecting malware, compromised RPC, cosigner with stale state, local-machine post-compromise, supply-chain) and explicit out-of-scopes (vendor firmware, blockchain consensus, raw-password attacks).
+  - **Known deferred items** — pulls from the pre-launch close report so the vendor doesn't re-discover them: HW MuSig2 nonce wiring (firmware-gated), HW classical multisig PSBT signing (vendor-API-heavy stubs), Home/History per-config UI polish.
+  - **Audit deliverables we expect** — severity-classed findings with file:line, coverage report, threat-model deltas, public-shareable final report.
+  - **Coordination** — scope-lock document, weekly check-ins, 90-day responsible disclosure for High+, coordinated public disclosure with GA notes.
+  - **Vendor inquiry template** — paste-ready email; recommended starting-point vendor list (Trail of Bits, Cure53, Quarkslab, Zellic, Cantina, OpenZeppelin Security, Halborn, Spearbit) with the explicit caveat that the user should cross-reference published wallet audits before selection.
+  - **Post-audit close-out checklist** — Critical resolved before GA, High resolved-or-rationalized, Medium/Low issue-tracked, public disclosure coordinated.
+
+### Decided
+
+- **Single-vendor coverage of all three layers.** The boundary handoffs (key material → signer → IPC → user-confirmation surface) are where wallets get exploited; auditing them as separate engagements risks each vendor assuming the boundary is the other one's problem. We pay once for end-to-end coverage.
+- **Reduced-motion item explicitly out of audit scope.** The fix shipped at v1.0.0-rc.4; calling it out in the packet so the vendor doesn't burn hours wondering whether it's a regression.
+
+### Notes
+
+- xchain-sdk pin stays at `^1.13.0`. No source changes; documentation + version bump only.
+- 92 smokes pass.
+
 ## [1.0.0-rc.4] - 2026-04-24
 
 §56.3 Pre-launch — user-initiated track, Step 3 of 5 — `prefers-reduced-motion` on `AnimatedQrFrames`. Closes the deferred a11y polish item recorded in `claude/reports/specs/2026-04-24_prelaunch-close.md` § "Things deferred from autonomous work" — previously queued for the external a11y audit; the fix is autonomously tractable and the audit gets a cleaner starting point.
