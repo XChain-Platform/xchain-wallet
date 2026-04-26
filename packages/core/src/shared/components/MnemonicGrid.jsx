@@ -6,17 +6,17 @@ import styles from './MnemonicGrid.module.css';
  * copy-to-clipboard is deliberately NOT provided; the spec wants users
  * to write seeds down rather than park them in clipboard history.
  *
- * `variant="popup"` renders a compact 3-column grid for the 360px
- * popup; `variant="full"` renders a responsive 3/4-column grid sized
- * for the full web layout.
+ * `variant="small"` renders a compact 3-column grid for the narrow
+ * (popup / mobile) viewport; `variant="full"` renders a responsive
+ * 3/4-column grid sized for the full web layout.
  *
  * @param {object} props
  * @param {string} props.mnemonic
- * @param {'popup' | 'full'} [props.variant]
+ * @param {'small' | 'full'} [props.variant]
  */
 export function MnemonicGrid({ mnemonic, variant = 'full' }) {
     const words = mnemonic.trim().split(/\s+/);
-    const gridClass = variant === 'popup' ? styles.gridPopup : styles.gridFull;
+    const gridClass = variant === 'small' ? styles.gridPopup : styles.gridFull;
     return (
         <ol className={gridClass} aria-label="Recovery phrase">
             {words.map((word, i) => (

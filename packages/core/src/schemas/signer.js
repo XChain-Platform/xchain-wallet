@@ -30,6 +30,7 @@ import {
     isString,
     result,
 } from './validate.js';
+import { randomUUID } from '../util/uuid.js';
 
 export const CURRENT_VERSION = 1;
 
@@ -67,7 +68,7 @@ export function createSignerRecord(input) {
     const now = new Date().toISOString();
     return {
         schemaVersion: CURRENT_VERSION,
-        id: crypto.randomUUID(),
+        id: randomUUID(),
         walletId: input.walletId,
         kind: input.kind,
         vendor: input.vendor,

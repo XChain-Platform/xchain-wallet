@@ -8,6 +8,7 @@ import {
     isPlainObject,
     result,
 } from './validate.js';
+import { randomUUID } from '../util/uuid.js';
 
 export const CURRENT_VERSION = 1;
 
@@ -31,7 +32,7 @@ export const CURRENT_VERSION = 1;
 export function createAccount(input) {
     return {
         schemaVersion: CURRENT_VERSION,
-        id: crypto.randomUUID(),
+        id: randomUUID(),
         walletId: input.walletId,
         name: input.name,
         index: input.index,

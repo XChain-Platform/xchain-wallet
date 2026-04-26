@@ -9,7 +9,7 @@ import styles from './Loading.module.css';
 export function Loading({ error }) {
     const { shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const centerClass = variant === 'popup' ? styles.centerPopup : styles.centerFull;
+    const centerClass = variant === 'small' ? styles.centerPopup : styles.centerFull;
     return (
         <Screen variant={variant}>
             <div className={centerClass}>

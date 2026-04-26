@@ -16,6 +16,7 @@ import { CURRENT_VERSION as MULTISIG_SIGNING_SESSION_VERSION } from './multisigS
 import { CURRENT_VERSION as SIGNER_VERSION } from './signer.js';
 import { CURRENT_VERSION as PENDING_AIRDROP_VERSION } from './pendingAirdrop.js';
 import { CURRENT_VERSION as WATCHLIST_VERSION } from './watchlistEntry.js';
+import { randomUUID } from '../util/uuid.js';
 
 /**
  * @typedef {(record: any) => any} MigrationStep
@@ -41,7 +42,7 @@ export const walletMigrations = {
         } else {
             const id = typeof legacy.id === 'string' && legacy.id.length > 0
                 ? legacy.id
-                : `legacy-${crypto.randomUUID()}`;
+                : `legacy-${randomUUID()}`;
             next.multisigs = [{
                 ...legacy,
                 id,
@@ -82,7 +83,7 @@ export const multisigConfigMigrations = {
         schemaVersion: 2,
         id: typeof r.id === 'string' && r.id.length > 0
             ? r.id
-            : `legacy-${crypto.randomUUID()}`,
+            : `legacy-${randomUUID()}`,
     }),
 };
 /** @type {MigrationMap} */

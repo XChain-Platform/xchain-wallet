@@ -1,0 +1,194 @@
+.wrap {
+    position: relative;
+    width: 100%;
+}
+
+.trigger {
+    appearance: none;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    padding: 8px 12px;
+    background: var(--xc-surface);
+    border: 1px solid var(--xc-border-strong);
+    border-radius: 10px;
+    color: var(--xc-text);
+    cursor: pointer;
+    text-align: left;
+    transition: background var(--xc-transition), border-color var(--xc-transition);
+}
+
+.trigger:hover {
+    background: var(--xc-bg-muted);
+    border-color: var(--xc-text-muted);
+}
+
+.trigger:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
+.triggerIcon {
+    flex: 0 0 auto;
+    width: 24px;
+    height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: var(--xc-bg-muted);
+    color: var(--xc-text-muted);
+    overflow: hidden;
+}
+
+.triggerIcon img {
+    width: 20px;
+    height: 20px;
+    display: block;
+}
+
+.triggerText {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    line-height: 1.15;
+}
+
+.triggerLabel {
+    font-weight: 600;
+    font-size: var(--xc-text-sm);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.triggerSub {
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+}
+
+.triggerCaret {
+    flex: 0 0 auto;
+    color: var(--xc-text-muted);
+    font-size: 12px;
+}
+
+/* ───── Popover ───── */
+
+.popover {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    right: 0;
+    z-index: 50;
+    background: var(--xc-surface);
+    border: 1px solid var(--xc-border-strong);
+    border-radius: 12px;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
+    max-height: 360px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.searchWrap {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    padding: var(--xc-space-2) var(--xc-space-3);
+    border-bottom: 1px solid var(--xc-border);
+    color: var(--xc-text-muted);
+    flex: 0 0 auto;
+}
+
+.search {
+    appearance: none;
+    background: transparent;
+    border: none;
+    flex: 1 1 auto;
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text);
+    padding: 4px 0;
+    outline: none;
+}
+
+.list {
+    list-style: none;
+    margin: 0;
+    padding: 4px 0;
+    overflow-y: auto;
+    flex: 1 1 auto;
+}
+
+.item {
+    appearance: none;
+    background: transparent;
+    border: none;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    padding: 8px 12px;
+    cursor: pointer;
+    color: var(--xc-text);
+    text-align: left;
+    font-size: var(--xc-text-sm);
+}
+
+.item:hover {
+    background: var(--xc-bg-muted);
+}
+
+.item:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: -2px;
+}
+
+.itemActive {
+    background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
+    font-weight: 600;
+}
+
+.itemIcon {
+    flex: 0 0 auto;
+    width: 24px;
+    height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: var(--xc-bg-muted);
+    overflow: hidden;
+    color: var(--xc-text-muted);
+}
+
+.itemIcon img {
+    width: 20px;
+    height: 20px;
+    display: block;
+}
+
+.itemLabel {
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.itemTicker {
+    flex: 0 0 auto;
+    font-family: var(--xc-font-mono);
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+}
+
+.empty {
+    padding: var(--xc-space-3);
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    text-align: center;
+}

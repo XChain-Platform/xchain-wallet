@@ -1,0 +1,44 @@
+/* Page-level wrapper. In popup mode the page background goes dark so
+   the 375×600 frame in the middle reads as a separated phone-style
+   preview; in full mode the wrapper is a transparent passthrough so
+   the existing app layout fills the viewport as it always has. */
+
+.fullPage {
+    min-height: 100vh;
+    background: var(--xc-bg, #FFFFFF);
+}
+
+.fullFrame {
+    /* Transparent passthrough — Vite-built routes own their own width. */
+    width: 100%;
+    min-height: 100vh;
+}
+
+/* ───── Small preview (used when wide viewport is forced into small
+       mode for design work; auto-detected small skips this and lets
+       the narrow viewport render naturally). */
+
+.smallPage {
+    min-height: 100vh;
+    background: #0B0F17;
+    padding: 24px 12px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+}
+
+.smallFrame {
+    width: 375px;
+    height: 600px;
+    overflow: hidden;
+    background: var(--xc-bg, #FFFFFF);
+    border-radius: 18px;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45),
+                0 0 0 1px rgba(255, 255, 255, 0.08) inset;
+    /* Pin the Screen's `--xc-screen-h` custom property to the frame's
+       height so the Screen inside fills the frame (and its body
+       scrolls within), rather than escaping to 100vh and overflowing.
+       Auto-detected small mode skips the frame entirely and lets the
+       Screen use its 100vh default. */
+    --xc-screen-h: 600px;
+}

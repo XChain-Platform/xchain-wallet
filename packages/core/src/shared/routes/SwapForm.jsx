@@ -4,6 +4,7 @@ import {
     Button,
     Input,
     ChainBadge,
+    ChainPicker,
     AddressText,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
@@ -253,23 +254,13 @@ export function SwapForm({ walletId, onBack }) {
 
     return wrap(
         <form onSubmit={handleSubmit} noValidate>
-            <label className={styles.fieldLabel}>
-                <span>Chain</span>
-                <select
-                    className={styles.select}
-                    value={chainId || ''}
-                    onChange={(e) => setChainId(e.target.value)}
-                >
-                    {chainIds.map((cId) => {
-                        const d = chainRegistry.get(cId);
-                        return (
-                            <option key={cId} value={cId}>
-                                {d ? d.displayName : cId}
-                            </option>
-                        );
-                    })}
-                </select>
-            </label>
+            <ChainPicker
+                label="Chain"
+                value={chainId}
+                onChange={setChainId}
+                chainIds={chainIds}
+                chainRegistry={chainRegistry}
+            />
 
             <label className={styles.fieldLabel}>
                 <span>From address</span>

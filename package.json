@@ -1,8 +1,9 @@
 {
     "name": "xchain-wallet",
     "description": "Self-custodial multi-chain wallet for the XChain Platform — browser, Chrome extension, and desktop",
-    "version": "1.0.0-rc.6",
+    "version": "0.103.0",
     "private": true,
+    "type": "module",
     "license": "SEE LICENSE IN LICENSE.md",
     "repository": {
         "type": "git",
@@ -17,7 +18,38 @@
     "scripts": {
         "typecheck": "pnpm -r --if-present typecheck",
         "lint": "pnpm -r --if-present lint",
-        "test": "pnpm -r --if-present test",
-        "build": "pnpm -r --if-present build"
+        "build": "pnpm -r --if-present build",
+        "test": "pnpm test:unit && pnpm test:smoke",
+        "test:unit": "vitest run",
+        "test:unit:watch": "vitest",
+        "test:unit:coverage": "vitest run --coverage",
+        "test:smoke": "node test/smoke/_run-smokes.js",
+        "test:integration": "vitest run --config vitest.config.integration.js",
+        "test:integration:watch": "vitest --config vitest.config.integration.js",
+        "test:boundary": "vitest run --config vitest.config.boundary.js",
+        "test:chaos": "vitest run --config vitest.config.chaos.js",
+        "test:fuzz": "vitest run --config vitest.config.fuzz.js",
+        "test:regression": "vitest run --config vitest.config.regression.js",
+        "test:security": "vitest run --config vitest.config.security.js",
+        "test:bench": "node test/benchmarks/harness.js",
+        "test:bench:quick": "node test/benchmarks/harness.js --quick",
+        "test:mutation": "stryker run test/mutation/stryker.config.mjs",
+        "test:a11y": "vitest run --config vitest.config.a11y.js",
+        "test:e2e": "playwright test --config test/e2e/playwright.config.js",
+        "test:e2e:headed": "playwright test --config test/e2e/playwright.config.js --headed",
+        "test:all": "pnpm test:unit && pnpm test:smoke && pnpm test:integration && pnpm test:boundary && pnpm test:chaos && pnpm test:fuzz && pnpm test:regression && pnpm test:security && pnpm test:a11y"
+    },
+    "devDependencies": {
+        "@testing-library/dom": "^10.4.0",
+        "@testing-library/jest-dom": "^6.5.0",
+        "@testing-library/react": "^16.0.1",
+        "@vitejs/plugin-react": "^4.3.0",
+        "@vitest/coverage-v8": "^2.1.0",
+        "jsdom": "^25.0.0",
+        "react": "^18.3.0",
+        "react-dom": "^18.3.0",
+        "vitest": "^2.1.0",
+        "fast-check": "^3.20.0",
+        "axe-core": "^4.10.0"
     }
 }

@@ -16,25 +16,49 @@
     margin: 0 auto;
 }
 
-.titlePopup {
-    font-weight: 700;
-    font-size: var(--xc-text-md);
-    color: var(--xc-text);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    min-width: 0;
-}
-
-.titleFull {
-    font-weight: 700;
-    font-size: var(--xc-text-lg);
-    color: var(--xc-text);
-}
-
 .headerRight {
     display: flex;
     gap: var(--xc-space-2);
+}
+
+.menuBtn {
+    appearance: none;
+    background: transparent;
+    border: 1px solid var(--xc-border-strong);
+    border-radius: 8px;
+    width: 38px;
+    height: 38px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--xc-text);
+    cursor: pointer;
+    flex: 0 0 auto;
+}
+
+.menuBtn:hover {
+    background: var(--xc-bg-muted);
+}
+
+.menuBtn:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
+/* Logo is 750×464 (≈1.617:1). Width-only sizing preserves aspect ratio.
+   Header-bar comfortable: ~36px tall in popup, ~44px tall in full. */
+.brandLogoFull {
+    width: 72px;   /* → ~44px tall */
+    height: auto;
+    flex: 0 0 auto;
+    display: block;
+}
+
+.brandLogoPopup {
+    width: 58px;   /* → ~36px tall */
+    height: auto;
+    flex: 0 0 auto;
+    display: block;
 }
 
 .bodyPopup {

@@ -1,0 +1,208 @@
+.wrap {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-3);
+    width: 100%;
+}
+
+/* ───── Filter chips ───── */
+
+.filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--xc-space-2);
+}
+
+.chip {
+    appearance: none;
+    background: var(--xc-surface);
+    border: 1px solid var(--xc-border-strong);
+    color: var(--xc-text);
+    padding: 6px var(--xc-space-3);
+    font-size: var(--xc-text-xs);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background var(--xc-transition), color var(--xc-transition), border-color var(--xc-transition);
+    white-space: nowrap;
+}
+
+.chip:hover:not(.chipActive) {
+    background: var(--xc-bg-muted);
+}
+
+.chipActive {
+    background: var(--chip-color, var(--xc-accent-primary));
+    border-color: var(--chip-color, var(--xc-accent-primary));
+    color: #FFFFFF;
+}
+
+.chipColored:not(.chipActive) {
+    border-color: var(--chip-color, var(--xc-border-strong));
+    color: var(--chip-color, var(--xc-text));
+}
+
+.chip:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
+/* ───── List card ───── */
+
+.list {
+    display: flex;
+    flex-direction: column;
+    background: var(--xc-surface);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-md);
+    overflow: hidden;
+}
+
+.sectionLabel {
+    font-size: var(--xc-text-xs);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--xc-text-muted);
+    padding: var(--xc-space-2) var(--xc-space-3);
+    background: var(--xc-bg-muted);
+    border-bottom: 1px solid var(--xc-border);
+    border-top: 1px solid var(--xc-border);
+}
+
+.sectionLabel:first-child {
+    border-top: none;
+}
+
+.sectionCount {
+    font-weight: 500;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--xc-text-muted);
+}
+
+.row {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-3);
+    padding: var(--xc-space-3);
+    border-top: 1px solid var(--xc-border);
+}
+
+/* The first row directly under a section label already has the label's
+   bottom border above it — suppress the row's top border to avoid a
+   double rule. */
+.sectionLabel + .row {
+    border-top: none;
+}
+
+.iconWrap {
+    position: relative;
+    flex: 0 0 auto;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: var(--xc-bg-muted);
+}
+
+.iconImg {
+    width: 28px;
+    height: 28px;
+    display: block;
+    border-radius: 50%;
+}
+
+/* Small chain badge tucked into the bottom-right of a token's avatar.
+   Sits on top of the parent circle with a white ring so it reads as
+   a separate element rather than blending into the avatar. */
+.chainOverlay {
+    position: absolute;
+    bottom: -2px;
+    right: -2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #FFFFFF;
+    box-shadow: 0 0 0 1.5px var(--xc-surface);
+    object-fit: cover;
+    display: block;
+}
+
+.iconLetter {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--xc-font-sans);
+    font-weight: 700;
+    font-size: var(--xc-text-md);
+}
+
+.body {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.title {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.name {
+    font-weight: 600;
+    color: var(--xc-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.subtitle {
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.amounts {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+}
+
+.qty {
+    font-family: var(--xc-font-mono);
+    font-size: var(--xc-text-md);
+    font-weight: 700;
+    color: var(--xc-text);
+    line-height: 1.1;
+}
+
+.fiat {
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    font-weight: 600;
+    font-family: var(--xc-font-mono);
+}
+
+.empty {
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text-muted);
+    margin: 0;
+    text-align: center;
+    padding: var(--xc-space-4);
+}

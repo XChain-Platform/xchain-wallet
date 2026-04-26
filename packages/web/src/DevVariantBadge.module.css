@@ -1,0 +1,116 @@
+.badge {
+    position: fixed;
+    bottom: 12px;
+    right: 12px;
+    z-index: 9999;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: rgba(15, 23, 42, 0.92);
+    color: #FFFFFF;
+    font-family: var(--xc-font-mono, ui-monospace, monospace);
+    font-size: 11px;
+    border-radius: 999px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(6px);
+    user-select: none;
+}
+
+.label {
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #94A3B8;
+}
+
+.value {
+    font-weight: 700;
+    text-transform: uppercase;
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+.value.small {
+    background: #7B2C8F;
+    color: #FFFFFF;
+}
+
+.value.full {
+    background: #1E90C7;
+    color: #FFFFFF;
+}
+
+.clear {
+    appearance: none;
+    background: transparent;
+    border: 1px dashed rgba(255, 255, 255, 0.3);
+    border-radius: 6px;
+    color: #CBD5E1;
+    font-family: inherit;
+    font-size: 11px;
+    padding: 2px 8px;
+    cursor: pointer;
+    text-transform: lowercase;
+}
+
+.clear:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: #FFFFFF;
+}
+
+.divider {
+    color: rgba(255, 255, 255, 0.2);
+    margin: 0 2px;
+    user-select: none;
+}
+
+.pwToggle {
+    appearance: none;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 6px;
+    color: #94A3B8;
+    font-family: inherit;
+    font-size: 11px;
+    padding: 2px 8px;
+    cursor: pointer;
+    text-transform: lowercase;
+}
+
+.pwToggle:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #FFFFFF;
+}
+
+.pwToggle.pwOn {
+    background: #F59E0B;
+    border-color: #F59E0B;
+    color: #FFFFFF;
+    font-weight: 700;
+}
+
+.pwToggle.pwOn:hover {
+    filter: brightness(0.9);
+}
+
+.dims {
+    color: #CBD5E1;
+}
+
+.flip {
+    appearance: none;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 6px;
+    color: #FFFFFF;
+    font-family: inherit;
+    font-size: 11px;
+    padding: 2px 8px;
+    cursor: pointer;
+    text-transform: lowercase;
+}
+
+.flip:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.4);
+}

@@ -1,17 +1,21 @@
 import styles from './Screen.module.css';
 
 /**
- * Top-level layout wrapper. `variant="popup"` is a fixed 360×600 MV3 popup
- * (§8.1 target #3); `variant="full"` is the flexible layout used by the
- * extension's full-screen tab (§8.1 target #4) and the web SPA (target #1).
+ * Top-level layout wrapper.
+ *
+ *   `variant="small"` — narrow viewport, fixed 360×600 (Chrome
+ *                        extension popup, mobile browser, narrow
+ *                        desktop window).
+ *   `variant="full"`  — wide viewport, flexible (extension full-screen
+ *                        tab, desktop browser, tablet landscape).
  *
  * @param {object} props
  * @param {import('react').ReactNode} [props.header]
  * @param {import('react').ReactNode} [props.footer]
- * @param {'popup' | 'full'} [props.variant]
+ * @param {'small' | 'full'} [props.variant]
  * @param {import('react').ReactNode} props.children
  */
-export function Screen({ header, footer, variant = 'popup', children }) {
+export function Screen({ header, footer, variant = 'small', children }) {
     const className = `${styles.screen} ${styles[variant]}`;
     return (
         <div className={className} role="group">

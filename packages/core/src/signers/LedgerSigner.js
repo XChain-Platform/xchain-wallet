@@ -32,6 +32,7 @@
 // Bitcoin-message signature xchain-sdk's `auth.verifyMessage`
 // accepts.
 
+import { sha256 } from '@noble/hashes/sha2';
 import { Signer, SignerStatusError } from './Signer.js';
 import {
     composeBitcoinCompactSignature,
@@ -419,9 +420,12 @@ export async function deriveLedgerDeviceIdentifier(publicKeyHex) {
     if (typeof publicKeyHex !== 'string' || publicKeyHex.length === 0) {
         throw new Error('deriveLedgerDeviceIdentifier: publicKeyHex is required');
     }
+    // Pure-JS SHA-256 via `@noble/hashes` so this works on any
+    // origin — `crypto.subtle.digest` is gated on secure context, but
+    // a wallet served over plain HTTP from a LAN host should still be
+    // able to identify a paired Ledger.
     const bytes = hexToBytes(publicKeyHex);
-    const digest = await crypto.subtle.digest('SHA-256', bytes);
-    const view = new Uint8Array(digest);
+    const view = sha256(bytes);
     let out = '';
     for (let i = 0; i < 8; i += 1) {
         out += view[i].toString(16).padStart(2, '0');

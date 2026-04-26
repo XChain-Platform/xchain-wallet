@@ -1,0 +1,117 @@
+// Smoke for Phase 4 — Step 5 of 23 — EXECUTE method form (§42.4).
+
+import { strict as assert } from 'node:assert';
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import { flows } from '../../../packages/core/src/index.js';
+
+const here = dirname(fileURLToPath(import.meta.url));
+const wsRoot = join(here, '..', '..', '..');
+const core = join(wsRoot, 'packages', 'core');
+const ext = join(wsRoot, 'packages', 'extension');
+const web = join(wsRoot, 'packages', 'web');
+const desktop = join(wsRoot, 'packages', 'desktop');
+const sharedRoutes = join(core, 'src', 'shared', 'routes');
+
+const formPath = join(sharedRoutes, 'ExecuteContractForm.jsx');
+assert.ok(existsSync(formPath), 'ExecuteContractForm.jsx exists');
+
+const formSrc = readFileSync(formPath, 'utf8');
+
+assert.ok(/export function ExecuteContractForm\b/.test(formSrc),
+    'ExecuteContractForm is a named export');
+assert.equal(
+    (formSrc.match(/^export\s+(function|const|class)\b/gm) || []).length,
+    1,
+    'ExecuteContractForm.jsx only exports the component',
+);
+
+for (const stage of ['form', 'review', 'submitting', 'done']) {
+    assert.ok(new RegExp(`'${stage}'`).test(formSrc),
+        `ExecuteContractForm tracks '${stage}' stage`);
+}
+
+for (const call of [
+    'messaging.executeAction',
+    'messaging.executeActionHw',
+    'messaging.getAddressesByChain',
+    'messaging.getSignerStatus',
+]) {
+    assert.ok(formSrc.includes(call), `ExecuteContractForm calls ${call}`);
+}
+
+// Pipe-delimited param splitting on submit (SDK validator requires array).
+assert.ok(/paramsText\.split\('\|'\)/.test(formSrc),
+    'ExecuteContractForm splits pipe-delimited params into an array');
+assert.ok(/PARAMS\b/.test(formSrc), 'ExecuteContractForm composes a PARAMS field');
+
+// HW branch + wrong-password distinguished.
+assert.ok(/isHwSource\s*\n?\s*\?\s*await messaging\.executeActionHw/.test(formSrc),
+    'ExecuteContractForm branches HW vs software signing');
+assert.ok(/InvalidPasswordError/.test(formSrc),
+    'ExecuteContractForm distinguishes wrong-password');
+
+// --- Core flow guards + positive path ---
+
+assert.equal(typeof flows.executeAction, 'function', 'flows.executeAction is re-exported');
+
+await assert.rejects(
+    async () => flows.executeAction({}),
+    /executeAction: params is required/,
+    'executeAction guards params',
+);
+await assert.rejects(
+    async () => flows.executeAction({ params: { METHOD: 'x' } }),
+    /executeAction: params\.CONTRACT_ACTION_INDEX is required/,
+    'executeAction guards CONTRACT_ACTION_INDEX',
+);
+await assert.rejects(
+    async () => flows.executeAction({ params: { CONTRACT_ACTION_INDEX: '1' } }),
+    /executeAction: params\.METHOD is required/,
+    'executeAction guards METHOD',
+);
+
+// --- Background host + shell messaging helpers ---
+
+const bg = readFileSync(join(ext, 'src', 'background', 'createBackgroundHost.js'), 'utf8');
+assert.ok(bg.includes("'action.execute'"), 'background host registers action.execute');
+assert.ok(/registerHwHandler\('action\.execute\.hw', executeAction\)/.test(bg),
+    'background host registers action.execute.hw via registerHwHandler');
+
+for (const [shell, msgPath] of [
+    ['popup', join(ext, 'src', 'popup', 'messaging.js')],
+    ['web', join(web, 'src', 'messaging.js')],
+    ['desktop', join(desktop, 'renderer', 'messaging.js')],
+]) {
+    const m = readFileSync(msgPath, 'utf8');
+    for (const fn of ['executeAction', 'executeActionHw']) {
+        assert.ok(
+            new RegExp(`export function ${fn}\\b`).test(m),
+            `${shell} messaging.js exports ${fn}`,
+        );
+    }
+}
+
+// --- App.jsx wiring ---
+
+for (const [shell, appPath] of [
+    ['popup', join(ext, 'src', 'popup', 'App.jsx')],
+    ['web', join(web, 'src', 'App.jsx')],
+    ['desktop', join(desktop, 'renderer', 'App.jsx')],
+]) {
+    const app = readFileSync(appPath, 'utf8');
+    assert.ok(app.includes('ExecuteContractForm'),
+        `${shell} App.jsx imports ExecuteContractForm`);
+    assert.ok(app.includes("'contract-execute'"),
+        `${shell} tracks the contract-execute sub-route`);
+    assert.ok(/onExecute=\{\(\)\s*=>\s*setUnlockedView\('contract-execute'\)\}/.test(app),
+        `${shell} wires ContractDetail.onExecute → contract-execute`);
+    assert.ok(/onBack=\{\(\)\s*=>\s*setUnlockedView\('contract-detail'\)\}/.test(app),
+        `${shell} ExecuteContractForm back returns to contract-detail`);
+}
+
+console.log(
+    'OK — execute contract form smoke (ExecuteContractForm shared route + executeAction + bg handlers + 3-shell messaging + ContractDetail onExecute wire-through)',
+);

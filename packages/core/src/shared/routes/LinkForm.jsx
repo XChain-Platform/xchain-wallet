@@ -4,6 +4,7 @@ import {
     Button,
     Input,
     ChainBadge,
+    ChainPicker,
     AddressText,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
@@ -455,23 +456,13 @@ function SidePanel({ title, chainIds, chainId, onChainChange, actionIndex, onAct
                 {title}
             </legend>
 
-            <label className={styles.pickerLabel}>
-                <span>Chain</span>
-                <select
-                    className={styles.picker}
-                    value={chainId || ''}
-                    onChange={(e) => onChainChange(e.target.value)}
-                >
-                    {chainIds.map((cid) => {
-                        const d = chainRegistry.get(cid);
-                        return (
-                            <option key={cid} value={cid}>
-                                {d ? d.displayName : cid}
-                            </option>
-                        );
-                    })}
-                </select>
-            </label>
+            <ChainPicker
+                label="Chain"
+                value={chainId}
+                onChange={onChainChange}
+                chainIds={chainIds}
+                chainRegistry={chainRegistry}
+            />
 
             <Input
                 label="Action to reference (action_index)"

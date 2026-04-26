@@ -1,0 +1,16 @@
+{
+    "name": "@xchain-wallet/e2e",
+    "version": "0.103.0",
+    "private": true,
+    "description": "Playwright end-to-end suite — drives the web SPA through the full wallet flows.",
+    "type": "module",
+    "scripts": {
+        "test": "playwright test --config playwright.config.js",
+        "test:headed": "playwright test --config playwright.config.js --headed",
+        "install:browsers": "playwright install --with-deps chromium"
+    },
+    "devDependencies": {
+        "@axe-core/playwright": "^4.10.0",
+        "@playwright/test": "^1.48.0"
+    }
+}

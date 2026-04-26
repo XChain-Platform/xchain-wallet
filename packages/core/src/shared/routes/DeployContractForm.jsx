@@ -4,6 +4,7 @@ import {
     Button,
     Input,
     ChainBadge,
+    ChainPicker,
     AddressText,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
@@ -397,23 +398,13 @@ export function DeployContractForm({ walletId, onBack }) {
     return wrap(
         <form onSubmit={handleReview} noValidate>
             {btcChainsWithAddresses.length > 1 ? (
-                <label className={styles.pickerLabel}>
-                    Chain
-                    <select
-                        className={styles.picker}
-                        value={chainId || ''}
-                        onChange={(e) => setChainId(e.target.value)}
-                    >
-                        {btcChainsWithAddresses.map((cid) => {
-                            const d = chainRegistry.get(cid);
-                            return (
-                                <option key={cid} value={cid}>
-                                    {d ? `${d.displayName} (${d.networkKind})` : cid}
-                                </option>
-                            );
-                        })}
-                    </select>
-                </label>
+                <ChainPicker
+                    label="Chain"
+                    value={chainId}
+                    onChange={setChainId}
+                    chainIds={btcChainsWithAddresses}
+                    chainRegistry={chainRegistry}
+                />
             ) : descriptor ? (
                 <div className={styles.chainLine}>
                     <ChainBadge descriptor={descriptor} size="sm" />

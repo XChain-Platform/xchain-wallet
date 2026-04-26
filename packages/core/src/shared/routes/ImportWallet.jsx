@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Screen, Button, Input } from '@xchain-wallet/core/ui';
+import { Screen, Button, Input, Icon } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './ImportWallet.module.css';
 
@@ -82,6 +82,12 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
     const mnemonicClass = isFull ? styles.mnemonicFull : styles.mnemonicPopup;
     const actionsClass = isFull ? styles.actionsFull : styles.actionsPopup;
 
+    // Errors that originate from the field-level validators (mismatched
+    // confirm, too-short password) AND errors that come back from the
+    // import flow (KDF failure, malformed mnemonic, missing crypto.subtle
+    // on insecure-context HTTP, etc.) all funnel through `error`. Show
+    // them in a single top-of-form alert box so a runtime failure is
+    // never visually attached to whichever input the user typed last.
     const form = (
         <form onSubmit={handleSubmit} noValidate>
             <header className={headClass}>
@@ -100,6 +106,9 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                             : 'Paste a 12-, 15-, 18-, 21-, or 24-word recovery phrase.')}
                 </p>
             </header>
+            {error ? (
+                <div role="alert" className={styles.error}>{error}</div>
+            ) : null}
             <label className={styles.mnemonicLabel} htmlFor="xc-mnemonic">
                 Recovery phrase
             </label>
@@ -157,7 +166,6 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                 }}
                 autoComplete="new-password"
                 disabled={busy}
-                error={error || undefined}
             />
             <div className={actionsClass}>
                 <Button
@@ -166,6 +174,7 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                     type="button"
                     disabled={busy}
                     size={isFull ? undefined : 'sm'}
+                    icon={<Icon.BackIcon />}
                 >
                     Back
                 </Button>
@@ -174,6 +183,7 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                     variant="primary"
                     loading={busy}
                     size={isFull ? undefined : 'sm'}
+                    icon={<Icon.KeyIcon />}
                     disabled={
                         mnemonic.trim().length === 0 ||
                         password.length === 0 ||

@@ -11,6 +11,7 @@ import {
     isString,
     result,
 } from './validate.js';
+import { randomUUID } from '../util/uuid.js';
 
 export const CURRENT_VERSION = 1;
 
@@ -61,7 +62,7 @@ export const PENDING_TX_STATUSES = /** @type {const} */ ([
 export function createPendingTx(input) {
     return {
         schemaVersion: CURRENT_VERSION,
-        id: crypto.randomUUID(),
+        id: randomUUID(),
         chain: input.chain,
         network: input.network,
         fromAddress: input.fromAddress,

@@ -15,6 +15,7 @@ import {
     isPlainObject,
     result,
 } from './validate.js';
+import { randomUUID } from '../util/uuid.js';
 
 export const CURRENT_VERSION = 1;
 
@@ -40,7 +41,7 @@ export const CURRENT_VERSION = 1;
 export function createWatchlistEntry(input) {
     return {
         schemaVersion: CURRENT_VERSION,
-        id: crypto.randomUUID(),
+        id: randomUUID(),
         walletId: input.walletId,
         chainId: input.chainId,
         tick1: input.tick1,

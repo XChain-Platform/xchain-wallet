@@ -16,6 +16,18 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
+// HTTPS is OPT-IN via the `VITE_HTTPS=1` env var. The wallet's crypto
+// surfaces (`crypto.subtle.*` for KDF + AEAD, `navigator.clipboard.*`,
+// `getUserMedia` for the camera scanner, WebUSB / WebHID for hardware
+// signers) require a secure context — `localhost` qualifies natively,
+// so plain HTTP is fine when someone hits the wallet directly on the
+// machine that's serving it. For LAN / VM-hostname access, set
+// VITE_HTTPS=1 and `@vitejs/plugin-basic-ssl` generates a self-signed
+// cert. The wallet also surfaces an in-app banner when it detects an
+// insecure context, so the page never silently breaks.
+import basicSsl from '@vitejs/plugin-basic-ssl';
+
+const httpsEnabled = process.env.VITE_HTTPS === '1' || process.env.HTTPS === '1';
 
 // Absolute paths to workspace-local Node shims that xchain-sdk pulls
 // in at module load. Vite resolves these via resolve.alias below.
@@ -57,9 +69,17 @@ export default defineConfig({
     },
     server: {
         port: 5173,
+        host: '0.0.0.0',
+        allowedHosts: ['devhost', 'localhost', '127.0.0.1'],
+    },
+    preview: {
+        port: 4173,
+        host: '0.0.0.0',
+        allowedHosts: ['devhost', 'localhost', '127.0.0.1'],
     },
     plugins: [
         react(),
+        ...(httpsEnabled ? [basicSsl()] : []),
         nodePolyfills({
             include: ['buffer', 'process', 'crypto', 'events', 'stream', 'util'],
             globals: { Buffer: true, process: true, global: true },

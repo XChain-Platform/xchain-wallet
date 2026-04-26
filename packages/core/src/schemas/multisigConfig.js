@@ -13,6 +13,7 @@ import {
     isPlainObject,
     result,
 } from './validate.js';
+import { randomUUID } from '../util/uuid.js';
 
 export const CURRENT_VERSION = 2;
 
@@ -176,7 +177,7 @@ export function buildMultisigConfig(input) {
         schemaVersion: CURRENT_VERSION,
         id: typeof input.id === 'string' && input.id.length > 0
             ? input.id
-            : crypto.randomUUID(),
+            : randomUUID(),
         scheme: input.scheme,
         threshold: input.threshold,
         cosigners,

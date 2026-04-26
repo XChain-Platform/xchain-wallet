@@ -1,4 +1,4 @@
-import { Screen, Button } from '@xchain-wallet/core/ui';
+import { Screen, Button, Icon } from '@xchain-wallet/core/ui';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './Onboarding.module.css';
@@ -39,24 +39,27 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet }) {
                     block
                     onClick={onCreate}
                     disabled={!onCreate}
+                    icon={<Icon.PlusIcon />}
                 >
-                    Create a new wallet
+                    Create new wallet
                 </Button>
                 <Button
                     variant="secondary"
                     block
                     onClick={onImport}
                     disabled={!onImport}
+                    icon={<Icon.KeyIcon />}
                 >
-                    I already have a wallet
+                    Import wallet
                 </Button>
                 <Button
                     variant="ghost"
                     block
                     onClick={onImportFromFreeWallet}
                     disabled={!onImportFromFreeWallet}
+                    icon={<Icon.MigrateIcon />}
                 >
-                    Coming from FreeWallet
+                    From FreeWallet
                 </Button>
             </div>
         </Screen>

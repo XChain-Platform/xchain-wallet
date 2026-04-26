@@ -31,6 +31,7 @@ import {
 // at build time. Candidate for a lower-level package extraction once a
 // third shell appears.
 import { createBackgroundHost } from '../../extension/src/background/createBackgroundHost.js';
+import { fakeBalanceFor } from './devFakeBalances.js';
 import { IndexedDBStorageBackend } from './storage/IndexedDBStorageBackend.js';
 import { WebMetaBackend } from './storage/WebMetaBackend.js';
 import { resolveSdkFactory } from './sdkFactory.js';
@@ -48,41 +49,74 @@ const chainRegistry = registryLib.defaultRegistry();
 // (pubkey, type) so createWallet / importMnemonic persist real vault
 // records. Signing / broadcast / WIF-import throw loudly — those
 // paths have no non-SDK implementation.
-const createDevMockSdk = () => ({
-    wallet: {
-        /**
-         * @param {string} publicKeyHex
-         * @param {{ type?: string }} [opts]
-         */
-        deriveAddress(publicKeyHex, opts) {
-            const type = opts?.type ?? 'p2wpkh';
-            const prefix = {
-                p2pkh: '1devmock',
-                'p2sh-p2wpkh': '3devmock',
-                p2wpkh: 'bc1qdevmock',
-                p2tr: 'bc1pdevmock',
-            }[type] ?? `${type}:`;
-            const tail = String(publicKeyHex || '').slice(0, 24);
-            return `${prefix}${tail}`.toLowerCase();
+const createDevMockSdk = (constructorOpts) => {
+    // Each per-chain SDK instance carries its own `network` (chainId)
+    // so the fake-balance dataset can return chain-appropriate values.
+    const chainId = constructorOpts?.network || 'bitcoin-mainnet';
+
+    // Read-side stub. Any `get*` method the wallet calls before the
+    // real SDK has finished loading (or when the real SDK isn't
+    // resolvable at all) returns an empty list / zero-balance shape
+    // rather than crashing with "X.getBalances is not a function".
+    // `getBalances` is overridden to return the realistic dev dataset
+    // so the UI has something to render. Methods that mutate or sign
+    // throw loudly — those paths have no non-SDK implementation.
+    const readStub = new Proxy({}, {
+        get(_target, prop) {
+            if (typeof prop !== 'string') return undefined;
+            if (prop === 'getBalances') {
+                return async (address /* , opts */) => fakeBalanceFor(address, chainId);
+            }
+            if (prop.startsWith('get')) {
+                return async () => [];
+            }
+            return undefined;
         },
-        signPsbt() { throw new Error('Dev SDK stub: signing requires the real xchain-sdk'); },
-        validateAddress(addr) {
-            return {
-                valid: typeof addr === 'string' && addr.length > 0,
-                type: null,
-                network: null,
-                error: null,
-            };
+    });
+    const sdk = {
+        wallet: {
+            /**
+             * @param {string} publicKeyHex
+             * @param {{ type?: string }} [opts]
+             */
+            deriveAddress(publicKeyHex, opts) {
+                const type = opts?.type ?? 'p2wpkh';
+                const prefix = {
+                    p2pkh: '1devmock',
+                    'p2sh-p2wpkh': '3devmock',
+                    p2wpkh: 'bc1qdevmock',
+                    p2tr: 'bc1pdevmock',
+                }[type] ?? `${type}:`;
+                const tail = String(publicKeyHex || '').slice(0, 24);
+                return `${prefix}${tail}`.toLowerCase();
+            },
+            signPsbt() { throw new Error('Dev SDK stub: signing requires the real xchain-sdk'); },
+            validateAddress(addr) {
+                return {
+                    valid: typeof addr === 'string' && addr.length > 0,
+                    type: null,
+                    network: null,
+                    error: null,
+                };
+            },
+            broadcastTx() { return Promise.reject(new Error('Dev SDK stub: broadcast requires the real xchain-sdk')); },
+            importWIF() { throw new Error('Dev SDK stub: WIF import requires the real xchain-sdk'); },
         },
-        broadcastTx() { return Promise.reject(new Error('Dev SDK stub: broadcast requires the real xchain-sdk')); },
-        importWIF() { throw new Error('Dev SDK stub: WIF import requires the real xchain-sdk'); },
-    },
-    auth: {
-        signMessage() { throw new Error('Dev SDK stub: message signing requires the real xchain-sdk'); },
-        verifyMessage() { return false; },
-        generateChallenge() { return ''; },
-    },
-});
+        auth: {
+            signMessage() { throw new Error('Dev SDK stub: message signing requires the real xchain-sdk'); },
+            verifyMessage() { return false; },
+            generateChallenge() { return ''; },
+        },
+    };
+    // Compose: explicit fields (wallet/auth) win; everything else falls
+    // through to the read stub so any sdk.getXxx() call resolves to [].
+    return new Proxy(sdk, {
+        get(target, prop, receiver) {
+            if (prop in target) return Reflect.get(target, prop, receiver);
+            return Reflect.get(readStub, prop, receiver);
+        },
+    });
+};
 
 // Build the SDKRegistry against a boot-time-resolved factory. Starts
 // with the dev mock so the module is usable synchronously; the real

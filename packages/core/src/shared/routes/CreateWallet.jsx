@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Screen, Button, Input } from '@xchain-wallet/core/ui';
+import { Screen, Button, Input, CopyButton, Icon } from '@xchain-wallet/core/ui';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { crypto as cryptoLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -46,7 +46,30 @@ export function CreateWallet({ onBack, onCreated }) {
     const [persistError, setPersistError] = useState(
         /** @type {string | null} */ (null),
     );
+    const [clipboardCopied, setClipboardCopied] = useState(false);
+    const clipboardClearRef = useRef(/** @type {ReturnType<typeof setTimeout> | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+
+    useEffect(() => () => {
+        // Cleanup on unmount: if the user navigated away while the
+        // 60-second clipboard auto-clear was pending, fire it now so
+        // the seed doesn't outlive the screen in their clipboard.
+        if (clipboardClearRef.current) {
+            clearTimeout(clipboardClearRef.current);
+            clipboardClearRef.current = null;
+            navigator.clipboard?.writeText?.(' ').catch(() => {});
+        }
+    }, []);
+
+    function handleMnemonicCopied() {
+        setClipboardCopied(true);
+        if (clipboardClearRef.current) clearTimeout(clipboardClearRef.current);
+        clipboardClearRef.current = setTimeout(() => {
+            navigator.clipboard?.writeText?.(' ').catch(() => {});
+            setClipboardCopied(false);
+            clipboardClearRef.current = null;
+        }, 60_000);
+    }
 
     useEffect(() => {
         if (stage === 'password') {
@@ -105,6 +128,19 @@ export function CreateWallet({ onBack, onCreated }) {
                     </p>
                 </header>
                 <MnemonicGrid mnemonic={mnemonic || ''} variant={variant} />
+                <div className={styles.copyRow}>
+                    <CopyButton
+                        value={mnemonic || ''}
+                        label="Copy recovery phrase"
+                        ariaLabel="Copy recovery phrase to clipboard"
+                        onCopied={handleMnemonicCopied}
+                    />
+                    <span className={styles.copyHint} aria-live="polite">
+                        {clipboardCopied
+                            ? 'Copied — clipboard auto-clears in 60 s. Paste it into a password manager, then write it on paper.'
+                            : 'Paper is safest. If you copy, paste into a password manager — clipboard auto-clears after 60 s.'}
+                    </span>
+                </div>
                 <label className={styles.confirmRow}>
                     <input
                         type="checkbox"
@@ -127,6 +163,7 @@ export function CreateWallet({ onBack, onCreated }) {
                         onClick={onBack}
                         disabled={stage === 'persisting'}
                         size={isFull ? undefined : 'sm'}
+                        icon={<Icon.BackIcon />}
                     >
                         Back
                     </Button>
@@ -137,6 +174,7 @@ export function CreateWallet({ onBack, onCreated }) {
                         loading={stage === 'persisting'}
                         block={!isFull}
                         size={isFull ? undefined : 'sm'}
+                        icon={<Icon.CheckIcon />}
                     >
                         Create wallet
                     </Button>
@@ -205,6 +243,7 @@ export function CreateWallet({ onBack, onCreated }) {
                     onClick={onBack}
                     type="button"
                     size={isFull ? undefined : 'sm'}
+                    icon={<Icon.BackIcon />}
                 >
                     Back
                 </Button>
@@ -213,6 +252,7 @@ export function CreateWallet({ onBack, onCreated }) {
                     variant="primary"
                     disabled={password.length === 0 || confirm.length === 0}
                     size={isFull ? undefined : 'sm'}
+                    icon={<Icon.MigrateIcon />}
                 >
                     Next
                 </Button>

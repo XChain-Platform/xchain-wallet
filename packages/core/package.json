@@ -1,6 +1,6 @@
 {
     "name": "@xchain-wallet/core",
-    "version": "1.0.0-rc.6",
+    "version": "0.103.0",
     "private": true,
     "description": "Platform-agnostic components, state, SDK integration, and signer implementations for XChain Wallet",
     "type": "module",
@@ -16,17 +16,15 @@
         "./shims/*": "./src/shims/*",
         "./signerFactories": "./src/signerFactories/index.js"
     },
-    "scripts": {
-        "test": "vitest run",
-        "test:watch": "vitest",
-        "test:coverage": "vitest run --coverage",
-        "test:smoke": "node test/_run-smokes.js"
-    },
+    "scripts": {},
     "dependencies": {
+        "@noble/ciphers": "^1.0.0",
         "@noble/hashes": "^1.5.0",
         "@scure/base": "^1.1.9",
         "@scure/bip32": "^1.5.0",
-        "@scure/bip39": "^1.4.0"
+        "@scure/bip39": "^1.4.0",
+        "lightweight-charts": "^4.2.0",
+        "qrcode": "^1.5.4"
     },
     "peerDependencies": {
         "react": "^18.3.0",

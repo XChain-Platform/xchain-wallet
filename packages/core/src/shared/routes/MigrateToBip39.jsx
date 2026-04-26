@@ -5,7 +5,20 @@ import {
     Input,
     ChainBadge,
     AddressText,
+    Icon,
 } from '@xchain-wallet/core/ui';
+
+// Why-migrate explanation copy reads as a paragraph rather than a
+// caption — override the shared `.hint` (centred, muted) with a
+// left-justified, full-contrast block so the content is comfortably
+// readable.
+const explainParagraphStyle = {
+    textAlign: 'justify',
+    color: 'var(--xc-text)',
+    fontSize: 'var(--xc-text-sm)',
+    lineHeight: 1.55,
+    margin: '0 0 var(--xc-space-3)',
+};
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './IssueTokenForm.module.css';
@@ -153,26 +166,26 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated }) {
         return wrap(
             <>
                 <h2 className={styles.successTitle}>Why migrate?</h2>
-                <p className={styles.hint}>
+                <p style={explainParagraphStyle}>
                     Your current wallet uses the Counterwallet / FreeWallet
                     12-word legacy format. BIP39 is the modern standard: it
                     interoperates with every other wallet, supports 25th-word
                     passphrases, and ships with stronger derivation.
                 </p>
-                <p className={styles.hint}>
+                <p style={explainParagraphStyle}>
                     This wizard creates a new BIP39 wallet. It does not touch
                     your legacy wallet — that stays intact as a reference. After
                     creation, you'll see a side-by-side list of your legacy
                     addresses and the new BIP39 destinations. Sweep balances
                     chain-by-chain via the normal Send flow when you're ready.
                 </p>
-                <p className={styles.hint}>
+                <p style={explainParagraphStyle}>
                     Save your new BIP39 recovery phrase somewhere safe — it is
                     the only way to restore this wallet on another device.
                 </p>
                 <div className={styles.actions}>
-                    <Button variant="ghost" onClick={onBack}>Not now</Button>
-                    <Button variant="primary" onClick={() => setStage('create')}>
+                    <Button variant="ghost" onClick={onBack} icon={<Icon.BackIcon />}>Not now</Button>
+                    <Button variant="primary" onClick={() => setStage('create')} icon={<Icon.MigrateIcon />}>
                         Continue
                     </Button>
                 </div>

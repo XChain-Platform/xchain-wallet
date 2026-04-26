@@ -1,33 +1,52 @@
+/* Top-level layout: header docks at the top, body fills remaining
+   height + scrolls. Wrapper height comes from a CSS custom property
+   `--xc-screen-h` so different host environments can pin it without
+   forking the component (the forced-small framed preview sets it
+   to 600px; everything else defaults to 100dvh). `overflow: hidden`
+   on the screen is critical — it constrains the flex children so
+   the body's `overflow-y: auto` actually triggers, leaving the
+   header docked. */
+
 .screen {
     display: flex;
     flex-direction: column;
     background: var(--xc-bg);
     color: var(--xc-text);
+    height: var(--xc-screen-h, 100vh);
+    height: var(--xc-screen-h, 100dvh);
+    overflow: hidden;
 }
 
-.popup {
-    width: 360px;
-    height: 600px;
+/* Small variant fills its parent — the host (page wrapper, framed
+   preview, mobile viewport) is responsible for the outer width
+   constraint. Letting Screen fill the parent avoids the gutter that
+   a hard max-width creates inside a slightly-larger container (e.g.
+   a 375px framed preview vs a 360px Screen). */
+.small {
+    width: 100%;
 }
 
 .full {
     width: 100%;
-    min-height: 100vh;
 }
 
 .header {
+    flex: 0 0 auto;
     padding: var(--xc-space-3) var(--xc-space-4);
     border-bottom: 1px solid var(--xc-border);
     background: var(--xc-surface-raised);
 }
 
 .body {
-    flex: 1;
+    flex: 1 1 auto;
+    min-height: 0;
     padding: var(--xc-space-4);
     overflow-y: auto;
+    overflow-x: hidden;
 }
 
 .footer {
+    flex: 0 0 auto;
     padding: var(--xc-space-3) var(--xc-space-4);
     border-top: 1px solid var(--xc-border);
     background: var(--xc-surface-raised);

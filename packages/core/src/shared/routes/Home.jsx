@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Screen, Button } from '@xchain-wallet/core/ui';
+import { Screen, Button, Icon } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useAutoLock } from '../hooks/useAutoLock.js';
-import { ChainBalanceCard } from '../components/ChainBalanceCard.jsx';
+import { UnifiedBalanceList } from '../components/UnifiedBalanceList.jsx';
+import { HeaderActionMenu } from '../components/HeaderActionMenu.jsx';
+import { AlertsOverlay } from '../components/AlertsOverlay.jsx';
 import styles from './Home.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -37,8 +39,9 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {() => void} [props.onStaking]       navigate to the Staking dashboard (§42.7.4) — BTC-only, App.jsx gates the prop
  * @param {() => void} [props.onHistory]       navigate to the History route (§23 + §23.5 cross-chain threading)
  * @param {() => void} [props.onMigrateToBip39]           navigate to the §40.13 migration wizard when the active wallet is counterwallet-legacy
+ * @param {Array<{ id: string, label: string, description?: string, onSelect?: () => void }>} [props.extraActions]   §40+ entries surfaced in the small-mode pancake drawer; in full mode the host renders these via the dedicated ActionsMenu route
  */
-export function Home({ onLocked, onSend, onReceive, onCreateToken, onActions, onMarkets, onResumeAirdrop, onResumeCoinpay, onMessaging, onContracts, onStaking, onHistory, onAddresses, onMigrateToBip39 }) {
+export function Home({ onLocked, onSend, onReceive, onCreateToken, onActions, onMarkets, onResumeAirdrop, onResumeCoinpay, onMessaging, onContracts, onStaking, onHistory, onAddresses, onMigrateToBip39, extraActions }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -63,6 +66,8 @@ export function Home({ onLocked, onSend, onReceive, onCreateToken, onActions, on
         /** @type {string | null} */ (null),
     );
     const [locking, setLocking] = useState(false);
+    const [menuOpen, setMenuOpen] = useState(false);
+    const [alertsOpen, setAlertsOpen] = useState(false);
 
     useEffect(() => {
         let cancelled = false;
@@ -178,17 +183,41 @@ export function Home({ onLocked, onSend, onReceive, onCreateToken, onActions, on
     const activeWallet = wallets && activeWalletId
         ? wallets.find((w) => w.id === activeWalletId)
         : null;
-    const walletName = activeWallet?.name || branding.PRODUCT_NAME;
+
+    // Wallet-level alerts surfaced in the pancake's Alerts panel.
+    // Computed each render from the available signals; future alerts
+    // (incoming message, order match settled, MuSig2 round needs
+    // attention, etc.) drop into this array as they wire through
+    // their own sources.
+    const alerts = [];
+    if (activeWallet?.format === 'counterwallet-legacy' && onMigrateToBip39) {
+        alerts.push({
+            id: 'legacy-format',
+            severity: 'info',
+            title: 'Legacy FreeWallet format',
+            message: 'This wallet uses the 12-word Counterwallet format. Migrate to BIP39 for broader interop and stronger derivation.',
+            action: { label: 'Migrate to BIP39', onSelect: onMigrateToBip39 },
+        });
+    }
+
+    const brandBlock = (
+        <img
+            src={branding.logoUrl()}
+            alt={branding.PRODUCT_NAME}
+            className={isFull ? styles.brandLogoFull : styles.brandLogoPopup}
+        />
+    );
 
     const headerInner = isFull ? (
         <div className={styles.headerFull}>
-            <span className={styles.titleFull}>{walletName}</span>
+            {brandBlock}
             <div className={styles.headerRight}>
                 <Button
                     variant="ghost"
                     size="sm"
                     onClick={handleLock}
                     loading={locking}
+                    icon={<Icon.LockIcon />}
                 >
                     Lock
                 </Button>
@@ -196,17 +225,17 @@ export function Home({ onLocked, onSend, onReceive, onCreateToken, onActions, on
         </div>
     ) : (
         <div className={styles.headerPopup}>
-            <span className={styles.titlePopup} title={walletName}>
-                {walletName}
-            </span>
-            <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleLock}
-                loading={locking}
+            {brandBlock}
+            <button
+                type="button"
+                className={styles.menuBtn}
+                onClick={() => setMenuOpen(true)}
+                aria-label="Open menu"
+                aria-haspopup="dialog"
+                aria-expanded={menuOpen ? 'true' : 'false'}
             >
-                Lock
-            </Button>
+                <Icon.MenuIcon />
+            </button>
         </div>
     );
 
@@ -221,21 +250,9 @@ export function Home({ onLocked, onSend, onReceive, onCreateToken, onActions, on
                     <p className={styles.hint}>Loading balances…</p>
                 ) : null}
 
-                {activeWallet?.format === 'counterwallet-legacy' && onMigrateToBip39 ? (
-                    <button
-                        type="button"
-                        className={styles.legacyBanner}
-                        onClick={onMigrateToBip39}
-                    >
-                        <span className={styles.legacyBannerTitle}>
-                            Legacy FreeWallet format
-                        </span>
-                        <span className={styles.legacyBannerHint}>
-                            This wallet uses the 12-word Counterwallet format.
-                            Tap to migrate to BIP39 (§40.13).
-                        </span>
-                    </button>
-                ) : null}
+                {/* Inline notice removed — surfaces in the Alerts panel
+                    of the pancake menu instead so the main view stays
+                    focused on balances + work, not status banners. */}
 
                 {pendingAirdrops.length > 0 && onResumeAirdrop ? (
                     <div role="group" aria-label="Pending airdrops">
@@ -284,26 +301,12 @@ export function Home({ onLocked, onSend, onReceive, onCreateToken, onActions, on
                 ) : null}
 
                 {balances ? (
-                    <div className={isFull ? styles.grid : styles.stack}>
-                        {Object.entries(balances).map(([chainId, entries]) => {
-                            const descriptor = chainRegistry.get(chainId);
-                            if (!descriptor) return null;
-                            // §22.4: multisig is BTC-only at launch
-                            // (§10.3) so the badge only renders on the
-                            // BTC card. When the wallet supports
-                            // multiple multisig configs in the future
-                            // the indicator becomes per-address.
-                            const isBtc = descriptor.coin === 'bitcoin';
-                            return (
-                                <ChainBalanceCard
-                                    key={chainId}
-                                    descriptor={descriptor}
-                                    entries={entries}
-                                    multisig={isBtc ? multisig : null}
-                                />
-                            );
-                        })}
-                    </div>
+                    <UnifiedBalanceList
+                        chainRegistry={chainRegistry}
+                        balances={balances}
+                        multisig={multisig}
+                        multisigChainId={chainRegistry.byCoin('bitcoin')[0]?.id}
+                    />
                 ) : null}
 
                 {balances && Object.keys(balances).length === 0 ? (
@@ -312,12 +315,17 @@ export function Home({ onLocked, onSend, onReceive, onCreateToken, onActions, on
                     </p>
                 ) : null}
 
-                <div className={isFull ? styles.actionsFull : styles.actionsPopup}>
+                {/* Action button grid is full-mode only. In small mode the
+                    actions live in the pancake menu, freeing the body for
+                    the balance list. */}
+                {isFull ? (
+                <div className={styles.actionsFull}>
                     <Button
                         variant="primary"
                         block={!isFull}
                         onClick={onSend}
                         disabled={!onSend}
+                        icon={<Icon.SendIcon />}
                     >
                         Send
                     </Button>
@@ -326,6 +334,7 @@ export function Home({ onLocked, onSend, onReceive, onCreateToken, onActions, on
                         block={!isFull}
                         onClick={onReceive}
                         disabled={!onReceive}
+                        icon={<Icon.ReceiveIcon />}
                     >
                         Receive
                     </Button>
@@ -334,14 +343,16 @@ export function Home({ onLocked, onSend, onReceive, onCreateToken, onActions, on
                         block={!isFull}
                         onClick={onCreateToken}
                         disabled={!onCreateToken}
+                        icon={<Icon.TokenIcon />}
                     >
-                        Create a token
+                        Create token
                     </Button>
                     <Button
                         variant="secondary"
                         block={!isFull}
                         onClick={onMarkets}
                         disabled={!onMarkets}
+                        icon={<Icon.MarketIcon />}
                     >
                         Markets
                     </Button>
@@ -350,6 +361,7 @@ export function Home({ onLocked, onSend, onReceive, onCreateToken, onActions, on
                         block={!isFull}
                         onClick={onMessaging}
                         disabled={!onMessaging}
+                        icon={<Icon.MessageIcon />}
                     >
                         Messaging
                     </Button>
@@ -358,6 +370,7 @@ export function Home({ onLocked, onSend, onReceive, onCreateToken, onActions, on
                         block={!isFull}
                         onClick={onHistory}
                         disabled={!onHistory}
+                        icon={<Icon.HistoryIcon />}
                     >
                         History
                     </Button>
@@ -366,6 +379,7 @@ export function Home({ onLocked, onSend, onReceive, onCreateToken, onActions, on
                         block={!isFull}
                         onClick={onAddresses}
                         disabled={!onAddresses}
+                        icon={<Icon.AddressIcon />}
                     >
                         Addresses
                     </Button>
@@ -374,6 +388,7 @@ export function Home({ onLocked, onSend, onReceive, onCreateToken, onActions, on
                             variant="secondary"
                             block={!isFull}
                             onClick={onContracts}
+                            icon={<Icon.ContractIcon />}
                         >
                             Contracts
                         </Button>
@@ -383,6 +398,7 @@ export function Home({ onLocked, onSend, onReceive, onCreateToken, onActions, on
                             variant="secondary"
                             block={!isFull}
                             onClick={onStaking}
+                            icon={<Icon.StakeIcon />}
                         >
                             Staking
                         </Button>
@@ -392,11 +408,40 @@ export function Home({ onLocked, onSend, onReceive, onCreateToken, onActions, on
                         block={!isFull}
                         onClick={onActions}
                         disabled={!onActions}
+                        icon={<Icon.MoreIcon />}
                     >
                         More actions
                     </Button>
                 </div>
+                ) : null}
             </div>
+            {/* Pancake menu lives at the route level (not inside Screen)
+                so it overlays the entire viewport. */}
+            {!isFull && menuOpen ? (
+                <HeaderActionMenu
+                    onClose={() => setMenuOpen(false)}
+                    onAlerts={() => setAlertsOpen(true)}
+                    alertCount={alerts.length}
+                    onSend={onSend}
+                    onReceive={onReceive}
+                    onCreateToken={onCreateToken}
+                    onMarkets={onMarkets}
+                    onMessaging={onMessaging}
+                    onHistory={onHistory}
+                    onAddresses={onAddresses}
+                    onContracts={onContracts}
+                    onStaking={onStaking}
+                    extraActions={extraActions}
+                    onLock={handleLock}
+                    locking={locking}
+                />
+            ) : null}
+            {alertsOpen ? (
+                <AlertsOverlay
+                    alerts={alerts}
+                    onClose={() => setAlertsOpen(false)}
+                />
+            ) : null}
         </Screen>
     );
 }

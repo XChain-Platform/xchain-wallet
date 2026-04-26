@@ -25,6 +25,7 @@ import {
     isString,
     result,
 } from './validate.js';
+import { randomUUID } from '../util/uuid.js';
 
 export const CURRENT_VERSION = 1;
 
@@ -67,7 +68,7 @@ export const PENDING_AIRDROP_STAGES = /** @type {const} */ ([
 export function createPendingAirdrop(input) {
     return {
         schemaVersion: CURRENT_VERSION,
-        id: crypto.randomUUID(),
+        id: randomUUID(),
         walletId: input.walletId,
         chainId: input.chainId,
         fromAddress: input.fromAddress,

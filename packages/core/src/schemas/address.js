@@ -17,6 +17,7 @@ import {
     isString,
     result,
 } from './validate.js';
+import { randomUUID } from '../util/uuid.js';
 
 export const CURRENT_VERSION = 2;
 
@@ -58,7 +59,7 @@ export const CURRENT_VERSION = 2;
 export function createAddress(input) {
     return {
         schemaVersion: CURRENT_VERSION,
-        id: crypto.randomUUID(),
+        id: randomUUID(),
         accountId: input.accountId,
         chain: input.chain,
         network: input.network,

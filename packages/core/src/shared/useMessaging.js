@@ -21,9 +21,22 @@ export function useMessaging() {
 /**
  * Resolve the Screen layout variant from the current shell.
  *
+ * Layout variant follows AVAILABLE WIDTH, not container type:
+ *   `small` — narrow viewport (Chrome extension popup, mobile browser,
+ *             narrow desktop window, future native app with limited
+ *             width). The legacy `popup` literal is also accepted as
+ *             an alias by every consumer.
+ *   `full`  — wide viewport (desktop browser, tablet landscape,
+ *             extension full-screen mode).
+ *
+ * The shell-based mapping here is the conservative default for
+ * shells that don't pass their own width signal through; the web
+ * shell overrides this at boot via `useActiveVariant` so it picks
+ * the right variant by viewport width.
+ *
  * @param {'popup' | 'web' | 'desktop'} shell
- * @returns {'popup' | 'full'}
+ * @returns {'small' | 'full'}
  */
 export function screenVariantFor(shell) {
-    return shell === 'popup' ? 'popup' : 'full';
+    return shell === 'popup' ? 'small' : 'full';
 }

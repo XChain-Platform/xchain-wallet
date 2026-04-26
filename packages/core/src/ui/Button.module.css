@@ -11,6 +11,22 @@
     transition: background var(--xc-transition), border-color var(--xc-transition);
     user-select: none;
     text-decoration: none;
+    /* Button labels never wrap. If a label is too long for its container,
+     * shorten the label — wrapping splits a single CTA into a paragraph
+     * and breaks alignment with the icon. */
+    white-space: nowrap;
+}
+
+.icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+}
+
+.label {
+    display: inline-flex;
+    align-items: center;
 }
 
 .btn:focus-visible {
@@ -39,34 +55,44 @@
     width: 100%;
 }
 
+/* Default rule: every button variant has a coloured fill and #FFFFFF
+ * text. Hardcoded white (rather than `--xc-text-inverted`) so dark-mode
+ * inversion can't flip button text to black. */
+
 .primary {
     background: var(--xc-accent-primary);
-    color: var(--xc-text-inverted);
+    color: #FFFFFF;
 }
 .primary:hover:not(:disabled) {
     background: var(--xc-accent-primary-hover);
 }
 
 .secondary {
-    background: var(--xc-surface);
-    color: var(--xc-text);
-    border-color: var(--xc-border-strong);
+    background: var(--xc-accent-secondary);
+    color: #FFFFFF;
+    border-color: var(--xc-accent-secondary);
 }
 .secondary:hover:not(:disabled) {
-    background: var(--xc-bg-muted);
+    filter: brightness(0.92);
 }
 
+/* Ghost gets a neutral slate fill so white text reads clearly in both
+ * light and dark modes. Used for less-prominent actions ("Back",
+ * "Coming from FreeWallet") that should still look obviously
+ * clickable. */
 .ghost {
-    background: transparent;
-    color: var(--xc-text);
+    background: #475569;  /* slate-600; ~7:1 against #FFFFFF */
+    color: #FFFFFF;
+    border-color: #475569;
 }
 .ghost:hover:not(:disabled) {
-    background: var(--xc-bg-muted);
+    background: #334155;  /* slate-700 */
+    border-color: #334155;
 }
 
 .danger {
     background: var(--xc-danger);
-    color: var(--xc-text-inverted);
+    color: #FFFFFF;
 }
 .danger:hover:not(:disabled) {
     filter: brightness(0.92);

@@ -18,6 +18,7 @@ import {
     result,
 } from './validate.js';
 import { validateMultisigConfig } from './multisigConfig.js';
+import { randomUUID } from '../util/uuid.js';
 
 export const CURRENT_VERSION = 2;
 
@@ -80,7 +81,7 @@ export const WALLET_FORMATS = /** @type {const} */ ([
 export function createWallet(input) {
     return {
         schemaVersion: CURRENT_VERSION,
-        id: crypto.randomUUID(),
+        id: randomUUID(),
         name: input.name,
         createdAt: new Date().toISOString(),
         origin: input.origin,

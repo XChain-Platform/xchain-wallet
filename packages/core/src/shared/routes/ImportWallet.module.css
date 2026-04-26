@@ -88,6 +88,19 @@
     box-shadow: 0 0 0 3px var(--xc-focus-ring);
 }
 
+.error {
+    font-size: var(--xc-text-sm);
+    color: #FFFFFF;
+    background: var(--xc-danger);
+    border: 1px solid var(--xc-danger);
+    padding: var(--xc-space-2) var(--xc-space-3);
+    border-radius: var(--xc-radius-md);
+    margin: 0 0 var(--xc-space-3);
+    line-height: 1.4;
+    text-align: center;
+    font-weight: 500;
+}
+
 .actionsPopup {
     display: flex;
     gap: var(--xc-space-2);

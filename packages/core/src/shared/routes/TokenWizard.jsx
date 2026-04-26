@@ -5,7 +5,7 @@ import {
     Input,
     ChainBadge,
     AddressText,
-} from '@xchain-wallet/core/ui';
+ ChainPicker, } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -590,23 +590,7 @@ function renderChainStage({
         <>
             <p className={styles.stageHint}>Which chain should this token live on?</p>
             {chainsWithAddresses.length > 1 ? (
-                <label className={styles.pickerLabel}>
-                    Chain
-                    <select
-                        className={styles.picker}
-                        value={chainId}
-                        onChange={(e) => setChainId(e.target.value)}
-                    >
-                        {chainsWithAddresses.map((cid) => {
-                            const d = chainRegistry.get(cid);
-                            return (
-                                <option key={cid} value={cid}>
-                                    {d ? `${d.displayName} (${d.networkKind})` : cid}
-                                </option>
-                            );
-                        })}
-                    </select>
-                </label>
+                <ChainPicker label="Chain" value={chainId} onChange={setChainId} chainIds={chainsWithAddresses} chainRegistry={chainRegistry} />
             ) : descriptor ? (
                 <div className={styles.chainLine}>
                     <ChainBadge descriptor={descriptor} size="sm" />

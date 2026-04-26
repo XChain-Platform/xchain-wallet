@@ -74,15 +74,33 @@ import { pairTrezorSigner } from './signers/trezorFactory.js';
 import { pairLedgerSigner } from './signers/ledgerFactory.js';
 import { registerSigner as registerLocalSigner } from './signerBridge.js';
 import * as messaging from './messaging.js';
-import { getSessionStatus, listWallets } from './messaging.js';
+import { getSessionStatus, listWallets, unlockWallet } from './messaging.js';
+import { readPassword, clearPassword } from './sessionPasswordCache.js';
 import { ExtensionBanner } from './components/ExtensionBanner.jsx';
+import { useActiveVariant, shellForVariant } from './devVariant.js';
+import { DevVariantBadge } from './DevVariantBadge.jsx';
+import devShellStyles from './DevVariantShell.module.css';
 
 export function App() {
+    const variantState = useActiveVariant();
+    const { variant, source } = variantState;
+    const shell = shellForVariant(variant);
+    // The framed phone-style preview only makes sense when a wide
+    // viewport is being deliberately previewed as small (forced
+    // override). When the viewport itself is narrow (auto-detected
+    // small), the page already IS narrow — framing it would just
+    // waste pixels.
+    const showFrame = variant === 'small' && source !== 'auto';
     return (
-        <MessagingProvider shell="web" messaging={messaging}>
-            <ExtensionBanner />
-            <AppInner />
-        </MessagingProvider>
+        <div className={showFrame ? devShellStyles.smallPage : devShellStyles.fullPage}>
+            <div className={showFrame ? devShellStyles.smallFrame : devShellStyles.fullFrame}>
+                <MessagingProvider shell={shell} messaging={messaging}>
+                    <ExtensionBanner />
+                    <AppInner />
+                </MessagingProvider>
+            </div>
+            <DevVariantBadge state={variantState} />
+        </div>
     );
 }
 
@@ -134,6 +152,20 @@ function AppInner() {
     }, []);
 
     useEffect(() => { refresh(); }, [refresh]);
+
+    // Auto-unlock from the session cache: if the user unlocked
+    // earlier in this tab session, the password sits in sessionStorage
+    // and a reload skips straight back to Home. A failure (vault
+    // rotated, password changed in another tab) clears the cache and
+    // falls back to the unlock form.
+    useEffect(() => {
+        if (status.state !== 'locked') return;
+        const cached = readPassword();
+        if (!cached) return;
+        unlockWallet(cached)
+            .then(() => refresh())
+            .catch(() => clearPassword());
+    }, [status.state, refresh]);
 
     useEffect(() => {
         if (status.state !== 'unlocked') {
@@ -734,6 +766,37 @@ function AppInner() {
                         setUnlockedView('coinpay');
                     } : undefined}
                     onMigrateToBip39={activeWalletId ? () => setUnlockedView('migrate-bip39') : undefined}
+                    extraActions={activeWalletId ? buildActionEntries({
+                        onIssue: () => setUnlockedView('issue'),
+                        onMint: () => setUnlockedView('mint'),
+                        onDestroy: () => setUnlockedView('destroy'),
+                        onLock: () => setUnlockedView('lock'),
+                        onUpdateDescription: () => setUnlockedView('description'),
+                        onTransferOwnership: () => setUnlockedView('transfer'),
+                        onBroadcast: () => setUnlockedView('broadcast'),
+                        onCreateDispenser: () => setUnlockedView('dispenser'),
+                        onMyDispensers: () => setUnlockedView('dispensers-list'),
+                        onBrowseDispensers: () => setUnlockedView('dispenser-explorer'),
+                        onPayDividend: () => setUnlockedView('dividend'),
+                        onAirdrop: () => {
+                            setResumeAirdropId(null);
+                            setUnlockedView('airdrop');
+                        },
+                        onAdvanced: () => setUnlockedView('advanced'),
+                        onPairSigner: () => setUnlockedView('pair-signer'),
+                        onPayCoinpay: () => {
+                            setResumeCoinpay(null);
+                            setUnlockedView('coinpay');
+                        },
+                        onSwap: () => setUnlockedView('swap'),
+                        onLink: () => setUnlockedView('link-form'),
+                        onParallel: () => setUnlockedView('parallel-compose'),
+                        onCrossChainSwap: () => setUnlockedView('cross-chain-swap'),
+                        onCrossChainTemplates: () => setUnlockedView('cross-chain-templates'),
+                        onMultisigCreate: hasBtcAddress ? () => setUnlockedView('multisig-create') : undefined,
+                        onMultisigSign: hasBtcAddress ? () => setUnlockedView('multisig-sign') : undefined,
+                        onContacts: () => setUnlockedView('contacts'),
+                    }) : undefined}
                 />
             );
         default:

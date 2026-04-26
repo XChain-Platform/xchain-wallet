@@ -10,6 +10,7 @@ import {
     isString,
     result,
 } from './validate.js';
+import { randomUUID } from '../util/uuid.js';
 
 export const CURRENT_VERSION = 1;
 
@@ -45,7 +46,7 @@ export function createContact(input) {
     const avatarSeed = input.avatarSeed ?? input.entries[0]?.address ?? '';
     return {
         schemaVersion: CURRENT_VERSION,
-        id: crypto.randomUUID(),
+        id: randomUUID(),
         name: input.name,
         notes: input.notes ?? '',
         entries: input.entries,

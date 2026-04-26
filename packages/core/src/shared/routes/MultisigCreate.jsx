@@ -4,6 +4,7 @@ import {
     Button,
     Input,
     ChainBadge,
+    ChainPicker,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -296,23 +297,13 @@ export function MultisigCreate({ walletId, onBack }) {
                 or hardware-pairing.
             </p>
 
-            <label className={styles.pickerLabel}>
-                <span>Network</span>
-                <select
-                    className={styles.picker}
-                    value={chainId}
-                    onChange={(e) => setChainId(e.target.value)}
-                >
-                    {btcChainIds
-                        .filter((cid) => Array.isArray(addressesByChain[cid]) && addressesByChain[cid].length > 0)
-                        .map((cid) => {
-                            const d = chainRegistry.get(cid);
-                            return (
-                                <option key={cid} value={cid}>{d ? d.displayName : cid}</option>
-                            );
-                        })}
-                </select>
-            </label>
+            <ChainPicker
+                label="Network"
+                value={chainId}
+                onChange={setChainId}
+                chainIds={btcChainIds.filter((cid) => Array.isArray(addressesByChain[cid]) && addressesByChain[cid].length > 0)}
+                chainRegistry={chainRegistry}
+            />
 
             <fieldset style={fieldsetStyle}>
                 <legend style={legendStyle}>Cosigners</legend>

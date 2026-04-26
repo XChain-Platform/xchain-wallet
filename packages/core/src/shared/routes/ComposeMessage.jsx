@@ -4,6 +4,7 @@ import {
     Button,
     Input,
     ChainBadge,
+    ChainPicker,
     AddressText,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
@@ -241,23 +242,13 @@ export function ComposeMessage({
 
     return wrap(
         <form onSubmit={handleSubmit} noValidate>
-            <label className={styles.fieldLabel}>
-                <span>From chain</span>
-                <select
-                    className={styles.select}
-                    value={chainId || ''}
-                    onChange={(e) => { setChainId(e.target.value); setFromAddressId(null); }}
-                >
-                    {chainIds.map((cId) => {
-                        const d = chainRegistry.get(cId);
-                        return (
-                            <option key={cId} value={cId}>
-                                {d ? d.displayName : cId}
-                            </option>
-                        );
-                    })}
-                </select>
-            </label>
+            <ChainPicker
+                label="From chain"
+                value={chainId}
+                onChange={(next) => { setChainId(next); setFromAddressId(null); }}
+                chainIds={chainIds}
+                chainRegistry={chainRegistry}
+            />
 
             <label className={styles.fieldLabel}>
                 <span>From address</span>

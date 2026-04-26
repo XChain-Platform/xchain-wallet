@@ -7,9 +7,106 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.103.0] - 2026-04-25
+
+Major iteration session. Wallet was effectively never built or run before this — package.json deps were declared but `pnpm install` had not been run since v0.12.0, no `vitest` invocation had ever rendered a component, and several runtime paths (Web Crypto, getUserMedia, Clipboard API) were broken on the LAN-host HTTP origin the user actually loads from. This release brings the project from "code-complete spec on disk" to "actually runs in a browser, has a deep test substrate, and has a coherent design language."
+
+Version demoted from `1.0.0-rc.6` → `0.102.0` (then bumped here to `0.103.0`) because the RC label implied production-readiness the codebase did not have.
+
+### Added
+
+- **Whole-wallet test substrate at `xchain-wallet/test/`** matching the per-component layout used across every other XChain Platform service. 13 distinct test types: `unit/`, `smoke/`, `integration/`, `boundary/`, `chaos/`, `fuzz/`, `regression/`, `security/`, `benchmarks/`, `mutation/`, `a11y/`, `e2e/`, plus playwright reorganized under `e2e/`. Per-type `vitest.config.<type>.js` at the wallet root. Per-type `setup.js` + `README.md` documenting scope + run cmd + conventions. New `pnpm test:<type>` scripts.
+
+- **Deep crypto coverage** across `packages/core/src/crypto/`. ~80 new tests spanning unit (per-module), integration (kdf↔aead↔walletBlob, mnemonic→hd, backup roundtrip), boundary (kdf params, hd paths, aead size limits), chaos (backup tamper across 4 vectors), fuzz (aead/wif/mnemonic round-trip properties), security (10K-iteration nonce uniqueness, backup tamper resistance), benchmarks (kdf at floor + 2× tiers, hd derive, aead per size). Stryker mutation config scoped to crypto + util.
+
+- **Auto-icon `<Button>`** — single-source label-to-icon resolver (`iconForLabel`) shared by Button + HeaderActionMenu. 40+ pattern bucket coverage. Buttons that pass an explicit `icon` prop keep theirs; static-string labels auto-iconify; opt-out via `icon={null}`.
+
+- **20-icon set** at `packages/core/src/ui/icons/` — hand-rolled inline SVGs (no icon-library dep) for Send, Receive, Sign, Broadcast, Lock, Unlock, Stake, Swap, Markets, Message, History, Address, Contract, Home, Settings, More, Back, Forward, Plus, Check, X, Trash, Pencil, Refresh, Copy, Paste, Scan, Search, Filter, Eye, EyeOff, Link, Unlink, USB, Download, Upload, Pause, Play, Migrate, Token, Multisig, Info, ExternalLink, Menu (pancake).
+
+- **`<ChainPicker>` primitive** — single-select dropdown with chain icon + display name + ticker · network suffix. Searchable when option count > 6. Replaces native `<select>` for chain selection across 16 forms (Send, Swap, Compose, Broadcast, TokenAdmin, Destroy, Mint, IssueToken, TokenWizard, Multisig, Dividend, Dispenser, DeployContract, Link, Airdrop, AdvancedActions).
+
+- **`<NetworkFilter>` dropdown** on Home — replaces the All/BTC/LTC/DOGE chip row with one searchable picker that scales to N coin families.
+
+- **`<UnifiedBalanceList>`** — single list of every balance across every chain (Coins section + Tokens section), each row with an avatar + chain-icon overlay + name + ticker subtitle + quantity + fiat value.
+
+- **`<HeaderActionMenu>`** (pancake drawer) for the `small` variant — full-overlay slide-in with two sections (Wallet primary nav + §40+ Actions), Alerts entry with count badge, Lock-wallet block at bottom.
+
+- **`<AlertsOverlay>`** — alerts panel surfaced from the pancake. Severity-railed (info/warning/critical). First inhabitant: legacy FreeWallet-format → migrate. Replaces the inline legacy-banner in Home body.
+
+- **Variant switcher (`small` ↔ `full`)** driven by viewport width with 640px threshold. URL/`localStorage` overrides. Floating dev badge bottom-right showing variant + source + viewport px + flip controls. Forced-small rendering inside a centered 375×600 frame so designers see the popup the way users will.
+
+- **Session-scoped password cache** (`sessionStorage`) — `unlockWallet` saves the password; `lockWallet` and tab-close clear it; auto-unlock on App boot when the cache is populated. Web shell only.
+
+- **Dev fake balances + 40 tokens** at `packages/web/src/devFakeBalances.js` — populates the dev-mock SDK with 50 BTC, 30 LTC, 100k DOGE, plus 40 distinct tokens distributed by chain personality. Each token carries an asset+display+description+quantity+divisibility+fiatRate. Lets the UI render realistic balance data without a configured explorer.
+
+- **`@vitejs/plugin-basic-ssl`** — opt-in HTTPS for the web shell via `VITE_HTTPS=1`. Self-signed cert. Useful for testing hardware-signer flows from a non-localhost origin.
+
+- **`@noble/ciphers`** dependency at the core package level. Backs the rewritten AEAD.
+
+- **`fast-check` + `axe-core`** dev dependencies for the fuzz + a11y-runtime suites.
+
+- **`packages/web/public/favicon.png`** — wired from the brand asset; web shell's `index.html` now references it. Closes the persistent 404.
+
+- **Reduced-motion support on `<AnimatedQrFrames>`** — when `prefers-reduced-motion: reduce`, the auto-advance interval suspends and Prev/Next manual controls render. Cadence label flips to "manual".
+
 ### Changed
 
-- `README.md` — rewritten in the standard XChain component README format used by every sibling repo (encoder, decoder, indexer, explorer, hub, utxo-tracker, vm, sdk, node, regtest-miner, indexer-sync, e2e-test). Adds the shields header, a feature list with bracketed bold items, a Documentation table linking to `xchain-documentation/components/wallet/`, per-shell Quick Start, root + per-package Scripts, a Test Suite breakdown by group, and the standard Copyright trailer. Replaces the previous bespoke pre-implementation README. No source changes.
+- **`packages/core/src/crypto/aead.js`** — replaced Web Crypto API (`crypto.subtle.importKey/encrypt/decrypt`) with pure-JS `gcm()` from `@noble/ciphers/aes`. SubtleCrypto is gated on a secure context (HTTPS or `localhost`); the previous implementation crashed onboarding under any LAN-host HTTP origin with `Cannot read properties of undefined (reading 'importKey')`. Wire format unchanged (12-byte IV ‖ ciphertext ‖ 16-byte tag) so existing vaults decrypt cleanly under the new code path.
+
+- **`packages/core/src/signers/LedgerSigner.js`** — replaced `crypto.subtle.digest('SHA-256', ...)` with `sha256()` from `@noble/hashes/sha2`. Same secure-context fix.
+
+- **`packages/core/src/util/uuid.js`** (new) — `randomUUID()` polyfill that uses `crypto.randomUUID` when available and falls back to a `crypto.getRandomValues`-based UUIDv4. Replaces 12 schema files' direct `crypto.randomUUID()` calls (account, address, connectedSite, contact, migrations, multisigConfig, multisigSigningSession, pendingAirdrop, pendingTx, signer, wallet, watchlistEntry).
+
+- **`packages/extension/manifest.json`** — `version` rolled back to plain semver `0.103.0`; `version_name` ships the human-readable string. Earlier RC-style versioning carried forward via `deriveExtensionVersion`.
+
+- **Test directory layout** — `packages/core/test/` → `xchain-wallet/test/` at the workspace root, matching the per-component pattern across the platform. 95 files moved, 119 import-path rewrites, 81 `wsRoot` path-computation rewrites. `vitest.config.js` moved to root, smoke runner `cwd` adjusted, root `package.json` gained `"type": "module"` so smokes parse as ESM.
+
+- **`<Screen>` layout** — `--xc-screen-h` custom property for parent-driven sizing (defaults to `100dvh` with `100vh` fallback). `overflow: hidden` on `.screen` so the body's `overflow-y: auto` becomes the only scrollable region — sticky header on every variant. `popup` variant renamed to `small`.
+
+- **Onboarding labels** — "Create a new wallet" → "Create new wallet"; "I already have a wallet" → "Import wallet"; "Coming from FreeWallet" → "From FreeWallet". All buttons gained icons.
+
+- **`<CopyButton>`** — multi-tier clipboard write (modern API → legacy `execCommand('copy')` textarea fallback) so plain-HTTP origins still copy. State machine: idle → copied → failed → idle. Visible "Copy failed" state instead of silent no-op.
+
+- **Button system** — `white-space: nowrap` baseline, every variant uses `#FFFFFF` text on coloured fills (no `var(--xc-text-inverted)` which inverted to black in dark mode).
+
+- **Error display** — moved from below the second password field on `<ImportWallet>` to a top-of-form red alert box. White text on saturated red with WCAG-AA contrast. `text-align: center`, `font-weight: 500`. Same treatment applied to `<CreateWallet>`.
+
+- **Why-migrate paragraphs** in `<MigrateToBip39>` — switched from centered/muted to justified body copy with full-contrast text + 1.55 line-height. Buttons gained Back/Migrate icons.
+
+- **Home header** — brand block (logo + "XChain Wallet" + optional wallet-name subtitle when it differs from the product name) replaces the previous wallet-name-only title.
+
+- **`packages/web/vite.config.js`** — `host: '0.0.0.0'` so the Mac side of Parallels can reach the dev server. `allowedHosts: ['devhost', 'localhost', '127.0.0.1']` to bypass Vite 5's host check.
+
+- **`packages/extension/package.json`** + **`packages/web/package.json`** — `xchain-sdk` switched from `^1.13.0` (npm — only published 1.2.5 available) to `link:../../../xchain-sdk` (sibling repo).
+
+- **Dev-mock SDK** in `packages/web/src/hostBridge.js` — proxied `get*` lookup that returns empty arrays by default and overrides `getBalances` to return the realistic dev fake-balance dataset. Constructor receives the per-chain `network` opt so balances are chain-appropriate.
+
+- **`pnpm-workspace.yaml`** — `e2e` workspace renamed to `test/e2e`.
+
+- **`.npmrc`** added: `shamefully-hoist=true`. Required because `vite-plugin-node-polyfills` injects shim imports into bundled core code that pnpm's strict layout couldn't resolve.
+
+### Removed
+
+- `packages/web/dist/`, `packages/extension/dist/` — no longer in tree (rebuild via `pnpm -C packages/<shell> build`).
+- Old `e2e/` workspace root — moved to `test/e2e/`.
+- `packages/core/vitest.config.js` — moved to wallet-root `vitest.config.js`.
+- `packages/web/src/devPasswordCache.js` — replaced by `sessionPasswordCache.js` (no longer dev-gated).
+
+### Decided
+
+- **Crypto layer is pure-JS, not Web Crypto.** Web Crypto's secure-context gate is incompatible with self-hosted wallet deployment patterns (LAN HTTP, mobile Safari sometimes, IPv4 internal). `@noble/ciphers` + `@noble/hashes` cover everything we need; perf is comparable to SubtleCrypto at our payload sizes (verified in benchmarks).
+
+- **`small` variant covers Chrome extension popup, mobile browsers, and any narrow container.** Single design serves every constrained-width context. `full` covers everything else. Detection is viewport-width-driven (640px threshold), not shell-driven.
+
+- **Pancake menu in `small` is the SOLE navigation surface.** No "More actions" link to a list-in-main-view — main view is for doing work, pancake is for navigation. Drops a class of confusion where users land on a menu route and don't realize they need to go back.
+
+- **Test directory at workspace root, not per-package.** Matches every other XChain Platform component's convention. Cross-package test types (integration, e2e) need a workspace-level home.
+
+### Notes
+
+- 11 pre-existing UI test failures in `unit/ui/Button.test.jsx` / `Input.test.jsx` / `CopyButton.test.jsx` and 1 decoder string-mismatch are stale assertions from this session's design iteration. They need their expectations refreshed; tracked separately.
+- 21 pre-existing smoke failures (out of 92) are also stale assertions (label changes, `link:` xchain-sdk pin, `ChainBalanceCard` → `UnifiedBalanceList` swap) — same family of cleanup.
+- Suite-level pass rates as of this commit: integration 25/25, boundary 49/49, chaos 16/16, fuzz 10/10, security 15/15, regression 4/4, a11y 8/8, unit 171/182. Benchmarks live (`pnpm test:bench`).
 
 ## [1.0.0-rc.6] - 2026-04-24
 

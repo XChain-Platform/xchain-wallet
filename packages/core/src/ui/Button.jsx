@@ -1,4 +1,14 @@
 import styles from './Button.module.css';
+import { iconForLabel } from './icons/index.jsx';
+
+// Auto-icon: if the caller didn't pass an explicit `icon` prop AND
+// children is a static string, look the label up via the shared
+// `iconForLabel` resolver (in icons/index.jsx). Caller can pass
+// `icon={null}` to opt out for the rare label-only button.
+function defaultIconFor(children) {
+    const Icon = iconForLabel(typeof children === 'string' ? children : null);
+    return Icon ? <Icon /> : null;
+}
 
 /**
  * @param {object} props
@@ -9,6 +19,7 @@ import styles from './Button.module.css';
  * @param {boolean} [props.disabled]
  * @param {'button' | 'submit' | 'reset'} [props.type]
  * @param {(e: import('react').MouseEvent<HTMLButtonElement>) => void} [props.onClick]
+ * @param {import('react').ReactNode | null} [props.icon]   icon node before the label, or `null` to suppress the auto-default
  * @param {import('react').ReactNode} props.children
  */
 export function Button({
@@ -19,6 +30,7 @@ export function Button({
     disabled = false,
     type = 'button',
     onClick,
+    icon,
     children,
     ...rest
 }) {
@@ -29,6 +41,10 @@ export function Button({
         block ? styles.block : null,
         loading ? styles.loading : null,
     ].filter(Boolean).join(' ');
+    // `icon` is `undefined` when the caller didn't pass it → fall back
+    // to the auto-lookup. `null` is the explicit opt-out and renders
+    // no icon at all. Any truthy value renders verbatim.
+    const resolvedIcon = icon === undefined ? defaultIconFor(children) : icon;
     return (
         <button
             type={type}
@@ -39,6 +55,7 @@ export function Button({
             {...rest}
         >
             {loading ? <span className={styles.spinner} aria-hidden="true" /> : null}
+            {!loading && resolvedIcon ? <span className={styles.icon} aria-hidden="true">{resolvedIcon}</span> : null}
             <span className={styles.label}>{children}</span>
         </button>
     );
