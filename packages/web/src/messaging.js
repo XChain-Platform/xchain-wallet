@@ -695,6 +695,16 @@ export function exportBackupFile(opts) {
     return /** @type {any} */ (sendMessage('wallet.exportBackup', opts));
 }
 
+// §35.1 + §43 connected-sites — list / disconnect. Approvals create
+// the records in bridge/handlers.js.
+export function listConnectedSites() {
+    return /** @type {any} */ (sendMessage('sites.list'));
+}
+/** @param {{ id: string }} req */
+export function deleteConnectedSite(req) {
+    return /** @type {any} */ (sendMessage('sites.delete', req));
+}
+
 /**
  * Derive + persist the next unused external address for (wallet, chain).
  * Requires the user's password because the signer re-derives the HD

@@ -429,6 +429,21 @@ export function createBackgroundHost(deps) {
         return { fileContent: r.fileContent };
     });
 
+    // §35.1 + §43 connected-sites maintenance. List/delete; the
+    // approval-flow record creation lives in bridge/handlers.js.
+    host.register('sites.list', async (_req, { vault }) => {
+        const sites = await vault.connectedSites.list();
+        return [...sites].sort((a, b) => (b.lastUsedAt || '').localeCompare(a.lastUsedAt || ''));
+    });
+    host.register('sites.delete', async (req, { vault }) => {
+        const id = req?.id;
+        if (typeof id !== 'string' || !id) {
+            throw new Error('sites.delete: id is required');
+        }
+        await vault.connectedSites.delete(id);
+        return { ok: true };
+    });
+
     // --- Receive -------------------------------------------------------------
 
     host.register('receive.getAddress', async (req, { vault, chainRegistry, sdkRegistry }) => {

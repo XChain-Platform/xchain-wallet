@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.117.0] - 2026-04-26
+
+Settings — Step 14 of 18 — Connected Sites panel.
+
+Lists ConnectedSite records sorted by `lastUsedAt` desc with origin / appName / connect / last-used timestamps. Each row expands to a permissions summary (granted chains, accounts, sign-message permission, per-action signAction map) and carries a Disconnect action that deletes the record. Per-action permission editing (toggling individual ACTIONs between allow / ask / deny) needs a narrower write handler than full record replacement; that lands in a follow-up step. List + disconnect cover the majority of value — users who want to reset a site can disconnect and re-approve.
+
+### Added
+
+- **`packages/core/src/shared/components/settings/ConnectedSitesSection.jsx`** — list + expandable permissions summary + disconnect.
+- **`sites.list` + `sites.delete` host handlers** in `createBackgroundHost.js`.
+- **`listConnectedSites` + `deleteConnectedSite` messaging wrappers** in popup + web.
+- **`test/smoke/ui/settings-connected-sites.smoke.js`** — section surface, permissions fields, empty state, host wiring, messaging exports, Settings.jsx hook-up.
+
+### Changed
+
+- **`packages/core/src/shared/routes/Settings.jsx`** — connected-sites section flips from `kind: 'stub'` to `kind: 'panel'`.
+
 ## [0.116.0] - 2026-04-26
 
 Settings — Step 13 of 18 — Backup panel.

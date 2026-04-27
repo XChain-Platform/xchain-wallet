@@ -5,6 +5,7 @@ import { AboutSection } from '../components/settings/AboutSection.jsx';
 import { AdsSection } from '../components/settings/AdsSection.jsx';
 import { AppearanceSection } from '../components/settings/AppearanceSection.jsx';
 import { BackupSection } from '../components/settings/BackupSection.jsx';
+import { ConnectedSitesSection } from '../components/settings/ConnectedSitesSection.jsx';
 import { DeveloperModeSection } from '../components/settings/DeveloperModeSection.jsx';
 import { LanguageRegionSection } from '../components/settings/LanguageRegionSection.jsx';
 import { PrivacySection } from '../components/settings/PrivacySection.jsx';
@@ -159,7 +160,8 @@ export function Settings({
             title: 'Connected Sites',
             description: 'dApp connections and per-site permissions.',
             keywords: 'connected sites dapp permissions origin',
-            kind: 'stub',
+            kind: 'panel',
+            Component: ConnectedSitesSection,
         },
         {
             id: 'contacts',
