@@ -1,10 +1,38 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Screen, Button, Icon } from '@xchain-wallet/core/ui';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
+import { LICENSE_NAME, LICENSE_FILE } from '../../buildInfo.js';
 import { crypto as cryptoLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './Onboarding.module.css';
 import pickerStyles from './WalletPicker.module.css';
+
+const LICENSE_STORAGE_KEY = 'xc:licenseAcceptedAt';
+
+const LICENSE_SUMMARY = [
+    `By using ${branding.PRODUCT_NAME} you agree to the ${LICENSE_NAME}.`,
+    'The wallet is provided as-is — there are no warranties of any kind, and no remedy if you lose your seed phrase, passphrase, or hardware wallet. Cryptocurrency is irreversible. Anything you send is gone the moment a miner includes it in a block.',
+    'Your seed phrase is the only backup. If you lose this device AND your written copy of the seed, the keys are gone forever. The team behind this software cannot recover them. Customer support cannot recover them. Nobody can.',
+    'You are solely responsible for your private keys, your transactions, and any tax or legal consequences thereof. The wallet does not withhold or report taxes. You are the bank.',
+    'You are also responsible for verifying the authenticity of every download. Releases are signed; check the signatures. Phishing copies of this app exist. We do not link to or endorse them.',
+    'Software and tokens visible in this wallet may be subject to local laws on financial instruments, securities, money transmission, anti-money-laundering, or sanctions. You agree not to use the wallet in a jurisdiction where doing so is unlawful, or to facilitate any unlawful activity through it.',
+    'Some features (hardware wallet integration, the dApp bridge, etc.) interact with third-party software you control. Vulnerabilities or bugs in those tools are not the wallet\'s responsibility. The wallet does its best to fail closed when it detects a problem.',
+    `Full license text: ${LICENSE_FILE} in the source repository. Read it. Disagreement means you should not continue.`,
+];
+
+function readAcceptedAt() {
+    try {
+        return globalThis.localStorage?.getItem(LICENSE_STORAGE_KEY) || null;
+    } catch {
+        return null;
+    }
+}
+
+function markAccepted() {
+    try {
+        globalThis.localStorage?.setItem(LICENSE_STORAGE_KEY, new Date().toISOString());
+    } catch { /* best-effort */ }
+}
 
 /**
  * Welcome screen — the entry point for users with no wallet yet.
@@ -29,6 +57,35 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onDemoE
     const isFull = variant === 'full';
     const [demoBusy, setDemoBusy] = useState(false);
     const [demoError, setDemoError] = useState(/** @type {string | null} */ (null));
+    // §25.1 / G061 — license-acceptance gate. Persisted to localStorage so
+    // a returning user (e.g. after wiping a demo wallet) doesn't have to
+    // re-accept. The "Add Wallet" path (when `onBack` is supplied) is
+    // already inside an unlocked vault, so the gate is skipped.
+    const [licenseAcceptedAt, setLicenseAcceptedAt] = useState(() => readAcceptedAt());
+    const [scrolledToEnd, setScrolledToEnd] = useState(false);
+    const [licenseAck, setLicenseAck] = useState(false);
+    const licenseScrollRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+
+    useEffect(() => {
+        // If the panel is already short enough that the user can see
+        // everything without scrolling, treat as scrolled.
+        const el = licenseScrollRef.current;
+        if (!el) return;
+        if (el.scrollHeight <= el.clientHeight + 4) setScrolledToEnd(true);
+    }, [licenseAcceptedAt]);
+
+    function handleLicenseScroll(event) {
+        const el = event.currentTarget;
+        if (!el) return;
+        if (el.scrollTop + el.clientHeight >= el.scrollHeight - 8) {
+            setScrolledToEnd(true);
+        }
+    }
+
+    function handleAcceptLicense() {
+        markAccepted();
+        setLicenseAcceptedAt(new Date().toISOString());
+    }
 
     async function handleEnterDemo() {
         if (demoBusy) return;
@@ -79,6 +136,59 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onDemoE
             <span />
         </div>
     ) : null;
+
+    // First-launch gate. The "Add wallet" path skips it because the user
+    // is already inside an unlocked vault — they accepted at install time.
+    if (!licenseAcceptedAt && !onBack) {
+        return (
+            <Screen variant={variant} header={null}>
+                <div className={isFull ? styles.heroFull : styles.heroPopup}>
+                    <h1 className={isFull ? styles.nameFull : styles.namePopup}>
+                        Before we begin
+                    </h1>
+                    <p className={isFull ? styles.taglineFull : styles.taglinePopup}>
+                        Read and accept the {LICENSE_NAME} to use {branding.PRODUCT_NAME}.
+                    </p>
+                </div>
+                <div
+                    ref={licenseScrollRef}
+                    className={styles.licenseScroll}
+                    onScroll={handleLicenseScroll}
+                    tabIndex={0}
+                    aria-label="License terms"
+                >
+                    {LICENSE_SUMMARY.map((p, i) => (
+                        <p key={i} className={styles.licenseParagraph}>{p}</p>
+                    ))}
+                </div>
+                <label className={styles.licenseAck}>
+                    <input
+                        type="checkbox"
+                        checked={licenseAck}
+                        disabled={!scrolledToEnd}
+                        onChange={(e) => setLicenseAck(e.target.checked)}
+                    />
+                    <span>
+                        {scrolledToEnd
+                            ? 'I have read and agree to these terms.'
+                            : 'Scroll to the end of the terms to enable.'}
+                    </span>
+                </label>
+                <div className={isFull ? styles.actionsFull : styles.actionsPopup}>
+                    <Button
+                        variant="primary"
+                        block
+                        onClick={handleAcceptLicense}
+                        disabled={!licenseAck || !scrolledToEnd}
+                        icon={<Icon.CheckIcon />}
+                    >
+                        Accept and continue
+                    </Button>
+                </div>
+            </Screen>
+        );
+    }
+
     return (
         <Screen variant={variant} header={header}>
             <div className={isFull ? styles.heroFull : styles.heroPopup}>

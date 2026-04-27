@@ -133,3 +133,45 @@
     color: var(--xc-danger, #B91C1C);
     text-align: center;
 }
+
+.licenseScroll {
+    max-height: 280px;
+    overflow-y: auto;
+    padding: var(--xc-space-3) var(--xc-space-4);
+    background: var(--xc-bg-muted);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-md);
+    margin: var(--xc-space-3) auto;
+    max-width: 560px;
+    color: var(--xc-text);
+    font-size: var(--xc-text-sm);
+    line-height: 1.45;
+}
+
+.licenseScroll:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
+.licenseParagraph {
+    margin: 0 0 var(--xc-space-2);
+}
+
+.licenseParagraph:last-child {
+    margin-bottom: 0;
+}
+
+.licenseAck {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--xc-space-2);
+    margin: 0 auto var(--xc-space-3);
+    max-width: 560px;
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text);
+    line-height: 1.4;
+}
+
+.licenseAck input[type="checkbox"] {
+    margin-top: 2px;
+}

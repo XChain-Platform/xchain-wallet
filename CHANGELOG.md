@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.186.0] - 2026-04-27
+
+§25.1 — Cluster J Step 4 — License agreement scroll-to-enable (G061). Cluster J closed.
+
+First-launch onboarding now opens with a license-acceptance gate. Users see a scrollable summary panel (8 paragraphs covering as-is warranty, seed-loss responsibility, regulatory disclaimer, third-party tool risk, and a pointer to the full LICENSE.md); the "I have read and agree" checkbox stays disabled until the user scrolls to the end of the panel; the "Accept and continue" button stays disabled until both scroll-completion and the checkbox tick. Acceptance is persisted in localStorage (`xc:licenseAcceptedAt`) so returning users don't re-accept. The `add wallet` lane (when `onBack` is supplied) skips the gate — those users already accepted at install.
+
+### Added
+
+- **`packages/core/src/shared/routes/Onboarding.jsx`** — `LICENSE_STORAGE_KEY` / `LICENSE_SUMMARY` / `readAcceptedAt` / `markAccepted`; license-gate render branch with scroll detection (`handleLicenseScroll`); `licenseScrollRef` for the scrollable panel; auto-marks short panels as scrolled when content fits without overflow.
+- **`packages/core/src/shared/routes/Onboarding.module.css`** — `.licenseScroll` / `.licenseParagraph` / `.licenseAck` styles; focus-ring on the scroll panel for keyboard users.
+
+Closes G061. **Cluster J — §25 Onboarding polish — closed at v0.186.0.**
+
 ## [0.185.0] - 2026-04-27
 
 §25.4 — Cluster J Step 3 — Animated onboarding explainers (G060).
