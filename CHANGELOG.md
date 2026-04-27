@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.128.0] - 2026-04-26
+
+§21 Signing Safety — Step 3 of 6 — Send.jsx review wires `<BalanceChanges>`.
+
+The §21.2 preview goes live on the user-initiated Send flow. On entering the review stage Send.jsx now fetches the source address's balances via the new `balances.address` shell wrapper, runs the SDK shape through the new `decoder.balancesFromSdk` adapter, feeds the decoded ACTION + balances into `decoder.simulateAction`, and renders `<BalanceChanges>` between the headline and the details list. Fetch failures don't block — the section reads "(preview unavailable — <reason>)" muted and the user can still sign.
+
+### Added
+
+- **`packages/core/src/decoder/balanceAdapter.js`** — `balancesFromSdk(sdkShape)` converts the SDK's `{ native, assets }` raw shape (string base-units `quantity` + `divisibility`) into the simulator's human-scale `BalanceLookup[]`. Pure helper, sits in `decoder/` because it pairs 1:1 with `simulateAction`'s input contract. Re-exported from `decoder/index.js` so callers reach it via `decoder.balancesFromSdk(...)`.
+- **`getAddressBalances(chainId, address)`** in `packages/web/src/messaging.js` and `packages/extension/src/popup/messaging.js` — thin wrapper over the existing `balances.address` host handler.
+- **`test/smoke/ui/send-balance-preview.smoke.js`** — adapter semantics (sat scaling, divisibility=0, trailing-zero strip, negative quantities, null/empty), per-shell wrapper presence, Send.jsx imports + `simulateAction` + `balancesFromSdk` calls + the on-review-only effect + the loading/error props plumbed to the renderer + the JSX ordering (summary → BalanceChanges → details list).
+
+### Changed
+
+- **`packages/core/src/shared/routes/Send.jsx`** — adds `previewBalances` state (loading / error / sdkShape) and a stage-gated `useEffect` that fetches against the source address; adds `previewResult` derived via `simulateAction`; renders `<BalanceChanges>` between the action headline and the details list. Fee defaults to `'0'` until the §44.2 fee-selector cluster lands.
+
+### Behavior preserved
+
+- Send.jsx form / submit / done / error paths unchanged. The preview is additive — review still progresses to `submitting` even if the preview fetch fails.
+- SignApproval (signAction) still renders the v0.125.0 layout unchanged; Step 4 wires the same preview there next.
+
 ## [0.127.0] - 2026-04-26
 
 §21 Signing Safety — Step 2 of 6 — `<BalanceChanges>` renderer.

@@ -12,6 +12,7 @@ import {
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { HwSignBlock } from '../components/HwSignBlock.jsx';
+import { BalanceChanges } from '../components/BalanceChanges.jsx';
 import styles from './Send.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -133,6 +134,57 @@ export function Send({ walletId, onBack }) {
             chainRegistry,
         });
     }, [stage, asset, amount, toAddress, memo, chainId]);
+
+    // §21.2 balance-change preview. Fetched on entering review against
+    // the source address; the result feeds `decoder.simulateAction` and
+    // renders inside `<BalanceChanges>` between the headline and details.
+    // Fetch failure is non-blocking — the section renders muted with a
+    // "(preview unavailable)" line and the user can still sign.
+    const [previewBalances, setPreviewBalances] = useState(
+        /** @type {{ loading: boolean, error: string | null, sdkShape: any | null }} */
+        ({ loading: false, error: null, sdkShape: null }),
+    );
+    useEffect(() => {
+        if (stage !== 'review') return undefined;
+        if (!chainId || !fromAddress) return undefined;
+        let cancelled = false;
+        setPreviewBalances({ loading: true, error: null, sdkShape: null });
+        messaging.getAddressBalances(chainId, fromAddress.address)
+            .then((sdkShape) => {
+                if (cancelled) return;
+                setPreviewBalances({ loading: false, error: null, sdkShape });
+            })
+            .catch((err) => {
+                if (cancelled) return;
+                setPreviewBalances({
+                    loading: false,
+                    error: err?.message || 'balance fetch failed',
+                    sdkShape: null,
+                });
+            });
+        return () => { cancelled = true; };
+    }, [stage, chainId, fromAddress, messaging]);
+
+    const previewResult = useMemo(() => {
+        if (stage !== 'review' && stage !== 'submitting') return null;
+        if (previewBalances.loading || previewBalances.error || !previewBalances.sdkShape) {
+            return null;
+        }
+        return decoderLib.simulateAction({
+            action: 'SEND',
+            params: {
+                TICK: asset.trim(),
+                AMOUNT: String(amount).trim(),
+                DESTINATION: toAddress.trim(),
+                MEMO: memo.trim() || undefined,
+            },
+            balances: decoderLib.balancesFromSdk(previewBalances.sdkShape),
+            // Fee selector lands later (§44.2 cluster); '0' until then.
+            feeEstimate: '0',
+            chainId: chainId || undefined,
+            chainRegistry,
+        });
+    }, [stage, asset, amount, toAddress, memo, chainId, previewBalances]);
 
     function handleReview(event) {
         event.preventDefault();
@@ -270,6 +322,11 @@ export function Send({ walletId, onBack }) {
         return wrap(
             <form onSubmit={handleSubmit} noValidate>
                 <p className={styles.summary}>{decoded?.summary}</p>
+                <BalanceChanges
+                    result={previewResult}
+                    loading={previewBalances.loading}
+                    error={previewBalances.error}
+                />
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Chain</dt>
                     <dd className={styles.detailsValue}>

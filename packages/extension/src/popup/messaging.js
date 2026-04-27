@@ -141,6 +141,19 @@ export function getWalletBalances(walletId, accountId) {
 }
 
 /**
+ * Single-address balance read — the §21.2 simulator's input source.
+ * Returns the SDK's raw `{ native, assets }` shape; callers convert
+ * with `decoder.balancesFromSdk(...)` before feeding `simulateAction`.
+ *
+ * @param {string} chainId
+ * @param {string} address
+ * @returns {Promise<unknown>}
+ */
+export function getAddressBalances(chainId, address) {
+    return /** @type {any} */ (sendMessage('balances.address', { chainId, address }));
+}
+
+/**
  * @param {string} walletId
  * @param {string} [accountId]   when supplied, restrict to a single BIP44 account
  * @returns {Promise<Record<string, Array<{ address: string, label: string, addressType: string, derivationPath: string | null }>>>}

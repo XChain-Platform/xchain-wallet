@@ -94,6 +94,20 @@ export function getWalletBalances(walletId, accountId) {
     return /** @type {any} */ (sendMessage('balances.wallet', { walletId, accountId }));
 }
 
+/**
+ * Single-address balance read — feeds the §21.2 simulator preview on
+ * Send.jsx review and SignApproval. Returns the SDK's raw
+ * `{ native, assets }` shape; callers convert via
+ * `decoder.balancesFromSdk(...)` before feeding `simulateAction`.
+ *
+ * @param {string} chainId
+ * @param {string} address
+ * @returns {Promise<unknown>}
+ */
+export function getAddressBalances(chainId, address) {
+    return /** @type {any} */ (sendMessage('balances.address', { chainId, address }));
+}
+
 /** @param {string} walletId @param {string} [accountId] */
 export function getAddressesByChain(walletId, accountId) {
     return /** @type {any} */ (sendMessage('addresses.byChain', { walletId, accountId }));

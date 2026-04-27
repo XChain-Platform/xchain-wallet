@@ -94,21 +94,15 @@ assert.match(css, /\[data-direction="down"\]/, 'down-direction rule present');
 assert.match(css, /\[data-direction="up"\]/, 'up-direction rule present');
 assert.match(css, /\[data-fee="true"\]/, 'fee-row styling distinct');
 
-// --- Importability: not yet wired anywhere — Steps 3 + 4 wire it ---------
+// --- Wiring tracking: Send.jsx wired in Step 3; SignApproval pending Step 4 -
 
 const sendSrc = readFileSync(
     join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', 'Send.jsx'), 'utf8',
 );
-const signSrc = readFileSync(
-    join(wsRoot, 'packages', 'extension', 'src', 'approval', 'kinds', 'SignApproval.jsx'), 'utf8',
-);
-assert.ok(
-    !/BalanceChanges/.test(sendSrc),
-    'Send.jsx not yet wired (Step 3 will wire)',
-);
-assert.ok(
-    !/BalanceChanges/.test(signSrc),
-    'SignApproval.jsx not yet wired (Step 4 will wire)',
+assert.match(
+    sendSrc,
+    /import \{ BalanceChanges \}/,
+    'Send.jsx wired in Step 3',
 );
 
 console.log('balance-changes smoke OK');

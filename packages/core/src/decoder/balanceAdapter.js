@@ -1,0 +1,87 @@
+// Adapter — SDK `getBalances(address)` shape → simulator `BalanceLookup[]`.
+//
+// The explorer / SDK returns `{ native: { asset, divisibility, quantity },
+// assets: [{ asset, displayName, divisibility, quantity }] }` where every
+// `quantity` is a string-encoded base-units integer (sats for BTC/LTC/DOGE,
+// raw units for tokens). The §21.2 simulator wants decimal-string
+// balances at human scale (`'0.05'` for 5,000,000 sats with divisibility
+// 8) so before/after deltas read straight on the sign screen.
+//
+// Pure function — no I/O, no SDK reference. Lives in `decoder/` because
+// it pairs 1:1 with `simulateAction`'s input contract.
+
+/**
+ * @typedef {Object} SdkBalances
+ * @property {{ asset?: string, divisibility?: number | string, quantity?: string | number } | null} [native]
+ * @property {Array<{ asset?: string, divisibility?: number | string, quantity?: string | number }>} [assets]
+ */
+
+/**
+ * @param {SdkBalances | null | undefined} sdkBalances
+ * @returns {import('./txSimulator.js').BalanceLookup[]}
+ */
+export function balancesFromSdk(sdkBalances) {
+    /** @type {import('./txSimulator.js').BalanceLookup[]} */
+    const out = [];
+    if (!sdkBalances || typeof sdkBalances !== 'object') return out;
+
+    const native = sdkBalances.native;
+    if (native && typeof native === 'object') {
+        const tick = String(native.asset || '').toUpperCase();
+        if (tick) {
+            out.push({
+                tick,
+                amount: scaleDown(native.quantity, native.divisibility),
+                isCoin: true,
+            });
+        }
+    }
+
+    const assets = Array.isArray(sdkBalances.assets) ? sdkBalances.assets : [];
+    for (const a of assets) {
+        if (!a || typeof a !== 'object') continue;
+        const tick = String(a.asset || '').toUpperCase();
+        if (!tick) continue;
+        out.push({
+            tick,
+            amount: scaleDown(a.quantity, a.divisibility),
+            isCoin: false,
+        });
+    }
+
+    return out;
+}
+
+/**
+ * Scale a base-units string by `10^-divisibility`.
+ *
+ *   ('5000000', 8)   → '0.05'
+ *   ('1234', 0)      → '1234'
+ *   ('1', 8)         → '0.00000001'
+ *   ('100', 2)       → '1'
+ *
+ * @param {string | number | null | undefined} qty
+ * @param {number | string | null | undefined} divisibility
+ * @returns {string}
+ */
+function scaleDown(qty, divisibility) {
+    const div = Number(divisibility ?? 0) || 0;
+    const raw = qty === null || qty === undefined ? '0' : String(qty).trim();
+    if (raw === '' || raw === '0') return '0';
+    if (div <= 0) return raw;
+
+    const negative = raw.startsWith('-');
+    const body = negative ? raw.slice(1) : raw;
+    if (!/^\d+$/.test(body)) {
+        // Already-decimal input — pass through verbatim, the simulator
+        // accepts decimal strings.
+        return raw;
+    }
+    const padded = body.padStart(div + 1, '0');
+    const cut = padded.length - div;
+    let whole = padded.slice(0, cut);
+    let frac = padded.slice(cut);
+    while (frac.endsWith('0')) frac = frac.slice(0, -1);
+    const out = frac.length > 0 ? `${whole}.${frac}` : whole;
+    return negative ? `-${out}` : out;
+}
