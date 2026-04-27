@@ -61,7 +61,8 @@ for (let i = 1; i < idOrder.length; i += 1) {
 
 // ─── 4. The two existing drilldowns are still wired ──────────────────
 
-assert.match(src, /kind:\s*'drill'/, 'drill kind present for the built sections');
+assert.match(src, /kind:\s*'external-drill'/, 'external-drill (Wallet/Account picker) kind present');
+assert.match(src, /kind:\s*'internal-drill'/, 'internal-drill (settings sub-page) kind present');
 assert.match(src, /onOpenWalletPicker/, 'wallet picker drilldown still wired');
 assert.match(src, /onOpenAccountPicker/, 'account picker drilldown still wired');
 

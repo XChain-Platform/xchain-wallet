@@ -101,7 +101,7 @@ assert.match(
 const aboutBlockIdx = settingsSrc.indexOf("id: 'about'");
 assert.ok(aboutBlockIdx >= 0, 'about section literal present');
 const aboutBlock = settingsSrc.slice(aboutBlockIdx, aboutBlockIdx + 600);
-assert.match(aboutBlock, /kind:\s*'panel'/, 'about section kind is panel (not stub)');
+assert.match(aboutBlock, /kind:\s*'internal-drill'/, 'about section kind is panel (not stub)');
 assert.match(aboutBlock, /Component:\s*AboutSection/, 'about section wires AboutSection');
 
 // Render switch handles the `panel` kind.

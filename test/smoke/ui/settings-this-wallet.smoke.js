@@ -135,7 +135,7 @@ const settingsSrc = readFileSync(settingsPath, 'utf8');
 assert.match(settingsSrc, /import \{ ThisWalletSection \}/, 'Settings.jsx imports section');
 const idx = settingsSrc.indexOf("id: 'this-wallet'");
 const block = settingsSrc.slice(idx, idx + 600);
-assert.match(block, /kind:\s*'panel'/, 'this-wallet flipped to panel');
+assert.match(block, /kind:\s*'internal-drill'/, 'this-wallet flipped to panel');
 assert.match(block, /Component:\s*ThisWalletSection/, 'wires ThisWalletSection');
 assert.match(block, /activeWallet.*onOpenWalletPicker/, 'props pass activeWallet + onOpenWalletPicker');
 

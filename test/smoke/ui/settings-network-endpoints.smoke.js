@@ -50,7 +50,7 @@ const settingsSrc = readFileSync(settingsPath, 'utf8');
 assert.match(settingsSrc, /import \{ NetworkEndpointsSection \}/, 'Settings.jsx imports section');
 const idx = settingsSrc.indexOf("id: 'network-endpoints'");
 const block = settingsSrc.slice(idx, idx + 600);
-assert.match(block, /kind:\s*'panel'/);
+assert.match(block, /kind:\s*'internal-drill'/);
 assert.match(block, /Component:\s*NetworkEndpointsSection/);
 
 console.log('settings-network-endpoints smoke OK');

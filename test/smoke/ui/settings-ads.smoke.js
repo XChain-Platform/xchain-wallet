@@ -61,7 +61,7 @@ assert.match(src, /registryLib\.isChainVisibleToUser\(d, settings\)/, 'regtest f
 assert.match(settingsSrc, /import \{ AdsSection \}/, 'Settings.jsx imports AdsSection');
 const idx = settingsSrc.indexOf("id: 'ads'");
 const block = settingsSrc.slice(idx, idx + 600);
-assert.match(block, /kind:\s*'panel'/);
+assert.match(block, /kind:\s*'internal-drill'/);
 assert.match(block, /Component:\s*AdsSection/);
 
 console.log('settings-ads smoke OK');

@@ -59,7 +59,7 @@ assert.match(hookSrc, /developerMode = Boolean\(settings\?\.developerMode\)/, 'r
 assert.match(settingsSrc, /import \{ DeveloperModeSection \}/, 'Settings.jsx imports section');
 const idx = settingsSrc.indexOf("id: 'developer'");
 const block = settingsSrc.slice(idx, idx + 600);
-assert.match(block, /kind:\s*'panel'/);
+assert.match(block, /kind:\s*'internal-drill'/);
 assert.match(block, /Component:\s*DeveloperModeSection/);
 
 console.log('settings-developer-mode smoke OK');

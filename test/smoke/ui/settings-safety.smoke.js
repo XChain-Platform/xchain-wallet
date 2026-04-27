@@ -47,7 +47,7 @@ const settingsSrc = readFileSync(settingsPath, 'utf8');
 assert.match(settingsSrc, /import \{ SafetySection \}/, 'Settings.jsx imports SafetySection');
 const idx = settingsSrc.indexOf("id: 'safety'");
 const block = settingsSrc.slice(idx, idx + 600);
-assert.match(block, /kind:\s*'panel'/);
+assert.match(block, /kind:\s*'internal-drill'/);
 assert.match(block, /Component:\s*SafetySection/);
 
 console.log('settings-safety smoke OK');

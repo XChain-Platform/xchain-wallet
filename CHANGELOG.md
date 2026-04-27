@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.125.0] - 2026-04-26
+
+Settings — drilldown refactor with state-summary rows.
+
+The §35 Settings page used to render every section's full body inline — 16 stacked panels meant the user had to scroll past a long page and could not see *what was set* without entering each panel. Refactored into a scannable list: 4 short bodies stay inline (Appearance, Language & Region, Notifications, Contacts), 1 external drill stays as-is (Accounts & Addresses → AccountPicker), and 10 sections flip to internal drilldowns that render the section's existing component inside a Settings sub-page. Each drill row carries a short summary string showing current state on the right.
+
+Examples of the new top-level rows:
+
+- **This Wallet** › Main Wallet
+- **Privacy** › 2 of 5 on
+- **Safety** › Auto-lock 15 min
+- **Fees** › All defaults
+- **Network & Endpoints** › All defaults / 2 chains custom
+- **Connected Sites** › 0 sites / 3 sites
+- **Automatic Donation System** › On · 12,345 sats donated
+- **Developer Mode** › Off / On
+- **About** › 0.125.0
+
+### Added
+
+- **`DrillRow`** primitive in `Settings.jsx` — title on the left, summary + chevron on the right, summary truncates with ellipsis when narrow.
+- **Internal sub-page routing inside `Settings.jsx`** — a `subpageId` state renders the targeted section's existing Component inside a Screen with a "Back to settings" header. No App.jsx changes required in either shell — the routing lives entirely inside Settings.
+- **Summary helpers** — `privacySummary`, `safetySummary`, `feesSummary`, `endpointsSummary`, `adsSummary`, `developerSummary`, `connectedSitesSummary`. The connected-sites count is fetched once at mount via `messaging.listConnectedSites()`.
+- **`test/smoke/ui/settings-drilldown-refactor.smoke.js`** — kind splits, subpage routing primitives, DrillRow primitive shape, useSettings invocation, summary-helper semantics.
+
+### Changed
+
+- **`packages/core/src/shared/routes/Settings.jsx`** — render switch now handles three section kinds (`external-drill`, `internal-drill`, `panel`). 10 sections flip from `kind: 'panel'` to `kind: 'internal-drill'`. Drill rows render `<DrillRow>`, panels render `<PanelBlock>` with the existing section heading + description + body.
+- **Affected per-section smokes** — assertions flipped from `kind:\s*'panel'` to `kind:\s*'internal-drill'`. No section-component code changes; the components are rendered unchanged inside the new sub-page wrapper.
+
+### Behavior preserved
+
+- Section components render with the same props they used to (Backup still receives `activeWallet`, This Wallet still receives `activeWallet` + `onOpenWalletPicker`).
+- Search input still filters by title / description / keywords; the keywords for each section have been broadened slightly so common synonyms reach the right drill row.
+- The 4 inline panels keep their existing inline rendering — Appearance / Language & Region / Notifications / Contacts are short enough that hiding them behind a chevron would be churn.
+
 ## [0.124.0] - 2026-04-26
 
 Chain visibility — shared helper for the regtest-reveal rule.

@@ -54,7 +54,7 @@ const settingsSrc = readFileSync(settingsPath, 'utf8');
 assert.match(settingsSrc, /import \{ FeesSection \}/, 'Settings.jsx imports FeesSection');
 const idx = settingsSrc.indexOf("id: 'fees'");
 const block = settingsSrc.slice(idx, idx + 600);
-assert.match(block, /kind:\s*'panel'/);
+assert.match(block, /kind:\s*'internal-drill'/);
 assert.match(block, /Component:\s*FeesSection/);
 
 console.log('settings-fees smoke OK');

@@ -50,7 +50,7 @@ const settingsSrc = readFileSync(settingsPath, 'utf8');
 assert.match(settingsSrc, /import \{ ConnectedSitesSection \}/, 'Settings.jsx imports section');
 const idx = settingsSrc.indexOf("id: 'connected-sites'");
 const block = settingsSrc.slice(idx, idx + 600);
-assert.match(block, /kind:\s*'panel'/);
+assert.match(block, /kind:\s*'internal-drill'/);
 assert.match(block, /Component:\s*ConnectedSitesSection/);
 
 console.log('settings-connected-sites smoke OK');

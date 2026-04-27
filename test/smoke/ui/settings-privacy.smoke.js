@@ -46,7 +46,7 @@ const settingsSrc = readFileSync(settingsPath, 'utf8');
 assert.match(settingsSrc, /import \{ PrivacySection \}/, 'Settings.jsx imports PrivacySection');
 const idx = settingsSrc.indexOf("id: 'privacy'");
 const block = settingsSrc.slice(idx, idx + 600);
-assert.match(block, /kind:\s*'panel'/, 'flipped to panel');
+assert.match(block, /kind:\s*'internal-drill'/, 'flipped to panel');
 assert.match(block, /Component:\s*PrivacySection/, 'wires PrivacySection');
 
 console.log('settings-privacy smoke OK');
