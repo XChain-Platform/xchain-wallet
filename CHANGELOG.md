@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.191.0] - 2026-04-27
+
+§47.1 — Cluster L Step 2 — Web protocol handler registration (G143).
+
+`packages/web/src/main.jsx` now calls `navigator.registerProtocolHandler('web+xchain', '/?uri=%s')` at boot so the browser can register this origin as a handler for `xchain:`-flavored links (browsers prompt the user once on first call). Also tries the bare `xchain` scheme — some browsers accept it, others reject it as not in the safelist; we swallow either path so the SPA always boots cleanly. Wrapped in a try/catch since registerProtocolHandler is a no-op on http origins outside localhost. Per-browser routing of clicked `xchain:` URIs is the same: target URL receives the URI in `?uri=...` so a future router pass can read `location.search` and forward to Send / Receive accordingly.
+
+### Added
+
+- **`packages/web/src/main.jsx`** — `navigator.registerProtocolHandler` calls for `web+xchain` (always safelisted) and `xchain` (try-catch fallback); both target `/?uri=%s` on the SPA's origin.
+
+Closes G143. Read-side wiring (parse `?uri=` from `location.search`, route into Send / Receive based on `parseXchainUri` intent) lands as a Cluster L FOLLOWUP — the registration call is the marquee.
+
 ## [0.190.0] - 2026-04-27
 
 §47.4 — Cluster L Step 1 — `xchain:` URI parser (G145).

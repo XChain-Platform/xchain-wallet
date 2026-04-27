@@ -6,6 +6,27 @@ import { createRoot } from 'react-dom/client';
 import '@xchain-wallet/core/ui/tokens.css';
 import { App } from './App.jsx';
 
+// §47.1 / G143 — register this origin as a handler for `xchain:` URIs so
+// the OS / browser can open the web wallet when the user clicks an
+// `xchain:` link. Browsers expose this via `navigator.registerProtocolHandler`
+// — the user is prompted once on first call. Only effective on https:
+// origins (and localhost during dev); browsers silently ignore the call
+// otherwise. We swallow exceptions so a stricter browser policy doesn't
+// crash the SPA at boot.
+try {
+    if (typeof navigator?.registerProtocolHandler === 'function') {
+        const target = `${location.origin}/?uri=%s`;
+        // `web+xchain` is always safelisted by browsers per the
+        // registerProtocolHandler spec.
+        navigator.registerProtocolHandler('web+xchain', target);
+        // Some browsers also accept the bare `xchain` scheme; others reject
+        // it as not in the safelist. Try and ignore the resulting throw.
+        try {
+            navigator.registerProtocolHandler('xchain', target);
+        } catch { /* not safelisted in this browser — web+xchain still works */ }
+    }
+} catch { /* registration is a soft enhancement — never block app boot */ }
+
 const container = document.getElementById('xchain-web-root');
 if (!container) {
     throw new Error('web: #xchain-web-root missing — check index.html');
