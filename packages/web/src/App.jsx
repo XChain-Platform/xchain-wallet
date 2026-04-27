@@ -72,6 +72,7 @@ import { LinkForm } from '@xchain-wallet/core/shared/routes/LinkForm.jsx';
 import { SignMessageForm } from '@xchain-wallet/core/shared/routes/SignMessageForm.jsx';
 import { VerifySignatureForm } from '@xchain-wallet/core/shared/routes/VerifySignatureForm.jsx';
 import { PsbtSignForm } from '@xchain-wallet/core/shared/routes/PsbtSignForm.jsx';
+import { ViewPrivateKey } from '@xchain-wallet/core/shared/routes/ViewPrivateKey.jsx';
 import { ParallelComposer } from '@xchain-wallet/core/shared/routes/ParallelComposer.jsx';
 import { CrossChainSwapForm } from '@xchain-wallet/core/shared/routes/CrossChainSwapForm.jsx';
 import { CrossChainTemplates } from '@xchain-wallet/core/shared/routes/CrossChainTemplates.jsx';
@@ -138,6 +139,11 @@ function AppInner() {
     const [migrateLegacyWalletId, setMigrateLegacyWalletId] = useState(/** @type {string | null} */ (null));
     const [resumeAirdropId, setResumeAirdropId] = useState(
         /** @type {string | null} */ (null),
+    );
+    // §17.7 / G027 — staged address handed to <ViewPrivateKey> when the
+    // user picks "Show key" from the addresses list.
+    const [privateKeyAddress, setPrivateKeyAddress] = useState(
+        /** @type {any | null} */ (null),
     );
     const [resumeCoinpay, setResumeCoinpay] = useState(
         /** @type {{ chainId: string, address: string, orderMatchActionIndex: string } | null} */ (null),
@@ -572,6 +578,22 @@ function AppInner() {
                         accountId={activeAccountId || undefined}
                         onBack={() => setUnlockedView('home')}
                         onReceive={() => setUnlockedView('receive')}
+                        onShowPrivateKey={(addr) => {
+                            setPrivateKeyAddress(addr);
+                            setUnlockedView('view-private-key');
+                        }}
+                    />
+                );
+            }
+            if (unlockedView === 'view-private-key' && activeWalletId && privateKeyAddress) {
+                return (
+                    <ViewPrivateKey
+                        walletId={activeWalletId}
+                        address={privateKeyAddress}
+                        onBack={() => {
+                            setPrivateKeyAddress(null);
+                            setUnlockedView('addresses');
+                        }}
                     />
                 );
             }

@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.166.0] - 2026-04-27
+
+§17.7 — Step 4 of Cluster E — ViewPrivateKey wired to App navigation (G027).
+
+The standalone `ViewPrivateKey` component was built when §17 first landed but never had a path from the unlocked UI — users couldn't actually reach it. This step adds an `onShowPrivateKey` prop to `AddressList`; each non-multisig row now renders a "Show key" button that hands the address record back to the shell. Both shells (extension popup + web) stage the address in a new `privateKeyAddress` slot, switch `unlockedView` to `'view-private-key'`, and render `<ViewPrivateKey>`. Back navigation clears the staged address so a stale record can't leak into a later visit. HW / watch-only rows still route to the existing info panels inside the component itself (G026).
+
+### Added
+
+- **`shared/routes/AddressList.jsx`** — `onShowPrivateKey` render-prop; per-row "Show key" button gated on `row.record && !row.multisig`. Rows now carry the underlying `record` so the shell has the full Address shape (id, source, derivationPath, network, label).
+- **`packages/extension/src/popup/App.jsx`** + **`packages/web/src/App.jsx`** — `privateKeyAddress` state slot, `view-private-key` unlocked view branch, `onShowPrivateKey` callback wired into `<AddressList>`, ViewPrivateKey import.
+- **`test/smoke/ui/view-private-key-wiring.smoke.js`** — verifies the prop / button / state-flow / back-clear in both shells.
+
+Closes G027. Smoke baseline preserved (24 / 167; new view-private-key-wiring smoke passes).
+
 ## [0.165.0] - 2026-04-27
 
 §17.7.2 — Step 3 of Cluster E — HW gating regression-test for ViewPrivateKey (G026).

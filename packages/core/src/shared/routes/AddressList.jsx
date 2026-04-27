@@ -33,8 +33,10 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {string} props.walletId
  * @param {string} [props.accountId]   active BIP44 account; when set, only that account's addresses are shown
  * @param {() => void} props.onBack
+ * @param {() => void} [props.onReceive]
+ * @param {(address: { id: string, address: string, source: string, chain: string, network: string, derivationPath: string | null, label: string }) => void} [props.onShowPrivateKey]   §17.7 — when supplied, each non-multisig row gets a "Show key" affordance that hands the row's address back to the caller (shell wires it to <ViewPrivateKey>)
  */
-export function AddressList({ walletId, accountId, onBack, onReceive }) {
+export function AddressList({ walletId, accountId, onBack, onReceive, onShowPrivateKey }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
 
@@ -96,7 +98,7 @@ export function AddressList({ walletId, accountId, onBack, onReceive }) {
                 .filter((m) => typeof m.address === 'string')
                 .map((m) => [m.address.toLowerCase(), m]),
         );
-        /** @type {Array<{ key: string, chainId: string, address: string, label: string, multisig: any }>} */
+        /** @type {Array<{ key: string, chainId: string, address: string, label: string, multisig: any, record: any }>} */
         const out = [];
         for (const [chainId, addrs] of Object.entries(addressesByChain)) {
             if (!enabledChains.has(chainId)) continue;
@@ -109,6 +111,7 @@ export function AddressList({ walletId, accountId, onBack, onReceive }) {
                     address: a.address,
                     label: a.label || '',
                     multisig: matched,
+                    record: a,
                 });
             }
         }
@@ -126,6 +129,7 @@ export function AddressList({ walletId, accountId, onBack, onReceive }) {
                         address: m.address,
                         label: 'Multisig receive',
                         multisig: m,
+                        record: null,
                     });
                 }
             }
@@ -261,6 +265,16 @@ export function AddressList({ walletId, accountId, onBack, onReceive }) {
                             <div className={styles.rowMeta}>
                                 <AddressText address={row.address} />
                                 <CopyButton value={row.address} />
+                                {onShowPrivateKey && row.record && !row.multisig ? (
+                                    <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={() => onShowPrivateKey(row.record)}
+                                        aria-label={`Show private key for ${row.address}`}
+                                    >
+                                        Show key
+                                    </Button>
+                                ) : null}
                             </div>
                         </li>
                     );
