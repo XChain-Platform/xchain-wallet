@@ -113,6 +113,20 @@ export class SignerPool {
     }
 
     /**
+     * Lock + drop a single wallet's signer. Used when a wallet is
+     * removed via `removeWallet` so the unlocked seed material is
+     * cleared synchronously rather than waiting for `lockAll`.
+     *
+     * @param {string} walletId
+     */
+    evict(walletId) {
+        const signer = this._signers.get(walletId);
+        if (!signer) return;
+        try { signer.lock(); } catch { /* best-effort */ }
+        this._signers.delete(walletId);
+    }
+
+    /**
      * Lock every signer + clear the pool. Callers MUST invoke this on
      * `wallet.lock` so seed material doesn't outlive the unlocked
      * session.

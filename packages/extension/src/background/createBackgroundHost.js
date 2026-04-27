@@ -126,6 +126,7 @@ const {
     getSettings,
     updateSettings,
     exportBackupFile,
+    removeWallet,
 } = flows;
 
 /**
@@ -427,6 +428,21 @@ export function createBackgroundHost(deps) {
             includePendingTxs: req?.includePendingTxs,
         });
         return { fileContent: r.fileContent };
+    });
+
+    // §35.1 — destructively remove a wallet and all its descendants.
+    // The host clears the wallet's SignerPool entry too so a removed
+    // wallet doesn't linger as an unlocked-key reference.
+    host.register('wallet.remove', async (req, { vault, signerPool }) => {
+        const walletId = req?.walletId;
+        if (typeof walletId !== 'string' || !walletId) {
+            throw new Error('wallet.remove: walletId is required');
+        }
+        const result = await removeWallet({ vault, walletId });
+        if (signerPool && typeof signerPool.evict === 'function') {
+            try { signerPool.evict(walletId); } catch { /* best-effort */ }
+        }
+        return result;
     });
 
     // §35.1 + §43 connected-sites maintenance. List/delete; the

@@ -139,6 +139,7 @@ export {
 } from './resolveSigner.js';
 export { seedSettingsForChains, ensureSettings } from './seedSettings.js';
 export { getSettings, updateSettings } from './settings.js';
+export { removeWallet } from './removeWallet.js';
 export { receiveAddress, NoMatchingAccountError } from './receiveAddress.js';
 export {
     addressBalances,

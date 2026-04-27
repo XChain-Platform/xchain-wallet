@@ -706,6 +706,16 @@ export function deleteConnectedSite(req) {
 }
 
 /**
+ * Destructively remove a wallet and every record linked to it. Returns
+ * a `removed` summary keyed by collection name.
+ *
+ * @param {{ walletId: string }} req
+ */
+export function removeWallet(req) {
+    return /** @type {any} */ (sendMessage('wallet.remove', req));
+}
+
+/**
  * Derive + persist the next unused external address for (wallet, chain).
  * Requires the user's password because the signer re-derives the HD
  * key material; the vault-level unlock doesn't cover the per-wallet

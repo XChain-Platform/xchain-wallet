@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.119.0] - 2026-04-26
+
+Settings — Step 16 of 18 — This Wallet panel + destructive removeWallet flow.
+
+The This-Wallet section flips from a drilldown to a panel that surfaces the active wallet's name + a "Switch / rename…" drilldown into the existing WalletPicker (which already houses rename + migrate-to-BIP39) plus a new **Remove wallet** action with a typed-name confirmation modal. Removal goes through a fresh `removeWallet` core flow that purges the wallet record + every linked descendant: accounts, addresses, signers, pendingTxs, pendingAirdrops, multisigSigningSessions, watchlistEntries. The host handler also evicts the SignerPool entry so the unlocked seed material is cleared synchronously.
+
+Vault-level singletons (settings) and shared collections (contacts, connectedSites) survive — they aren't owned by a single wallet.
+
+### Added
+
+- **`packages/core/src/flows/removeWallet.js`** — destructive deletion flow. Returns a `{ removed: { wallet, accounts, addresses, signers, pendingTxs, pendingAirdrops, multisigSigningSessions, watchlistEntries } }` bookkeeping summary so callers can confirm the cleanup.
+- **`SignerPool.evict(walletId)`** in `packages/core/src/signers/SignerPool.js` — locks one wallet's signer + drops it from the pool. Used by the `wallet.remove` host handler.
+- **`wallet.remove` host handler** in `createBackgroundHost.js` — calls the flow + evicts the SignerPool entry.
+- **`removeWallet` messaging wrappers** in popup + web.
+- **`packages/core/src/shared/components/settings/ThisWalletSection.jsx`** — wallet name + Switch/rename drilldown + Remove action with typed-name confirmation modal.
+- **`test/smoke/ui/settings-this-wallet.smoke.js`** — flow-level test that purges only the targeted wallet's descendants while leaving siblings intact + source-level wiring assertions for SignerPool.evict, host handler, messaging wrappers, Settings.jsx hook-up.
+
+### Changed
+
+- **`packages/core/src/shared/routes/Settings.jsx`** — this-wallet section flips from `kind: 'drill'` to `kind: 'panel'` with `Component: ThisWalletSection` and `props: { activeWallet, onOpenWalletPicker }`.
+
 ## [0.118.0] - 2026-04-26
 
 Settings — Step 15 of 18 — Contacts export / import panel.

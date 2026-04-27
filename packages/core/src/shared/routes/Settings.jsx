@@ -14,6 +14,7 @@ import { FeesSection } from '../components/settings/FeesSection.jsx';
 import { NetworkEndpointsSection } from '../components/settings/NetworkEndpointsSection.jsx';
 import { NotificationsSection } from '../components/settings/NotificationsSection.jsx';
 import { SafetySection } from '../components/settings/SafetySection.jsx';
+import { ThisWalletSection } from '../components/settings/ThisWalletSection.jsx';
 import styles from './ActionsMenu.module.css';
 import pickerStyles from './WalletPicker.module.css';
 
@@ -75,11 +76,10 @@ export function Settings({
             id: 'this-wallet',
             title: 'This Wallet',
             description: 'Wallet name, remove wallet, migrate to BIP39.',
-            keywords: 'wallet name remove rename migrate bip39',
-            kind: 'drill',
-            visible: Boolean(onOpenWalletPicker),
-            label: walletLabel,
-            onOpen: onOpenWalletPicker,
+            keywords: 'wallet name remove rename migrate bip39 delete destroy',
+            kind: 'panel',
+            Component: ThisWalletSection,
+            props: { activeWallet, onOpenWalletPicker },
         },
         {
             id: 'accounts-addresses',

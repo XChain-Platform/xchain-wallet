@@ -1275,3 +1275,12 @@ export function listConnectedSites() {
 export function deleteConnectedSite(req) {
     return /** @type {any} */ (sendMessage('sites.delete', req));
 }
+
+/**
+ * Destructively remove a wallet and every record linked to it.
+ *
+ * @param {{ walletId: string }} req
+ */
+export function removeWallet(req) {
+    return /** @type {any} */ (sendMessage('wallet.remove', req));
+}
