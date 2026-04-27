@@ -39,3 +39,29 @@ export function fetchApproval(id) {
 export function resolveApproval(id, result) {
     return /** @type {any} */ (sendMessage('approval.resolve', { id, result }));
 }
+
+/**
+ * Single-address balance read — feeds the §21.2 simulator preview on
+ * the SignApproval (signAction) screen. Routes to the same
+ * `balances.address` host handler the popup + web shells use.
+ *
+ * @param {string} chainId
+ * @param {string} address
+ * @returns {Promise<unknown>}
+ */
+export function getAddressBalances(chainId, address) {
+    return /** @type {any} */ (sendMessage('balances.address', { chainId, address }));
+}
+
+/**
+ * Fetch the persisted Address records for a wallet, grouped by chainId.
+ * Used by SignApproval to resolve the signing source address when the
+ * dApp request omits it (some dApps just say "sign on Bitcoin" and let
+ * the wallet pick the active address).
+ *
+ * @param {string} walletId
+ * @returns {Promise<Record<string, Array<{ address: string }>>>}
+ */
+export function getAddressesByChain(walletId) {
+    return /** @type {any} */ (sendMessage('addresses.byChain', { walletId }));
+}

@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.129.0] - 2026-04-26
+
+§21 Signing Safety — Step 4 of 6 — SignApproval (signAction) wires the preview.
+
+The §21.2 preview now lights up on the dApp-triggered sign screen too. SignApproval.jsx fetches the source address's balances against the dApp's requested chain, runs them through the simulator, and renders `<BalanceChanges>` between the existing `<SignSummary>` and the password form. Source address resolution: prefer `payload.payload.from.address` when the dApp passes it; otherwise fall back to the wallet's first address on the requested chain via `addresses.byChain`. Fetch failures degrade gracefully — the section reads "(preview unavailable)" and the user can still approve.
+
+The preview is gated to the `signAction` kind. `signMessage`, `signPsbt`, and `signIn` skip it — they don't move value, so a balance-change preview would be misleading.
+
+### Added
+
+- **`getAddressBalances` + `getAddressesByChain`** in `packages/extension/src/approval/messaging.js` — thin wrappers matching the popup + web shells, routing to `balances.address` and `addresses.byChain` respectively. Lets the approval window resolve a signing source address without round-tripping through the popup.
+- **`test/smoke/ui/sign-approval-balance-preview.smoke.js`** — approval-side wrappers, render-gate semantics (`signAction` only), source-address resolution (dApp-supplied vs fallback), simulator inputs (action / params / balances / fee), loading + error props plumbed through, JSX ordering (`<SignSummary>` → `<BalanceChanges>` → form).
+
+### Changed
+
+- **`packages/extension/src/approval/kinds/SignApproval.jsx`**:
+  - Adds `previewBalances` state + a `signAction`-gated `useEffect` that resolves the source address and fetches its balances.
+  - Adds a `useMemo` that runs `decoder.simulateAction` once balances arrive.
+  - Renders `<BalanceChanges>` between `<SignSummary>` and the password form, only for the `signAction` kind.
+  - Fee defaults to `'0'` until the bridge payload carries an estimate (§44.2).
+
+### Behavior preserved
+
+- All four sign kinds (`signMessage` / `signPsbt` / `signAction` / `signIn`) keep their existing summary, password gate, save-permanent toggle, and approve / reject footer. The preview is additive — approval still resolves cleanly even if the preview fetch fails.
+- `signMessage` / `signPsbt` / `signIn` continue to render exactly as before — the preview gate is structural, not a runtime fall-through.
+
 ## [0.128.0] - 2026-04-26
 
 §21 Signing Safety — Step 3 of 6 — Send.jsx review wires `<BalanceChanges>`.

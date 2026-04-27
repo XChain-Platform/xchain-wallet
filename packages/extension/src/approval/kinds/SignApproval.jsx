@@ -1,10 +1,16 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Screen, Button, Input, ChainBadge } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
 } from '@xchain-wallet/core';
-import { listWallets, resolveApproval } from '../messaging.js';
+import { BalanceChanges } from '@xchain-wallet/core/shared/components/BalanceChanges.jsx';
+import {
+    listWallets,
+    resolveApproval,
+    getAddressBalances,
+    getAddressesByChain,
+} from '../messaging.js';
 import shared from '../approval.module.css';
 import styles from './SignApproval.module.css';
 
@@ -63,6 +69,65 @@ export function SignApproval({ id, kind, payload, onReject }) {
         // Focus the password field once the screen paints.
         setTimeout(() => inputRef.current?.focus(), 0);
     }, []);
+
+    // §21.2 balance-change preview — only meaningful for the
+    // `signAction` kind (signMessage / signPsbt / signIn don't move
+    // value). Source address: prefer `payload.payload.from.address`
+    // when the dApp passes it; otherwise fall back to the wallet's
+    // first address on the requested chain. Fetch failures degrade
+    // gracefully — the section reads "(preview unavailable)" so the
+    // user can still approve.
+    const [previewBalances, setPreviewBalances] = useState(
+        /** @type {{ loading: boolean, error: string | null, sdkShape: any | null, fromAddress: string | null }} */
+        ({ loading: false, error: null, sdkShape: null, fromAddress: null }),
+    );
+    useEffect(() => {
+        if (kind !== 'signAction' || !chainId || !walletId) return undefined;
+        let cancelled = false;
+        const dappFrom = payload?.payload?.from?.address || payload?.from?.address || null;
+        async function loadPreview() {
+            setPreviewBalances({ loading: true, error: null, sdkShape: null, fromAddress: null });
+            let address = dappFrom;
+            try {
+                if (!address) {
+                    const byChain = await getAddressesByChain(walletId);
+                    address = byChain?.[chainId]?.[0]?.address || null;
+                }
+                if (!address) throw new Error('no signing address');
+                const sdkShape = await getAddressBalances(chainId, address);
+                if (cancelled) return;
+                setPreviewBalances({ loading: false, error: null, sdkShape, fromAddress: address });
+            } catch (err) {
+                if (cancelled) return;
+                setPreviewBalances({
+                    loading: false,
+                    error: err?.message || 'balance fetch failed',
+                    sdkShape: null,
+                    fromAddress: address,
+                });
+            }
+        }
+        loadPreview();
+        return () => { cancelled = true; };
+    }, [kind, chainId, walletId, payload]);
+
+    const previewResult = useMemo(() => {
+        if (kind !== 'signAction') return null;
+        if (previewBalances.loading || previewBalances.error || !previewBalances.sdkShape) {
+            return null;
+        }
+        return decoderLib.simulateAction({
+            action: payload?.action,
+            params: payload?.payload || {},
+            balances: decoderLib.balancesFromSdk(previewBalances.sdkShape),
+            // Fee defaults to '0' — the dApp request doesn't carry an
+            // estimate today; once the §44.2 fee selector lands the
+            // host can attach one alongside the bridge payload.
+            feeEstimate: '0',
+            chainId,
+            chainRegistry,
+        });
+    }, [kind, payload, previewBalances, chainId]);
 
     const title = KIND_TITLE[kind] ?? 'Approval required';
     const showSavePermanent =
@@ -134,6 +199,14 @@ export function SignApproval({ id, kind, payload, onReject }) {
             ) : null}
 
             <SignSummary kind={kind} payload={payload} />
+
+            {kind === 'signAction' ? (
+                <BalanceChanges
+                    result={previewResult}
+                    loading={previewBalances.loading}
+                    error={previewBalances.error}
+                />
+            ) : null}
 
             <form
                 id="sign-approval-form"
