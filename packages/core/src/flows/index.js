@@ -212,6 +212,15 @@ export {
 } from './ads.js';
 export { checkReachability } from './reachability.js';
 export {
+    emptyLockoutState,
+    delayForAttempts,
+    getLockoutState,
+    getRemainingMs,
+    recordFailure as recordLockoutFailure,
+    recordSuccess as recordLockoutSuccess,
+    clearLockoutState,
+} from './lockoutTracking.js';
+export {
     enqueueSignedTx,
     listQueuedBroadcasts,
     drainQueuedBroadcast,

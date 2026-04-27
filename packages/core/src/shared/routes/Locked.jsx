@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { Screen, Button, Input } from '@xchain-wallet/core/ui';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
+import {
+    getLockoutState,
+    getRemainingMs,
+    recordLockoutFailure,
+    recordLockoutSuccess,
+} from '@xchain-wallet/core/flows';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './Locked.module.css';
 
@@ -10,9 +16,10 @@ import styles from './Locked.module.css';
  * wraps this route in a card for centering; the popup renders flush
  * inside its fixed-size window.
  *
- * `InvalidPasswordError` surfaces as a field-level error; any other
- * failure shows the raw message — those are bugs, not user-input
- * errors, and visible text helps diagnosis.
+ * `InvalidPasswordError` surfaces as a field-level error and increments
+ * the §26 / G066 lockout counter; any other failure shows the raw
+ * message and does NOT count against the user — those are bugs, not
+ * bad guesses.
  *
  * @param {object} props
  * @param {() => void} [props.onUnlocked]
@@ -25,24 +32,56 @@ export function Locked({ onUnlocked }) {
     const [password, setPassword] = useState('');
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [busy, setBusy] = useState(false);
+    const [lockout, setLockout] = useState(getLockoutState);
+    const [remainingMs, setRemainingMs] = useState(() =>
+        getRemainingMs(getLockoutState()),
+    );
     const inputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
     useEffect(() => {
         inputRef.current?.focus();
     }, []);
 
+    // Countdown ticker — runs only while a lockout is active.
+    useEffect(() => {
+        if (remainingMs <= 0) return undefined;
+        const handle = window.setInterval(() => {
+            const ms = getRemainingMs(lockout);
+            setRemainingMs(ms);
+            if (ms <= 0) window.clearInterval(handle);
+        }, 1000);
+        return () => window.clearInterval(handle);
+    }, [lockout, remainingMs]);
+
+    const isLockedOut = remainingMs > 0;
+
     async function handleSubmit(event) {
         event.preventDefault();
-        if (busy || password.length === 0) return;
+        if (busy || password.length === 0 || isLockedOut) return;
         setBusy(true);
         setError(null);
         try {
             await messaging.unlockWallet(password);
+            recordLockoutSuccess();
+            setLockout({ failedAttempts: 0, lockedUntilMs: 0 });
+            setRemainingMs(0);
             setPassword('');
             onUnlocked?.();
         } catch (err) {
             const isBadPassword = err?.name === 'InvalidPasswordError';
-            setError(isBadPassword ? 'Incorrect password.' : err?.message || 'Unlock failed.');
+            if (isBadPassword) {
+                const next = recordLockoutFailure();
+                setLockout(next);
+                const nextRemaining = getRemainingMs(next);
+                setRemainingMs(nextRemaining);
+                setError(
+                    nextRemaining > 0
+                        ? `Incorrect password. Try again in ${formatCountdown(nextRemaining)}.`
+                        : 'Incorrect password.',
+                );
+            } else {
+                setError(err?.message || 'Unlock failed.');
+            }
             setBusy(false);
             inputRef.current?.focus();
             inputRef.current?.select();
@@ -59,8 +98,25 @@ export function Locked({ onUnlocked }) {
         </div>
     );
 
+    const lockoutBanner = isLockedOut ? (
+        <div
+            className={styles.lockoutBanner}
+            role="status"
+            aria-live="polite"
+        >
+            <span>
+                Too many failed attempts. Try again in{' '}
+                <span className={styles.lockoutCountdown}>
+                    {formatCountdown(remainingMs)}
+                </span>
+                .
+            </span>
+        </div>
+    ) : null;
+
     const form = (
         <form onSubmit={handleSubmit} noValidate>
+            {lockoutBanner}
             <Input
                 ref={inputRef}
                 type="password"
@@ -71,7 +127,7 @@ export function Locked({ onUnlocked }) {
                     if (error) setError(null);
                 }}
                 autoComplete="current-password"
-                disabled={busy}
+                disabled={busy || isLockedOut}
                 error={error || undefined}
             />
             <Button
@@ -79,9 +135,9 @@ export function Locked({ onUnlocked }) {
                 variant="primary"
                 block
                 loading={busy}
-                disabled={password.length === 0}
+                disabled={password.length === 0 || isLockedOut}
             >
-                Unlock Wallet
+                {isLockedOut ? `Locked (${formatCountdown(remainingMs)})` : 'Unlock Wallet'}
             </Button>
         </form>
     );
@@ -101,4 +157,25 @@ export function Locked({ onUnlocked }) {
             )}
         </Screen>
     );
+}
+
+/**
+ * Format a remaining-ms value as a short, screen-reader-friendly string.
+ * Always rounds UP so "1s left" doesn't tick to "0s left" before the
+ * lockout actually clears.
+ *
+ * @param {number} ms
+ * @returns {string}
+ */
+function formatCountdown(ms) {
+    const totalSec = Math.max(0, Math.ceil(ms / 1000));
+    if (totalSec < 60) return `${totalSec}s`;
+    const mins = Math.floor(totalSec / 60);
+    const secs = totalSec % 60;
+    if (mins < 60) {
+        return secs === 0 ? `${mins}m` : `${mins}m ${secs}s`;
+    }
+    const hours = Math.floor(mins / 60);
+    const remMins = mins % 60;
+    return remMins === 0 ? `${hours}h` : `${hours}h ${remMins}m`;
 }

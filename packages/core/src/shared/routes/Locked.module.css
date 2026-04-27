@@ -55,3 +55,26 @@
     color: var(--xc-text-muted);
     margin: 0;
 }
+
+.lockoutBanner {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    padding: var(--xc-space-3);
+    margin-bottom: var(--xc-space-3);
+    background: var(--xc-surface);
+    border: 1px solid var(--xc-warning, var(--xc-border-strong));
+    border-radius: var(--xc-radius-md);
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text);
+}
+
+.lockoutBanner::before {
+    content: '⏱';
+    font-size: var(--xc-text-md);
+}
+
+.lockoutCountdown {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+}

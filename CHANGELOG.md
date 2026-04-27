@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.144.0] - 2026-04-27
+
+§26 Lock & Panic — Step 2 of 6 — Failed-attempts escalating delay (G066).
+
+After repeated bad-password unlock attempts, the Locked screen now imposes an escalating timed lockout that survives popup close/reopen and tab reload. The schedule is opaque-but-aggressive: attempts 1–2 are free, attempt 3 imposes 5 s, attempt 4 → 15 s, attempt 5 → 60 s, attempt 6 → 5 min, attempts 7+ → 15 min cap. A successful unlock clears the counter immediately. Errors that aren't `InvalidPasswordError` (vault corruption, unexpected throws) do not count against the user — those are bugs to surface, not guesses to penalise.
+
+### Added
+
+- **`flows/lockoutTracking.js`** — pure flow with no React or vault dependencies. Reads/writes a `xchain-wallet:lockout` key in `globalThis.localStorage`; degrades gracefully to in-memory state when the API is unavailable (SSR / hardened iframes / tests). Exports `delayForAttempts`, `emptyLockoutState`, `getLockoutState`, `getRemainingMs`, `recordFailure`, `recordSuccess`, `clearLockoutState`. Re-exported from `flows/index.js` under `recordLockoutFailure` / `recordLockoutSuccess` to avoid name clashes with future per-feature failure recorders.
+- **Lockout banner on Locked.jsx** — `role="status"` + `aria-live="polite"` row reading "Too many failed attempts. Try again in `<countdown>`." Countdown ticks every 1 s via `setInterval`, cleaned up on unmount or when the lockout expires. Format rounds UP (`Math.ceil(ms / 1000)`) so the user never sees "0 s" while still locked.
+- **`.lockoutBanner` + `.lockoutCountdown` CSS** — uses `--xc-warning` border with fallback, `tabular-nums` so the countdown digit width doesn't jitter.
+- **`test/smoke/core/lockout-tracking.smoke.js`** — schedule table (every N from 0–7 + cap), persistence round-trip via fake `localStorage`, remaining-ms math at boundaries (just-locked / mid-countdown / past-expiry / null state), corruption tolerance (malformed JSON, negative counters, non-number fields), explicit `clearLockoutState`, memory fallback when `localStorage` is removed.
+- **`test/smoke/ui/locked-lockout.smoke.js`** — Locked.jsx wiring: imports, lazily-initialised state slots, ticker setInterval + clearInterval, submit gating (`busy || password.length === 0 || isLockedOut`), success-path clears, failure-path increments only inside the `isBadPassword` branch, error message includes the retry window, input + button disabled while locked, button label flips to `Locked (Xs)`, banner aria + countdown formatter rounding.
+
+### Changed
+
+- **`Locked.jsx`** — adds two state slots (`lockout`, `remainingMs`), a countdown effect, and three new branches in `handleSubmit` (success → `recordLockoutSuccess`; bad-password → `recordLockoutFailure` + retry-window error; other error → unchanged raw message). Input and submit button gain an `isLockedOut` clause to their `disabled` props; the button label flips to a `Locked (countdown)` form while locked.
+- **`flows/index.js`** — re-exports the seven lockout tracking helpers, with `recordFailure` / `recordSuccess` aliased to `recordLockoutFailure` / `recordLockoutSuccess` so the flow's intent is clear at the call site.
+
+### Behavior preserved
+
+- Empty-password submits still no-op (the original guard runs before the lockout check).
+- Non-`InvalidPasswordError` failures still surface their raw message and clear `busy`; they do NOT increment the counter or arm a lockout.
+- The unlock control flow (`messaging.unlockWallet(password)` → `onUnlocked()`) is unchanged on success; the only addition is an explicit lockout reset before `setPassword('')`.
+- ARIA structure (`Input` aria-describedby, error `role="alert"`) is unchanged; the lockout banner sits adjacent to the form and announces independently.
+
 ## [0.143.0] - 2026-04-27
 
 §26 Lock & Panic — Step 1 of 6 — Caps-Lock warning in password fields (G067).
