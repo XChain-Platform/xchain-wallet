@@ -454,6 +454,21 @@ export function Send({ walletId, onBack }) {
         ({ mode: 'normal' }),
     );
 
+    // §44.3 RBF toggle. Default reads from settings.fees[chainId]
+    // .rbfByDefault when present; falls back to true (BIP125 RBF is the
+    // §29 / §44 expectation for all native sends). The current value
+    // flows into the send payload as `rbf: bool`; the encoder uses
+    // it to set the input sequence numbers (RBF requires sequence <
+    // 0xfffffffe per BIP125).
+    const [rbfEnabled, setRbfEnabled] = useState(true);
+    useEffect(() => {
+        if (!chainId || !settings?.fees) return;
+        const chainFees = settings.fees[chainId];
+        if (chainFees && typeof chainFees.rbfByDefault === 'boolean') {
+            setRbfEnabled(chainFees.rbfByDefault);
+        }
+    }, [chainId, settings]);
+
     const feeTiers = useMemo(() => {
         if (!chainId) return null;
         return estimateNativeSendFeeTiers({ chainId, chainRegistry });
@@ -553,6 +568,7 @@ export function Send({ walletId, onBack }) {
                 asset: asset.trim(),
                 amount: String(amount).trim(),
                 memo: memo.trim() || undefined,
+                rbf: rbfEnabled,
             };
             // Software path: send password; background unlocks + signs.
             // HW path: bypass password; background routes the sign
@@ -891,6 +907,23 @@ export function Send({ walletId, onBack }) {
                     onChange={setFeePick}
                     placeholderBadge={feeEstimate?.source === 'static-placeholder'}
                 />
+            ) : null}
+            {feeTiers ? (
+                <label className={styles.rbfRow}>
+                    <input
+                        type="checkbox"
+                        role="switch"
+                        checked={rbfEnabled}
+                        onChange={(e) => setRbfEnabled(e.target.checked)}
+                        aria-label="Replace-by-fee enabled"
+                    />
+                    <span className={styles.rbfLabel}>
+                        Replace-by-fee
+                        <span className={styles.rbfHint}>
+                            Allows speeding up or cancelling this transaction while it's in the mempool.
+                        </span>
+                    </span>
+                </label>
             ) : null}
             {formError ? (
                 <div role="alert" className={styles.error}>{formError}</div>

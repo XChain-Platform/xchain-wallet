@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.139.0] - 2026-04-26
+
+§44 Fee UX — Step 2 of 5 — RBF toggle on Send form. Closes the §44.3 audit row.
+
+The Send form gains a Replace-by-fee switch beneath the FeeSelector. Default reads from `settings.fees[chainId].rbfByDefault` (schema field exists, was unread); falls back to `true` when no per-chain setting is recorded. The current value flows into `messaging.sendAsset({ ..., rbf })`; the encoder uses it to set the input sequence numbers per BIP125 (sequence < 0xfffffffe enables RBF replacement; the §29 / §44.4 Speed up + Cancel actions in History only apply to RBF-flagged transactions).
+
+### Added
+
+- **`test/smoke/ui/send-rbf-toggle.smoke.js`** — `rbfEnabled` state defaulting to `true`, settings-derived sync, payload wiring (`rbf: rbfEnabled` lands in the base object), toggle UI (`role="switch"`, label + hint copy), and CSS hooks.
+
+### Changed
+
+- **`Send.jsx`** — new `rbfEnabled` state initialized to `true`; useEffect syncs from `settings.fees[chainId].rbfByDefault` when chain changes. The `base` payload object passed to both `messaging.sendAsset` (software signer) and `messaging.sendAssetHw` (hardware signer) gains `rbf: rbfEnabled`. UI: a `<label>` wrapper around an `<input type="checkbox" role="switch">` renders below the FeeSelector with title + hint copy.
+- **`Send.module.css`** — `.rbfRow`, `.rbfLabel`, `.rbfHint` rules.
+
+### Behavior preserved
+
+- Existing wallets without a per-chain RBF preference get `true` by default — same as the historical implicit assumption (the encoder previously set RBF sequence numbers regardless). The schema-derived initialization only fires when an explicit `rbfByDefault` boolean lives in settings.
+- The toggle is informational + advisory at the wallet layer; the encoder's actual RBF flagging depends on its respect for the new `rbf` payload field. When the encoder lands its handler (FOLLOWUP for the §29 RBF engine), this UI feeds it the right input automatically.
+
 ## [0.138.0] - 2026-04-26
 
 §44 Fee UX — Step 1 of 5 — FeeSelector primitive + Send.jsx wiring.
