@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.163.0] - 2026-04-27
+
+§30.5 — Step 1 of Cluster E — User-cancel rejection toast (G089).
+
+When a sign attempt fails with a message matching `/cancel|reject|denied/i` (Trezor "Action cancelled by user", Ledger "Transaction was rejected", and similar), the Send route now treats it as a deliberate user cancel rather than a Send failure: the form's `submitError` and `password` are cleared, the stage routes back to the composing form, and a calm "Transaction cancelled." toast surfaces via the §37 ToastHost. Bad-password still wins precedence so it isn't masked. Other errors fall through to the existing red `submitError` path on review.
+
+### Added
+
+- **`test/smoke/ui/send-rejection-toast.smoke.js`** — verifies useToast import, cancel-pattern regex, spec wording, and form-stage routing in the catch branch.
+
+### Changed
+
+- **`shared/routes/Send.jsx`** — imports `useToast`, defines `USER_CANCEL_RE`, branches the `handleSubmit` catch to a toast + form-stage path on user-cancel.
+
+Closes G089. Smoke baseline preserved (24 / 164; new send-rejection-toast smoke passes).
+
 ## [0.162.0] - 2026-04-27
 
 §37 — Step 2 of Cluster D — Broadcast success confirmation (G124); Cluster D closed.

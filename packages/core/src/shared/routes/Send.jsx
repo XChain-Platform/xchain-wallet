@@ -31,7 +31,16 @@ import { getFiatRate, coinToFiat, fiatToCoin } from '../../flows/priceLookup.js'
 import { HwSignBlock } from '../components/HwSignBlock.jsx';
 import { BalanceChanges } from '../components/BalanceChanges.jsx';
 import { RawPsbtViewer } from '../components/RawPsbtViewer.jsx';
+import { useToast } from '../components/ToastHost.jsx';
 import styles from './Send.module.css';
+
+// §30.5 user-initiated cancel detection. HW-device libraries surface a
+// rejection as an Error whose message contains words like "cancelled",
+// "rejected", or "denied" (Trezor: "Action cancelled by user"; Ledger:
+// "Transaction was rejected"). Treat any of those as a deliberate user
+// cancel rather than a Send failure so the UI returns to the composing
+// form with a calm "Transaction cancelled." toast instead of a red error.
+const USER_CANCEL_RE = /cancel|reject|denied/i;
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -62,6 +71,7 @@ export function Send({ walletId, onBack }) {
     const isFull = variant === 'full';
     const { developerMode } = useDeveloperMode();
     const { settings } = useSettings();
+    const { showToast } = useToast();
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -626,10 +636,22 @@ export function Send({ walletId, onBack }) {
             setStage('done');
         } catch (err) {
             const isBadPassword = err?.name === 'InvalidPasswordError';
+            const rawMsg = err?.message || '';
+            const isUserCancel = !isBadPassword && USER_CANCEL_RE.test(rawMsg);
+            if (isUserCancel) {
+                // §30.5 — user-initiated cancel returns to the composing
+                // form with a dismissible "Transaction cancelled." toast.
+                // Form values stay intact so the user can edit and retry.
+                setSubmitError(null);
+                setPassword('');
+                setStage('form');
+                showToast({ message: 'Transaction cancelled.' });
+                return;
+            }
             setSubmitError(
                 isBadPassword
                     ? 'Incorrect password.'
-                    : err?.message || 'Send failed.',
+                    : rawMsg || 'Send failed.',
             );
             setStage('review');
             if (!isHwSource) {
