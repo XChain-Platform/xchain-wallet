@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.145.0] - 2026-04-27
+
+§26 Lock & Panic — Step 3 of 6 — Privacy blur on window blur (G069).
+
+When `settings.privacy.blurOnBlur` is on, the wallet now applies a CSS blur to its body whenever the host window loses focus or visibility — alt-tab, click-away, side-panel collapse, popup occlusion, tab background. Removing focus while a balance, address, or signing dialog is on screen no longer leaks that content to a passing observer. The schema slot has existed since v2 settings (§35); this step delivers the engine that consumes it.
+
+### Added
+
+- **`shared/hooks/usePrivacyBlur.js`** — focus tracker. Subscribes to `window` `blur` / `focus` and `document` `visibilitychange`; on every transition recomputes hidden-state via `document.visibilityState === 'hidden'` with `document.hasFocus()` as a fallback. Sets `data-xc-privacy-blur="true"` on `<html>` while hidden, removes the attribute while focused or when `enabled` flips false. Detaches every listener on unmount + when disabled. SSR-safe — guards on `typeof document` / `typeof window`.
+- **`shared/PrivacyBlurGate.jsx`** — null-rendering bridge between `useSettings` and `usePrivacyBlur`. Reads `settings.privacy.blurOnBlur`, coerces with `Boolean(settings?.privacy?.blurOnBlur)`, and feeds the flag into the hook. Mounted automatically inside `MessagingProvider`, so every shell that already wraps its app in `<MessagingProvider>` (web, extension popup, desktop renderer) gets the behaviour without local edits.
+- **CSS rule** in `tokens.css`: `html[data-xc-privacy-blur="true"] body { filter: blur(12px); transition: filter var(--xc-transition); }`. The transition piggy-backs on the motion token, so `prefers-reduced-motion: reduce` (which the token already collapses to 0 ms) eliminates the fade.
+- **`test/smoke/ui/privacy-blur.smoke.js`** — guards: `enabled` short-circuit, attribute clear when disabled, all three event listeners attached + detached, hidden-state composition (`visibilityState === 'hidden'` and `hasFocus()` fallback), SSR `typeof document`/`window` guards, data-attribute name pinned to `xcPrivacyBlur`, dataset write/delete pattern, gate consumes `useSettings`, gate calls `usePrivacyBlur`, gate returns null, MessagingProvider imports + renders `<PrivacyBlurGate />`, CSS selector targets the attribute, applies `filter: blur(`, transition uses `--xc-transition`.
+
+### Changed
+
+- **`MessagingProvider.jsx`** — renders `<PrivacyBlurGate />` as the first child of the context provider. Uses `useMemo` for the value object as before; no behavioral change to consumers.
+
+### Behavior preserved
+
+- When the wallet is locked or settings haven't loaded yet, `useSettings()` returns `settings = null` and the gate feeds `enabled = false` to the hook — the hook then ensures the data-attribute is cleared and detaches listeners. No surprise blur on the unlock screen.
+- The `prefers-reduced-motion: reduce` collapse already set `--xc-transition: 0ms`, so users who opt out of motion get an instant on/off transition rather than a slide.
+- The data attribute name (`xcPrivacyBlur` → `data-xc-privacy-blur`) is namespaced so it doesn't clash with any other `data-` flags the shells use.
+
 ## [0.144.0] - 2026-04-27
 
 §26 Lock & Panic — Step 2 of 6 — Failed-attempts escalating delay (G066).

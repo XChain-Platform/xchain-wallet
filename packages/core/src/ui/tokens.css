@@ -111,3 +111,12 @@ body {
     white-space: nowrap;
     border: 0;
 }
+
+/* §26 / G069 — privacy blur on window blur. Applied by usePrivacyBlur
+ * via a data-attribute on <html> when settings.privacy.blurOnBlur is on
+ * AND the wallet's host window has lost focus. The transition is
+ * suppressed under prefers-reduced-motion via the --xc-transition token. */
+html[data-xc-privacy-blur="true"] body {
+    filter: blur(12px);
+    transition: filter var(--xc-transition);
+}
