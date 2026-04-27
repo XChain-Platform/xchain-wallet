@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.138.0] - 2026-04-26
+
+§44 Fee UX — Step 1 of 5 — FeeSelector primitive + Send.jsx wiring.
+
+The user can now pick a fee tier on the Send form. Three presets — Low / Normal / Fast — render their rate, the absolute coin-amount fee, and an approximate ETA pulled from a per-chain placeholder table. A Custom mode accepts a sat/vB rate (BTC / LTC) or a koinu/byte rate (DOGE) directly. The selected estimate flows into the §21.2 simulator's fee row + the §29.2 Max button, so both reflect the user's pick instead of the silent placeholder default.
+
+Closes the §29 close FOLLOWUP 3 (real fee selector); the placeholder rates themselves stay flagged as such until Step 4 wires SDK-backed fetch.
+
+### Added
+
+- **`packages/core/src/ui/FeeSelector.jsx`** + **`.module.css`** — presentation-only primitive. Props: `tiers` (from `estimateNativeSendFeeTiers`), `value` (`{ mode, customRate? }`), `onChange`, `disabled`, `placeholderBadge`. ARIA radiogroup with three preset radios + a Custom radio that reveals a numeric input. The component never computes fees itself — callers pass tiers in and get selection events back. Re-exported from `@xchain-wallet/core/ui`.
+- **`flows/feeEstimate.js`** grows two helpers and a `speed` parameter:
+  - `estimateNativeSendFee({ chainId, chainRegistry, speed = 'normal' })` now dispatches per tier. Returns the existing `{ sats, coinAmount, source, confidence, rate, … }` shape plus `unit` / `rateValue` / `speed` / `etaMinutes`.
+  - `estimateNativeSendFeeTiers({ chainId, chainRegistry })` returns `{ low, normal, fast, unit }` for the FeeSelector to render.
+  - `customFeeEstimate({ chainId, chainRegistry, rate })` builds a user-rate estimate at high confidence.
+  - Per-chain tier table: BTC 1 / 6 / 12 sat/vB; LTC 1 / 1 / 2 sat/vB; DOGE 10k / 100k / 200k koinu/byte rendered as DOGE/kB.
+- **`test/smoke/core/fee-tiers.smoke.js`** — per-chain tier dispatch (sats math, defaults, unknown speed fallback, DOGE/kB unit semantics), `estimateNativeSendFeeTiers` ordering + null guards, `customFeeEstimate` rate validation + zero-rate allowance.
+- **`test/smoke/ui/fee-selector.smoke.js`** — public API + ARIA radiogroup, preset wiring from `tiers` prop, selection writes (`onTierClick`, `onCustomToggle`, `onCustomRateChange`), empty-state copy, conditional placeholder badge, and CSS hooks.
+- **`test/smoke/ui/send-fee-selector.smoke.js`** — Send.jsx imports, `feePick` state defaulting to `'normal'`, `feeTiers` + `feeEstimate` memos (custom branch dispatches to `customFeeEstimate`, tier branch passes `speed: feePick.mode`), and form rendering with `placeholderBadge` bound to source.
+
+### Changed
+
+- **`Send.jsx`** — replaces the static `feeEstimate = useMemo(estimateNativeSendFee)` with `feePick` state + `feeTiers` memo + a tier-aware `feeEstimate` memo. The selector renders below the Memo input. Both the simulator's fee row and the Max button now reflect the user's tier or custom rate.
+
+### Behavior preserved
+
+- Existing `estimateNativeSendFee` callers that omit `speed` get the same value they got before (defaults to `'normal'`, which matches the previous single-rate placeholder).
+- Surfaces still mark the values "(placeholder)" until Step 4 wires SDK-backed fetch — the badge surfaces inside the FeeSelector's `placeholderBadge` slot.
+- Submit, signing, balance preview, raw PSBT viewer — all unchanged.
+
 ## [0.137.0] - 2026-04-26
 
 §29 Send/Receive — Step 6 of 6 — RBF Speed up + Cancel from History. **Closes the §29 cluster.**

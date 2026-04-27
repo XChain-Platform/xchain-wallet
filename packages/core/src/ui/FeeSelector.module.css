@@ -1,0 +1,96 @@
+.wrap {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+}
+
+.label {
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text);
+    font-weight: 500;
+}
+
+.tiers {
+    display: flex;
+    gap: var(--xc-space-1);
+    flex-wrap: wrap;
+}
+
+.tier {
+    flex: 1 1 0;
+    min-width: 80px;
+    padding: var(--xc-space-2);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-sm);
+    background: var(--xc-surface, transparent);
+    color: var(--xc-text);
+    cursor: pointer;
+    text-align: left;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-family: inherit;
+}
+
+.tier:hover:not(:disabled) {
+    background: var(--xc-bg-muted);
+}
+
+.tier:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.tierActive {
+    border-color: var(--xc-accent-primary);
+    background: color-mix(in srgb, var(--xc-accent-primary, #2563eb) 10%, transparent);
+}
+
+.tierName {
+    font-weight: 600;
+    font-size: var(--xc-text-sm);
+}
+
+.tierRate {
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+}
+
+.tierFee {
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text);
+}
+
+.tierEta {
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+}
+
+.customRow {
+    display: flex;
+    align-items: baseline;
+    gap: var(--xc-space-1);
+}
+
+.customInput {
+    width: 100%;
+    padding: var(--xc-space-1) var(--xc-space-2);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-sm);
+    background: var(--xc-bg);
+    color: var(--xc-text);
+    font-size: var(--xc-text-sm);
+}
+
+.customUnit {
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    white-space: nowrap;
+}
+
+.placeholder {
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    margin: 0;
+    line-height: 1.3;
+}

@@ -46,6 +46,8 @@ export {
 export { checkRecipientNovelty } from './recipientNovelty.js';
 export {
     estimateNativeSendFee,
+    estimateNativeSendFeeTiers,
+    customFeeEstimate,
     satsToCoinDecimal,
 } from './feeEstimate.js';
 export {

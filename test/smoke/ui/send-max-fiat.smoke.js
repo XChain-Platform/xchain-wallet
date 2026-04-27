@@ -20,10 +20,12 @@ const sendCss = readFileSync(
 
 // --- imports ----------------------------------------------------------
 
+// Step 4 of §29 imported the single helper; Step 1 of §44 expanded
+// the import to include the tier + custom helpers.
 assert.match(
     sendSrc,
-    /import \{ estimateNativeSendFee \} from '\.\.\/\.\.\/flows\/feeEstimate\.js'/,
-    'imports estimateNativeSendFee',
+    /import \{[\s\S]*estimateNativeSendFee[\s\S]*\} from '\.\.\/\.\.\/flows\/feeEstimate\.js'/,
+    'imports estimateNativeSendFee (and siblings)',
 );
 assert.match(
     sendSrc,

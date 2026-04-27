@@ -1,71 +1,195 @@
-// Fee estimate — bridge between the §21.2 simulator + the §29.2 Max
-// button and the proper §44.2 fee selector that lands in a later
-// cluster. Keeps both surfaces honest: they get a defensible default
-// rate keyed off the chain's coin family rather than the silent zero
-// they had been feeding the simulator.
+// Fee estimate — bridge between the §21.2 simulator, the §29.2 Max
+// button, and the §44.2 user-selectable fee tiers.
 //
-// All values are STATIC PLACEHOLDERS marked as such. They are sized
-// for a typical 1-input / 2-output SEND tx (one recipient + change)
-// and for the protocol minimum on coins that enforce one. When the
-// SDK exposes a real fee endpoint (or §44.2 wires user-selectable
-// rates), this flow swaps to that source while keeping the same
-// return shape — so callers don't have to learn a new contract.
+// Three speed tiers per chain (low / normal / fast) sized for a
+// typical 1-input / 2-output SEND tx. Plus a "custom" mode the
+// FeeSelector exposes for power users — it accepts a sat/vB rate (or
+// DOGE/kB rate) and recomputes the absolute fee.
+//
+// Values are STATIC PLACEHOLDERS marked as such. When the SDK exposes
+// a real fee endpoint (Step 4 of this cluster), this flow probes for
+// it and swaps the source while keeping the same return shape —
+// callers don't relearn the contract.
 //
 // Output is always `{ sats, source, confidence, ... }`. `source` is
 // the truthful provenance of the value; surfaces show it next to the
 // number so the user understands what they're looking at.
 
-const PLACEHOLDER_FEES = /** @type {const} */ ({
-    bitcoin: { sats: 1500, feeRate: '6 sat/vB', txSize: 250 },
-    litecoin: { sats: 250, feeRate: '1 sat/vB', txSize: 250 },
-    // DOGE protocol minimum: 1 DOGE/kB. A 250-byte tx ≈ 0.25 kB →
-    // 0.25 DOGE = 25,000,000 koinu. Round up to 0.25 DOGE.
-    dogecoin: { sats: 25_000_000, feeRate: '1 DOGE/kB', txSize: 250 },
+/**
+ * Per-chain fee tier table. Each tier has a sat/vB or DOGE/kB rate.
+ * `txSize` is the assumed virtual size in vbytes (BTC/LTC) or raw
+ * bytes (DOGE — its minrelayfee is denominated per-kB of raw size).
+ */
+const PLACEHOLDER_FEE_TIERS = /** @type {const} */ ({
+    bitcoin: {
+        txSize: 250,
+        unit: 'sat/vB',
+        tiers: {
+            low: { rate: 1, label: 'Low', etaMinutes: 60 },
+            normal: { rate: 6, label: 'Normal', etaMinutes: 30 },
+            fast: { rate: 12, label: 'Fast', etaMinutes: 10 },
+        },
+    },
+    litecoin: {
+        txSize: 250,
+        unit: 'sat/vB',
+        tiers: {
+            low: { rate: 1, label: 'Low', etaMinutes: 5 },
+            normal: { rate: 1, label: 'Normal', etaMinutes: 3 },
+            fast: { rate: 2, label: 'Fast', etaMinutes: 2 },
+        },
+    },
+    dogecoin: {
+        // DOGE minrelayfee 1 DOGE/kB → 100_000_000 koinu/kB ≈
+        // 100_000 koinu/B. Tier rates are koinu per byte.
+        txSize: 250,
+        unit: 'DOGE/kB',
+        tiers: {
+            // Below mainnet's minrelayfee. Many nodes will reject;
+            // included only because some Doge nodes still relax it.
+            low: { rate: 10_000, label: 'Low', etaMinutes: 5 },
+            normal: { rate: 100_000, label: 'Normal', etaMinutes: 1 },
+            fast: { rate: 200_000, label: 'Fast', etaMinutes: 1 },
+        },
+    },
 });
+
+const DEFAULT_SPEED = 'normal';
+
+/**
+ * @typedef {'low' | 'normal' | 'fast'} FeeSpeed
+ */
 
 /**
  * @typedef {object} FeeEstimate
  * @property {number} sats          absolute fee in coin base units (sats / koinu)
- * @property {string} coinAmount    same value as a decimal string at coin scale (8 decimals for BTC/LTC/DOGE)
+ * @property {string} coinAmount    same value as a decimal string at coin scale
  * @property {'static-placeholder' | 'sdk' | 'user'} source
  * @property {'low' | 'medium' | 'high'} confidence
  * @property {string} [rate]        human display, e.g., "6 sat/vB"
- * @property {number} [vsize]       assumed virtual size in bytes, when known
+ * @property {string} [unit]        rate unit ('sat/vB' or 'DOGE/kB')
+ * @property {number} [rateValue]   numeric rate at chain's native unit granularity
+ * @property {number} [vsize]       assumed virtual size in bytes
+ * @property {FeeSpeed} [speed]     tier this estimate corresponds to
+ * @property {number} [etaMinutes]  approximate ETA at this rate
  */
 
 /**
- * Estimate the network fee for a typical SEND transaction on the given
- * chain. Native sends use the placeholder table; asset / token sends
- * use the same number (the fee is paid in native coin regardless of
- * what's being moved).
+ * Estimate the network fee at a given speed tier.
  *
  * @param {object} opts
  * @param {string} opts.chainId
  * @param {{ get: (id: string) => any }} opts.chainRegistry
+ * @param {FeeSpeed} [opts.speed]   default 'normal'
  * @returns {FeeEstimate | null}
  */
-export function estimateNativeSendFee({ chainId, chainRegistry } = {}) {
+export function estimateNativeSendFee({ chainId, chainRegistry, speed = DEFAULT_SPEED } = {}) {
     if (typeof chainId !== 'string' || !chainRegistry) return null;
     const desc = chainRegistry.get(chainId);
     const coin = desc?.coin;
     if (!coin) return null;
-    const row = PLACEHOLDER_FEES[coin];
-    if (!row) {
+    const table = PLACEHOLDER_FEE_TIERS[coin];
+    if (!table) {
         return {
             sats: 0,
             coinAmount: '0',
             source: 'static-placeholder',
             confidence: 'low',
+            speed,
         };
     }
+    const tier = table.tiers[speed] ?? table.tiers[DEFAULT_SPEED];
+    const sats = computeSats(table, tier.rate);
     return {
-        sats: row.sats,
-        coinAmount: satsToCoinDecimal(row.sats),
+        sats,
+        coinAmount: satsToCoinDecimal(sats),
         source: 'static-placeholder',
         confidence: 'low',
-        rate: row.feeRate,
-        vsize: row.txSize,
+        rate: formatRate(table.unit, tier.rate),
+        unit: table.unit,
+        rateValue: tier.rate,
+        vsize: table.txSize,
+        speed,
+        etaMinutes: tier.etaMinutes,
     };
+}
+
+/**
+ * Return the full set of `{ low, normal, fast }` estimates for a chain.
+ * The FeeSelector primitive uses this to render the three preset
+ * buttons; Send.jsx uses it to back the simulator + Max with the
+ * user's chosen tier.
+ *
+ * @param {object} opts
+ * @param {string} opts.chainId
+ * @param {{ get: (id: string) => any }} opts.chainRegistry
+ * @returns {{ low: FeeEstimate, normal: FeeEstimate, fast: FeeEstimate, unit: string } | null}
+ */
+export function estimateNativeSendFeeTiers({ chainId, chainRegistry } = {}) {
+    if (typeof chainId !== 'string' || !chainRegistry) return null;
+    const desc = chainRegistry.get(chainId);
+    const coin = desc?.coin;
+    if (!coin) return null;
+    const table = PLACEHOLDER_FEE_TIERS[coin];
+    if (!table) return null;
+    return {
+        low: estimateNativeSendFee({ chainId, chainRegistry, speed: 'low' }),
+        normal: estimateNativeSendFee({ chainId, chainRegistry, speed: 'normal' }),
+        fast: estimateNativeSendFee({ chainId, chainRegistry, speed: 'fast' }),
+        unit: table.unit,
+    };
+}
+
+/**
+ * Build a custom-rate FeeEstimate. The FeeSelector's "Custom" mode
+ * feeds this — user enters a rate in the chain's native unit, this
+ * function recomputes the absolute fee.
+ *
+ * @param {object} opts
+ * @param {string} opts.chainId
+ * @param {{ get: (id: string) => any }} opts.chainRegistry
+ * @param {number} opts.rate                   in chain's native unit (sat/vB or koinu/B)
+ * @returns {FeeEstimate | null}
+ */
+export function customFeeEstimate({ chainId, chainRegistry, rate } = {}) {
+    if (typeof chainId !== 'string' || !chainRegistry) return null;
+    if (!Number.isFinite(rate) || rate < 0) return null;
+    const desc = chainRegistry.get(chainId);
+    const coin = desc?.coin;
+    if (!coin) return null;
+    const table = PLACEHOLDER_FEE_TIERS[coin];
+    if (!table) return null;
+    const sats = computeSats(table, rate);
+    return {
+        sats,
+        coinAmount: satsToCoinDecimal(sats),
+        source: 'user',
+        confidence: 'high',
+        rate: formatRate(table.unit, rate),
+        unit: table.unit,
+        rateValue: rate,
+        vsize: table.txSize,
+        speed: undefined,
+    };
+}
+
+function computeSats(table, ratePerByte) {
+    return Math.ceil(ratePerByte * table.txSize);
+}
+
+function formatRate(unit, value) {
+    if (unit === 'DOGE/kB') {
+        // value is koinu/byte; convert to DOGE/kB for display.
+        // koinu/byte × 1000 bytes / 100_000_000 koinu/DOGE
+        const dogePerKb = (value * 1000) / 1e8;
+        return `${trimNumber(dogePerKb)} DOGE/kB`;
+    }
+    return `${trimNumber(value)} ${unit}`;
+}
+
+function trimNumber(n) {
+    const s = Number(n.toFixed(8)).toString();
+    return s;
 }
 
 /**

@@ -6,6 +6,7 @@ import {
     AddressCombobox,
     ChainBadge,
     AddressText,
+    FeeSelector,
  ChainPicker,  Icon,} from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
@@ -19,7 +20,11 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDeveloperMode } from '../hooks/useDeveloperMode.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { checkRecipientNovelty } from '../../flows/recipientNovelty.js';
-import { estimateNativeSendFee } from '../../flows/feeEstimate.js';
+import {
+    estimateNativeSendFee,
+    estimateNativeSendFeeTiers,
+    customFeeEstimate,
+} from '../../flows/feeEstimate.js';
 import { getFiatRate, coinToFiat, fiatToCoin } from '../../flows/priceLookup.js';
 import { HwSignBlock } from '../components/HwSignBlock.jsx';
 import { BalanceChanges } from '../components/BalanceChanges.jsx';
@@ -440,13 +445,31 @@ export function Send({ walletId, onBack }) {
         return () => { cancelled = true; };
     }, [stage, chainId, fromAddress, messaging]);
 
-    // §44 fee bridge — the §21.2 simulator's fee row + the §29.2 Max
-    // button both consume this. Real selector lands in the §44.2
-    // cluster; today this is a static per-chain placeholder.
+    // §44.2 user-selectable fee tiers. Selector backs both the §21.2
+    // simulator's fee row + the §29.2 Max button. Default tier is
+    // 'normal'; user picks via FeeSelector. Custom mode accepts a
+    // sat/vB or DOGE/kB rate via the bound input.
+    const [feePick, setFeePick] = useState(
+        /** @type {{ mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }} */
+        ({ mode: 'normal' }),
+    );
+
+    const feeTiers = useMemo(() => {
+        if (!chainId) return null;
+        return estimateNativeSendFeeTiers({ chainId, chainRegistry });
+    }, [chainId]);
+
     const feeEstimate = useMemo(() => {
         if (!chainId) return null;
-        return estimateNativeSendFee({ chainId, chainRegistry });
-    }, [chainId]);
+        if (feePick.mode === 'custom') {
+            return customFeeEstimate({
+                chainId,
+                chainRegistry,
+                rate: Number(feePick.customRate) || 0,
+            });
+        }
+        return estimateNativeSendFee({ chainId, chainRegistry, speed: feePick.mode });
+    }, [chainId, feePick]);
 
     const previewResult = useMemo(() => {
         if (stage !== 'review' && stage !== 'submitting') return null;
@@ -861,6 +884,14 @@ export function Send({ walletId, onBack }) {
                 onChange={(e) => setMemo(e.target.value)}
                 autoComplete="off"
             />
+            {feeTiers ? (
+                <FeeSelector
+                    tiers={feeTiers}
+                    value={feePick}
+                    onChange={setFeePick}
+                    placeholderBadge={feeEstimate?.source === 'static-placeholder'}
+                />
+            ) : null}
             {formError ? (
                 <div role="alert" className={styles.error}>{formError}</div>
             ) : null}
