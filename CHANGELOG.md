@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.165.0] - 2026-04-27
+
+§17.7.2 — Step 3 of Cluster E — HW gating regression-test for ViewPrivateKey (G026).
+
+ViewPrivateKey already routed Trezor / Ledger / watch-only addresses to an informational panel without a password prompt — that behavior was added when the component first landed but never had a smoke pinning it. This step adds the smoke so future edits can't accidentally regress the gating, and marks G026 closed in the ledger.
+
+### Added
+
+- **`test/smoke/ui/view-private-key-hw-gating.smoke.js`** — verifies `classifySource` maps trezor/ledger → `hardware` and watch-only → `watch-only`, and that those branches short-circuit before the password / revealed stages.
+
+Closes G026. No code changes — gating already enforced. Smoke baseline preserved (24 / 166).
+
 ## [0.164.0] - 2026-04-27
 
 §30.4 — Step 2 of Cluster E — PSBT paste-in form (G088 + paired G042).
