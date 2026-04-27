@@ -12,6 +12,7 @@ import { EmptyStateNudge } from '../components/EmptyStateNudge.jsx';
 import { useToast } from '../components/ToastHost.jsx';
 import { groupHistoryEntries } from '../utils/historyGrouping.js';
 import { TxStatusTimeline } from '../components/TxStatusTimeline.jsx';
+import { flows as flowsLib } from '@xchain-wallet/core';
 import {
     applyHistoryFilters,
     ACTION_TYPE_OPTIONS,
@@ -490,6 +491,25 @@ export function History({ walletId, accountId, onBack, onReceive, initialSearchQ
                     title="Collapse related actions (issuance + mints, dispenser + dispenses, order + fills) into a single expandable card (§28.2)."
                 >
                     {groupingMode === 'grouped' ? 'Grouped' : 'Flat'}
+                </button>
+                <span className={styles.divider} aria-hidden="true" />
+                <button
+                    type="button"
+                    onClick={() => exportVisibleHistory({ entries: visibleEntries, scope: chainScopeLabel(enabledChains, activeChainIds), format: 'csv' })}
+                    disabled={visibleEntries.length === 0}
+                    className={styles.chip}
+                    title="Export the filtered history rows as CSV (§28.5)."
+                >
+                    Export CSV
+                </button>
+                <button
+                    type="button"
+                    onClick={() => exportVisibleHistory({ entries: visibleEntries, scope: chainScopeLabel(enabledChains, activeChainIds), format: 'json' })}
+                    disabled={visibleEntries.length === 0}
+                    className={styles.chip}
+                    title="Export the filtered history rows as JSON."
+                >
+                    Export JSON
                 </button>
             </div>
 
@@ -1001,4 +1021,32 @@ function decodeActionToText(row) {
     } catch (err) {
         return String(err);
     }
+}
+
+/* ───── §28.5 / G081 history export ───────────────────────────────── */
+
+function chainScopeLabel(enabledChains, activeChainIds) {
+    if (!enabledChains) return 'all';
+    const total = activeChainIds.length;
+    if (enabledChains.size === 0 || enabledChains.size === total) return 'all';
+    return Array.from(enabledChains).sort().join('+');
+}
+
+function exportVisibleHistory({ entries, scope, format }) {
+    if (!Array.isArray(entries) || entries.length === 0) return;
+    const filename = flowsLib.buildExportFilename({ scope, format });
+    const fileContent = format === 'csv'
+        ? flowsLib.entriesToCsv(entries)
+        : flowsLib.entriesToJson(entries, { scope });
+    const mime = format === 'csv' ? 'text/csv;charset=utf-8' : 'application/json';
+    const blob = new Blob([fileContent], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

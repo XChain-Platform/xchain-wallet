@@ -274,6 +274,11 @@ export {
     computeBackupReminderState,
 } from './backupReminder.js';
 export {
+    entriesToCsv,
+    entriesToJson,
+    buildExportFilename,
+} from './historyExport.js';
+export {
     discoverUsedAddresses,
     DEFAULT_GAP_LIMIT,
     DEFAULT_PER_QUERY_TIMEOUT_MS,

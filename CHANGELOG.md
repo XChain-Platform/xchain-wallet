@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.182.0] - 2026-04-27
+
+§28.5 — Cluster I Step 5 — History export (G081). Cluster I closed.
+
+History page now exposes Export CSV / Export JSON buttons next to the Grouped/Flat toggle. Export operates on the *currently filtered* entry set so chain chips, search query, action-type filter, status filter, and date range all narrow the export. CSV is RFC-4180 (quoting + doubled quotes for embedded delimiters); JSON wraps the rows in a `{ format, exportedAt, scope, entries }` envelope. Download triggered client-side via Blob + anchor click; filename `xchain-history-<scope>-<isoDate>.{csv,json}`.
+
+### Added
+
+- **`packages/core/src/flows/historyExport.js`** (new) — `entriesToCsv`, `entriesToJson`, `buildExportFilename`; re-exported from `flows/index.js`.
+- **`packages/core/src/shared/routes/History.jsx`** — Export CSV / Export JSON chips in the filter bar; `exportVisibleHistory` Blob-download helper; `chainScopeLabel` summarizes the active chain filter into the filename.
+
+Closes G081. **Cluster I — §27 Balances + §28 History — closed at v0.182.0.**
+
 ## [0.181.0] - 2026-04-27
 
 §28.3 — Cluster I Step 4 — Transaction status timeline (G079).
