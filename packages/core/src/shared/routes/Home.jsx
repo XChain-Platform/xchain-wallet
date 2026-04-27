@@ -5,6 +5,7 @@ import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useAutoLock } from '../hooks/useAutoLock.js';
 import { HomeTabs } from '../components/HomeTabs.jsx';
+import { BackupReminderCard } from '../components/BackupReminderCard.jsx';
 import { HeaderActionMenu } from '../components/HeaderActionMenu.jsx';
 import { HeaderSettingsButton } from '../components/HeaderSettingsButton.jsx';
 import { HeaderNetworkButton } from '../components/HeaderNetworkButton.jsx';
@@ -441,6 +442,14 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onBuy, onCreateToken
                             </button>
                         ))}
                     </div>
+                ) : null}
+
+                {activeWalletId ? (
+                    <BackupReminderCard
+                        walletId={activeWalletId}
+                        walletCreatedAt={activeWallet?.createdAt}
+                        onAction={() => setSettingsOpen(true)}
+                    />
                 ) : null}
 
                 {balances ? (

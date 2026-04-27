@@ -20,6 +20,7 @@
 //     xchain-wallet/FOLLOWUPS.md`.
 
 import { useEffect, useState } from 'react';
+import { flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging } from '../../useMessaging.js';
 import { ROW, ROW_HINT, STACK, Status } from './_settingsPrimitives.jsx';
 
@@ -83,6 +84,9 @@ export function BackupSection({ activeWallet }) {
                 password,
             });
             triggerDownload(activeWallet.name || activeWallet.id, fileContent);
+            // §19.7 / G034 — successful encrypted-backup export counts as
+            // a fresh backup verification for reminder purposes.
+            try { flowsLib.markBackupVerified(activeWallet.id); } catch { /* best-effort */ }
             setPendingPassword(null);
         } catch (err) {
             setExportError(err instanceof Error ? err.message : String(err));

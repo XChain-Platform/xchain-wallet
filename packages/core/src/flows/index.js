@@ -268,6 +268,12 @@ export {
 } from './queuedBroadcast.js';
 export { diagnosticDump, createErrorRingBuffer } from './diagnosticDump.js';
 export {
+    markBackupVerified,
+    getBackupVerifiedAt,
+    dismissBackupReminder,
+    computeBackupReminderState,
+} from './backupReminder.js';
+export {
     discoverUsedAddresses,
     DEFAULT_GAP_LIMIT,
     DEFAULT_PER_QUERY_TIMEOUT_MS,

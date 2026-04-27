@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Screen, Button, Input, CopyButton, Icon } from '@xchain-wallet/core/ui';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
-import { crypto as cryptoLib } from '@xchain-wallet/core';
+import { crypto as cryptoLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { MnemonicGrid } from '../components/MnemonicGrid.jsx';
 import styles from './CreateWallet.module.css';
@@ -180,13 +180,22 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
             const passphraseArg = showPassphrase && bip39Passphrase.length > 0
                 ? bip39Passphrase
                 : '';
+            let createdWalletId = null;
             if (mode === 'add') {
                 if (typeof messaging.addImportedWallet !== 'function') {
                     throw new Error('messaging.addImportedWallet is not available in this shell.');
                 }
-                await messaging.addImportedWallet({ password, mnemonic, name, bip39Passphrase: passphraseArg });
+                const r = await messaging.addImportedWallet({ password, mnemonic, name, bip39Passphrase: passphraseArg });
+                createdWalletId = r?.wallet?.id || r?.walletId || null;
             } else {
-                await messaging.importMnemonic({ password, mnemonic, name, bip39Passphrase: passphraseArg });
+                const r = await messaging.importMnemonic({ password, mnemonic, name, bip39Passphrase: passphraseArg });
+                createdWalletId = r?.wallet?.id || r?.walletId || null;
+            }
+            // §19.7 / G034 — record that the user just verified the seed
+            // via the §19.2 word-quiz, so Home's BackupReminderCard knows
+            // not to nag them.
+            if (createdWalletId) {
+                try { flowsLib.markBackupVerified(createdWalletId); } catch { /* best-effort */ }
             }
             // §36.1 ADS consent — one-time screen during wallet
             // creation. ADS_DEFAULT_ENABLED is true so "Enable" is a

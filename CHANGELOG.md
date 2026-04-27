@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.177.0] - 2026-04-27
+
+§19.7 — Cluster H Step 7 — Progressive backup reminder card on Home (G034 + G062). Cluster H closed.
+
+New `flows/backupReminder.js` tracks per-wallet backup-verified timestamps in `localStorage` (no schema churn) and computes a three-state reminder (`hidden` / `gentle` / `firm`) based on wallet age, never-verified status, and the user's `settings.backupReminders` cadence. CreateWallet now calls `markBackupVerified` after the §19.2 quiz passes; BackupSection's encrypted-backup export marks the wallet verified on success. Home mounts a new `<BackupReminderCard>` above the balance grid that reads the state on mount, renders nothing for never-shown cases, surfaces a Dismiss-for-24h button on the gentle variant, and routes "Back up now" to Settings.
+
+### Added
+
+- **`packages/core/src/flows/backupReminder.js`** (new) — `markBackupVerified` / `getBackupVerifiedAt` / `dismissBackupReminder` / `computeBackupReminderState`; localStorage-backed (`xc:backupVerifiedAt`, `xc:backupReminderDismissedUntil`). Re-exported from `flows/index.js`.
+- **`packages/core/src/shared/components/BackupReminderCard.jsx` + `.module.css`** (new) — loads settings via messaging on mount, reads `computeBackupReminderState`, renders the gentle / firm card; "Back up now" CTA routes through `onAction`.
+- **`packages/core/src/shared/routes/Home.jsx`** — mounts `<BackupReminderCard>` above HomeTabs with `onAction={() => setSettingsOpen(true)}`.
+- **`packages/core/src/shared/routes/CreateWallet.jsx`** — captures the new walletId from `messaging.importMnemonic` / `addImportedWallet` and calls `flowsLib.markBackupVerified(walletId)` after persist.
+- **`packages/core/src/shared/components/settings/BackupSection.jsx`** — calls `flowsLib.markBackupVerified(activeWallet.id)` after a successful encrypted-backup export.
+
+Closes G034 and G062. **Cluster H — Onboarding & Recovery — closed at v0.177.0.**
+
 ## [0.176.0] - 2026-04-27
 
 §19.2 — Cluster H Step 6 — Backup verification quiz on Create (G033).
