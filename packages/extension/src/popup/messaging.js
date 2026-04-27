@@ -375,6 +375,15 @@ export function importBackupRequest(opts) {
 }
 
 /**
+ * §50 / G156 — diagnostic dump for bug-report copy-paste. Resolves to a
+ * `DiagnosticDump` object with wallet metadata + chain registry +
+ * counts + recent errors.
+ */
+export function getDiagnosticDump() {
+    return /** @type {any} */ (sendMessage('diagnostic.dump'));
+}
+
+/**
  * HW-wallet variant of sendAsset. No password (HW keys live on the
  * device). The background handler resolves the `signerId` to a
  * SignerRecord, builds a RemoteSigner wrapping a transport that

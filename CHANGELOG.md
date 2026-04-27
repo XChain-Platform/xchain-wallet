@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.193.0] - 2026-04-27
+
+§50 — Cluster L Step 4 — Diagnostic dump UI (G156). Cluster L closed.
+
+The `flows/diagnosticDump` primitive has shipped for a while; what was missing was a user-facing affordance. About panel now exposes a "Copy diagnostics" button that invokes `messaging.getDiagnosticDump`, JSON-pretty-prints the result, and writes it to the clipboard. Status / error rows announce via `aria-live` so screen reader users hear the result. New `diagnostic.dump` host handler is wired across the extension background; messaging shims added in all three shells; `@xchain-wallet/core/buildInfo.js` is now an explicit subpath export so the host can read `WALLET_VERSION` without a deep relative path.
+
+### Added
+
+- **`packages/extension/src/background/createBackgroundHost.js`** — `diagnostic.dump` host handler wraps `flows.diagnosticDump`; pulls `diagnosticDump` into the destructured `flows` import; imports `WALLET_VERSION` from `@xchain-wallet/core/buildInfo.js` to thread through.
+- **`packages/extension/src/popup/messaging.js`** + **`packages/web/src/messaging.js`** + **`packages/desktop/renderer/messaging.js`** — `getDiagnosticDump()` shims.
+- **`packages/core/src/shared/components/settings/AboutSection.jsx`** — "Copy diagnostics" Button row + status / error live regions; uses `useMessaging` to reach the host.
+- **`packages/core/package.json`** — `./buildInfo.js` subpath export so non-core consumers can import wallet version + license metadata directly.
+
+Closes G156. **Cluster L — §47 URI Schemes + §50 Diagnostic Dump — closed at v0.193.0.**
+
 ## [0.192.0] - 2026-04-27
 
 §47.5 — Cluster L Step 3 — Desktop URI handler verify (G144).

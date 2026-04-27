@@ -13,6 +13,7 @@
 // radius of any future logging or telemetry bug in the popup layer.
 
 import { flows } from '@xchain-wallet/core';
+import { WALLET_VERSION } from '@xchain-wallet/core/buildInfo.js';
 import { MessageHost } from './MessageHost.js';
 import { registerBridgeHandlers } from '../bridge/handlers.js';
 import * as signerBridge from './signerBridge.js';
@@ -135,6 +136,7 @@ const {
     dryRunRestore,
     publishLabelsNow,
     importWif,
+    diagnosticDump,
 } = flows;
 
 /**
@@ -521,6 +523,20 @@ export function createBackgroundHost(deps) {
     // chain. Auto-sync (debounced on label change) and fetch-on-restore
     // are tracked in FOLLOWUPS.md; this handler powers the user-visible
     // "Publish now" button only.
+    // §50 / G156 — diagnostic dump. Returns a JSON-shaped support packet
+    // (wallet metadata + chain registry + endpoint config + record counts +
+    // recent errors). The shell is responsible for surfacing it (Copy
+    // button on About panel, etc.) so users can paste it into a bug
+    // report. No secrets included — this passes the diagnosticDump flow's
+    // own redaction.
+    host.register('diagnostic.dump', async (_req, { vault, chainRegistry }) => {
+        return diagnosticDump({
+            vault,
+            chainRegistry,
+            walletVersion: WALLET_VERSION,
+        });
+    });
+
     // §15.5 / G020 — add a single imported WIF (private key) to an existing
     // HD wallet. Caller (shell) is responsible for surfacing the
     // §15.5.3 backup-implications warning before invoking this handler.

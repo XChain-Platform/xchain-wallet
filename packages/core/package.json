@@ -1,6 +1,6 @@
 {
     "name": "@xchain-wallet/core",
-    "version": "0.192.0",
+    "version": "0.193.0",
     "private": true,
     "description": "Platform-agnostic components, state, SDK integration, and signer implementations for XChain Wallet",
     "type": "module",
@@ -11,6 +11,7 @@
         "./ui/tokens.css": "./src/ui/tokens.css",
         "./ui/*": "./src/ui/*",
         "./branding/*": "./src/branding/*",
+        "./buildInfo.js": "./src/buildInfo.js",
         "./shared": "./src/shared/index.js",
         "./shared/*": "./src/shared/*",
         "./shims/*": "./src/shims/*",

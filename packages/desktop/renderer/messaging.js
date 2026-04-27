@@ -65,6 +65,11 @@ export function removeWallet(req) {
     return /** @type {any} */ (sendMessage('wallet.remove', req));
 }
 
+/** §50 / G156 — diagnostic dump for support copy-paste. */
+export function getDiagnosticDump() {
+    return /** @type {any} */ (sendMessage('diagnostic.dump'));
+}
+
 /** @param {object} opts */
 export function renameWallet(opts) {
     return /** @type {any} */ (sendMessage('wallet.rename', opts));

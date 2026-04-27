@@ -4,6 +4,9 @@
 // Items whose underlying artifact isn't yet published render with a
 // muted "not yet published" hint instead of an inert link.
 
+import { useState } from 'react';
+import { Button } from '@xchain-wallet/core/ui';
+import { useMessaging } from '../../useMessaging.js';
 import {
     LICENSE_FILE,
     LICENSE_NAME,
@@ -38,6 +41,31 @@ const STACK = {
 };
 
 export function AboutSection() {
+    const { messaging } = useMessaging();
+    const [busy, setBusy] = useState(false);
+    const [status, setStatus] = useState(/** @type {string | null} */ (null));
+    const [error, setError] = useState(/** @type {string | null} */ (null));
+
+    async function handleCopyDiagnostics() {
+        if (busy) return;
+        setBusy(true);
+        setStatus(null);
+        setError(null);
+        try {
+            if (typeof messaging?.getDiagnosticDump !== 'function') {
+                throw new Error('Diagnostic dump is not available in this shell.');
+            }
+            const dump = await messaging.getDiagnosticDump();
+            const text = JSON.stringify(dump, null, 2);
+            await navigator.clipboard?.writeText?.(text);
+            setStatus(`Copied — ${text.length.toLocaleString()} bytes. Paste into your bug report.`);
+        } catch (err) {
+            setError(err?.message || 'Could not copy diagnostics.');
+        } finally {
+            setBusy(false);
+        }
+    }
+
     return (
         <div style={STACK}>
             <Row label="Version">
@@ -69,6 +97,27 @@ export function AboutSection() {
                     <span style={ROW_VALUE_MUTED}>not yet published</span>
                 )}
             </Row>
+            <Row label="Diagnostics">
+                <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={handleCopyDiagnostics}
+                    loading={busy}
+                    disabled={busy}
+                >
+                    Copy diagnostics
+                </Button>
+            </Row>
+            {status ? (
+                <div role="status" aria-live="polite" style={{ ...ROW_VALUE_MUTED, padding: 'var(--xc-space-2) var(--xc-space-3)' }}>
+                    {status}
+                </div>
+            ) : null}
+            {error ? (
+                <div role="alert" style={{ color: 'var(--xc-danger, #B91C1C)', padding: 'var(--xc-space-2) var(--xc-space-3)' }}>
+                    {error}
+                </div>
+            ) : null}
         </div>
     );
 }

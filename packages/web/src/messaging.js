@@ -267,6 +267,11 @@ export function importBackupRequest(opts) {
     return /** @type {any} */ (sendMessage('wallet.importBackup', opts));
 }
 
+/** §50 / G156 — diagnostic dump for support copy-paste. */
+export function getDiagnosticDump() {
+    return /** @type {any} */ (sendMessage('diagnostic.dump'));
+}
+
 /**
  * HW-wallet variant of sendAsset. No password. Background resolves
  * the `signerId` + routes the sign request through the renderer-side
