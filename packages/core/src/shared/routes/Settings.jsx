@@ -5,6 +5,7 @@ import { AboutSection } from '../components/settings/AboutSection.jsx';
 import { AppearanceSection } from '../components/settings/AppearanceSection.jsx';
 import { LanguageRegionSection } from '../components/settings/LanguageRegionSection.jsx';
 import { PrivacySection } from '../components/settings/PrivacySection.jsx';
+import { NotificationsSection } from '../components/settings/NotificationsSection.jsx';
 import { SafetySection } from '../components/settings/SafetySection.jsx';
 import styles from './ActionsMenu.module.css';
 import pickerStyles from './WalletPicker.module.css';
@@ -141,7 +142,8 @@ export function Settings({
             title: 'Notifications',
             description: 'Confirmations, receipts, dispenser fills, order fills, price alerts.',
             keywords: 'notifications confirmations receipts dispenser order price alert',
-            kind: 'stub',
+            kind: 'panel',
+            Component: NotificationsSection,
         },
         {
             id: 'connected-sites',

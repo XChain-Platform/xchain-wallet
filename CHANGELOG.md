@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.111.0] - 2026-04-26
+
+Settings — Step 8 of 18 — Notifications panel.
+
+Five toggles backed by `settings.notifications.*` (txConfirmations, incomingReceipts, dispenserFills, orderFills, priceAlerts). Owns user preference only; the §46 delivery layer (browser Notification API, extension service-worker, OS toast on desktop) is a separate concern.
+
+### Added
+
+- **`packages/core/src/shared/components/settings/NotificationsSection.jsx`** — five toggles via shared `ToggleRow`. Writes use the deep-merge nested form: `update({ notifications: { [key]: next } })`.
+- **`test/smoke/ui/settings-notifications.smoke.js`** — useSettings wiring, every schema notification flag has a corresponding `NOTIFICATION_FLAGS` entry, write path, Settings.jsx hook-up.
+
+### Changed
+
+- **`packages/core/src/shared/routes/Settings.jsx`** — notifications section flips from `kind: 'stub'` to `kind: 'panel'`.
+
 ## [0.110.0] - 2026-04-26
 
 Settings — Step 7 of 18 — Safety panel.
