@@ -51,3 +51,32 @@
     border-top: 1px solid var(--xc-border);
     background: var(--xc-surface-raised);
 }
+
+/* §53.1 / G167 — skip-to-main-content link. Visually hidden until it
+   receives focus (first Tab from any Screen surfaces it), at which point
+   it pins to the top-left in high contrast for sighted keyboard users. */
+.skipLink {
+    position: absolute;
+    left: var(--xc-space-3);
+    top: -40px;
+    background: var(--xc-text);
+    color: var(--xc-bg);
+    padding: var(--xc-space-2) var(--xc-space-3);
+    border-radius: var(--xc-radius-sm);
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    text-decoration: none;
+    z-index: 1000;
+    transition: top 120ms ease;
+}
+
+.skipLink:focus,
+.skipLink:focus-visible {
+    top: var(--xc-space-3);
+    outline: 2px solid var(--xc-accent-primary, var(--xc-text));
+    outline-offset: 2px;
+}
+
+.body:focus {
+    outline: none;
+}

@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.187.0] - 2026-04-27
+
+§53.1 + §53.2 — Cluster K Steps 1+2 — Skip link + semantic landmarks (G167 + G168).
+
+`<Screen>` is now the canonical landmark host: the header slot renders as `<header>`, the body slot is a `<main id="xc-main">` with `tabIndex={-1}` (so the skip link can move focus into it), and the footer slot renders as `<footer>`. A skip-to-main-content `<a>` lives at the top of every screen — visually hidden by default, snaps to the top-left in high contrast on keyboard focus, and Enter jumps focus past the header straight into the body. Combining Steps 1 and 2 because both edits land in `Screen.jsx` / `Screen.module.css` and overlap structurally.
+
+### Changed
+
+- **`packages/core/src/ui/Screen.jsx`** — wrapper drops the `role="group"` shim in favor of real landmarks (`<header>` / `<main>` / `<footer>`); skip-link `<a href="#xc-main">` rendered as the first focusable element; main element has `id="xc-main"` + `tabIndex={-1}` for programmatic focus-after-skip.
+- **`packages/core/src/ui/Screen.module.css`** — `.skipLink` styles (off-screen by default, snaps in on focus); `.body:focus { outline: none }` so the post-skip focus ring on `<main>` doesn't render as a frame around the entire content area.
+
+Closes G167 + G168.
+
 ## [0.186.0] - 2026-04-27
 
 §25.1 — Cluster J Step 4 — License agreement scroll-to-enable (G061). Cluster J closed.
