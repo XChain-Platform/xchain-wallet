@@ -210,6 +210,21 @@ export function Settings({
         },
     ]), [walletLabel, accountLabel, onOpenWalletPicker, onOpenAccountPicker, activeWallet, settings, siteCount]);
 
+    // List-view filter. Hoisted ABOVE the subpage early-return so that
+    // both render paths call the same number of hooks — flipping
+    // `subpageId` from null to a section id used to drop a useMemo
+    // call from the second render, tripping React's
+    // "Rendered fewer hooks than expected" guard.
+    const filtered = useMemo(() => {
+        const q = query.trim().toLowerCase();
+        if (!q) return sections;
+        return sections.filter((s) =>
+            s.title.toLowerCase().includes(q)
+            || s.description.toLowerCase().includes(q)
+            || s.keywords.toLowerCase().includes(q),
+        );
+    }, [sections, query]);
+
     // ─── Subpage view ─────────────────────────────────────────────
 
     if (subpageId) {
@@ -244,16 +259,6 @@ export function Settings({
     }
 
     // ─── List view ────────────────────────────────────────────────
-
-    const filtered = useMemo(() => {
-        const q = query.trim().toLowerCase();
-        if (!q) return sections;
-        return sections.filter((s) =>
-            s.title.toLowerCase().includes(q)
-            || s.description.toLowerCase().includes(q)
-            || s.keywords.toLowerCase().includes(q),
-        );
-    }, [sections, query]);
 
     const header = (
         <div className={pickerStyles.header}>

@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.136.0] - 2026-04-26
+
+§29 Send/Receive — Step 5 of 6 — Receive Request payment sub-form + Share button.
+
+Closes the §29.10 (Request payment) and §29.7 (Share) audit rows.
+
+### Fixed
+
+- **Settings drill-down crash.** `Settings.jsx` declared `filtered = useMemo(...)` AFTER the subpage early-return, so flipping `subpageId` from null to a section id dropped a `useMemo` call from the second render and tripped React's "Rendered fewer hooks than expected" guard. The hook is hoisted above the subpage branch; both render paths now call the same number of hooks. User-reported during Step 5.
+
+### Added
+
+- **Request payment** sub-form on `Receive.jsx`. A `+ Request payment` toggle below the bare-address QR opens a form with Amount / Asset ticker / Memo / Expiry (minutes) inputs. As the user types, a second QR renders the BIP21 URI with `amount`, `message`, optional `tick` (XChain extension), and optional `expiry` (ISO timestamp) params. The full URI displays under the QR with Copy + Share buttons.
+- **Share button** next to the bare-address Copy button (always present on a loaded address) and inside the Request payment panel. Uses `navigator.share()` when available (mobile native share sheet); falls back to `navigator.clipboard.writeText()` with an inline "Copied to clipboard." status. When neither is available, shows "Share unavailable — copy the link manually."
+- **`test/smoke/ui/receive-request-share.smoke.js`** — useMemo import, all six new state slots, request URI memo (amount / tick / expiry param wiring), QR generation, share callback (Web Share + clipboard fallback), bare-address share button, panel UI + ARIA, and CSS hooks.
+
+### Changed
+
+- **`Receive.jsx`** — adds `useMemo` to the React import. Six new state hooks for the request form. Two new memos (`requestUri`, derived `expiresAt`). A new `useEffect` rendering `requestUri` to a QR data URL. New `onShare` callback. The body grows a `<section className={styles.requestPanel}>` block below the bare-address row. The bare-address row gains a Share button next to Copy.
+- **`Receive.module.css`** — `.requestPanel`, `.requestToggle`, `.requestForm`, `.requestUri`, `.requestActions` rules. `.requestUri` is monospace + `word-break: break-all` so the long URI wraps cleanly inside the card.
+
+### Behavior preserved
+
+- The bare-address QR + AddressText + CopyButton above are unchanged. The request form is purely additive — opens on demand, collapses by default.
+- Share's clipboard fallback uses the same Clipboard API as `<CopyButton>`. When neither share nor clipboard are available, the inline status copy tells the user to copy manually rather than swallowing silently.
+
 ## [0.135.0] - 2026-04-26
 
 §29 Send/Receive — Step 4 of 6 — Max button + fiat toggle + real fee estimate.

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import {
     Screen,
@@ -231,6 +231,85 @@ export function Receive({ walletId, accountId, onBack }) {
     const availableChainIds = chainsByWallet ? Object.keys(chainsByWallet) : [];
     const descriptor = activeChainId ? chainRegistry.get(activeChainId) : null;
 
+    // §29.10 Request payment sub-form. Renders a BIP21 URI with the
+    // user-specified amount / ticker / memo / expiry as a second QR
+    // alongside the bare-address QR above.
+    const [reqOpen, setReqOpen] = useState(false);
+    const [reqAmount, setReqAmount] = useState('');
+    const [reqTick, setReqTick] = useState('');
+    const [reqMemo, setReqMemo] = useState('');
+    const [reqExpiryMinutes, setReqExpiryMinutes] = useState('');
+    const [reqQrDataUrl, setReqQrDataUrl] = useState(/** @type {string | null} */ (null));
+    const [shareStatus, setShareStatus] = useState(/** @type {string | null} */ (null));
+
+    const requestUri = useMemo(() => {
+        if (!address || !descriptor) return null;
+        const params = {};
+        if (reqTick.trim()) params.tick = reqTick.trim().toUpperCase();
+        if (reqExpiryMinutes.trim()) {
+            const minutes = parseInt(reqExpiryMinutes.trim(), 10);
+            if (Number.isFinite(minutes) && minutes > 0) {
+                const expiresAt = new Date(Date.now() + minutes * 60_000).toISOString();
+                params.expiry = expiresAt;
+            }
+        }
+        return uriLib.encodeBip21Uri({
+            scheme: descriptor.uriScheme,
+            address: address.address,
+            amount: reqAmount.trim() || undefined,
+            message: reqMemo.trim() || undefined,
+            params,
+        });
+    }, [address, descriptor, reqAmount, reqTick, reqMemo, reqExpiryMinutes]);
+
+    useEffect(() => {
+        if (!reqOpen || !requestUri) {
+            setReqQrDataUrl(null);
+            return undefined;
+        }
+        let cancelled = false;
+        QRCode.toDataURL(requestUri, {
+            errorCorrectionLevel: 'M',
+            margin: 2,
+            width: 200,
+            color: { dark: '#0F172A', light: '#FFFFFF' },
+        })
+            .then((dataUrl) => { if (!cancelled) setReqQrDataUrl(dataUrl); })
+            .catch(() => { if (!cancelled) setReqQrDataUrl(null); });
+        return () => { cancelled = true; };
+    }, [reqOpen, requestUri]);
+
+    // §29.7 Share button. Uses Web Share API when available; falls
+    // back to clipboard. Surfaces inline status (no toast system in
+    // core yet — §37.2 adds the host).
+    const onShare = useCallback(async (uri) => {
+        if (!uri) return;
+        setShareStatus(null);
+        if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+            try {
+                await navigator.share({
+                    title: 'Payment request',
+                    text: `Pay ${reqAmount.trim() || ''} ${reqTick.trim() || (descriptor?.coin?.toUpperCase() || '')}`.trim(),
+                    url: uri,
+                });
+                setShareStatus('Shared.');
+                return;
+            } catch (err) {
+                // User cancelled or share failed; fall through to clipboard.
+            }
+        }
+        try {
+            if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+                await navigator.clipboard.writeText(uri);
+                setShareStatus('Copied to clipboard.');
+                return;
+            }
+        } catch {
+            // ignore — surfaced via fallback message
+        }
+        setShareStatus('Share unavailable — copy the link manually.');
+    }, [reqAmount, reqTick, descriptor]);
+
     const header = (
         <div className={styles.header}>
             <button
@@ -296,9 +375,101 @@ export function Receive({ walletId, accountId, onBack }) {
                 <div className={styles.addressBox}>
                     <AddressText address={address.address} truncate={false} size="sm" />
                     <CopyButton value={address.address} />
+                    <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => onShare(uriLib.encodeBip21Uri({
+                            scheme: descriptor?.uriScheme || 'bitcoin',
+                            address: address.address,
+                        }))}
+                        disabled={!descriptor}
+                    >
+                        Share
+                    </Button>
                 </div>
             ) : !loadError ? (
                 <p className={styles.hint}>Loading address…</p>
+            ) : null}
+
+            {address ? (
+                <section className={styles.requestPanel}>
+                    <button
+                        type="button"
+                        className={styles.requestToggle}
+                        onClick={() => setReqOpen((o) => !o)}
+                        aria-expanded={reqOpen}
+                    >
+                        {reqOpen ? '− Request payment' : '+ Request payment'}
+                    </button>
+                    {reqOpen ? (
+                        <div className={styles.requestForm}>
+                            <Input
+                                label={`Amount (${descriptor?.coin?.toUpperCase() || 'coin'})`}
+                                inputMode="decimal"
+                                value={reqAmount}
+                                onChange={(e) => setReqAmount(e.target.value)}
+                                placeholder="0.001"
+                                autoComplete="off"
+                            />
+                            <Input
+                                label="Asset ticker"
+                                hint={`Defaults to ${descriptor?.coin?.toUpperCase() || 'native coin'}.`}
+                                value={reqTick}
+                                onChange={(e) => setReqTick(e.target.value)}
+                                placeholder={descriptor?.coin?.toUpperCase() || ''}
+                                autoComplete="off"
+                                autoCapitalize="characters"
+                            />
+                            <Input
+                                label="Memo (optional)"
+                                value={reqMemo}
+                                onChange={(e) => setReqMemo(e.target.value)}
+                                autoComplete="off"
+                            />
+                            <Input
+                                label="Expiry (minutes, optional)"
+                                inputMode="numeric"
+                                value={reqExpiryMinutes}
+                                onChange={(e) => setReqExpiryMinutes(e.target.value)}
+                                hint="Adds an `expiry` ISO timestamp to the URI."
+                                autoComplete="off"
+                            />
+                            {requestUri ? (
+                                <>
+                                    {reqQrDataUrl ? (
+                                        <div className={styles.qrBox}>
+                                            <img
+                                                src={reqQrDataUrl}
+                                                alt="Payment request QR"
+                                                width={200}
+                                                height={200}
+                                                className={styles.qr}
+                                            />
+                                        </div>
+                                    ) : (
+                                        <div className={styles.qrBox} aria-hidden="true">
+                                            <div className={styles.qrPlaceholder}>Rendering QR…</div>
+                                        </div>
+                                    )}
+                                    <code className={styles.requestUri}>{requestUri}</code>
+                                    <div className={styles.requestActions}>
+                                        <CopyButton value={requestUri} />
+                                        <Button
+                                            variant="secondary"
+                                            size="sm"
+                                            onClick={() => onShare(requestUri)}
+                                        >
+                                            Share
+                                        </Button>
+                                    </div>
+                                </>
+                            ) : null}
+                            {shareStatus ? (
+                                <p className={styles.hint} role="status">{shareStatus}</p>
+                            ) : null}
+                        </div>
+                    ) : null}
+                </section>
             ) : null}
 
             {multisigs.map((multisig) => (
