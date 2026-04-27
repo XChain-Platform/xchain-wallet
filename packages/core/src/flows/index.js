@@ -47,6 +47,7 @@ export { checkRecipientNovelty } from './recipientNovelty.js';
 export {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
+    fetchNativeSendFeeTiers,
     customFeeEstimate,
     perByteRateToDisplay,
     displayRateToPerByte,

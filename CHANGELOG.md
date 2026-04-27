@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.141.0] - 2026-04-27
+
+§44 Fee UX — Step 4 of 5 — SDK-backed fee fetch with placeholder fallback.
+
+The fee tiers feeding the FeeSelector + the §21.2 simulator's fee row + the §29.2 Max button now probe the shell's messaging layer for an SDK-backed `estimateFee` method before falling back to the static placeholder table. The first shell that registers `estimateFee` (the §44 SDK + encoder work) starts feeding live rates; until then, callers see exactly the same placeholder values they got at v0.138.0–0.140.0. The "(placeholder rate)" badge on the FeeSelector flips off automatically when the source is live.
+
+### Added
+
+- **`fetchNativeSendFeeTiers({ messaging, chainId, chainRegistry })`** in `flows/feeEstimate.js` — async; probes `messaging.estimateFee({ chainId })` and shapes the response into the same `{ low, normal, fast, unit }` contract the sync helper already returned. Per-tier `source` is `'sdk'` when the SDK responded with a finite rate; `'static-placeholder'` otherwise. Partial SDK responses fall back per missing tier (so a SDK that only knows "normal" still upgrades that single tier without zeroing out low/fast).
+- **`test/smoke/core/fee-fetch.smoke.js`** — every branch: no messaging, messaging without `estimateFee`, SDK returns full live tiers (per-tier source / confidence / sats / etaMinutes / rateValue), SDK throws (silent fallback), SDK returns null, partial response (mixed sources), DOGE live unit semantics (per-byte koinu in, DOGE/kB rateValue out), unknown chain returns null.
+
+### Changed
+
+- **`Send.jsx`** — replaces the synchronous `feeTiers = useMemo(estimateNativeSendFeeTiers)` with `[feeTiers, setFeeTiers] = useState` + an effect that:
+  1. seeds with the synchronous placeholder so the form stays responsive on first paint
+  2. fires `fetchNativeSendFeeTiers` and upgrades to SDK-sourced tiers when the response lands
+  The `feeEstimate` memo prefers `feeTiers[feePick.mode]` (which inherits the SDK source) and falls back to the sync placeholder only while the async fetch hasn't populated.
+- **`test/smoke/ui/send-fee-selector.smoke.js`** — asserts the new state shape, the sync seed, the async fetcher invocation, and the live-tier preference in the `feeEstimate` memo.
+
+### Behavior preserved
+
+- Shells without `messaging.estimateFee` (which is all of them today) see byte-for-byte the same fee values as v0.140.0. The fallback path is the same `estimateNativeSendFeeTiers` invocation that lived in the memo.
+- The placeholder badge on the FeeSelector reads `feeEstimate?.source === 'static-placeholder'`. When the SDK lights up live tiers, the badge silently disappears with no further wallet-side change required.
+- Custom-mode behavior is unchanged — Custom rates always run through `customFeeEstimate` with `source: 'user'`.
+
 ## [0.140.0] - 2026-04-26
 
 §44 Fee UX — Step 3 of 5 — DOGE per-kB unit semantics in Custom-mode input.

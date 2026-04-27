@@ -213,6 +213,72 @@ export function displayRateToPerByte(unit, displayValue) {
     return displayValue;
 }
 
+/**
+ * Async variant: probe the shell's messaging layer for a real fee
+ * source before falling back to the placeholder table. The first
+ * shell that registers `estimateFee` (the §44 SDK / encoder work)
+ * starts feeding the FeeSelector + simulator with live rates; until
+ * then, callers see exactly the same `static-placeholder`-flagged
+ * values as the sync `estimateNativeSendFee`.
+ *
+ * SDK contract (when it lands):
+ *   `messaging.estimateFee({ chainId })` → `{ low, normal, fast, unit, sourceLabel? }`
+ *   where each tier is `{ rate, etaMinutes? }` in the chain's
+ *   per-byte unit (sat/vB / koinu/byte). The flow shapes this into
+ *   the same `FeeEstimate` callers already consume.
+ *
+ * @param {object} opts
+ * @param {{ estimateFee?: (req: { chainId: string }) => Promise<{ low?: { rate: number, etaMinutes?: number }, normal?: { rate: number, etaMinutes?: number }, fast?: { rate: number, etaMinutes?: number }, unit?: string } | null> }} [opts.messaging]
+ * @param {string} opts.chainId
+ * @param {{ get: (id: string) => any }} opts.chainRegistry
+ * @returns {Promise<{ low: FeeEstimate, normal: FeeEstimate, fast: FeeEstimate, unit: string } | null>}
+ */
+export async function fetchNativeSendFeeTiers({ messaging, chainId, chainRegistry } = {}) {
+    if (typeof chainId !== 'string' || !chainRegistry) return null;
+    const desc = chainRegistry.get(chainId);
+    const coin = desc?.coin;
+    if (!coin) return null;
+    const table = PLACEHOLDER_FEE_TIERS[coin];
+    if (!table) return null;
+
+    if (messaging && typeof messaging.estimateFee === 'function') {
+        try {
+            const sdk = await messaging.estimateFee({ chainId });
+            if (sdk && typeof sdk === 'object') {
+                const unit = typeof sdk.unit === 'string' ? sdk.unit : table.unit;
+                return {
+                    low: shapeSdkTier({ table, sdk: sdk.low, unit, fallback: table.tiers.low, speed: 'low' }),
+                    normal: shapeSdkTier({ table, sdk: sdk.normal, unit, fallback: table.tiers.normal, speed: 'normal' }),
+                    fast: shapeSdkTier({ table, sdk: sdk.fast, unit, fallback: table.tiers.fast, speed: 'fast' }),
+                    unit,
+                };
+            }
+        } catch {
+            // SDK refused / errored — silently fall through to the placeholder.
+        }
+    }
+
+    return estimateNativeSendFeeTiers({ chainId, chainRegistry });
+}
+
+function shapeSdkTier({ table, sdk, unit, fallback, speed }) {
+    const live = sdk && typeof sdk === 'object' && Number.isFinite(sdk.rate);
+    const ratePerByte = live ? sdk.rate : fallback.rate;
+    const sats = computeSats(table, ratePerByte);
+    return {
+        sats,
+        coinAmount: satsToCoinDecimal(sats),
+        source: live ? 'sdk' : 'static-placeholder',
+        confidence: live ? 'high' : 'low',
+        rate: formatRate(unit, ratePerByte),
+        unit,
+        rateValue: perByteRateToDisplay(unit, ratePerByte),
+        vsize: table.txSize,
+        speed,
+        etaMinutes: live && Number.isFinite(sdk.etaMinutes) ? sdk.etaMinutes : fallback.etaMinutes,
+    };
+}
+
 function computeSats(table, ratePerByte) {
     return Math.ceil(ratePerByte * table.txSize);
 }

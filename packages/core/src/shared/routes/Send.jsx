@@ -23,6 +23,7 @@ import { checkRecipientNovelty } from '../../flows/recipientNovelty.js';
 import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
+    fetchNativeSendFeeTiers,
     customFeeEstimate,
 } from '../../flows/feeEstimate.js';
 import { getFiatRate, coinToFiat, fiatToCoin } from '../../flows/priceLookup.js';
@@ -469,10 +470,26 @@ export function Send({ walletId, onBack }) {
         }
     }, [chainId, settings]);
 
-    const feeTiers = useMemo(() => {
-        if (!chainId) return null;
-        return estimateNativeSendFeeTiers({ chainId, chainRegistry });
-    }, [chainId]);
+    // Step 4 of §44 — async fetcher probes the shell's messaging
+    // layer for an SDK-backed `estimateFee` method; falls back to the
+    // synchronous placeholder when the method isn't registered. The
+    // sync helper still backs the initial render so the form stays
+    // responsive on first paint; the effect upgrades to live tiers
+    // when the SDK responds.
+    const [feeTiers, setFeeTiers] = useState(/** @type {any} */ (null));
+    useEffect(() => {
+        if (!chainId) {
+            setFeeTiers(null);
+            return undefined;
+        }
+        // Synchronous initial seed.
+        setFeeTiers(estimateNativeSendFeeTiers({ chainId, chainRegistry }));
+        let cancelled = false;
+        fetchNativeSendFeeTiers({ messaging, chainId, chainRegistry })
+            .then((tiers) => { if (!cancelled && tiers) setFeeTiers(tiers); })
+            .catch(() => { /* keep the placeholder seed */ });
+        return () => { cancelled = true; };
+    }, [chainId, messaging]);
 
     const feeEstimate = useMemo(() => {
         if (!chainId) return null;
@@ -483,8 +500,13 @@ export function Send({ walletId, onBack }) {
                 rate: Number(feePick.customRate) || 0,
             });
         }
+        // Prefer the live tier (SDK-sourced when available); fall back
+        // to the synchronous placeholder if the async fetch hasn't
+        // populated yet.
+        const liveTier = feeTiers ? feeTiers[feePick.mode] : null;
+        if (liveTier) return liveTier;
         return estimateNativeSendFee({ chainId, chainRegistry, speed: feePick.mode });
-    }, [chainId, feePick]);
+    }, [chainId, feePick, feeTiers]);
 
     const previewResult = useMemo(() => {
         if (stage !== 'review' && stage !== 'submitting') return null;

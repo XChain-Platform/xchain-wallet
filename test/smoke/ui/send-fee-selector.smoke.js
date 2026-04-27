@@ -29,10 +29,15 @@ assert.match(sendSrc, /feePick/, 'feePick state slot');
 assert.match(sendSrc, /setFeePick/, 'feePick setter');
 assert.match(sendSrc, /mode: 'normal'/, 'default mode is normal');
 
-// --- tier + selected estimate memos -----------------------------------
+// --- tier state + async fetch (Step 4) ---------------------------------
 
-assert.match(sendSrc, /feeTiers = useMemo/, 'tier memo');
-assert.match(sendSrc, /estimateNativeSendFeeTiers\(/, 'tier helper invoked');
+assert.match(sendSrc, /\[feeTiers, setFeeTiers\] = useState/, 'tier state slot');
+assert.match(sendSrc, /estimateNativeSendFeeTiers\(/, 'sync seed for first paint');
+assert.match(
+    sendSrc,
+    /fetchNativeSendFeeTiers\(\{[\s\S]*messaging,[\s\S]*chainId,/,
+    'async fetcher upgrades to SDK source when available',
+);
 
 assert.match(sendSrc, /feeEstimate = useMemo/, 'selected estimate memo');
 assert.match(
@@ -48,7 +53,12 @@ assert.match(
 assert.match(
     sendSrc,
     /estimateNativeSendFee\(\{[\s\S]*speed:\s*feePick\.mode/,
-    'tier branch passes selected speed',
+    'tier branch falls back to sync placeholder while async tiers load',
+);
+assert.match(
+    sendSrc,
+    /const liveTier = feeTiers \? feeTiers\[feePick\.mode\] : null/,
+    'tier branch prefers SDK-sourced live tier when available',
 );
 
 // --- selector renders in the form -------------------------------------
