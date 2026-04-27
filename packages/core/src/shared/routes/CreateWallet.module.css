@@ -93,6 +93,46 @@
     margin-top: var(--xc-space-5);
 }
 
+.wordCountRow {
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-md);
+    padding: var(--xc-space-2) var(--xc-space-3);
+    margin: var(--xc-space-3) 0 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+}
+
+.wordCountLegend {
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    padding: 0 var(--xc-space-1);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.wordCountOption {
+    display: flex;
+    align-items: baseline;
+    gap: var(--xc-space-2);
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text);
+    cursor: pointer;
+}
+
+.wordCountOption input[type="radio"] {
+    margin: 0;
+}
+
+.wordCountLabel {
+    font-weight: 500;
+}
+
+.wordCountHint {
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+}
+
 .error {
     font-size: var(--xc-text-sm);
     color: #FFFFFF;

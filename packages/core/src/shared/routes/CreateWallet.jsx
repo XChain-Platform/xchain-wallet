@@ -42,6 +42,8 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
     const [name, setName] = useState('Main Wallet');
     const [password, setPassword] = useState('');
     const [confirm, setConfirm] = useState('');
+    // §15.1 — 12-word default, 24-word opt-in. 12 → 128-bit entropy, 24 → 256-bit.
+    const [wordCount, setWordCount] = useState(/** @type {12 | 24} */ (12));
     const [passwordError, setPasswordError] = useState(
         /** @type {string | null} */ (null),
     );
@@ -94,7 +96,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
             return;
         }
         setPasswordError(null);
-        setMnemonic(cryptoLib.generateBip39Mnemonic(128));
+        setMnemonic(cryptoLib.generateBip39Mnemonic(wordCount === 24 ? 256 : 128));
         setStage('mnemonic');
     }
 
@@ -231,8 +233,8 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                     </h1>
                     <p className={subtitleClass}>
                         {isFull
-                            ? 'These twelve words are the ONLY way to recover your wallet if you lose access to this device. Write them down on paper and store them somewhere safe — never type them into a website, email, or photo.'
-                            : "Write these 12 words down and store them somewhere safe. They're the only way to recover your wallet."}
+                            ? `These ${wordCount === 24 ? 'twenty-four' : 'twelve'} words are the ONLY way to recover your wallet if you lose access to this device. Write them down on paper and store them somewhere safe — never type them into a website, email, or photo.`
+                            : `Write these ${wordCount} words down and store them somewhere safe. They're the only way to recover your wallet.`}
                     </p>
                 </header>
                 <MnemonicGrid mnemonic={mnemonic || ''} variant={variant} />
@@ -336,6 +338,31 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                 autoComplete="new-password"
                 error={passwordError || undefined}
             />
+            <fieldset className={styles.wordCountRow}>
+                <legend className={styles.wordCountLegend}>Recovery phrase length</legend>
+                <label className={styles.wordCountOption}>
+                    <input
+                        type="radio"
+                        name="word-count"
+                        value="12"
+                        checked={wordCount === 12}
+                        onChange={() => setWordCount(12)}
+                    />
+                    <span className={styles.wordCountLabel}>12 words</span>
+                    <span className={styles.wordCountHint}>Default — 128-bit entropy</span>
+                </label>
+                <label className={styles.wordCountOption}>
+                    <input
+                        type="radio"
+                        name="word-count"
+                        value="24"
+                        checked={wordCount === 24}
+                        onChange={() => setWordCount(24)}
+                    />
+                    <span className={styles.wordCountLabel}>24 words</span>
+                    <span className={styles.wordCountHint}>256-bit entropy</span>
+                </label>
+            </fieldset>
             <div className={actionsClass}>
                 <Button
                     type="submit"

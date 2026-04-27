@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.171.0] - 2026-04-27
+
+§15.1 — Cluster H Step 1 — 12 vs 24-word selector in CreateWallet.
+
+CreateWallet password stage now exposes a "Recovery phrase length" radio group (12 words / 24 words). The selection threads into `cryptoLib.generateBip39Mnemonic(strength)` (128-bit vs 256-bit entropy) and the recovery-phrase display copy reflects the chosen count.
+
+### Added
+
+- **`packages/core/src/shared/routes/CreateWallet.jsx`** — `wordCount` state (12 default), radio fieldset before submit, dynamic copy on the mnemonic display screen.
+- **`packages/core/src/shared/routes/CreateWallet.module.css`** — `.wordCountRow` / `.wordCountLegend` / `.wordCountOption` / `.wordCountLabel` / `.wordCountHint` styles.
+
+Closes G018.
+
 ## [0.170.0] - 2026-04-27
 
 §49.3/§49.5 — Step 2 of Cluster G — StalenessLabel (G155) + QueuedBroadcastBanner (G154 partial); Cluster G closed.
