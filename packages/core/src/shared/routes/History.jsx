@@ -11,6 +11,7 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { EmptyStateNudge } from '../components/EmptyStateNudge.jsx';
 import { useToast } from '../components/ToastHost.jsx';
 import { groupHistoryEntries } from '../utils/historyGrouping.js';
+import { TxStatusTimeline } from '../components/TxStatusTimeline.jsx';
 import {
     applyHistoryFilters,
     ACTION_TYPE_OPTIONS,
@@ -683,6 +684,7 @@ function DetailCard({ entry, peerCache }) {
                 <span className={styles.detailSideTitle}>
                     This side · {entry.action} #{entry.actionIndex}
                 </span>
+                <TxStatusTimeline entry={entry} />
                 <pre className={styles.detailDecoded}>
                     {decodeActionToText(entry.raw)}
                 </pre>

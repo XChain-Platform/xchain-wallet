@@ -1,0 +1,72 @@
+.timeline {
+    list-style: none;
+    margin: 0 0 var(--xc-space-3);
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.row {
+    position: relative;
+    display: grid;
+    grid-template-columns: 24px 1fr;
+    gap: var(--xc-space-2);
+    padding: var(--xc-space-1) 0;
+    align-items: start;
+}
+
+.dot {
+    grid-column: 1;
+    grid-row: 1;
+    width: 18px;
+    height: 18px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    line-height: 1;
+    color: var(--xc-text-muted);
+    background: var(--xc-surface);
+    border-radius: 50%;
+    z-index: 1;
+}
+
+.rowDone .dot {
+    color: var(--xc-success, #10B981);
+}
+
+.spine {
+    grid-column: 1;
+    position: absolute;
+    left: 8px;
+    top: 22px;
+    bottom: -8px;
+    width: 2px;
+    background: var(--xc-border);
+}
+
+.spineDone {
+    background: var(--xc-success, #10B981);
+}
+
+.body {
+    grid-column: 2;
+    min-width: 0;
+}
+
+.label {
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    color: var(--xc-text);
+}
+
+.rowPending .label {
+    color: var(--xc-text-muted);
+    font-weight: 500;
+}
+
+.sub {
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    line-height: 1.3;
+}

@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.181.0] - 2026-04-27
+
+§28.3 — Cluster I Step 4 — Transaction status timeline (G079).
+
+History `<DetailCard>` now renders a vertical `<TxStatusTimeline>` above the decoded ACTION block. Three stages — Broadcast / Mempool / Confirmed — derived from the explorer fields each entry already carries (`txHash`, `blockIndex`, `timestamp`). Stages flip done / pending based on those values; confirmed rows show the block number + a localized timestamp. Future Signed / Indexed stages are queued as a Cluster I FOLLOWUP (require pendingTx tracking + indexer-sync watermark exposure respectively).
+
+### Added
+
+- **`packages/core/src/shared/components/TxStatusTimeline.jsx` + `.module.css`** (new) — derives stage state from entry fields; renders a dot + spine + label/sub copy per stage; reduces to short txid display.
+- **`packages/core/src/shared/routes/History.jsx`** — imports `TxStatusTimeline`; renders it inside `DetailCard.detailSide` above the decoded ACTION pre block.
+
+Closes G079.
+
 ## [0.180.0] - 2026-04-27
 
 §27.5 — Cluster I Step 3 — Collectibles grid view (G074).
