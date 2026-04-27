@@ -28,6 +28,7 @@ import { RenameWalletForm } from '@xchain-wallet/core/shared/routes/RenameWallet
 import { Locked } from '@xchain-wallet/core/shared/routes/Locked.jsx';
 import { Home } from '@xchain-wallet/core/shared/routes/Home.jsx';
 import { TokenDetail } from '@xchain-wallet/core/shared/routes/TokenDetail.jsx';
+import { ToastHost } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
 import { Receive } from '@xchain-wallet/core/shared/routes/Receive.jsx';
 import { Send } from '@xchain-wallet/core/shared/routes/Send.jsx';
 import { TokenWizard } from '@xchain-wallet/core/shared/routes/TokenWizard.jsx';
@@ -83,7 +84,9 @@ import { getSessionStatus, listWallets, listAccounts } from './messaging.js';
 export function App() {
     return (
         <MessagingProvider shell="popup" messaging={messaging}>
-            <AppInner />
+            <ToastHost>
+                <AppInner />
+            </ToastHost>
         </MessagingProvider>
     );
 }

@@ -9,6 +9,7 @@ import {
 } from '../../flows/rbfReplace.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { EmptyStateNudge } from '../components/EmptyStateNudge.jsx';
+import { useToast } from '../components/ToastHost.jsx';
 import { groupHistoryEntries } from '../utils/historyGrouping.js';
 import {
     applyHistoryFilters,
@@ -70,6 +71,7 @@ export function History({ walletId, accountId, onBack, onReceive, initialSearchQ
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
+    const { showToast } = useToast();
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -278,11 +280,34 @@ export function History({ walletId, accountId, onBack, onReceive, initialSearchQ
     };
 
     const clearAllFilters = () => {
+        // Snapshot the active filter set so the §37.2 Undo toast can
+        // restore exactly what the user had before pressing Clear.
+        const snapshot = {
+            searchQuery,
+            actionTypeFilter: new Set(actionTypeFilter),
+            statusFilter: new Set(statusFilter),
+            dateFrom,
+            dateTo,
+        };
+        const hadAny = Boolean(filtersActive);
         setSearchQuery('');
         setActionTypeFilter(new Set());
         setStatusFilter(new Set());
         setDateFrom('');
         setDateTo('');
+        if (hadAny) {
+            showToast({
+                message: 'Filter cleared',
+                actionLabel: 'Undo',
+                onAction: () => {
+                    setSearchQuery(snapshot.searchQuery);
+                    setActionTypeFilter(snapshot.actionTypeFilter);
+                    setStatusFilter(snapshot.statusFilter);
+                    setDateFrom(snapshot.dateFrom);
+                    setDateTo(snapshot.dateTo);
+                },
+            });
+        }
     };
 
     // For drawing the vertical connector: an entry is "threaded with

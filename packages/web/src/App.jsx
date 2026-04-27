@@ -32,6 +32,7 @@ import { RenameWalletForm } from '@xchain-wallet/core/shared/routes/RenameWallet
 import { Locked } from '@xchain-wallet/core/shared/routes/Locked.jsx';
 import { Home } from '@xchain-wallet/core/shared/routes/Home.jsx';
 import { TokenDetail } from '@xchain-wallet/core/shared/routes/TokenDetail.jsx';
+import { ToastHost } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
 import { Send } from '@xchain-wallet/core/shared/routes/Send.jsx';
 import { Receive } from '@xchain-wallet/core/shared/routes/Receive.jsx';
 import { TokenWizard } from '@xchain-wallet/core/shared/routes/TokenWizard.jsx';
@@ -106,8 +107,10 @@ export function App() {
         <div className={wrapper.page}>
             <div className={wrapper.frame}>
                 <MessagingProvider shell={shell} messaging={messaging}>
-                    <ExtensionBanner />
-                    <AppInner />
+                    <ToastHost>
+                        <ExtensionBanner />
+                        <AppInner />
+                    </ToastHost>
                 </MessagingProvider>
             </div>
             <DevVariantBadge state={variantState} />

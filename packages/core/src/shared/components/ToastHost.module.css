@@ -1,0 +1,108 @@
+/* §37.2 toast viewport. The host pins to the bottom-center of the
+ * screen as a stack of cards; each toast slides in from the bottom
+ * with a subtle fade. Animation collapses to an instantaneous swap
+ * when the user prefers reduced motion.
+ *
+ * The viewport is `pointer-events: none` so it doesn't trap clicks
+ * across the rest of the page; individual toasts re-enable pointer
+ * events so their Undo / Dismiss buttons stay clickable.
+ */
+.viewport {
+    position: fixed;
+    bottom: var(--xc-space-4);
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--xc-space-2);
+    z-index: 9999;
+    pointer-events: none;
+    width: min(28rem, calc(100vw - 2 * var(--xc-space-4)));
+}
+
+.toast {
+    pointer-events: auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--xc-space-2);
+    padding: var(--xc-space-2) var(--xc-space-3);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-md);
+    background: var(--xc-surface-raised);
+    color: var(--xc-text);
+    font-size: var(--xc-text-sm);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+    animation: toast-in 160ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .toast { animation: none; }
+}
+
+@keyframes toast-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.variant_success {
+    border-color: var(--xc-success, #2c7a3d);
+}
+.variant_error {
+    border-color: var(--xc-error, #b00);
+}
+
+.message {
+    flex: 1 1 auto;
+    min-width: 0;
+    word-break: break-word;
+}
+
+.controls {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+    flex: 0 0 auto;
+}
+
+.actionBtn {
+    background: transparent;
+    border: none;
+    color: var(--xc-accent-primary);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: var(--xc-text-xs);
+    cursor: pointer;
+    padding: var(--xc-space-1) var(--xc-space-2);
+    border-radius: var(--xc-radius-sm);
+    font-family: inherit;
+}
+.actionBtn:hover {
+    background: var(--xc-bg-muted);
+}
+.actionBtn:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
+.dismissBtn {
+    background: transparent;
+    border: none;
+    color: var(--xc-text-muted);
+    cursor: pointer;
+    font-size: var(--xc-text-lg);
+    line-height: 1;
+    padding: 0 var(--xc-space-1);
+    border-radius: var(--xc-radius-sm);
+    font-family: inherit;
+}
+.dismissBtn:hover {
+    color: var(--xc-text);
+    background: var(--xc-bg-muted);
+}
+.dismissBtn:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}

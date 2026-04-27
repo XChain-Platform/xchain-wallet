@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.161.0] - 2026-04-27
+
+§37.2 — Step 1 of Cluster D — Toast foundation + first undo integrations (G119).
+
+A new shared `<ToastHost>` provider mounts above every route in both shells; any component can drop a transient toast via `useToast().showToast({ message, actionLabel, onAction, durationMs })`. Toasts auto-dismiss after 8 s per spec, are keyboard-dismissible, and respect `prefers-reduced-motion` (animation collapses to an instant swap). Two destructive actions wire the first undo paths: deleting a contact (re-saves the snapshotted record) and clearing the History filter set (restores every filter axis).
+
+Remaining §37.2 integrations from the spec — disconnect site, remove imported WIF address, cancel pending tx — slot into the same `useToast` API as those surfaces gain delete affordances; tracked in FOLLOWUPS.
+
+### Added
+
+- **`shared/components/ToastHost.jsx` + `ToastHost.module.css`** (new) — provider + viewport + `useToast` hook; pointer-events-none viewport so the toast layer never traps clicks.
+- **`test/smoke/ui/toast-host.smoke.js`** — host API surface, reduced-motion guard, ContactsList + History integrations, both shells' wrapping.
+
+### Changed
+
+- **`shared/routes/ContactsList.jsx`** — `handleDelete` snapshots the contact before deleting; on success shows an Undo toast that calls `messaging.saveContact({ record })` to restore.
+- **`shared/routes/History.jsx`** — `clearAllFilters` snapshots the active filter set; if anything was set, shows an Undo toast that restores searchQuery / actionTypeFilter / statusFilter / dateFrom / dateTo verbatim.
+- **`packages/web/src/App.jsx` + `packages/extension/src/popup/App.jsx`** — wrap their unlocked tree in `<ToastHost>` so every route has access to the hook.
+
+Closes G119. Smoke baseline preserved (24 / 162; new toast-host smoke passes).
+
 ## [0.160.0] - 2026-04-27
 
 §27.6 — Step 6 of Cluster C — Token detail page (G071); Cluster C closed.

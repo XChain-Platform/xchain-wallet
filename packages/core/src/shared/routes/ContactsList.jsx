@@ -8,6 +8,7 @@ import {
  Icon,} from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useToast } from '../components/ToastHost.jsx';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -32,6 +33,7 @@ export function ContactsList({ walletId, onSendMessage, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
+    const { showToast } = useToast();
 
     const [contacts, setContacts] = useState(/** @type {any[] | null} */ (null));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
@@ -118,11 +120,31 @@ export function ContactsList({ walletId, onSendMessage, onBack }) {
 
     async function handleDelete(id) {
         if (!confirm('Delete this contact?')) return;
+        // Snapshot the full record before deletion so the §37.2 Undo
+        // toast can re-create it via saveContact. We freeze the
+        // displayed name here so the toast text doesn't change if the
+        // user quickly creates another contact with the same id.
+        const snapshot = contacts ? contacts.find((c) => c.id === id) : null;
+        const displayName = snapshot?.name || 'Contact';
         try {
             await messaging.deleteContact({ id });
             setActiveId(null);
             setMode('list');
             await loadContacts();
+            if (snapshot) {
+                showToast({
+                    message: `${displayName} deleted`,
+                    actionLabel: 'Undo',
+                    onAction: async () => {
+                        try {
+                            await messaging.saveContact({ record: snapshot });
+                            await loadContacts();
+                        } catch (err) {
+                            setLoadError(err?.message || 'Restore failed.');
+                        }
+                    },
+                });
+            }
         } catch (err) {
             setLoadError(err?.message || 'Delete failed.');
         }
