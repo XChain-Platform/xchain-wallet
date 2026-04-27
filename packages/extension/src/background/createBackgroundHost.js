@@ -683,6 +683,50 @@ export function createBackgroundHost(deps) {
         });
     });
 
+    // §49.5 / G154 — queued broadcast surface. v0.170.0 ships only the
+    // UI plumbing + a per-walletId in-memory queue; auto-enqueue from
+    // offline broadcasts is tracked as a Cluster G FOLLOWUP. The store
+    // intentionally lives in the background process's memory rather
+    // than in the vault — the queue is ephemeral by design and the
+    // schema impact would be cross-cutting; persistence comes with the
+    // FOLLOWUP that actually wires Send / action paths to enqueue.
+    /** @type {Map<string, Array<{ id: string, chainId: string, signedTxHex: string, summary: string, signedAt: number }>>} */
+    const queuedBroadcasts = new Map();
+    function getQueue(walletId) {
+        if (typeof walletId !== 'string' || !walletId) {
+            throw new Error('broadcast.queue: walletId is required');
+        }
+        let q = queuedBroadcasts.get(walletId);
+        if (!q) {
+            q = [];
+            queuedBroadcasts.set(walletId, q);
+        }
+        return q;
+    }
+    host.register('broadcast.queue.list', async (req) => {
+        return [...getQueue(req?.walletId)];
+    });
+    host.register('broadcast.queue.broadcast', async (req, { sdkRegistry }) => {
+        const q = getQueue(req?.walletId);
+        const id = req?.id;
+        const idx = q.findIndex((entry) => entry.id === id);
+        if (idx < 0) throw new Error(`broadcast.queue: no queued entry "${id}"`);
+        const entry = q[idx];
+        const sdk = sdkRegistry.get(entry.chainId);
+        if (typeof sdk?.wallet?.broadcastTx !== 'function') {
+            throw new Error(`broadcast.queue: SDK for "${entry.chainId}" lacks wallet.broadcastTx`);
+        }
+        const result = await sdk.wallet.broadcastTx(entry.signedTxHex);
+        q.splice(idx, 1);
+        return result;
+    });
+    host.register('broadcast.queue.discard', async (req) => {
+        const q = getQueue(req?.walletId);
+        const idx = q.findIndex((entry) => entry.id === req?.id);
+        if (idx >= 0) q.splice(idx, 1);
+        return { discarded: idx >= 0 };
+    });
+
     // §49.1 / G153 — reachability probe across the supplied chains.
     // Read-only across SDK ping endpoints; no vault access required.
     host.register('reachability.check', async (req, { sdkRegistry }) => {

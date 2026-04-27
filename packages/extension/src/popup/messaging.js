@@ -248,6 +248,38 @@ export function verifyMessageRequest(opts) {
 }
 
 /**
+ * §49.5 / G154 — list signed transactions queued for broadcast on this
+ * wallet. UI surface ships at v0.170.0; auto-enqueue from offline
+ * broadcasts is tracked as a Cluster G FOLLOWUP, so the list is empty
+ * in v1 unless something explicitly enqueues.
+ *
+ * @param {{ walletId: string }} opts
+ * @returns {Promise<Array<{ id: string, chainId: string, signedTxHex: string, summary: string, signedAt: number }>>}
+ */
+export function listQueuedBroadcasts(opts) {
+    return /** @type {any} */ (sendMessage('broadcast.queue.list', opts));
+}
+
+/**
+ * §49.5 / G154 — broadcast a queued signed transaction. Caller is the
+ * QueuedBroadcastBanner action button.
+ *
+ * @param {{ walletId: string, id: string }} opts
+ */
+export function broadcastQueuedRequest(opts) {
+    return /** @type {any} */ (sendMessage('broadcast.queue.broadcast', opts));
+}
+
+/**
+ * §49.5 / G154 — discard a queued signed transaction without broadcast.
+ *
+ * @param {{ walletId: string, id: string }} opts
+ */
+export function discardQueuedRequest(opts) {
+    return /** @type {any} */ (sendMessage('broadcast.queue.discard', opts));
+}
+
+/**
  * §49.1 / G153 — reachability probe across the supplied chains.
  * Returns `{ overall, perChain }`. Polled by the React `useReachability`
  * hook to drive the offline / degraded banner.

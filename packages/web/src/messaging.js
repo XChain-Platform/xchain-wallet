@@ -169,6 +169,23 @@ export function verifyMessageRequest(opts) {
 }
 
 /**
+ * §49.5 / G154 — queued broadcast list / broadcast / discard.
+ *
+ * @param {{ walletId: string }} opts
+ */
+export function listQueuedBroadcasts(opts) {
+    return /** @type {any} */ (sendMessage('broadcast.queue.list', opts));
+}
+/** @param {{ walletId: string, id: string }} opts */
+export function broadcastQueuedRequest(opts) {
+    return /** @type {any} */ (sendMessage('broadcast.queue.broadcast', opts));
+}
+/** @param {{ walletId: string, id: string }} opts */
+export function discardQueuedRequest(opts) {
+    return /** @type {any} */ (sendMessage('broadcast.queue.discard', opts));
+}
+
+/**
  * §49.1 / G153 — reachability probe across the supplied chains.
  *
  * @param {{ chainIds: string[], timeoutMs?: number }} opts

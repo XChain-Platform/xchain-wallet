@@ -1,0 +1,13 @@
+/* §49.3 — Staleness label. Inline by default; callers can pass a
+   className to lift it into a layout slot.
+*/
+
+.label {
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    font-style: italic;
+}
+
+.stale {
+    color: var(--xc-warning-text, #6e520a);
+}

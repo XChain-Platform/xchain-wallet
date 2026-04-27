@@ -1,0 +1,94 @@
+/* §49.5 — Queued broadcast banner. Lives near the top of the unlocked
+   tree; only renders when the queue is non-empty.
+*/
+
+.banner {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    padding: var(--xc-space-2) var(--xc-space-3);
+    border-radius: var(--xc-radius-md);
+    border: 1px solid var(--xc-info, #3b82f6);
+    background: var(--xc-info-bg, rgba(59, 130, 246, 0.08));
+    color: var(--xc-info-text, #0f3a8e);
+    font-size: var(--xc-text-sm);
+    margin: var(--xc-space-2);
+}
+
+.title {
+    font-weight: 600;
+}
+
+.list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+}
+
+.row {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    padding: var(--xc-space-1) 0;
+    border-top: 1px dashed currentColor;
+    border-top-color: rgba(0, 0, 0, 0.10);
+}
+
+.row:first-child {
+    border-top: none;
+}
+
+.summary {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.summaryText {
+    font-weight: 500;
+    word-break: break-word;
+}
+
+.meta {
+    color: inherit;
+    opacity: 0.8;
+    font-size: var(--xc-text-xs);
+}
+
+.actions {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.broadcastBtn,
+.discardBtn {
+    padding: 4px 10px;
+    border-radius: var(--xc-radius-sm);
+    border: 1px solid currentColor;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    font: inherit;
+    font-size: var(--xc-text-xs);
+}
+
+.broadcastBtn:hover,
+.discardBtn:hover {
+    background: rgba(0, 0, 0, 0.05);
+}
+
+.broadcastBtn:disabled,
+.discardBtn:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.error {
+    color: var(--xc-danger-text, #5c1216);
+    font-size: var(--xc-text-xs);
+}

@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.170.0] - 2026-04-27
+
+§49.3/§49.5 — Step 2 of Cluster G — StalenessLabel (G155) + QueuedBroadcastBanner (G154 partial); Cluster G closed.
+
+`<StalenessLabel lastSyncedAt={...}>` is a small reusable presentational component that renders "Last synced 12s ago" copy; ticks itself on a 30s interval; renders nothing when `lastSyncedAt` is null/undefined per §49.3 (never fabricate data); tones into a warning style past an optional `warnAfterMs` threshold. Callers (balance views, history feed, market panels) drop it next to fetched data without parent re-renders.
+
+`<QueuedBroadcastBanner walletId={activeWalletId} />` lists signed transactions queued for broadcast and exposes per-row "Broadcast now" / "Discard" actions. The banner returns null when the queue is empty. v0.170.0 ships the UI, the messaging surface (`listQueuedBroadcasts`, `broadcastQueuedRequest`, `discardQueuedRequest`), and a per-walletId in-memory queue in the background process; auto-enqueue from offline broadcasts, persistent storage, and a "you have 1 queued tx, broadcast now?" prompt on reconnection are tracked as Cluster G FOLLOWUPs. G154 stays 🟡 partial — the banner is reachable and exercises end-to-end if something explicitly enqueues, but no wallet path enqueues yet.
+
+### Added
+
+- **`shared/components/StalenessLabel.jsx` + `.module.css`** (new) — presentational; tolerates missing data; self-ticking; reduced-motion friendly via the inherited tick interval (no animation).
+- **`shared/components/QueuedBroadcastBanner.jsx` + `.module.css`** (new) — list / broadcast / discard; hidden when empty; surfaces broadcast errors inline.
+- **`packages/extension/src/popup/messaging.js`** + **`packages/web/src/messaging.js`** — `listQueuedBroadcasts` / `broadcastQueuedRequest` / `discardQueuedRequest` shims.
+- **`packages/extension/src/background/createBackgroundHost.js`** — `broadcast.queue.list` / `broadcast.queue.broadcast` / `broadcast.queue.discard` handlers backed by an in-memory `Map<walletId, entry[]>`.
+- **`test/smoke/ui/queued-broadcast-staleness.smoke.js`** — verifies StalenessLabel exports + null-tolerance + tick, QueuedBroadcastBanner exports + hide-when-empty + actions, all three background routes, both messaging shims, and both shells' Home-prefix mount.
+
+### Changed
+
+- **`packages/extension/src/popup/App.jsx`** + **`packages/web/src/App.jsx`** — `<QueuedBroadcastBanner walletId={activeWalletId}>` mounted above Home (the top-of-tree mount for unlocked sessions).
+
+Closes G155 outright; G154 closed as 🟡 partial pending the auto-enqueue + persistence FOLLOWUPs. Cluster G — §49 Offline & Degraded Mode — closed at v0.170.0. Smoke baseline preserved (24 / 171; new queued-broadcast-staleness smoke passes).
+
 ## [0.169.0] - 2026-04-27
 
 §49.1/§49.2 — Step 1 of Cluster G — Reachability poll + offline / degraded banner (G152 + G153).

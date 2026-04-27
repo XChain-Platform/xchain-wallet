@@ -30,6 +30,7 @@ import { Home } from '@xchain-wallet/core/shared/routes/Home.jsx';
 import { TokenDetail } from '@xchain-wallet/core/shared/routes/TokenDetail.jsx';
 import { ToastHost } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
 import { ReachabilityBanner } from '@xchain-wallet/core/shared/components/ReachabilityBanner.jsx';
+import { QueuedBroadcastBanner } from '@xchain-wallet/core/shared/components/QueuedBroadcastBanner.jsx';
 import { Receive } from '@xchain-wallet/core/shared/routes/Receive.jsx';
 import { Send } from '@xchain-wallet/core/shared/routes/Send.jsx';
 import { TokenWizard } from '@xchain-wallet/core/shared/routes/TokenWizard.jsx';
@@ -951,41 +952,44 @@ function AppInner() {
                 );
             }
             return (
-                <Home
-                    onLocked={refresh}
-                    onSend={activeWalletId ? () => setUnlockedView('send') : undefined}
-                    onReceive={activeWalletId ? () => setUnlockedView('receive') : undefined}
-                    onSwap={activeWalletId ? () => setUnlockedView('swap') : undefined}
-                    onBuy={activeWalletId ? () => setUnlockedView('dispenser-explorer') : undefined}
-                    onCreateToken={activeWalletId ? () => setUnlockedView('wizard') : undefined}
-                    onActions={activeWalletId ? () => setUnlockedView('actions') : undefined}
-                    onMarkets={activeWalletId ? () => setUnlockedView('markets') : undefined}
-                    onMessaging={activeWalletId ? () => setUnlockedView('messaging') : undefined}
-                    onContracts={activeWalletId && hasBtcAddress ? () => setUnlockedView('contracts-list') : undefined}
-                    onStaking={activeWalletId && hasBtcAddress ? () => setUnlockedView('staking-dashboard') : undefined}
-                    onHistory={activeWalletId ? () => setUnlockedView('history') : undefined}
-                    onAddresses={activeWalletId ? () => setUnlockedView('addresses') : undefined}
-                    onResumeAirdrop={activeWalletId ? (id) => {
-                        setResumeAirdropId(id);
-                        setUnlockedView('airdrop');
-                    } : undefined}
-                    onResumeCoinpay={activeWalletId ? (ref) => {
-                        setResumeCoinpay(ref);
-                        setUnlockedView('coinpay');
-                    } : undefined}
-                    onMigrateToBip39={activeWalletId ? () => setUnlockedView('migrate-bip39') : undefined}
-                    onCrossChain={activeWalletId ? () => setUnlockedView('cross-chain-templates') : undefined}
-                    onContacts={activeWalletId ? () => setUnlockedView('contacts') : undefined}
-                    onMultisig={activeWalletId && hasBtcAddress ? () => setUnlockedView('multisig-create') : undefined}
-                    onSelectToken={activeWalletId ? (tok) => {
-                        setTokenDetailRef(tok);
-                        setUnlockedView('token-detail');
-                    } : undefined}
-                    onOpenWalletPicker={() => setUnlockedView('wallet-picker')}
-                    onOpenAccountPicker={activeWalletId ? () => setUnlockedView('account-picker') : undefined}
-                    activeAccountId={activeAccountId}
-                    onSwitchAccount={setActiveAccountId}
-                />
+                <>
+                    {activeWalletId ? <QueuedBroadcastBanner walletId={activeWalletId} /> : null}
+                    <Home
+                        onLocked={refresh}
+                        onSend={activeWalletId ? () => setUnlockedView('send') : undefined}
+                        onReceive={activeWalletId ? () => setUnlockedView('receive') : undefined}
+                        onSwap={activeWalletId ? () => setUnlockedView('swap') : undefined}
+                        onBuy={activeWalletId ? () => setUnlockedView('dispenser-explorer') : undefined}
+                        onCreateToken={activeWalletId ? () => setUnlockedView('wizard') : undefined}
+                        onActions={activeWalletId ? () => setUnlockedView('actions') : undefined}
+                        onMarkets={activeWalletId ? () => setUnlockedView('markets') : undefined}
+                        onMessaging={activeWalletId ? () => setUnlockedView('messaging') : undefined}
+                        onContracts={activeWalletId && hasBtcAddress ? () => setUnlockedView('contracts-list') : undefined}
+                        onStaking={activeWalletId && hasBtcAddress ? () => setUnlockedView('staking-dashboard') : undefined}
+                        onHistory={activeWalletId ? () => setUnlockedView('history') : undefined}
+                        onAddresses={activeWalletId ? () => setUnlockedView('addresses') : undefined}
+                        onResumeAirdrop={activeWalletId ? (id) => {
+                            setResumeAirdropId(id);
+                            setUnlockedView('airdrop');
+                        } : undefined}
+                        onResumeCoinpay={activeWalletId ? (ref) => {
+                            setResumeCoinpay(ref);
+                            setUnlockedView('coinpay');
+                        } : undefined}
+                        onMigrateToBip39={activeWalletId ? () => setUnlockedView('migrate-bip39') : undefined}
+                        onCrossChain={activeWalletId ? () => setUnlockedView('cross-chain-templates') : undefined}
+                        onContacts={activeWalletId ? () => setUnlockedView('contacts') : undefined}
+                        onMultisig={activeWalletId && hasBtcAddress ? () => setUnlockedView('multisig-create') : undefined}
+                        onSelectToken={activeWalletId ? (tok) => {
+                            setTokenDetailRef(tok);
+                            setUnlockedView('token-detail');
+                        } : undefined}
+                        onOpenWalletPicker={() => setUnlockedView('wallet-picker')}
+                        onOpenAccountPicker={activeWalletId ? () => setUnlockedView('account-picker') : undefined}
+                        activeAccountId={activeAccountId}
+                        onSwitchAccount={setActiveAccountId}
+                    />
+                </>
             );
         default:
             return <Loading error={`unknown state "${status.state}"`} />;
