@@ -327,23 +327,28 @@ export function Send({ walletId, onBack }) {
                     loading={previewBalances.loading}
                     error={previewBalances.error}
                 />
-                <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
-                    <dt className={styles.detailsLabel}>From</dt>
-                    <dd className={styles.detailsValue}>
-                        <AddressText address={fromAddress.address} />
-                    </dd>
-                    {(decoded?.details || []).map((d) => (
-                        <DetailRow
-                            key={d.label}
-                            label={d.label}
-                            value={d.value}
-                        />
-                    ))}
-                </dl>
+                <details className={styles.details}>
+                    <summary className={styles.detailsToggle}>
+                        Details ({2 + (decoded?.details?.length || 0)})
+                    </summary>
+                    <dl className={styles.detailsList}>
+                        <dt className={styles.detailsLabel}>Chain</dt>
+                        <dd className={styles.detailsValue}>
+                            {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
+                        </dd>
+                        <dt className={styles.detailsLabel}>From</dt>
+                        <dd className={styles.detailsValue}>
+                            <AddressText address={fromAddress.address} />
+                        </dd>
+                        {(decoded?.details || []).map((d) => (
+                            <DetailRow
+                                key={d.label}
+                                label={d.label}
+                                value={d.value}
+                            />
+                        ))}
+                    </dl>
+                </details>
                 {decoded && decoded.warnings.length > 0 ? (
                     <div role="alert" className={styles.warnings}>
                         {decoded.warnings.map((w, i) => (
@@ -396,7 +401,9 @@ export function Send({ walletId, onBack }) {
                     >
                         {isHwSource
                             ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                            : 'Send'}
+                            : descriptor?.displayName
+                                ? `Sign on ${descriptor.displayName}`
+                                : 'Sign'}
                     </Button>
                 </div>
             </form>,

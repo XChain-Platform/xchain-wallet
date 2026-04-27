@@ -134,6 +134,27 @@ export function SignApproval({ id, kind, payload, onReject }) {
         kind === 'signAction' ||
         (kind === 'signMessage' && !payload?.payload?.alreadyGranted);
 
+    // §21.7 button-label conventions. Action / PSBT signing reads
+    // "Approve & Sign on <chain>" so the user sees which chain is
+    // about to commit a signature; mitigates approval-drift between
+    // tabs (§21.3). Message / sign-in keep "Approve" — no signature
+    // commits balance, so the chain suffix would mislead.
+    const chainName = descriptor?.displayName || '';
+    const approveLabel =
+        kind === 'signAction' || kind === 'signPsbt'
+            ? chainName
+                ? `Approve & Sign on ${chainName}`
+                : 'Approve & Sign'
+            : kind === 'signIn'
+                ? 'Sign in'
+                : 'Approve';
+
+    // §21.3 dApp Source block — Origin + App name (when the dApp
+    // attached one). Only renders when an origin is present; in
+    // practice every dApp request carries one, but user-initiated
+    // sign flows that re-use this screen wouldn't.
+    const appName = payload?.appName || payload?.payload?.appName || '';
+
     async function handleApprove(event) {
         event.preventDefault();
         if (busy || password.length === 0 || !walletId) return;
@@ -187,7 +208,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
                         loading={busy}
                         disabled={password.length === 0 || !walletId}
                     >
-                        Approve
+                        {approveLabel}
                     </Button>
                 </div>
             }
@@ -196,6 +217,14 @@ export function SignApproval({ id, kind, payload, onReject }) {
                 <div className={styles.chainLine}>
                     <ChainBadge descriptor={descriptor} size="sm" />
                 </div>
+            ) : null}
+
+            {origin ? (
+                <section className={styles.source} aria-label="Source">
+                    <p className={styles.sourceLabel}>Source</p>
+                    <p className={styles.sourceOrigin}>{origin}</p>
+                    {appName ? <p className={styles.sourceApp}>{appName}</p> : null}
+                </section>
             ) : null}
 
             <SignSummary kind={kind} payload={payload} />
@@ -297,14 +326,19 @@ function SignSummary({ kind, payload }) {
                             {decoded.summary}
                         </p>
                         {decoded.details.length > 0 ? (
-                            <dl className={styles.detailsList}>
-                                {decoded.details.map((row) => (
-                                    <div className={styles.detailsRow} key={row.label}>
-                                        <dt className={styles.detailsLabel}>{row.label}</dt>
-                                        <dd className={styles.detailsValue}>{row.value}</dd>
-                                    </div>
-                                ))}
-                            </dl>
+                            <details className={styles.details}>
+                                <summary className={styles.detailsToggle}>
+                                    Details ({decoded.details.length})
+                                </summary>
+                                <dl className={styles.detailsList}>
+                                    {decoded.details.map((row) => (
+                                        <div className={styles.detailsRow} key={row.label}>
+                                            <dt className={styles.detailsLabel}>{row.label}</dt>
+                                            <dd className={styles.detailsValue}>{row.value}</dd>
+                                        </div>
+                                    ))}
+                                </dl>
+                            </details>
                         ) : null}
                     </div>
                     {decoded.warnings.length > 0 ? (

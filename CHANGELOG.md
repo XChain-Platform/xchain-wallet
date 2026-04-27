@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.130.0] - 2026-04-26
+
+§21 Signing Safety — Step 5 of 6 — sign-screen layout polish (§21.3 + §21.7).
+
+Brings the sign screens — the dApp-triggered SignApproval window and the user-initiated Send.jsx review stage — in line with the §21.3 layout sketch and §21.7 copy conventions. Three pieces:
+
+1. **Chain-aware approve / sign buttons.** "Approve & Sign on Bitcoin" instead of bare "Approve" for `signAction` and `signPsbt`; "Sign on Bitcoin" instead of bare "Send" for the Send.jsx software-signing path. Mitigates approval-drift between tabs — the user always sees which chain is about to commit a signature. `signMessage` keeps "Approve" (signing a message commits no value, the chain suffix would mislead). `signIn` reads "Sign in".
+2. **dApp Source block.** New labelled section above the action summary in SignApproval — Origin in mono, optional App name below. Distinct surface (`--xc-surface-raised` background + bordered) so the user reads "this is from xyz.com" before reading what the action does. Renders only when an origin is present.
+3. **Collapsible details.** Action details (per-field decoded rows) now sit inside a `<details>` disclosure that's closed by default, per §21.3 ("collapsed but discoverable; power users expand, casual users ignore"). Toggle reads "Details (N)" with the row count.
+
+### Added
+
+- **`approveLabel`** derivation in `SignApproval.jsx` — kind-aware label ("Approve & Sign on <chain>" / "Approve & Sign" / "Sign in" / "Approve").
+- **Source block** — `<section>` above SignSummary surfacing dApp `origin` + `appName`.
+- **`<details>` + `<summary>` disclosure** wraps action details in both SignApproval and Send.jsx review.
+- **`packages/extension/src/approval/kinds/SignApproval.module.css`** — new `.source`, `.sourceLabel`, `.sourceOrigin`, `.sourceApp`, `.details`, `.detailsToggle` rules. Source uses `--xc-surface-raised`; toggle reads as a small label that hovers to full text.
+- **`packages/core/src/shared/routes/Send.module.css`** — new `.details`, `.detailsToggle` rules; `.detailsList` now nests inside the disclosure.
+- **`test/smoke/ui/sign-screen-layout.smoke.js`** — approve-label semantics for all four kinds, Source block presence + props, action-details disclosure, every new CSS hook, Send.jsx submit-label + disclosure parity.
+
+### Changed
+
+- **`SignApproval.jsx`** — Approve button now renders `{approveLabel}` (was hardcoded "Approve"). Action details `<dl>` wrapped in a `<details>` disclosure with a "Details (N)" summary. Source block renders above SignSummary on dApp-originated requests.
+- **`Send.jsx`** — Submit button reads "Sign on <chain>" (software path) or "Sign on Trezor/Ledger" (HW path; unchanged copy). Review-stage `<dl>` wrapped in a `<details>` disclosure.
+
+### Behavior preserved
+
+- Approve / Reject footer position, password gate, save-permanent toggle, HW signing block — unchanged.
+- BalanceChanges renders above the disclosure (always visible) so the headline metric stays scannable; the disclosure only hides the per-field details that power users want to expand.
+
 ## [0.129.0] - 2026-04-26
 
 §21 Signing Safety — Step 4 of 6 — SignApproval (signAction) wires the preview.

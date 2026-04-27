@@ -56,3 +56,59 @@
 .warnings li + li {
     margin-top: var(--xc-space-1);
 }
+
+/* §21.3 Source block — distinct from the wallet chrome so the user
+   sees clearly which dApp is asking. Origin reads in mono so trailing
+   ports / paths are scannable; appName below as a plain label. */
+.source {
+    margin: 0 0 var(--xc-space-2) 0;
+    padding: var(--xc-space-2) var(--xc-space-3);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-sm);
+    background: var(--xc-surface-raised);
+}
+
+.sourceLabel {
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--xc-text-muted);
+    margin: 0;
+}
+
+.sourceOrigin {
+    font-family: var(--xc-font-mono);
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text);
+    margin: var(--xc-space-1) 0 0 0;
+    word-break: break-all;
+}
+
+.sourceApp {
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    margin: var(--xc-space-1) 0 0 0;
+}
+
+/* §21.3 collapsible Details disclosure — closed by default (power
+   users expand, casual users ignore). The disclosure triangle is the
+   browser default; the toggle row reads as a small label. */
+.details {
+    margin: var(--xc-space-2) 0 0;
+}
+
+.detailsToggle {
+    cursor: pointer;
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--xc-text-muted);
+    list-style: revert;
+    padding: var(--xc-space-1) 0;
+}
+
+.detailsToggle:hover {
+    color: var(--xc-text);
+}
