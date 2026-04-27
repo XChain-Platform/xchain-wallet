@@ -15,4 +15,5 @@ export { AnimatedQrFrames } from './AnimatedQrFrames.jsx';
 export { MultisigBadge } from './MultisigBadge.jsx';
 export { QrScanner } from './QrScanner.jsx';
 export { ChainPicker } from './ChainPicker.jsx';
+export { Skeleton } from './Skeleton.jsx';
 export * as Icon from './icons/index.jsx';

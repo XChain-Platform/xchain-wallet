@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.155.0] - 2026-04-27
+
+§37.1 Micro-UX — Step 1 of Cluster C — Skeleton loading-placeholder primitive (G118).
+
+Adds the shared `<Skeleton>` component that the §27 Balances + §28 History + later cluster steps will swap in for spinners. Variant per shape (row/text/title/avatar/badge/card/tile); `<Skeleton.Row>` + `<Skeleton.List rows={N}>` composites mirror the wallet's typical avatar + title + subtitle layout; shimmer collapses to a static gray block under `prefers-reduced-motion: reduce` (§53 a11y); `aria-hidden="true"` by default with an opt-in `ariaLabel` for screen-reader announcement.
+
+### Added
+
+- **`packages/core/src/ui/Skeleton.jsx` + `Skeleton.module.css`** — primitive + composites + reduced-motion guard.
+- **`packages/core/src/ui/index.js`** re-exports `Skeleton`.
+- **`test/smoke/ui/skeleton.smoke.js`** — shape variants, composites, aria default + opt-in, reduced-motion media-query.
+
+Closes G118 (G076 — wiring into balance/history rows — lands in Cluster C Step 2).
+
 ## [0.154.0] - 2026-04-27
 
 §19 Backup — Step 6 of Cluster B — On-chain label publish UI (G037).

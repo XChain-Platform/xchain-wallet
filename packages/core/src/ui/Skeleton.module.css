@@ -1,0 +1,96 @@
+/* Skeleton — §37.1 / G118. Content-shaped placeholder with a subtle
+ * left-to-right shimmer. Static gray block under
+ * `prefers-reduced-motion: reduce` (the @media block at the bottom). */
+
+.skeleton {
+    background-color: var(--xc-surface-raised, #1f2937);
+    background-image: linear-gradient(
+        90deg,
+        transparent 0%,
+        rgba(255, 255, 255, 0.04) 50%,
+        transparent 100%
+    );
+    background-size: 200% 100%;
+    background-repeat: no-repeat;
+    background-position: -100% 0;
+    border-radius: var(--xc-radius-sm);
+    animation: xc-skeleton-shimmer 1.4s ease-in-out infinite;
+    /* Stable layout — block-level, fills the parent's width unless an
+     * explicit `width` prop is set inline. */
+    display: block;
+    width: 100%;
+    height: 12px;
+}
+
+.shapeRow {
+    height: 12px;
+}
+
+.shapeText {
+    height: 10px;
+    border-radius: var(--xc-radius-sm);
+}
+
+.shapeTitle {
+    height: 16px;
+    border-radius: var(--xc-radius-sm);
+}
+
+.shapeAvatar {
+    width: 32px;
+    height: 32px;
+    border-radius: var(--xc-radius-pill);
+}
+
+.shapeBadge {
+    width: 24px;
+    height: 24px;
+    border-radius: var(--xc-radius-pill);
+}
+
+.shapeCard {
+    height: 80px;
+    border-radius: var(--xc-radius-md);
+}
+
+.shapeTile {
+    aspect-ratio: 1 / 1;
+    height: auto;
+    border-radius: var(--xc-radius-md);
+}
+
+.row {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-3);
+    padding: var(--xc-space-2) 0;
+}
+
+.rowText {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    flex: 1;
+    min-width: 0;
+}
+
+.list {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+@keyframes xc-skeleton-shimmer {
+    0%   { background-position: -100% 0; }
+    100% { background-position:  200% 0; }
+}
+
+/* §53 a11y — under reduced-motion, the shimmer animation collapses to
+ * a static gray block. The placeholder still occupies the same layout
+ * footprint; only the moving gradient stops. */
+@media (prefers-reduced-motion: reduce) {
+    .skeleton {
+        animation: none;
+        background-image: none;
+    }
+}
