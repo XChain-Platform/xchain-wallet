@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.120.0] - 2026-04-26
+
+Settings — Step 17 of 18 — Keyboard Shortcuts panel (preview).
+
+The §34 keyboard system is fully unbuilt per the gap audit (no global hook, no dispatch table, no rebind UI). This panel ships a read-only preview listing the planned shortcut surface (`?`, `Cmd/Ctrl+K`, `Esc`, `g h`/`g a`/`g c`/`g s`, `n s`/`n r`, `l`) so users and contributors can see the planned system without a separate docs page. Each row is labelled "not yet active" and rebind controls land when §34 ships.
+
+### Added
+
+- **`packages/core/src/shared/components/settings/KeyboardShortcutsSection.jsx`** — read-only shortcut catalogue with kbd-style chips.
+- **`test/smoke/ui/settings-keyboard-shortcuts.smoke.js`** — table presence, expected entries, deferral copy, Settings.jsx hook-up.
+
+### Changed
+
+- **`packages/core/src/shared/routes/Settings.jsx`** — keyboard section flips from `kind: 'stub'` to `kind: 'panel'`.
+
 ## [0.119.0] - 2026-04-26
 
 Settings — Step 16 of 18 — This Wallet panel + destructive removeWallet flow.

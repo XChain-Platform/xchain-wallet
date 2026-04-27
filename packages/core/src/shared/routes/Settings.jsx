@@ -11,6 +11,7 @@ import { DeveloperModeSection } from '../components/settings/DeveloperModeSectio
 import { LanguageRegionSection } from '../components/settings/LanguageRegionSection.jsx';
 import { PrivacySection } from '../components/settings/PrivacySection.jsx';
 import { FeesSection } from '../components/settings/FeesSection.jsx';
+import { KeyboardShortcutsSection } from '../components/settings/KeyboardShortcutsSection.jsx';
 import { NetworkEndpointsSection } from '../components/settings/NetworkEndpointsSection.jsx';
 import { NotificationsSection } from '../components/settings/NotificationsSection.jsx';
 import { SafetySection } from '../components/settings/SafetySection.jsx';
@@ -185,7 +186,8 @@ export function Settings({
             title: 'Keyboard Shortcuts',
             description: 'Rebind global shortcuts.',
             keywords: 'keyboard shortcuts rebind hotkey',
-            kind: 'stub',
+            kind: 'panel',
+            Component: KeyboardShortcutsSection,
         },
         {
             id: 'developer',
