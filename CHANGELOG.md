@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.180.0] - 2026-04-27
+
+§27.5 — Cluster I Step 3 — Collectibles grid view (G074).
+
+The NFTs tab in HomeTabs now renders a dedicated `<CollectiblesView>` instead of the row-style `<BalanceList>`. Square thumbnail cards lay out in a responsive 2/3/4-column grid with chain-icon overlays, ticker-letter placeholders (image slot ready for when `messaging.getAssetInfo` lands per Cluster C FOLLOWUP 3), pin / hide affordances on the card chrome, and click-through to the §27.6 token detail page.
+
+### Added
+
+- **`packages/core/src/shared/components/CollectiblesView.jsx` + `.module.css`** (new) — grid layout; `<CollectibleCard>` per row; image with `onError` fallback to ticker letter; pin/hide buttons overlaid on the thumbnail; collapsible "Show N hidden" footer mirrors BalanceList.
+- **`packages/core/src/shared/components/HomeTabs.jsx`** — imports `CollectiblesView`; the NFTs tab swaps from BalanceList to the new view; empty-state copy reframes "No NFTs" → "No collectibles".
+
+Closes G074.
+
 ## [0.179.0] - 2026-04-27
 
 §27.4 — Cluster I Step 2 — Hidden / spam tokens (G073).

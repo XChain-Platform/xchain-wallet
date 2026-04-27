@@ -1,0 +1,172 @@
+.wrap {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-3);
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--xc-space-3);
+}
+
+@media (min-width: 480px) {
+    .grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+@media (min-width: 720px) {
+    .grid {
+        grid-template-columns: repeat(4, 1fr);
+    }
+}
+
+.card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    padding: var(--xc-space-2);
+    background: var(--xc-surface);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-md);
+    text-align: left;
+    color: inherit;
+    font: inherit;
+}
+
+.cardClickable {
+    cursor: pointer;
+    background: transparent;
+}
+
+.cardClickable:hover {
+    background: var(--xc-bg-muted);
+    border-color: var(--xc-border-strong);
+}
+
+.cardClickable:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: -2px;
+}
+
+.cardPinned {
+    border-color: var(--xc-accent-primary, var(--xc-border-strong));
+    box-shadow: 0 0 0 1px var(--xc-accent-primary, var(--xc-border-strong));
+}
+
+.cardHidden {
+    opacity: 0.65;
+}
+
+.thumb {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1;
+    border-radius: var(--xc-radius-sm);
+    background: var(--xc-bg-muted);
+    overflow: hidden;
+}
+
+.thumbImg {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: cover;
+}
+
+.thumbLetter {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #FFFFFF;
+    font-family: var(--xc-font-sans);
+    font-weight: 700;
+    font-size: 28px;
+    letter-spacing: 0.05em;
+}
+
+.chainOverlay {
+    position: absolute;
+    bottom: 6px;
+    left: 6px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #FFFFFF;
+    box-shadow: 0 0 0 1.5px var(--xc-surface);
+    object-fit: cover;
+}
+
+.pinBtn,
+.hideBtn {
+    position: absolute;
+    top: 6px;
+    width: 24px;
+    height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    color: #FFFFFF;
+    background: rgba(0, 0, 0, 0.4);
+    border-radius: 50%;
+    cursor: pointer;
+    user-select: none;
+    line-height: 1;
+}
+
+.pinBtn { right: 6px; }
+.hideBtn { right: 36px; }
+
+.pinBtn:hover,
+.hideBtn:hover {
+    background: rgba(0, 0, 0, 0.7);
+}
+
+.pinBtnActive {
+    color: var(--xc-accent-primary, #f5b400);
+}
+
+.hideBtnActive {
+    color: var(--xc-accent-primary, #f5b400);
+}
+
+.meta {
+    min-width: 0;
+}
+
+.name {
+    font-weight: 600;
+    color: var(--xc-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.subtitle {
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.hiddenToggle {
+    border: 0;
+    background: transparent;
+    padding: var(--xc-space-3);
+    border-top: 1px dashed var(--xc-border);
+    text-align: center;
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    cursor: pointer;
+    width: 100%;
+}
+
+.hiddenToggle:hover {
+    color: var(--xc-text);
+    background: var(--xc-bg-muted);
+}

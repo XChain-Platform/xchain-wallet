@@ -6,6 +6,7 @@ import {
     sortByChainThenAsset,
     coinFromChainId,
 } from './BalanceList.jsx';
+import { CollectiblesView } from './CollectiblesView.jsx';
 import { TotalBalanceHero } from './TotalBalanceHero.jsx';
 import styles from './HomeTabs.module.css';
 
@@ -132,9 +133,9 @@ export function HomeTabs({ chainRegistry, balances, networkFilter, multisig, mul
                 ) : null}
 
                 {active === 'nfts' ? (
-                    <BalanceList
+                    <CollectiblesView
                         rows={nfts}
-                        emptyTitle={networkFilter === 'all' ? 'No NFTs yet' : 'No NFTs on this network'}
+                        emptyTitle={networkFilter === 'all' ? 'No collectibles yet' : 'No collectibles on this network'}
                         emptyBody={networkFilter === 'all'
                             ? 'Indivisible tokens (Rare Pepe, Ordinals, Bitcoin Stamps) appear here once received.'
                             : undefined}
