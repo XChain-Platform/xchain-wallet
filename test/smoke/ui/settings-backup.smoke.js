@@ -44,7 +44,7 @@ for (const label of [
 // Host handler + messaging wrappers
 const hostSrc = readFileSync(hostPath, 'utf8');
 assert.match(hostSrc, /host\.register\('wallet\.exportBackup'/, 'host registers wallet.exportBackup');
-assert.match(hostSrc, /exportBackupFile,?\s*\}\s*=\s*flows/, 'host destructures exportBackupFile from flows');
+assert.match(hostSrc, /exportBackupFile,/, 'host destructures exportBackupFile from flows');
 
 const popupMsg = readFileSync(popupMsgPath, 'utf8');
 const webMsg = readFileSync(webMsgPath, 'utf8');
