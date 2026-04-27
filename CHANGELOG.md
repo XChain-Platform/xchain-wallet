@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.135.0] - 2026-04-26
+
+§29 Send/Receive — Step 4 of 6 — Max button + fiat toggle + real fee estimate.
+
+Closes the deferred §21 FOLLOWUP 5 (fee-aware balance preview) and the §29.2 / §29.3 audit rows. The Send form's Amount block grows three affordances:
+
+- **Max button.** Sets the amount to the source-address balance minus the estimated network fee (for native-coin sends) or the full asset balance (for token sends, since the fee is paid in native coin separately). Disabled when the balance hasn't loaded.
+- **Fiat / native toggle.** Pressing the currency button next to Max flips the input between the chain's native ticker and USD. In fiat mode the user types a USD value; the form derives the canonical native amount via the placeholder rate. The non-active mode shows up as a "≈" preview under the field. The toggle is disabled when no rate is available.
+- **Real fee estimate fed to the simulator.** The §21.2 BalanceChanges renderer now sees a non-zero fee number for SEND, so the fee row stops reading "(0)" and starts reading the actual placeholder estimate. Both surfaces display "(placeholder)" next to the value so users know it's not from a live source.
+
+### Added
+
+- **`packages/core/src/flows/feeEstimate.js`** — `estimateNativeSendFee({ chainId, chainRegistry })` returns `{ sats, coinAmount, source: 'static-placeholder', confidence: 'low', rate, vsize } | null`. Per-chain placeholder values: BTC 1500 sats (~6 sat/vB × 250 vB), LTC 250 sats (~1 sat/vB × 250 vB), DOGE 25,000,000 koinu (1 DOGE/kB protocol minimum). `satsToCoinDecimal(sats)` does the trailing-zero-stripping conversion.
+- **`packages/core/src/flows/priceLookup.js`** — `getFiatRate({ chainCoin, fiatCurrency = 'USD' })` returns `{ rate, chainCoin, fiatCurrency, source, fetchedAt } | null`. Placeholder rates: BTC $40k, LTC $80, DOGE $0.10. Non-USD currencies return null (single-currency table). `coinToFiat` and `fiatToCoin` handle the conversions; `fiatToCoin` rounds to 8 decimals by default.
+- **`test/smoke/core/fee-estimate.smoke.js`** — `satsToCoinDecimal` edge cases; per-chain placeholder values; unknown chain / coin handling; null guards.
+- **`test/smoke/core/price-lookup.smoke.js`** — `getFiatRate` per-chain values, unknown coin / non-USD currency returns null, `coinToFiat` numeric + string inputs, `fiatToCoin` round-trip precision and zero-rate guard.
+- **`test/smoke/ui/send-max-fiat.smoke.js`** — Send.jsx imports + `feeEstimate` memo wired into the simulator (no leftover `'0'` literal); `fiatRate` memo, `amountMode` / `fiatInput` state, toggle + fiat-input handlers; Max callback subtracts fee from balance for native sends; balance hint copy + form-stage balance fetch; CSS hooks.
+
+### Changed
+
+- **`Send.jsx`** —
+  - Hoisted `feeEstimate` memo above the simulator's `previewResult` so the simulator gets a real fee number.
+  - New state: `amountMode: 'native' | 'fiat'`, `fiatInput`. New memos: `isNativeSend`, `sourceBalance`, `fiatPreview`. New callbacks: `onMax`, `onToggleAmountMode`, `onFiatInputChange`.
+  - The Amount field is now wrapped in a row containing the input + a `Max` button + a currency toggle button.
+  - Below the row, a balance hint reads "Available: X TICK" (with "(fee ≈ Y, placeholder)" appended for native sends).
+  - The address-balance fetch effect now also runs in the form stage (so Max + the Available hint can reference balance before the user reaches review).
+- **`Send.module.css`** — `.amountRow`, `.amountField`, `.amountActions`, `.amountButton`, `.balanceHint` rules.
+
+### Behavior preserved
+
+- The form's existing Amount field and its `setAmount` plumbing remain the source of truth for the SEND payload — all derived state (fiat input, Max output) writes back through `setAmount`. The submit + review path is unchanged.
+- The simulator's fee row was already rendered; only the input changed (placeholder instead of zero). When the §44.2 selector lands, the same wiring carries the user's chosen rate without further changes to Send.jsx.
+- All values displayed from the placeholder tables carry "(placeholder)" or "(placeholder rate)" badges so users don't mistake them for live data. When §44.2 / §45 wire real sources, those badges drop automatically.
+
 ## [0.134.0] - 2026-04-26
 
 §29 Send/Receive — Step 3 of 6 — Test-send protection.

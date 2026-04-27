@@ -45,6 +45,15 @@ export {
 } from './recentDestinations.js';
 export { checkRecipientNovelty } from './recipientNovelty.js';
 export {
+    estimateNativeSendFee,
+    satsToCoinDecimal,
+} from './feeEstimate.js';
+export {
+    getFiatRate,
+    coinToFiat,
+    fiatToCoin,
+} from './priceLookup.js';
+export {
     getCoinpayObligationsForAddress,
     getCoinpaysForAddress,
 } from './coinpayQueries.js';

@@ -97,8 +97,13 @@ assert.match(
 assert.match(sendSrc, /loading:\s*false[^,]*,\s*error:\s*null[^,]*,\s*sdkShape:\s*null/);
 assert.match(sendSrc, /loading:\s*true[^,]*,\s*error:\s*null/);
 
-// Effect runs only in review stage (not on every render).
-assert.match(sendSrc, /if \(stage !== 'review'\) return undefined;/);
+// Effect runs in form + review stages (Step 4 added the form-stage
+// fetch so Max + the Available hint can reference balance before
+// review). Skips on submitting / done.
+assert.match(
+    sendSrc,
+    /if \(stage !== 'review' && stage !== 'form'\) return undefined;/,
+);
 
 // Renders between the summary line and the details list. The JSX
 // element starts with `<BalanceChanges\n` (a tag, not the inline
@@ -117,7 +122,9 @@ assert.ok(
 assert.match(sendSrc, /loading=\{previewBalances\.loading\}/);
 assert.match(sendSrc, /error=\{previewBalances\.error\}/);
 
-// Fee defaults to '0' until the §44 fee selector lands.
-assert.match(sendSrc, /feeEstimate:\s*'0'/);
+// Fee feeds in from the placeholder estimator (Step 4); the real
+// §44.2 selector swaps the source later.
+assert.match(sendSrc, /feeEstimate:\s*feeStr/);
+assert.match(sendSrc, /feeEstimate\?\.coinAmount/, 'fee comes from estimateNativeSendFee');
 
 console.log('send-balance-preview smoke OK');

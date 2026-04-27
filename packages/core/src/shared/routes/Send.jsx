@@ -19,6 +19,8 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDeveloperMode } from '../hooks/useDeveloperMode.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { checkRecipientNovelty } from '../../flows/recipientNovelty.js';
+import { estimateNativeSendFee } from '../../flows/feeEstimate.js';
+import { getFiatRate, coinToFiat, fiatToCoin } from '../../flows/priceLookup.js';
 import { HwSignBlock } from '../components/HwSignBlock.jsx';
 import { BalanceChanges } from '../components/BalanceChanges.jsx';
 import { RawPsbtViewer } from '../components/RawPsbtViewer.jsx';
@@ -263,6 +265,87 @@ export function Send({ walletId, onBack }) {
         };
     }, [settings, toAddress, asset, amount, chainId, contacts, historyRows, testedThisSession]);
 
+    // §29.2 Max + §29.3 fiat toggle.
+    // Fiat rate for "≈ $X.XX" preview + the optional fiat-entry mode.
+    // Marked as static placeholder until §45 wires the real oracle.
+    const fiatCurrency = settings?.fiatCurrency || 'USD';
+    const fiatRate = useMemo(() => {
+        const desc = chainId ? chainRegistry.get(chainId) : null;
+        const coin = desc?.coin;
+        if (!coin) return null;
+        return getFiatRate({ chainCoin: coin, fiatCurrency });
+    }, [chainId, fiatCurrency]);
+
+    // Amount-entry mode toggle. 'native' = user types coin units;
+    // 'fiat' = user types fiat (when a rate is available). The form's
+    // canonical `amount` state always holds the native-unit value.
+    const [amountMode, setAmountMode] = useState(/** @type {'native' | 'fiat'} */ ('native'));
+    const [fiatInput, setFiatInput] = useState('');
+
+    const isNativeSend = useMemo(() => {
+        const desc = chainId ? chainRegistry.get(chainId) : null;
+        const nativeTicker = desc?.coin?.toUpperCase();
+        return Boolean(nativeTicker && asset.trim().toUpperCase() === nativeTicker);
+    }, [chainId, asset]);
+
+    // Native-unit balance available for the selected asset on the
+    // source address, derived from the same SDK call the simulator
+    // already runs. Drives Max + the "Available: X" hint.
+    const sourceBalance = useMemo(() => {
+        if (!previewBalances.sdkShape) return null;
+        const tickUpper = asset.trim().toUpperCase();
+        if (!tickUpper) return null;
+        const native = previewBalances.sdkShape.native;
+        if (native && String(native.asset || '').toUpperCase() === tickUpper) {
+            return decoderLib.balancesFromSdk(previewBalances.sdkShape).find((b) => b.tick === tickUpper) || null;
+        }
+        return decoderLib.balancesFromSdk(previewBalances.sdkShape).find((b) => b.tick === tickUpper) || null;
+    }, [previewBalances.sdkShape, asset]);
+
+    const onMax = useCallback(() => {
+        if (!sourceBalance || !sourceBalance.amount) return;
+        const balanceNum = parseFloat(sourceBalance.amount);
+        if (!Number.isFinite(balanceNum) || balanceNum <= 0) return;
+        let maxAmount = balanceNum;
+        if (isNativeSend && feeEstimate) {
+            const feeNum = parseFloat(feeEstimate.coinAmount);
+            if (Number.isFinite(feeNum)) maxAmount = Math.max(0, balanceNum - feeNum);
+        }
+        const display = Number(maxAmount.toFixed(8)).toString();
+        setAmount(display);
+        if (amountMode === 'fiat' && fiatRate) {
+            const fiat = coinToFiat(display, fiatRate);
+            setFiatInput(fiat != null ? fiat.toFixed(2) : '');
+        }
+    }, [sourceBalance, isNativeSend, feeEstimate, amountMode, fiatRate]);
+
+    const onToggleAmountMode = useCallback(() => {
+        if (!fiatRate) return;
+        setAmountMode((prev) => {
+            if (prev === 'native') {
+                const fiat = coinToFiat(amount, fiatRate);
+                setFiatInput(fiat != null ? fiat.toFixed(2) : '');
+                return 'fiat';
+            }
+            return 'native';
+        });
+    }, [amount, fiatRate]);
+
+    const onFiatInputChange = useCallback((value) => {
+        setFiatInput(value);
+        if (!fiatRate) return;
+        const coin = fiatToCoin(value, fiatRate);
+        if (coin != null) setAmount(coin);
+    }, [fiatRate]);
+
+    const fiatPreview = useMemo(() => {
+        if (!fiatRate) return null;
+        if (!isNativeSend) return null;
+        const f = coinToFiat(amount, fiatRate);
+        if (f == null) return null;
+        return `≈ $${f.toFixed(2)} (placeholder rate)`;
+    }, [amount, fiatRate, isNativeSend]);
+
     const onSendSmallTest = useCallback(() => {
         const amt = parseFloat(String(amount).trim());
         if (!Number.isFinite(amt) || amt <= 0) return;
@@ -334,7 +417,10 @@ export function Send({ walletId, onBack }) {
         ({ loading: false, error: null, sdkShape: null }),
     );
     useEffect(() => {
-        if (stage !== 'review') return undefined;
+        // Fetch on review (for the simulator) AND on form (so Max + the
+        // "Available: X" hint know what's spendable). Form-stage fetches
+        // are non-blocking — failure leaves Max disabled, the hint hidden.
+        if (stage !== 'review' && stage !== 'form') return undefined;
         if (!chainId || !fromAddress) return undefined;
         let cancelled = false;
         setPreviewBalances({ loading: true, error: null, sdkShape: null });
@@ -354,11 +440,20 @@ export function Send({ walletId, onBack }) {
         return () => { cancelled = true; };
     }, [stage, chainId, fromAddress, messaging]);
 
+    // §44 fee bridge — the §21.2 simulator's fee row + the §29.2 Max
+    // button both consume this. Real selector lands in the §44.2
+    // cluster; today this is a static per-chain placeholder.
+    const feeEstimate = useMemo(() => {
+        if (!chainId) return null;
+        return estimateNativeSendFee({ chainId, chainRegistry });
+    }, [chainId]);
+
     const previewResult = useMemo(() => {
         if (stage !== 'review' && stage !== 'submitting') return null;
         if (previewBalances.loading || previewBalances.error || !previewBalances.sdkShape) {
             return null;
         }
+        const feeStr = feeEstimate?.coinAmount || '0';
         return decoderLib.simulateAction({
             action: 'SEND',
             params: {
@@ -368,12 +463,16 @@ export function Send({ walletId, onBack }) {
                 MEMO: memo.trim() || undefined,
             },
             balances: decoderLib.balancesFromSdk(previewBalances.sdkShape),
-            // Fee selector lands later (§44.2 cluster); '0' until then.
-            feeEstimate: '0',
+            // Fee from the static placeholder table (§44.2 cluster
+            // wires the real selector). The simulator emits the fee
+            // row with the value provided here; surfaces marked
+            // "(placeholder)" in the BalanceChanges renderer when
+            // confidence is low.
+            feeEstimate: feeStr,
             chainId: chainId || undefined,
             chainRegistry,
         });
-    }, [stage, asset, amount, toAddress, memo, chainId, previewBalances]);
+    }, [stage, asset, amount, toAddress, memo, chainId, previewBalances, feeEstimate]);
 
     function handleReview(event) {
         event.preventDefault();
@@ -694,13 +793,67 @@ export function Send({ walletId, onBack }) {
                 autoComplete="off"
                 autoCapitalize="characters"
             />
-            <Input
-                label="Amount"
-                inputMode="decimal"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                autoComplete="off"
-            />
+            <div className={styles.amountRow}>
+                <div className={styles.amountField}>
+                    {amountMode === 'native' ? (
+                        <Input
+                            label={`Amount${asset.trim() ? ` (${asset.trim()})` : ''}`}
+                            inputMode="decimal"
+                            value={amount}
+                            onChange={(e) => setAmount(e.target.value)}
+                            hint={fiatPreview || undefined}
+                            autoComplete="off"
+                        />
+                    ) : (
+                        <Input
+                            label={`Amount (${fiatRate?.fiatCurrency || 'USD'})`}
+                            inputMode="decimal"
+                            value={fiatInput}
+                            onChange={(e) => onFiatInputChange(e.target.value)}
+                            hint={
+                                amount
+                                    ? `≈ ${amount} ${asset.trim() || ''} (placeholder rate)`
+                                    : undefined
+                            }
+                            autoComplete="off"
+                        />
+                    )}
+                </div>
+                <div className={styles.amountActions}>
+                    <button
+                        type="button"
+                        className={styles.amountButton}
+                        onClick={onMax}
+                        disabled={!sourceBalance}
+                        aria-label="Set max amount"
+                    >
+                        Max
+                    </button>
+                    <button
+                        type="button"
+                        className={styles.amountButton}
+                        onClick={onToggleAmountMode}
+                        disabled={!fiatRate}
+                        aria-label={
+                            amountMode === 'native'
+                                ? 'Enter amount in fiat'
+                                : 'Enter amount in coin units'
+                        }
+                    >
+                        {amountMode === 'native'
+                            ? (fiatRate?.fiatCurrency || 'USD')
+                            : (asset.trim() || 'coin')}
+                    </button>
+                </div>
+            </div>
+            {sourceBalance ? (
+                <p className={styles.balanceHint}>
+                    Available: {sourceBalance.amount} {sourceBalance.tick}
+                    {feeEstimate && isNativeSend
+                        ? ` (fee ≈ ${feeEstimate.coinAmount} ${sourceBalance.tick}, placeholder)`
+                        : ''}
+                </p>
+            ) : null}
             <Input
                 label="Memo"
                 hint="Optional. Cannot contain | or ; characters."

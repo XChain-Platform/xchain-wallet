@@ -211,6 +211,51 @@
     flex-wrap: wrap;
 }
 
+.amountRow {
+    display: flex;
+    gap: var(--xc-space-2);
+    align-items: flex-end;
+}
+
+.amountField {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.amountActions {
+    display: flex;
+    gap: var(--xc-space-1);
+    padding-bottom: var(--xc-space-1);
+}
+
+.amountButton {
+    padding: var(--xc-space-1) var(--xc-space-2);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-sm);
+    background: var(--xc-surface, transparent);
+    color: var(--xc-text);
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+    cursor: pointer;
+    min-width: 44px;
+}
+
+.amountButton:hover:not(:disabled) {
+    background: var(--xc-bg-muted);
+}
+
+.amountButton:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.balanceHint {
+    margin: calc(-1 * var(--xc-space-2)) 0 var(--xc-space-3);
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    line-height: 1.3;
+}
+
 .successTitle {
     font-size: var(--xc-text-xl);
     font-weight: 700;
