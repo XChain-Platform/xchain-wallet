@@ -6,6 +6,7 @@ import { AdsSection } from '../components/settings/AdsSection.jsx';
 import { AppearanceSection } from '../components/settings/AppearanceSection.jsx';
 import { BackupSection } from '../components/settings/BackupSection.jsx';
 import { ConnectedSitesSection } from '../components/settings/ConnectedSitesSection.jsx';
+import { ContactsSection } from '../components/settings/ContactsSection.jsx';
 import { DeveloperModeSection } from '../components/settings/DeveloperModeSection.jsx';
 import { LanguageRegionSection } from '../components/settings/LanguageRegionSection.jsx';
 import { PrivacySection } from '../components/settings/PrivacySection.jsx';
@@ -168,7 +169,8 @@ export function Settings({
             title: 'Contacts',
             description: 'Export and import the address book.',
             keywords: 'contacts address book export import',
-            kind: 'stub',
+            kind: 'panel',
+            Component: ContactsSection,
         },
         {
             id: 'ads',

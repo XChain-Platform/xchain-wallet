@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.118.0] - 2026-04-26
+
+Settings — Step 15 of 18 — Contacts export / import panel.
+
+Bulk export the address book as JSON and bulk import a contacts file. Each imported record is upserted via `messaging.saveContact({ record })` so the existing id is preserved — re-importing the same file overwrites in place rather than duplicating. Per-contact editing (add / rename / delete) stays where it already lives, in the dedicated Contacts route reached from the main menu.
+
+### Added
+
+- **`packages/core/src/shared/components/settings/ContactsSection.jsx`** — count display, Export action (Blob download), Import action (file picker + JSON parse + saveContact loop with skip-on-invalid).
+- **`test/smoke/ui/settings-contacts.smoke.js`** — list/save calls, JSON encode/decode, file-input wiring, count pluralisation, status/error rendering, Settings.jsx hook-up.
+
+### Changed
+
+- **`packages/core/src/shared/routes/Settings.jsx`** — contacts section flips from `kind: 'stub'` to `kind: 'panel'`.
+
 ## [0.117.0] - 2026-04-26
 
 Settings — Step 14 of 18 — Connected Sites panel.
