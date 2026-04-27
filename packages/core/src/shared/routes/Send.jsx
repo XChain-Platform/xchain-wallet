@@ -17,6 +17,8 @@ import { findLookalike } from '../utils/lookalike.js';
 import { checkPasteIntegrity } from '../utils/pasteIntegrity.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDeveloperMode } from '../hooks/useDeveloperMode.js';
+import { useSettings } from '../hooks/useSettings.js';
+import { checkRecipientNovelty } from '../../flows/recipientNovelty.js';
 import { HwSignBlock } from '../components/HwSignBlock.jsx';
 import { BalanceChanges } from '../components/BalanceChanges.jsx';
 import { RawPsbtViewer } from '../components/RawPsbtViewer.jsx';
@@ -50,6 +52,7 @@ export function Send({ walletId, onBack }) {
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
     const { developerMode } = useDeveloperMode();
+    const { settings } = useSettings();
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -190,6 +193,23 @@ export function Send({ walletId, onBack }) {
             .catch(() => { /* silent */ });
     }, []);
 
+    // §21.4 test-send protection. Session-scoped acknowledgement set —
+    // marking an address tested suppresses the gate for the rest of
+    // the session. Persistence across reloads is intentionally out of
+    // scope (avoids a wallet-schema migration just to track a UX
+    // affordance); the user re-confirms after a reload, which is fine.
+    const [testedThisSession, setTestedThisSession] = useState(
+        /** @type {Set<string>} */ (() => new Set()),
+    );
+    const markTested = useCallback((addr) => {
+        setTestedThisSession((prev) => {
+            if (prev.has(addr)) return prev;
+            const next = new Set(prev);
+            next.add(addr);
+            return next;
+        });
+    }, []);
+
     // §21.5 lookalike fuzzy-match. Compare the entered address against
     // the autocomplete candidate set (contacts + recent send history).
     // Surfaces a warning when the user is about to send to an address
@@ -205,6 +225,56 @@ export function Send({ walletId, onBack }) {
         const pct = Math.round(hit.score * 100);
         return `Looks ${pct}% similar to ${sourceLabel}: ${hit.match.address}. Double-check this is the address you mean.`;
     }, [toAddress, suggestions]);
+
+    // §21.4 test-send gate. Active when:
+    //   - threshold > 0 (Settings → Safety → Test-send warning)
+    //   - the send is a native-coin send (asset matches descriptor.coin
+    //     uppercased — the threshold is denominated in sats and only
+    //     translates cleanly for native sends; asset/token threshold is
+    //     a future fiat-aware affordance)
+    //   - amountSats exceeds the threshold
+    //   - recipient is novel (not in contacts on this chain, no past SEND
+    //     to it from any of the wallet's addresses on this chain)
+    //   - user hasn't already acknowledged this address in the session
+    const testSendGate = useMemo(() => {
+        const threshold = Number(settings?.grace?.testSendThresholdSats) || 0;
+        if (threshold <= 0) return null;
+        const dest = toAddress.trim();
+        if (!dest) return null;
+        const desc = chainId ? chainRegistry.get(chainId) : null;
+        const nativeTicker = desc?.coin?.toUpperCase();
+        if (!nativeTicker || asset.trim().toUpperCase() !== nativeTicker) return null;
+        const amt = parseFloat(String(amount).trim());
+        if (!Number.isFinite(amt) || amt <= 0) return null;
+        const amountSats = Math.floor(amt * 1e8);
+        if (amountSats <= threshold) return null;
+        const novelty = checkRecipientNovelty({
+            address: dest,
+            chainCoin: desc.coin,
+            contacts,
+            historyRows,
+        });
+        if (!novelty.novel) return null;
+        if (testedThisSession.has(dest)) return null;
+        return {
+            amountSats,
+            threshold,
+            ticker: nativeTicker,
+        };
+    }, [settings, toAddress, asset, amount, chainId, contacts, historyRows, testedThisSession]);
+
+    const onSendSmallTest = useCallback(() => {
+        const amt = parseFloat(String(amount).trim());
+        if (!Number.isFinite(amt) || amt <= 0) return;
+        // 1% of the original, with a floor of one sat-equivalent so
+        // tiny sends don't round to zero.
+        const reduced = Math.max(amt * 0.01, 1e-8);
+        // Round to 8 decimals (BTC/LTC/DOGE precision) and strip
+        // trailing zeros for a tidy display.
+        const display = Number(reduced.toFixed(8)).toString();
+        setAmount(display);
+        setStage('form');
+    }, [amount]);
 
     useEffect(() => {
         if (!chainId || !addressesByChain) return;
@@ -479,6 +549,34 @@ export function Send({ walletId, onBack }) {
                         ))}
                     </div>
                 ) : null}
+                {testSendGate ? (
+                    <div role="alert" className={styles.testSendGate}>
+                        <p className={styles.testSendTitle}>
+                            First send to this address — test it first?
+                        </p>
+                        <p className={styles.testSendBody}>
+                            You're sending {testSendGate.amountSats.toLocaleString()} sats
+                            to a new recipient. A small test send confirms the address
+                            works before the full amount goes out.
+                        </p>
+                        <div className={styles.testSendActions}>
+                            <Button
+                                type="button"
+                                variant="primary"
+                                onClick={onSendSmallTest}
+                            >
+                                Send a small test first
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="secondary"
+                                onClick={() => markTested(toAddress.trim())}
+                            >
+                                I've verified — continue
+                            </Button>
+                        </div>
+                    </div>
+                ) : null}
                 <RawPsbtViewer
                     developerMode={developerMode}
                     actionFields={{
@@ -527,9 +625,10 @@ export function Send({ walletId, onBack }) {
                         variant="primary"
                         loading={stage === 'submitting'}
                         disabled={
-                            isHwSource
+                            !!testSendGate
+                            || (isHwSource
                                 ? hwStatus !== 'available'
-                                : password.length === 0
+                                : password.length === 0)
                         }
                     >
                         {isHwSource

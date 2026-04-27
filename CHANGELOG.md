@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.134.0] - 2026-04-26
+
+§29 Send/Receive — Step 3 of 6 — Test-send protection.
+
+Closes the deferred §21 FOLLOWUP 2. The Settings → Safety → Test-send warning threshold (sats) — shipped at v0.123.0 with no consumer — finally has one. When all four conditions hold:
+
+1. `settings.grace.testSendThresholdSats > 0`
+2. The send is a native-coin send (asset matches `descriptor.coin` uppercased — sat-denominated thresholds only translate cleanly for native sends; asset / token thresholds wait on a fiat-aware affordance)
+3. The form's `amount × 1e8` (sats) exceeds the threshold
+4. The recipient is novel — not in contacts on this chain, never received a SEND from any of the wallet's addresses on this chain — and not yet acknowledged in the session
+
+…the review stage renders a banner above the submit area with two actions:
+
+- **Send a small test first** — reduces the form's amount to 1% of the original (with a 1-sat floor) and returns the user to the form so they can tweak before signing the test transaction.
+- **I've verified — continue** — adds the address to a session-scoped acknowledgement set so the gate stops firing for that address; the user can sign normally.
+
+The submit button is disabled while the gate is active. Closing the form, switching chains, or entering a different recipient all release the gate.
+
+### Added
+
+- **`packages/core/src/flows/recipientNovelty.js`** — `checkRecipientNovelty({ address, chainCoin, contacts, historyRows })` returning `{ everSentTo, knownAsContact, novel }`. Pure helper feeding off the same data Step 1 already loaded for autocomplete (no extra fetch). Exported from `packages/core/src/flows/index.js`.
+- **`test/smoke/core/recipient-novelty.smoke.js`** — empty inputs, contact-on-wrong-chain skip, history dedup over destination / DESTINATION / recipient field aliases, ISSUE actions ignored, novel-address result.
+- **`test/smoke/ui/send-test-send-gate.smoke.js`** — Send.jsx wires `useSettings`, the novelty helper, the `testedThisSession` set + `markTested` setter, the gate memo (with all four condition gates), the small-test handler (1% reduction, return to form), the gate UI (banner copy + buttons + ack wiring), submit-disable wiring, and the four new CSS hooks.
+
+### Changed
+
+- **`Send.jsx`** —
+  - `useSettings` + `checkRecipientNovelty` imported.
+  - New `testedThisSession` Set state + `markTested` callback.
+  - New `testSendGate` memo computing the four conditions; returns `{ amountSats, threshold, ticker } | null`.
+  - New `onSendSmallTest` callback that scales `amount × 0.01` (8-decimal float, trailing-zero stripped) and pops back to the form stage.
+  - Review stage renders the gate banner between decoded warnings and the RawPsbtViewer when `testSendGate` is non-null.
+  - Submit button gains `!!testSendGate ||` to its `disabled` predicate.
+- **`Send.module.css`** — `.testSendGate`, `.testSendTitle`, `.testSendBody`, `.testSendActions` rules. Banner uses the accent-primary color tokens (informational, not the warning yellow — this is a friendly nudge, not an error).
+
+### Behavior preserved
+
+- Threshold = 0 (the schema default): gate is off entirely. Existing wallets see no behavior change.
+- Asset / token sends: gate doesn't fire (sat threshold isn't meaningful here). FOLLOWUP — fiat-aware threshold once §45 PRICE oracle wires.
+- Acknowledgement is session-only — across reloads, the user re-confirms novel recipients. Persisting to a `wallet.testedRecipients` list would require a v3 migration; deferred until other v3 housekeeping accumulates.
+- Test-send doesn't auto-resume the original amount after broadcast — the user re-enters it next time. The session ack set means they don't see the gate again on the second send.
+
 ## [0.133.0] - 2026-04-26
 
 §29 Send/Receive — Step 2 of 6 — Recipient safety trio (checksum highlighting + paste-integrity + lookalike fuzzy match).

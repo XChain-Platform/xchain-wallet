@@ -43,6 +43,7 @@ export {
     buildRecentDestinations,
     filterSuggestions,
 } from './recentDestinations.js';
+export { checkRecipientNovelty } from './recipientNovelty.js';
 export {
     getCoinpayObligationsForAddress,
     getCoinpaysForAddress,
