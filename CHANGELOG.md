@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.123.0] - 2026-04-26
+
+Settings schema v1 → v2 migration. Unlocks every "Coming soon" deferred toggle across the §35 panels.
+
+`schemas/settings.js` `CURRENT_VERSION` bumps from 1 to 2; existing wallets migrate forward via `settingsMigrations[1]` with defaults that preserve v1 behavior. All five v1 panels stay backwards-compatible — the fresh fields default to no-ops (`'auto'` reduced motion, `false` for the new privacy toggles, `0` test-send threshold, `false` panic-mode enabled, `'off'` backup reminders).
+
+### Added
+
+- **Schema v2 fields:**
+  - `reducedMotion: 'auto' | 'always' | 'never'` (Appearance override of the OS `prefers-reduced-motion` signal)
+  - `privacy.blurOnBlur: boolean` (window-unfocus blur of mnemonic / QR / balance surfaces)
+  - `privacy.labelsSurviveRestore: boolean` (§19.5.2 on-chain label sync opt-in; toggle persists today, FILE-action submit/fetch wiring is shell-level pending)
+  - `grace.testSendThresholdSats: number` (large-amount confirmation gate; `0` disables)
+  - `panicMode.enabled: boolean` (§26.5 schema slot; full duress-PIN flow lands separately)
+  - `backupReminders: 'off' | 'monthly' | 'quarterly'` (§19.1 backup-reminder cadence)
+- **`settingsMigrations[1]`** in `schemas/migrations.js` — forward-only v1 → v2 migrator with sensible per-field defaults that preserve v1 behavior.
+- **`REDUCED_MOTION_MODES` + `BACKUP_REMINDER_CADENCES`** tuples exported from `schemas/settings.js`.
+- **`test/smoke/core/settings-schema-v2.smoke.js`** — schema constants, `createDefaultSettings` shape, v1-record migration with default-fill on missing fields, post-migration validation, `updateSettings` round-trip on the new fields, validator rejection of bad values.
+
+### Changed
+
+- **`packages/core/src/shared/components/settings/AppearanceSection.jsx`** — Reduced-motion select goes live (auto / always / never). Accent-color row stays deferred pending brand cut.
+- **`packages/core/src/shared/components/settings/PrivacySection.jsx`** — Blur-sensitive-on-blur and Labels-survive-restore toggles flip from disabled "Coming soon" to live.
+- **`packages/core/src/shared/components/settings/SafetySection.jsx`** — Test-send warning input, Panic mode toggle, and Backup reminders cadence picker flip from disabled "Coming soon" to live.
+
+### Migration semantics
+
+Vault opens existing v1 records, the singleton store calls `migrateSettings`, the migrator default-fills the new fields, the validator passes, the record is rewritten on the next `vault.settings.put`. No data loss; no surprise behavior change. Per-field comparison in the smoke confirms a v1 record with `changeAddressRotation: false` survives migration as `false` (not silently flipped to the default `true`).
+
 ## [0.122.0] - 2026-04-26
 
 Settings — drop Keyboard Shortcuts panel.

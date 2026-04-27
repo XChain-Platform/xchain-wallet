@@ -34,12 +34,13 @@ for (const v of [3, 5, 10, 15]) {
     assert.match(src, re, `UNDO_SEND_OPTIONS has ${v}-second entry`);
 }
 
-// Three deferred rows
-for (const label of ['Test-send warning', 'Panic mode', 'Backup reminders']) {
-    assert.ok(src.includes(`label="${label}"`), `${label} deferred row present`);
-}
-const comingSoonCount = (src.match(/Coming soon/g) || []).length;
-assert.ok(comingSoonCount >= 3, `at least 3 "Coming soon" hints (got ${comingSoonCount})`);
+// Three rows live now (schema v2): test-send warning, panic mode, backup reminders.
+assert.match(src, /Test-send warning \(sats\)/, 'test-send warning row present');
+assert.match(src, /testSendThresholdSats:\s*n/, 'test-send writes through grace.testSendThresholdSats');
+assert.match(src, /label="Panic mode"/, 'panic mode toggle present');
+assert.match(src, /panicMode:\s*\{\s*enabled:\s*v\s*\}/, 'panic mode writes through panicMode.enabled');
+assert.match(src, /Backup reminders/, 'backup reminders row present');
+assert.match(src, /backupReminders:\s*e\.target\.value/, 'backup reminders writes through update');
 
 // Settings.jsx wiring
 const settingsSrc = readFileSync(settingsPath, 'utf8');

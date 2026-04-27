@@ -1,19 +1,14 @@
 // AppearanceSection — §35.1 Appearance panel.
 //
-// In scope this step:
-//   - Theme picker: system / light / dark. Persisted to
-//     `settings.theme` via the Settings flow.
+// Live:
+//   - Theme picker: system / light / dark.
+//   - Reduced-motion override: auto (follow OS) / always / never.
 //
-// Deferred to later steps:
-//   - Reduced motion override (needs a `reducedMotion` field on the
-//     Settings schema; not yet in the v1 record). The shipped
-//     wallet currently respects `prefers-reduced-motion` from the
-//     OS for AnimatedQrFrames and a few other surfaces; the
-//     in-wallet override row appears here once the schema migration
-//     lands.
+// Deferred:
 //   - Accent color (per spec §35.1 only "when brand is finalized").
 
 import { useSettings } from '../../hooks/useSettings.js';
+import { ROW, ROW_LABEL, SELECT, STACK, Status } from './_settingsPrimitives.jsx';
 
 const THEME_OPTIONS = /** @type {const} */ ([
     { value: 'system', label: 'System default' },
@@ -21,32 +16,12 @@ const THEME_OPTIONS = /** @type {const} */ ([
     { value: 'dark', label: 'Dark' },
 ]);
 
-const ROW = {
-    display: 'flex',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 'var(--xc-space-2) var(--xc-space-3)',
-    background: 'var(--xc-surface-raised)',
-    border: '1px solid var(--xc-border)',
-    borderRadius: 'var(--xc-radius-md)',
-    fontSize: 'var(--xc-text-sm)',
-    gap: 'var(--xc-space-3)',
-};
-const STACK = {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 'var(--xc-space-1)',
-};
-const SELECT = {
-    background: 'var(--xc-bg)',
-    color: 'var(--xc-text)',
-    border: '1px solid var(--xc-border)',
-    borderRadius: 'var(--xc-radius-sm)',
-    padding: 'var(--xc-space-1) var(--xc-space-2)',
-    fontSize: 'var(--xc-text-sm)',
-    fontFamily: 'inherit',
-};
+const REDUCED_MOTION_OPTIONS = /** @type {const} */ ([
+    { value: 'auto', label: 'Follow system' },
+    { value: 'always', label: 'Always reduce' },
+    { value: 'never', label: 'Never reduce' },
+]);
+
 const HINT = {
     color: 'var(--xc-text-muted)',
     fontSize: 'var(--xc-text-xs)',
@@ -64,19 +39,23 @@ export function AppearanceSection() {
         try {
             await update({ theme: next });
         } catch (err) {
-            // The hook surfaces `error` for read failures; for write
-            // failures we keep the previous value visible and don't
-            // throw past the section. A future toast pass surfaces
-            // failures inline (§37.2).
             // eslint-disable-next-line no-console
             console.error('appearance.theme update failed:', err);
+        }
+    };
+    const onReducedMotionChange = async (next) => {
+        try {
+            await update({ reducedMotion: next });
+        } catch (err) {
+            // eslint-disable-next-line no-console
+            console.error('appearance.reducedMotion update failed:', err);
         }
     };
 
     return (
         <div style={STACK}>
             <div style={ROW}>
-                <span style={{ color: 'var(--xc-text-muted)' }}>Theme</span>
+                <span style={ROW_LABEL}>Theme</span>
                 <select
                     value={settings.theme}
                     onChange={(e) => onThemeChange(e.target.value)}
@@ -89,30 +68,22 @@ export function AppearanceSection() {
                 </select>
             </div>
             <div style={ROW}>
-                <span style={{ color: 'var(--xc-text-muted)' }}>Reduced motion</span>
-                <span style={HINT}>follows OS — override coming soon</span>
+                <span style={ROW_LABEL}>Reduced motion</span>
+                <select
+                    value={settings.reducedMotion ?? 'auto'}
+                    onChange={(e) => onReducedMotionChange(e.target.value)}
+                    aria-label="Reduced motion"
+                    style={SELECT}
+                >
+                    {REDUCED_MOTION_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                </select>
             </div>
             <div style={ROW}>
-                <span style={{ color: 'var(--xc-text-muted)' }}>Accent color</span>
+                <span style={ROW_LABEL}>Accent color</span>
                 <span style={HINT}>finalized at brand cut</span>
             </div>
-        </div>
-    );
-}
-
-function Status({ text, tone }) {
-    return (
-        <div style={{
-            padding: 'var(--xc-space-3) var(--xc-space-4)',
-            background: 'var(--xc-surface-raised)',
-            border: tone === 'error'
-                ? '1px solid var(--xc-error, #c33)'
-                : '1px dashed var(--xc-border)',
-            borderRadius: 'var(--xc-radius-md)',
-            color: tone === 'error' ? 'var(--xc-error, #c33)' : 'var(--xc-text-muted)',
-            fontSize: 'var(--xc-text-sm)',
-        }}>
-            {text}
         </div>
     );
 }

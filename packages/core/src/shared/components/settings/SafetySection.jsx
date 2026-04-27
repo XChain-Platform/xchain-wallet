@@ -1,15 +1,15 @@
 // SafetySection — §35.1 Safety panel.
 //
-// Live: auto-lock timeout (minutes), undo-send grace (seconds).
-// Both fields exist on the v1 Settings schema.
-//
-// Deferred to later steps (need schema migrations + flow wiring):
-//   - Test-send warning threshold (large-amount confirmation gate)
-//   - Panic mode duration (§26.5 — fully unbuilt per gap audit)
-//   - Backup reminders cadence (§19.1)
+// All five §35.1 rows live (schema v2 added the four missing fields):
+//   - Auto-lock timeout (minutes)
+//   - Undo-send grace (seconds)
+//   - Test-send warning threshold (sats; 0 disables)
+//   - Panic mode toggle — schema slot ships v2; full §26.5 duress-PIN
+//     wiring lands later, the toggle gates that behavior when present.
+//   - Backup reminders cadence (off / monthly / quarterly)
 
 import { useSettings } from '../../hooks/useSettings.js';
-import { ROW, ROW_LABEL, SELECT, STACK, Status, ToggleRow } from './_settingsPrimitives.jsx';
+import { INPUT, ROW, ROW_LABEL, SELECT, STACK, Status, ToggleRow } from './_settingsPrimitives.jsx';
 
 const AUTOLOCK_OPTIONS = /** @type {const} */ ([
     { value: 1, label: '1 minute' },
@@ -27,6 +27,12 @@ const UNDO_SEND_OPTIONS = /** @type {const} */ ([
     { value: 5, label: '5 seconds' },
     { value: 10, label: '10 seconds' },
     { value: 15, label: '15 seconds' },
+]);
+
+const BACKUP_REMINDER_OPTIONS = /** @type {const} */ ([
+    { value: 'off', label: 'Off' },
+    { value: 'monthly', label: 'Monthly' },
+    { value: 'quarterly', label: 'Quarterly' },
 ]);
 
 export function SafetySection() {
@@ -94,27 +100,56 @@ export function SafetySection() {
                     ) : null}
                 </select>
             </div>
-            <ToggleRow
-                label="Test-send warning"
-                hint="Coming soon — confirmation gate for large amounts. Needs schema migration."
-                checked={false}
-                disabled
-                onChange={() => {}}
-            />
+            <div style={ROW}>
+                <span style={ROW_LABEL}>Test-send warning (sats)</span>
+                <input
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    step={1}
+                    defaultValue={settings.grace.testSendThresholdSats}
+                    onBlur={(e) => {
+                        const n = Math.max(0, Math.floor(Number(e.target.value) || 0));
+                        update({ grace: { testSendThresholdSats: n } }).catch((err) => {
+                            // eslint-disable-next-line no-console
+                            console.error('grace.testSendThresholdSats update failed:', err);
+                        });
+                    }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+                    placeholder="0 = no warning"
+                    aria-label="Test-send warning threshold (sats)"
+                    style={{ ...INPUT, width: 140, textAlign: 'right' }}
+                />
+            </div>
             <ToggleRow
                 label="Panic mode"
-                hint="Coming soon — duress PIN that opens a decoy wallet. §26.5 + schema migration."
-                checked={false}
-                disabled
-                onChange={() => {}}
+                hint="Reserved — toggle persists the preference. Full §26.5 duress-PIN flow lands separately."
+                checked={Boolean(settings.panicMode?.enabled)}
+                onChange={(v) => {
+                    update({ panicMode: { enabled: v } }).catch((err) => {
+                        // eslint-disable-next-line no-console
+                        console.error('panicMode.enabled update failed:', err);
+                    });
+                }}
             />
-            <ToggleRow
-                label="Backup reminders"
-                hint="Coming soon — periodic prompt to verify the seed phrase is still readable. §19.1 + schema migration."
-                checked={false}
-                disabled
-                onChange={() => {}}
-            />
+            <div style={ROW}>
+                <span style={ROW_LABEL}>Backup reminders</span>
+                <select
+                    value={settings.backupReminders ?? 'off'}
+                    onChange={(e) => {
+                        update({ backupReminders: e.target.value }).catch((err) => {
+                            // eslint-disable-next-line no-console
+                            console.error('backupReminders update failed:', err);
+                        });
+                    }}
+                    aria-label="Backup reminders"
+                    style={SELECT}
+                >
+                    {BACKUP_REMINDER_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                </select>
+            </div>
         </div>
     );
 }

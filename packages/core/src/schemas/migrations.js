@@ -68,7 +68,34 @@ export const contactMigrations = {};
 /** @type {MigrationMap} */
 export const connectedSiteMigrations = {};
 /** @type {MigrationMap} */
-export const settingsMigrations = {};
+export const settingsMigrations = {
+    // v1 → v2: §35 Settings build round 2. Adds opt-in fields the v1
+    // panel surfaces deferred: reducedMotion override (Appearance),
+    // privacy.blurOnBlur + privacy.labelsSurviveRestore (Privacy),
+    // grace.testSendThresholdSats + panicMode.enabled + backupReminders
+    // (Safety). Defaults preserve v1 behavior — every field starts in
+    // its "no-op" state so existing wallets see no behavior change.
+    1: (r) => ({
+        ...r,
+        schemaVersion: 2,
+        reducedMotion: typeof r.reducedMotion === 'string' ? r.reducedMotion : 'auto',
+        privacy: {
+            torRouting: Boolean(r.privacy?.torRouting),
+            changeAddressRotation: r.privacy?.changeAddressRotation !== false,
+            hideSmallBalances: Boolean(r.privacy?.hideSmallBalances),
+            blurOnBlur: Boolean(r.privacy?.blurOnBlur),
+            labelsSurviveRestore: Boolean(r.privacy?.labelsSurviveRestore),
+        },
+        grace: {
+            undoSendSeconds: Number.isFinite(r.grace?.undoSendSeconds) ? r.grace.undoSendSeconds : 5,
+            testSendThresholdSats: Number.isFinite(r.grace?.testSendThresholdSats) ? r.grace.testSendThresholdSats : 0,
+        },
+        panicMode: {
+            enabled: Boolean(r.panicMode?.enabled),
+        },
+        backupReminders: typeof r.backupReminders === 'string' ? r.backupReminders : 'off',
+    }),
+};
 /** @type {MigrationMap} */
 export const pendingTxMigrations = {};
 /** @type {MigrationMap} */

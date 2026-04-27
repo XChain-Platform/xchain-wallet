@@ -13,10 +13,12 @@ import {
     result,
 } from './validate.js';
 
-export const CURRENT_VERSION = 1;
+export const CURRENT_VERSION = 2;
 
 export const THEMES = /** @type {const} */ (['system', 'light', 'dark']);
 export const FEE_STRATEGIES = /** @type {const} */ (['low', 'normal', 'fast', 'custom']);
+export const REDUCED_MOTION_MODES = /** @type {const} */ (['auto', 'always', 'never']);
+export const BACKUP_REMINDER_CADENCES = /** @type {const} */ (['off', 'monthly', 'quarterly']);
 
 // ADS default — single source of truth per §36. Flip this to false to
 // make ADS opt-in without touching call sites.
@@ -50,19 +52,22 @@ export const ADS_DEFAULT_TRIGGER_SATS = 1000;
 
 /**
  * @typedef {Object} Settings
- * @property {1} schemaVersion
+ * @property {2} schemaVersion
  * @property {typeof THEMES[number]} theme
+ * @property {typeof REDUCED_MOTION_MODES[number]} reducedMotion        v2 — `auto` follows the OS `prefers-reduced-motion`; `always` forces reduce; `never` ignores the OS preference
  * @property {number} autolockMinutes
  * @property {string} fiatCurrency
  * @property {string} language
  * @property {Record<string, SdkEndpoint>} sdkEndpoints
  * @property {Record<string, FeeSettings>} fees
- * @property {{ torRouting: boolean, changeAddressRotation: boolean, hideSmallBalances: boolean }} privacy
+ * @property {{ torRouting: boolean, changeAddressRotation: boolean, hideSmallBalances: boolean, blurOnBlur: boolean, labelsSurviveRestore: boolean }} privacy   v2 — adds blurOnBlur (window-unfocus blur of sensitive data), labelsSurviveRestore (§19.5.2 on-chain label sync opt-in)
  * @property {{ enabled: boolean, perChain: Record<string, AdsChainState> }} ads
  * @property {{ txConfirmations: boolean, incomingReceipts: boolean, dispenserFills: boolean, orderFills: boolean, priceAlerts: boolean }} notifications
  * @property {boolean} developerMode
  * @property {boolean} learnMode
- * @property {{ undoSendSeconds: number }} grace
+ * @property {{ undoSendSeconds: number, testSendThresholdSats: number }} grace                              v2 — adds testSendThresholdSats (large-amount confirmation gate; 0 = disabled)
+ * @property {{ enabled: boolean }} panicMode                                                                v2 — duress-mode toggle; full §26.5 wiring lands later, the schema slot ships now so the Safety panel can flip it
+ * @property {typeof BACKUP_REMINDER_CADENCES[number]} backupReminders                                       v2 — backup-reminder cadence
  */
 
 /** @returns {Settings} */
@@ -70,6 +75,7 @@ export function createDefaultSettings() {
     return {
         schemaVersion: CURRENT_VERSION,
         theme: 'system',
+        reducedMotion: 'auto',
         autolockMinutes: 15,
         fiatCurrency: 'USD',
         language: 'en',
@@ -79,6 +85,8 @@ export function createDefaultSettings() {
             torRouting: false,
             changeAddressRotation: true,
             hideSmallBalances: false,
+            blurOnBlur: false,
+            labelsSurviveRestore: false,
         },
         ads: {
             enabled: ADS_DEFAULT_ENABLED,
@@ -95,7 +103,12 @@ export function createDefaultSettings() {
         learnMode: false,
         grace: {
             undoSendSeconds: 5,
+            testSendThresholdSats: 0,
         },
+        panicMode: {
+            enabled: false,
+        },
+        backupReminders: 'off',
     };
 }
 
@@ -147,6 +160,7 @@ export function validateSettings(record) {
     const r = /** @type {Settings} */ (record);
     check(errors, 'schemaVersion', r.schemaVersion === CURRENT_VERSION, `must be ${CURRENT_VERSION}`);
     check(errors, 'theme', isOneOf(r.theme, THEMES), `must be one of ${THEMES.join(', ')}`);
+    check(errors, 'reducedMotion', isOneOf(r.reducedMotion, REDUCED_MOTION_MODES), `must be one of ${REDUCED_MOTION_MODES.join(', ')}`);
     check(errors, 'autolockMinutes', isNonNegativeInteger(r.autolockMinutes), 'must be a non-negative integer');
     check(errors, 'fiatCurrency', isNonEmptyString(r.fiatCurrency), 'must be a non-empty string');
     check(errors, 'language', isNonEmptyString(r.language), 'must be a non-empty string');
@@ -159,7 +173,9 @@ export function validateSettings(record) {
         isPlainObject(r.privacy) &&
             isBoolean(r.privacy.torRouting) &&
             isBoolean(r.privacy.changeAddressRotation) &&
-            isBoolean(r.privacy.hideSmallBalances),
+            isBoolean(r.privacy.hideSmallBalances) &&
+            isBoolean(r.privacy.blurOnBlur) &&
+            isBoolean(r.privacy.labelsSurviveRestore),
         'malformed',
     );
 
@@ -189,8 +205,22 @@ export function validateSettings(record) {
     check(
         errors,
         'grace',
-        isPlainObject(r.grace) && isNonNegativeInteger(r.grace.undoSendSeconds),
+        isPlainObject(r.grace)
+            && isNonNegativeInteger(r.grace.undoSendSeconds)
+            && isNonNegativeInteger(r.grace.testSendThresholdSats),
         'malformed',
+    );
+    check(
+        errors,
+        'panicMode',
+        isPlainObject(r.panicMode) && isBoolean(r.panicMode.enabled),
+        'malformed',
+    );
+    check(
+        errors,
+        'backupReminders',
+        isOneOf(r.backupReminders, BACKUP_REMINDER_CADENCES),
+        `must be one of ${BACKUP_REMINDER_CADENCES.join(', ')}`,
     );
 
     return result(errors);

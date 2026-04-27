@@ -50,11 +50,14 @@ for (const theme of schemaThemes) {
 assert.match(src, /loading\)\s*return\s*<Status/, 'loading state renders Status');
 assert.match(src, /error\)\s*return\s*<Status/, 'error state renders Status');
 
-// ─── 4. Reduced motion + accent color shown as deferred ──────────────
+// ─── 4. Reduced motion is live (schema v2); accent color still deferred
 
 assert.match(src, /Reduced motion/, 'Reduced motion row present');
+assert.match(src, /update\(\{\s*reducedMotion:\s*next\s*\}\)/, 'reducedMotion writes through update');
+assert.match(src, /value:\s*'auto'/, 'auto option present');
+assert.match(src, /value:\s*'always'/, 'always option present');
+assert.match(src, /value:\s*'never'/, 'never option present');
 assert.match(src, /Accent color/, 'Accent color row present');
-assert.match(src, /follows OS — override coming soon/, 'reduced-motion deferral copy');
 assert.match(src, /finalized at brand cut/, 'accent-color deferral copy');
 
 // ─── 5. Settings.jsx wires AppearanceSection as the appearance panel ─

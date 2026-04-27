@@ -20,20 +20,15 @@ assert.match(
     'privacy writes go through update({ privacy: { [field]: next } }) — nested merge',
 );
 
-// All three live toggles
-for (const field of ['torRouting', 'changeAddressRotation', 'hideSmallBalances']) {
+// All five live toggles (v2 added blurOnBlur + labelsSurviveRestore)
+for (const field of ['torRouting', 'changeAddressRotation', 'hideSmallBalances', 'blurOnBlur', 'labelsSurviveRestore']) {
     assert.ok(
         src.includes(`onToggle('${field}'`),
         `toggle for privacy.${field} present`,
     );
 }
-
-// Two deferred rows render disabled toggles with "Coming soon" hints.
-assert.match(src, /Blur sensitive data on blur/, 'blur-on-blur deferred row present');
-assert.match(src, /Labels survive restore/, 'labels-survive-restore deferred row present');
-const deferredCount = (src.match(/Coming soon/g) || []).length;
-assert.ok(deferredCount >= 2, `at least 2 "Coming soon" hints (got ${deferredCount})`);
-assert.match(src, /disabled\b/, 'deferred toggles use disabled prop');
+assert.match(src, /Blur sensitive data on blur/, 'blur-on-blur row present');
+assert.match(src, /Labels survive restore/, 'labels-survive-restore row present');
 
 // Primitives module exports what the section consumes.
 const primSrc = readFileSync(primitivesPath, 'utf8');

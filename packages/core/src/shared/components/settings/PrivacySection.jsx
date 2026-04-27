@@ -1,20 +1,15 @@
 // PrivacySection — §35.1 Privacy panel.
 //
-// Three toggles backed by `settings.privacy.*` (already in v1 of the
-// Settings schema):
+// All five §35.1 toggles backed by `settings.privacy.*` (schema v2):
 //   - Tor routing
 //   - Change-address rotation
 //   - Hide small balances
-//
-// Two additional rows from spec §35.1 ship as deferred:
 //   - Blur sensitive data on blur (window-unfocus blur of mnemonic /
-//     QR / balance values; needs new schema field)
-//   - Labels-survive-restore (§19.5.2 on-chain FILE-action sync;
-//     needs new schema field + flow wiring; flow primitives already
-//     exist per CHANGELOG v0.22.0)
-//
-// Both deferral rows render an opt-in toggle in disabled state so the
-// shape of the future UI is visible.
+//     QR / balance values; toggle ships now, the actual blur-on-blur
+//     wiring lives in shell-level event handlers added later)
+//   - Labels-survive-restore (§19.5.2 on-chain label sync opt-in;
+//     toggle persists the preference, the FILE-action submit/fetch
+//     wiring is shell-level work pending separately)
 
 import { useSettings } from '../../hooks/useSettings.js';
 import { ToggleRow, Status, STACK } from './_settingsPrimitives.jsx';
@@ -57,17 +52,15 @@ export function PrivacySection() {
             />
             <ToggleRow
                 label="Blur sensitive data on blur"
-                hint="Coming soon — needs schema migration for blurOnBlur flag."
-                checked={false}
-                disabled
-                onChange={() => {}}
+                hint="When enabled, mnemonic / QR / balance surfaces blur out while the wallet window is unfocused."
+                checked={Boolean(settings.privacy.blurOnBlur)}
+                onChange={(v) => onToggle('blurOnBlur', v)}
             />
             <ToggleRow
                 label="Labels survive restore"
-                hint="Coming soon — opts into §19.5.2 on-chain label sync (FILE-action transport)."
-                checked={false}
-                disabled
-                onChange={() => {}}
+                hint="Opts into §19.5.2 on-chain label sync (FILE-action transport). Submit/fetch wiring lands separately; the toggle persists the preference today."
+                checked={Boolean(settings.privacy.labelsSurviveRestore)}
+                onChange={(v) => onToggle('labelsSurviveRestore', v)}
             />
         </div>
     );
