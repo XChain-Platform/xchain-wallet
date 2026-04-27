@@ -153,6 +153,16 @@ export function signMessageRequest(opts) {
 }
 
 /**
+ * §17.5 / G025 — verify a signature against an address. Pure SDK call.
+ *
+ * @param {{ chainId: string, address: string, message: string, signature: string }} opts
+ * @returns {Promise<{ valid: boolean }>}
+ */
+export function verifyMessageRequest(opts) {
+    return /** @type {any} */ (sendMessage('auth.verifyMessage', opts));
+}
+
+/**
  * HW-wallet variant of sendAsset. No password. Background resolves
  * the `signerId` + routes the sign request through the renderer-side
  * signer bridge. See popup/messaging.js for the full shape.

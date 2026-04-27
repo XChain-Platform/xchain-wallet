@@ -64,6 +64,7 @@ import { OperatorDashboard } from '@xchain-wallet/core/shared/routes/OperatorDas
 import { History } from '@xchain-wallet/core/shared/routes/History.jsx';
 import { LinkForm } from '@xchain-wallet/core/shared/routes/LinkForm.jsx';
 import { SignMessageForm } from '@xchain-wallet/core/shared/routes/SignMessageForm.jsx';
+import { VerifySignatureForm } from '@xchain-wallet/core/shared/routes/VerifySignatureForm.jsx';
 import { ParallelComposer } from '@xchain-wallet/core/shared/routes/ParallelComposer.jsx';
 import { CrossChainSwapForm } from '@xchain-wallet/core/shared/routes/CrossChainSwapForm.jsx';
 import { CrossChainTemplates } from '@xchain-wallet/core/shared/routes/CrossChainTemplates.jsx';
@@ -461,6 +462,13 @@ function AppInner() {
                     />
                 );
             }
+            if (unlockedView === 'verify-signature') {
+                return (
+                    <VerifySignatureForm
+                        onBack={() => setUnlockedView('actions')}
+                    />
+                );
+            }
             if (unlockedView === 'parallel-compose' && activeWalletId) {
                 return (
                     <ParallelComposer
@@ -757,6 +765,7 @@ function AppInner() {
                             onMultisigSign: hasBtcAddress ? () => setUnlockedView('multisig-sign') : undefined,
                             onContacts: () => setUnlockedView('contacts'),
                             onSignMessage: () => setUnlockedView('sign-message'),
+                            onVerifySignature: () => setUnlockedView('verify-signature'),
                         })}
                         onBack={() => setUnlockedView('home')}
                     />
@@ -939,6 +948,7 @@ function buildActionEntries({
     onMultisigSign,
     onContacts,
     onSignMessage,
+    onVerifySignature,
 }) {
     return [
         {
@@ -1072,6 +1082,12 @@ function buildActionEntries({
             label: 'Sign message',
             description: 'Sign an arbitrary message with one of your addresses to prove ownership (§17.4 / §30.1).',
             onSelect: onSignMessage,
+        },
+        {
+            id: 'verify-signature',
+            label: 'Verify signature',
+            description: 'Verify a signature from any address, your own or someone else\'s (§17.5).',
+            onSelect: onVerifySignature,
         },
         {
             id: 'advanced',

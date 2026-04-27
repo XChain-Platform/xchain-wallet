@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.150.0] - 2026-04-27
+
+§17 Sign / Verify / Backup — Step 2 of 6 — Verify Signature route (G025).
+
+Counterpart to v0.149.0's Sign Message form. Verify a signature was produced by a given address over a given message. Pure SDK call (`sdk.auth.verifyMessage(address, message, signature)`) — no wallet password, no signer required, address can be any address (yours or a counterparty's).
+
+### Added
+
+- **`shared/routes/VerifySignatureForm.jsx`** — chain picker (sourced from the chain registry, not the wallet — verification has no wallet dependency), free-form Address input, Message + Signature textareas, Verify button. Result rendered in a `role="status"` `aria-live="polite"` row with green "✓ Signature is valid for this address." or red "✗ Signature does NOT match this address." copy.
+- **`auth.verifyMessage` host handler** in `extension/src/background/createBackgroundHost.js`. Wraps `sdk.auth.verifyMessage(...)` in a try/catch so malformed signatures return `{ valid: false }` rather than throwing — the form treats verify-failed and verify-malformed identically.
+- **`messaging.verifyMessageRequest`** wrappers in web + popup messaging.
+- **App routing** in both `web/src/App.jsx` and `extension/src/popup/App.jsx`: `unlockedView === 'verify-signature'` branch + `onVerifySignature` plumbed through `buildActionEntries` + a "Verify signature" entry adjacent to "Sign message".
+- **`test/smoke/ui/verify-signature.smoke.js`** — form structure (no password field, ChainPicker from registry not wallet, both result branches, status role + aria-live), host handler shape (try/catch wrap, positional SDK args), messaging wrappers in both shells, App wiring in both shells.
+
+### Behavior preserved
+
+- Sign Message route from v0.149.0 is unchanged.
+- All existing ActionsMenu entries keep their order; "Verify signature" slots in directly after "Sign message".
+- Desktop shell wiring is still pending (FOLLOWUP from Step 1; will land for both routes together).
+
 ## [0.149.0] - 2026-04-27
 
 §17 Sign / Verify / Backup — Step 1 of 6 — Sign Message route (G024).

@@ -481,6 +481,38 @@ export function createBackgroundHost(deps) {
         return sendAsset({ ...req, vault, chainRegistry, sdkRegistry });
     });
 
+    // §17.5 / G025 — verify signature. Pure SDK call, no signer / no
+    // password. Caller supplies chainId + address + message + signature.
+    host.register('auth.verifyMessage', async (req, { sdkRegistry }) => {
+        const chainId = req?.chainId;
+        const address = req?.address;
+        const message = req?.message;
+        const signature = req?.signature;
+        if (typeof chainId !== 'string' || !chainId) {
+            throw new Error('auth.verifyMessage: chainId is required');
+        }
+        if (typeof address !== 'string' || !address) {
+            throw new Error('auth.verifyMessage: address is required');
+        }
+        if (typeof message !== 'string') {
+            throw new Error('auth.verifyMessage: message must be a string');
+        }
+        if (typeof signature !== 'string' || !signature) {
+            throw new Error('auth.verifyMessage: signature is required');
+        }
+        const sdk = sdkRegistry.get(chainId);
+        if (!sdk?.auth?.verifyMessage) {
+            throw new Error(`auth.verifyMessage: SDK for "${chainId}" lacks auth.verifyMessage`);
+        }
+        let valid = false;
+        try {
+            valid = Boolean(sdk.auth.verifyMessage(address, message, signature));
+        } catch (_err) {
+            valid = false;
+        }
+        return { valid };
+    });
+
     // §17.4 / §30.1 / G024 — user-initiated message signing. Caller
     // supplies the addressId (HD or imported-WIF) and the wallet
     // resolves it to either `path` (HD) or `addressId` (imported).
