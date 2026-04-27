@@ -38,7 +38,6 @@ const expectedIds = [
     'connected-sites',
     'contacts',
     'ads',
-    'keyboard',
     'developer',
     'about',
 ];

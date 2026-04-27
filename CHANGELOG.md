@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.122.0] - 2026-04-26
+
+Settings — drop Keyboard Shortcuts panel.
+
+The §35 Settings tree previewed §34 keyboard shortcuts in a read-only panel at v0.120.0. Out of scope for the wallet at this point — removed entirely so the surface doesn't promise something we're not building.
+
+### Removed
+
+- **`packages/core/src/shared/components/settings/KeyboardShortcutsSection.jsx`** + its smoke. Settings.jsx drops the import + section literal. The `keyboard` section id is no longer in the §35.1 scaffold.
+
 ## [0.121.0] - 2026-04-26
 
 Settings — Step 18 of 18 — ADS onboarding consent during wallet creation.

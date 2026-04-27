@@ -11,7 +11,6 @@ import { DeveloperModeSection } from '../components/settings/DeveloperModeSectio
 import { LanguageRegionSection } from '../components/settings/LanguageRegionSection.jsx';
 import { PrivacySection } from '../components/settings/PrivacySection.jsx';
 import { FeesSection } from '../components/settings/FeesSection.jsx';
-import { KeyboardShortcutsSection } from '../components/settings/KeyboardShortcutsSection.jsx';
 import { NetworkEndpointsSection } from '../components/settings/NetworkEndpointsSection.jsx';
 import { NotificationsSection } from '../components/settings/NotificationsSection.jsx';
 import { SafetySection } from '../components/settings/SafetySection.jsx';
@@ -180,14 +179,6 @@ export function Settings({
             keywords: 'donation ads automatic per chain amount threshold lifetime',
             kind: 'panel',
             Component: AdsSection,
-        },
-        {
-            id: 'keyboard',
-            title: 'Keyboard Shortcuts',
-            description: 'Rebind global shortcuts.',
-            keywords: 'keyboard shortcuts rebind hotkey',
-            kind: 'panel',
-            Component: KeyboardShortcutsSection,
         },
         {
             id: 'developer',
