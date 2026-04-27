@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.143.0] - 2026-04-27
+
+§26 Lock & Panic — Step 1 of 6 — Caps-Lock warning in password fields (G067).
+
+The shared `<Input>` component now detects when Caps Lock is active while a password field is focused, and renders an inline aria-live status row reading "Caps Lock is on". Detection is gated on `type="password"` — every other input type sees no behavior change. Caller-supplied `onKeyDown` / `onKeyUp` / `onFocus` / `onBlur` handlers are chained, never replaced, so existing call sites (Locked.jsx, ImportWallet.jsx, CreateWallet.jsx, ViewPrivateKey.jsx, settings password prompts) pick up the warning automatically without local edits.
+
+### Added
+
+- **Caps-Lock detection** on `<Input>` for `type="password"` — `event.getModifierState('CapsLock')` read on `keydown` / `keyup` / `focus`. State scoped to focused-and-on; the warning hides on blur.
+- **Warning element** with `role="status"` + `aria-live="polite"`, included in `aria-describedby` only while shown so screen readers announce the change without spurious associations.
+- **`.capsLock` CSS class** in `Input.module.css` — uses `--xc-warning` token with `--xc-text-muted` fallback; ⇪ glyph rendered via `::before`.
+- **`test/smoke/ui/input-capslock-warning.smoke.js`** — guards: useState wired, password-only gating (`isPassword` flag + early-return in `readCapsLock`), `getModifierState('CapsLock')` invocation, missing-API guard (`typeof event.getModifierState !== 'function'`), all four caller-handler chain points (`onKeyDown` / `onKeyUp` / `onFocus` / `onBlur` each invoked via optional-chain), `showCapsLock = isPassword && focused && capsLockOn` composition, `role="status"` + `aria-live="polite"` markup, conditional `aria-describedby` inclusion, CSS class + glyph.
+
+### Changed
+
+- **`Input.jsx`** — destructures `onKeyDown` / `onKeyUp` / `onFocus` / `onBlur` from props before the `{...rest}` spread so the local chained handlers always win; the previous behavior of spreading rest after `aria-describedby` is preserved (hint / error / capsLock IDs still appear in describedby in that order).
+
+### Behavior preserved
+
+- Non-password inputs run zero new code paths — `isPassword` short-circuits the modifier-state read.
+- The hint / error rendering rules are untouched: hint hidden when error present, error keeps `role="alert"` priority over the new caps-lock status row.
+- All existing `<Input>` test cases pass without modification (label association, hint via aria-describedby, error + aria-invalid, ref forwarding, value/onChange pass-through).
+
 ## [0.142.0] - 2026-04-27
 
 §44 Fee UX — Step 5 of 5 — Settings → Fees panel wiring. **Closes the §44 cluster.**

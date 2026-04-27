@@ -46,3 +46,17 @@
     font-size: var(--xc-text-xs);
     color: var(--xc-danger);
 }
+
+.capsLock {
+    font-size: var(--xc-text-xs);
+    color: var(--xc-warning, var(--xc-text-muted));
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+}
+
+.capsLock::before {
+    content: '⇪';
+    font-size: var(--xc-text-sm);
+    line-height: 1;
+}
