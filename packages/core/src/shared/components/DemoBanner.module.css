@@ -1,0 +1,43 @@
+.banner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--xc-space-3);
+    padding: var(--xc-space-2) var(--xc-space-3);
+    margin-bottom: var(--xc-space-3);
+    background: var(--xc-warning-bg, var(--xc-bg-muted));
+    border: 1px solid var(--xc-warning, var(--xc-border-strong));
+    border-radius: var(--xc-radius-md);
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text);
+}
+
+.body {
+    flex: 1 1 240px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.headline {
+    font-weight: 700;
+    color: var(--xc-text);
+}
+
+.copy {
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    line-height: 1.3;
+}
+
+.actions {
+    flex-shrink: 0;
+}
+
+.error {
+    flex-basis: 100%;
+    margin: 0;
+    color: var(--xc-danger, #B91C1C);
+    font-size: var(--xc-text-xs);
+}

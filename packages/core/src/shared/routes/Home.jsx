@@ -6,6 +6,7 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useAutoLock } from '../hooks/useAutoLock.js';
 import { HomeTabs } from '../components/HomeTabs.jsx';
 import { BackupReminderCard } from '../components/BackupReminderCard.jsx';
+import { DemoBanner } from '../components/DemoBanner.jsx';
 import { HeaderActionMenu } from '../components/HeaderActionMenu.jsx';
 import { HeaderSettingsButton } from '../components/HeaderSettingsButton.jsx';
 import { HeaderNetworkButton } from '../components/HeaderNetworkButton.jsx';
@@ -492,6 +493,12 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onBuy, onCreateToken
                     </div>
                 ) : null}
 
+                {activeWalletId ? (
+                    <DemoBanner
+                        activeWalletId={activeWalletId}
+                        onExited={onLocked}
+                    />
+                ) : null}
                 {activeWalletId ? (
                     <BackupReminderCard
                         walletId={activeWalletId}

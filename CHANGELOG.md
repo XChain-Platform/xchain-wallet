@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.184.0] - 2026-04-27
+
+§25.2 — Cluster J Step 2 — Demo banner (G059).
+
+`<DemoBanner>` mounted above the BackupReminderCard on Home. Renders only when the active wallet matches the localStorage demo flag set in Step 1; offers an "Exit demo & wipe" action that calls `messaging.removeWallet`, clears the flag, and refreshes the App state back to Onboarding. Desktop messaging gains a `removeWallet` shim to match extension + web.
+
+### Added
+
+- **`packages/core/src/shared/components/DemoBanner.jsx` + `.module.css`** (new) — checks `flowsLib.isDemoWallet(walletId)` on mount; renders nothing for normal wallets; "Exit demo & wipe" wires through `messaging.removeWallet` + `clearDemoWalletId`.
+- **`packages/core/src/shared/routes/Home.jsx`** — mounts `<DemoBanner>` above `<BackupReminderCard>`.
+- **`packages/desktop/renderer/messaging.js`** — `removeWallet` shim added (extension + web already had it).
+
+Closes G059.
+
 ## [0.183.0] - 2026-04-27
 
 §25.2 — Cluster J Step 1 — Try-before-commit demo entry (G058).

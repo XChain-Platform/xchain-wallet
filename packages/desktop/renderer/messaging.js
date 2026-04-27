@@ -60,6 +60,11 @@ export function importBackupRequest(opts) {
     return /** @type {any} */ (sendMessage('wallet.importBackup', opts));
 }
 
+/** @param {{ walletId: string }} req */
+export function removeWallet(req) {
+    return /** @type {any} */ (sendMessage('wallet.remove', req));
+}
+
 /** @param {object} opts */
 export function renameWallet(opts) {
     return /** @type {any} */ (sendMessage('wallet.rename', opts));
