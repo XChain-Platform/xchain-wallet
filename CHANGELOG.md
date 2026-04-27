@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.168.0] - 2026-04-27
+
+§43 — Cluster F (single step) — dApp Bridge completeness verification (G126 + G128 + G129 + G130); Cluster F closed.
+
+The §43.2 `window.xchain` API surface, its background handlers, the content-script relay, and the web-app extension-detection banner all already shipped in earlier work. Cluster F's job was verification: pin the wiring with a smoke so future edits can't quietly regress it, and mark the four gap rows closed in the ledger. No production code changes — purely a regression-test + accounting step. Event emission for `accountsChanged` / `chainChanged` / `disconnect` is wired end-to-end (background → content script → page → provider listeners) but no background sender currently fires them; the actual emission triggers (state-change observers in the unlocked tree) are tracked as a Cluster F FOLLOWUP.
+
+### Added
+
+- **`test/smoke/bridge/dapp-bridge-completeness.smoke.js`** — verifies the provider exposes all 14 §43.2 methods plus the on/off listeners machinery; the background registers all 11 bridge.* routes and gates them with `requireSite` + `assertChainPermitted`; the content script relays `bridge.event` runtime messages to the page; and the web App mounts `<ExtensionBanner>` above its router.
+
+Closes G126 + G128 + G129 + G130. Cluster F — §43 dApp Bridge — closed at v0.168.0. Smoke baseline preserved (24 / 169; new dapp-bridge-completeness smoke passes).
+
 ## [0.167.0] - 2026-04-27
 
 §17.7.1 — Step 5 of Cluster E — Clipboard auto-clear configurable 0–600s (G028); Cluster E closed.
