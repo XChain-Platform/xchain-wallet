@@ -1,0 +1,96 @@
+// AboutSection — §35.1 "About" + §51.3 release info. Read-only.
+// Surfaces wallet version, update channel, license, reproducible-build
+// link, release-signatures link, and the SECURITY.md disclosure link.
+// Items whose underlying artifact isn't yet published render with a
+// muted "not yet published" hint instead of an inert link.
+
+import {
+    LICENSE_FILE,
+    LICENSE_NAME,
+    NOTICE_FILE,
+    RELEASE_SIGNATURES_DOC,
+    RELEASE_SIGNATURES_PUBLISHED,
+    REPRODUCIBLE_BUILD_DOC,
+    SECURITY_FILE,
+    SECURITY_PUBLISHED,
+    UPDATE_CHANNEL,
+    WALLET_VERSION,
+} from '../../../buildInfo.js';
+
+const ROW = {
+    display: 'flex',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 'var(--xc-space-2) var(--xc-space-3)',
+    background: 'var(--xc-surface-raised)',
+    border: '1px solid var(--xc-border)',
+    borderRadius: 'var(--xc-radius-md)',
+    fontSize: 'var(--xc-text-sm)',
+};
+const ROW_LABEL = { color: 'var(--xc-text-muted)' };
+const ROW_VALUE = { color: 'var(--xc-text)', fontWeight: 500 };
+const ROW_VALUE_MUTED = { color: 'var(--xc-text-muted)', fontStyle: 'italic' };
+const STACK = {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 'var(--xc-space-1)',
+};
+
+export function AboutSection() {
+    return (
+        <div style={STACK}>
+            <Row label="Version">
+                <span style={ROW_VALUE}>{WALLET_VERSION}</span>
+            </Row>
+            <Row label="Update channel">
+                <span style={ROW_VALUE}>{UPDATE_CHANNEL}</span>
+            </Row>
+            <Row label="License">
+                <DocLink path={LICENSE_FILE} label={LICENSE_NAME} />
+            </Row>
+            <Row label="Notice">
+                <DocLink path={NOTICE_FILE} label={NOTICE_FILE} />
+            </Row>
+            <Row label="Reproducible build">
+                <DocLink path={REPRODUCIBLE_BUILD_DOC} label="Verification procedure" />
+            </Row>
+            <Row label="Release signatures">
+                {RELEASE_SIGNATURES_PUBLISHED ? (
+                    <DocLink path={RELEASE_SIGNATURES_DOC} label="GPG fingerprint" />
+                ) : (
+                    <span style={ROW_VALUE_MUTED}>not yet published</span>
+                )}
+            </Row>
+            <Row label="Disclosure policy">
+                {SECURITY_PUBLISHED ? (
+                    <DocLink path={SECURITY_FILE} label={SECURITY_FILE} />
+                ) : (
+                    <span style={ROW_VALUE_MUTED}>not yet published</span>
+                )}
+            </Row>
+        </div>
+    );
+}
+
+function Row({ label, children }) {
+    return (
+        <div style={ROW}>
+            <span style={ROW_LABEL}>{label}</span>
+            {children}
+        </div>
+    );
+}
+
+function DocLink({ path, label }) {
+    // Repo-relative path shown literally — these documents ship inside
+    // the wallet bundle (LICENSE.md / NOTICE.md) or in-repo only. A
+    // future pass replaces these with anchored links to a hosted docs
+    // site once §55.6 governance + §51.5 release website land.
+    return (
+        <span style={{ color: 'var(--xc-text)', fontFamily: 'var(--xc-font-mono, monospace)', fontSize: 'var(--xc-text-xs)' }}>
+            {label}
+            <span style={{ color: 'var(--xc-text-muted)', marginLeft: 6 }}>({path})</span>
+        </span>
+    );
+}

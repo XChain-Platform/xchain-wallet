@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.106.0] - 2026-04-26
+
+Settings — Step 3 of 18 — About panel.
+
+First read-only panel filling in the §35.1 Settings tree. Surfaces wallet version, update channel, license, reproducible-build doc, release-signatures doc, and disclosure-policy doc as labelled rows. Items whose underlying artifact is not yet published (SECURITY.md per the gap audit; release signatures pre-GA) render a muted "not yet published" hint instead of an inert link.
+
+### Added
+
+- **`packages/core/src/buildInfo.js`** — single source of truth for build-time wallet metadata: `WALLET_VERSION`, `LICENSE_NAME`, `LICENSE_FILE`, `NOTICE_FILE`, `SECURITY_FILE` + `SECURITY_PUBLISHED`, `REPRODUCIBLE_BUILD_DOC`, `RELEASE_SIGNATURES_DOC` + `RELEASE_SIGNATURES_PUBLISHED`, `UPDATE_CHANNEL`. Bumped alongside every wallet version per the synchronized-versioning rule.
+- **`packages/core/src/shared/components/settings/AboutSection.jsx`** — renders the seven About rows from `buildInfo.js`. Read-only; no host roundtrip.
+- **`test/smoke/ui/settings-about.smoke.js`** — buildInfo exports the expected constants, `WALLET_VERSION` matches `core/package.json`, AboutSection renders the seven labelled rows with the publish-gate fallbacks, Settings.jsx wires AboutSection as the `about` panel and the render switch handles the new `panel` kind.
+
+### Changed
+
+- **`packages/core/src/shared/routes/Settings.jsx`** — render switch now handles a third section kind, `panel`, in addition to `drill` and `stub`. The `about` section flips from `kind: 'stub'` to `kind: 'panel'` with `Component: AboutSection`.
+
 ## [0.105.0] - 2026-04-26
 
 Settings — Step 1 + 2 of 18 — Substrate + sectioned page scaffold.

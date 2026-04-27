@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Screen, Icon } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { AboutSection } from '../components/settings/AboutSection.jsx';
 import styles from './ActionsMenu.module.css';
 import pickerStyles from './WalletPicker.module.css';
 
@@ -174,7 +175,8 @@ export function Settings({
             title: 'About',
             description: 'Version, license, reproducible build verification, release signatures.',
             keywords: 'about version license repro reproducible signatures release security',
-            kind: 'stub',
+            kind: 'panel',
+            Component: AboutSection,
         },
     ]), [walletLabel, accountLabel, onOpenWalletPicker, onOpenAccountPicker, activeWallet]);
 
@@ -239,6 +241,18 @@ export function Settings({
                             </SettingsSection>
                         );
                     }
+                    if (section.kind === 'panel' && section.Component) {
+                        const Component = section.Component;
+                        return (
+                            <SettingsSection
+                                key={section.id}
+                                title={section.title}
+                                description={section.description}
+                            >
+                                <Component />
+                            </SettingsSection>
+                        );
+                    }
                     return (
                         <SettingsSection
                             key={section.id}
@@ -260,10 +274,11 @@ export function Settings({
  *   title: string,
  *   description: string,
  *   keywords: string,
- *   kind: 'drill' | 'stub',
+ *   kind: 'drill' | 'stub' | 'panel',
  *   visible?: boolean,
  *   label?: string,
  *   onOpen?: () => void,
+ *   Component?: () => any,
  * }} SectionDef
  */
 
