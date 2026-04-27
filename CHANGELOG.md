@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.172.0] - 2026-04-27
+
+§15.6 — Cluster H Step 2 — BIP39 passphrase (25th word) in CreateWallet + ImportWallet.
+
+CreateWallet adds an "Add a BIP39 passphrase (advanced)" toggle that reveals two passphrase inputs and a warning that the passphrase is required to recover and cannot be reset. ImportWallet adds a "This wallet uses a BIP39 passphrase" toggle with a single passphrase input. Both threads pass `bip39Passphrase` through `messaging.importMnemonic` / `messaging.addImportedWallet`. FreeWallet variant suppresses the toggle (Counterwallet legacy rejects passphrases).
+
+### Added
+
+- **`packages/core/src/shared/routes/CreateWallet.jsx`** — `showPassphrase` / `bip39Passphrase` / `bip39PassphraseConfirm` state; advanced toggle + warning + matched-pair inputs; passphrase threaded into the import call.
+- **`packages/core/src/shared/routes/CreateWallet.module.css`** — `.advancedRow` / `.advancedToggle` / `.advancedWarning` styles.
+- **`packages/core/src/shared/routes/ImportWallet.jsx`** — `showPassphrase` / `bip39Passphrase` state; advanced toggle + single passphrase input (FreeWallet suppressed); passphrase threaded into the import call.
+- **`packages/core/src/shared/routes/ImportWallet.module.css`** — `.advancedRow` / `.advancedToggle` styles.
+
+Closes G019.
+
 ## [0.171.0] - 2026-04-27
 
 §15.1 — Cluster H Step 1 — 12 vs 24-word selector in CreateWallet.

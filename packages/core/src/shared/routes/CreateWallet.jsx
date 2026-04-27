@@ -44,6 +44,10 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
     const [confirm, setConfirm] = useState('');
     // §15.1 — 12-word default, 24-word opt-in. 12 → 128-bit entropy, 24 → 256-bit.
     const [wordCount, setWordCount] = useState(/** @type {12 | 24} */ (12));
+    // §15.6 — optional 25th-word BIP39 passphrase. Empty string means "not used".
+    const [showPassphrase, setShowPassphrase] = useState(false);
+    const [bip39Passphrase, setBip39Passphrase] = useState('');
+    const [bip39PassphraseConfirm, setBip39PassphraseConfirm] = useState('');
     const [passwordError, setPasswordError] = useState(
         /** @type {string | null} */ (null),
     );
@@ -95,6 +99,10 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
             setPasswordError('Passwords do not match.');
             return;
         }
+        if (showPassphrase && bip39Passphrase !== bip39PassphraseConfirm) {
+            setPasswordError('BIP39 passphrases do not match.');
+            return;
+        }
         setPasswordError(null);
         setMnemonic(cryptoLib.generateBip39Mnemonic(wordCount === 24 ? 256 : 128));
         setStage('mnemonic');
@@ -105,13 +113,16 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
         setStage('persisting');
         setPersistError(null);
         try {
+            const passphraseArg = showPassphrase && bip39Passphrase.length > 0
+                ? bip39Passphrase
+                : '';
             if (mode === 'add') {
                 if (typeof messaging.addImportedWallet !== 'function') {
                     throw new Error('messaging.addImportedWallet is not available in this shell.');
                 }
-                await messaging.addImportedWallet({ password, mnemonic, name });
+                await messaging.addImportedWallet({ password, mnemonic, name, bip39Passphrase: passphraseArg });
             } else {
-                await messaging.importMnemonic({ password, mnemonic, name });
+                await messaging.importMnemonic({ password, mnemonic, name, bip39Passphrase: passphraseArg });
             }
             // §36.1 ADS consent — one-time screen during wallet
             // creation. ADS_DEFAULT_ENABLED is true so "Enable" is a
@@ -363,6 +374,53 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                     <span className={styles.wordCountHint}>256-bit entropy</span>
                 </label>
             </fieldset>
+            <div className={styles.advancedRow}>
+                <label className={styles.advancedToggle}>
+                    <input
+                        type="checkbox"
+                        checked={showPassphrase}
+                        onChange={(e) => {
+                            setShowPassphrase(e.target.checked);
+                            if (!e.target.checked) {
+                                setBip39Passphrase('');
+                                setBip39PassphraseConfirm('');
+                            }
+                        }}
+                    />
+                    <span>Add a BIP39 passphrase (advanced)</span>
+                </label>
+                {showPassphrase ? (
+                    <>
+                        <p className={styles.advancedWarning}>
+                            The passphrase becomes a permanent part of your wallet —
+                            you will need BOTH your recovery phrase AND this
+                            passphrase to recover. If you forget it, your wallet is
+                            unrecoverable. It is not stored anywhere and cannot be reset.
+                        </p>
+                        <Input
+                            type="password"
+                            label="BIP39 passphrase"
+                            hint="Optional — leave blank to skip."
+                            value={bip39Passphrase}
+                            onChange={(e) => {
+                                setBip39Passphrase(e.target.value);
+                                if (passwordError) setPasswordError(null);
+                            }}
+                            autoComplete="new-password"
+                        />
+                        <Input
+                            type="password"
+                            label="Confirm passphrase"
+                            value={bip39PassphraseConfirm}
+                            onChange={(e) => {
+                                setBip39PassphraseConfirm(e.target.value);
+                                if (passwordError) setPasswordError(null);
+                            }}
+                            autoComplete="new-password"
+                        />
+                    </>
+                ) : null}
+            </div>
             <div className={actionsClass}>
                 <Button
                     type="submit"

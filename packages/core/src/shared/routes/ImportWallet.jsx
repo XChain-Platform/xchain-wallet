@@ -37,6 +37,12 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
     const [mnemonic, setMnemonic] = useState('');
     const [password, setPassword] = useState('');
     const [confirm, setConfirm] = useState('');
+    // §15.6 — optional 25th-word BIP39 passphrase. Hidden behind a toggle so
+    // users who never set one don't have to read the warning copy.
+    // FreeWallet imports follow the Counterwallet legacy code path, which
+    // rejects a passphrase, so we don't expose the toggle there.
+    const [showPassphrase, setShowPassphrase] = useState(false);
+    const [bip39Passphrase, setBip39Passphrase] = useState('');
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [busy, setBusy] = useState(false);
     const textareaRef = useRef(/** @type {HTMLTextAreaElement | null} */ (null));
@@ -70,13 +76,16 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
         setError(null);
         setBusy(true);
         try {
+            const passphraseArg = !isFreeWallet && showPassphrase && bip39Passphrase.length > 0
+                ? bip39Passphrase
+                : '';
             if (mode === 'add') {
                 if (typeof messaging.addImportedWallet !== 'function') {
                     throw new Error('messaging.addImportedWallet is not available in this shell.');
                 }
-                await messaging.addImportedWallet({ password, mnemonic: trimmed, name });
+                await messaging.addImportedWallet({ password, mnemonic: trimmed, name, bip39Passphrase: passphraseArg });
             } else {
-                await messaging.importMnemonic({ password, mnemonic: trimmed, name });
+                await messaging.importMnemonic({ password, mnemonic: trimmed, name, bip39Passphrase: passphraseArg });
             }
             onImported();
         } catch (err) {
@@ -176,6 +185,36 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                 autoComplete="new-password"
                 disabled={busy}
             />
+            {!isFreeWallet ? (
+                <div className={styles.advancedRow}>
+                    <label className={styles.advancedToggle}>
+                        <input
+                            type="checkbox"
+                            checked={showPassphrase}
+                            onChange={(e) => {
+                                setShowPassphrase(e.target.checked);
+                                if (!e.target.checked) setBip39Passphrase('');
+                            }}
+                            disabled={busy}
+                        />
+                        <span>This wallet uses a BIP39 passphrase</span>
+                    </label>
+                    {showPassphrase ? (
+                        <Input
+                            type="password"
+                            label="BIP39 passphrase"
+                            hint="Required to derive the same addresses as the original wallet."
+                            value={bip39Passphrase}
+                            onChange={(e) => {
+                                setBip39Passphrase(e.target.value);
+                                if (error) setError(null);
+                            }}
+                            autoComplete="off"
+                            disabled={busy}
+                        />
+                    ) : null}
+                </div>
+            ) : null}
             <div className={actionsClass}>
                 <Button
                     type="submit"
