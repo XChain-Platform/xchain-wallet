@@ -6,11 +6,13 @@
 //   - Back up seed phrase — wires `revealMnemonic` core flow through
 //     the `wallet.revealMnemonic` host handler. Inline password gate;
 //     mnemonic blurred until tapped; row collapses on done.
+//   - Test backup (dry-run restore) — wires `dryRunRestore` core flow
+//     through the `wallet.dryRunRestore` host handler. User pastes a
+//     candidate mnemonic; the panel renders an overall match flag plus
+//     a per-chain comparison report (matched / divergent / missing
+//     counts).
 //
 // Deferred (need additional flows / UI):
-//   - Test backup (dry-run restore) — `dryRunRestore` flow exists but
-//     wants its own multi-step UI (paste mnemonic, gap-limit picker,
-//     per-chain comparison report).
 //   - Published labels — §19.5.2 on-chain label sync; flow primitives
 //     ship at v0.22.0 but the FILE-action submit/fetch wiring is still
 //     pending.
@@ -47,6 +49,13 @@ export function BackupSection({ activeWallet }) {
     const [revealError, setRevealError] = useState(/** @type {string | null} */ (null));
     const [mnemonic, setMnemonic] = useState('');
     const [mnemonicHidden, setMnemonicHidden] = useState(true);
+
+    // §19.6 dry-run restore state.
+    const [dryRunStage, setDryRunStage] = useState(
+        /** @type {'idle' | 'form' | 'running' | 'result'} */ ('idle'),
+    );
+    const [dryRunError, setDryRunError] = useState(/** @type {string | null} */ (null));
+    const [dryRunResult, setDryRunResult] = useState(/** @type {any} */ (null));
 
     const onExport = async (password) => {
         if (typeof messaging?.exportBackupFile !== 'function') {
@@ -110,6 +119,39 @@ export function BackupSection({ activeWallet }) {
         setRevealError(null);
     }
 
+    async function runDryRun({ mnemonic: candidate, format, bip39Passphrase, gapLimit }) {
+        if (typeof messaging?.dryRunRestoreRequest !== 'function') {
+            setDryRunError('Dry-run restore is not wired in this shell yet.');
+            return;
+        }
+        if (!activeWallet?.id) {
+            setDryRunError('No active wallet.');
+            return;
+        }
+        setDryRunStage('running');
+        setDryRunError(null);
+        try {
+            const r = await messaging.dryRunRestoreRequest({
+                walletId: activeWallet.id,
+                mnemonic: candidate,
+                format,
+                bip39Passphrase,
+                gapLimit,
+            });
+            setDryRunResult(r);
+            setDryRunStage('result');
+        } catch (err) {
+            setDryRunError(err?.message || 'Dry-run restore failed.');
+            setDryRunStage('form');
+        }
+    }
+
+    function resetDryRun() {
+        setDryRunResult(null);
+        setDryRunError(null);
+        setDryRunStage('idle');
+    }
+
     return (
         <div style={STACK}>
             {pendingPassword !== null ? (
@@ -156,13 +198,27 @@ export function BackupSection({ activeWallet }) {
                     onClick={() => { setRevealStage('password'); setRevealError(null); }}
                 />
             )}
-            <BackupRow
-                label="Test backup (dry-run restore)"
-                hint="Coming soon — re-derive addresses from a mnemonic and confirm they match this wallet's balances per §19.6."
-                actionLabel="Test…"
-                disabled
-                onClick={() => {}}
-            />
+            {dryRunStage === 'form' || dryRunStage === 'running' ? (
+                <DryRunForm
+                    busy={dryRunStage === 'running'}
+                    error={dryRunError}
+                    onCancel={resetDryRun}
+                    onSubmit={runDryRun}
+                />
+            ) : dryRunStage === 'result' ? (
+                <DryRunReport
+                    result={dryRunResult}
+                    onDone={resetDryRun}
+                />
+            ) : (
+                <BackupRow
+                    label="Test backup (dry-run restore)"
+                    hint="Re-derive addresses from a candidate mnemonic and confirm they match this wallet's existing addresses (§19.6). Nothing persists; the candidate mnemonic is zeroed after the comparison runs."
+                    actionLabel="Test…"
+                    disabled={!activeWallet}
+                    onClick={() => { setDryRunStage('form'); setDryRunError(null); }}
+                />
+            )}
             <BackupRow
                 label="Published labels"
                 hint="Coming soon — opt into §19.5.2 on-chain label sync via FILE-action transport."
@@ -307,6 +363,161 @@ function RevealedMnemonic({ mnemonic, hidden, onToggle, onDone }) {
                 <button type="button" onClick={onDone} style={ACTION_BTN}>
                     Done
                 </button>
+            </div>
+        </div>
+    );
+}
+
+/**
+ * Dry-run restore form — paste mnemonic, pick format / passphrase /
+ * gap limit, fire the comparison.
+ */
+function DryRunForm({ busy, error, onCancel, onSubmit }) {
+    const [mn, setMn] = useState('');
+    const [format, setFormat] = useState(/** @type {'bip39' | 'counterwallet-legacy'} */ ('bip39'));
+    const [passphrase, setPassphrase] = useState('');
+    const [gapLimit, setGapLimit] = useState(10);
+
+    const canSubmit = mn.trim().length > 0 && !busy;
+
+    return (
+        <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 'var(--xc-space-2)',
+            padding: 'var(--xc-space-3)',
+            background: 'var(--xc-surface-raised)',
+            border: '1px solid var(--xc-border)',
+            borderRadius: 'var(--xc-radius-md)',
+        }}>
+            <div style={{ color: 'var(--xc-text)', fontWeight: 500 }}>Test backup</div>
+            <div style={ROW_HINT}>
+                Paste the mnemonic from your paper backup (or password manager). The
+                wallet derives the first {gapLimit} addresses on every active chain and
+                reports any mismatches without writing anything.
+            </div>
+            <textarea
+                value={mn}
+                onChange={(e) => setMn(e.target.value)}
+                placeholder="Paste mnemonic — separated by spaces"
+                rows={3}
+                aria-label="Candidate mnemonic"
+                style={{ ...passwordStyle, fontFamily: 'var(--xc-font-mono)', resize: 'vertical' }}
+            />
+            <div style={{ display: 'flex', gap: 'var(--xc-space-2)', alignItems: 'center', flexWrap: 'wrap' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 'var(--xc-text-sm)' }}>
+                    <span>Format:</span>
+                    <select
+                        value={format}
+                        onChange={(e) => setFormat(/** @type {any} */ (e.target.value))}
+                        aria-label="Mnemonic format"
+                        style={passwordStyle}
+                    >
+                        <option value="bip39">BIP39</option>
+                        <option value="counterwallet-legacy">Counterwallet legacy</option>
+                    </select>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 'var(--xc-text-sm)' }}>
+                    <span>Gap:</span>
+                    <input
+                        type="number"
+                        min={1}
+                        max={100}
+                        value={gapLimit}
+                        onChange={(e) => setGapLimit(Math.max(1, Math.min(100, Number(e.target.value) || 10)))}
+                        aria-label="Gap limit"
+                        style={{ ...passwordStyle, width: 70 }}
+                    />
+                </label>
+            </div>
+            {format === 'bip39' ? (
+                <input
+                    type="password"
+                    placeholder="BIP39 passphrase (optional)"
+                    value={passphrase}
+                    onChange={(e) => setPassphrase(e.target.value)}
+                    autoComplete="off"
+                    aria-label="BIP39 passphrase"
+                    style={passwordStyle}
+                />
+            ) : null}
+            {error ? <Status text={error} tone="error" /> : null}
+            <div style={{ display: 'flex', gap: 'var(--xc-space-2)', justifyContent: 'flex-end' }}>
+                <button type="button" onClick={onCancel} style={ACTION_BTN} disabled={busy}>Cancel</button>
+                <button
+                    type="button"
+                    onClick={() => onSubmit({
+                        mnemonic: mn.trim(),
+                        format,
+                        bip39Passphrase: format === 'bip39' ? passphrase : '',
+                        gapLimit,
+                    })}
+                    disabled={!canSubmit}
+                    style={{
+                        ...ACTION_BTN,
+                        background: canSubmit ? 'var(--xc-accent-primary)' : 'transparent',
+                        borderColor: canSubmit ? 'var(--xc-accent-primary)' : 'var(--xc-border)',
+                        color: canSubmit ? 'var(--xc-bg)' : 'var(--xc-text-muted)',
+                    }}
+                >
+                    {busy ? 'Testing…' : 'Run test'}
+                </button>
+            </div>
+        </div>
+    );
+}
+
+/**
+ * Dry-run comparison report. Shows the overall match flag and a
+ * per-chain breakdown (matched / divergent / missing counts).
+ */
+function DryRunReport({ result, onDone }) {
+    const overall = result?.overallMatch === true;
+    const perChain = Array.isArray(result?.perChain) ? result.perChain : [];
+    return (
+        <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 'var(--xc-space-2)',
+            padding: 'var(--xc-space-3)',
+            background: 'var(--xc-surface-raised)',
+            border: `1px solid ${overall ? 'var(--xc-accent-primary)' : 'var(--xc-danger)'}`,
+            borderRadius: 'var(--xc-radius-md)',
+        }}>
+            <div style={{
+                color: overall ? 'var(--xc-text)' : 'var(--xc-danger)',
+                fontWeight: 600,
+            }}>
+                {overall
+                    ? '✓ Backup matches this wallet on every active chain.'
+                    : '✗ Backup does NOT match this wallet on at least one chain.'}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {perChain.map((c) => (
+                    <div
+                        key={`${c.chainId}-${c.addressType}`}
+                        style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            fontSize: 'var(--xc-text-sm)',
+                            color: 'var(--xc-text)',
+                        }}
+                    >
+                        <span>{c.chainId} <span style={{ color: 'var(--xc-text-muted)' }}>({c.addressType})</span></span>
+                        <span style={{ fontFamily: 'var(--xc-font-mono)' }}>
+                            <span style={{ color: 'var(--xc-accent-primary)' }}>{c.matchedCount} ✓</span>
+                            {c.divergentCount > 0
+                                ? <span style={{ color: 'var(--xc-danger)' }}> · {c.divergentCount} ✗</span>
+                                : null}
+                            {c.missingCount > 0
+                                ? <span style={{ color: 'var(--xc-text-muted)' }}> · {c.missingCount} new</span>
+                                : null}
+                        </span>
+                    </div>
+                ))}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <button type="button" onClick={onDone} style={ACTION_BTN}>Done</button>
             </div>
         </div>
     );

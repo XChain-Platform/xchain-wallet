@@ -174,6 +174,16 @@ export function revealMnemonicRequest(opts) {
 }
 
 /**
+ * §19.6 — dry-run restore from a candidate mnemonic.
+ *
+ * @param {{ walletId: string, mnemonic: string, format?: string, bip39Passphrase?: string, gapLimit?: number }} opts
+ * @returns {Promise<{ overallMatch: boolean, perChain: Array<object> }>}
+ */
+export function dryRunRestoreRequest(opts) {
+    return /** @type {any} */ (sendMessage('wallet.dryRunRestore', opts));
+}
+
+/**
  * HW-wallet variant of sendAsset. No password. Background resolves
  * the `signerId` + routes the sign request through the renderer-side
  * signer bridge. See popup/messaging.js for the full shape.

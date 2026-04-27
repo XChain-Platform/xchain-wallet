@@ -129,6 +129,7 @@ const {
     removeWallet,
     signMessageFlow,
     revealMnemonic,
+    dryRunRestore,
 } = flows;
 
 /**
@@ -418,6 +419,26 @@ export function createBackgroundHost(deps) {
             ? /** @type {Record<string, unknown>} */ (req.patch)
             : /** @type {Record<string, unknown>} */ (req ?? {});
         return updateSettings(vault, patch);
+    });
+
+    // §19.6 — dry-run restore. Derive the first N addresses per active
+    // chain from a candidate mnemonic and compare against the current
+    // wallet. Nothing persists. The flow zeroes the seed material on
+    // exit; we forward the comparison report verbatim.
+    host.register('wallet.dryRunRestore', async (req, { vault, chainRegistry, sdkRegistry }) => {
+        return dryRunRestore({
+            vault,
+            walletId: req?.walletId,
+            mnemonic: req?.mnemonic,
+            format: req?.format,
+            bip39Passphrase: req?.bip39Passphrase,
+            activeChainIds: req?.activeChainIds,
+            gapLimit: req?.gapLimit,
+            accountIndex: req?.accountIndex,
+            change: req?.change,
+            chainRegistry,
+            sdkRegistry,
+        });
     });
 
     // §19.3 — reveal seed mnemonic. Decrypts the wallet's encrypted

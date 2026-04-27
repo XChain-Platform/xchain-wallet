@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.152.0] - 2026-04-27
+
+§19 Backup — Step 4 of Cluster B — Dry-run restore UI (G038).
+
+The Settings → Backup panel's "Test backup (dry-run restore)" row is now wired end-to-end. The user pastes a candidate mnemonic, picks BIP39 vs Counterwallet-legacy, sets a gap limit, and the panel renders an overall match flag plus a per-chain comparison report (matched / divergent / new counts). Nothing persists; the existing `dryRunRestore` core flow zeroes seed material on exit.
+
+### Added
+
+- **`wallet.dryRunRestore` host handler** in `extension/src/background/createBackgroundHost.js`. Thin pass-through to `flows.dryRunRestore`.
+- **`messaging.dryRunRestoreRequest`** wrappers in web + popup messaging.
+- **Inline dry-run UI in `BackupSection.jsx`** — three stages: idle (BackupRow with Test button), form (`<DryRunForm>`: candidate mnemonic textarea + BIP39/Counterwallet format selector + gap-limit input + optional BIP39 passphrase that auto-hides for Counterwallet), result (`<DryRunReport>`: green/red border based on `overallMatch`; per-chain rows show `chainId (addressType)` plus `matched ✓ · divergent ✗ · new` counts in tabular numerals).
+- **`test/smoke/ui/dry-run-restore-ui.smoke.js`** — BackupSection wiring (four-stage union, both subcomponents, format selector covers BIP39 + Counterwallet, BIP39-passphrase gating, success/failure copy, all three count fields); host handler; both messaging wrappers.
+
+### Changed
+
+- **`BackupSection.jsx`** — file header updated to list dry-run-restore as Live (was: Deferred). The "Test…" button activates whenever an `activeWallet` is supplied.
+
+### Behavior preserved
+
+- Encrypted-backup export (v0.116.0) and seed-phrase reveal (v0.151.0) flows are unchanged; all three live side-by-side in the same Settings panel and share the same primitive button + text styles.
+- The `dryRunRestore` core flow is untouched; this step is pure host + messaging + UI plumbing.
+- Counterwallet-legacy mnemonics correctly omit the BIP39 passphrase from the request (the form's `format === 'bip39'` gate suppresses both the input and the field in the dispatched options).
+
 ## [0.151.0] - 2026-04-27
 
 §19 Backup — Step 3 of Cluster B — Seed-phrase reveal flow.
