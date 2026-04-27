@@ -1,0 +1,94 @@
+.root {
+    margin: var(--xc-space-3) 0;
+    border: 1px dashed var(--xc-border);
+    border-radius: var(--xc-radius-sm);
+    padding: var(--xc-space-2) var(--xc-space-3);
+    background: var(--xc-surface-subtle, var(--xc-surface-raised));
+}
+
+.toggle {
+    cursor: pointer;
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--xc-text-muted);
+    list-style: revert;
+}
+
+.toggle:hover {
+    color: var(--xc-text);
+}
+
+.body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-3);
+    margin-top: var(--xc-space-2);
+}
+
+.section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+}
+
+.label {
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--xc-text-muted);
+    margin: 0;
+}
+
+.hex {
+    font-family: var(--xc-font-mono);
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text);
+    background: var(--xc-bg-muted);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-sm);
+    padding: var(--xc-space-2);
+    width: 100%;
+    resize: vertical;
+    min-height: 4em;
+    word-break: break-all;
+    white-space: pre-wrap;
+}
+
+.json {
+    font-family: var(--xc-font-mono);
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text);
+    background: var(--xc-bg-muted);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-sm);
+    padding: var(--xc-space-2);
+    margin: 0;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.placeholder {
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    font-style: italic;
+    margin: 0;
+}
+
+.copyBtn {
+    align-self: flex-start;
+    cursor: pointer;
+    background: var(--xc-bg-muted);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-sm);
+    padding: var(--xc-space-1) var(--xc-space-3);
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text);
+}
+
+.copyBtn:hover {
+    background: var(--xc-surface-raised);
+}

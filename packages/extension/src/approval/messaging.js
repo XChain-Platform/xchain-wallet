@@ -65,3 +65,14 @@ export function getAddressBalances(chainId, address) {
 export function getAddressesByChain(walletId) {
     return /** @type {any} */ (sendMessage('addresses.byChain', { walletId }));
 }
+
+/**
+ * Read the live settings record (§35). Approval window uses this to
+ * gate the §21.3 / §48.4 raw-PSBT viewer behind `developerMode`. Same
+ * `settings.get` host handler the popup + web shells call.
+ *
+ * @returns {Promise<{ developerMode?: boolean }>}
+ */
+export function getSettings() {
+    return /** @type {any} */ (sendMessage('settings.get'));
+}

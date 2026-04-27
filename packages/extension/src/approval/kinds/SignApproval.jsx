@@ -5,11 +5,13 @@ import {
     decoder as decoderLib,
 } from '@xchain-wallet/core';
 import { BalanceChanges } from '@xchain-wallet/core/shared/components/BalanceChanges.jsx';
+import { RawPsbtViewer } from '@xchain-wallet/core/shared/components/RawPsbtViewer.jsx';
 import {
     listWallets,
     resolveApproval,
     getAddressBalances,
     getAddressesByChain,
+    getSettings,
 } from '../messaging.js';
 import shared from '../approval.module.css';
 import styles from './SignApproval.module.css';
@@ -68,6 +70,24 @@ export function SignApproval({ id, kind, payload, onReject }) {
             });
         // Focus the password field once the screen paints.
         setTimeout(() => inputRef.current?.focus(), 0);
+    }, []);
+
+    // §21.3 / §48.4 raw-view gate. The approval window doesn't sit
+    // inside the shared MessagingProvider, so it can't use the
+    // `useDeveloperMode` hook directly — fetch settings once on mount.
+    // Defaults to `false` so a fetch failure or cold start hides the
+    // raw view (consistent with the spec's "developer mode hidden by
+    // default" stance).
+    const [developerMode, setDeveloperMode] = useState(false);
+    useEffect(() => {
+        let cancelled = false;
+        getSettings()
+            .then((s) => {
+                if (cancelled) return;
+                setDeveloperMode(Boolean(s?.developerMode));
+            })
+            .catch(() => { /* keep developerMode false on failure */ });
+        return () => { cancelled = true; };
     }, []);
 
     // §21.2 balance-change preview — only meaningful for the
@@ -236,6 +256,18 @@ export function SignApproval({ id, kind, payload, onReject }) {
                     error={previewBalances.error}
                 />
             ) : null}
+
+            <RawPsbtViewer
+                developerMode={developerMode}
+                psbtHex={kind === 'signPsbt' ? payload?.payload?.psbtHex : undefined}
+                actionFields={
+                    kind === 'signAction'
+                        ? { action: payload?.action, ...(payload?.payload || {}) }
+                        : kind === 'signPsbt'
+                            ? payload?.payload
+                            : undefined
+                }
+            />
 
             <form
                 id="sign-approval-form"

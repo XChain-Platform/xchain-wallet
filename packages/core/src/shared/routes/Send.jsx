@@ -11,8 +11,10 @@ import {
     decoder as decoderLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDeveloperMode } from '../hooks/useDeveloperMode.js';
 import { HwSignBlock } from '../components/HwSignBlock.jsx';
 import { BalanceChanges } from '../components/BalanceChanges.jsx';
+import { RawPsbtViewer } from '../components/RawPsbtViewer.jsx';
 import styles from './Send.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -42,6 +44,7 @@ export function Send({ walletId, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
+    const { developerMode } = useDeveloperMode();
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -356,6 +359,16 @@ export function Send({ walletId, onBack }) {
                         ))}
                     </div>
                 ) : null}
+                <RawPsbtViewer
+                    developerMode={developerMode}
+                    actionFields={{
+                        action: 'SEND',
+                        TICK: asset.trim(),
+                        AMOUNT: String(amount).trim(),
+                        DESTINATION: toAddress.trim(),
+                        ...(memo.trim() ? { MEMO: memo.trim() } : {}),
+                    }}
+                />
                 {isHwSource ? (
                     <HwSignBlock
                         signerKind={fromAddress.source}

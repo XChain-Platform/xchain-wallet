@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.131.0] - 2026-04-26
+
+§21 Signing Safety — Step 6 of 6 — Raw PSBT viewer (Developer Mode gated). Closes the §21 cluster and retires Settings FOLLOWUP 6.
+
+A power-user reveal under both sign surfaces — SignApproval (`signPsbt` + `signAction`) and Send.jsx review. Hidden by default; opens to a `<details>` disclosure showing whichever raw pieces the surface has at sign time:
+
+- **PSBT hex** — surfaced for dApp-initiated `signPsbt` requests where the dApp passes the hex it built.
+- **Action fields** — pretty-printed JSON of the payload the encoder will ingest. Always available for `signAction` and the Send.jsx review form.
+- **Parsed inputs / outputs** — placeholder section that reads "(parser not wired yet — see PSBT hex above)". A future commit wires a real BIP-174 parser; until then the disclosure stays honest about its limit.
+
+A Copy button writes the displayed payload (PSBT hex when present, else action-fields JSON) to the clipboard.
+
+### Added
+
+- **`packages/core/src/shared/components/RawPsbtViewer.jsx`** — `<RawPsbtViewer developerMode psbtHex actionFields />`. Hard-gated: `developerMode=false` → null; no payload at all → null (no orphan disclosure). Read-only.
+- **`packages/core/src/shared/components/RawPsbtViewer.module.css`** — dashed border + subtle background so the viewer reads as a developer affordance, not part of the main sign surface.
+- **`getSettings()`** in `packages/extension/src/approval/messaging.js` — the approval window doesn't sit inside the shared MessagingProvider, so it can't use the `useDeveloperMode` hook. This wrapper hits the same `settings.get` host handler the popup + web shells call.
+- **`test/smoke/ui/raw-psbt-viewer.smoke.js`** — public API + dual gate semantics (developerMode + non-empty payload), section presence + ARIA labels, Copy-button label semantics, every CSS hook, SignApproval wiring (settings fetch + per-kind props), Send.jsx wiring.
+
+### Changed
+
+- **`SignApproval.jsx`** — fetches `getSettings` once on mount, caches `developerMode` in local state (defaults to `false` so cold start + fetch failure both keep the gate closed). Renders `<RawPsbtViewer>` between BalanceChanges and the password form.
+- **`Send.jsx`** — uses the existing `useDeveloperMode` hook (Send sits inside MessagingProvider). Renders `<RawPsbtViewer>` after the warnings block in the review stage with `action: 'SEND'` + the form's TICK / AMOUNT / DESTINATION / MEMO.
+
+### Behavior preserved
+
+- Sign-screen surfaces unchanged for users with developer mode off — the new component renders nothing in that path. Fetch failures keep the gate closed by design.
+- Approve / Reject footer position, password gate, save-permanent toggle, HW signing block, BalanceChanges placement, action details disclosure — all unchanged.
+
+### §21 cluster — close
+
+This commit closes the §21 Signing Safety build (Steps 1–6, v0.126.0–v0.131.0). End-to-end: pure simulator (Step 1) → renderer (Step 2) → Send.jsx wiring (Step 3) → SignApproval wiring (Step 4) → §21.3 layout polish (Step 5) → raw view (Step 6). Of the seven §21 audit rows in the 2026-04-26 gap report, five close (transaction simulator, raw PSBT viewer, the §21.3 layout pieces). Two remain deferred for §29 Send-form clusters (test-send protection, recipient checksum highlighting + autocomplete) — see the close report at `claude/reports/specs/2026-04-26_signing-safety-build-close.md` (lands in the next commit).
+
 ## [0.130.0] - 2026-04-26
 
 §21 Signing Safety — Step 5 of 6 — sign-screen layout polish (§21.3 + §21.7).
