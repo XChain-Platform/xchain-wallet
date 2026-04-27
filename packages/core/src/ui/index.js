@@ -6,6 +6,7 @@
 export { Screen } from './Screen.jsx';
 export { Button } from './Button.jsx';
 export { Input } from './Input.jsx';
+export { AddressCombobox } from './AddressCombobox.jsx';
 export { ChainBadge } from './ChainBadge.jsx';
 export { AddressText } from './AddressText.jsx';
 export { CopyButton } from './CopyButton.jsx';

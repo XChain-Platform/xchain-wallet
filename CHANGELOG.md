@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.132.0] - 2026-04-26
+
+§29 Send/Receive — Step 1 of 6 — Recipient autocomplete + smart paste.
+
+The Send To-field becomes a combobox sourced from the user's contacts plus addresses they have previously sent to from this wallet on the active chain. Pasting into the To-field detects BIP21 / `xchain:` URIs (pre-filling amount, ticker, and memo) and surfaces a hint when the clipboard contents look like a private-key WIF (pointing the user at the import-private-key flow rather than letting a private key land in a recipient field).
+
+Closes the §29.4 / §29.5 audit rows and the deferred §21 FOLLOWUP 4 (autocomplete).
+
+### Added
+
+- **`packages/core/src/flows/recentDestinations.js`** — pure helper. `buildRecentDestinations({ contacts, chainCoin, historyRows })` returns a `Suggestion[]` ordered contacts-first, then send-history entries deduped by address and ranked by recency × frequency. `filterSuggestions(suggestions, query)` runs the substring filter the combobox applies on every keystroke. Both exported from `packages/core/src/flows/index.js`.
+- **`packages/core/src/ui/AddressCombobox.jsx`** + **`.module.css`** — combobox primitive wrapping `<Input>`. ARIA: `role="combobox"`, `aria-expanded`, `aria-controls`, `aria-autocomplete="list"`, `aria-activedescendant`; listbox + option roles on the dropdown; `aria-selected` on the active option. Keyboard nav for ArrowUp / ArrowDown / Enter / Escape. `onPaste` passes through to the underlying input so callers (Send.jsx) can run paste detection before the value lands. Re-exported from `@xchain-wallet/core/ui`.
+- **`test/smoke/core/recent-destinations.smoke.js`** — exercises the helper across empty inputs, contact filtering by chain, history deduplication and recency ordering, contact-vs-history merge precedence, contact name vs entry-label sublabel rules, and `filterSuggestions` substring matching.
+- **`test/smoke/ui/address-combobox.smoke.js`** — public API, forwardRef export, Input wrapping, every ARIA hook, the four keyboard handlers, mousedown selection wiring, and CSS-module hooks.
+- **`test/smoke/ui/send-autocomplete.smoke.js`** — Send.jsx wires the combobox in the form, fetches contacts on mount, fetches per-address history when chain changes, feeds the helper, runs `detectQrContent` on paste, and surfaces `pasteHint` through the combobox `hint` slot.
+
+### Changed
+
+- **`Send.jsx`** — To-field is now `<AddressCombobox>` with the same label, placeholder, and autocomplete attributes as before. Suggestions assemble from `messaging.listContacts()` (one fetch on mount) + `messaging.getAddressHistory({ chainId, address })` for each of the wallet's own addresses on the active chain (refetches when the chain changes). Paste runs through `uri.detectQrContent`:
+  - `bip21` → fills `to`, `amount`, `tick` (as ticker), `message` (as memo); shows "Filled from `<scheme>`: URI" in the hint slot.
+  - `xchain-uri` → same fill, "Filled from xchain: URI".
+  - `wif` → blocks the paste, shows "That looks like a private key…" pointing at the import flow.
+  - Anything else falls through to default text paste.
+- **`SafetySection.jsx`** — Undo-send grace row removed. The feature was scrapped: a cancellable countdown both delays every broadcast and rewards rage-clicking with a no-op. The `settings.grace.undoSendSeconds` schema field stays as a dead slot until a future v3 migration sweeps it (see settings close FOLLOWUP 12).
+- **`test/smoke/ui/settings-safety.smoke.js`** — drops the undo-send assertions and adds explicit `doesNotMatch` checks so a future re-introduction is loud.
+
+### Behavior preserved
+
+- The To-field still accepts arbitrary text — pasting a raw address passes through unmodified. The combobox dropdown is purely additive and disappears on Escape, blur outside the combobox, or selection.
+- Contact / history fetches are non-blocking — failure leaves the user with an empty suggestion list and the bare text-input behavior intact.
+- Submit, signing, balance preview, raw PSBT viewer — all unchanged.
+
 ## [0.131.0] - 2026-04-26
 
 §21 Signing Safety — Step 6 of 6 — Raw PSBT viewer (Developer Mode gated). Closes the §21 cluster and retires Settings FOLLOWUP 6.

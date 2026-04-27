@@ -1,12 +1,17 @@
 // SafetySection — §35.1 Safety panel.
 //
-// All five §35.1 rows live (schema v2 added the four missing fields):
+// Live rows:
 //   - Auto-lock timeout (minutes)
-//   - Undo-send grace (seconds)
 //   - Test-send warning threshold (sats; 0 disables)
 //   - Panic mode toggle — schema slot ships v2; full §26.5 duress-PIN
 //     wiring lands later, the toggle gates that behavior when present.
 //   - Backup reminders cadence (off / monthly / quarterly)
+//
+// The undo-send grace row was removed v0.132.0 — the feature was
+// scrapped (a cancellable countdown delays every broadcast and rewards
+// rage-clicking with a no-op). The `settings.grace.undoSendSeconds`
+// schema field stays around as a dead slot until a future v3 migration
+// sweeps it; see settings close-report FOLLOWUP 12.
 
 import { useSettings } from '../../hooks/useSettings.js';
 import { INPUT, ROW, ROW_LABEL, SELECT, STACK, Status, ToggleRow } from './_settingsPrimitives.jsx';
@@ -19,14 +24,6 @@ const AUTOLOCK_OPTIONS = /** @type {const} */ ([
     { value: 60, label: '1 hour' },
     { value: 240, label: '4 hours' },
     { value: 0, label: 'Never (until tab close)' },
-]);
-
-const UNDO_SEND_OPTIONS = /** @type {const} */ ([
-    { value: 0, label: 'Off (send immediately)' },
-    { value: 3, label: '3 seconds' },
-    { value: 5, label: '5 seconds' },
-    { value: 10, label: '10 seconds' },
-    { value: 15, label: '15 seconds' },
 ]);
 
 const BACKUP_REMINDER_OPTIONS = /** @type {const} */ ([
@@ -48,19 +45,10 @@ export function SafetySection() {
             console.error('autolock.update failed:', err);
         }
     };
-    const onUndoSendChange = async (next) => {
-        try { await update({ grace: { undoSendSeconds: Number(next) } }); } catch (err) {
-            // eslint-disable-next-line no-console
-            console.error('grace.undoSendSeconds.update failed:', err);
-        }
-    };
 
     const autolockValue = AUTOLOCK_OPTIONS.some((o) => o.value === settings.autolockMinutes)
         ? settings.autolockMinutes
         : settings.autolockMinutes;
-    const undoSendValue = UNDO_SEND_OPTIONS.some((o) => o.value === settings.grace.undoSendSeconds)
-        ? settings.grace.undoSendSeconds
-        : settings.grace.undoSendSeconds;
 
     return (
         <div style={STACK}>
@@ -78,24 +66,6 @@ export function SafetySection() {
                     {!AUTOLOCK_OPTIONS.some((o) => o.value === settings.autolockMinutes) ? (
                         <option value={String(settings.autolockMinutes)}>
                             {`${settings.autolockMinutes} minutes (custom)`}
-                        </option>
-                    ) : null}
-                </select>
-            </div>
-            <div style={ROW}>
-                <span style={ROW_LABEL}>Undo-send grace</span>
-                <select
-                    value={String(undoSendValue)}
-                    onChange={(e) => onUndoSendChange(e.target.value)}
-                    aria-label="Undo-send grace"
-                    style={SELECT}
-                >
-                    {UNDO_SEND_OPTIONS.map((o) => (
-                        <option key={o.value} value={String(o.value)}>{o.label}</option>
-                    ))}
-                    {!UNDO_SEND_OPTIONS.some((o) => o.value === settings.grace.undoSendSeconds) ? (
-                        <option value={String(settings.grace.undoSendSeconds)}>
-                            {`${settings.grace.undoSendSeconds} seconds (custom)`}
                         </option>
                     ) : null}
                 </select>

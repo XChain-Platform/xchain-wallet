@@ -40,6 +40,10 @@ export {
     deleteContact,
 } from './contacts.js';
 export {
+    buildRecentDestinations,
+    filterSuggestions,
+} from './recentDestinations.js';
+export {
     getCoinpayObligationsForAddress,
     getCoinpaysForAddress,
 } from './coinpayQueries.js';

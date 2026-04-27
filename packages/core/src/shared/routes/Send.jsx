@@ -3,13 +3,16 @@ import {
     Screen,
     Button,
     Input,
+    AddressCombobox,
     ChainBadge,
     AddressText,
  ChainPicker,  Icon,} from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
+    uri as uriLib,
 } from '@xchain-wallet/core';
+import { buildRecentDestinations } from '../../flows/recentDestinations.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDeveloperMode } from '../hooks/useDeveloperMode.js';
 import { HwSignBlock } from '../components/HwSignBlock.jsx';
@@ -89,6 +92,90 @@ export function Send({ walletId, onBack }) {
             });
         return () => { cancelled = true; };
     }, [walletId, messaging]);
+
+    // §29.4 / §21.6 autocomplete source data. Contacts cover the whole
+    // vault and load once; history is per-chain × per-address and
+    // refetches when the chain changes.
+    const [contacts, setContacts] = useState(/** @type {any[]} */ ([]));
+    useEffect(() => {
+        let cancelled = false;
+        messaging.listContacts()
+            .then((rows) => { if (!cancelled) setContacts(Array.isArray(rows) ? rows : []); })
+            .catch(() => { /* silent — autocomplete just shows fewer hits */ });
+        return () => { cancelled = true; };
+    }, [messaging]);
+
+    const [historyRows, setHistoryRows] = useState(/** @type {any[]} */ ([]));
+    useEffect(() => {
+        if (!chainId || !addressesByChain) return undefined;
+        const ownAddrs = (addressesByChain[chainId] || []).map((a) => a.address);
+        if (ownAddrs.length === 0) {
+            setHistoryRows([]);
+            return undefined;
+        }
+        let cancelled = false;
+        Promise.all(
+            ownAddrs.map((addr) =>
+                messaging.getAddressHistory({ chainId, address: addr })
+                    .then((rows) => Array.isArray(rows) ? rows : [])
+                    .catch(() => []),
+            ),
+        ).then((results) => {
+            if (cancelled) return;
+            setHistoryRows(results.flat());
+        });
+        return () => { cancelled = true; };
+    }, [chainId, addressesByChain, messaging]);
+
+    const suggestions = useMemo(() => {
+        const descriptor = chainId ? chainRegistry.get(chainId) : null;
+        return buildRecentDestinations({
+            contacts,
+            chainCoin: descriptor?.coin,
+            historyRows,
+        });
+    }, [contacts, chainId, historyRows]);
+
+    // §29.5 smart paste — BIP21 URI pre-fills amount/token/memo;
+    // pasting a WIF surfaces "import this private key instead?" rather
+    // than letting the user paste a private key into the To field.
+    const [pasteHint, setPasteHint] = useState(/** @type {string | null} */ (null));
+    const onAddressPaste = useCallback((e) => {
+        const text = e?.clipboardData?.getData?.('text');
+        if (typeof text !== 'string' || text.length === 0) return;
+        const trimmed = text.trim();
+        const detected = uriLib.detectQrContent(trimmed, { chainRegistry });
+        if (detected.type === 'bip21') {
+            e.preventDefault();
+            setToAddress(detected.address);
+            const parts = detected.parts;
+            if (parts.amount) setAmount(parts.amount);
+            const tickParam = parts.params?.tick;
+            if (typeof tickParam === 'string' && tickParam.length > 0) {
+                setAsset(tickParam.toUpperCase());
+            }
+            if (parts.message) setMemo(parts.message);
+            setPasteHint(`Filled from ${detected.scheme}: URI`);
+        } else if (detected.type === 'xchain-uri') {
+            e.preventDefault();
+            setToAddress(detected.parts.address);
+            const tickParam = detected.parts.params?.tick;
+            if (typeof tickParam === 'string' && tickParam.length > 0) {
+                setAsset(tickParam.toUpperCase());
+            }
+            if (detected.parts.amount) setAmount(detected.parts.amount);
+            if (detected.parts.message) setMemo(detected.parts.message);
+            setPasteHint('Filled from xchain: URI');
+        } else if (detected.type === 'wif') {
+            e.preventDefault();
+            setPasteHint(
+                'That looks like a private key, not an address. Use Settings → Import private key to import it.',
+            );
+        } else {
+            // raw address / unknown — let the default paste happen.
+            setPasteHint(null);
+        }
+    }, []);
 
     useEffect(() => {
         if (!chainId || !addressesByChain) return;
@@ -441,11 +528,17 @@ export function Send({ walletId, onBack }) {
                 </div>
             ) : null}
 
-            <Input
+            <AddressCombobox
                 label="To"
                 value={toAddress}
-                onChange={(e) => setToAddress(e.target.value)}
+                onChange={(e) => {
+                    setToAddress(e.target.value);
+                    if (pasteHint) setPasteHint(null);
+                }}
+                onPaste={onAddressPaste}
+                suggestions={suggestions}
                 placeholder={descriptor ? `${descriptor.displayName} address` : 'address'}
+                hint={pasteHint || undefined}
                 autoComplete="off"
                 autoCapitalize="none"
                 autoCorrect="off"

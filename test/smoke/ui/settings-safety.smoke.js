@@ -18,23 +18,22 @@ assert.match(
     /update\(\{\s*autolockMinutes:\s*Number\(next\)\s*\}\)/,
     'autolock writes through update({ autolockMinutes })',
 );
-assert.match(
-    src,
-    /update\(\{\s*grace:\s*\{\s*undoSendSeconds:\s*Number\(next\)\s*\}\s*\}\)/,
-    'undo-send writes through nested grace patch',
-);
 
-// Sensible coverage of common autolock / undo-send option values
+// Undo-send was scrapped v0.132.0 — the row + its handler are gone.
+// (Comments may still reference the dead schema field —
+// settings.grace.undoSendSeconds stays writable until v3, per settings
+// close FOLLOWUP 12 — so we check for actionable wiring, not substrings.)
+assert.doesNotMatch(src, /aria-label="Undo-send grace"/, 'undo-send <select> removed');
+assert.doesNotMatch(src, /onUndoSendChange/, 'undo-send handler removed');
+assert.doesNotMatch(src, /UNDO_SEND_OPTIONS/, 'undo-send option list removed');
+
+// Sensible coverage of common autolock option values
 for (const v of [1, 5, 15, 60]) {
     assert.ok(src.includes(`value: ${v},`), `AUTOLOCK_OPTIONS includes ${v}`);
 }
 assert.ok(src.includes('value: 0'), 'autolock supports 0 (never)');
-for (const v of [3, 5, 10, 15]) {
-    const re = new RegExp(`{\\s*value:\\s*${v},\\s*label:\\s*'${v}\\s*seconds'\\s*\\}`);
-    assert.match(src, re, `UNDO_SEND_OPTIONS has ${v}-second entry`);
-}
 
-// Three rows live now (schema v2): test-send warning, panic mode, backup reminders.
+// Three rows live now: test-send warning, panic mode, backup reminders.
 assert.match(src, /Test-send warning \(sats\)/, 'test-send warning row present');
 assert.match(src, /testSendThresholdSats:\s*n/, 'test-send writes through grace.testSendThresholdSats');
 assert.match(src, /label="Panic mode"/, 'panic mode toggle present');
