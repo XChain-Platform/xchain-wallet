@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.127.0] - 2026-04-26
+
+§21 Signing Safety — Step 2 of 6 — `<BalanceChanges>` renderer.
+
+Dumb renderer over a `SimulationResult` (the shape produced by `decoder.simulateAction` shipped at v0.126.0). Three lifecycle states — loading skeleton, error fallback (preview unavailable), result — and three render sections — balance deltas, side effects, notes. Renders nothing when the result is empty so a fee-only generic-fallback action doesn't show an orphaned section.
+
+### Added
+
+- **`packages/core/src/shared/components/BalanceChanges.jsx`** — `<BalanceChanges result loading error title />`. Per-row helpers split fee rows ("Network fee — BTC 0.0003") from token deltas ("Your MYTOKEN: 500 → 400") with a `data-direction` attribute (`down` / `up` / `flat`) on each row that the CSS uses for color affordance. Side effects render as a labelled list ("MYTOKEN supply: +50 (newly minted)"). Notes render muted at the bottom.
+- **`packages/core/src/shared/components/BalanceChanges.module.css`** — root card uses `--xc-surface-raised` to read as a distinct block under the action headline. Negative-delta `.after` reads in `--xc-danger`, positive in `--xc-success`. Fee row reads muted.
+- **`test/smoke/ui/balance-changes.smoke.js`** — public-API check, three lifecycle states, fee-vs-token branching, direction helper semantics, side-effects + notes rendering, every CSS hook the JSX references, and a forward-looking pair of assertions that Send.jsx and SignApproval.jsx are *not* yet wired (Steps 3 + 4 will wire).
+
+### Behavior preserved
+
+- No callers consume the component yet. Steps 3 + 4 wire it into Send.jsx review stage and SignApproval.jsx (signAction kind) — those wiring smokes confirm end-to-end behavior. This step exercises the renderer in isolation.
+
 ## [0.126.0] - 2026-04-26
 
 §21 Signing Safety — Step 1 of 6 — pure transaction simulator (`txSimulator.js`).
