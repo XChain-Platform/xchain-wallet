@@ -179,6 +179,45 @@ export function customFeeEstimate({ chainId, chainRegistry, rate } = {}) {
 }
 
 /**
+ * Convert a `settings.fees[chainId].customSatsPerKb` value to the
+ * FeeSelector's displayed-unit rate. The §35 Fees panel stores rates
+ * as smallest-unit per kilobyte (sats/KB on BTC/LTC, koinu/KB on
+ * DOGE — they're the same semantics, just different ticker on
+ * display). The FeeSelector wants the user-natural display unit:
+ * sat/vB for BTC/LTC, DOGE/kB for DOGE. This helper bridges the two.
+ *
+ * @param {string} unit                 FeeSelector's displayed unit
+ * @param {number} customSatsPerKb      from settings
+ * @returns {number}                    in the displayed unit
+ */
+export function settingsCustomToDisplayRate(unit, customSatsPerKb) {
+    if (!Number.isFinite(customSatsPerKb) || customSatsPerKb < 0) return 0;
+    if (unit === 'DOGE/kB') {
+        // koinu/KB → DOGE/kB
+        return Number((customSatsPerKb / 1e8).toFixed(8));
+    }
+    // sats/KB → sat/vB (assume virtual ≈ raw size; close enough for the
+    // placeholder default the user can tune in the Custom input).
+    return Number((customSatsPerKb / 1000).toFixed(8));
+}
+
+/**
+ * Inverse of `settingsCustomToDisplayRate` — used when persisting the
+ * Send-form custom rate back into `settings.fees[chainId].customSatsPerKb`.
+ *
+ * @param {string} unit
+ * @param {number} displayRate
+ * @returns {number}
+ */
+export function displayRateToSettingsCustom(unit, displayRate) {
+    if (!Number.isFinite(displayRate) || displayRate < 0) return 0;
+    if (unit === 'DOGE/kB') {
+        return Math.round(displayRate * 1e8);
+    }
+    return Math.round(displayRate * 1000);
+}
+
+/**
  * Convert a per-byte rate (the table's internal granularity) to the
  * user-displayed value in the chain's natural unit. Inverse of
  * `displayRateToPerByte`. Useful when porting tier defaults into the

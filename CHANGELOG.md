@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.142.0] - 2026-04-27
+
+§44 Fee UX — Step 5 of 5 — Settings → Fees panel wiring. **Closes the §44 cluster.**
+
+The Send-form FeeSelector now seeds its initial pick from `settings.fees[chainId]`, which the §35 Fees panel writes. A user who picks "Fast" on Bitcoin in Settings opens the Send form on Bitcoin and sees the Fast tier preselected; they can still override per-tx via the FeeSelector without disturbing the saved default. Custom-mode settings (the panel's `customSatsPerKb` field) seed the FeeSelector's Custom-mode rate, with unit conversion handled by two new helpers so the user-facing display unit (sat/vB / DOGE/kB) and the persisted unit (sats/KB or koinu/KB) stay in sync.
+
+The RBF default already wired in Step 2 — this step completes the round-trip from §35 settings to the Send form for both fee strategy and per-chain custom rate.
+
+### Added
+
+- **`settingsCustomToDisplayRate(unit, customSatsPerKb)`** in `flows/feeEstimate.js` — bridges the Fees-panel persistence shape (smallest-unit per KB) to the FeeSelector's display unit (sat/vB on BTC/LTC, DOGE/kB on DOGE).
+- **`displayRateToSettingsCustom(unit, displayRate)`** — inverse helper for writing the Send-form Custom rate back to Settings (no caller wires this yet; available for §35 polish later).
+- Both exported from `flows/index.js`.
+- **`test/smoke/core/fee-settings-conversion.smoke.js`** — both helpers across BTC/LTC + DOGE, 0/negative/NaN guards, round-trip identity over a range of values.
+- **`test/smoke/ui/send-fee-settings-default.smoke.js`** — Send.jsx imports, strategy-derived seed effect (low/normal/fast branch + custom branch), `Number.isFinite(customSatsPerKb)` guard, chain-aware unit derivation from `descriptor.coin`, effect dependency on `[chainId, settings]`.
+
+### Changed
+
+- **`Send.jsx`** — new `useEffect` reads `settings.fees[chainId]` on chain or settings change; sets `feePick` to either `{ mode }` (low/normal/fast) or `{ mode: 'custom', customRate }` with the persisted rate converted to display units. The user can still flip the FeeSelector mid-form without altering the saved default.
+
+### Behavior preserved
+
+- The default state of `feePick` (`{ mode: 'normal' }`) still applies as the first-paint value; the settings-derived seed runs after the settings hook resolves. Forms that open before settings load see "Normal" — same as v0.138.0–0.141.0.
+- The seed effect is read-only; nothing the user does inside the Send form writes back to `settings.fees`. Per-tx FeeSelector picks are scoped to the form instance, by design.
+- Settings → Fees panel UI is unchanged — only the read path gains a consumer.
+
+### §44 cluster — close
+
+Five steps shipped (v0.138.0 → v0.142.0). Cluster scope: §44.2 fee selector + §44.3 RBF toggle + §44.7 DOGE per-kB display + the §29 close FOLLOWUPs 3 (real fee selector wired into simulator) and 5 (fee-aware preview). Out of scope: §44.4 RBF replacement engine + §44.5 CPFP fallback (wallet-side UI shipped at v0.137.0; engines still need SDK + encoder work). Close report follows.
+
 ## [0.141.0] - 2026-04-27
 
 §44 Fee UX — Step 4 of 5 — SDK-backed fee fetch with placeholder fallback.

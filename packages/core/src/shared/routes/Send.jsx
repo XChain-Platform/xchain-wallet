@@ -25,6 +25,7 @@ import {
     estimateNativeSendFeeTiers,
     fetchNativeSendFeeTiers,
     customFeeEstimate,
+    settingsCustomToDisplayRate,
 } from '../../flows/feeEstimate.js';
 import { getFiatRate, coinToFiat, fiatToCoin } from '../../flows/priceLookup.js';
 import { HwSignBlock } from '../components/HwSignBlock.jsx';
@@ -454,6 +455,27 @@ export function Send({ walletId, onBack }) {
         /** @type {{ mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }} */
         ({ mode: 'normal' }),
     );
+
+    // Step 5 of §44 — initial mode + custom rate seeded from
+    // settings.fees[chainId]. Persisted preference flows from the §35
+    // Fees panel's Strategy picker; user can still flip per-tx via the
+    // FeeSelector without touching the saved default. Re-seeds when
+    // the active chain changes.
+    useEffect(() => {
+        if (!chainId || !settings?.fees) return;
+        const chainFees = settings.fees[chainId];
+        if (!chainFees || typeof chainFees.strategy !== 'string') return;
+        const desc = chainRegistry.get(chainId);
+        const tableUnit = desc?.coin === 'dogecoin' ? 'DOGE/kB' : 'sat/vB';
+        if (chainFees.strategy === 'custom' && Number.isFinite(chainFees.customSatsPerKb)) {
+            setFeePick({
+                mode: 'custom',
+                customRate: settingsCustomToDisplayRate(tableUnit, chainFees.customSatsPerKb),
+            });
+        } else if (['low', 'normal', 'fast'].includes(chainFees.strategy)) {
+            setFeePick({ mode: chainFees.strategy });
+        }
+    }, [chainId, settings]);
 
     // §44.3 RBF toggle. Default reads from settings.fees[chainId]
     // .rbfByDefault when present; falls back to true (BIP125 RBF is the

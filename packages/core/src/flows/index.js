@@ -51,6 +51,8 @@ export {
     customFeeEstimate,
     perByteRateToDisplay,
     displayRateToPerByte,
+    settingsCustomToDisplayRate,
+    displayRateToSettingsCustom,
     satsToCoinDecimal,
 } from './feeEstimate.js';
 export {
