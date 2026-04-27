@@ -6,6 +6,9 @@ import {
     getRemainingMs,
     recordLockoutFailure,
     recordLockoutSuccess,
+    isBiometricSupported,
+    isBiometricRegistered,
+    unlockWithBiometric,
 } from '@xchain-wallet/core/flows';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './Locked.module.css';
@@ -36,10 +39,26 @@ export function Locked({ onUnlocked }) {
     const [remainingMs, setRemainingMs] = useState(() =>
         getRemainingMs(getLockoutState()),
     );
+    const [biometricAvailable, setBiometricAvailable] = useState(false);
     const inputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
     useEffect(() => {
         inputRef.current?.focus();
+    }, []);
+
+    // Probe for biometric availability + a registered credential. The
+    // button only renders when both are true; otherwise the user sees
+    // the password form unchanged.
+    useEffect(() => {
+        let cancelled = false;
+        if (!isBiometricRegistered()) {
+            setBiometricAvailable(false);
+            return undefined;
+        }
+        isBiometricSupported().then((ok) => {
+            if (!cancelled) setBiometricAvailable(Boolean(ok));
+        });
+        return () => { cancelled = true; };
     }, []);
 
     // Countdown ticker — runs only while a lockout is active.
@@ -85,6 +104,26 @@ export function Locked({ onUnlocked }) {
             setBusy(false);
             inputRef.current?.focus();
             inputRef.current?.select();
+        }
+    }
+
+    async function handleBiometric() {
+        if (busy || isLockedOut) return;
+        setBusy(true);
+        setError(null);
+        try {
+            const unwrapped = await unlockWithBiometric();
+            await messaging.unlockWallet(unwrapped);
+            recordLockoutSuccess();
+            setLockout({ failedAttempts: 0, lockedUntilMs: 0 });
+            setRemainingMs(0);
+            onUnlocked?.();
+        } catch (err) {
+            // Biometric failures (cancelled prompt, missing credential,
+            // PRF failure) are surfaced raw — they are not bad-password
+            // guesses and must NOT increment the lockout counter.
+            setError(err?.message || 'Biometric unlock failed.');
+            setBusy(false);
         }
     }
 
@@ -139,6 +178,17 @@ export function Locked({ onUnlocked }) {
             >
                 {isLockedOut ? `Locked (${formatCountdown(remainingMs)})` : 'Unlock Wallet'}
             </Button>
+            {biometricAvailable ? (
+                <Button
+                    type="button"
+                    variant="secondary"
+                    block
+                    onClick={handleBiometric}
+                    disabled={busy || isLockedOut}
+                >
+                    Use biometrics
+                </Button>
+            ) : null}
         </form>
     );
 

@@ -15,6 +15,7 @@
 
 import { useSettings } from '../../hooks/useSettings.js';
 import { INPUT, ROW, ROW_LABEL, SELECT, STACK, Status, ToggleRow } from './_settingsPrimitives.jsx';
+import { BiometricRow } from './BiometricRow.jsx';
 
 const AUTOLOCK_OPTIONS = /** @type {const} */ ([
     { value: 1, label: '1 minute' },
@@ -91,6 +92,7 @@ export function SafetySection() {
                     style={{ ...INPUT, width: 140, textAlign: 'right' }}
                 />
             </div>
+            <BiometricRow />
             <ToggleRow
                 label="Panic mode"
                 hint="Reserved — toggle persists the preference. Full §26.5 duress-PIN flow lands separately."

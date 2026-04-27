@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.146.0] - 2026-04-27
+
+§26 Lock & Panic — Step 4 of 6 — Biometric unlock via WebAuthn PRF (G063).
+
+The wallet now supports unlocking with Touch ID, Windows Hello, or any platform authenticator that exposes the WebAuthn `prf` extension. The wallet password is encrypted at registration time under the credential's PRF output and stored in localStorage; at unlock the user authenticates with the platform authenticator, the browser re-derives the same 32-byte PRF output, and the password is unwrapped via the existing AES-256-GCM AEAD path. The plaintext password is never persisted.
+
+### Added
+
+- **`flows/biometricUnlock.js`** — full registration + unwrap flow.
+  - `isBiometricSupported()` — async probe that requires `navigator.credentials`, the static `PublicKeyCredential` global, and a positive `isUserVerifyingPlatformAuthenticatorAvailable()` response.
+  - `isBiometricRegistered()` — sync localStorage probe; truthy when `xchain-wallet:biometric` exists.
+  - `registerBiometricCredential({ password, accountName })` — creates a platform-bound credential with `userVerification: 'required'` + a 32-byte randomised PRF salt; falls back to a follow-up `navigator.credentials.get()` to obtain the PRF output when the create() response omits it (current Chrome behaviour); derives a 32-byte AES key from the PRF output, wraps the password via `crypto/aead.encrypt`, persists `{ credentialId, prfSalt, ciphertext, createdAt }`.
+  - `unlockWithBiometric()` — runs `navigator.credentials.get()` against the stored credential id with the persisted PRF salt; rederives the wrap key; decrypts the password and returns it for the caller to feed into `messaging.unlockWallet`.
+  - `clearBiometricCredential()` — wipes the localStorage record. The platform authenticator's credential itself is untouched (must be removed via OS settings — by design).
+  - Three named errors: `BiometricUnsupportedError`, `BiometricNotRegisteredError`, `BiometricPrfUnavailableError`.
+- **`shared/components/settings/BiometricRow.jsx`** — Settings → Safety panel row owning the four-state UX:
+  - `null` → "Checking platform authenticator…"
+  - unsupported → muted "Not available — this device or browser doesn't expose a WebAuthn platform authenticator with PRF support."
+  - supported but not registered → "Enable" button reveals an inline password input. Submitting calls `registerBiometricCredential`. Errors surface via `role="alert"`.
+  - supported + registered → "Disable" button calls `clearBiometricCredential`.
+- **Locked.jsx "Use biometrics" button** — only renders when `isBiometricRegistered()` AND `isBiometricSupported()`. The probe is short-circuited when no credential is registered to avoid a needless platform authenticator round-trip on the unlock screen. The button calls `unlockWithBiometric()`, then feeds the unwrapped password into `messaging.unlockWallet()`. Biometric failures surface their raw message and do NOT increment the lockout counter (they are not bad-password guesses).
+- **`test/smoke/core/biometric-unlock.smoke.js`** — full Node-side mock of `navigator.credentials` + `PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable` + `localStorage`. Exercises the cryptographic round-trip end-to-end (register a credential, fake an assertion that returns the same PRF output, confirm the original password comes back), the request-shape contract on both `create()` and `get()` (`userVerification: 'required'`, `authenticatorAttachment: 'platform'`, `rp.id`, `allowCredentials[].id`, PRF salt presence), the persisted-record schema, ciphertext-does-not-leak-plaintext, `clearBiometricCredential` round-trip, corruption tolerance, and the support-probe negative paths.
+- **`test/smoke/ui/biometric-unlock-ui.smoke.js`** — Locked.jsx wiring (imports, state slot, short-circuit when not registered, `handleBiometric` flow, lockout-counter exemption — biometric failure must NOT call `recordLockoutFailure`, button gating on `biometricAvailable`); Settings → Safety mounting; BiometricRow's four states + Enable form's `password.length === 0` gate + `role="alert"` errors.
+
+### Changed
+
+- **`flows/index.js`** — re-exports the eight biometric symbols (`isBiometricSupported`, `isBiometricRegistered`, `clearBiometricCredential`, `registerBiometricCredential`, `unlockWithBiometric`, `BiometricUnsupportedError`, `BiometricNotRegisteredError`, `BiometricPrfUnavailableError`).
+- **`Locked.jsx`** — adds a `biometricAvailable` state slot, an effect that probes support only when a credential is registered, a `handleBiometric` function, and a secondary "Use biometrics" Button that renders below the primary Unlock submit. The biometric path explicitly skips lockout-counter incrementation on failure.
+- **`SafetySection.jsx`** — imports + renders `<BiometricRow />` between the Test-send warning input and the Panic-mode toggle.
+
+### Behavior preserved
+
+- The password unlock path is unchanged on success and on the `InvalidPasswordError` branch (lockout still increments only there).
+- `Locked.jsx`'s caps-lock indicator (G067 / v0.143.0) and lockout banner (G066 / v0.144.0) remain in place.
+- Existing settings rows in the Safety panel keep their order; `BiometricRow` slots in adjacent to the panic-mode toggle.
+- Biometric registration writes a single localStorage key (`xchain-wallet:biometric`); no other persisted state is touched.
+
 ## [0.145.0] - 2026-04-27
 
 §26 Lock & Panic — Step 3 of 6 — Privacy blur on window blur (G069).

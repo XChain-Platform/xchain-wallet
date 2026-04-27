@@ -221,6 +221,16 @@ export {
     clearLockoutState,
 } from './lockoutTracking.js';
 export {
+    isBiometricSupported,
+    isBiometricRegistered,
+    clearBiometricCredential,
+    registerBiometricCredential,
+    unlockWithBiometric,
+    BiometricUnsupportedError,
+    BiometricNotRegisteredError,
+    BiometricPrfUnavailableError,
+} from './biometricUnlock.js';
+export {
     enqueueSignedTx,
     listQueuedBroadcasts,
     drainQueuedBroadcast,
