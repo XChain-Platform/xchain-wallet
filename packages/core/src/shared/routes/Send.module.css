@@ -308,3 +308,102 @@
     border-radius: var(--xc-radius-sm);
     word-break: break-all;
 }
+
+/* §37 / §29 Success confirmation card after broadcast (G124). The
+ * existing .successTitle / .successLabel / .txid carry the original
+ * "Sent" layout — the card adds the visual hierarchy spec'd in §29.5
+ * (icon + summary + txid + explorer link + Send-another / Done CTAs). */
+.successCard {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-3);
+    align-items: stretch;
+    padding: var(--xc-space-4);
+    border: 1px solid var(--xc-success, #2c7a3d);
+    border-radius: var(--xc-radius-md);
+    background: var(--xc-surface-raised);
+}
+
+.successIcon {
+    align-self: center;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 3rem;
+    height: 3rem;
+    border-radius: 999px;
+    background: var(--xc-success, #2c7a3d);
+    color: #fff;
+    font-size: 1.5rem;
+    font-weight: 700;
+}
+
+.successHint {
+    margin: 0;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+    text-align: center;
+}
+
+.successSummary {
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+    gap: var(--xc-space-2) var(--xc-space-3);
+    padding: var(--xc-space-2) var(--xc-space-3);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-sm);
+    background: var(--xc-bg);
+}
+
+.successRow {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+.successRow dt {
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.successRow dd {
+    margin: 0;
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text);
+    word-break: break-word;
+}
+
+.successMono {
+    font-family: var(--xc-font-mono, monospace);
+}
+
+.successTxidBlock {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+}
+
+.successTxidRow {
+    display: flex;
+    align-items: stretch;
+    gap: var(--xc-space-2);
+}
+
+.successLink {
+    align-self: flex-start;
+    background: transparent;
+    border: none;
+    color: var(--xc-accent-primary);
+    cursor: pointer;
+    font-size: var(--xc-text-xs);
+    font-family: inherit;
+    text-decoration: underline;
+    padding: var(--xc-space-1) 0;
+}
+.successLink:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+    border-radius: var(--xc-radius-sm);
+}

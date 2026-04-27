@@ -671,18 +671,88 @@ export function Send({ walletId, onBack }) {
 
     if (stage === 'done') {
         const txid = result?.txid || result?.broadcast?.txid;
+        const desc = chainId ? chainRegistry.get(chainId) : null;
+        const explorerBase = desc?.explorer?.defaultUrl || '';
+        const explorerUrl = txid && explorerBase
+            ? `${explorerBase.replace(/\/$/, '')}/tx/${txid}`
+            : null;
+        const sentAmount = amount && asset ? `${amount} ${asset}` : null;
+        const recipient = toAddress
+            ? `${toAddress.slice(0, 8)}…${toAddress.slice(-6)}`
+            : null;
+        const sendAnother = () => {
+            setStage('form');
+            setAmount('');
+            setToAddress('');
+            setResult(null);
+            setPreviewResult(null);
+        };
+        const copyTxid = () => {
+            if (!txid) return;
+            try { navigator.clipboard?.writeText(txid); } catch { /* best effort */ }
+        };
         return wrap(
             <>
-                <h2 className={styles.successTitle}>Sent</h2>
-                {txid ? (
-                    <>
-                        <p className={styles.successLabel}>Transaction ID</p>
-                        <code className={styles.txid}>{txid}</code>
-                    </>
-                ) : (
-                    <p className={styles.hint}>Broadcast complete.</p>
-                )}
+                <div className={styles.successCard} role="status" aria-live="polite">
+                    <div className={styles.successIcon} aria-hidden="true">✓</div>
+                    <h2 className={styles.successTitle}>Broadcast — pending</h2>
+                    <p className={styles.successHint}>
+                        Your transaction is on its way. It will confirm in the next
+                        few blocks; you can leave this screen at any time.
+                    </p>
+                    {sentAmount || recipient ? (
+                        <dl className={styles.successSummary}>
+                            {sentAmount ? (
+                                <div className={styles.successRow}>
+                                    <dt>Amount</dt>
+                                    <dd>{sentAmount}</dd>
+                                </div>
+                            ) : null}
+                            {recipient ? (
+                                <div className={styles.successRow}>
+                                    <dt>To</dt>
+                                    <dd className={styles.successMono}>{recipient}</dd>
+                                </div>
+                            ) : null}
+                            {desc ? (
+                                <div className={styles.successRow}>
+                                    <dt>Chain</dt>
+                                    <dd>{desc.displayName}</dd>
+                                </div>
+                            ) : null}
+                        </dl>
+                    ) : null}
+                    {txid ? (
+                        <div className={styles.successTxidBlock}>
+                            <p className={styles.successLabel}>Transaction ID</p>
+                            <div className={styles.successTxidRow}>
+                                <code className={styles.txid}>{txid}</code>
+                                <button
+                                    type="button"
+                                    className={styles.successLink}
+                                    onClick={copyTxid}
+                                    aria-label="Copy transaction id"
+                                >
+                                    Copy
+                                </button>
+                            </div>
+                            {explorerUrl ? (
+                                <a
+                                    className={styles.successLink}
+                                    href={explorerUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                >
+                                    View on explorer ↗
+                                </a>
+                            ) : null}
+                        </div>
+                    ) : null}
+                </div>
                 <div className={styles.actions}>
+                    <Button variant="secondary" onClick={sendAnother}>
+                        Send another
+                    </Button>
                     <Button variant="primary" onClick={onBack}>Done</Button>
                 </div>
             </>,

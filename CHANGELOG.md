@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.162.0] - 2026-04-27
+
+§37 — Step 2 of Cluster D — Broadcast success confirmation (G124); Cluster D closed.
+
+The Send route's done stage now renders a richer success card matching §29.5 / §37: a green check icon, "Broadcast — pending" headline (matching the §28.4 status-timeline language), a summary of what was sent (amount / to-address / chain), the txid with a Copy affordance, an explorer link wired through `chainRegistry.get(chainId).explorer.defaultUrl`, and a "Send another" button that resets the form so a user sending a series of payments doesn't have to re-navigate from Home.
+
+### Added
+
+- **`test/smoke/ui/broadcast-success.smoke.js`** — verifies success card layout, role=status / aria-live, send-another reset, explorer-link target=_blank+noopener, clipboard copy.
+
+### Changed
+
+- **`shared/routes/Send.jsx`** — done stage replaced with the new card. Old `<h2>Sent</h2>` + bare txid block superseded.
+- **`shared/routes/Send.module.css`** — adds `.successCard`, `.successIcon`, `.successHint`, `.successSummary`, `.successRow`, `.successMono`, `.successTxidBlock`, `.successTxidRow`, `.successLink`.
+
+Closes G124. Cluster D — §37 Toast foundation — closed at v0.162.0. Smoke baseline preserved (24 / 163; new broadcast-success smoke passes).
+
 ## [0.161.0] - 2026-04-27
 
 §37.2 — Step 1 of Cluster D — Toast foundation + first undo integrations (G119).
