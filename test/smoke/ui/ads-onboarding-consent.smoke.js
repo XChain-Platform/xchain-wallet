@@ -16,10 +16,12 @@ const createPath = join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', '
 
 const src = readFileSync(createPath, 'utf8');
 
-// Stage type widened
+// Stage type widened — must still include the ads-consent member.
+// The full union grew further (verify quiz at v0.176.0 / G033) so we match
+// the ads-consent member specifically rather than pinning the entire shape.
 assert.match(
     src,
-    /'password'\|'mnemonic'\|'persisting'\|'ads-consent'/,
+    /'ads-consent'/,
     'stage union grew an ads-consent member',
 );
 

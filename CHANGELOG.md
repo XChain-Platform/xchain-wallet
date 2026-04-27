@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.176.0] - 2026-04-27
+
+§19.2 — Cluster H Step 6 — Backup verification quiz on Create (G033).
+
+After the user ticks "I've saved my recovery phrase", `CreateWallet.jsx` advances to a new `verify` stage that quizzes three random non-adjacent word positions before the actual persist. Quiz positions are picked once per attempt (no reshuffle on re-render), Fisher-Yates shuffled, position #1 skipped (just shown as the first row of the grid). On match → `handlePersist`; on mismatch → inline error with the offending position. Back button returns to mnemonic stage so the user can re-read the phrase.
+
+### Added
+
+- **`packages/core/src/shared/routes/CreateWallet.jsx`** — `verify` stage in the union; `quizPositions` / `quizAnswers` / `quizError` state; `pickQuizPositions` (Fisher-Yates + non-adjacent guard); `handleStartVerify` (mnemonic → verify); `handleSubmitVerify` (compares typed words, persists on match); mnemonic-stage CTA now reads "Verify recovery phrase" and routes through verify.
+- **`packages/core/src/shared/routes/CreateWallet.module.css`** — `.quizList` / `.quizRow` / `.quizIndex` styles.
+
+### Changed
+
+- **`test/smoke/ui/ads-onboarding-consent.smoke.js`** — relax stage-union assertion from a full literal match to `/'ads-consent'/` so future stage additions don't churn the smoke.
+
+Closes G033.
+
 ## [0.175.0] - 2026-04-27
 
 §19.4 — Cluster H Step 5 — Encrypted backup restore lane in ImportWallet (G036).

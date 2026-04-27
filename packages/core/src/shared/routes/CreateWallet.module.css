@@ -149,6 +149,36 @@
     cursor: pointer;
 }
 
+.quizList {
+    list-style: none;
+    margin: 0 0 var(--xc-space-3);
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+}
+
+.quizRow {
+    display: flex;
+    align-items: flex-end;
+    gap: var(--xc-space-2);
+}
+
+.quizIndex {
+    flex: 0 0 48px;
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    font-variant-numeric: tabular-nums;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding-bottom: 12px;
+    text-align: right;
+}
+
+.quizRow > :global(*):not(.quizIndex) {
+    flex: 1;
+}
+
 .advancedWarning {
     font-size: var(--xc-text-xs);
     color: var(--xc-text);

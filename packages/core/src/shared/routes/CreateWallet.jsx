@@ -35,8 +35,15 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
     const isFull = variant === 'full';
 
     const [stage, setStage] = useState(
-        /** @type {'password'|'mnemonic'|'persisting'|'ads-consent'} */ ('password'),
+        /** @type {'password'|'mnemonic'|'verify'|'persisting'|'ads-consent'} */ ('password'),
     );
+    // §19.2 / G033 — verification quiz state. `quizPositions` is a sorted
+    // list of 1-based word indices the user must type back; `quizAnswers`
+    // is keyed by that index. Computed once when the user clicks
+    // "Verify" — re-renders shouldn't reshuffle.
+    const [quizPositions, setQuizPositions] = useState(/** @type {number[]} */ ([]));
+    const [quizAnswers, setQuizAnswers] = useState(/** @type {Record<number, string>} */ ({}));
+    const [quizError, setQuizError] = useState(/** @type {string | null} */ (null));
     const [adsBusy, setAdsBusy] = useState(false);
     const [adsError, setAdsError] = useState(/** @type {string | null} */ (null));
     const [name, setName] = useState('Main Wallet');
@@ -106,6 +113,63 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
         setPasswordError(null);
         setMnemonic(cryptoLib.generateBip39Mnemonic(wordCount === 24 ? 256 : 128));
         setStage('mnemonic');
+    }
+
+    function pickQuizPositions(totalWords) {
+        // §19.2 — quiz the user on three random non-adjacent positions.
+        // Picking three keeps friction low; non-adjacent so a partial-recall
+        // user can't slide along consecutive words. Skip position 1 — the
+        // user just read it as the first row of the grid.
+        const out = new Set();
+        const candidates = [];
+        for (let i = 2; i <= totalWords; i++) candidates.push(i);
+        // Fisher-Yates shuffle; pick from the end.
+        for (let i = candidates.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+        }
+        for (const c of candidates) {
+            if (out.size >= 3) break;
+            // Reject if adjacent to anything already chosen.
+            let adjacent = false;
+            for (const p of out) {
+                if (Math.abs(p - c) <= 1) { adjacent = true; break; }
+            }
+            if (!adjacent) out.add(c);
+        }
+        return Array.from(out).sort((a, b) => a - b);
+    }
+
+    function handleStartVerify() {
+        if (!mnemonic || !saved) return;
+        const totalWords = mnemonic.trim().split(/\s+/).length;
+        const positions = pickQuizPositions(totalWords);
+        setQuizPositions(positions);
+        const blanks = {};
+        for (const p of positions) blanks[p] = '';
+        setQuizAnswers(blanks);
+        setQuizError(null);
+        setStage('verify');
+    }
+
+    function handleSubmitVerify(event) {
+        event.preventDefault();
+        if (!mnemonic) return;
+        const words = mnemonic.trim().split(/\s+/);
+        for (const p of quizPositions) {
+            const expected = (words[p - 1] || '').trim().toLowerCase();
+            const got = (quizAnswers[p] || '').trim().toLowerCase();
+            if (got.length === 0) {
+                setQuizError('Fill in every word.');
+                return;
+            }
+            if (got !== expected) {
+                setQuizError(`Word #${p} doesn't match. Double-check your written copy.`);
+                return;
+            }
+        }
+        setQuizError(null);
+        handlePersist();
     }
 
     async function handlePersist() {
@@ -233,7 +297,78 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
         );
     }
 
-    if (stage === 'mnemonic' || stage === 'persisting') {
+    if (stage === 'verify' || stage === 'persisting') {
+        const verifyBody = (
+            <>
+                <header className={headClass}>
+                    <h1 className={titleClass}>
+                        {isFull ? 'Verify your recovery phrase' : 'Verify phrase'}
+                    </h1>
+                    <p className={subtitleClass}>
+                        {isFull
+                            ? "Type the words at the positions below. We'll check them against the phrase you just wrote down — there's no second chance to copy it after this step."
+                            : 'Type the words at these positions to confirm.'}
+                    </p>
+                </header>
+                <form onSubmit={handleSubmitVerify} noValidate>
+                    <ol className={styles.quizList}>
+                        {quizPositions.map((p) => (
+                            <li key={p} className={styles.quizRow}>
+                                <span className={styles.quizIndex}>#{p}</span>
+                                <Input
+                                    label={`Word ${p}`}
+                                    value={quizAnswers[p] || ''}
+                                    onChange={(e) => {
+                                        setQuizAnswers((prev) => ({ ...prev, [p]: e.target.value }));
+                                        if (quizError) setQuizError(null);
+                                    }}
+                                    autoComplete="off"
+                                    autoCapitalize="none"
+                                    autoCorrect="off"
+                                    spellCheck={false}
+                                    disabled={stage === 'persisting'}
+                                />
+                            </li>
+                        ))}
+                    </ol>
+                    {quizError ? (
+                        <div role="alert" className={styles.error}>{quizError}</div>
+                    ) : null}
+                    {persistError ? (
+                        <div role="alert" className={styles.error}>{persistError}</div>
+                    ) : null}
+                    <div className={actionsClass}>
+                        <Button
+                            variant="secondary"
+                            type="button"
+                            onClick={() => { setQuizError(null); setStage('mnemonic'); }}
+                            disabled={stage === 'persisting'}
+                            size={isFull ? undefined : 'sm'}
+                        >
+                            Back
+                        </Button>
+                        <Button
+                            type="submit"
+                            variant="primary"
+                            loading={stage === 'persisting'}
+                            block={!isFull}
+                            size={isFull ? undefined : 'sm'}
+                            icon={<Icon.CheckIcon />}
+                        >
+                            Create wallet
+                        </Button>
+                    </div>
+                </form>
+            </>
+        );
+        return (
+            <Screen variant={variant} header={screenHeader}>
+                {isFull ? <div className={styles.card}>{verifyBody}</div> : verifyBody}
+            </Screen>
+        );
+    }
+
+    if (stage === 'mnemonic') {
         const mnemonicBody = (
             <>
                 <header className={headClass}>
@@ -281,14 +416,13 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                 <div className={actionsClass}>
                     <Button
                         variant="primary"
-                        onClick={handlePersist}
+                        onClick={handleStartVerify}
                         disabled={!saved}
-                        loading={stage === 'persisting'}
                         block={!isFull}
                         size={isFull ? undefined : 'sm'}
                         icon={<Icon.CheckIcon />}
                     >
-                        Create wallet
+                        Verify recovery phrase
                     </Button>
                 </div>
             </>
