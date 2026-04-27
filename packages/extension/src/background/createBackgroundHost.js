@@ -206,6 +206,55 @@ async function loadAddressForHwSigning(vault, req) {
 }
 
 /**
+ * Pick the right Signer instance for an HD-derive request (account.create,
+ * receive.getAddress) given an optional `signerId` on the request.
+ * §17.6 / G023.
+ *
+ *   - signerId omitted / null → use the SignerPool's pre-unlocked
+ *     SoftwareSigner for this wallet (no password). When the pool has
+ *     no entry, returns null and the calling flow falls back to the
+ *     password-unlock path it already supports.
+ *   - signerId names a paired HW SignerRecord → look up the record,
+ *     fetch the renderer-side transport from the signer bridge, and
+ *     return a RemoteSigner. Throws when the record is unknown,
+ *     belongs to a different wallet, or the bridge isn't connected.
+ *
+ * @param {object} args
+ * @param {import('@xchain-wallet/core').storage.Vault} args.vault
+ * @param {string} args.walletId
+ * @param {string | null} [args.signerId]
+ * @param {import('@xchain-wallet/core').signers.SignerPool} [args.signerPool]
+ * @returns {Promise<import('@xchain-wallet/core').signers.Signer | null>}
+ */
+async function pickSignerFromRequest({ vault, walletId, signerId, signerPool }) {
+    if (typeof walletId !== 'string' || walletId.length === 0) return null;
+    if (typeof signerId === 'string' && signerId.length > 0) {
+        const record = await vault.signers.find(signerId);
+        if (!record) {
+            throw new Error(`signerId "${signerId}" is not a paired signer.`);
+        }
+        if (record.walletId !== walletId) {
+            throw new Error(`signerId "${signerId}" belongs to a different wallet.`);
+        }
+        if (record.kind !== 'trezor' && record.kind !== 'ledger') {
+            throw new Error(`signerId "${signerId}" is not a hardware signer.`);
+        }
+        const transport = signerBridge.getTransport(record.id);
+        if (!transport) {
+            throw new Error(
+                'Hardware signer is not connected. Open the wallet UI, re-pair if needed, and try again.',
+            );
+        }
+        const descriptor = { kind: record.kind, address: null, signerRecord: record };
+        return buildRemoteSigner(descriptor, transport);
+    }
+    if (signerPool && typeof signerPool.get === 'function') {
+        return signerPool.get(walletId) || null;
+    }
+    return null;
+}
+
+/**
  * Return the newest (highest external index) HD address for a wallet +
  * chain, or `null` if no address exists. External = change = 0 in the
  * BIP44-style derivation path. Skips imported WIFs — those aren't a
@@ -379,19 +428,26 @@ export function createBackgroundHost(deps) {
     // Create the next BIP44 account under a wallet (max(index)+1) +
     // first address per active chain. When the host has a SignerPool
     // (populated at unlock time), no password is needed — the
-    // pre-unlocked signer is reused. Falls back to a password-based
+    // pre-unlocked signer is reused. When `req.signerId` names a
+    // paired hardware SignerRecord (§17.6 / G023), build a
+    // RemoteSigner against the renderer-side device transport and use
+    // that instead — no password, addresses persist with
+    // `source: 'trezor' | 'ledger'`. Falls back to a password-based
     // unlock for shells/sessions that don't pre-populate the pool.
     host.register('account.create', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
         const activeChainIds = Array.isArray(req?.activeChainIds) && req.activeChainIds.length > 0
             ? req.activeChainIds
             : DEFAULT_ACTIVE_CHAIN_IDS;
         const walletId = req?.walletId;
-        const cachedSigner = signerPool && typeof walletId === 'string'
-            ? signerPool.get(walletId)
-            : null;
+        const signer = await pickSignerFromRequest({
+            vault,
+            walletId,
+            signerId: req?.signerId,
+            signerPool,
+        });
         const r = await createAccount({
             ...req,
-            signer: cachedSigner || undefined,
+            signer: signer || undefined,
             activeChainIds,
             vault,
             chainRegistry,
@@ -498,8 +554,25 @@ export function createBackgroundHost(deps) {
 
     // --- Receive -------------------------------------------------------------
 
-    host.register('receive.getAddress', async (req, { vault, chainRegistry, sdkRegistry }) => {
-        return receiveAddress({ ...req, vault, chainRegistry, sdkRegistry });
+    host.register('receive.getAddress', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        // §17.6 / G023 — when `req.signerId` names a paired HW signer
+        // (or signerPool has a pre-unlocked software signer for this
+        // wallet), pass it through and skip the password-based unlock
+        // inside the flow. Without either, the flow falls back to a
+        // password unlock as before.
+        const signer = await pickSignerFromRequest({
+            vault,
+            walletId: req?.walletId,
+            signerId: req?.signerId,
+            signerPool,
+        });
+        return receiveAddress({
+            ...req,
+            signer: signer || undefined,
+            vault,
+            chainRegistry,
+            sdkRegistry,
+        });
     });
 
     host.register('addresses.byChain', async (req, { vault, chainRegistry }) => {

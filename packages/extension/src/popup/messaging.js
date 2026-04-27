@@ -115,13 +115,18 @@ export function listAccounts(walletId) {
 
 /**
  * Create the next BIP44 account under a wallet (max(index)+1). Persists
- * an Account record + a first address per active chain.
+ * an Account record + a first address per active chain. When
+ * `opts.signerId` is set, the new addresses are derived by the named
+ * paired hardware signer (§17.6 / G023) and persisted with
+ * `source: 'trezor' | 'ledger'`; omit it to derive via the wallet's
+ * software seed.
  *
  * @param {object} opts
  * @param {string} opts.walletId
- * @param {string} opts.password
+ * @param {string} [opts.password]
  * @param {string} [opts.bip39Passphrase]
  * @param {string} [opts.name]
+ * @param {string} [opts.signerId]
  */
 export function createAccount(opts) {
     return /** @type {any} */ (sendMessage('account.create', opts));
@@ -179,16 +184,19 @@ export function getNewestAddress(walletId, chainId, accountId) {
 
 /**
  * Derive + persist the next unused external address for (wallet, chain).
- * Requires the user's password because the signer re-derives the HD
- * key material; the vault-level unlock doesn't cover the per-wallet
- * seed decryption.
+ * Requires the user's password when the resolved signer is software
+ * (re-runs Argon2id KDF on the encrypted seed). When `opts.signerId`
+ * names a paired hardware signer (§17.6 / G023), the password is
+ * skipped and the device confirms the derivation locally; the address
+ * is persisted with `source: 'trezor' | 'ledger'`.
  *
  * @param {object} opts
  * @param {string} opts.walletId
  * @param {string} opts.chainId
- * @param {string} opts.password
+ * @param {string} [opts.password]
  * @param {string} [opts.bip39Passphrase]
  * @param {string} [opts.addressType]
+ * @param {string} [opts.signerId]
  * @returns {Promise<{ id: string, address: string, label: string, addressType: string, derivationPath: string | null }>}
  */
 export function generateReceiveAddress(opts) {

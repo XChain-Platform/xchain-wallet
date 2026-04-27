@@ -14,6 +14,7 @@ import {
     uri as uriLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { SignerSelectForm } from './SignerSelectForm.jsx';
 import styles from './Receive.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -52,6 +53,10 @@ export function Receive({ walletId, accountId, onBack }) {
     const [genPassword, setGenPassword] = useState('');
     const [genError, setGenError] = useState(/** @type {string | null} */ (null));
     const [genBusy, setGenBusy] = useState(false);
+    // null = software (implicit); string = HW SignerRecord id. SignerSelectForm
+    // hides itself when only software is available so the common path
+    // stays a single password prompt.
+    const [genSignerId, setGenSignerId] = useState(/** @type {string | null} */ (null));
     const genInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
     // §22 + §42.9 multisig receive integration. When the wallet has a
@@ -203,26 +208,38 @@ export function Receive({ walletId, accountId, onBack }) {
         setTimeout(() => genInputRef.current?.focus(), 0);
     }, []);
 
+    // HW signer path skips the password prompt — the device confirms
+    // derivation locally. Software path requires the password to re-run
+    // Argon2id KDF on the encrypted seed.
+    const usingHwSigner = genSignerId !== null;
+    const canDerive = activeChainId
+        && !genBusy
+        && (usingHwSigner || genPassword.length > 0);
+
     async function handleGenerate(event) {
         event.preventDefault();
-        if (!activeChainId || genBusy || genPassword.length === 0) return;
+        if (!canDerive) return;
         setGenBusy(true);
         setGenError(null);
         try {
-            const fresh = await messaging.generateReceiveAddress({
+            const req = {
                 walletId,
                 accountId,
                 chainId: activeChainId,
-                password: genPassword,
-            });
+                signerId: genSignerId || undefined,
+            };
+            if (!usingHwSigner) req.password = genPassword;
+            const fresh = await messaging.generateReceiveAddress(req);
             setAddress(fresh);
             setGenOpen(false);
             setGenPassword('');
         } catch (err) {
             const bad = err?.name === 'InvalidPasswordError';
             setGenError(bad ? 'Incorrect password.' : err?.message || 'Failed to derive.');
-            genInputRef.current?.focus();
-            genInputRef.current?.select();
+            if (!usingHwSigner) {
+                genInputRef.current?.focus();
+                genInputRef.current?.select();
+            }
         } finally {
             setGenBusy(false);
         }
@@ -522,27 +539,42 @@ export function Receive({ walletId, accountId, onBack }) {
 
             {genOpen ? (
                 <form onSubmit={handleGenerate} className={styles.genForm}>
-                    <Input
-                        ref={genInputRef}
-                        type="password"
-                        label="Password"
-                        hint="Deriving a new address re-runs the Argon2id KDF."
-                        value={genPassword}
-                        onChange={(e) => {
-                            setGenPassword(e.target.value);
-                            if (genError) setGenError(null);
-                        }}
-                        autoComplete="current-password"
+                    <SignerSelectForm
+                        walletId={walletId}
+                        value={genSignerId}
+                        onChange={setGenSignerId}
                         disabled={genBusy}
-                        error={genError || undefined}
                     />
+                    {usingHwSigner ? (
+                        <p className={styles.hint}>
+                            Confirm the new address on your device when prompted.
+                        </p>
+                    ) : (
+                        <Input
+                            ref={genInputRef}
+                            type="password"
+                            label="Password"
+                            hint="Deriving a new address re-runs the Argon2id KDF."
+                            value={genPassword}
+                            onChange={(e) => {
+                                setGenPassword(e.target.value);
+                                if (genError) setGenError(null);
+                            }}
+                            autoComplete="current-password"
+                            disabled={genBusy}
+                            error={genError || undefined}
+                        />
+                    )}
+                    {usingHwSigner && genError ? (
+                        <p className={styles.error} role="alert">{genError}</p>
+                    ) : null}
                     <div className={styles.genButtons}>
                         <Button
                             type="submit"
                             variant="primary"
                             size="sm"
                             loading={genBusy}
-                            disabled={genPassword.length === 0}
+                            disabled={!canDerive}
                         >
                             Derive
                         </Button>

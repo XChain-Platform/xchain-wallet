@@ -14,9 +14,9 @@ import { WalletNotFoundError } from './unlockWallet.js';
 /**
  * @typedef {Object} CreateAccountOpts
  * @property {string} walletId
- * @property {string} [password]                         required only when no pre-unlocked signer is supplied (`signer` arg)
+ * @property {string} [password]                         required only when no pre-unlocked signer is supplied (`signer` arg) and the chosen signer is software
  * @property {string} [bip39Passphrase]                  required if the wallet has §15.6 25th-word enabled and no pre-unlocked signer is supplied
- * @property {import('../signers/SoftwareSigner.js').SoftwareSigner} [signer]   pre-unlocked signer for this wallet — when present, no password is read; signer is NOT locked by this flow (pool owns its lifecycle)
+ * @property {import('../signers/Signer.js').Signer} [signer]   pre-unlocked SoftwareSigner OR a RemoteSigner for HW. When present, no password is read and the signer is NOT locked by this flow (pool / shell owns its lifecycle)
  * @property {string} [name]                             default `Account N` where N is the new index + 1
  * @property {string} [initialAddressLabel]              default 'Address #1'
  * @property {import('../storage/Vault.js').Vault} vault
@@ -98,6 +98,12 @@ export async function createAccount({
         });
     const ownsSigner = !providedSigner;
 
+    // Pick the right `Address.source` from the signer kind. Software
+    // signers produce HD addresses; HW signers produce trezor / ledger
+    // addresses tied to the SignerRecord by signerId (§17.6).
+    const signerKind = signer.kind;
+    const addressSource = signerKind === 'software' ? 'hd' : signerKind;
+
     try {
         const addresses = [];
         for (const chainId of activeChainIds) {
@@ -115,7 +121,7 @@ export async function createAccount({
                 accountId: account.id,
                 chain: descriptor.coin,
                 network: descriptor.networkKind,
-                source: 'hd',
+                source: addressSource,
                 addressType,
                 derivationPath: derived.path,
                 address: derived.address,
@@ -128,6 +134,6 @@ export async function createAccount({
         }
         return { account, addresses };
     } finally {
-        if (ownsSigner) signer.lock();
+        if (ownsSigner && typeof signer.lock === 'function') signer.lock();
     }
 }

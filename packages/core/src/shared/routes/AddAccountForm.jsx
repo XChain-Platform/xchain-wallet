@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, Button, Input, Icon } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { SignerSelectForm } from './SignerSelectForm.jsx';
 import styles from './CreateWallet.module.css';
 
 /**
@@ -27,8 +28,14 @@ export function AddAccountForm({ walletId, onBack, onCreated }) {
     const [name, setName] = useState('Account');
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [busy, setBusy] = useState(false);
+    // null = software (implicit); string = HW SignerRecord id. The
+    // SignerSelectForm hides itself when only software is available
+    // and emits onChange(null) once.
+    const [signerId, setSignerId] = useState(/** @type {string | null} */ (null));
     const nameRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const userEditedRef = useRef(false);
+
+    const onPickSigner = useCallback((id) => setSignerId(id), []);
 
     useEffect(() => {
         setTimeout(() => nameRef.current?.focus(), 0);
@@ -67,6 +74,7 @@ export function AddAccountForm({ walletId, onBack, onCreated }) {
             await messaging.createAccount({
                 walletId,
                 name: name.trim(),
+                signerId: signerId || undefined,
             });
             onCreated();
         } catch (err) {
@@ -90,6 +98,12 @@ export function AddAccountForm({ walletId, onBack, onCreated }) {
                     A new set of derived addresses under the same recovery phrase.
                 </p>
             </header>
+            <SignerSelectForm
+                walletId={walletId}
+                value={signerId}
+                onChange={onPickSigner}
+                disabled={busy}
+            />
             <Input
                 ref={nameRef}
                 label="Account name"

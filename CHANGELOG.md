@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.153.0] - 2026-04-27
+
+§17 Signer Interface — Step 3 of Cluster B — Signer selection UI when adding address/account (G023).
+
+When a wallet has more than one signer (software seed plus paired hardware), the Add-account form and Receive's "New address" panel render an inline picker so the user chooses which signer derives the new HD address. Single-signer wallets see no extra friction — the picker auto-resolves and stays hidden.
+
+### Added
+
+- **`shared/routes/SignerSelectForm.jsx`** — fetches `messaging.listSigners(walletId)`; renders one card per option ("Software wallet (this seed)" + one per paired HW SignerRecord); auto-resolves to software when no HW signers exist.
+- **`pickSignerFromRequest` helper** in `extension/src/background/createBackgroundHost.js` — when the request carries `signerId`, looks up the SignerRecord, fetches the live transport via `signerBridge.getTransport`, and returns a `RemoteSigner`. Otherwise falls back to `signerPool.get(walletId)`. Wired into both `account.create` and `receive.getAddress`.
+
+### Changed
+
+- **`flows/createAccount.js` + `flows/receiveAddress.js`** — now accept an optional pre-supplied `signer` (HW path skips the password unlock); `Address.source` is picked from `signer.kind` (`software → 'hd'`, `trezor → 'trezor'`, `ledger → 'ledger'`); `signer.lock()` is only invoked when present (RemoteSigner has none).
+- **`AddAccountForm.jsx` + `Receive.jsx`** — render `<SignerSelectForm>` and thread `signerId` into the messaging call; Receive's password input is suppressed when an HW signer is selected.
+- **Messaging JSDoc** in popup + web — `createAccount` / `generateReceiveAddress` document the optional `signerId` and the password-skipping HW path.
+
+Closes G023.
+
 ## [0.152.0] - 2026-04-27
 
 §19 Backup — Step 4 of Cluster B — Dry-run restore UI (G038).

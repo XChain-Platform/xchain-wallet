@@ -84,7 +84,13 @@ export function listAccounts(walletId) {
     return /** @type {any} */ (sendMessage('account.list', { walletId }));
 }
 
-/** @param {object} opts */
+/**
+ * Create the next BIP44 account under a wallet (max(index)+1). When
+ * `opts.signerId` names a paired hardware signer (§17.6 / G023), the
+ * account's first addresses are derived by that device.
+ *
+ * @param {{ walletId: string, password?: string, bip39Passphrase?: string, name?: string, signerId?: string }} opts
+ */
 export function createAccount(opts) {
     return /** @type {any} */ (sendMessage('account.create', opts));
 }
@@ -772,16 +778,19 @@ export function removeWallet(req) {
 
 /**
  * Derive + persist the next unused external address for (wallet, chain).
- * Requires the user's password because the signer re-derives the HD
- * key material; the vault-level unlock doesn't cover the per-wallet
- * seed decryption (§26 — password-never-stored posture).
+ * Software signer requires the user's password (re-runs Argon2id KDF
+ * on the encrypted seed; §26 — password-never-stored posture). When
+ * `opts.signerId` names a paired hardware signer (§17.6 / G023), the
+ * password is skipped and the device confirms the derivation locally;
+ * the address is persisted with `source: 'trezor' | 'ledger'`.
  *
  * @param {object} opts
  * @param {string} opts.walletId
  * @param {string} opts.chainId
- * @param {string} opts.password
+ * @param {string} [opts.password]
  * @param {string} [opts.bip39Passphrase]
  * @param {string} [opts.addressType]
+ * @param {string} [opts.signerId]
  * @returns {Promise<{ id: string, address: string, label: string, addressType: string, derivationPath: string | null }>}
  */
 export function generateReceiveAddress(opts) {

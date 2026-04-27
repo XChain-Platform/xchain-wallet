@@ -26,8 +26,9 @@ export class NoMatchingAccountError extends Error {
  * @typedef {Object} ReceiveAddressOpts
  * @property {import('../storage/Vault.js').Vault} vault
  * @property {string} walletId
- * @property {string} password
+ * @property {string} [password]                required only when `signer` is omitted and the resolved signer is software
  * @property {string} [bip39Passphrase]
+ * @property {import('../signers/Signer.js').Signer} [signer]   pre-supplied signer (SoftwareSigner from pool, or RemoteSigner for HW). Skips password when present.
  * @property {import('../registry/index.js').ChainRegistry} chainRegistry
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
  * @property {string} chainId
@@ -46,6 +47,7 @@ export async function receiveAddress({
     walletId,
     password,
     bip39Passphrase,
+    signer: providedSigner,
     chainRegistry,
     sdkRegistry,
     chainId,
@@ -58,8 +60,8 @@ export async function receiveAddress({
     if (typeof walletId !== 'string' || walletId.length === 0) {
         throw new Error('receiveAddress: walletId is required');
     }
-    if (typeof password !== 'string' || password.length === 0) {
-        throw new Error('receiveAddress: password is required');
+    if (!providedSigner && (typeof password !== 'string' || password.length === 0)) {
+        throw new Error('receiveAddress: either `signer` or `password` is required');
     }
     if (!chainRegistry) throw new Error('receiveAddress: chainRegistry is required');
     if (!sdkRegistry) throw new Error('receiveAddress: sdkRegistry is required');
@@ -115,14 +117,20 @@ export async function receiveAddress({
     }
     const nextIndex = highest + 1;
 
-    const signer = await unlockWallet({
-        vault,
-        walletId,
-        password,
-        bip39Passphrase,
-        chainRegistry,
-        sdkRegistry,
-    });
+    const signer = providedSigner
+        ? providedSigner
+        : await unlockWallet({
+            vault,
+            walletId,
+            password,
+            bip39Passphrase,
+            chainRegistry,
+            sdkRegistry,
+        });
+    const ownsSigner = !providedSigner;
+    const signerKind = signer.kind;
+    const addressSource = signerKind === 'software' ? 'hd' : signerKind;
+
     try {
         const [derived] = await signer.getAddresses({
             chainId,
@@ -136,7 +144,7 @@ export async function receiveAddress({
             accountId: account.id,
             chain: descriptor.coin,
             network: descriptor.networkKind,
-            source: 'hd',
+            source: addressSource,
             addressType: type,
             derivationPath: derived.path,
             address: derived.address,
@@ -147,6 +155,6 @@ export async function receiveAddress({
         await vault.addresses.put(record);
         return record;
     } finally {
-        signer.lock();
+        if (ownsSigner && typeof signer.lock === 'function') signer.lock();
     }
 }
