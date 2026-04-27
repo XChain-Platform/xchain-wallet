@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.140.0] - 2026-04-26
+
+§44 Fee UX — Step 3 of 5 — DOGE per-kB unit semantics in Custom-mode input.
+
+Closes the §44.7 audit row. Step 1 already had the FeeSelector display tier rates correctly per chain (sat/vB for BTC/LTC, DOGE/kB for DOGE), but Custom-mode input expected the user to type in the *internal* per-byte unit (koinu/byte for DOGE) — confusing and unnatural. Now the Custom input accepts the DISPLAYED unit, so a DOGE user types "1.5 DOGE/kB" and the system converts to koinu/byte under the hood.
+
+### Added
+
+- **`flows/feeEstimate.js`** grows two conversion helpers:
+  - `displayRateToPerByte(unit, displayValue)` — converts user-natural rate (sat/vB or DOGE/kB) to the table's internal per-byte rate (sat/vB or koinu/byte).
+  - `perByteRateToDisplay(unit, ratePerByte)` — inverse, used to populate `rateValue` consistently in the displayed unit.
+- Both exported from `flows/index.js`.
+
+### Changed
+
+- **`estimateNativeSendFee`** — `rateValue` in returned estimates is now the user-displayed value (DOGE/kB for DOGE, sat/vB for BTC/LTC) so that the FeeSelector's Custom-mode default seed and the input value remain consistent. The actual fee math uses internal per-byte rates from the placeholder table (unchanged).
+- **`customFeeEstimate`** — the `rate` parameter is now interpreted as the displayed unit; the function converts to per-byte via `displayRateToPerByte` before computing sats. `rateValue` echoes the user-typed value verbatim.
+- **`test/smoke/core/fee-tiers.smoke.js`** — adds DOGE-side assertions: `tiers.normal.rateValue === 1` (DOGE/kB), Custom rate `1.5 DOGE/kB` produces `37_500_000` koinu, and round-trip identity for the conversion helpers across a range of values.
+
+### Behavior preserved
+
+- BTC / LTC behavior is unchanged byte-for-byte: their displayed unit (sat/vB) IS their internal per-byte rate. The conversion helpers no-op for `sat/vB`.
+- The FeeSelector's `tiers.normal?.rateValue` seed for Custom-mode now matches the input's expected unit on every chain — DOGE users see "1" prefilled (DOGE/kB), not "100000" (koinu/byte).
+
 ## [0.139.0] - 2026-04-26
 
 §44 Fee UX — Step 2 of 5 — RBF toggle on Send form. Closes the §44.3 audit row.

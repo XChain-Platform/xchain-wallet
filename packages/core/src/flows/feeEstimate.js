@@ -107,7 +107,10 @@ export function estimateNativeSendFee({ chainId, chainRegistry, speed = DEFAULT_
         confidence: 'low',
         rate: formatRate(table.unit, tier.rate),
         unit: table.unit,
-        rateValue: tier.rate,
+        // §44.7 — rateValue is the user-displayed value in the chain's
+        // natural unit (sat/vB for BTC/LTC, DOGE/kB for DOGE). Custom
+        // mode echoes this value back through the input verbatim.
+        rateValue: perByteRateToDisplay(table.unit, tier.rate),
         vsize: table.txSize,
         speed,
         etaMinutes: tier.etaMinutes,
@@ -142,13 +145,14 @@ export function estimateNativeSendFeeTiers({ chainId, chainRegistry } = {}) {
 
 /**
  * Build a custom-rate FeeEstimate. The FeeSelector's "Custom" mode
- * feeds this — user enters a rate in the chain's native unit, this
- * function recomputes the absolute fee.
+ * feeds this — user enters a rate in the displayed unit (sat/vB for
+ * BTC/LTC, DOGE/kB for DOGE), this function converts to per-byte
+ * internally and recomputes the absolute fee. §44.7.
  *
  * @param {object} opts
  * @param {string} opts.chainId
  * @param {{ get: (id: string) => any }} opts.chainRegistry
- * @param {number} opts.rate                   in chain's native unit (sat/vB or koinu/B)
+ * @param {number} opts.rate                   in chain's DISPLAYED unit
  * @returns {FeeEstimate | null}
  */
 export function customFeeEstimate({ chainId, chainRegistry, rate } = {}) {
@@ -159,18 +163,54 @@ export function customFeeEstimate({ chainId, chainRegistry, rate } = {}) {
     if (!coin) return null;
     const table = PLACEHOLDER_FEE_TIERS[coin];
     if (!table) return null;
-    const sats = computeSats(table, rate);
+    const ratePerByte = displayRateToPerByte(table.unit, rate);
+    const sats = computeSats(table, ratePerByte);
     return {
         sats,
         coinAmount: satsToCoinDecimal(sats),
         source: 'user',
         confidence: 'high',
-        rate: formatRate(table.unit, rate),
+        rate: formatRate(table.unit, ratePerByte),
         unit: table.unit,
-        rateValue: rate,
+        rateValue: rate, // keep the user-typed value so the input echoes back unchanged
         vsize: table.txSize,
         speed: undefined,
     };
+}
+
+/**
+ * Convert a per-byte rate (the table's internal granularity) to the
+ * user-displayed value in the chain's natural unit. Inverse of
+ * `displayRateToPerByte`. Useful when porting tier defaults into the
+ * custom input.
+ *
+ * @param {string} unit
+ * @param {number} ratePerByte
+ * @returns {number}
+ */
+export function perByteRateToDisplay(unit, ratePerByte) {
+    if (!Number.isFinite(ratePerByte)) return 0;
+    if (unit === 'DOGE/kB') {
+        // koinu/byte × 1000 bytes / 100_000_000 koinu/DOGE
+        return Number(((ratePerByte * 1000) / 1e8).toFixed(8));
+    }
+    return ratePerByte;
+}
+
+/**
+ * Convert a user-typed rate in the displayed unit back to per-byte.
+ *
+ * @param {string} unit
+ * @param {number} displayValue
+ * @returns {number}
+ */
+export function displayRateToPerByte(unit, displayValue) {
+    if (!Number.isFinite(displayValue)) return 0;
+    if (unit === 'DOGE/kB') {
+        // DOGE/kB × 100_000_000 koinu/DOGE / 1000 bytes/kB
+        return (displayValue * 1e8) / 1000;
+    }
+    return displayValue;
 }
 
 function computeSats(table, ratePerByte) {
@@ -180,7 +220,6 @@ function computeSats(table, ratePerByte) {
 function formatRate(unit, value) {
     if (unit === 'DOGE/kB') {
         // value is koinu/byte; convert to DOGE/kB for display.
-        // koinu/byte × 1000 bytes / 100_000_000 koinu/DOGE
         const dogePerKb = (value * 1000) / 1e8;
         return `${trimNumber(dogePerKb)} DOGE/kB`;
     }

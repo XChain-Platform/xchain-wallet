@@ -5,6 +5,8 @@ import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
     customFeeEstimate,
+    perByteRateToDisplay,
+    displayRateToPerByte,
 } from '../../../packages/core/src/flows/feeEstimate.js';
 
 const registry = {
@@ -48,6 +50,28 @@ assert.equal(dogeNormal.unit, 'DOGE/kB');
 assert.match(dogeNormal.rate, /DOGE\/kB/);
 // 100_000 koinu/byte × 250 bytes = 25_000_000 koinu = 0.25 DOGE.
 assert.equal(dogeNormal.sats, 25_000_000);
+// §44.7 — DOGE rateValue is the displayed value (DOGE/kB), not
+// the internal koinu/byte. 100_000 koinu/byte × 1000 / 1e8 = 1 DOGE/kB.
+assert.equal(dogeNormal.rateValue, 1, 'DOGE rateValue is in DOGE/kB');
+const dogeFast = estimateNativeSendFee({ chainId: 'dogecoin-mainnet', chainRegistry: registry, speed: 'fast' });
+assert.equal(dogeFast.rateValue, 2);
+
+// BTC rateValue is unchanged (sat/vB IS the displayed unit).
+assert.equal(btcNormal.rateValue, 6);
+
+// --- displayRateToPerByte / perByteRateToDisplay -----------------------
+
+assert.equal(displayRateToPerByte('sat/vB', 6), 6, 'sat/vB → per-byte is identity');
+assert.equal(displayRateToPerByte('DOGE/kB', 1), 100_000, '1 DOGE/kB = 100k koinu/byte');
+assert.equal(displayRateToPerByte('DOGE/kB', 2), 200_000);
+assert.equal(perByteRateToDisplay('sat/vB', 6), 6);
+assert.equal(perByteRateToDisplay('DOGE/kB', 100_000), 1);
+
+// Round-trip
+for (const v of [0.5, 1, 6, 100, 1234.5678]) {
+    const rt = perByteRateToDisplay('DOGE/kB', displayRateToPerByte('DOGE/kB', v));
+    assert.ok(Math.abs(rt - v) < 1e-7, `DOGE round-trip ${v} → ${rt}`);
+}
 
 // --- estimateNativeSendFeeTiers ----------------------------------------
 
@@ -82,5 +106,17 @@ assert.equal(customFeeEstimate({ chainId: 'bitcoin-mainnet', chainRegistry: regi
 const zero = customFeeEstimate({ chainId: 'bitcoin-mainnet', chainRegistry: registry, rate: 0 });
 assert.ok(zero);
 assert.equal(zero.sats, 0);
+
+// §44.7 — DOGE custom rate is in DOGE/kB
+const dogeCustom = customFeeEstimate({
+    chainId: 'dogecoin-mainnet',
+    chainRegistry: registry,
+    rate: 1.5,
+});
+assert.ok(dogeCustom);
+// 1.5 DOGE/kB → 150_000 koinu/byte → 150_000 × 250 = 37_500_000 koinu
+assert.equal(dogeCustom.sats, 37_500_000);
+assert.equal(dogeCustom.rateValue, 1.5, 'DOGE custom echoes user value back');
+assert.match(dogeCustom.rate, /1\.5 DOGE\/kB/);
 
 console.log('fee-tiers smoke OK');

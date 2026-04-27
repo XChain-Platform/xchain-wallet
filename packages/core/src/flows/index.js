@@ -48,6 +48,8 @@ export {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
     customFeeEstimate,
+    perByteRateToDisplay,
+    displayRateToPerByte,
     satsToCoinDecimal,
 } from './feeEstimate.js';
 export {
