@@ -10,6 +10,8 @@ import {
     registry as registryLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useSettings } from '../hooks/useSettings.js';
+import { CLIPBOARD_AUTO_CLEAR_DEFAULT } from '../../schemas/settings.js';
 import styles from './ViewPrivateKey.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -39,8 +41,17 @@ const chainRegistry = registryLib.defaultRegistry();
  */
 export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
     const { messaging, shell } = useMessaging();
+    const { settings } = useSettings();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
+    // §17.7.1 / G028 — clipboard auto-clear timeout, configurable from
+    // Settings → Privacy. 0 disables the auto-clear. Records without
+    // the field (older v2 settings) fall back to the spec default.
+    const clipboardAutoClearSeconds = (() => {
+        const raw = settings?.privacy?.clipboardAutoClearSeconds;
+        if (typeof raw === 'number' && Number.isInteger(raw) && raw >= 0) return raw;
+        return CLIPBOARD_AUTO_CLEAR_DEFAULT;
+    })();
 
     const [stage, setStage] = useState(
         /** @type {'warning' | 'password' | 'submitting' | 'revealed'} */ ('warning'),
@@ -71,15 +82,17 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
         return () => window.removeEventListener('blur', handler);
     }, []);
 
-    // §17.7.1 — clipboard auto-clear after 60s.
+    // §17.7.1 / G028 — clipboard auto-clear. Timeout sourced from
+    // settings.privacy.clipboardAutoClearSeconds (0–600, 0 disables).
     useEffect(() => {
         if (clipboardStatus !== 'copied') return undefined;
+        if (clipboardAutoClearSeconds <= 0) return undefined;
         const id = setTimeout(() => {
             navigator.clipboard?.writeText('').catch(() => {});
             setClipboardStatus('cleared');
-        }, 60_000);
+        }, clipboardAutoClearSeconds * 1000);
         return () => clearTimeout(id);
-    }, [clipboardStatus]);
+    }, [clipboardStatus, clipboardAutoClearSeconds]);
 
     const chainId = useMemo(() => {
         const descriptor = findDescriptor(address);
@@ -318,7 +331,11 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
                     onClick={handleCopy}
                     disabled={!revealed}
                 >
-                    {clipboardStatus === 'copied' ? 'Copied — auto-clears in 60s' : 'Copy'}
+                    {clipboardStatus === 'copied'
+                        ? (clipboardAutoClearSeconds > 0
+                            ? `Copied — auto-clears in ${clipboardAutoClearSeconds}s`
+                            : 'Copied')
+                        : 'Copy'}
                 </Button>
                 {clipboardStatus === 'cleared' ? (
                     <span className={styles.clipboardNote}>Clipboard cleared.</span>

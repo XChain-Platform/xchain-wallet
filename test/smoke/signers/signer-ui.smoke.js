@@ -129,9 +129,10 @@ assert.ok(
     'ViewPrivateKey auto-hides on window blur (§17.7.1)',
 );
 assert.ok(
-    /setTimeout\(/.test(viewSrc) && /60_000/.test(viewSrc)
+    /setTimeout\(/.test(viewSrc)
+        && /clipboardAutoClearSeconds\s*\*\s*1000/.test(viewSrc)
         && /clipboard\?\.writeText\(''\)/.test(viewSrc),
-    'ViewPrivateKey clears clipboard after 60s (§17.7.1)',
+    'ViewPrivateKey clears clipboard after `clipboardAutoClearSeconds * 1000` ms (§17.7.1 / G028)',
 );
 assert.ok(
     /Tap to reveal/.test(viewSrc),
@@ -228,5 +229,5 @@ assert.ok(
 );
 
 console.log(
-    'OK — signer UI smoke (PairSignerForm §17.6/§18.3: vendor picker + DI factories + firmware-verdict gating + messaging.registerSigner wiring; ViewPrivateKey §17.7: classifySource routes HW/watch-only to info panels + tap-to-reveal + window-blur auto-hide + 60s clipboard auto-clear + password re-prompt; exportPrivateKey handler + messaging; pair-signer sub-route wired into both shells)',
+    'OK — signer UI smoke (PairSignerForm §17.6/§18.3: vendor picker + DI factories + firmware-verdict gating + messaging.registerSigner wiring; ViewPrivateKey §17.7: classifySource routes HW/watch-only to info panels + tap-to-reveal + window-blur auto-hide + configurable clipboard auto-clear (§17.7.1 / G028) + password re-prompt; exportPrivateKey handler + messaging; pair-signer sub-route wired into both shells)',
 );

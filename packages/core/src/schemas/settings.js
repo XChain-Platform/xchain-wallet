@@ -26,6 +26,13 @@ export const ADS_DEFAULT_ENABLED = true;
 export const ADS_DEFAULT_PER_TX_SATS = 1;
 export const ADS_DEFAULT_TRIGGER_SATS = 1000;
 
+// §17.7.1 / G028 — clipboard auto-clear bounds. The Settings Privacy
+// panel exposes this as a number input; ViewPrivateKey reads it via
+// useSettings to pick the timer. 0 disables auto-clear.
+export const CLIPBOARD_AUTO_CLEAR_MIN = 0;
+export const CLIPBOARD_AUTO_CLEAR_MAX = 600;
+export const CLIPBOARD_AUTO_CLEAR_DEFAULT = 60;
+
 /**
  * @typedef {Object} SdkEndpoint
  * @property {string} explorerUrl
@@ -60,7 +67,7 @@ export const ADS_DEFAULT_TRIGGER_SATS = 1000;
  * @property {string} language
  * @property {Record<string, SdkEndpoint>} sdkEndpoints
  * @property {Record<string, FeeSettings>} fees
- * @property {{ torRouting: boolean, changeAddressRotation: boolean, hideSmallBalances: boolean, blurOnBlur: boolean, labelsSurviveRestore: boolean }} privacy   v2 — adds blurOnBlur (window-unfocus blur of sensitive data), labelsSurviveRestore (§19.5.2 on-chain label sync opt-in)
+ * @property {{ torRouting: boolean, changeAddressRotation: boolean, hideSmallBalances: boolean, blurOnBlur: boolean, labelsSurviveRestore: boolean, clipboardAutoClearSeconds?: number }} privacy   v2 — adds blurOnBlur (window-unfocus blur of sensitive data), labelsSurviveRestore (§19.5.2 on-chain label sync opt-in); clipboardAutoClearSeconds is optional v2-tolerant — 0–600 inclusive, 0 = never clear, default 60 (§17.7.1 / G028)
  * @property {{ enabled: boolean, perChain: Record<string, AdsChainState> }} ads
  * @property {{ txConfirmations: boolean, incomingReceipts: boolean, dispenserFills: boolean, orderFills: boolean, priceAlerts: boolean }} notifications
  * @property {boolean} developerMode
@@ -87,6 +94,7 @@ export function createDefaultSettings() {
             hideSmallBalances: false,
             blurOnBlur: false,
             labelsSurviveRestore: false,
+            clipboardAutoClearSeconds: CLIPBOARD_AUTO_CLEAR_DEFAULT,
         },
         ads: {
             enabled: ADS_DEFAULT_ENABLED,
@@ -175,7 +183,14 @@ export function validateSettings(record) {
             isBoolean(r.privacy.changeAddressRotation) &&
             isBoolean(r.privacy.hideSmallBalances) &&
             isBoolean(r.privacy.blurOnBlur) &&
-            isBoolean(r.privacy.labelsSurviveRestore),
+            isBoolean(r.privacy.labelsSurviveRestore) &&
+            // clipboardAutoClearSeconds is v2-tolerant: missing is fine
+            // (older records default to 60s at read time); when present,
+            // require an integer in [0, 600].
+            (r.privacy.clipboardAutoClearSeconds === undefined
+                || (Number.isInteger(r.privacy.clipboardAutoClearSeconds)
+                    && r.privacy.clipboardAutoClearSeconds >= CLIPBOARD_AUTO_CLEAR_MIN
+                    && r.privacy.clipboardAutoClearSeconds <= CLIPBOARD_AUTO_CLEAR_MAX)),
         'malformed',
     );
 

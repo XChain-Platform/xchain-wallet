@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.167.0] - 2026-04-27
+
+§17.7.1 — Step 5 of Cluster E — Clipboard auto-clear configurable 0–600s (G028); Cluster E closed.
+
+ViewPrivateKey's clipboard auto-clear timer was hard-coded to 60 seconds. The Settings → Privacy panel now exposes a `Clipboard auto-clear (seconds)` number input that writes `settings.privacy.clipboardAutoClearSeconds`, an integer in `[0, 600]` clamped on the way in. ViewPrivateKey reads the value via `useSettings`; `0` short-circuits the timer entirely (no auto-clear), any positive value drives `setTimeout(_, value * 1000)`. Older v2 settings records without the field default to 60 at read time, so existing wallets behave identically until the user moves the slider. The post-copy hint now reflects the active interval ("Copied — auto-clears in 90s") instead of the dead 60s string. Closes Cluster E (§30 + §17 finish).
+
+### Added
+
+- **`schemas/settings.js`** — `CLIPBOARD_AUTO_CLEAR_MIN` / `_MAX` / `_DEFAULT` constants; tolerant validation (undefined OK, integer in [0, 600] when present); `createDefaultSettings` seeds the default.
+- **`shared/components/settings/PrivacySection.jsx`** — new number input row, clamped via `Math.max / Math.min` against the schema bounds; updates `settings.privacy.clipboardAutoClearSeconds` on change.
+- **`test/smoke/ui/clipboard-auto-clear-setting.smoke.js`** — verifies schema constants, default seeding, tolerant validation, PrivacySection input wiring, ViewPrivateKey timer wiring, and removal of the hard-coded 60_000 literal.
+
+### Changed
+
+- **`shared/routes/ViewPrivateKey.jsx`** — reads the setting via `useSettings`; timer effect skips when value ≤ 0; copied-hint string interpolates the active value.
+- **`test/smoke/signers/signer-ui.smoke.js`** — clipboard-clear assertion now pins `clipboardAutoClearSeconds * 1000` (the configurable form) rather than the retired `60_000` literal.
+
+Closes G028. Cluster E — §30 + §17 finish — closed at v0.167.0. Smoke baseline preserved (24 / 168; new clipboard-auto-clear-setting smoke passes).
+
 ## [0.166.0] - 2026-04-27
 
 §17.7 — Step 4 of Cluster E — ViewPrivateKey wired to App navigation (G027).
