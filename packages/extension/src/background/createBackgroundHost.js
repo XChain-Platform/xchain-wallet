@@ -127,6 +127,7 @@ const {
     updateSettings,
     exportBackupFile,
     removeWallet,
+    signMessageFlow,
 } = flows;
 
 /**
@@ -478,6 +479,45 @@ export function createBackgroundHost(deps) {
 
     host.register('action.send', async (req, { vault, chainRegistry, sdkRegistry }) => {
         return sendAsset({ ...req, vault, chainRegistry, sdkRegistry });
+    });
+
+    // §17.4 / §30.1 / G024 — user-initiated message signing. Caller
+    // supplies the addressId (HD or imported-WIF) and the wallet
+    // resolves it to either `path` (HD) or `addressId` (imported).
+    host.register('auth.signMessage', async (req, { vault, chainRegistry, sdkRegistry }) => {
+        const walletId = req?.walletId;
+        const addressId = req?.addressId;
+        const password = req?.password;
+        const message = req?.message;
+        if (typeof walletId !== 'string' || !walletId) {
+            throw new Error('auth.signMessage: walletId is required');
+        }
+        if (typeof addressId !== 'string' || !addressId) {
+            throw new Error('auth.signMessage: addressId is required');
+        }
+        if (typeof password !== 'string' || password.length === 0) {
+            throw new Error('auth.signMessage: password is required');
+        }
+        if (typeof message !== 'string') {
+            throw new Error('auth.signMessage: message must be a string');
+        }
+        const address = await vault.addresses.get(addressId);
+        if (!address) {
+            throw new Error(`auth.signMessage: address "${addressId}" not found`);
+        }
+        const isHd = address.source === 'hd' && typeof address.derivationPath === 'string';
+        return signMessageFlow({
+            vault,
+            walletId,
+            password,
+            bip39Passphrase: req?.bip39Passphrase,
+            chainRegistry,
+            sdkRegistry,
+            chainId: address.chainId,
+            path: isHd ? address.derivationPath : undefined,
+            addressId: isHd ? undefined : addressId,
+            message,
+        });
     });
 
     // HW variants — no password. The renderer (popup / web / desktop)

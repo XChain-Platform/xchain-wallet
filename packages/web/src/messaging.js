@@ -143,6 +143,16 @@ export function sendAsset(opts) {
 }
 
 /**
+ * §17.4 / §30.1 / G024 — user-initiated message signing.
+ *
+ * @param {{ walletId: string, addressId: string, password: string, message: string, bip39Passphrase?: string }} opts
+ * @returns {Promise<{ signature: string }>}
+ */
+export function signMessageRequest(opts) {
+    return /** @type {any} */ (sendMessage('auth.signMessage', opts));
+}
+
+/**
  * HW-wallet variant of sendAsset. No password. Background resolves
  * the `signerId` + routes the sign request through the renderer-side
  * signer bridge. See popup/messaging.js for the full shape.

@@ -220,6 +220,16 @@ export function sendAsset(opts) {
 }
 
 /**
+ * §17.4 / §30.1 / G024 — user-initiated message signing.
+ *
+ * @param {{ walletId: string, addressId: string, password: string, message: string, bip39Passphrase?: string }} opts
+ * @returns {Promise<{ signature: string }>}
+ */
+export function signMessageRequest(opts) {
+    return /** @type {any} */ (sendMessage('auth.signMessage', opts));
+}
+
+/**
  * HW-wallet variant of sendAsset. No password (HW keys live on the
  * device). The background handler resolves the `signerId` to a
  * SignerRecord, builds a RemoteSigner wrapping a transport that

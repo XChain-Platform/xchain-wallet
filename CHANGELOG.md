@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.149.0] - 2026-04-27
+
+§17 Sign / Verify / Backup — Step 1 of 6 — Sign Message route (G024).
+
+User-initiated message signing now has a dedicated UI surface. The user picks a chain + address from their wallet, types a message, enters their password, and gets back a signature with a copy button. The form routes through a new `auth.signMessage` host handler that bridges to the existing `flows.signMessageFlow`. HD addresses sign via `derivationPath`; imported-WIF addresses sign via `addressId`.
+
+### Added
+
+- **`shared/routes/SignMessageForm.jsx`** — chain picker + address select + message textarea + password input + submit. Post-sign view shows signed-by chain badge + address, the message in a wrapped `<pre>`, the base64 signature with a CopyButton, and a "Sign another message" reset. `InvalidPasswordError` maps to user-friendly "Incorrect password." copy.
+- **`auth.signMessage` host handler** in `extension/src/background/createBackgroundHost.js` (also covers the web shell — `web/src/hostBridge.js` instantiates `createBackgroundHost` directly). Resolves `addressId → Address` record, distinguishes HD (passes `path: derivationPath`) from imported-WIF (passes `addressId`) and forwards to `signMessageFlow`.
+- **`messaging.signMessageRequest`** wrappers in `web/src/messaging.js` and `extension/src/popup/messaging.js`.
+- **App routing** in both `web/src/App.jsx` and `extension/src/popup/App.jsx`: `unlockedView === 'sign-message'` branch + `onSignMessage` plumbed through `buildActionEntries` + a "Sign message" entry in the ActionsMenu.
+- **`test/smoke/ui/sign-message.smoke.js`** — form structure, host handler shape (HD vs imported routing), messaging wrappers in both shells, App wiring in both shells.
+
+### Behavior preserved
+
+- All existing ActionsMenu entries keep their order; "Sign message" slots in adjacent to "Contacts" and "Advanced action".
+- The desktop shell's `messageHost.js` does NOT yet register `auth.signMessage`; the form gracefully reports "messaging.signMessageRequest is not available in this shell" until FOLLOWUP 1 wires it.
+- Hardware-signer path is out of scope for this step; the form rejects HW addresses by routing them through the password-required `signMessageFlow` (which throws on non-software signers). The HW counterpart lives in a Cluster B FOLLOWUP.
+
 ## [0.148.0] - 2026-04-27
 
 §26 Lock & Panic — Step 6 of 6 — Duress passphrase (G068 part 2). **Closes the §26 cluster.**

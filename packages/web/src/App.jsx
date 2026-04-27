@@ -67,6 +67,7 @@ import { DelegationActionForm } from '@xchain-wallet/core/shared/routes/Delegati
 import { OperatorDashboard } from '@xchain-wallet/core/shared/routes/OperatorDashboard.jsx';
 import { History } from '@xchain-wallet/core/shared/routes/History.jsx';
 import { LinkForm } from '@xchain-wallet/core/shared/routes/LinkForm.jsx';
+import { SignMessageForm } from '@xchain-wallet/core/shared/routes/SignMessageForm.jsx';
 import { ParallelComposer } from '@xchain-wallet/core/shared/routes/ParallelComposer.jsx';
 import { CrossChainSwapForm } from '@xchain-wallet/core/shared/routes/CrossChainSwapForm.jsx';
 import { CrossChainTemplates } from '@xchain-wallet/core/shared/routes/CrossChainTemplates.jsx';
@@ -491,6 +492,14 @@ function AppInner() {
                     />
                 );
             }
+            if (unlockedView === 'sign-message' && activeWalletId) {
+                return (
+                    <SignMessageForm
+                        walletId={activeWalletId}
+                        onBack={() => setUnlockedView('actions')}
+                    />
+                );
+            }
             if (unlockedView === 'parallel-compose' && activeWalletId) {
                 return (
                     <ParallelComposer
@@ -786,6 +795,7 @@ function AppInner() {
                             onMultisigCreate: hasBtcAddress ? () => setUnlockedView('multisig-create') : undefined,
                             onMultisigSign: hasBtcAddress ? () => setUnlockedView('multisig-sign') : undefined,
                             onContacts: () => setUnlockedView('contacts'),
+                            onSignMessage: () => setUnlockedView('sign-message'),
                         })}
                         onBack={() => setUnlockedView('home')}
                     />
@@ -965,6 +975,7 @@ function AppInner() {
                         onMultisigCreate: hasBtcAddress ? () => setUnlockedView('multisig-create') : undefined,
                         onMultisigSign: hasBtcAddress ? () => setUnlockedView('multisig-sign') : undefined,
                         onContacts: () => setUnlockedView('contacts'),
+                        onSignMessage: () => setUnlockedView('sign-message'),
                     }) : undefined}
                 />
             );
@@ -998,6 +1009,7 @@ function buildActionEntries({
     onMultisigCreate,
     onMultisigSign,
     onContacts,
+    onSignMessage,
 }) {
     return [
         {
@@ -1125,6 +1137,12 @@ function buildActionEntries({
             label: 'Contacts',
             description: 'Local address book — label counterparties, quick-compose to saved recipients (§41.7.4).',
             onSelect: onContacts,
+        },
+        {
+            id: 'sign-message',
+            label: 'Sign message',
+            description: 'Sign an arbitrary message with one of your addresses to prove ownership (§17.4 / §30.1).',
+            onSelect: onSignMessage,
         },
         {
             id: 'advanced',
