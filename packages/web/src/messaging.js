@@ -259,6 +259,15 @@ export function importWifRequest(opts) {
 }
 
 /**
+ * §19.4 / G036 — restore an encrypted backup envelope into the live vault.
+ *
+ * @param {{ fileContent: string, password: string, onConflict?: 'overwrite' | 'preserve' | 'error' }} opts
+ */
+export function importBackupRequest(opts) {
+    return /** @type {any} */ (sendMessage('wallet.importBackup', opts));
+}
+
+/**
  * HW-wallet variant of sendAsset. No password. Background resolves
  * the `signerId` + routes the sign request through the renderer-side
  * signer bridge. See popup/messaging.js for the full shape.

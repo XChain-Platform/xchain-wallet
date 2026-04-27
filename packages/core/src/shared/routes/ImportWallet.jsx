@@ -33,10 +33,18 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
 
     const isFreeWallet = importVariant === 'freewallet';
     const acceptedWordCounts = isFreeWallet ? [12] : ACCEPTED_WORD_COUNTS;
+    // §19.4 / G036 — two import lanes: recovery phrase (default) and
+    // encrypted-backup restore. FreeWallet variant pins to 'mnemonic'.
+    const [lane, setLane] = useState(/** @type {'mnemonic' | 'backup'} */ ('mnemonic'));
     const [name, setName] = useState(isFreeWallet ? 'FreeWallet' : 'Imported Wallet');
     const [mnemonic, setMnemonic] = useState('');
     const [password, setPassword] = useState('');
     const [confirm, setConfirm] = useState('');
+    // Encrypted-backup lane state.
+    const [backupContent, setBackupContent] = useState('');
+    const [backupPassword, setBackupPassword] = useState('');
+    const [backupOverwrite, setBackupOverwrite] = useState(false);
+    const [backupFileName, setBackupFileName] = useState(/** @type {string | null} */ (null));
     // §15.6 — optional 25th-word BIP39 passphrase. Hidden behind a toggle so
     // users who never set one don't have to read the warning copy.
     // FreeWallet imports follow the Counterwallet legacy code path, which
@@ -62,6 +70,52 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
         setMnemonic(cleaned);
         setScanning(false);
         if (error) setError(null);
+    }
+
+    function handleBackupFile(event) {
+        const file = event.target?.files?.[0];
+        if (!file) return;
+        setBackupFileName(file.name);
+        const reader = new FileReader();
+        reader.onload = () => {
+            const text = typeof reader.result === 'string' ? reader.result : '';
+            setBackupContent(text);
+            if (error) setError(null);
+        };
+        reader.onerror = () => {
+            setError('Could not read the selected file.');
+        };
+        reader.readAsText(file);
+    }
+
+    async function handleBackupSubmit(event) {
+        event.preventDefault();
+        if (busy) return;
+        if (backupContent.trim().length === 0) {
+            setError('Pick a backup file or paste its contents.');
+            return;
+        }
+        if (backupPassword.length === 0) {
+            setError('Backup password is required.');
+            return;
+        }
+        if (typeof messaging.importBackupRequest !== 'function') {
+            setError('Backup restore is not available in this shell.');
+            return;
+        }
+        setError(null);
+        setBusy(true);
+        try {
+            await messaging.importBackupRequest({
+                fileContent: backupContent,
+                password: backupPassword,
+                onConflict: backupOverwrite ? 'overwrite' : 'error',
+            });
+            onImported();
+        } catch (err) {
+            setError(err?.message || 'Failed to restore backup.');
+            setBusy(false);
+        }
     }
 
     function handleFileDrop(event) {
@@ -150,27 +204,130 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
     // on insecure-context HTTP, etc.) all funnel through `error`. Show
     // them in a single top-of-form alert box so a runtime failure is
     // never visually attached to whichever input the user typed last.
+    const laneSwitcher = !isFreeWallet ? (
+        <div className={styles.laneSwitcher} role="tablist" aria-label="Import lane">
+            <button
+                type="button"
+                role="tab"
+                aria-selected={lane === 'mnemonic'}
+                className={`${styles.laneTab} ${lane === 'mnemonic' ? styles.laneTabActive : ''}`}
+                onClick={() => { setLane('mnemonic'); setError(null); }}
+                disabled={busy}
+            >
+                Recovery phrase
+            </button>
+            <button
+                type="button"
+                role="tab"
+                aria-selected={lane === 'backup'}
+                className={`${styles.laneTab} ${lane === 'backup' ? styles.laneTabActive : ''}`}
+                onClick={() => { setLane('backup'); setError(null); }}
+                disabled={busy}
+            >
+                Encrypted backup
+            </button>
+        </div>
+    ) : null;
+
     const form = (
-        <form onSubmit={handleSubmit} noValidate>
+        <form onSubmit={lane === 'backup' ? handleBackupSubmit : handleSubmit} noValidate>
             <header className={headClass}>
                 <h1 className={titleClass}>
                     {isFreeWallet
                         ? (isFull ? 'Import from FreeWallet' : 'FreeWallet import')
-                        : (isFull ? 'Import an existing wallet' : 'Import wallet')}
+                        : lane === 'backup'
+                            ? (isFull ? 'Restore from encrypted backup' : 'Restore backup')
+                            : (isFull ? 'Import an existing wallet' : 'Import wallet')}
                 </h1>
                 <p className={subtitleClass}>
                     {isFreeWallet
                         ? (isFull
                             ? 'Paste your 12-word FreeWallet recovery phrase. We\'ll import it as a Counterwallet-legacy wallet — the same derivation FreeWallet used — so every address matches the one you already know.'
                             : 'Paste your 12-word FreeWallet recovery phrase.')
-                        : (isFull
-                            ? 'Enter a BIP39 recovery phrase (12, 15, 18, 21, or 24 words) or a Counterwallet 12-word mnemonic. The format is detected automatically.'
-                            : 'Paste a 12-, 15-, 18-, 21-, or 24-word recovery phrase.')}
+                        : lane === 'backup'
+                            ? (isFull
+                                ? 'Pick a `.xchain-wallet` file you exported from this app and enter the password you set when you created the backup.'
+                                : 'Pick a backup file and enter its password.')
+                            : (isFull
+                                ? 'Enter a BIP39 recovery phrase (12, 15, 18, 21, or 24 words) or a Counterwallet 12-word mnemonic. The format is detected automatically.'
+                                : 'Paste a 12-, 15-, 18-, 21-, or 24-word recovery phrase.')}
                 </p>
             </header>
+            {laneSwitcher}
             {error ? (
                 <div role="alert" className={styles.error}>{error}</div>
             ) : null}
+            {lane === 'backup' ? (
+                <>
+                    <label className={styles.mnemonicLabel} htmlFor="xc-backup-file">
+                        Backup file
+                    </label>
+                    <input
+                        id="xc-backup-file"
+                        type="file"
+                        accept=".xchain-wallet,application/json,text/plain"
+                        onChange={handleBackupFile}
+                        disabled={busy}
+                        className={styles.backupFileInput}
+                    />
+                    {backupFileName ? (
+                        <p className={styles.backupHint}>Loaded {backupFileName} ({backupContent.length.toLocaleString()} bytes).</p>
+                    ) : (
+                        <p className={styles.backupHint}>Or paste the file contents below.</p>
+                    )}
+                    <textarea
+                        className={mnemonicClass}
+                        value={backupContent}
+                        onChange={(e) => {
+                            setBackupContent(e.target.value);
+                            if (e.target.value !== backupContent) setBackupFileName(null);
+                            if (error) setError(null);
+                        }}
+                        placeholder='{"version":1,"kdf":{"name":"argon2id"…'
+                        spellCheck={false}
+                        autoCapitalize="none"
+                        autoCorrect="off"
+                        autoComplete="off"
+                        rows={4}
+                        disabled={busy}
+                    />
+                    <Input
+                        type="password"
+                        label="Backup password"
+                        hint="The password you chose when you exported this backup (not your wallet-unlock password)."
+                        value={backupPassword}
+                        onChange={(e) => {
+                            setBackupPassword(e.target.value);
+                            if (error) setError(null);
+                        }}
+                        autoComplete="off"
+                        disabled={busy}
+                    />
+                    <label className={styles.advancedToggle}>
+                        <input
+                            type="checkbox"
+                            checked={backupOverwrite}
+                            onChange={(e) => setBackupOverwrite(e.target.checked)}
+                            disabled={busy}
+                        />
+                        <span>Overwrite if any record collides (advanced)</span>
+                    </label>
+                    <div className={actionsClass}>
+                        <Button
+                            type="submit"
+                            variant="primary"
+                            loading={busy}
+                            size={isFull ? undefined : 'sm'}
+                            icon={<Icon.KeyIcon />}
+                            disabled={backupContent.trim().length === 0 || backupPassword.length === 0}
+                        >
+                            Restore
+                        </Button>
+                    </div>
+                </>
+            ) : null}
+            {lane === 'mnemonic' ? (
+            <>
             <div className={styles.mnemonicHeader}>
                 <label className={styles.mnemonicLabel} htmlFor="xc-mnemonic">
                     Recovery phrase
@@ -307,6 +464,8 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                     Import
                 </Button>
             </div>
+            </>
+            ) : null}
         </form>
     );
 

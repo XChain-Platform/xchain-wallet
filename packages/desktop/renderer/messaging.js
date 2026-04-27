@@ -52,6 +52,14 @@ export function importWifRequest(opts) {
     return /** @type {any} */ (sendMessage('wallet.importWif', opts));
 }
 
+/**
+ * §19.4 / G036 — restore an encrypted backup envelope.
+ * @param {{ fileContent: string, password: string, onConflict?: 'overwrite' | 'preserve' | 'error' }} opts
+ */
+export function importBackupRequest(opts) {
+    return /** @type {any} */ (sendMessage('wallet.importBackup', opts));
+}
+
 /** @param {object} opts */
 export function renameWallet(opts) {
     return /** @type {any} */ (sendMessage('wallet.rename', opts));

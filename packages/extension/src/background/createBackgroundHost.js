@@ -126,6 +126,7 @@ const {
     getSettings,
     updateSettings,
     exportBackupFile,
+    importBackupFile,
     removeWallet,
     signMessageFlow,
     signPsbtFlow,
@@ -562,6 +563,26 @@ export function createBackgroundHost(deps) {
             includePendingTxs: req?.includePendingTxs,
         });
         return { fileContent: r.fileContent };
+    });
+
+    // §19.4 / G036 — restore an encrypted backup envelope into the live
+    // vault. The renderer hands the raw JSON string + decrypt password
+    // + conflict policy. Returns the imported walletId + write/skip
+    // counts so the shell can surface "Imported wallet 'X' with N
+    // addresses" copy.
+    host.register('wallet.importBackup', async (req, { vault }) => {
+        const r = await importBackupFile({
+            vault,
+            fileContent: req?.fileContent,
+            password: req?.password,
+            onConflict: req?.onConflict,
+        });
+        return {
+            walletId: r.walletId,
+            writes: r.writes,
+            skipped: r.skipped,
+            walletName: r.payload?.wallet?.name,
+        };
     });
 
     // §35.1 — destructively remove a wallet and all its descendants.

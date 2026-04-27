@@ -183,3 +183,46 @@
     color: var(--xc-text);
     cursor: pointer;
 }
+
+.laneSwitcher {
+    display: flex;
+    gap: var(--xc-space-1);
+    margin-bottom: var(--xc-space-3);
+    background: var(--xc-bg-muted);
+    border-radius: var(--xc-radius-md);
+    padding: 2px;
+}
+
+.laneTab {
+    flex: 1;
+    background: transparent;
+    border: 0;
+    padding: var(--xc-space-2) var(--xc-space-3);
+    border-radius: var(--xc-radius-sm);
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text-muted);
+    cursor: pointer;
+}
+
+.laneTab[disabled] {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.laneTabActive {
+    background: var(--xc-surface);
+    color: var(--xc-text);
+    font-weight: 500;
+    box-shadow: var(--xc-shadow-sm);
+}
+
+.backupFileInput {
+    margin-bottom: var(--xc-space-2);
+    font-size: var(--xc-text-sm);
+}
+
+.backupHint {
+    margin: 0 0 var(--xc-space-2);
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+}

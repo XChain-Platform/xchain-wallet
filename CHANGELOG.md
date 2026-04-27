@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.175.0] - 2026-04-27
+
+§19.4 — Cluster H Step 5 — Encrypted backup restore lane in ImportWallet (G036).
+
+`ImportWallet.jsx` gains a "Recovery phrase / Encrypted backup" lane switcher (suppressed in the FreeWallet variant). The backup lane accepts a `.xchain-wallet` file via `<input type="file">` (or pasted JSON), the backup password, and an optional "Overwrite if any record collides" toggle. Submit calls the new `messaging.importBackupRequest` shim → `wallet.importBackup` host handler → `flows.importBackupFile`, then fires `onImported()` so the caller refreshes into the now-restored wallet.
+
+### Added
+
+- **`packages/extension/src/background/createBackgroundHost.js`** — `wallet.importBackup` host handler wrapping `flows.importBackupFile`; pulls the flow into the destructured `flows` import.
+- **`packages/extension/src/popup/messaging.js`** + **`packages/web/src/messaging.js`** + **`packages/desktop/renderer/messaging.js`** — `importBackupRequest` shims.
+- **`packages/core/src/shared/routes/ImportWallet.jsx`** — `lane` state + lane switcher + backup-lane state (`backupContent` / `backupPassword` / `backupOverwrite` / `backupFileName`) + `handleBackupFile` + `handleBackupSubmit`; mnemonic-lane block wrapped in `lane === 'mnemonic'` conditional.
+- **`packages/core/src/shared/routes/ImportWallet.module.css`** — `.laneSwitcher` / `.laneTab` / `.laneTabActive` / `.backupFileInput` / `.backupHint` styles.
+
+Closes G036.
+
 ## [0.174.0] - 2026-04-27
 
 §15.5 — Cluster H Step 4 — Import WIF + backup-implications warning (G020 + G021).
