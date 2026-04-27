@@ -54,8 +54,8 @@ assert.match(src, /Pending — real /, 'placeholder copy present');
 // Inputs disable when ADS is off so the user can't poke them
 assert.match(src, /disabled=\{!settings\.ads\.enabled\}/, 'inputs disable when ADS is off');
 
-// Regtest filtering when developer mode is off
-assert.match(src, /developerMode \|\| d\.networkKind !== 'regtest'/, 'regtest hidden when devMode off');
+// Regtest filtering goes through the shared visibility helper.
+assert.match(src, /registryLib\.isChainVisibleToUser\(d, settings\)/, 'regtest filter via shared helper');
 
 // Settings.jsx wiring
 assert.match(settingsSrc, /import \{ AdsSection \}/, 'Settings.jsx imports AdsSection');

@@ -53,11 +53,10 @@ export function AdsSection() {
     if (error) return <Status text={`Settings unavailable: ${error.message}`} tone="error" />;
     if (!settings) return <Status text="Settings unavailable." tone="error" />;
 
-    const developerMode = Boolean(settings.developerMode);
     const chainIds = Object.keys(settings.ads.perChain).filter((cid) => {
         const d = chainRegistry.get(cid);
         if (!d) return true; // surface stale entries so they can be edited away
-        return developerMode || d.networkKind !== 'regtest';
+        return registryLib.isChainVisibleToUser(d, settings);
     }).sort();
 
     const onToggleEnabled = async (next) => {

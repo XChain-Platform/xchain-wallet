@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.124.0] - 2026-04-26
+
+Chain visibility — shared helper for the regtest-reveal rule.
+
+The "regtest descriptors are hidden from user-facing pickers unless Developer Mode is on" rule (spec §2.2 + §48.3) was inlined inside `NetworkEndpointsSection.jsx` and `AdsSection.jsx` as a per-call predicate. Centralised into a shared `filterChainsForUser` / `isChainVisibleToUser` pair under `packages/core/src/registry/visibility.js` so every future picker / list / form picks up the same gate without restating it.
+
+### Added
+
+- **`packages/core/src/registry/visibility.js`** — `filterChainsForUser(descriptors, settings)` and `isChainVisibleToUser(descriptor, settings)`. Defaults to "hide regtest" when settings is null / missing the developerMode flag, so cold-start callers default to the safe branch.
+- Re-exports `filterChainsForUser` + `isChainVisibleToUser` from `packages/core/src/registry/index.js`.
+- **`test/smoke/core/chain-visibility.smoke.js`** — count drops by exact regtest descriptor count when developerMode is off, all chains visible when on, null-settings cold-start path defaults to hidden, single-descriptor predicate matches the bulk filter.
+
+### Changed
+
+- **`packages/core/src/shared/components/settings/NetworkEndpointsSection.jsx`** — replaces the inline `developerMode || d.networkKind !== 'regtest'` filter with `registryLib.filterChainsForUser(...)`.
+- **`packages/core/src/shared/components/settings/AdsSection.jsx`** — replaces the inline regtest filter with `registryLib.isChainVisibleToUser(d, settings)`.
+
 ## [0.123.0] - 2026-04-26
 
 Settings schema v1 → v2 migration. Unlocks every "Coming soon" deferred toggle across the §35 panels.

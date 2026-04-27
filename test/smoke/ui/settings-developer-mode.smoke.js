@@ -44,13 +44,8 @@ for (const label of [
 
 assert.match(
     networkSrc,
-    /developerMode \|\| d\.networkKind !== 'regtest'/,
-    'NetworkEndpointsSection filters out regtest when developerMode is false',
-);
-assert.match(
-    networkSrc,
-    /Boolean\(settings\.developerMode\)/,
-    'NetworkEndpointsSection reads developerMode from settings',
+    /registryLib\.filterChainsForUser\(/,
+    'NetworkEndpointsSection routes regtest filtering through the shared visibility helper',
 );
 
 // ─── useDeveloperMode hook ───────────────────────────────────────

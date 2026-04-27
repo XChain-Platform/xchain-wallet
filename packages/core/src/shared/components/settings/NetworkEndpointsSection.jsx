@@ -61,9 +61,7 @@ export function NetworkEndpointsSection() {
     if (error) return <Status text={`Settings unavailable: ${error.message}`} tone="error" />;
     if (!settings) return <Status text="Settings unavailable." tone="error" />;
 
-    const developerMode = Boolean(settings.developerMode);
-    const descriptors = chainRegistry.supportedChains()
-        .filter((d) => developerMode || d.networkKind !== 'regtest')
+    const descriptors = registryLib.filterChainsForUser(chainRegistry.supportedChains(), settings)
         .slice()
         .sort((a, b) => {
             if (a.coin !== b.coin) return a.coin.localeCompare(b.coin);

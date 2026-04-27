@@ -143,3 +143,4 @@ export {
     ADS_DONATION_ADDRESS_PLACEHOLDER,
     isDonationAddressConfigured,
 } from './validate.js';
+export { filterChainsForUser, isChainVisibleToUser } from './visibility.js';
