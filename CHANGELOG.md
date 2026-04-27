@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.133.0] - 2026-04-26
+
+§29 Send/Receive — Step 2 of 6 — Recipient safety trio (checksum highlighting + paste-integrity + lookalike fuzzy match).
+
+Closes the deferred §21 FOLLOWUP 3 from the signing-safety close report. Three additive defenses on the Send To-field:
+
+- **Checksum-positional highlighting.** `<AddressText>` gains a `highlight` prop. When set, addresses render as three spans — first 6 (head, accent) / middle (muted) / last 6 (tail, accent) — so users can sanity-check the identifying ends of the destination at a glance. Send.jsx review wires `highlight` on the From row and the Destination detail row.
+- **Paste-integrity check.** New `pasteIntegrity.checkPasteIntegrity({ pastedText })` SHA-256-hashes the pasted text and re-reads `navigator.clipboard.readText()` one frame later. If the clipboard rewrote itself between paste and re-read (a clipboard-hijack tell), Send.jsx surfaces a warning under the To-field. Permission failures / missing API silently skip — the warning is purely additive.
+- **Lookalike fuzzy match.** New `lookalike.findLookalike({ address, candidates })` runs Levenshtein distance against the same suggestion set Step 1 built from contacts + recent send history. When the entered address scores ≥90% similarity to a known address — same length, one or two characters off — Send.jsx renders a warning naming the contact / history hit and the percent score.
+
+### Added
+
+- **`packages/core/src/shared/utils/lookalike.js`** — `levenshtein(a, b)` (single-row DP, O(min(a, b)) memory), `similarity(a, b)` (1 - distance / max), `findLookalike({ address, candidates, threshold = 0.9, minLength = 20, maxDistance = 4 })` returning `{ match, score, distance } | null`. Length-gated (skip candidates more than ±2 chars off) and short-input-gated (skip when the entered address is shorter than `minLength`).
+- **`packages/core/src/shared/utils/pasteIntegrity.js`** — `hashText(text)` (SHA-256 hex via `@noble/hashes`), `checkPasteIntegrity({ pastedText, clipboard? })` async helper. Returns `{ ok, skipped?, pastedHash, reread?, rereadHash?, reason? }`. Caller-injectable `clipboard` prop for testability.
+- **`test/smoke/core/lookalike.smoke.js`** — Levenshtein basics (kitten/sitting, saturday/sunday, single edits, empty / non-string), similarity gradient, findLookalike happy path, no-hit cases, threshold suppression, maxDistance gate, short-input gate, multi-candidate scoring.
+- **`test/smoke/core/paste-integrity.smoke.js`** — fixed-vector SHA-256 (`""`, `"abc"`), non-string inputs, all five clipboard branches (no clipboard, identical, mismatch, throwing readText, non-string readText, missing readText fn).
+- **`test/smoke/ui/address-text-highlight.smoke.js`** — `highlight` prop default off, head/middle/tail span rendering, truncate-vs-full middle behavior, empty / short-address branches, CSS hooks including the muted-token middle.
+- **`test/smoke/ui/send-recipient-safety.smoke.js`** — Send.jsx imports + state + paste-integrity wiring + lookalike candidate set + warning copy + form-stage rendering + review-stage `highlight` on From and Destination.
+
+### Changed
+
+- **`packages/core/src/ui/AddressText.jsx`** — adds `highlight` prop (default false). Refactor splits the render into four explicit branches (empty / short / non-highlight / highlight). Truncate behavior unchanged when `highlight` is off — existing call sites keep their current rendering.
+- **`packages/core/src/ui/AddressText.module.css`** — `.head`, `.middle`, `.tail` rules. `.middle` uses `--xc-text-muted`.
+- **`Send.jsx`** —
+  - Paste handler now also fires `checkPasteIntegrity` (fire-and-forget; mismatch sets `pasteWarning`).
+  - New `lookalikeWarning` memo over `toAddress` + `suggestions`. Both warnings render under the AddressCombobox with `role="alert"`.
+  - Review stage wires `<AddressText … highlight />` on the From row, and intercepts the decoder's "Destination" detail to render through `<AddressText … highlight />`.
+
+### Behavior preserved
+
+- Non-highlight `<AddressText>` rendering is unchanged byte-for-byte for existing callers.
+- The Send form keeps its current submit / signing / balance-preview / raw-PSBT-viewer wiring. The two new warnings are advisory; neither blocks submit.
+- Paste-integrity skips silently on browsers / contexts where `navigator.clipboard.readText` isn't available, so the form remains usable in non-secure contexts.
+
 ## [0.132.0] - 2026-04-26
 
 §29 Send/Receive — Step 1 of 6 — Recipient autocomplete + smart paste.

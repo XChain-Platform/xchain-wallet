@@ -11,3 +11,14 @@
 .md {
     font-size: var(--xc-text-sm);
 }
+
+.head,
+.tail {
+    color: var(--xc-text);
+    font-weight: 600;
+}
+
+.middle {
+    color: var(--xc-text-muted, #6b7180);
+    font-weight: 400;
+}

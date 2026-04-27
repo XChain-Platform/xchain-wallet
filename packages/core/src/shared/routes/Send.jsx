@@ -13,6 +13,8 @@ import {
     uri as uriLib,
 } from '@xchain-wallet/core';
 import { buildRecentDestinations } from '../../flows/recentDestinations.js';
+import { findLookalike } from '../utils/lookalike.js';
+import { checkPasteIntegrity } from '../utils/pasteIntegrity.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDeveloperMode } from '../hooks/useDeveloperMode.js';
 import { HwSignBlock } from '../components/HwSignBlock.jsx';
@@ -139,7 +141,11 @@ export function Send({ walletId, onBack }) {
     // §29.5 smart paste — BIP21 URI pre-fills amount/token/memo;
     // pasting a WIF surfaces "import this private key instead?" rather
     // than letting the user paste a private key into the To field.
+    // Also runs §21.5 paste-integrity: hashes the pasted text, then
+    // re-reads navigator.clipboard.readText() and warns if the
+    // clipboard rewrote itself between paste and re-read.
     const [pasteHint, setPasteHint] = useState(/** @type {string | null} */ (null));
+    const [pasteWarning, setPasteWarning] = useState(/** @type {string | null} */ (null));
     const onAddressPaste = useCallback((e) => {
         const text = e?.clipboardData?.getData?.('text');
         if (typeof text !== 'string' || text.length === 0) return;
@@ -175,7 +181,30 @@ export function Send({ walletId, onBack }) {
             // raw address / unknown — let the default paste happen.
             setPasteHint(null);
         }
+        setPasteWarning(null);
+        // Defer the integrity check so the paste event finishes first.
+        // navigator.clipboard.readText is async and permission-gated;
+        // skipped + ok results are silent.
+        Promise.resolve().then(() => checkPasteIntegrity({ pastedText: text }))
+            .then((res) => { if (!res.ok) setPasteWarning(res.reason || 'Clipboard altered after paste — verify the address before sending.'); })
+            .catch(() => { /* silent */ });
     }, []);
+
+    // §21.5 lookalike fuzzy-match. Compare the entered address against
+    // the autocomplete candidate set (contacts + recent send history).
+    // Surfaces a warning when the user is about to send to an address
+    // that is one or two characters off from a known one.
+    const lookalikeWarning = useMemo(() => {
+        const trimmed = toAddress.trim();
+        if (!trimmed) return null;
+        const hit = findLookalike({ address: trimmed, candidates: suggestions });
+        if (!hit) return null;
+        const sourceLabel = hit.match.source === 'contact'
+            ? `contact "${hit.match.label}"`
+            : 'an address you have sent to before';
+        const pct = Math.round(hit.score * 100);
+        return `Looks ${pct}% similar to ${sourceLabel}: ${hit.match.address}. Double-check this is the address you mean.`;
+    }, [toAddress, suggestions]);
 
     useEffect(() => {
         if (!chainId || !addressesByChain) return;
@@ -428,13 +457,17 @@ export function Send({ walletId, onBack }) {
                         </dd>
                         <dt className={styles.detailsLabel}>From</dt>
                         <dd className={styles.detailsValue}>
-                            <AddressText address={fromAddress.address} />
+                            <AddressText address={fromAddress.address} highlight />
                         </dd>
                         {(decoded?.details || []).map((d) => (
                             <DetailRow
                                 key={d.label}
                                 label={d.label}
-                                value={d.value}
+                                value={
+                                    d.label === 'Destination' && typeof d.value === 'string'
+                                        ? <AddressText address={d.value} highlight />
+                                        : d.value
+                                }
                             />
                         ))}
                     </dl>
@@ -534,6 +567,7 @@ export function Send({ walletId, onBack }) {
                 onChange={(e) => {
                     setToAddress(e.target.value);
                     if (pasteHint) setPasteHint(null);
+                    if (pasteWarning) setPasteWarning(null);
                 }}
                 onPaste={onAddressPaste}
                 suggestions={suggestions}
@@ -543,6 +577,16 @@ export function Send({ walletId, onBack }) {
                 autoCapitalize="none"
                 autoCorrect="off"
             />
+            {pasteWarning ? (
+                <div role="alert" className={styles.warnings}>
+                    <p className={styles.warning}>{pasteWarning}</p>
+                </div>
+            ) : null}
+            {lookalikeWarning ? (
+                <div role="alert" className={styles.warnings}>
+                    <p className={styles.warning}>{lookalikeWarning}</p>
+                </div>
+            ) : null}
             <Input
                 label="Asset"
                 hint="Ticker. Native coin by default."
