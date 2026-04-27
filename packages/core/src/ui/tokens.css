@@ -85,6 +85,70 @@
     }
 }
 
+/* §53.4 / G170 — high-contrast variant. Triggered by `prefers-contrast: more`
+ * (or the synonym `forced-colors: active` on Windows high-contrast mode).
+ * Pumps text-vs-background contrast into the WCAG AAA range, darkens borders
+ * to full opacity, and brightens focus rings. Applies on top of either light
+ * or dark base theme — only the values that need a kick get overridden. */
+@media (prefers-contrast: more) {
+    :root {
+        --xc-bg: #FFFFFF;
+        --xc-bg-muted: #EEF1F5;
+        --xc-surface: #FFFFFF;
+        --xc-surface-raised: #FFFFFF;
+        --xc-border: #1F2937;
+        --xc-border-strong: #0F172A;
+        --xc-text: #000000;
+        --xc-text-muted: #1F2937;
+        --xc-danger: #B91C1C;
+        --xc-warning: #92400E;
+        --xc-success: #166534;
+        --xc-accent-primary: #134B6E;
+        --xc-accent-primary-hover: #0B304A;
+        --xc-focus-ring: rgba(15, 23, 42, 0.85);
+    }
+
+    @media (prefers-color-scheme: dark) {
+        :root {
+            --xc-bg: #000000;
+            --xc-bg-muted: #0B0F17;
+            --xc-surface: #050810;
+            --xc-surface-raised: #0B0F17;
+            --xc-border: #E5EAF2;
+            --xc-border-strong: #FFFFFF;
+            --xc-text: #FFFFFF;
+            --xc-text-muted: #E5EAF2;
+            --xc-danger: #FCA5A5;
+            --xc-warning: #FCD34D;
+            --xc-success: #86EFAC;
+            --xc-accent-primary: #93C5FD;
+            --xc-accent-primary-hover: #BFDBFE;
+            --xc-focus-ring: rgba(255, 255, 255, 0.85);
+        }
+    }
+}
+
+/* Windows high-contrast mode emits `forced-colors: active`. Map our tokens
+ * onto the system colors so the wallet inherits whatever palette the user
+ * picked at OS level. */
+@media (forced-colors: active) {
+    :root {
+        --xc-bg: Canvas;
+        --xc-bg-muted: Canvas;
+        --xc-surface: Canvas;
+        --xc-surface-raised: Canvas;
+        --xc-border: CanvasText;
+        --xc-border-strong: CanvasText;
+        --xc-text: CanvasText;
+        --xc-text-muted: GrayText;
+        --xc-text-inverted: Canvas;
+        --xc-accent-primary: LinkText;
+        --xc-accent-primary-hover: VisitedText;
+        --xc-danger: Mark;
+        --xc-focus-ring: Highlight;
+    }
+}
+
 body {
     margin: 0;
     font-family: var(--xc-font-sans);

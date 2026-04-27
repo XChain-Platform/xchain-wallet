@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.189.0] - 2026-04-27
+
+§53.4 — Cluster K Step 4 — `prefers-contrast: more` variant (G170). Cluster K closed.
+
+`tokens.css` now ships a high-contrast palette via `@media (prefers-contrast: more)` plus a separate `@media (forced-colors: active)` block that maps our tokens onto Windows system colors (`Canvas` / `CanvasText` / `LinkText` / etc.) so the wallet inherits whatever palette the user picked at OS level. The contrast variant layers on top of either light or dark base theme — only the tokens that needed a kick (text, borders, focus ring, accent) get overridden; spacing / typography / radius tokens stay unchanged.
+
+### Added
+
+- **`packages/core/src/ui/tokens.css`** — `@media (prefers-contrast: more)` palette overrides (light + dark variants); `@media (forced-colors: active)` mapping onto system colors for Windows high-contrast mode.
+
+Closes G170. **Cluster K — §53 Accessibility — closed at v0.189.0.**
+
 ## [0.188.0] - 2026-04-27
 
 §53.3 — Cluster K Step 3 — `<StatusMessage>` ARIA-live primitive (G169).
