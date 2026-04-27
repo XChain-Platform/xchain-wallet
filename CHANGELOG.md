@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.173.0] - 2026-04-27
+
+§15.4 — Cluster H Step 3 — QR scan + drag-drop mnemonic on Import (G022).
+
+ImportWallet header now exposes a "Scan QR" toggle that mounts the existing `<QrScanner>` over the textarea; the first detected QR string fills the mnemonic field (with an optional `bip39:` prefix stripped). The textarea wrapper is now a drop zone — dragging a `.txt` (or `.asc`) file in extracts the longest line that looks like a wordlist of ≥12 words, falling back to the raw file contents.
+
+### Added
+
+- **`packages/core/src/shared/routes/ImportWallet.jsx`** — `scanning` / `dragOver` state; `handleQrFrame` strips `bip39:` and assigns; `handleFileDrop` reads with FileReader and picks the best mnemonic line; Scan QR button + scanner block + drop-zone wrapper.
+- **`packages/core/src/shared/routes/ImportWallet.module.css`** — `.mnemonicHeader` / `.scanButton` / `.scannerBox` / `.dropZone` / `.dropZoneActive` / `.dropHint` styles.
+
+Closes G022.
+
 ## [0.172.0] - 2026-04-27
 
 §15.6 — Cluster H Step 2 — BIP39 passphrase (25th word) in CreateWallet + ImportWallet.

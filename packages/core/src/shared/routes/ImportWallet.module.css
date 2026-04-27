@@ -53,6 +53,59 @@
     margin-bottom: var(--xc-space-1);
 }
 
+.mnemonicHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--xc-space-1);
+}
+
+.scanButton {
+    background: transparent;
+    border: 1px solid var(--xc-border-strong);
+    border-radius: var(--xc-radius-sm);
+    padding: 2px var(--xc-space-2);
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text);
+    cursor: pointer;
+}
+
+.scanButton:hover:not(:disabled) {
+    background: var(--xc-bg-muted);
+}
+
+.scanButton:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.scannerBox {
+    margin-bottom: var(--xc-space-3);
+    padding: var(--xc-space-2);
+    background: var(--xc-bg-muted);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-md);
+}
+
+.dropZone {
+    position: relative;
+    border-radius: var(--xc-radius-md);
+    transition: background 120ms ease;
+}
+
+.dropZoneActive {
+    background: var(--xc-focus-ring);
+    outline: 2px dashed var(--xc-accent-primary);
+    outline-offset: 2px;
+}
+
+.dropHint {
+    margin: -2px 0 var(--xc-space-3);
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    line-height: 1.3;
+}
+
 .mnemonicPopup {
     width: 100%;
     font-family: var(--xc-font-mono);

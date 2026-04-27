@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Screen, Button, Input, Icon } from '@xchain-wallet/core/ui';
+import { Screen, Button, Input, Icon, QrScanner } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './ImportWallet.module.css';
 import pickerStyles from './WalletPicker.module.css';
@@ -45,11 +45,55 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
     const [bip39Passphrase, setBip39Passphrase] = useState('');
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [busy, setBusy] = useState(false);
+    // §15.4 G022 — QR-scan + drag-drop affordances. `scanning` toggles the
+    // <QrScanner> block; `dragOver` lights up the drop zone styling.
+    const [scanning, setScanning] = useState(false);
+    const [dragOver, setDragOver] = useState(false);
     const textareaRef = useRef(/** @type {HTMLTextAreaElement | null} */ (null));
 
     useEffect(() => {
         setTimeout(() => textareaRef.current?.focus(), 0);
     }, []);
+
+    function handleQrFrame(text) {
+        if (typeof text !== 'string' || text.length === 0) return;
+        // Strip an optional `bip39:` prefix that some QR generators emit.
+        const cleaned = text.replace(/^\s*bip39:\s*/i, '').trim();
+        setMnemonic(cleaned);
+        setScanning(false);
+        if (error) setError(null);
+    }
+
+    function handleFileDrop(event) {
+        event.preventDefault();
+        setDragOver(false);
+        const file = event.dataTransfer?.files?.[0];
+        if (!file) return;
+        // Only accept text-like files. PDFs / images would need extra
+        // decoding paths (image → BarcodeDetector); out of scope for G022.
+        if (file.type && !file.type.startsWith('text/') && !/\.(txt|asc)$/i.test(file.name)) {
+            setError('Only plain-text files (.txt) can be dropped here.');
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => {
+            const raw = typeof reader.result === 'string' ? reader.result : '';
+            // Strip common surrounding text — many users paste a paragraph
+            // they wrote around the seed. We pick the longest line whose
+            // tokens look like wordlist words.
+            const candidate = raw
+                .split(/\r?\n/)
+                .map((line) => line.trim().replace(/\s+/g, ' '))
+                .filter((line) => /^[a-zA-Z\s]+$/.test(line) && line.split(' ').length >= 12)
+                .sort((a, b) => b.length - a.length)[0];
+            setMnemonic((candidate || raw).trim());
+            if (error) setError(null);
+        };
+        reader.onerror = () => {
+            setError('Could not read the dropped file.');
+        };
+        reader.readAsText(file);
+    }
 
     async function handleSubmit(event) {
         event.preventDefault();
@@ -127,30 +171,62 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
             {error ? (
                 <div role="alert" className={styles.error}>{error}</div>
             ) : null}
-            <label className={styles.mnemonicLabel} htmlFor="xc-mnemonic">
-                Recovery phrase
-            </label>
-            <textarea
-                id="xc-mnemonic"
-                ref={textareaRef}
-                className={mnemonicClass}
-                value={mnemonic}
-                onChange={(e) => {
-                    setMnemonic(e.target.value);
-                    if (error) setError(null);
+            <div className={styles.mnemonicHeader}>
+                <label className={styles.mnemonicLabel} htmlFor="xc-mnemonic">
+                    Recovery phrase
+                </label>
+                <button
+                    type="button"
+                    className={styles.scanButton}
+                    onClick={() => {
+                        setScanning((s) => !s);
+                        if (error) setError(null);
+                    }}
+                    disabled={busy}
+                    aria-pressed={scanning}
+                >
+                    {scanning ? 'Cancel scan' : 'Scan QR'}
+                </button>
+            </div>
+            {scanning ? (
+                <div className={styles.scannerBox}>
+                    <QrScanner onFrame={handleQrFrame} alt="Recovery-phrase QR scanner" />
+                </div>
+            ) : null}
+            <div
+                className={`${styles.dropZone}${dragOver ? ` ${styles.dropZoneActive}` : ''}`}
+                onDragOver={(e) => {
+                    e.preventDefault();
+                    if (!dragOver) setDragOver(true);
                 }}
-                placeholder={
-                    isFull
-                        ? 'word word word word word word word word word word word word'
-                        : 'word word word…'
-                }
-                spellCheck={false}
-                autoCapitalize="none"
-                autoCorrect="off"
-                autoComplete="off"
-                rows={3}
-                disabled={busy}
-            />
+                onDragLeave={() => setDragOver(false)}
+                onDrop={handleFileDrop}
+            >
+                <textarea
+                    id="xc-mnemonic"
+                    ref={textareaRef}
+                    className={mnemonicClass}
+                    value={mnemonic}
+                    onChange={(e) => {
+                        setMnemonic(e.target.value);
+                        if (error) setError(null);
+                    }}
+                    placeholder={
+                        isFull
+                            ? 'word word word word word word word word word word word word'
+                            : 'word word word…'
+                    }
+                    spellCheck={false}
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    autoComplete="off"
+                    rows={3}
+                    disabled={busy}
+                />
+                <p className={styles.dropHint}>
+                    {dragOver ? 'Release to load' : 'Drop a .txt file with your seed phrase to load it here.'}
+                </p>
+            </div>
             <Input
                 label="Wallet name"
                 value={name}
