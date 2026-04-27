@@ -268,6 +268,19 @@ export function dryRunRestoreRequest(opts) {
 }
 
 /**
+ * §19.5.2 / G037 — manual on-chain label publish. Encrypts the
+ * wallet's labels + contacts under the seed-derived commitment key
+ * and broadcasts the ciphertext as a FILE action on the chosen chain.
+ *
+ * Resolves to `{ txid, chainId, discoveryName, sizeBytes, fromAddress }`.
+ *
+ * @param {{ walletId: string, password: string, chainId: string, bip39Passphrase?: string, fee?: number, feePerKb?: number }} opts
+ */
+export function publishLabelsRequest(opts) {
+    return /** @type {any} */ (sendMessage('wallet.publishLabels', opts));
+}
+
+/**
  * HW-wallet variant of sendAsset. No password (HW keys live on the
  * device). The background handler resolves the `signerId` to a
  * SignerRecord, builds a RemoteSigner wrapping a transport that

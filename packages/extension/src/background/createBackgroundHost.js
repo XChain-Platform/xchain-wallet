@@ -130,6 +130,7 @@ const {
     signMessageFlow,
     revealMnemonic,
     dryRunRestore,
+    publishLabelsNow,
 } = flows;
 
 /**
@@ -507,6 +508,26 @@ export function createBackgroundHost(deps) {
             vault,
             walletId: req?.walletId,
             password: req?.password,
+        });
+    });
+
+    // §19.5.2 / G037 — manual on-chain label publish. Encrypts the
+    // wallet's labels + contacts under the seed-derived commitment key
+    // and broadcasts the ciphertext as a FILE action on the chosen
+    // chain. Auto-sync (debounced on label change) and fetch-on-restore
+    // are tracked in FOLLOWUPS.md; this handler powers the user-visible
+    // "Publish now" button only.
+    host.register('wallet.publishLabels', async (req, { vault, chainRegistry, sdkRegistry }) => {
+        return publishLabelsNow({
+            vault,
+            walletId: req?.walletId,
+            password: req?.password,
+            bip39Passphrase: req?.bip39Passphrase,
+            chainId: req?.chainId,
+            chainRegistry,
+            sdkRegistry,
+            fee: req?.fee,
+            feePerKb: req?.feePerKb,
         });
     });
 

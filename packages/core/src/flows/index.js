@@ -200,6 +200,9 @@ export { dryRunRestore, DEFAULT_DRY_RUN_GAP } from './dryRunRestore.js';
 export {
     buildLabelSyncPayload,
     applyLabelSyncPayload,
+    publishLabelsNow,
+    NoFundedAddressError,
+    WifOnlyLabelSyncUnsupportedError,
     LABEL_SYNC_PAYLOAD_VERSION,
 } from './labelSync.js';
 export { signMessageFlow, signPsbtFlow } from './signFlows.js';

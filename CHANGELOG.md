@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.154.0] - 2026-04-27
+
+§19 Backup — Step 6 of Cluster B — On-chain label publish UI (G037).
+
+The Settings → Backup panel's "Publish labels on-chain" row replaces the v0.116.0 placeholder. The user picks a chain, enters the wallet password, and the wallet encrypts its labels + contacts under a seed-derived commitment key and broadcasts the ciphertext as a FILE action. The result panel shows the txid + chain + encrypted size + discovery name. Auto-sync on label change and fetch-on-restore decryption are queued in `claude/reports/xchain-wallet/FOLLOWUPS.md`.
+
+### Added
+
+- **`flows/labelSync.js`: `publishLabelsNow`** — orchestrates the full publish: decrypt wallet seed → derive commitment key → buildLabelSyncPayload → submitAction with `action: 'FILE'` and `encoderOpts.rawData = bytesToHex(ciphertext)`. Wif-only wallets throw `WifOnlyLabelSyncUnsupportedError`; wallets with no HD address on the picked chain throw `NoFundedAddressError`. Both seed + plaintext-mnemonic buffers are zeroed in `try/finally`. Re-exported from `flows/index.js`.
+- **`wallet.publishLabels` host handler** in `extension/src/background/createBackgroundHost.js`. Pass-through to `publishLabelsNow` with vault + chainRegistry + sdkRegistry deps.
+- **`messaging.publishLabelsRequest`** wrappers in popup + web messaging.
+- **`PublishLabelsForm` + `PublishLabelsReport` in `BackupSection.jsx`** — chain picker (sourced from `getAddressesByChain`, only chains with addresses are shown) + wallet-password input + status row; result panel shows txid (with Copy button), chain, encrypted size, discovery name.
+- **`claude/reports/xchain-wallet/FOLLOWUPS.md`** (new shared file) — `## §17/§19 — closed at v0.154.0` header with three FOLLOWUPs: on-change debounced auto-sync, fetch + decrypt + apply on restore, HW-wallet support for label-publish.
+- **`test/smoke/ui/publish-labels-ui.smoke.js`** — flow shape + zeroing assertions; host handler + messaging wrappers in both shells; BackupSection wiring (publishStage union, both subcomponents, copy refresh, FILE-action mention, txid/size/discovery surface); FOLLOWUPS.md cluster header + entries.
+
+### Changed
+
+- **`BackupSection.jsx`** — file header lists "Publish labels (§19.5.2)" as Live (was: Deferred). Placeholder "Coming soon" disabled row replaced by the four-stage publish flow (idle → form → running → result). React import switches to `useEffect` + `useState`.
+
+Closes G037.
+
 ## [0.153.0] - 2026-04-27
 
 §17 Signer Interface — Step 3 of Cluster B — Signer selection UI when adding address/account (G023).

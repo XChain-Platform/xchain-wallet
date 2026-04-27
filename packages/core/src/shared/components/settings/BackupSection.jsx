@@ -11,13 +11,15 @@
 //     candidate mnemonic; the panel renders an overall match flag plus
 //     a per-chain comparison report (matched / divergent / missing
 //     counts).
-//
-// Deferred (need additional flows / UI):
-//   - Published labels — §19.5.2 on-chain label sync; flow primitives
-//     ship at v0.22.0 but the FILE-action submit/fetch wiring is still
-//     pending.
+//   - Publish labels (§19.5.2) — wires `publishLabelsNow` core flow
+//     through the `wallet.publishLabels` host handler. User picks a
+//     chain + enters the wallet password; the panel encrypts the
+//     labels + contacts payload, broadcasts it as a FILE action, and
+//     reports the txid + payload size. Auto-sync on label change and
+//     fetch-on-restore decryption are tracked in `claude/reports/
+//     xchain-wallet/FOLLOWUPS.md`.
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMessaging } from '../../useMessaging.js';
 import { ROW, ROW_HINT, STACK, Status } from './_settingsPrimitives.jsx';
 
@@ -56,6 +58,13 @@ export function BackupSection({ activeWallet }) {
     );
     const [dryRunError, setDryRunError] = useState(/** @type {string | null} */ (null));
     const [dryRunResult, setDryRunResult] = useState(/** @type {any} */ (null));
+
+    // §19.5.2 publish-labels state.
+    const [publishStage, setPublishStage] = useState(
+        /** @type {'idle' | 'form' | 'running' | 'result'} */ ('idle'),
+    );
+    const [publishError, setPublishError] = useState(/** @type {string | null} */ (null));
+    const [publishResult, setPublishResult] = useState(/** @type {any} */ (null));
 
     const onExport = async (password) => {
         if (typeof messaging?.exportBackupFile !== 'function') {
@@ -152,6 +161,37 @@ export function BackupSection({ activeWallet }) {
         setDryRunStage('idle');
     }
 
+    async function runPublish({ chainId, password }) {
+        if (typeof messaging?.publishLabelsRequest !== 'function') {
+            setPublishError('Label publish is not wired in this shell yet.');
+            return;
+        }
+        if (!activeWallet?.id) {
+            setPublishError('No active wallet.');
+            return;
+        }
+        setPublishStage('running');
+        setPublishError(null);
+        try {
+            const r = await messaging.publishLabelsRequest({
+                walletId: activeWallet.id,
+                password,
+                chainId,
+            });
+            setPublishResult(r);
+            setPublishStage('result');
+        } catch (err) {
+            setPublishError(err?.message || 'Failed to publish labels.');
+            setPublishStage('form');
+        }
+    }
+
+    function resetPublish() {
+        setPublishResult(null);
+        setPublishError(null);
+        setPublishStage('idle');
+    }
+
     return (
         <div style={STACK}>
             {pendingPassword !== null ? (
@@ -219,13 +259,28 @@ export function BackupSection({ activeWallet }) {
                     onClick={() => { setDryRunStage('form'); setDryRunError(null); }}
                 />
             )}
-            <BackupRow
-                label="Published labels"
-                hint="Coming soon — opt into §19.5.2 on-chain label sync via FILE-action transport."
-                actionLabel="Configure…"
-                disabled
-                onClick={() => {}}
-            />
+            {publishStage === 'form' || publishStage === 'running' ? (
+                <PublishLabelsForm
+                    walletId={activeWallet?.id}
+                    busy={publishStage === 'running'}
+                    error={publishError}
+                    onCancel={resetPublish}
+                    onSubmit={runPublish}
+                />
+            ) : publishStage === 'result' ? (
+                <PublishLabelsReport
+                    result={publishResult}
+                    onDone={resetPublish}
+                />
+            ) : (
+                <BackupRow
+                    label="Publish labels on-chain"
+                    hint="Encrypt this wallet's labels + contacts and broadcast them as a FILE action so a from-seed restore can pull them back (§19.5.2)."
+                    actionLabel="Publish now…"
+                    disabled={!activeWallet}
+                    onClick={() => { setPublishStage('form'); setPublishError(null); }}
+                />
+            )}
         </div>
     );
 }
@@ -605,4 +660,156 @@ function triggerDownload(walletName, fileContent) {
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/**
+ * §19.5.2 publish-labels form. Pulls the wallet's address-bearing
+ * chains from `messaging.getAddressesByChain` so the picker only
+ * surfaces chains where the FILE action can actually be broadcast,
+ * then takes the wallet password and dispatches `publishLabelsRequest`.
+ */
+function PublishLabelsForm({ walletId, busy, error, onCancel, onSubmit }) {
+    const { messaging } = useMessaging();
+    const [chains, setChains] = useState(/** @type {string[] | null} */ (null));
+    const [chainId, setChainId] = useState(/** @type {string} */ (''));
+    const [password, setPassword] = useState('');
+    const [chainsError, setChainsError] = useState(/** @type {string | null} */ (null));
+
+    useEffect(() => {
+        let cancelled = false;
+        if (!walletId || typeof messaging?.getAddressesByChain !== 'function') {
+            setChains([]);
+            return () => { cancelled = true; };
+        }
+        messaging.getAddressesByChain(walletId)
+            .then((byChain) => {
+                if (cancelled) return;
+                const ids = Object.keys(byChain || {})
+                    .filter((cid) => Array.isArray(byChain[cid]) && byChain[cid].length > 0);
+                setChains(ids);
+                if (ids.length > 0) setChainId(ids[0]);
+            })
+            .catch((err) => {
+                if (cancelled) return;
+                setChains([]);
+                setChainsError(err?.message || 'Failed to load chains.');
+            });
+        return () => { cancelled = true; };
+    }, [walletId, messaging]);
+
+    const canSubmit = !!chainId && password.length > 0 && !busy;
+
+    return (
+        <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 'var(--xc-space-2)',
+            padding: 'var(--xc-space-3)',
+            background: 'var(--xc-surface-raised)',
+            border: '1px solid var(--xc-border)',
+            borderRadius: 'var(--xc-radius-md)',
+        }}>
+            <div style={{ color: 'var(--xc-text)', fontWeight: 500 }}>Publish labels on-chain</div>
+            <div style={ROW_HINT}>
+                The labels + contacts are encrypted under a key derived from this
+                wallet's seed and broadcast as a FILE action. Only someone who already
+                has your seed can decrypt them. The transaction pays a network fee.
+            </div>
+            {chains === null ? (
+                <div style={ROW_HINT}>Loading chains…</div>
+            ) : chains.length === 0 ? (
+                <Status text={chainsError || 'No chains have addresses on this wallet — generate one first.'} tone="error" />
+            ) : (
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 'var(--xc-text-sm)' }}>
+                    <span style={ROW_HINT}>Chain</span>
+                    <select
+                        value={chainId}
+                        onChange={(e) => setChainId(e.target.value)}
+                        aria-label="Publish chain"
+                        style={passwordStyle}
+                    >
+                        {chains.map((cid) => (
+                            <option key={cid} value={cid}>{cid}</option>
+                        ))}
+                    </select>
+                </label>
+            )}
+            <input
+                type="password"
+                placeholder="Wallet password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoFocus
+                autoComplete="current-password"
+                aria-label="Wallet password"
+                style={passwordStyle}
+            />
+            {error ? <Status text={error} tone="error" /> : null}
+            <div style={{ display: 'flex', gap: 'var(--xc-space-2)', justifyContent: 'flex-end' }}>
+                <button type="button" onClick={onCancel} style={ACTION_BTN} disabled={busy}>Cancel</button>
+                <button
+                    type="button"
+                    onClick={() => onSubmit({ chainId, password })}
+                    disabled={!canSubmit}
+                    style={{
+                        ...ACTION_BTN,
+                        background: canSubmit ? 'var(--xc-accent-primary)' : 'transparent',
+                        borderColor: canSubmit ? 'var(--xc-accent-primary)' : 'var(--xc-border)',
+                        color: canSubmit ? 'var(--xc-bg)' : 'var(--xc-text-muted)',
+                    }}
+                >
+                    {busy ? 'Publishing…' : 'Publish'}
+                </button>
+            </div>
+        </div>
+    );
+}
+
+/**
+ * §19.5.2 publish-labels result panel — shows the broadcast txid + the
+ * payload metadata (chain, encrypted size, discovery name). The user
+ * can copy the txid; "Done" resets the section back to the idle row.
+ */
+function PublishLabelsReport({ result, onDone }) {
+    const txid = result?.txid || '';
+    return (
+        <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 'var(--xc-space-2)',
+            padding: 'var(--xc-space-3)',
+            background: 'var(--xc-surface-raised)',
+            border: '1px solid var(--xc-accent-primary)',
+            borderRadius: 'var(--xc-radius-md)',
+        }}>
+            <div style={{ color: 'var(--xc-text)', fontWeight: 600 }}>
+                ✓ Labels published
+            </div>
+            <dl style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '4px var(--xc-space-3)', margin: 0 }}>
+                <dt style={ROW_HINT}>Txid</dt>
+                <dd style={{ margin: 0, fontFamily: 'var(--xc-font-mono)', fontSize: 'var(--xc-text-xs)', wordBreak: 'break-all' }}>{txid}</dd>
+                <dt style={ROW_HINT}>Chain</dt>
+                <dd style={{ margin: 0, fontSize: 'var(--xc-text-sm)' }}>{result?.chainId || '—'}</dd>
+                <dt style={ROW_HINT}>Encrypted size</dt>
+                <dd style={{ margin: 0, fontSize: 'var(--xc-text-sm)' }}>{result?.sizeBytes ?? 0} bytes</dd>
+                <dt style={ROW_HINT}>Discovery name</dt>
+                <dd style={{ margin: 0, fontFamily: 'var(--xc-font-mono)', fontSize: 'var(--xc-text-xs)', wordBreak: 'break-all' }}>{result?.discoveryName || '—'}</dd>
+            </dl>
+            <div style={{ display: 'flex', gap: 'var(--xc-space-2)', justifyContent: 'flex-end' }}>
+                <button
+                    type="button"
+                    onClick={() => {
+                        if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+                            navigator.clipboard.writeText(txid).catch(() => {});
+                        }
+                    }}
+                    style={ACTION_BTN}
+                    disabled={!txid}
+                >
+                    Copy txid
+                </button>
+                <button type="button" onClick={onDone} style={ACTION_BTN}>Done</button>
+            </div>
+        </div>
+    );
 }

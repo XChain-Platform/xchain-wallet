@@ -32,11 +32,13 @@ assert.match(src, /mismatch =/, 'mismatch detection present');
 assert.match(src, /new Blob\(/, 'Blob constructor used for download');
 assert.match(src, /\.xchain-wallet/, 'download filename has .xchain-wallet extension');
 
-// Three deferred rows
+// Four backup rows — three previously-deferred lanes are now Live as of
+// v0.151.0 (seed reveal), v0.152.0 (dry-run restore), v0.154.0 (publish
+// labels). The smoke keeps the row-presence assertion on the new copy.
 for (const label of [
     'Back up seed phrase',
     'Test backup',
-    'Published labels',
+    'Publish labels on-chain',
 ]) {
     assert.ok(src.includes(label), `${label} row present`);
 }
