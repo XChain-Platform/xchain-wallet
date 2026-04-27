@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.109.0] - 2026-04-26
+
+Settings — Step 6 of 18 — Privacy panel.
+
+Three live toggles for the `privacy.*` flags already on the v1 schema (Tor routing, change-address rotation, hide small balances). Two additional spec §35.1 rows ship as disabled deferral rows: blur-sensitive-on-blur and labels-survive-restore — both need a schema migration before they go live.
+
+### Added
+
+- **`packages/core/src/shared/components/settings/PrivacySection.jsx`** — three toggles + two deferred rows. Writes use the deep-merge nested-object form: `update({ privacy: { [field]: next } })`.
+- **`packages/core/src/shared/components/settings/_settingsPrimitives.jsx`** — shared layout helpers (`ROW`, `STACK`, `ROW_HINT`, `SELECT`, `INPUT`, `ToggleRow`, `Status`) extracted out of the per-section files. Reused across PrivacySection now and by every panel after it.
+- **`test/smoke/ui/settings-privacy.smoke.js`** — useSettings wiring, three live toggles map to the schema fields, two deferred rows are disabled with "Coming soon" hints, primitives module exports the expected surface, Settings.jsx hook-up.
+
+### Changed
+
+- **`packages/core/src/shared/routes/Settings.jsx`** — privacy section flips from `kind: 'stub'` to `kind: 'panel'` with `Component: PrivacySection`.
+
 ## [0.108.0] - 2026-04-26
 
 Settings — Step 5 of 18 — Language & Region panel.

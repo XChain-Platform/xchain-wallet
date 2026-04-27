@@ -4,6 +4,7 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { AboutSection } from '../components/settings/AboutSection.jsx';
 import { AppearanceSection } from '../components/settings/AppearanceSection.jsx';
 import { LanguageRegionSection } from '../components/settings/LanguageRegionSection.jsx';
+import { PrivacySection } from '../components/settings/PrivacySection.jsx';
 import styles from './ActionsMenu.module.css';
 import pickerStyles from './WalletPicker.module.css';
 
@@ -102,7 +103,8 @@ export function Settings({
             title: 'Privacy',
             description: 'Tor, change-address rotation, hide small balances.',
             keywords: 'privacy tor rotation hide balances labels',
-            kind: 'stub',
+            kind: 'panel',
+            Component: PrivacySection,
         },
         {
             id: 'safety',
