@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.185.0] - 2026-04-27
+
+§25.4 — Cluster J Step 3 — Animated onboarding explainers (G060).
+
+CSS-only entrance animations on the Welcome screen — logo scale-in, hero fade+slide, actions slide+fade with a small stagger. All wrapped in `prefers-reduced-motion: reduce` so users with the OS toggle see no motion. No JS, no dependencies; the spec called for "explainers" but a single subtle entrance signature is enough to make the screen feel alive without the carousel-style pattern that always feels heavy in a wallet onboarding.
+
+### Changed
+
+- **`packages/core/src/shared/routes/Onboarding.module.css`** — `@keyframes heroEnter` / `actionsEnter` / `logoEnter`; `.heroPopup` / `.heroFull` / `.actionsPopup` / `.actionsFull` / `.logoPopup` / `.logoFull` get an `animation` declaration; `@media (prefers-reduced-motion: reduce)` clears all of them.
+
+Closes G060. A future FOLLOWUP can swap in a multi-step animated carousel if user testing wants more guidance — the spec leaves the depth open.
+
 ## [0.184.0] - 2026-04-27
 
 §25.2 — Cluster J Step 2 — Demo banner (G059).
