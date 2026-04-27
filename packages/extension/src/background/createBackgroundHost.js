@@ -133,6 +133,7 @@ const {
     revealMnemonic,
     dryRunRestore,
     publishLabelsNow,
+    importWif,
 } = flows;
 
 /**
@@ -519,6 +520,24 @@ export function createBackgroundHost(deps) {
     // chain. Auto-sync (debounced on label change) and fetch-on-restore
     // are tracked in FOLLOWUPS.md; this handler powers the user-visible
     // "Publish now" button only.
+    // §15.5 / G020 — add a single imported WIF (private key) to an existing
+    // HD wallet. Caller (shell) is responsible for surfacing the
+    // §15.5.3 backup-implications warning before invoking this handler.
+    host.register('wallet.importWif', async (req, { vault, chainRegistry, sdkRegistry }) => {
+        const r = await importWif({
+            vault,
+            walletId: req?.walletId,
+            password: req?.password,
+            chainId: req?.chainId,
+            wif: req?.wif,
+            addressType: req?.addressType,
+            label: req?.label,
+            chainRegistry,
+            sdkRegistry,
+        });
+        return { wallet: toSafeWallet(r.wallet), address: r.address };
+    });
+
     host.register('wallet.publishLabels', async (req, { vault, chainRegistry, sdkRegistry }) => {
         return publishLabelsNow({
             vault,

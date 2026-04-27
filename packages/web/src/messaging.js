@@ -250,6 +250,15 @@ export function publishLabelsRequest(opts) {
 }
 
 /**
+ * §15.5 / G020 — add a single imported WIF to an existing HD wallet.
+ *
+ * @param {{ walletId: string, password: string, chainId: string, wif: string, addressType?: string, label?: string }} opts
+ */
+export function importWifRequest(opts) {
+    return /** @type {any} */ (sendMessage('wallet.importWif', opts));
+}
+
+/**
  * HW-wallet variant of sendAsset. No password. Background resolves
  * the `signerId` + routes the sign request through the renderer-side
  * signer bridge. See popup/messaging.js for the full shape.

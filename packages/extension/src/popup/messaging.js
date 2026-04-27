@@ -351,6 +351,19 @@ export function publishLabelsRequest(opts) {
 }
 
 /**
+ * §15.5 / G020 — add a single imported WIF (private key) to an existing
+ * HD wallet. The shell is responsible for surfacing the §15.5.3
+ * backup-implications warning before invoking this.
+ *
+ * Resolves to `{ wallet, address }`.
+ *
+ * @param {{ walletId: string, password: string, chainId: string, wif: string, addressType?: string, label?: string }} opts
+ */
+export function importWifRequest(opts) {
+    return /** @type {any} */ (sendMessage('wallet.importWif', opts));
+}
+
+/**
  * HW-wallet variant of sendAsset. No password (HW keys live on the
  * device). The background handler resolves the `signerId` to a
  * SignerRecord, builds a RemoteSigner wrapping a transport that

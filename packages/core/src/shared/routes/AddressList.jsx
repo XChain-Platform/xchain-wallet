@@ -7,12 +7,14 @@ import {
     CopyButton,
     MultisigBadge,
     Skeleton,
+    Input,
     Icon,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { EmptyStateNudge } from '../components/EmptyStateNudge.jsx';
 import styles from './History.module.css';
+import wifStyles from './AddressList.wif.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -49,6 +51,74 @@ export function AddressList({ walletId, accountId, onBack, onReceive, onShowPriv
     const [multisigs, setMultisigs] = useState(
         /** @type {Array<{ multisigConfigId: string, address: string, threshold: number, cosignerCount: number, scheme: string }>} */ ([]),
     );
+    // §15.5 / G020 + G021 — Import WIF inline form. Hidden until the user
+    // expands it; gates submit on the §15.5.3 backup-implications warning
+    // checkbox.
+    const [showWifForm, setShowWifForm] = useState(false);
+    const [wifChainId, setWifChainId] = useState('');
+    const [wifInput, setWifInput] = useState('');
+    const [wifLabel, setWifLabel] = useState('');
+    const [wifPassword, setWifPassword] = useState('');
+    const [wifWarningAck, setWifWarningAck] = useState(false);
+    const [wifBusy, setWifBusy] = useState(false);
+    const [wifError, setWifError] = useState(/** @type {string | null} */ (null));
+    const [wifNotice, setWifNotice] = useState(/** @type {string | null} */ (null));
+
+    function resetWifForm() {
+        setWifChainId('');
+        setWifInput('');
+        setWifLabel('');
+        setWifPassword('');
+        setWifWarningAck(false);
+        setWifError(null);
+    }
+
+    async function handleImportWif(event) {
+        event.preventDefault();
+        if (wifBusy) return;
+        if (!wifWarningAck) {
+            setWifError('Please acknowledge the backup warning before importing.');
+            return;
+        }
+        if (!wifChainId) {
+            setWifError('Pick a chain.');
+            return;
+        }
+        if (wifInput.trim().length === 0) {
+            setWifError('Paste a WIF private key.');
+            return;
+        }
+        if (wifPassword.length === 0) {
+            setWifError('Wallet password is required to encrypt the imported key.');
+            return;
+        }
+        if (typeof messaging.importWifRequest !== 'function') {
+            setWifError('Import WIF is not available in this shell.');
+            return;
+        }
+        setWifBusy(true);
+        setWifError(null);
+        try {
+            const r = await messaging.importWifRequest({
+                walletId,
+                password: wifPassword,
+                chainId: wifChainId,
+                wif: wifInput.trim(),
+                label: wifLabel.trim() || undefined,
+            });
+            const importedAddress = r?.address?.address || '(unknown)';
+            setWifNotice(`Imported ${importedAddress}.`);
+            resetWifForm();
+            setShowWifForm(false);
+            // Reload the address list so the new row appears.
+            const byChain = await messaging.getAddressesByChain(walletId, accountId);
+            setAddressesByChain(byChain || {});
+        } catch (err) {
+            setWifError(err?.message || 'Failed to import WIF.');
+        } finally {
+            setWifBusy(false);
+        }
+    }
 
     useEffect(() => {
         let cancelled = false;
@@ -233,6 +303,112 @@ export function AddressList({ walletId, accountId, onBack, onReceive, onShowPriv
                 >
                     🔐 Multisig only
                 </button>
+            </div>
+
+            <div className={wifStyles.wifBar}>
+                {wifNotice && !showWifForm ? (
+                    <p className={wifStyles.wifNotice} role="status">{wifNotice}</p>
+                ) : null}
+                <button
+                    type="button"
+                    onClick={() => {
+                        setShowWifForm((v) => !v);
+                        if (showWifForm) resetWifForm();
+                        setWifNotice(null);
+                    }}
+                    className={wifStyles.wifToggle}
+                    aria-expanded={showWifForm}
+                >
+                    {showWifForm ? 'Cancel' : 'Import private key (WIF)'}
+                </button>
+                {showWifForm ? (
+                    <form className={wifStyles.wifForm} onSubmit={handleImportWif} noValidate>
+                        <p className={wifStyles.wifWarning}>
+                            <strong>Heads up — imported keys are not covered by your recovery phrase.</strong>{' '}
+                            If you wipe this device or restore from your seed words, this address will not come back. You must keep a separate copy of the WIF, or move the funds back to a derived address before that happens.
+                        </p>
+                        <label className={wifStyles.wifField}>
+                            <span className={wifStyles.wifLabel}>Chain</span>
+                            <select
+                                value={wifChainId}
+                                onChange={(e) => {
+                                    setWifChainId(e.target.value);
+                                    if (wifError) setWifError(null);
+                                }}
+                                disabled={wifBusy}
+                                className={wifStyles.wifSelect}
+                            >
+                                <option value="">Pick a chain…</option>
+                                {Object.keys(addressesByChain || {}).map((cid) => {
+                                    const d = chainRegistry.get(cid);
+                                    return (
+                                        <option key={cid} value={cid}>
+                                            {d?.displayName || cid}
+                                        </option>
+                                    );
+                                })}
+                            </select>
+                        </label>
+                        <Input
+                            label="WIF private key"
+                            value={wifInput}
+                            onChange={(e) => {
+                                setWifInput(e.target.value);
+                                if (wifError) setWifError(null);
+                            }}
+                            placeholder="L1aW…"
+                            autoComplete="off"
+                            spellCheck={false}
+                            disabled={wifBusy}
+                        />
+                        <Input
+                            label="Label (optional)"
+                            value={wifLabel}
+                            onChange={(e) => setWifLabel(e.target.value)}
+                            placeholder="e.g. Cold storage 2024"
+                            autoComplete="off"
+                            disabled={wifBusy}
+                        />
+                        <Input
+                            type="password"
+                            label="Wallet password"
+                            hint="Encrypts the imported key with the same key as your seed."
+                            value={wifPassword}
+                            onChange={(e) => {
+                                setWifPassword(e.target.value);
+                                if (wifError) setWifError(null);
+                            }}
+                            autoComplete="current-password"
+                            disabled={wifBusy}
+                        />
+                        <label className={wifStyles.wifAck}>
+                            <input
+                                type="checkbox"
+                                checked={wifWarningAck}
+                                onChange={(e) => {
+                                    setWifWarningAck(e.target.checked);
+                                    if (wifError) setWifError(null);
+                                }}
+                                disabled={wifBusy}
+                            />
+                            <span>I understand this key is not backed up by my recovery phrase.</span>
+                        </label>
+                        {wifError ? (
+                            <div role="alert" className={wifStyles.wifErrorBox}>{wifError}</div>
+                        ) : null}
+                        <div className={wifStyles.wifActions}>
+                            <Button
+                                type="submit"
+                                variant="primary"
+                                size="sm"
+                                loading={wifBusy}
+                                disabled={!wifWarningAck || wifInput.trim().length === 0 || wifPassword.length === 0 || !wifChainId}
+                            >
+                                Import
+                            </Button>
+                        </div>
+                    </form>
+                ) : null}
             </div>
 
             {rows.length === 0 ? (

@@ -1,0 +1,97 @@
+.wifBar {
+    margin: var(--xc-space-3) 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+}
+
+.wifToggle {
+    align-self: flex-start;
+    background: transparent;
+    border: 1px dashed var(--xc-border-strong);
+    border-radius: var(--xc-radius-sm);
+    padding: var(--xc-space-1) var(--xc-space-2);
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text);
+    cursor: pointer;
+}
+
+.wifToggle:hover {
+    background: var(--xc-bg-muted);
+}
+
+.wifNotice {
+    margin: 0;
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+}
+
+.wifForm {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    padding: var(--xc-space-3);
+    background: var(--xc-bg-muted);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-md);
+}
+
+.wifWarning {
+    margin: 0;
+    padding: var(--xc-space-2) var(--xc-space-3);
+    border-radius: var(--xc-radius-sm);
+    background: var(--xc-warning-bg, var(--xc-surface));
+    border: 1px solid var(--xc-warning, var(--xc-border));
+    color: var(--xc-text);
+    font-size: var(--xc-text-xs);
+    line-height: 1.4;
+}
+
+.wifField {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+    font-size: var(--xc-text-sm);
+}
+
+.wifLabel {
+    color: var(--xc-text-muted);
+    font-weight: 500;
+}
+
+.wifSelect {
+    padding: var(--xc-space-2);
+    background: var(--xc-surface);
+    border: 1px solid var(--xc-border-strong);
+    border-radius: var(--xc-radius-sm);
+    color: var(--xc-text);
+    font-size: var(--xc-text-sm);
+}
+
+.wifAck {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--xc-space-2);
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text);
+    line-height: 1.3;
+}
+
+.wifAck input[type="checkbox"] {
+    margin-top: 2px;
+}
+
+.wifErrorBox {
+    font-size: var(--xc-text-xs);
+    color: #FFFFFF;
+    background: var(--xc-danger);
+    border: 1px solid var(--xc-danger);
+    padding: var(--xc-space-1) var(--xc-space-2);
+    border-radius: var(--xc-radius-sm);
+}
+
+.wifActions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--xc-space-2);
+}

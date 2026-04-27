@@ -44,6 +44,14 @@ export function addImportedWallet(opts) {
     return /** @type {any} */ (sendMessage('wallet.add.import', opts));
 }
 
+/**
+ * §15.5 / G020 — add a single imported WIF to an existing HD wallet.
+ * @param {{ walletId: string, password: string, chainId: string, wif: string, addressType?: string, label?: string }} opts
+ */
+export function importWifRequest(opts) {
+    return /** @type {any} */ (sendMessage('wallet.importWif', opts));
+}
+
 /** @param {object} opts */
 export function renameWallet(opts) {
     return /** @type {any} */ (sendMessage('wallet.rename', opts));

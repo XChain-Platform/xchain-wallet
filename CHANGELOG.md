@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.174.0] - 2026-04-27
+
+§15.5 — Cluster H Step 4 — Import WIF + backup-implications warning (G020 + G021).
+
+`AddressList.jsx` gains an "Import private key (WIF)" toggle that expands an inline form: chain select, WIF input, optional label, wallet password, plus a required acknowledgement that the imported key is **not** covered by the recovery phrase. On submit, the new `messaging.importWifRequest` shim routes through a fresh `wallet.importWif` host handler that calls the existing `flows.importWif` primitive (encrypts the WIF under the same master key as the seed, persists an `imported-wif` Address record + `Wallet.importedKeys` entry).
+
+### Added
+
+- **`packages/extension/src/background/createBackgroundHost.js`** — `wallet.importWif` host handler wrapping `flows.importWif`; pulls the flow into the destructured `flows` import.
+- **`packages/extension/src/popup/messaging.js`** + **`packages/web/src/messaging.js`** + **`packages/desktop/renderer/messaging.js`** — `importWifRequest` shims.
+- **`packages/core/src/shared/routes/AddressList.jsx`** — inline WIF form state + `handleImportWif` + Import-private-key toggle and form markup; reloads `addressesByChain` on success.
+- **`packages/core/src/shared/routes/AddressList.wif.module.css`** (new) — `.wifBar` / `.wifForm` / `.wifWarning` / `.wifField` / `.wifSelect` / `.wifAck` / `.wifErrorBox` / `.wifActions` styles.
+
+Closes G020 and G021.
+
 ## [0.173.0] - 2026-04-27
 
 §15.4 — Cluster H Step 3 — QR scan + drag-drop mnemonic on Import (G022).
