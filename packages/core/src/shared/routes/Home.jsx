@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Screen, Button, Icon } from '@xchain-wallet/core/ui';
+import { Screen, Button, Icon, Skeleton } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -388,7 +388,9 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onBuy, onCreateToken
                 ) : null}
 
                 {balances === null && !loadError ? (
-                    <p className={styles.hint}>Loading balances…</p>
+                    <div role="status" aria-label="Loading balances">
+                        <Skeleton.List rows={5} />
+                    </div>
                 ) : null}
 
                 {/* Inline notice removed — surfaces in the Alerts panel

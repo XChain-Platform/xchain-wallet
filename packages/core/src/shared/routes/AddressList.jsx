@@ -6,7 +6,9 @@ import {
     AddressText,
     CopyButton,
     MultisigBadge,
- Icon,} from '@xchain-wallet/core/ui';
+    Skeleton,
+    Icon,
+} from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './History.module.css';
@@ -170,7 +172,11 @@ export function AddressList({ walletId, accountId, onBack }) {
     }
 
     if (!addressesByChain) {
-        return wrap(<p className={styles.empty}>Loading addresses…</p>);
+        return wrap(
+            <div role="status" aria-label="Loading addresses">
+                <Skeleton.List rows={5} />
+            </div>,
+        );
     }
 
     const activeChainIds = Object.entries(addressesByChain)

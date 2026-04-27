@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.156.0] - 2026-04-27
+
+§27.9 Balances + §28 History — Step 2 of Cluster C — Skeleton loading rows in balance / history / address lists (G076).
+
+The plain "Loading X…" `<p>` placeholders in Home, History, and AddressList are replaced with content-shaped `<Skeleton.List>` rows. Each loading state is wrapped in a `role="status"` element with an `aria-label` so assistive tech still announces the load.
+
+### Changed
+
+- **`shared/routes/Home.jsx`** — `Loading balances…` text → `<Skeleton.List rows={5}>` inside `role="status" aria-label="Loading balances"`.
+- **`shared/routes/History.jsx`** — both loading states (initial address-fetch + per-chain history fetch) → `<Skeleton.List>`; per-chain skeleton uses `Math.max(3, loadingChains.size)` rows so it scales with the number of chains being fetched.
+- **`shared/routes/AddressList.jsx`** — `Loading addresses…` text → `<Skeleton.List rows={5}>`.
+- **`test/smoke/ui/skeleton-wiring.smoke.js`** (new) — verifies all three routes import Skeleton, render `<Skeleton.List>`, and wrap it in the right `role="status"` + `aria-label`.
+
+Closes G076.
+
 ## [0.155.0] - 2026-04-27
 
 §37.1 Micro-UX — Step 1 of Cluster C — Skeleton loading-placeholder primitive (G118).

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Screen, Button, ChainBadge , Icon} from '@xchain-wallet/core/ui';
+import { Screen, Button, ChainBadge, Icon, Skeleton } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import {
     isEntryReplaceable,
@@ -307,7 +307,11 @@ export function History({ walletId, accountId, onBack }) {
         return wrap(<p role="alert" className={styles.error}>{loadError}</p>);
     }
     if (!addressesByChain) {
-        return wrap(<p className={styles.empty}>Loading addresses…</p>);
+        return wrap(
+            <div role="status" aria-label="Loading history">
+                <Skeleton.List rows={5} />
+            </div>,
+        );
     }
     const activeChainIds = Object.entries(addressesByChain)
         .filter(([, addrs]) => Array.isArray(addrs) && addrs.length > 0)
@@ -366,7 +370,9 @@ export function History({ walletId, accountId, onBack }) {
             </div>
 
             {loadingChains.size > 0 ? (
-                <p className={styles.empty}>Loading history…</p>
+                <div role="status" aria-label="Loading history">
+                    <Skeleton.List rows={Math.max(3, loadingChains.size)} />
+                </div>
             ) : null}
 
             {visibleEntries.length === 0 && loadingChains.size === 0 ? (
