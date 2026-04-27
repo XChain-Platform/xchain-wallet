@@ -129,6 +129,7 @@ const {
     removeWallet,
     signMessageFlow,
     signPsbtFlow,
+    checkReachability,
     revealMnemonic,
     dryRunRestore,
     publishLabelsNow,
@@ -679,6 +680,22 @@ export function createBackgroundHost(deps) {
             path: isHd ? address.derivationPath : undefined,
             addressId: isHd ? undefined : addressId,
             message,
+        });
+    });
+
+    // §49.1 / G153 — reachability probe across the supplied chains.
+    // Read-only across SDK ping endpoints; no vault access required.
+    host.register('reachability.check', async (req, { sdkRegistry }) => {
+        const chainIds = Array.isArray(req?.chainIds) ? req.chainIds.filter((s) => typeof s === 'string' && s) : [];
+        if (chainIds.length === 0) {
+            // No active chains — surface "offline" so the banner can
+            // explain rather than silently treating it as healthy.
+            return { overall: 'offline', perChain: [] };
+        }
+        return checkReachability({
+            sdkRegistry,
+            chainIds,
+            timeoutMs: typeof req?.timeoutMs === 'number' ? req.timeoutMs : undefined,
         });
     });
 

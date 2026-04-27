@@ -1,0 +1,78 @@
+/* §49.1 / §49.2 — Offline / degraded reachability banner. Sits above
+   the unlocked route surface. Two variants: degraded (yellow) and
+   offline (red). Layout-light so it works in both popup and web shells.
+*/
+
+.banner {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    padding: var(--xc-space-2) var(--xc-space-3);
+    border-radius: var(--xc-radius-md);
+    border: 1px solid;
+    font-size: var(--xc-text-sm);
+    margin: var(--xc-space-2);
+}
+
+.degraded {
+    background: var(--xc-warning-bg, rgba(255, 196, 0, 0.10));
+    border-color: var(--xc-warning, #d4a017);
+    color: var(--xc-warning-text, #6e520a);
+}
+
+.offline {
+    background: var(--xc-danger-bg, rgba(220, 53, 69, 0.10));
+    border-color: var(--xc-danger, #c33);
+    color: var(--xc-danger-text, #5c1216);
+}
+
+.icon {
+    font-size: 1.25em;
+    flex-shrink: 0;
+}
+
+.body {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.title {
+    font-weight: 600;
+}
+
+.detail {
+    color: inherit;
+    opacity: 0.9;
+    font-size: var(--xc-text-xs);
+    line-height: 1.4;
+}
+
+.staleness {
+    font-style: italic;
+    margin-left: 4px;
+}
+
+.retry {
+    padding: 4px 10px;
+    border-radius: var(--xc-radius-sm);
+    border: 1px solid currentColor;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    font: inherit;
+    font-size: var(--xc-text-xs);
+    flex-shrink: 0;
+}
+
+.retry:hover {
+    background: rgba(0, 0, 0, 0.05);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .retry {
+        transition: none;
+    }
+}

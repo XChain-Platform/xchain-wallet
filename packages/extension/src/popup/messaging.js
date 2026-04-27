@@ -248,6 +248,18 @@ export function verifyMessageRequest(opts) {
 }
 
 /**
+ * §49.1 / G153 — reachability probe across the supplied chains.
+ * Returns `{ overall, perChain }`. Polled by the React `useReachability`
+ * hook to drive the offline / degraded banner.
+ *
+ * @param {{ chainIds: string[], timeoutMs?: number }} opts
+ * @returns {Promise<{ overall: 'normal' | 'degraded' | 'offline', perChain: Array<{ chainId: string, mode: 'normal' | 'degraded' | 'offline' | 'not-configured', services: { explorer: string, encoder: string, hub: string } }> }>}
+ */
+export function checkReachabilityRequest(opts) {
+    return /** @type {any} */ (sendMessage('reachability.check', opts));
+}
+
+/**
  * §30.4 / G088 — read-only PSBT decompose. The PsbtSignForm uses this to
  * surface inputs / outputs / fee on the paste screen before the user
  * commits a password.

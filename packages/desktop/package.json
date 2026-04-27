@@ -1,6 +1,6 @@
 {
     "name": "@xchain-wallet/desktop",
-    "version": "0.168.0",
+    "version": "0.169.0",
     "private": true,
     "description": "Electron desktop shell for XChain Wallet (Windows / macOS / Linux) — Phase 2 §40.12: main-process signing isolation (§9.3.2), OS keychain auto-unlock, WebHID hardware signer pairing, electron-builder packaging with Level-2 reproducible pre-signing artifacts (§51), URI scheme registration, and electron-updater wiring.",
     "main": "./main/index.js",

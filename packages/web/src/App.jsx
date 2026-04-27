@@ -33,6 +33,7 @@ import { Locked } from '@xchain-wallet/core/shared/routes/Locked.jsx';
 import { Home } from '@xchain-wallet/core/shared/routes/Home.jsx';
 import { TokenDetail } from '@xchain-wallet/core/shared/routes/TokenDetail.jsx';
 import { ToastHost } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
+import { ReachabilityBanner } from '@xchain-wallet/core/shared/components/ReachabilityBanner.jsx';
 import { Send } from '@xchain-wallet/core/shared/routes/Send.jsx';
 import { Receive } from '@xchain-wallet/core/shared/routes/Receive.jsx';
 import { TokenWizard } from '@xchain-wallet/core/shared/routes/TokenWizard.jsx';
@@ -111,6 +112,7 @@ export function App() {
                 <MessagingProvider shell={shell} messaging={messaging}>
                     <ToastHost>
                         <ExtensionBanner />
+                        <ReachabilityBanner />
                         <AppInner />
                     </ToastHost>
                 </MessagingProvider>

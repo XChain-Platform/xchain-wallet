@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.169.0] - 2026-04-27
+
+§49.1/§49.2 — Step 1 of Cluster G — Reachability poll + offline / degraded banner (G152 + G153).
+
+A new `useReachability` hook polls `messaging.checkReachabilityRequest({ chainIds })` every 30s (configurable) and exposes `{ overall, perChain, lastChecked, refresh, error }`; chainIds default to `Object.keys(settings.fees)` so the wallet's "active chain" view matches what `bridge.getActiveChains` reports to dApps. A new `<ReachabilityBanner>` component consumes the hook, hides while `overall === 'normal'`, and renders a status banner (yellow `degraded`, red `offline`) when at least one configured service is down — listing per-chain which services failed plus a "Last checked Xs ago" footer and a Retry button. The banner mounts above the route surface in both shells so every screen renders consistently. The §49.1 detection flow itself shipped earlier as `flows/reachability.js` and `checkReachability`; this step just adds the messaging boundary, the polling hook, the UI, and the wiring.
+
+### Added
+
+- **`shared/hooks/useReachability.js`** — `useReachability({ intervalMs?, chainIds? })`; auto-derives chainIds from settings.fees; tracks last-checked + error; exposes `refresh()`.
+- **`shared/components/ReachabilityBanner.jsx` + `.module.css`** — hidden in normal mode; degraded vs offline variants; per-chain service summary; Retry; reduced-motion guard.
+- **`packages/extension/src/popup/messaging.js`** + **`packages/web/src/messaging.js`** — `checkReachabilityRequest` shim.
+- **`packages/extension/src/background/createBackgroundHost.js`** — `reachability.check` handler routing to the existing `flows/reachability.checkReachability`.
+- **`test/smoke/ui/reachability-banner.smoke.js`** — verifies hook exports + polling, banner exports + hide-when-normal + role/Retry, CSS variants + reduced-motion, background handler, both messaging shims, both shells' mount points.
+
+### Changed
+
+- **`packages/extension/src/popup/App.jsx`** + **`packages/web/src/App.jsx`** — `<ReachabilityBanner />` mounted inside `<ToastHost>` so it sits above every route. Web wires it next to ExtensionBanner.
+
+Closes G152 + G153. Smoke baseline preserved (24 / 170; new reachability-banner smoke passes).
+
 ## [0.168.0] - 2026-04-27
 
 §43 — Cluster F (single step) — dApp Bridge completeness verification (G126 + G128 + G129 + G130); Cluster F closed.
