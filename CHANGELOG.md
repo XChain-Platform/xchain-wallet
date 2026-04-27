@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.126.0] - 2026-04-26
+
+§21 Signing Safety — Step 1 of 6 — pure transaction simulator (`txSimulator.js`).
+
+The first §21.2 building block. A pure projection module that, given a decoded ACTION + the source address's current balances + a fee estimate, returns the post-state the user is about to commit to: per-asset balance deltas (token rows + a coin row + a separate fee-label row), protocol-level side effects (token supply changes, dispenser open / cancel / refill, dividend pool, broadcast publication), and prose notes for the not-pre-simulatable parts (holder count for DIVIDEND, list size for AIRDROP, contract state for EXECUTE). No I/O, no SDK, no vault — Steps 3 and 4 wire the SDK balance lookup into Send.jsx review and SignApproval respectively, then feed it into a `<BalanceChanges>` component that ships in Step 2.
+
+### Added
+
+- **`packages/core/src/decoder/txSimulator.js`** — `simulateAction({ action, params, balances, feeEstimate, chainId, chainRegistry })` returning `{ deltas, sideEffects, notes }`.
+  - Per-action simulators: SEND (token / coin), SWEEP, MINT (to-self / to-other), DESTROY, ISSUE (v0 create / v0 transfer-only / v3 lock / config), DIVIDEND, DISPENSER (v0 open / v1 cancel / v2 edit-refill), BROADCAST (v0/v1/v2/v3), AIRDROP, LIST, BATCH (recursive aggregation), generic fallback.
+  - Decimal-string add / subtract on bigint-scaled integers — sat-level precision survives arbitrary chained operations without float drift. Handles up to 18 fractional digits (every tick on the platform fits).
+  - Coin-family → ticker mapping (`bitcoin` → `BTC`, `litecoin` → `LTC`, `dogecoin` → `DOGE`) inlined to keep the simulator importless and consistent with the same map in `SwapForm.jsx` / `CoinpayForm.jsx`.
+- **`packages/core/src/decoder/index.js`** — re-exports `simulateAction` alongside the existing `decodeAction`.
+- **`test/smoke/core/tx-simulator.smoke.js`** — 19 cases covering every per-action simulator, BATCH aggregation, decimal-string precision (sat-level + signed), generic fallback, empty-balance / null-fee paths, and static wiring.
+
+### Behavior preserved
+
+- `decodeAction` is unchanged. The simulator is a sibling, not a wrapper.
+- No code path consumes `simulateAction` yet — Step 2 builds the renderer, Steps 3 and 4 wire it. This step is groundwork only and runs zero new code in either shell.
+
 ## [0.125.0] - 2026-04-26
 
 Settings — drilldown refactor with state-summary rows.
