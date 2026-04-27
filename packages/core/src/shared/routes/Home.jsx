@@ -90,6 +90,35 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onBuy, onCreateToken
     const [alertsOpen, setAlertsOpen] = useState(false);
     const [networkFilter, setNetworkFilter] = useState('all');
     const [settingsOpen, setSettingsOpen] = useState(false);
+    // §27.3 / G072 — pinned tokens. Loaded from Settings on unlock; toggled
+    // optimistically in the UI then persisted via messaging.updateSettings.
+    const [pinnedTokens, setPinnedTokens] = useState(/** @type {string[]} */ ([]));
+
+    // §27.3 / G072 — load pinnedTokens from Settings on mount.
+    useEffect(() => {
+        let cancelled = false;
+        if (typeof messaging?.getSettings !== 'function') return undefined;
+        messaging.getSettings().then((s) => {
+            if (cancelled) return;
+            const arr = Array.isArray(s?.pinnedTokens) ? s.pinnedTokens.filter((k) => typeof k === 'string') : [];
+            setPinnedTokens(arr);
+        }).catch(() => { /* tolerate — empty pin list is a fine default */ });
+        return () => { cancelled = true; };
+    }, [messaging]);
+
+    const handleTogglePin = useCallback((key, nextPinned) => {
+        if (typeof key !== 'string' || !key) return;
+        setPinnedTokens((prev) => {
+            const set = new Set(prev);
+            if (nextPinned) set.add(key);
+            else set.delete(key);
+            const next = Array.from(set);
+            if (typeof messaging?.updateSettings === 'function') {
+                messaging.updateSettings({ pinnedTokens: next }).catch(() => { /* best-effort */ });
+            }
+            return next;
+        });
+    }, [messaging]);
 
     // Load the wallets list once. The user picks the active one via
     // HeaderSettingsButton → onSwitchWallet → setActiveWalletId →
@@ -461,6 +490,8 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onBuy, onCreateToken
                         multisigChainId={chainRegistry.byCoin('bitcoin')[0]?.id}
                         onReceive={onReceive}
                         onSelectToken={onSelectToken}
+                        pinnedKeys={new Set(pinnedTokens)}
+                        onTogglePin={handleTogglePin}
                         actions={(
                             <div className={styles.quickActions} role="group" aria-label="Quick actions">
                                 <button

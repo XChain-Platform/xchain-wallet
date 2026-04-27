@@ -19,6 +19,8 @@ import styles from './BalanceList.module.css';
  * @param {() => void} [props.onReceive]             when supplied, the empty-state shows a Receive CTA
  * @param {(token: { chainId: string, asset: string, kind: string, displayName: string, divisibility: number, fiatRate: number | null, quantity: string }) => void} [props.onSelectToken]
  *        Click handler for a balance row — surfaces the §27.6 Token detail page (G071) when supplied.
+ * @param {Set<string> | null} [props.pinnedKeys]    `chainId:asset` keys pinned by the user — pinned rows sort to the top (§27.3 / G072)
+ * @param {(key: string, nextPinned: boolean) => void} [props.onTogglePin]   per-row pin/unpin callback; when supplied each row renders a star button
  */
 export function BalanceList({
     rows,
@@ -28,6 +30,8 @@ export function BalanceList({
     emptyBody,
     onReceive,
     onSelectToken,
+    pinnedKeys,
+    onTogglePin,
 }) {
     if (!rows || rows.length === 0) {
         return (
@@ -40,21 +44,36 @@ export function BalanceList({
             />
         );
     }
+    // Stable sort: pinned rows first (preserving each section's existing
+    // chain/asset order), then unpinned. Caller already sorted within each
+    // group via sortByChainThenAsset.
+    const sortedRows = pinnedKeys && pinnedKeys.size > 0
+        ? [
+            ...rows.filter((r) => pinnedKeys.has(`${r.chainId}:${r.asset}`)),
+            ...rows.filter((r) => !pinnedKeys.has(`${r.chainId}:${r.asset}`)),
+        ]
+        : rows;
     return (
         <div className={styles.list} role="list" aria-label="Balances">
-            {rows.map((r) => (
-                <BalanceRowEl
-                    key={`${r.chainId}:${r.asset}`}
-                    row={r}
-                    multisig={r.chainId === multisigChainId ? multisig : null}
-                    onSelect={onSelectToken}
-                />
-            ))}
+            {sortedRows.map((r) => {
+                const key = `${r.chainId}:${r.asset}`;
+                const pinned = pinnedKeys ? pinnedKeys.has(key) : false;
+                return (
+                    <BalanceRowEl
+                        key={key}
+                        row={r}
+                        multisig={r.chainId === multisigChainId ? multisig : null}
+                        onSelect={onSelectToken}
+                        pinned={pinned}
+                        onTogglePin={onTogglePin}
+                    />
+                );
+            })}
         </div>
     );
 }
 
-function BalanceRowEl({ row, multisig, onSelect }) {
+function BalanceRowEl({ row, multisig, onSelect, pinned, onTogglePin }) {
     const isNative = row.kind === 'native';
     const chainIconUrl = branding.chainIconSmallUrl(row.chainId);
     const subtitle = row.networkKind !== 'mainnet'
@@ -76,10 +95,12 @@ function BalanceRowEl({ row, multisig, onSelect }) {
             quantity: row.quantity,
         })
         : undefined;
+    const showPin = typeof onTogglePin === 'function';
+    const pinKey = `${row.chainId}:${row.asset}`;
     const Tag = clickable ? 'button' : 'div';
     return (
         <Tag
-            className={`${styles.row} ${clickable ? styles.rowClickable : ''}`}
+            className={`${styles.row} ${clickable ? styles.rowClickable : ''} ${pinned ? styles.rowPinned : ''}`}
             role="listitem"
             type={clickable ? 'button' : undefined}
             onClick={handleClick}
@@ -127,6 +148,30 @@ function BalanceRowEl({ row, multisig, onSelect }) {
                 <div className={styles.qty}>{formatAmount(row.quantity, row.divisibility)}</div>
                 <div className={styles.fiat}>{formatFiat(fiat)}</div>
             </div>
+            {showPin ? (
+                <span
+                    role="button"
+                    tabIndex={0}
+                    className={`${styles.pinBtn} ${pinned ? styles.pinBtnActive : ''}`}
+                    aria-pressed={pinned}
+                    aria-label={pinned ? `Unpin ${row.asset}` : `Pin ${row.asset}`}
+                    title={pinned ? 'Unpin' : 'Pin to top'}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        onTogglePin(pinKey, !pinned);
+                    }}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            onTogglePin(pinKey, !pinned);
+                        }
+                    }}
+                >
+                    {pinned ? '★' : '☆'}
+                </span>
+            ) : null}
         </Tag>
     );
 }

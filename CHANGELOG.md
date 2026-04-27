@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.178.0] - 2026-04-27
+
+§27.3 — Cluster I Step 1 — Pinned tokens on Home (G072).
+
+`Settings.pinnedTokens` (v2-tolerant string array of `chainId:asset` keys) feeds a star-toggle on each balance row; pinned rows sort to the top of the Coins / Tokens / NFTs tabs. Toggle persists optimistically through `messaging.updateSettings`.
+
+### Added
+
+- **`packages/core/src/schemas/settings.js`** — `pinnedTokens?: string[]` field; default `[]`; v2-tolerant validator.
+- **`packages/core/src/shared/components/BalanceList.jsx`** — `pinnedKeys` + `onTogglePin` props; pinned-first stable sort; per-row star button (★ / ☆) with keyboard support; `.rowPinned` highlight.
+- **`packages/core/src/shared/components/BalanceList.module.css`** — `.pinBtn` / `.pinBtnActive` / `.rowPinned` styles.
+- **`packages/core/src/shared/components/HomeTabs.jsx`** — passes `pinnedKeys` + `onTogglePin` through to BalanceList.
+- **`packages/core/src/shared/routes/Home.jsx`** — `pinnedTokens` state loaded from Settings on mount; `handleTogglePin` updates state + persists via `messaging.updateSettings`; `pinnedKeys={new Set(pinnedTokens)}` wired into HomeTabs.
+
+Closes G072.
+
 ## [0.177.0] - 2026-04-27
 
 §19.7 — Cluster H Step 7 — Progressive backup reminder card on Home (G034 + G062). Cluster H closed.

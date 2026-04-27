@@ -146,3 +146,32 @@
     text-align: center;
     padding: var(--xc-space-5) var(--xc-space-3);
 }
+
+.pinBtn {
+    flex: 0 0 auto;
+    margin-left: var(--xc-space-2);
+    width: 24px;
+    height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    color: var(--xc-text-muted);
+    cursor: pointer;
+    user-select: none;
+    border-radius: var(--xc-radius-sm);
+    line-height: 1;
+}
+
+.pinBtn:hover {
+    background: var(--xc-bg-muted);
+    color: var(--xc-text);
+}
+
+.pinBtnActive {
+    color: var(--xc-accent-primary, #f5b400);
+}
+
+.rowPinned {
+    background: var(--xc-bg-muted-soft, var(--xc-bg-muted));
+}

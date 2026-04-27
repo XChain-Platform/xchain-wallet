@@ -75,6 +75,7 @@ export const CLIPBOARD_AUTO_CLEAR_DEFAULT = 60;
  * @property {{ undoSendSeconds: number, testSendThresholdSats: number }} grace                              v2 — adds testSendThresholdSats (large-amount confirmation gate; 0 = disabled)
  * @property {{ enabled: boolean }} panicMode                                                                v2 — duress-mode toggle; full §26.5 wiring lands later, the schema slot ships now so the Safety panel can flip it
  * @property {typeof BACKUP_REMINDER_CADENCES[number]} backupReminders                                       v2 — backup-reminder cadence
+ * @property {string[]} [pinnedTokens]                                                                       v2-tolerant — list of `chainId:asset` keys the user pinned to the top of the balance list (§27.3 / G072)
  */
 
 /** @returns {Settings} */
@@ -117,6 +118,7 @@ export function createDefaultSettings() {
             enabled: false,
         },
         backupReminders: 'off',
+        pinnedTokens: [],
     };
 }
 
@@ -237,6 +239,14 @@ export function validateSettings(record) {
         isOneOf(r.backupReminders, BACKUP_REMINDER_CADENCES),
         `must be one of ${BACKUP_REMINDER_CADENCES.join(', ')}`,
     );
+    if (r.pinnedTokens !== undefined) {
+        check(
+            errors,
+            'pinnedTokens',
+            Array.isArray(r.pinnedTokens) && r.pinnedTokens.every(isString),
+            'must be an array of strings (chainId:asset keys)',
+        );
+    }
 
     return result(errors);
 }
