@@ -3,6 +3,7 @@ import { Screen, Icon } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { AboutSection } from '../components/settings/AboutSection.jsx';
 import { AppearanceSection } from '../components/settings/AppearanceSection.jsx';
+import { DeveloperModeSection } from '../components/settings/DeveloperModeSection.jsx';
 import { LanguageRegionSection } from '../components/settings/LanguageRegionSection.jsx';
 import { PrivacySection } from '../components/settings/PrivacySection.jsx';
 import { FeesSection } from '../components/settings/FeesSection.jsx';
@@ -182,7 +183,8 @@ export function Settings({
             title: 'Developer Mode',
             description: 'Custom endpoints, regtest networks, raw PSBT inspector.',
             keywords: 'developer mode regtest custom endpoints psbt raw',
-            kind: 'stub',
+            kind: 'panel',
+            Component: DeveloperModeSection,
         },
         {
             id: 'about',

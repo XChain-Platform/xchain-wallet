@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.114.0] - 2026-04-26
+
+Settings — Step 11 of 18 — Developer Mode panel + regtest reveal in Network & Endpoints.
+
+Two live toggles (`developerMode`, `learnMode`) plus four deferred reveals (custom chain registry, raw PSBT inspector, auto-approve localhost, logs console) covering spec §48. The Developer Mode toggle now gates regtest visibility in the Network & Endpoints panel — when off, regtest descriptors are filtered out; when on, they appear with their localhost defaults pre-populated. Broader picker filtering (Send / Receive / Swap chain pickers across the app) lands in a follow-up step.
+
+### Added
+
+- **`packages/core/src/shared/components/settings/DeveloperModeSection.jsx`** — two live toggles + four "coming soon" deferred reveals.
+- **`packages/core/src/shared/hooks/useDeveloperMode.js`** — convenience accessor returning `{ developerMode, ready, error }` from useSettings. Defaults to `false` while loading or unavailable so feature gates default to the hidden branch.
+- **`test/smoke/ui/settings-developer-mode.smoke.js`** — panel surface, regtest filter in NetworkEndpointsSection, hook contract, Settings.jsx hook-up.
+
+### Changed
+
+- **`packages/core/src/shared/components/settings/NetworkEndpointsSection.jsx`** — descriptors filtered through `developerMode || d.networkKind !== 'regtest'` so regtest rows are hidden by default.
+- **`packages/core/src/shared/routes/Settings.jsx`** — developer section flips from `kind: 'stub'` to `kind: 'panel'`.
+
 ## [0.113.0] - 2026-04-26
 
 Settings — Step 10 of 18 — Network & Endpoints panel.

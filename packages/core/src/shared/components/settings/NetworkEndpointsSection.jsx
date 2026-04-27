@@ -61,11 +61,15 @@ export function NetworkEndpointsSection() {
     if (error) return <Status text={`Settings unavailable: ${error.message}`} tone="error" />;
     if (!settings) return <Status text="Settings unavailable." tone="error" />;
 
-    const descriptors = chainRegistry.supportedChains().slice().sort((a, b) => {
-        if (a.coin !== b.coin) return a.coin.localeCompare(b.coin);
-        const order = { mainnet: 0, testnet: 1, regtest: 2 };
-        return (order[a.networkKind] ?? 9) - (order[b.networkKind] ?? 9);
-    });
+    const developerMode = Boolean(settings.developerMode);
+    const descriptors = chainRegistry.supportedChains()
+        .filter((d) => developerMode || d.networkKind !== 'regtest')
+        .slice()
+        .sort((a, b) => {
+            if (a.coin !== b.coin) return a.coin.localeCompare(b.coin);
+            const order = { mainnet: 0, testnet: 1, regtest: 2 };
+            return (order[a.networkKind] ?? 9) - (order[b.networkKind] ?? 9);
+        });
 
     if (descriptors.length === 0) {
         return <Status text="No chains registered." />;
