@@ -5,6 +5,7 @@ import { AboutSection } from '../components/settings/AboutSection.jsx';
 import { AppearanceSection } from '../components/settings/AppearanceSection.jsx';
 import { LanguageRegionSection } from '../components/settings/LanguageRegionSection.jsx';
 import { PrivacySection } from '../components/settings/PrivacySection.jsx';
+import { SafetySection } from '../components/settings/SafetySection.jsx';
 import styles from './ActionsMenu.module.css';
 import pickerStyles from './WalletPicker.module.css';
 
@@ -111,7 +112,8 @@ export function Settings({
             title: 'Safety',
             description: 'Auto-lock, undo-send, panic mode, backup reminders.',
             keywords: 'safety autolock auto lock undo panic backup',
-            kind: 'stub',
+            kind: 'panel',
+            Component: SafetySection,
         },
         {
             id: 'backup',

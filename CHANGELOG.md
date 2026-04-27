@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.110.0] - 2026-04-26
+
+Settings — Step 7 of 18 — Safety panel.
+
+Live: auto-lock timeout (`settings.autolockMinutes`) and undo-send grace (`settings.grace.undoSendSeconds`). Both pickers carry curated common values plus a fallback "(custom)" option preserving any out-of-list value the schema currently holds. Three deferred toggle rows surface the spec's remaining safety items: test-send warning, panic mode, backup reminders. All three need schema migrations + flow wiring; panic mode is also called out as fully unbuilt in the gap audit.
+
+### Added
+
+- **`packages/core/src/shared/components/settings/SafetySection.jsx`** — auto-lock + undo-send selects + three deferred toggles.
+- **`test/smoke/ui/settings-safety.smoke.js`** — useSettings wiring, write paths (top-level scalar + nested grace patch), option coverage, deferred-row presence, Settings.jsx hook-up.
+
+### Changed
+
+- **`packages/core/src/shared/routes/Settings.jsx`** — safety section flips from `kind: 'stub'` to `kind: 'panel'`.
+
 ## [0.109.0] - 2026-04-26
 
 Settings — Step 6 of 18 — Privacy panel.
