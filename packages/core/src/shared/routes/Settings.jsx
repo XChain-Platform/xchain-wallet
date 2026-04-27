@@ -3,6 +3,7 @@ import { Screen, Icon } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { AboutSection } from '../components/settings/AboutSection.jsx';
 import { AppearanceSection } from '../components/settings/AppearanceSection.jsx';
+import { LanguageRegionSection } from '../components/settings/LanguageRegionSection.jsx';
 import styles from './ActionsMenu.module.css';
 import pickerStyles from './WalletPicker.module.css';
 
@@ -93,7 +94,8 @@ export function Settings({
             title: 'Language & Region',
             description: 'Language, currency.',
             keywords: 'language region currency fiat locale',
-            kind: 'stub',
+            kind: 'panel',
+            Component: LanguageRegionSection,
         },
         {
             id: 'privacy',

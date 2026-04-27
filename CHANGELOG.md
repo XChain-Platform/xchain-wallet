@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.108.0] - 2026-04-26
+
+Settings — Step 5 of 18 — Language & Region panel.
+
+Language picker (English-only at the moment; spec §54 i18n adds locales over time as new dictionaries land under `packages/core/src/i18n/`) and fiat-currency picker. Currency picker offers a curated 12-entry shortlist plus a "Custom…" option that types an arbitrary ISO code into the persisted record — the schema accepts any non-empty string.
+
+### Added
+
+- **`packages/core/src/shared/components/settings/LanguageRegionSection.jsx`** — language `<select>` + currency `<select>` with custom-code input. Both writes go through `useSettings().update`.
+- **`test/smoke/ui/settings-language-region.smoke.js`** — wiring, picker contents, custom-code path, status fallbacks, Settings.jsx hook-up.
+
+### Changed
+
+- **`packages/core/src/shared/routes/Settings.jsx`** — language-region section flips from `kind: 'stub'` to `kind: 'panel'` with `Component: LanguageRegionSection`.
+
 ## [0.107.0] - 2026-04-26
 
 Settings — Step 4 of 18 — Appearance panel.
