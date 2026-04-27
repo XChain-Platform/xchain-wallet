@@ -29,8 +29,9 @@ import styles from './HomeTabs.module.css';
  * @param {{ threshold: number, cosignerCount: number, scheme: string } | null} [props.multisig]
  * @param {string} [props.multisigChainId]
  * @param {import('react').ReactNode} [props.actions]   slot rendered between the total-balance hero and the tab strip — used by Home for the Send / Receive / Swap / Buy quick-action row
+ * @param {() => void} [props.onReceive]   forwarded to empty-state nudges so the "No balances yet" cards can render a one-tap Receive CTA (G077)
  */
-export function HomeTabs({ chainRegistry, balances, networkFilter, multisig, multisigChainId, actions }) {
+export function HomeTabs({ chainRegistry, balances, networkFilter, multisig, multisigChainId, actions, onReceive }) {
     const [active, setActive] = useState('coins');
 
     const allRows = useMemo(
@@ -101,27 +102,33 @@ export function HomeTabs({ chainRegistry, balances, networkFilter, multisig, mul
                         rows={coins}
                         multisig={multisig}
                         multisigChainId={multisigChainId}
-                        emptyMessage={networkFilter === 'all'
-                            ? 'No coin balances yet.'
-                            : 'No coins on this network.'}
+                        emptyTitle={networkFilter === 'all' ? 'No coins yet' : 'No coins on this network'}
+                        emptyBody={networkFilter === 'all'
+                            ? 'Receive Bitcoin, Litecoin, or Dogecoin to populate this list.'
+                            : undefined}
+                        onReceive={networkFilter === 'all' ? onReceive : undefined}
                     />
                 ) : null}
 
                 {active === 'tokens' ? (
                     <BalanceList
                         rows={tokens}
-                        emptyMessage={networkFilter === 'all'
-                            ? 'No tokens yet. Browse markets or accept a token transfer to populate this view.'
-                            : 'No tokens on this network.'}
+                        emptyTitle={networkFilter === 'all' ? 'No tokens yet' : 'No tokens on this network'}
+                        emptyBody={networkFilter === 'all'
+                            ? 'Browse markets or accept a token transfer to populate this view.'
+                            : undefined}
+                        onReceive={networkFilter === 'all' ? onReceive : undefined}
                     />
                 ) : null}
 
                 {active === 'nfts' ? (
                     <BalanceList
                         rows={nfts}
-                        emptyMessage={networkFilter === 'all'
-                            ? 'No NFTs yet. Indivisible tokens (Rare Pepe, Ordinals, Bitcoin Stamps) appear here.'
-                            : 'No NFTs on this network.'}
+                        emptyTitle={networkFilter === 'all' ? 'No NFTs yet' : 'No NFTs on this network'}
+                        emptyBody={networkFilter === 'all'
+                            ? 'Indivisible tokens (Rare Pepe, Ordinals, Bitcoin Stamps) appear here once received.'
+                            : undefined}
+                        onReceive={networkFilter === 'all' ? onReceive : undefined}
                     />
                 ) : null}
 

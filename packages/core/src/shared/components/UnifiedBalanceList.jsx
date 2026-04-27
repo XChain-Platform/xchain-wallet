@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
-import { MultisigBadge } from '@xchain-wallet/core/ui';
+import { MultisigBadge, Icon } from '@xchain-wallet/core/ui';
 import { NetworkFilter } from './NetworkFilter.jsx';
+import { EmptyStateNudge } from './EmptyStateNudge.jsx';
 import styles from './UnifiedBalanceList.module.css';
 
 /**
@@ -18,7 +19,7 @@ import styles from './UnifiedBalanceList.module.css';
  * @param {{ threshold: number, cosignerCount: number, scheme: string } | null} [props.multisig]
  * @param {string} [props.multisigChainId]
  */
-export function UnifiedBalanceList({ chainRegistry, balances, multisig, multisigChainId }) {
+export function UnifiedBalanceList({ chainRegistry, balances, multisig, multisigChainId, onReceive }) {
     const allRows = useMemo(() => buildRows(balances, chainRegistry), [balances, chainRegistry]);
 
     // Active filter — 'all' or a coin family ('bitcoin'/'litecoin'/...).
@@ -47,7 +48,15 @@ export function UnifiedBalanceList({ chainRegistry, balances, multisig, multisig
         .sort((a, b) => byChainOrder(a, b) || a.asset.localeCompare(b.asset));
 
     if (allRows.length === 0) {
-        return <p className={styles.empty}>No balances yet.</p>;
+        return (
+            <EmptyStateNudge
+                title="No balances yet"
+                body="Receive coins or tokens on any chain to populate this list."
+                actionLabel={onReceive ? 'Receive' : undefined}
+                onAction={onReceive}
+                icon={onReceive ? <Icon.ReceiveIcon /> : undefined}
+            />
+        );
     }
 
     return (
@@ -81,9 +90,10 @@ export function UnifiedBalanceList({ chainRegistry, balances, multisig, multisig
                     <BalanceRow key={`${r.chainId}:${r.asset}`} row={r} multisig={null} />
                 ))}
                 {natives.length === 0 && tokens.length === 0 ? (
-                    <p className={styles.empty}>
-                        No balances on this network.
-                    </p>
+                    <EmptyStateNudge
+                        title="No balances on this network"
+                        body="Switch to All in the network filter, or receive coins on this chain."
+                    />
                 ) : null}
             </div>
         </div>

@@ -450,6 +450,7 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onBuy, onCreateToken
                         networkFilter={networkFilter}
                         multisig={multisig}
                         multisigChainId={chainRegistry.byCoin('bitcoin')[0]?.id}
+                        onReceive={onReceive}
                         actions={(
                             <div className={styles.quickActions} role="group" aria-label="Quick actions">
                                 <button

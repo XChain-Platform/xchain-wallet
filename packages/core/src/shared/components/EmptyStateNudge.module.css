@@ -1,0 +1,33 @@
+/* EmptyStateNudge — §27.7 / §28 / G077. Centered card-shaped block
+ * shown in place of "No X yet" plain-text placeholders. */
+
+.wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: var(--xc-space-2);
+    padding: var(--xc-space-6) var(--xc-space-4);
+    background: var(--xc-surface-raised, transparent);
+    border: 1px dashed var(--xc-border);
+    border-radius: var(--xc-radius-md);
+    margin: var(--xc-space-2) 0;
+}
+
+.title {
+    color: var(--xc-text);
+    font-weight: 600;
+    font-size: var(--xc-text-md);
+}
+
+.body {
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+    margin: 0;
+    max-width: 36ch;
+    line-height: 1.4;
+}
+
+.actions {
+    margin-top: var(--xc-space-2);
+}

@@ -11,6 +11,7 @@ import {
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { EmptyStateNudge } from '../components/EmptyStateNudge.jsx';
 import styles from './History.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -33,7 +34,7 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {string} [props.accountId]   active BIP44 account; when set, only that account's addresses are shown
  * @param {() => void} props.onBack
  */
-export function AddressList({ walletId, accountId, onBack }) {
+export function AddressList({ walletId, accountId, onBack, onReceive }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
 
@@ -185,10 +186,13 @@ export function AddressList({ walletId, accountId, onBack }) {
 
     if (activeChainIds.length === 0 && !multisig) {
         return wrap(
-            <p className={styles.empty}>
-                No addresses yet. Use Receive to generate one before this list
-                populates.
-            </p>,
+            <EmptyStateNudge
+                title="No addresses yet"
+                body="Generate a receive address to populate this list."
+                actionLabel={onReceive ? 'Receive' : undefined}
+                onAction={onReceive}
+                icon={onReceive ? <Icon.ReceiveIcon /> : undefined}
+            />,
         );
     }
 

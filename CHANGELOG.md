@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.157.0] - 2026-04-27
+
+§27.7 / §28 — Step 3 of Cluster C — Empty-state nudges with Receive CTA (G077).
+
+Replaces the bare "No X yet" `<p>` placeholders in BalanceList, UnifiedBalanceList, History, and AddressList with a content-shaped `<EmptyStateNudge>` card. When a parent supplies `onReceive`, the nudge renders a primary Receive button so a user staring at an empty Home / History / address list has a one-tap path to populating it.
+
+### Added
+
+- **`shared/components/EmptyStateNudge.jsx` + `EmptyStateNudge.module.css`** (new) — title / body / actionLabel / onAction / icon / role props; centered card with a dashed border and an optional primary button.
+- **`test/smoke/ui/empty-state-nudge.smoke.js`** — component shape, BalanceList + UnifiedBalanceList integration, HomeTabs + Home onReceive forwarding, History + AddressList integration, both shells' App.jsx wiring.
+
+### Changed
+
+- **`shared/components/BalanceList.jsx`** — `emptyMessage` prop replaced with `emptyTitle` + `emptyBody` + `onReceive`; renders `<EmptyStateNudge>`.
+- **`shared/components/HomeTabs.jsx`** — accepts `onReceive` and only forwards it when `networkFilter === 'all'` (network-filtered empty states drop the misleading CTA); copy on each tab's empty state refreshed for the new `<EmptyStateNudge>` layout.
+- **`shared/components/UnifiedBalanceList.jsx`** — both empty branches (no rows + filtered no rows) now render `<EmptyStateNudge>`.
+- **`shared/routes/Home.jsx`** — threads `onReceive` into `<HomeTabs>`.
+- **`shared/routes/History.jsx`** — accepts `onReceive`; both empty branches (no addresses + no entries) render `<EmptyStateNudge>`; cross-chain-only branch suppresses the Receive CTA.
+- **`shared/routes/AddressList.jsx`** — accepts `onReceive`; empty branch renders `<EmptyStateNudge>`.
+- **`packages/extension/src/popup/App.jsx` + `packages/web/src/App.jsx`** — wire `onReceive={() => setUnlockedView('receive')}` into both `<History>` and `<AddressList>` mounts.
+
+Closes G077.
+
 ## [0.156.0] - 2026-04-27
 
 §27.9 Balances + §28 History — Step 2 of Cluster C — Skeleton loading rows in balance / history / address lists (G076).

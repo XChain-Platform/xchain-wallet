@@ -523,6 +523,7 @@ function AppInner() {
                         walletId={activeWalletId}
                         accountId={activeAccountId || undefined}
                         onBack={() => setUnlockedView('home')}
+                        onReceive={() => setUnlockedView('receive')}
                     />
                 );
             }
@@ -728,6 +729,7 @@ function AppInner() {
                         walletId={activeWalletId}
                         accountId={activeAccountId || undefined}
                         onBack={() => setUnlockedView('home')}
+                        onReceive={() => setUnlockedView('receive')}
                     />
                 );
             }

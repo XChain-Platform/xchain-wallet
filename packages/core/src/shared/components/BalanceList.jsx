@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
-import { MultisigBadge } from '@xchain-wallet/core/ui';
+import { MultisigBadge, Icon } from '@xchain-wallet/core/ui';
+import { EmptyStateNudge } from './EmptyStateNudge.jsx';
 import styles from './BalanceList.module.css';
 
 /**
@@ -13,11 +14,28 @@ import styles from './BalanceList.module.css';
  * @param {Array<BalanceRow>} props.rows
  * @param {{ threshold: number, cosignerCount: number, scheme: string } | null} [props.multisig]
  * @param {string} [props.multisigChainId]
- * @param {string} [props.emptyMessage]
+ * @param {string} [props.emptyTitle]                empty-state headline
+ * @param {string} [props.emptyBody]                 explanatory body copy
+ * @param {() => void} [props.onReceive]             when supplied, the empty-state shows a Receive CTA
  */
-export function BalanceList({ rows, multisig, multisigChainId, emptyMessage = 'No balances yet.' }) {
+export function BalanceList({
+    rows,
+    multisig,
+    multisigChainId,
+    emptyTitle = 'No balances yet',
+    emptyBody,
+    onReceive,
+}) {
     if (!rows || rows.length === 0) {
-        return <p className={styles.empty}>{emptyMessage}</p>;
+        return (
+            <EmptyStateNudge
+                title={emptyTitle}
+                body={emptyBody}
+                actionLabel={onReceive ? 'Receive' : undefined}
+                onAction={onReceive}
+                icon={onReceive ? <Icon.ReceiveIcon /> : undefined}
+            />
+        );
     }
     return (
         <div className={styles.list} role="list" aria-label="Balances">

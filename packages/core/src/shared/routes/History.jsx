@@ -8,6 +8,7 @@ import {
     RbfInvalidEntryError,
 } from '../../flows/rbfReplace.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { EmptyStateNudge } from '../components/EmptyStateNudge.jsx';
 import styles from './History.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -56,8 +57,9 @@ const COIN_TICKER_TO_NAME = {
  * @param {string} props.walletId
  * @param {string} [props.accountId]   active BIP44 account; when set, history is scoped to that account's addresses
  * @param {() => void} props.onBack
+ * @param {() => void} [props.onReceive]   surfaces a Receive CTA in the empty-state nudges (G077)
  */
-export function History({ walletId, accountId, onBack }) {
+export function History({ walletId, accountId, onBack, onReceive }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -318,10 +320,13 @@ export function History({ walletId, accountId, onBack }) {
         .map(([cid]) => cid);
     if (activeChainIds.length === 0) {
         return wrap(
-            <p className={styles.empty}>
-                No addresses yet. Use Receive to generate one before
-                history can populate.
-            </p>,
+            <EmptyStateNudge
+                title="No addresses yet"
+                body="Generate a receive address to populate history."
+                actionLabel={onReceive ? 'Receive' : undefined}
+                onAction={onReceive}
+                icon={onReceive ? <Icon.ReceiveIcon /> : undefined}
+            />,
         );
     }
 
@@ -376,11 +381,17 @@ export function History({ walletId, accountId, onBack }) {
             ) : null}
 
             {visibleEntries.length === 0 && loadingChains.size === 0 ? (
-                <p className={styles.empty}>
-                    {crossChainOnly
-                        ? 'No cross-chain actions yet.'
-                        : 'No history yet for the selected chains.'}
-                </p>
+                <EmptyStateNudge
+                    title={crossChainOnly
+                        ? 'No cross-chain actions yet'
+                        : 'No history yet'}
+                    body={crossChainOnly
+                        ? 'Send a LINK action or receive one to see cross-chain entries here.'
+                        : 'Once you send or receive on the selected chains, the activity feed populates.'}
+                    actionLabel={!crossChainOnly && onReceive ? 'Receive' : undefined}
+                    onAction={!crossChainOnly ? onReceive : undefined}
+                    icon={!crossChainOnly && onReceive ? <Icon.ReceiveIcon /> : undefined}
+                />
             ) : null}
 
             <ul className={styles.timeline}>
