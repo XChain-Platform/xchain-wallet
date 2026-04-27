@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.137.0] - 2026-04-26
+
+§29 Send/Receive — Step 6 of 6 — RBF Speed up + Cancel from History. **Closes the §29 cluster.**
+
+Pending (mempool-only) coin-moving entries in History grow Speed up + Cancel buttons inside the inline DetailCard. The UI surfaces are complete; the replacement-broadcast engine itself depends on SDK / encoder work that lands as part of the §44.4 / §44.5 cluster (building a replacement transaction that respends the original tx's UTXOs at a higher fee for Speed up, or routes them to a self-controlled output for Cancel). Until that engine wires up, clicks surface a clear "RBF replacement is not supported by this build" error inline — honest about the gap, not a silent no-op.
+
+### Added
+
+- **`packages/core/src/flows/rbfReplace.js`** — `isEntryReplaceable(entry)` (gate: pending blockIndex, txHash present, action ∈ SEND/SWEEP/DISPENSE/DIVIDEND/AIRDROP/EXECUTE/DEPOSIT/WITHDRAW); `sendRbfRequest({ messaging, request })` (probes for `messaging.replaceTx`, validates the request shape, throws `RbfNotSupportedError` when the engine isn't wired); `replaceFromHistoryEntry({ messaging, entry, strategy, walletId, feeRate })` (validate + dispatch convenience wrapper). Exports `RbfNotSupportedError` + `RbfInvalidEntryError`.
+- **`RbfActions` sub-component** in `History.jsx` — renders Speed up + Cancel buttons + inline error / status states; uses `useMessaging` to grab the shell's messaging layer and runs the flow on click.
+- **`test/smoke/core/rbf-replace.smoke.js`** — full coverage of `isEntryReplaceable` (null / empty / confirmed / no-hash / non-replaceable action / case-insensitive / all 8 replaceable kinds), `sendRbfRequest` error branches (no replaceTx → `RbfNotSupportedError`; null request; missing chainId / originalTxHash; unknown strategy), happy-path passthrough, and `replaceFromHistoryEntry` validation + dispatch.
+- **`test/smoke/ui/history-rbf.smoke.js`** — imports, DetailCard gate wiring, `RbfActions` component shape (messaging hook, flow invocation, button labels + strategies), error / status role attributes, and CSS hooks.
+
+### Changed
+
+- **`History.jsx`** — imports the rbfReplace flow primitives; DetailCard checks `isEntryReplaceable(entry)` and renders `<RbfActions entry={entry} />` inline when the entry is in mempool. New `RbfActions` function component lives at the bottom of the file, after DetailCard.
+- **`History.module.css`** — `.rbfActions`, `.rbfError`, `.rbfDone` rules. The actions row sits below the decoded ACTION block with a dashed top border so it reads as a separate, action-bearing region.
+
+### Behavior preserved
+
+- Confirmed entries (blockIndex > 0) and non-coin-moving actions (ISSUE / MINT / DESTROY / ORDER / etc.) render the existing DetailCard exactly as before — no new buttons, no new wiring. Only mempool entries on the eight replaceable kinds gain the affordance.
+- The flow validates the request shape before dispatching, so misuse from custom calling code surfaces `RbfInvalidEntryError` instead of an opaque host-side error. Surfaces wired today, engine wires when §44 ships.
+
+### §29 cluster — close
+
+Six steps shipped (v0.132.0 → v0.137.0). Cluster scope: §29.4 / §29.5 / §29.7 / §29.9 / §29.10 audit rows; deferred §21 FOLLOWUPs 2 (test-send) / 3 (recipient safety trio) / 4 (autocomplete) / 5 (fee-aware preview); plus the §44.4 RBF UI surfaces. A close report follows separately.
+
 ## [0.136.0] - 2026-04-26
 
 §29 Send/Receive — Step 5 of 6 — Receive Request payment sub-form + Share button.

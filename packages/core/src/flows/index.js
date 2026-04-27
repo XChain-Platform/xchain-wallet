@@ -49,6 +49,13 @@ export {
     satsToCoinDecimal,
 } from './feeEstimate.js';
 export {
+    isEntryReplaceable,
+    sendRbfRequest,
+    replaceFromHistoryEntry,
+    RbfNotSupportedError,
+    RbfInvalidEntryError,
+} from './rbfReplace.js';
+export {
     getFiatRate,
     coinToFiat,
     fiatToCoin,

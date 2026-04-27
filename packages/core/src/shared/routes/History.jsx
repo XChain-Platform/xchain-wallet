@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Screen, Button, ChainBadge , Icon} from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
+import {
+    isEntryReplaceable,
+    replaceFromHistoryEntry,
+    RbfNotSupportedError,
+    RbfInvalidEntryError,
+} from '../../flows/rbfReplace.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './History.module.css';
 
@@ -434,6 +440,7 @@ function DetailCard({ entry, peerCache }) {
         ? peerCacheKey(entry.link.peerChainId, entry.link.peerActionIndex)
         : null;
     const peer = peerKey ? peerCache[peerKey] : null;
+    const replaceable = isEntryReplaceable(entry);
 
     return (
         <div className={`${styles.detail} ${isLinked ? styles.detailDual : ''}`} role="region" aria-label="Action detail">
@@ -444,6 +451,7 @@ function DetailCard({ entry, peerCache }) {
                 <pre className={styles.detailDecoded}>
                     {decodeActionToText(entry.raw)}
                 </pre>
+                {replaceable.ok ? <RbfActions entry={entry} /> : null}
             </div>
             {isLinked ? (
                 <div className={styles.detailSide}>
@@ -467,6 +475,76 @@ function DetailCard({ entry, peerCache }) {
                         </p>
                     )}
                 </div>
+            ) : null}
+        </div>
+    );
+}
+
+/**
+ * §29.9 / §44.4 RBF actions — Speed up + Cancel buttons for pending
+ * (mempool-only) coin-moving entries. Replacement engine wiring is
+ * §44.4 / §44.5 SDK / encoder work; until that lands, the messaging
+ * layer surfaces an honest "RBF replacement is not supported by this
+ * build" error and we render it inline.
+ */
+function RbfActions({ entry }) {
+    const { messaging } = useMessaging();
+    const [busy, setBusy] = useState(/** @type {'speedup' | 'cancel' | null} */ (null));
+    const [error, setError] = useState(/** @type {string | null} */ (null));
+    const [done, setDone] = useState(/** @type {string | null} */ (null));
+
+    const run = async (strategy) => {
+        if (busy) return;
+        setBusy(strategy);
+        setError(null);
+        setDone(null);
+        try {
+            const res = await replaceFromHistoryEntry({
+                messaging,
+                entry,
+                strategy,
+            });
+            setDone(`Replacement broadcast: ${res?.replacementTxHash || 'pending'}`);
+        } catch (err) {
+            if (err instanceof RbfNotSupportedError) {
+                setError(err.message);
+            } else if (err instanceof RbfInvalidEntryError) {
+                setError(err.message);
+            } else {
+                setError(err?.message || 'Replacement failed.');
+            }
+        } finally {
+            setBusy(null);
+        }
+    };
+
+    return (
+        <div className={styles.rbfActions}>
+            <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                loading={busy === 'speedup'}
+                disabled={busy !== null}
+                onClick={() => run('speedup')}
+            >
+                Speed up
+            </Button>
+            <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                loading={busy === 'cancel'}
+                disabled={busy !== null}
+                onClick={() => run('cancel')}
+            >
+                Cancel
+            </Button>
+            {error ? (
+                <p className={styles.rbfError} role="alert">{error}</p>
+            ) : null}
+            {done ? (
+                <p className={styles.rbfDone} role="status">{done}</p>
             ) : null}
         </div>
     );
