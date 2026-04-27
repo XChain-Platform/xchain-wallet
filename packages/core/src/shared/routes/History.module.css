@@ -323,3 +323,127 @@
     border-bottom-right-radius: var(--xc-radius-md);
     background: var(--xc-surface-raised);
 }
+
+/* §28.6 advanced filtering. Search input + "More filters" panel sits
+ * directly under the chip filterBar; the panel is collapsed by default
+ * to keep the header compact. */
+.searchRow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--xc-space-2);
+}
+
+.searchInput {
+    flex: 1 1 14rem;
+    min-width: 12rem;
+    padding: var(--xc-space-2) var(--xc-space-3);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-md);
+    background: var(--xc-bg);
+    color: var(--xc-text);
+    font-family: inherit;
+    font-size: var(--xc-text-sm);
+}
+.searchInput:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
+.filterBadge {
+    margin-left: 0.25rem;
+    color: var(--xc-accent-primary);
+}
+
+.clearLink {
+    background: transparent;
+    border: none;
+    color: var(--xc-accent-primary);
+    cursor: pointer;
+    font-size: var(--xc-text-xs);
+    text-decoration: underline;
+    padding: var(--xc-space-1);
+    font-family: inherit;
+}
+.clearLink:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+    border-radius: var(--xc-radius-sm);
+}
+
+.morePanel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-3);
+    padding: var(--xc-space-3);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-md);
+    background: var(--xc-surface-raised);
+}
+
+.fieldset {
+    margin: 0;
+    padding: 0;
+    border: none;
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+}
+
+.legend {
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: var(--xc-space-1);
+    padding: 0;
+}
+
+.checkboxGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr));
+    gap: var(--xc-space-1) var(--xc-space-2);
+}
+
+.checkLabel {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text);
+    cursor: pointer;
+}
+
+.statusChips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--xc-space-2);
+}
+
+.dateRow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--xc-space-3);
+}
+
+.dateLabel {
+    display: inline-flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+}
+
+.dateLabel input {
+    padding: var(--xc-space-1) var(--xc-space-2);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-sm);
+    background: var(--xc-bg);
+    color: var(--xc-text);
+    font-family: inherit;
+    font-size: var(--xc-text-sm);
+}
+.dateLabel input:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}

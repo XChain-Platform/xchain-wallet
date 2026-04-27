@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.159.0] - 2026-04-27
+
+§28.6 — Step 5 of Cluster C — Advanced history filtering (G080).
+
+History gains a search box (full-text over ACTION code, addresses, txid, tick, memo, destination, source) and a "More filters" panel with the spec's four filter axes — action-type checkboxes (14 buckets including Send/Receive split by wallet ownership), status chips (Pending / Confirmed / Failed), and a from/to date-range picker. An active-filters dot + "Clear" link surface in the header so a user who navigates away and back never wonders why the feed looks empty.
+
+### Added
+
+- **`shared/utils/historyFilter.js`** (new) — `applyHistoryFilters(entries, opts)` plus `classifyEntryAction` / `classifyEntryStatus` plus `ACTION_TYPE_OPTIONS` / `STATUS_OPTIONS` constants. Pure; takes wallet addresses as input so Send vs Receive discrimination is testable without React state.
+- **`test/unit/util/historyFilter.test.js`** (new) — 21 cases covering action-type buckets, status classification, send/receive split, date range, search across raw payload fields, and combined filters.
+
+### Changed
+
+- **`shared/routes/History.jsx`** — adds `searchQuery` / `actionTypeFilter` / `statusFilter` / `dateFrom` / `dateTo` / `moreFiltersOpen` state; computes `walletAddressSet` once from `addressesByChain`; threads everything into `applyHistoryFilters` inside the existing `visibleEntries` memo. Filter-aware empty state: "No matches for the current filters — Clear filters" when filters are active but the result is empty.
+- **`shared/routes/History.module.css`** — `.searchRow`, `.searchInput`, `.morePanel`, `.fieldset`, `.legend`, `.checkboxGrid`, `.checkLabel`, `.statusChips`, `.dateRow`, `.dateLabel`, `.filterBadge`, `.clearLink` for the new filter UI.
+
+Closes G080. Smoke baseline preserved (24/160).
+
 ## [0.158.0] - 2026-04-27
 
 §28.2 — Step 4 of Cluster C — Activity feed grouping (G078).

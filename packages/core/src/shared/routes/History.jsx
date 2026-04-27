@@ -10,6 +10,11 @@ import {
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { EmptyStateNudge } from '../components/EmptyStateNudge.jsx';
 import { groupHistoryEntries } from '../utils/historyGrouping.js';
+import {
+    applyHistoryFilters,
+    ACTION_TYPE_OPTIONS,
+    STATUS_OPTIONS,
+} from '../utils/historyFilter.js';
 import styles from './History.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -77,6 +82,12 @@ export function History({ walletId, accountId, onBack, onReceive }) {
     const [multisigAddress, setMultisigAddress] = useState(/** @type {string | null} */ (null));
     const [groupingMode, setGroupingMode] = useState(/** @type {'grouped' | 'flat'} */ ('grouped'));
     const [expandedGroups, setExpandedGroups] = useState(/** @type {Set<string>} */ (new Set()));
+    const [searchQuery, setSearchQuery] = useState('');
+    const [actionTypeFilter, setActionTypeFilter] = useState(/** @type {Set<string>} */ (new Set()));
+    const [statusFilter, setStatusFilter] = useState(/** @type {Set<string>} */ (new Set()));
+    const [dateFrom, setDateFrom] = useState(/** @type {string} */ (''));
+    const [dateTo, setDateTo] = useState(/** @type {string} */ (''));
+    const [moreFiltersOpen, setMoreFiltersOpen] = useState(false);
     const [selectedKey, setSelectedKey] = useState(/** @type {string | null} */ (null));
     const [peerCache, setPeerCache] = useState(
         /** @type {Record<string, { loading: boolean, action: any | null, error: string | null }>} */ ({}),
@@ -209,6 +220,19 @@ export function History({ walletId, accountId, onBack, onReceive }) {
         return () => { cancelled = true; };
     }, [addressesByChain, messaging]);
 
+    // Lowercase set of every wallet address across every chain. Used by
+    // the action-type filter to discriminate Send (wallet is source)
+    // from Receive (wallet is destination).
+    const walletAddressSet = useMemo(() => {
+        const s = new Set();
+        for (const cid of Object.keys(addressesByChain || {})) {
+            for (const a of (addressesByChain[cid] || [])) {
+                if (a && a.address) s.add(String(a.address).toLowerCase());
+            }
+        }
+        return s;
+    }, [addressesByChain]);
+
     const visibleEntries = useMemo(() => {
         let list = entries.filter((e) => enabledChains.has(e.chainId));
         if (crossChainOnly) list = list.filter((e) => Boolean(e.link));
@@ -219,8 +243,46 @@ export function History({ walletId, accountId, onBack, onReceive }) {
                 return a === lower;
             });
         }
-        return list;
-    }, [entries, enabledChains, crossChainOnly, multisigOnly, multisigAddress]);
+        return applyHistoryFilters(list, {
+            searchQuery,
+            actionTypes: actionTypeFilter,
+            statusSet: statusFilter,
+            dateFromMs: dateFrom ? Date.parse(dateFrom) : null,
+            // dateTo is interpreted as end-of-day so a "to: 2026-04-27"
+            // pick includes everything that happened that day.
+            dateToMs: dateTo ? Date.parse(dateTo) + 24 * 60 * 60 * 1000 - 1 : null,
+            walletAddresses: walletAddressSet,
+        });
+    }, [
+        entries, enabledChains, crossChainOnly, multisigOnly, multisigAddress,
+        searchQuery, actionTypeFilter, statusFilter, dateFrom, dateTo,
+        walletAddressSet,
+    ]);
+
+    const filtersActive = (
+        searchQuery
+        || actionTypeFilter.size > 0
+        || statusFilter.size > 0
+        || dateFrom
+        || dateTo
+    );
+
+    const toggleSetMember = (setter) => (id) => {
+        setter((prev) => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+    };
+
+    const clearAllFilters = () => {
+        setSearchQuery('');
+        setActionTypeFilter(new Set());
+        setStatusFilter(new Set());
+        setDateFrom('');
+        setDateTo('');
+    };
 
     // For drawing the vertical connector: an entry is "threaded with
     // the entry above it" iff both sides are linked AND the row above
@@ -404,6 +466,103 @@ export function History({ walletId, accountId, onBack, onReceive }) {
                 </button>
             </div>
 
+            <div className={styles.searchRow}>
+                <input
+                    type="search"
+                    className={styles.searchInput}
+                    placeholder="Search action, address, token, txid, memo…"
+                    aria-label="Search history"
+                    value={searchQuery}
+                    onChange={(ev) => setSearchQuery(ev.target.value)}
+                />
+                <button
+                    type="button"
+                    className={`${styles.chip} ${moreFiltersOpen ? styles.chipActive : ''}`}
+                    onClick={() => setMoreFiltersOpen((v) => !v)}
+                    aria-expanded={moreFiltersOpen}
+                    aria-controls="history-more-filters"
+                >
+                    More filters
+                    {filtersActive ? <span className={styles.filterBadge} aria-hidden="true">•</span> : null}
+                </button>
+                {filtersActive ? (
+                    <button
+                        type="button"
+                        className={styles.clearLink}
+                        onClick={clearAllFilters}
+                    >
+                        Clear
+                    </button>
+                ) : null}
+            </div>
+
+            {moreFiltersOpen ? (
+                <div
+                    id="history-more-filters"
+                    className={styles.morePanel}
+                    role="group"
+                    aria-label="Advanced filters"
+                >
+                    <fieldset className={styles.fieldset}>
+                        <legend className={styles.legend}>Action types</legend>
+                        <div className={styles.checkboxGrid}>
+                            {ACTION_TYPE_OPTIONS.map((opt) => (
+                                <label key={opt.id} className={styles.checkLabel}>
+                                    <input
+                                        type="checkbox"
+                                        checked={actionTypeFilter.has(opt.id)}
+                                        onChange={() => toggleSetMember(setActionTypeFilter)(opt.id)}
+                                    />
+                                    {opt.label}
+                                </label>
+                            ))}
+                        </div>
+                    </fieldset>
+
+                    <fieldset className={styles.fieldset}>
+                        <legend className={styles.legend}>Status</legend>
+                        <div className={styles.statusChips}>
+                            {STATUS_OPTIONS.map((opt) => {
+                                const active = statusFilter.has(opt.id);
+                                return (
+                                    <button
+                                        key={opt.id}
+                                        type="button"
+                                        onClick={() => toggleSetMember(setStatusFilter)(opt.id)}
+                                        className={`${styles.chip} ${active ? styles.chipActive : ''}`}
+                                        aria-pressed={active}
+                                    >
+                                        {opt.label}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </fieldset>
+
+                    <fieldset className={styles.fieldset}>
+                        <legend className={styles.legend}>Date range</legend>
+                        <div className={styles.dateRow}>
+                            <label className={styles.dateLabel}>
+                                From
+                                <input
+                                    type="date"
+                                    value={dateFrom}
+                                    onChange={(ev) => setDateFrom(ev.target.value)}
+                                />
+                            </label>
+                            <label className={styles.dateLabel}>
+                                To
+                                <input
+                                    type="date"
+                                    value={dateTo}
+                                    onChange={(ev) => setDateTo(ev.target.value)}
+                                />
+                            </label>
+                        </div>
+                    </fieldset>
+                </div>
+            ) : null}
+
             {loadingChains.size > 0 ? (
                 <div role="status" aria-label="Loading history">
                     <Skeleton.List rows={Math.max(3, loadingChains.size)} />
@@ -411,17 +570,26 @@ export function History({ walletId, accountId, onBack, onReceive }) {
             ) : null}
 
             {visibleEntries.length === 0 && loadingChains.size === 0 ? (
-                <EmptyStateNudge
-                    title={crossChainOnly
-                        ? 'No cross-chain actions yet'
-                        : 'No history yet'}
-                    body={crossChainOnly
-                        ? 'Send a LINK action or receive one to see cross-chain entries here.'
-                        : 'Once you send or receive on the selected chains, the activity feed populates.'}
-                    actionLabel={!crossChainOnly && onReceive ? 'Receive' : undefined}
-                    onAction={!crossChainOnly ? onReceive : undefined}
-                    icon={!crossChainOnly && onReceive ? <Icon.ReceiveIcon /> : undefined}
-                />
+                filtersActive ? (
+                    <EmptyStateNudge
+                        title="No matches for the current filters"
+                        body="Adjust or clear the filters to see more history."
+                        actionLabel="Clear filters"
+                        onAction={clearAllFilters}
+                    />
+                ) : (
+                    <EmptyStateNudge
+                        title={crossChainOnly
+                            ? 'No cross-chain actions yet'
+                            : 'No history yet'}
+                        body={crossChainOnly
+                            ? 'Send a LINK action or receive one to see cross-chain entries here.'
+                            : 'Once you send or receive on the selected chains, the activity feed populates.'}
+                        actionLabel={!crossChainOnly && onReceive ? 'Receive' : undefined}
+                        onAction={!crossChainOnly ? onReceive : undefined}
+                        icon={!crossChainOnly && onReceive ? <Icon.ReceiveIcon /> : undefined}
+                    />
+                )
             ) : null}
 
             <ul className={styles.timeline}>
