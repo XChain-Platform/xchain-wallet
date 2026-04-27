@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.107.0] - 2026-04-26
+
+Settings — Step 4 of 18 — Appearance panel.
+
+First write-capable §35.1 panel. Theme picker (system / light / dark) wired through `useSettings()` → `messaging.updateSettings({ theme })` → core `updateSettings` flow → `vault.settings.put`. Reduced-motion override and accent-color rows render as muted deferral copy until the schema migration / brand cut land.
+
+### Added
+
+- **`packages/core/src/shared/components/settings/AppearanceSection.jsx`** — Theme `<select>` reading the schema's `THEMES` tuple. Loading / error / write-failure states all render inside the section without disturbing the rest of the page.
+- **`test/smoke/ui/settings-appearance.smoke.js`** — useSettings wiring, THEME_OPTIONS covers the schema's exact `THEMES` tuple, write path goes through `update({ theme })`, deferral copy present for the two not-yet-shipped rows, Settings.jsx flips appearance from stub to panel.
+
+### Changed
+
+- **`packages/core/src/shared/routes/Settings.jsx`** — appearance section flips from `kind: 'stub'` to `kind: 'panel'` with `Component: AppearanceSection`.
+
 ## [0.106.0] - 2026-04-26
 
 Settings — Step 3 of 18 — About panel.

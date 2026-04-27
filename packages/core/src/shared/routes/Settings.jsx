@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Screen, Icon } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { AboutSection } from '../components/settings/AboutSection.jsx';
+import { AppearanceSection } from '../components/settings/AppearanceSection.jsx';
 import styles from './ActionsMenu.module.css';
 import pickerStyles from './WalletPicker.module.css';
 
@@ -84,7 +85,8 @@ export function Settings({
             title: 'Appearance',
             description: 'Theme, accent color, reduced motion.',
             keywords: 'appearance theme color motion accent dark light',
-            kind: 'stub',
+            kind: 'panel',
+            Component: AppearanceSection,
         },
         {
             id: 'language-region',
