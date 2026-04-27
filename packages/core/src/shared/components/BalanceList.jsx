@@ -1,0 +1,274 @@
+import { useMemo } from 'react';
+import * as branding from '@xchain-wallet/core/branding/branding.js';
+import { MultisigBadge } from '@xchain-wallet/core/ui';
+import styles from './BalanceList.module.css';
+
+/**
+ * Renders a flat list of balance rows. Filtering, tab selection, and
+ * sectioning live in the parent (typically `<HomeTabs>`); this is a
+ * dumb renderer so each tab can reuse the same row layout against
+ * its own slice of the data.
+ *
+ * @param {object} props
+ * @param {Array<BalanceRow>} props.rows
+ * @param {{ threshold: number, cosignerCount: number, scheme: string } | null} [props.multisig]
+ * @param {string} [props.multisigChainId]
+ * @param {string} [props.emptyMessage]
+ */
+export function BalanceList({ rows, multisig, multisigChainId, emptyMessage = 'No balances yet.' }) {
+    if (!rows || rows.length === 0) {
+        return <p className={styles.empty}>{emptyMessage}</p>;
+    }
+    return (
+        <div className={styles.list} role="list" aria-label="Balances">
+            {rows.map((r) => (
+                <BalanceRowEl
+                    key={`${r.chainId}:${r.asset}`}
+                    row={r}
+                    multisig={r.chainId === multisigChainId ? multisig : null}
+                />
+            ))}
+        </div>
+    );
+}
+
+function BalanceRowEl({ row, multisig }) {
+    const isNative = row.kind === 'native';
+    const chainIconUrl = branding.chainIconSmallUrl(row.chainId);
+    const subtitle = row.networkKind !== 'mainnet'
+        ? `${row.asset} · ${row.networkKind}`
+        : row.asset;
+    const fiat = useMemo(
+        () => fiatValue(row.quantity, row.divisibility, row.fiatRate),
+        [row.quantity, row.divisibility, row.fiatRate],
+    );
+    return (
+        <div className={styles.row} role="listitem">
+            <div className={styles.iconWrap}>
+                {isNative && chainIconUrl ? (
+                    <img src={chainIconUrl} alt="" aria-hidden="true" className={styles.iconImg} />
+                ) : (
+                    <span
+                        className={styles.iconLetter}
+                        style={{ background: tickerColor(row.asset), color: '#FFFFFF' }}
+                        aria-hidden="true"
+                    >
+                        {row.asset.slice(0, 1)}
+                    </span>
+                )}
+                {!isNative && chainIconUrl ? (
+                    <img
+                        src={chainIconUrl}
+                        alt=""
+                        aria-hidden="true"
+                        title={row.chainDisplayName}
+                        className={styles.chainOverlay}
+                    />
+                ) : null}
+            </div>
+            <div className={styles.body}>
+                <div className={styles.title}>
+                    <span className={styles.name} title={row.displayName}>{row.displayName}</span>
+                    {multisig ? (
+                        <MultisigBadge
+                            threshold={multisig.threshold}
+                            cosignerCount={multisig.cosignerCount}
+                            scheme={multisig.scheme}
+                            size="sm"
+                        />
+                    ) : null}
+                </div>
+                <div className={styles.subtitle}>{subtitle}</div>
+            </div>
+            <div className={styles.amounts}>
+                <div className={styles.qty}>{formatAmount(row.quantity, row.divisibility)}</div>
+                <div className={styles.fiat}>{formatFiat(fiat)}</div>
+            </div>
+        </div>
+    );
+}
+
+/* ───── Aggregation helpers exported for tab components ───── */
+
+/**
+ * Aggregates raw `balances` keyed by chainId + chain registry into
+ * a flat list of `BalanceRow`s. Used by every tab so each tab gets
+ * the same shape and only needs to filter.
+ */
+export function buildBalanceRows(balances, chainRegistry) {
+    const out = [];
+    if (!balances || typeof balances !== 'object') return out;
+
+    for (const [chainId, entries] of Object.entries(balances)) {
+        if (!Array.isArray(entries)) continue;
+        const descriptor = chainRegistry.get(chainId);
+        if (!descriptor) continue;
+
+        let nativeAcc = null;
+        const tokenAcc = new Map();
+
+        for (const entry of entries) {
+            const b = entry.balances;
+            if (!b || typeof b !== 'object') continue;
+
+            if (b.native && b.native.quantity != null) {
+                if (!nativeAcc) {
+                    nativeAcc = mkRow({
+                        kind: 'native',
+                        chainId,
+                        descriptor,
+                        asset: b.native.asset || descriptor.coin.toUpperCase(),
+                        displayName: b.native.displayName || descriptor.displayName,
+                        divisibility: Number(b.native.divisibility ?? 8),
+                        fiatRate: b.native.fiatRate,
+                    });
+                }
+                nativeAcc.quantity += safeBigInt(b.native.quantity);
+            }
+
+            if (Array.isArray(b.assets)) {
+                for (const a of b.assets) {
+                    if (!a || typeof a.asset !== 'string') continue;
+                    let acc = tokenAcc.get(a.asset);
+                    if (!acc) {
+                        acc = mkRow({
+                            kind: a.kind || 'token',
+                            chainId,
+                            descriptor,
+                            asset: a.asset,
+                            displayName: a.displayName || a.asset,
+                            divisibility: Number(a.divisibility ?? 8),
+                            fiatRate: a.fiatRate,
+                        });
+                        tokenAcc.set(a.asset, acc);
+                    }
+                    acc.quantity += safeBigInt(a.quantity);
+                }
+            }
+        }
+
+        if (nativeAcc) out.push(nativeAcc);
+        for (const acc of tokenAcc.values()) out.push(acc);
+    }
+    return out.map((r) => ({ ...r, quantity: r.quantity.toString() }));
+}
+
+function mkRow({ kind, chainId, descriptor, asset, displayName, divisibility, fiatRate }) {
+    return {
+        kind,
+        chainId,
+        chainShort: shortLabelForCoin(descriptor.coin),
+        chainDisplayName: descriptor.displayName,
+        chainColor: descriptor.color,
+        networkKind: descriptor.networkKind,
+        asset,
+        displayName,
+        divisibility,
+        fiatRate: typeof fiatRate === 'number' ? fiatRate : null,
+        quantity: 0n,
+    };
+}
+
+function shortLabelForCoin(coin) {
+    const map = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
+    return map[coin] || coin.toUpperCase();
+}
+
+const CHAIN_ORDER = { bitcoin: 0, litecoin: 1, dogecoin: 2 };
+export function sortByChainThenAsset(rows) {
+    return rows.slice().sort((a, b) => {
+        const ax = CHAIN_ORDER[coinFromChainId(a.chainId)] ?? 99;
+        const bx = CHAIN_ORDER[coinFromChainId(b.chainId)] ?? 99;
+        return (ax - bx) || a.asset.localeCompare(b.asset);
+    });
+}
+export function coinFromChainId(id) {
+    if (typeof id !== 'string') return '';
+    const dash = id.indexOf('-');
+    return dash > 0 ? id.slice(0, dash) : id;
+}
+
+/* ───── Formatting / colour helpers ───── */
+
+function safeBigInt(v) {
+    if (typeof v === 'bigint') return v;
+    if (typeof v === 'number') return BigInt(Math.trunc(v));
+    if (typeof v === 'string') {
+        const t = v.trim();
+        if (!/^-?\d+$/.test(t)) return 0n;
+        return BigInt(t);
+    }
+    return 0n;
+}
+
+function formatAmount(quantityStr, divisibility) {
+    const q = String(quantityStr || '0');
+    if (!divisibility || divisibility <= 0) return groupThousands(q);
+    const negative = q.startsWith('-');
+    const abs = negative ? q.slice(1) : q;
+    const padded = abs.padStart(divisibility + 1, '0');
+    const whole = padded.slice(0, padded.length - divisibility);
+    let frac = padded.slice(padded.length - divisibility);
+    frac = frac.replace(/0+$/, '');
+    const out = frac ? `${groupThousands(whole)}.${frac}` : groupThousands(whole);
+    return negative ? `-${out}` : out;
+}
+
+function groupThousands(s) {
+    return String(s).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
+function fiatValue(quantityStr, divisibility, fiatRate) {
+    if (typeof fiatRate !== 'number' || !isFinite(fiatRate)) return null;
+    const q = safeBigInt(quantityStr);
+    if (q === 0n) return 0;
+    if (!divisibility || divisibility <= 0) return Number(q) * fiatRate;
+    const div = 10n ** BigInt(divisibility);
+    const whole = Number(q / div);
+    const frac = Number(q % div) / Number(div);
+    return (whole + frac) * fiatRate;
+}
+
+/**
+ * Sum the fiat value across an arbitrary list of `BalanceRow`s. Rows
+ * without a `fiatRate` (no price data) are SKIPPED in the sum and
+ * counted as `unpriced` so the caller can surface "X assets not
+ * priced" if it cares.
+ *
+ * @param {Array<{quantity: string, divisibility: number, fiatRate: number | null}>} rows
+ * @returns {{ total: number, priced: number, unpriced: number }}
+ */
+export function sumFiatValue(rows) {
+    let total = 0;
+    let priced = 0;
+    let unpriced = 0;
+    for (const r of rows || []) {
+        const v = fiatValue(r.quantity, r.divisibility, r.fiatRate);
+        if (v === null) unpriced += 1;
+        else { total += v; priced += 1; }
+    }
+    return { total, priced, unpriced };
+}
+
+function formatFiat(usd) {
+    if (usd === null || usd === undefined) return '';
+    if (usd === 0) return '$0.00';
+    if (usd > 0 && usd < 0.01) return '<$0.01';
+    return '$' + usd.toLocaleString('en-US', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    });
+}
+
+const PALETTE = [
+    '#1E90C7', '#7B2C8F', '#0EA5E9', '#10B981', '#F59E0B',
+    '#EF4444', '#8B5CF6', '#EC4899', '#14B8A6', '#F97316',
+    '#6366F1', '#84CC16', '#06B6D4', '#A855F7', '#F43F5E',
+];
+function tickerColor(asset) {
+    let h = 0;
+    for (let i = 0; i < asset.length; i += 1) {
+        h = (h * 31 + asset.charCodeAt(i)) >>> 0;
+    }
+    return PALETTE[h % PALETTE.length];
+}

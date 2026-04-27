@@ -4,15 +4,18 @@ import styles from './DevVariantBadge.module.css';
 /**
  * Floating dev-only badge that surfaces which layout variant is
  * active, why (auto-by-viewport vs forced override), the current
- * viewport width, and lets the designer flip variants or clear the
+ * viewport width, and lets the designer cycle variants or clear the
  * override with one click.
  *
+ * Variants cycle: small → full → sidebar → small …
+ *
  * @param {object} props
- * @param {{ variant: 'small' | 'full', source: 'url' | 'storage' | 'auto', viewportPx: number }} props.state
+ * @param {{ variant: 'small' | 'full' | 'sidebar', source: 'url' | 'storage' | 'auto', viewportPx: number }} props.state
  */
 export function DevVariantBadge({ state }) {
     const { variant, source, viewportPx } = state;
-    const next = variant === 'small' ? 'full' : 'small';
+    const cycle = { small: 'full', full: 'sidebar', sidebar: 'small' };
+    const next = cycle[variant] || 'full';
     const sourceLabel = source === 'auto'
         ? `auto · ${viewportPx}px`
         : `forced · ${viewportPx}px`;
@@ -27,7 +30,7 @@ export function DevVariantBadge({ state }) {
                 type="button"
                 className={styles.flip}
                 onClick={() => setActiveVariant(next)}
-                title={`Force ${next}`}
+                title={`Switch to ${next}`}
             >
                 ⇄ {next}
             </button>

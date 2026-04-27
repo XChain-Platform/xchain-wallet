@@ -1,0 +1,163 @@
+/* Header for WalletPicker / AccountPicker — back arrow on the left,
+   title centered, plus icon on the right. Compact icon-only buttons
+   at the edges replace the text "← Back" / bottom "Add" row in the
+   ActionsMenu shape. */
+.header {
+    display: grid;
+    grid-template-columns: 40px 1fr 40px;
+    align-items: center;
+    gap: var(--xc-space-2);
+    width: 100%;
+    max-width: 1080px;
+    margin: 0 auto;
+}
+
+.iconBtn {
+    appearance: none;
+    background: transparent;
+    border: none;
+    width: 40px;
+    height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--xc-text);
+    cursor: pointer;
+    border-radius: var(--xc-radius-sm);
+}
+
+.iconBtn:hover:not(:disabled) { background: var(--xc-bg-muted); }
+
+.iconBtn:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
+.iconBtn:disabled {
+    color: var(--xc-text-muted);
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.title {
+    font-weight: 700;
+    font-size: var(--xc-text-lg);
+    color: var(--xc-text);
+    text-align: center;
+}
+
+/* WalletDetails read-only metadata list. */
+.detailList {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    margin: 0;
+    padding: 0;
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-md);
+    background: var(--xc-surface-raised);
+}
+
+.detailRow {
+    display: grid;
+    grid-template-columns: minmax(120px, 1fr) 2fr;
+    gap: var(--xc-space-3);
+    padding: var(--xc-space-2) var(--xc-space-3);
+    align-items: baseline;
+}
+
+.detailRow + .detailRow {
+    border-top: 1px solid var(--xc-border);
+}
+
+.detailLabel {
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 600;
+    margin: 0;
+}
+
+.detailValue {
+    margin: 0;
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text);
+    word-break: break-word;
+}
+
+.code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.85em;
+    color: var(--xc-text-muted);
+}
+
+/* 3-dot menu trigger floats inside the wallet row's top-right corner.
+   `.rowWrap` is the positioning context; the wallet button stretches
+   to full width, and the menu button overlays it. */
+.rowWrap {
+    position: relative;
+    width: 100%;
+}
+
+.rowMenuBtn {
+    appearance: none;
+    background: var(--xc-surface);
+    border: 1px solid var(--xc-border-strong);
+    position: absolute;
+    top: 50%;
+    right: 8px;
+    transform: translateY(-50%);
+    z-index: 1;
+    width: 32px;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--xc-text-muted);
+    cursor: pointer;
+    border-radius: var(--xc-radius-sm);
+    font-size: 18px;
+    line-height: 1;
+}
+
+.rowMenuBtn:hover {
+    background: var(--xc-bg-muted);
+    color: var(--xc-text);
+    border-color: var(--xc-accent-primary);
+}
+
+.rowMenuBtn:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
+.rowMenu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    z-index: 10;
+    min-width: 180px;
+    background: var(--xc-surface);
+    border: 1px solid var(--xc-border-strong);
+    border-radius: var(--xc-radius-md);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
+    padding: var(--xc-space-1);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.rowMenuItem {
+    appearance: none;
+    background: transparent;
+    border: none;
+    text-align: left;
+    padding: var(--xc-space-2) var(--xc-space-3);
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text);
+    cursor: pointer;
+    border-radius: var(--xc-radius-sm);
+}
+
+.rowMenuItem:hover { background: var(--xc-bg-muted); }

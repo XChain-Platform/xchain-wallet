@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Screen, Button, ChainBadge } from '@xchain-wallet/core/ui';
+import { Screen, Button, ChainBadge , Icon} from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './History.module.css';
@@ -48,9 +48,10 @@ const COIN_TICKER_TO_NAME = {
  *
  * @param {object} props
  * @param {string} props.walletId
+ * @param {string} [props.accountId]   active BIP44 account; when set, history is scoped to that account's addresses
  * @param {() => void} props.onBack
  */
-export function History({ walletId, onBack }) {
+export function History({ walletId, accountId, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -73,7 +74,7 @@ export function History({ walletId, onBack }) {
     // Step 1 — resolve the wallet's addresses grouped by chainId.
     useEffect(() => {
         let cancelled = false;
-        messaging.getAddressesByChain(walletId)
+        messaging.getAddressesByChain(walletId, accountId)
             .then((byChain) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain || {});
@@ -88,7 +89,7 @@ export function History({ walletId, onBack }) {
                 if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
             });
         return () => { cancelled = true; };
-    }, [walletId, messaging]);
+    }, [walletId, accountId, messaging]);
 
     // §22 Multisig-only filter (Step 22). Resolve the wallet's
     // multisig receive address up-front so the chip can filter
@@ -281,7 +282,7 @@ export function History({ walletId, onBack }) {
                 className={styles.back}
                 aria-label="Back to home"
             >
-                ← Back
+                <Icon.BackIcon />
             </button>
             <span className={styles.title}>History</span>
             <span className={styles.spacer} />
@@ -292,7 +293,6 @@ export function History({ walletId, onBack }) {
         <Screen variant={variant} header={header}>
             <div className={styles.body}>{children}</div>
             <div className={styles.actions}>
-                <Button variant="ghost" onClick={onBack}>Back</Button>
             </div>
         </Screen>
     );

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Screen, Button, Input, Icon } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './ImportWallet.module.css';
+import pickerStyles from './WalletPicker.module.css';
 
 const MIN_PASSWORD_LENGTH = 8;
 const ACCEPTED_WORD_COUNTS = [12, 15, 18, 21, 24];
@@ -23,8 +24,9 @@ const ACCEPTED_WORD_COUNTS = [12, 15, 18, 21, 24];
  * @param {() => void} props.onBack
  * @param {() => void} props.onImported             refreshes App.jsx state
  * @param {'default' | 'freewallet'} [props.variant]
+ * @param {'fresh' | 'add'} [props.mode]   'fresh' → first wallet (pre-host `wallet.import`); 'add' → adds to an open vault (`wallet.add.import`). Defaults to 'fresh'.
  */
-export function ImportWallet({ onBack, onImported, variant: importVariant = 'default' }) {
+export function ImportWallet({ onBack, onImported, variant: importVariant = 'default', mode = 'fresh' }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -68,7 +70,14 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
         setError(null);
         setBusy(true);
         try {
-            await messaging.importMnemonic({ password, mnemonic: trimmed, name });
+            if (mode === 'add') {
+                if (typeof messaging.addImportedWallet !== 'function') {
+                    throw new Error('messaging.addImportedWallet is not available in this shell.');
+                }
+                await messaging.addImportedWallet({ password, mnemonic: trimmed, name });
+            } else {
+                await messaging.importMnemonic({ password, mnemonic: trimmed, name });
+            }
             onImported();
         } catch (err) {
             setError(err?.message || 'Failed to import wallet.');
@@ -169,16 +178,6 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
             />
             <div className={actionsClass}>
                 <Button
-                    variant="ghost"
-                    onClick={onBack}
-                    type="button"
-                    disabled={busy}
-                    size={isFull ? undefined : 'sm'}
-                    icon={<Icon.BackIcon />}
-                >
-                    Back
-                </Button>
-                <Button
                     type="submit"
                     variant="primary"
                     loading={busy}
@@ -196,8 +195,25 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
         </form>
     );
 
+    const screenHeader = (
+        <div className={pickerStyles.header}>
+            <button
+                type="button"
+                onClick={onBack}
+                className={pickerStyles.iconBtn}
+                aria-label="Back"
+                title="Back"
+                disabled={busy}
+            >
+                <Icon.BackIcon />
+            </button>
+            <span />
+            <span />
+        </div>
+    );
+
     return (
-        <Screen variant={variant}>
+        <Screen variant={variant} header={screenHeader}>
             {isFull ? <div className={styles.card}>{form}</div> : form}
         </Screen>
     );

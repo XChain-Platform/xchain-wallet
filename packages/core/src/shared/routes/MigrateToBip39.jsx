@@ -147,7 +147,7 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated }) {
                 className={styles.back}
                 aria-label="Back"
             >
-                ← Back
+                <Icon.BackIcon />
             </button>
             <span className={styles.title}>
                 {stage === 'done' ? 'BIP39 wallet created' : 'Migrate to BIP39'}
@@ -280,14 +280,6 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated }) {
                 Your legacy wallet password is not needed here.
             </p>
             <div className={styles.actions}>
-                <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={() => setStage('explain')}
-                    disabled={stage === 'submitting'}
-                >
-                    Back
-                </Button>
                 <Button
                     type="submit"
                     variant="primary"

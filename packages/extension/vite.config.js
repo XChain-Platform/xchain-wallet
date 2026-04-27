@@ -113,6 +113,7 @@ export default defineConfig({
                 xchainProvider: fileURLToPath(new URL('./src/inject/xchainProvider.js', import.meta.url)),
                 popup: fileURLToPath(new URL('./popup.html', import.meta.url)),
                 approval: fileURLToPath(new URL('./approval.html', import.meta.url)),
+                sidepanel: fileURLToPath(new URL('./sidepanel.html', import.meta.url)),
             },
             output: {
                 // Fixed output paths so manifest.json's string references

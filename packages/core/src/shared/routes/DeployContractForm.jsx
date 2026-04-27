@@ -6,7 +6,7 @@ import {
     ChainBadge,
     ChainPicker,
     AddressText,
-} from '@xchain-wallet/core/ui';
+ Icon,} from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials } from '../components/SignCredentials.jsx';
@@ -268,7 +268,7 @@ export function DeployContractForm({ walletId, onBack }) {
                 className={styles.back}
                 aria-label="Back"
             >
-                ← Back
+                <Icon.BackIcon />
             </button>
             <span className={styles.title}>
                 {stage === 'review' || stage === 'submitting'
@@ -370,14 +370,6 @@ export function DeployContractForm({ walletId, onBack }) {
                     <div role="alert" className={styles.error}>{submitError}</div>
                 ) : null}
                 <div className={styles.actions}>
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        onClick={() => setStage('form')}
-                        disabled={stage === 'submitting'}
-                    >
-                        Back
-                    </Button>
                     <Button
                         type="submit"
                         variant="primary"
@@ -516,7 +508,6 @@ export function DeployContractForm({ walletId, onBack }) {
                 <div role="alert" className={styles.error}>{formError}</div>
             ) : null}
             <div className={styles.actions}>
-                <Button type="button" variant="ghost" onClick={onBack}>Cancel</Button>
                 <Button
                     type="submit"
                     variant="primary"

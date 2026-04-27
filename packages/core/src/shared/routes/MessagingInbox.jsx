@@ -5,7 +5,7 @@ import {
     Input,
     ChainBadge,
     AddressText,
-} from '@xchain-wallet/core/ui';
+ Icon,} from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './IssueTokenForm.module.css';
@@ -165,7 +165,7 @@ export function MessagingInbox({ walletId, onCompose, onBack }) {
                 className={styles.back}
                 aria-label="Back"
             >
-                ← Back
+                <Icon.BackIcon />
             </button>
             <span className={styles.title}>Messaging</span>
             <span className={styles.spacer} />
@@ -183,7 +183,6 @@ export function MessagingInbox({ walletId, onCompose, onBack }) {
             <>
                 <div role="alert" className={styles.error}>{loadError}</div>
                 <div className={styles.actions}>
-                    <Button variant="ghost" onClick={onBack}>Back</Button>
                 </div>
             </>,
         );
@@ -220,7 +219,6 @@ export function MessagingInbox({ walletId, onCompose, onBack }) {
                     </select>
                 </label>
                 <div className={styles.actions}>
-                    <Button variant="ghost" onClick={onBack}>Back</Button>
                     <Button
                         variant="primary"
                         onClick={() => setStage('password')}
@@ -258,14 +256,6 @@ export function MessagingInbox({ walletId, onCompose, onBack }) {
                     </p>
                 ) : null}
                 <div className={styles.actions}>
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        onClick={() => { setStage('pick'); setPassword(''); setUnlockError(null); }}
-                        disabled={stage === 'submitting'}
-                    >
-                        Back
-                    </Button>
                     <Button
                         type="submit"
                         variant="primary"
@@ -427,7 +417,6 @@ export function MessagingInbox({ walletId, onCompose, onBack }) {
                 >
                     Switch address
                 </Button>
-                <Button variant="ghost" onClick={onBack}>Back</Button>
             </div>
         </>,
     );

@@ -5,7 +5,7 @@ import {
     Input,
     ChainBadge,
     AddressText,
-} from '@xchain-wallet/core/ui';
+ Icon,} from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './ActionsMenu.module.css';
@@ -95,7 +95,7 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
                 className={styles.back}
                 aria-label="Back"
             >
-                ← Back
+                <Icon.BackIcon />
             </button>
             <span className={styles.title}>Dispenser explorer</span>
             <span className={styles.spacer} />

@@ -4,7 +4,7 @@ import {
     Button,
     ChainBadge,
     AddressText,
-} from '@xchain-wallet/core/ui';
+ Icon,} from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './ActionsMenu.module.css';
@@ -145,7 +145,7 @@ export function ContractDetail({
                 className={styles.back}
                 aria-label="Back to contracts list"
             >
-                ← Back
+                <Icon.BackIcon />
             </button>
             <span className={styles.title}>Contract #{contractActionIndex}</span>
             <span className={styles.spacer} />
@@ -303,7 +303,6 @@ export function ContractDetail({
                 ) : null}
             </div>
             <div className={styles.actions}>
-                <Button variant="ghost" onClick={onBack}>Back</Button>
             </div>
         </Screen>
     );

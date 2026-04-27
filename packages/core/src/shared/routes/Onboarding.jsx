@@ -2,6 +2,7 @@ import { Screen, Button, Icon } from '@xchain-wallet/core/ui';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './Onboarding.module.css';
+import pickerStyles from './WalletPicker.module.css';
 
 /**
  * Welcome screen — the entry point for users with no wallet yet.
@@ -13,13 +14,29 @@ import styles from './Onboarding.module.css';
  * @param {() => void} [props.onCreate]
  * @param {() => void} [props.onImport]
  * @param {() => void} [props.onImportFromFreeWallet]
+ * @param {() => void} [props.onBack]                rendered as a Cancel button when present (used by the unlocked-state "Add Wallet" entry point)
  */
-export function Onboarding({ onCreate, onImport, onImportFromFreeWallet }) {
+export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onBack }) {
     const { shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
+    const header = onBack ? (
+        <div className={pickerStyles.header}>
+            <button
+                type="button"
+                onClick={onBack}
+                className={pickerStyles.iconBtn}
+                aria-label="Back"
+                title="Back"
+            >
+                <Icon.BackIcon />
+            </button>
+            <span />
+            <span />
+        </div>
+    ) : null;
     return (
-        <Screen variant={variant}>
+        <Screen variant={variant} header={header}>
             <div className={isFull ? styles.heroFull : styles.heroPopup}>
                 <img
                     src={branding.logoUrl()}

@@ -5,7 +5,7 @@ import {
     Input,
     ChainBadge,
     AddressText,
-} from '@xchain-wallet/core/ui';
+ Icon,} from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './IssueTokenForm.module.css';
@@ -143,7 +143,7 @@ export function ContactsList({ walletId, onSendMessage, onBack }) {
                 className={styles.back}
                 aria-label="Back"
             >
-                ← Back
+                <Icon.BackIcon />
             </button>
             <span className={styles.title}>
                 {mode === 'edit' ? (active ? 'Edit contact' : 'New contact')
@@ -165,7 +165,6 @@ export function ContactsList({ walletId, onSendMessage, onBack }) {
             <>
                 <div role="alert" className={styles.error}>{loadError}</div>
                 <div className={styles.actions}>
-                    <Button variant="ghost" onClick={onBack}>Back</Button>
                 </div>
             </>,
         );
@@ -253,14 +252,6 @@ export function ContactsList({ walletId, onSendMessage, onBack }) {
                     <p role="alert" className={styles.error} style={{ marginTop: '0.5rem' }}>{submitError}</p>
                 ) : null}
                 <div className={styles.actions}>
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        onClick={() => setMode(active ? 'detail' : 'list')}
-                        disabled={submitting}
-                    >
-                        Cancel
-                    </Button>
                     <Button type="submit" variant="primary" loading={submitting}>
                         Save
                     </Button>
@@ -358,7 +349,6 @@ export function ContactsList({ walletId, onSendMessage, onBack }) {
                 <Button variant="primary" onClick={() => { setActiveId(null); startEdit(null); }}>
                     + Add contact
                 </Button>
-                <Button variant="ghost" onClick={onBack}>Back</Button>
             </div>
         </>,
     );

@@ -1,0 +1,54 @@
+.wrap {
+    padding: var(--xc-space-3);
+    border-top: 1px solid var(--xc-border);
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+}
+
+.label {
+    font-size: var(--xc-text-xs);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--xc-text-muted);
+}
+
+.buttons {
+    display: flex;
+    gap: var(--xc-space-2);
+}
+
+.btn {
+    appearance: none;
+    background: var(--xc-surface);
+    border: 1px solid var(--xc-border-strong);
+    border-radius: 10px;
+    padding: var(--xc-space-2) var(--xc-space-3);
+    flex: 1 1 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    color: var(--xc-text);
+    cursor: pointer;
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+    transition: background var(--xc-transition), border-color var(--xc-transition), color var(--xc-transition);
+}
+
+.btn:hover {
+    background: var(--xc-bg-muted);
+    border-color: var(--xc-text-muted);
+}
+
+.btn:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
+.btnActive {
+    background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
+    border-color: var(--xc-accent-primary);
+    color: var(--xc-accent-primary);
+}

@@ -5,6 +5,7 @@ import { crypto as cryptoLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { MnemonicGrid } from '../components/MnemonicGrid.jsx';
 import styles from './CreateWallet.module.css';
+import pickerStyles from './WalletPicker.module.css';
 
 const MIN_PASSWORD_LENGTH = 8;
 
@@ -26,8 +27,9 @@ const MIN_PASSWORD_LENGTH = 8;
  * @param {object} props
  * @param {() => void} props.onBack
  * @param {() => void} props.onCreated
+ * @param {'fresh' | 'add'} [props.mode]   'fresh' → first wallet (pre-host `wallet.import`); 'add' → adds to an open vault (`wallet.add.import`). Defaults to 'fresh'.
  */
-export function CreateWallet({ onBack, onCreated }) {
+export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -99,7 +101,14 @@ export function CreateWallet({ onBack, onCreated }) {
         setStage('persisting');
         setPersistError(null);
         try {
-            await messaging.importMnemonic({ password, mnemonic, name });
+            if (mode === 'add') {
+                if (typeof messaging.addImportedWallet !== 'function') {
+                    throw new Error('messaging.addImportedWallet is not available in this shell.');
+                }
+                await messaging.addImportedWallet({ password, mnemonic, name });
+            } else {
+                await messaging.importMnemonic({ password, mnemonic, name });
+            }
             onCreated();
         } catch (err) {
             setPersistError(err?.message || 'Failed to create wallet.');
@@ -111,6 +120,23 @@ export function CreateWallet({ onBack, onCreated }) {
     const titleClass = isFull ? styles.titleFull : styles.titlePopup;
     const subtitleClass = isFull ? styles.subtitleFull : styles.subtitlePopup;
     const actionsClass = isFull ? styles.actionsFull : styles.actionsPopup;
+
+    const screenHeader = (
+        <div className={pickerStyles.header}>
+            <button
+                type="button"
+                onClick={onBack}
+                className={pickerStyles.iconBtn}
+                aria-label="Back"
+                title="Back"
+                disabled={stage === 'persisting'}
+            >
+                <Icon.BackIcon />
+            </button>
+            <span />
+            <span />
+        </div>
+    );
 
     if (stage === 'mnemonic' || stage === 'persisting') {
         const mnemonicBody = (
@@ -159,15 +185,6 @@ export function CreateWallet({ onBack, onCreated }) {
                 ) : null}
                 <div className={actionsClass}>
                     <Button
-                        variant="ghost"
-                        onClick={onBack}
-                        disabled={stage === 'persisting'}
-                        size={isFull ? undefined : 'sm'}
-                        icon={<Icon.BackIcon />}
-                    >
-                        Back
-                    </Button>
-                    <Button
                         variant="primary"
                         onClick={handlePersist}
                         disabled={!saved}
@@ -182,7 +199,7 @@ export function CreateWallet({ onBack, onCreated }) {
             </>
         );
         return (
-            <Screen variant={variant}>
+            <Screen variant={variant} header={screenHeader}>
                 {isFull ? <div className={styles.card}>{mnemonicBody}</div> : mnemonicBody}
             </Screen>
         );
@@ -239,15 +256,6 @@ export function CreateWallet({ onBack, onCreated }) {
             />
             <div className={actionsClass}>
                 <Button
-                    variant="ghost"
-                    onClick={onBack}
-                    type="button"
-                    size={isFull ? undefined : 'sm'}
-                    icon={<Icon.BackIcon />}
-                >
-                    Back
-                </Button>
-                <Button
                     type="submit"
                     variant="primary"
                     disabled={password.length === 0 || confirm.length === 0}
@@ -261,7 +269,7 @@ export function CreateWallet({ onBack, onCreated }) {
     );
 
     return (
-        <Screen variant={variant}>
+        <Screen variant={variant} header={screenHeader}>
             {isFull ? <div className={styles.card}>{formBody}</div> : formBody}
         </Screen>
     );

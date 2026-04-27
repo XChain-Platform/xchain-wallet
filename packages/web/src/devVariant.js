@@ -23,7 +23,7 @@ export const THRESHOLD_PX = 640;
 const STORAGE_KEY = 'xc.devVariant';
 
 function normalize(v) {
-    if (v === 'small' || v === 'full') return v;
+    if (v === 'small' || v === 'full' || v === 'sidebar') return v;
     if (v === 'popup') return 'small';   // legacy alias
     return null;
 }
@@ -49,7 +49,7 @@ function autoVariant() {
 }
 
 /**
- * @returns {{ variant: 'small' | 'full', source: 'url' | 'storage' | 'auto', viewportPx: number }}
+ * @returns {{ variant: 'small' | 'full' | 'sidebar', source: 'url' | 'storage' | 'auto', viewportPx: number }}
  */
 export function resolveVariant() {
     const url = readUrlOverride();
@@ -112,9 +112,10 @@ export function useActiveVariant() {
 
 /**
  * Map the active variant to the shell value `<MessagingProvider>` expects.
- * `full` → `web`; `small` → `popup` (the closest-matching shell type
- * for the narrow-viewport behaviour set, e.g. auto-lock).
+ * `full` → `web`; `small` and `sidebar` → `popup` (both are narrow
+ * surfaces; the small-viewport behaviour set applies — auto-lock,
+ * pancake-only nav, etc.).
  */
 export function shellForVariant(variant) {
-    return variant === 'small' ? 'popup' : 'web';
+    return variant === 'full' ? 'web' : 'popup';
 }

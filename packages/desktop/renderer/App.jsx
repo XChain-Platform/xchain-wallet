@@ -23,6 +23,11 @@ import { Loading } from '@xchain-wallet/core/shared/routes/Loading.jsx';
 import { Onboarding } from '@xchain-wallet/core/shared/routes/Onboarding.jsx';
 import { CreateWallet } from '@xchain-wallet/core/shared/routes/CreateWallet.jsx';
 import { ImportWallet } from '@xchain-wallet/core/shared/routes/ImportWallet.jsx';
+import { AddAccountForm } from '@xchain-wallet/core/shared/routes/AddAccountForm.jsx';
+import { WalletPicker } from '@xchain-wallet/core/shared/routes/WalletPicker.jsx';
+import { AccountPicker } from '@xchain-wallet/core/shared/routes/AccountPicker.jsx';
+import { WalletDetails } from '@xchain-wallet/core/shared/routes/WalletDetails.jsx';
+import { RenameWalletForm } from '@xchain-wallet/core/shared/routes/RenameWalletForm.jsx';
 import { Locked } from '@xchain-wallet/core/shared/routes/Locked.jsx';
 import { Home } from '@xchain-wallet/core/shared/routes/Home.jsx';
 import { Send } from '@xchain-wallet/core/shared/routes/Send.jsx';
@@ -70,7 +75,7 @@ import { AddressList } from '@xchain-wallet/core/shared/routes/AddressList.jsx';
 import { PairSignerForm } from '@xchain-wallet/core/shared/routes/PairSignerForm.jsx';
 import { useBtcAddressesPresent } from '@xchain-wallet/core/shared/hooks/useBtcAddressesPresent.js';
 import * as messaging from './messaging.js';
-import { getSessionStatus, listWallets } from './messaging.js';
+import { getSessionStatus, listWallets, listAccounts } from './messaging.js';
 import { registerSigner as registerLocalSigner } from './signerBridge.js';
 import { pairTrezorSigner } from './signerFactories/trezorFactory.js';
 import { pairLedgerSigner } from './signerFactories/ledgerFactory.js';
@@ -89,8 +94,13 @@ function AppInner() {
         /** @type {'welcome' | 'create' | 'import' | 'import-freewallet'} */ ('welcome'),
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'swap' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'staking-dashboard' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'link-form' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'addresses'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'swap' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'staking-dashboard' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'link-form' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'addresses' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename'} */ ('home'),
     );
+    const [walletDetailsId, setWalletDetailsId] = useState(/** @type {string | null} */ (null));
+    const [walletRenameTarget, setWalletRenameTarget] = useState(
+        /** @type {{ id: string, name: string } | null} */ (null),
+    );
+    const [migrateLegacyWalletId, setMigrateLegacyWalletId] = useState(/** @type {string | null} */ (null));
     const [resumeAirdropId, setResumeAirdropId] = useState(
         /** @type {string | null} */ (null),
     );
@@ -101,6 +111,9 @@ function AppInner() {
         /** @type {{ chainId?: string, fromAddressId?: string, toAddress?: string } | null} */ (null),
     );
     const [activeWalletId, setActiveWalletId] = useState(
+        /** @type {string | null} */ (null),
+    );
+    const [activeAccountId, setActiveAccountId] = useState(
         /** @type {string | null} */ (null),
     );
     const [dispenserRef, setDispenserRef] = useState(
@@ -135,6 +148,7 @@ function AppInner() {
     useEffect(() => {
         if (status.state !== 'unlocked') {
             setActiveWalletId(null);
+            setActiveAccountId(null);
             return;
         }
         let cancelled = false;
@@ -148,6 +162,24 @@ function AppInner() {
             .catch(() => { /* Home surfaces load errors */ });
         return () => { cancelled = true; };
     }, [status.state]);
+
+    useEffect(() => {
+        if (!activeWalletId) {
+            setActiveAccountId(null);
+            return undefined;
+        }
+        let cancelled = false;
+        listAccounts(activeWalletId)
+            .then((list) => {
+                if (cancelled) return;
+                const sorted = Array.isArray(list)
+                    ? [...list].sort((a, b) => a.index - b.index)
+                    : [];
+                setActiveAccountId(sorted[0]?.id || null);
+            })
+            .catch(() => { if (!cancelled) setActiveAccountId(null); });
+        return () => { cancelled = true; };
+    }, [activeWalletId]);
 
     // §42.2 Contracts nav — show only when a BTC wallet address exists
     // (VM actions are BTC-only at launch per BITCOIN_ACTIONS).
@@ -206,6 +238,7 @@ function AppInner() {
                 return (
                     <Receive
                         walletId={activeWalletId}
+                        accountId={activeAccountId || undefined}
                         onBack={() => setUnlockedView('home')}
                     />
                 );
@@ -333,12 +366,19 @@ function AppInner() {
                     />
                 );
             }
-            if (unlockedView === 'migrate-bip39' && activeWalletId) {
+            if (unlockedView === 'migrate-bip39' && (migrateLegacyWalletId || activeWalletId)) {
+                const targetId = migrateLegacyWalletId || activeWalletId;
                 return (
                     <MigrateToBip39
-                        legacyWalletId={activeWalletId}
-                        onBack={() => setUnlockedView('home')}
-                        onMigrated={refresh}
+                        legacyWalletId={targetId}
+                        onBack={() => {
+                            setMigrateLegacyWalletId(null);
+                            setUnlockedView(migrateLegacyWalletId ? 'wallet-details' : 'home');
+                        }}
+                        onMigrated={() => {
+                            setMigrateLegacyWalletId(null);
+                            refresh();
+                        }}
                     />
                 );
             }
@@ -463,6 +503,7 @@ function AppInner() {
                 return (
                     <AddressList
                         walletId={activeWalletId}
+                        accountId={activeAccountId || undefined}
                         onBack={() => setUnlockedView('home')}
                     />
                 );
@@ -667,6 +708,7 @@ function AppInner() {
                 return (
                     <History
                         walletId={activeWalletId}
+                        accountId={activeAccountId || undefined}
                         onBack={() => setUnlockedView('home')}
                     />
                 );
@@ -709,11 +751,126 @@ function AppInner() {
                     />
                 );
             }
+            if (unlockedView === 'wallet-picker') {
+                return (
+                    <WalletPicker
+                        activeWalletId={activeWalletId}
+                        onSwitch={setActiveWalletId}
+                        onAddWallet={() => {
+                            setOnboardingStep('welcome');
+                            setUnlockedView('add-wallet');
+                        }}
+                        onShowDetails={(id) => {
+                            setWalletDetailsId(id);
+                            setUnlockedView('wallet-details');
+                        }}
+                        onBack={() => setUnlockedView('home')}
+                    />
+                );
+            }
+            if (unlockedView === 'wallet-details' && walletDetailsId) {
+                return (
+                    <WalletDetails
+                        walletId={walletDetailsId}
+                        onBack={() => {
+                            setWalletDetailsId(null);
+                            setUnlockedView('wallet-picker');
+                        }}
+                        onRename={() => {
+                            setWalletRenameTarget({ id: walletDetailsId, name: '' });
+                            setUnlockedView('wallet-rename');
+                        }}
+                        onMigrateToBip39={() => {
+                            setMigrateLegacyWalletId(walletDetailsId);
+                            setUnlockedView('migrate-bip39');
+                        }}
+                    />
+                );
+            }
+            if (unlockedView === 'wallet-rename' && walletRenameTarget) {
+                return (
+                    <RenameWalletForm
+                        walletId={walletRenameTarget.id}
+                        initialName={walletRenameTarget.name}
+                        onBack={() => {
+                            setWalletRenameTarget(null);
+                            setUnlockedView('wallet-picker');
+                        }}
+                        onRenamed={() => {
+                            setWalletRenameTarget(null);
+                            setUnlockedView('wallet-picker');
+                        }}
+                    />
+                );
+            }
+            if (unlockedView === 'account-picker' && activeWalletId) {
+                return (
+                    <AccountPicker
+                        walletId={activeWalletId}
+                        activeAccountId={activeAccountId}
+                        onSwitch={setActiveAccountId}
+                        onAddAccount={() => setUnlockedView('add-account')}
+                        onBack={() => setUnlockedView('home')}
+                    />
+                );
+            }
+            if (unlockedView === 'add-account' && activeWalletId) {
+                return (
+                    <AddAccountForm
+                        walletId={activeWalletId}
+                        onBack={() => setUnlockedView('home')}
+                        onCreated={() => setUnlockedView('home')}
+                    />
+                );
+            }
+            if (unlockedView === 'add-wallet') {
+                if (onboardingStep === 'create') {
+                    return (
+                        <CreateWallet
+                            mode="add"
+                            onBack={() => setOnboardingStep('welcome')}
+                            onCreated={refresh}
+                        />
+                    );
+                }
+                if (onboardingStep === 'import') {
+                    return (
+                        <ImportWallet
+                            mode="add"
+                            onBack={() => setOnboardingStep('welcome')}
+                            onImported={refresh}
+                        />
+                    );
+                }
+                if (onboardingStep === 'import-freewallet') {
+                    return (
+                        <ImportWallet
+                            mode="add"
+                            variant="freewallet"
+                            onBack={() => setOnboardingStep('welcome')}
+                            onImported={refresh}
+                        />
+                    );
+                }
+                return (
+                    <Onboarding
+                        onCreate={() => setOnboardingStep('create')}
+                        onImport={() => setOnboardingStep('import')}
+                        onImportFromFreeWallet={() => setOnboardingStep('import-freewallet')}
+                        onBack={() => {
+                            setOnboardingStep('welcome');
+                            setUnlockedView('wallet-picker');
+                        }}
+                    />
+                );
+            }
             return (
                 <Home
                     onLocked={refresh}
                     onSend={activeWalletId ? () => setUnlockedView('send') : undefined}
                     onReceive={activeWalletId ? () => setUnlockedView('receive') : undefined}
+                    onSwap={activeWalletId ? () => setUnlockedView('swap') : undefined}
+                    onBuy={activeWalletId ? () => setUnlockedView('dispenser-explorer') : undefined}
                     onCreateToken={activeWalletId ? () => setUnlockedView('wizard') : undefined}
                     onActions={activeWalletId ? () => setUnlockedView('actions') : undefined}
                     onMarkets={activeWalletId ? () => setUnlockedView('markets') : undefined}
@@ -731,6 +888,13 @@ function AppInner() {
                         setUnlockedView('coinpay');
                     } : undefined}
                     onMigrateToBip39={activeWalletId ? () => setUnlockedView('migrate-bip39') : undefined}
+                    onCrossChain={activeWalletId ? () => setUnlockedView('cross-chain-templates') : undefined}
+                    onContacts={activeWalletId ? () => setUnlockedView('contacts') : undefined}
+                    onMultisig={activeWalletId && hasBtcAddress ? () => setUnlockedView('multisig-create') : undefined}
+                    onOpenWalletPicker={() => setUnlockedView('wallet-picker')}
+                    onOpenAccountPicker={activeWalletId ? () => setUnlockedView('account-picker') : undefined}
+                    activeAccountId={activeAccountId}
+                    onSwitchAccount={setActiveAccountId}
                 />
             );
         default:

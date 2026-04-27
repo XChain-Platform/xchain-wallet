@@ -1,0 +1,18 @@
+/* Override the shared popover styles so the network filter spans the
+   full width of the popup body. The shared popover is `position:
+   absolute; right: 0` anchored to the .wrap (which sits around the
+   filter button — not the popup edge), so a wide width would clip
+   off-screen-left. Switching to `position: fixed` centered on the
+   viewport handles both cases:
+   - real Chrome extension popup: viewport = popup body
+   - dev-shell small variant: small frame is centered in the page
+   so a centered fixed popover lines up with the wallet's body. */
+.popoverFull {
+    position: fixed;
+    top: 60px;
+    left: 50%;
+    transform: translateX(-50%);
+    right: auto;
+    width: calc(min(375px, 100vw) - 24px);
+    max-width: calc(100vw - 24px);
+}

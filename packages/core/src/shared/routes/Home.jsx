@@ -4,9 +4,12 @@ import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useAutoLock } from '../hooks/useAutoLock.js';
-import { UnifiedBalanceList } from '../components/UnifiedBalanceList.jsx';
+import { HomeTabs } from '../components/HomeTabs.jsx';
 import { HeaderActionMenu } from '../components/HeaderActionMenu.jsx';
+import { HeaderSettingsButton } from '../components/HeaderSettingsButton.jsx';
+import { HeaderNetworkButton } from '../components/HeaderNetworkButton.jsx';
 import { AlertsOverlay } from '../components/AlertsOverlay.jsx';
+import { Settings } from './Settings.jsx';
 import styles from './Home.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -29,6 +32,8 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {() => void} [props.onLocked]        refresh upstream state machine
  * @param {() => void} [props.onSend]          navigate to Send sub-route
  * @param {() => void} [props.onReceive]       navigate to Receive sub-route
+ * @param {() => void} [props.onSwap]          navigate to SwapForm sub-route — quick action #3
+ * @param {() => void} [props.onBuy]           navigate to a buy flow (DispenserExplorer or fiat ramp) — quick action #4
  * @param {() => void} [props.onCreateToken]   navigate to Token Wizard sub-route (§40.1)
  * @param {() => void} [props.onActions]       navigate to the Actions menu (§40.2+)
  * @param {() => void} [props.onMarkets]       navigate to the Markets list (§41.2)
@@ -39,9 +44,13 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {() => void} [props.onStaking]       navigate to the Staking dashboard (§42.7.4) — BTC-only, App.jsx gates the prop
  * @param {() => void} [props.onHistory]       navigate to the History route (§23 + §23.5 cross-chain threading)
  * @param {() => void} [props.onMigrateToBip39]           navigate to the §40.13 migration wizard when the active wallet is counterwallet-legacy
+ * @param {() => void} [props.onOpenWalletPicker]         Settings row → host navigates to the WalletPicker route
+ * @param {() => void} [props.onOpenAccountPicker]        Settings row → host navigates to the AccountPicker route
+ * @param {string | null} [props.activeAccountId]          App-level active BIP44 account; when supplied, Home is read-only with respect to account selection
+ * @param {(accountId: string) => void} [props.onSwitchAccount]   App-level setter for the active account (still used internally if a future inline picker lands)
  * @param {Array<{ id: string, label: string, description?: string, onSelect?: () => void }>} [props.extraActions]   §40+ entries surfaced in the small-mode pancake drawer; in full mode the host renders these via the dedicated ActionsMenu route
  */
-export function Home({ onLocked, onSend, onReceive, onCreateToken, onActions, onMarkets, onResumeAirdrop, onResumeCoinpay, onMessaging, onContracts, onStaking, onHistory, onAddresses, onMigrateToBip39, extraActions }) {
+export function Home({ onLocked, onSend, onReceive, onSwap, onBuy, onCreateToken, onActions, onMarkets, onResumeAirdrop, onResumeCoinpay, onMessaging, onContracts, onStaking, onHistory, onAddresses, onMigrateToBip39, onOpenWalletPicker, onOpenAccountPicker, onCrossChain, onContacts, onMultisig, activeAccountId: activeAccountIdProp, onSwitchAccount, extraActions }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -50,6 +59,16 @@ export function Home({ onLocked, onSend, onReceive, onCreateToken, onActions, on
     const [activeWalletId, setActiveWalletId] = useState(
         /** @type {string | null} */ (null),
     );
+    const [accounts, setAccounts] = useState(/** @type {any[] | null} */ (null));
+    // Local fallback used only when the host doesn't supply
+    // `activeAccountIdProp` (e.g. desktop shell pinned to an older
+    // App.jsx). When the prop is set, Home is read-only and the
+    // popover delegates switching to `onSwitchAccount`.
+    const [activeAccountIdLocal, setActiveAccountIdLocal] = useState(
+        /** @type {string | null} */ (null),
+    );
+    const activeAccountId = activeAccountIdProp ?? activeAccountIdLocal;
+    const setActiveAccountId = onSwitchAccount ?? setActiveAccountIdLocal;
     const [balances, setBalances] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
     );
@@ -68,7 +87,12 @@ export function Home({ onLocked, onSend, onReceive, onCreateToken, onActions, on
     const [locking, setLocking] = useState(false);
     const [menuOpen, setMenuOpen] = useState(false);
     const [alertsOpen, setAlertsOpen] = useState(false);
+    const [networkFilter, setNetworkFilter] = useState('all');
+    const [settingsOpen, setSettingsOpen] = useState(false);
 
+    // Load the wallets list once. The user picks the active one via
+    // HeaderSettingsButton → onSwitchWallet → setActiveWalletId →
+    // the per-wallet effect below refetches everything.
     useEffect(() => {
         let cancelled = false;
         (async () => {
@@ -80,91 +104,147 @@ export function Home({ onLocked, onSend, onReceive, onCreateToken, onActions, on
                     setLoadError('No wallets found.');
                     return;
                 }
-                const walletId = list[0].id;
-                setActiveWalletId(walletId);
-                try {
-                    const b = await messaging.getWalletBalances(walletId);
-                    if (!cancelled) setBalances(b);
-                } catch (err) {
-                    if (!cancelled) {
-                        setLoadError(err?.message || 'Failed to load balances.');
-                    }
-                }
-                // §22 multisig indicator (Step 22). Best-effort — the
-                // call fails when no multisig is configured, which is
-                // the typical state for a fresh wallet.
-                if (typeof messaging.getMultisigReceiveAddress === 'function') {
-                    const btcChain = chainRegistry.byCoin('bitcoin')[0]?.id;
-                    if (btcChain) {
-                        messaging.getMultisigReceiveAddress({ walletId, chainId: btcChain })
-                            .then((r) => {
-                                if (cancelled) return;
-                                if (r && Number.isInteger(r.threshold)) {
-                                    setMultisig({
-                                        threshold: r.threshold,
-                                        cosignerCount: r.cosignerCount,
-                                        scheme: r.scheme,
-                                    });
-                                }
-                            })
-                            .catch(() => { /* no multisig configured — silent */ });
-                    }
-                }
-                if (typeof messaging.listPendingAirdropsForWallet === 'function') {
-                    try {
-                        const records = await messaging.listPendingAirdropsForWallet({ walletId });
-                        if (!cancelled) {
-                            const resumable = (records || []).filter(
-                                (r) => r.stage === 'waiting-index' || r.stage === 'ready-to-airdrop',
-                            );
-                            setPendingAirdrops(resumable);
-                        }
-                    } catch (err) {
-                        // Non-fatal — resume card is a convenience, not core functionality.
-                    }
-                }
-                if (typeof messaging.getCoinpayObligationsForAddress === 'function') {
-                    try {
-                        const byChain = await messaging.getAddressesByChain(walletId);
-                        const pairs = [];
-                        for (const [cId, addrs] of Object.entries(byChain || {})) {
-                            for (const a of addrs) pairs.push({ chainId: cId, address: a.address });
-                        }
-                        const results = await Promise.all(pairs.map((p) =>
-                            messaging.getCoinpayObligationsForAddress({
-                                chainId: p.chainId, address: p.address,
-                            })
-                                .then((resp) => ({ ...p, rows: extractObligationRows(resp) }))
-                                .catch(() => ({ ...p, rows: [] }))
-                        ));
-                        if (cancelled) return;
-                        const obligations = [];
-                        for (const r of results) {
-                            for (const row of r.rows) {
-                                if (!isPendingForPayer(row, r.address)) continue;
-                                obligations.push({
-                                    chainId: r.chainId,
-                                    address: r.address,
-                                    orderMatchActionIndex: String(row.action_index ?? row.actionIndex),
-                                    coinAmount: row.coin_amount,
-                                    payeeAddress: row.payee_address || row.payeeAddress,
-                                    expiration: row.expiration,
-                                });
-                            }
-                        }
-                        setPendingCoinpays(obligations);
-                    } catch (err) {
-                        // Non-fatal.
-                    }
-                }
+                if (!activeWalletId) setActiveWalletId(list[0].id);
             } catch (err) {
-                if (!cancelled) {
-                    setLoadError(err?.message || 'Failed to load wallets.');
-                }
+                if (!cancelled) setLoadError(err?.message || 'Failed to load wallets.');
             }
         })();
         return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [messaging]);
+
+    // Load BIP44 accounts for the active wallet so the gear popover can
+    // render them. When the host owns `activeAccountId` (App-level), it
+    // also picks the initial account; this effect only updates Home's
+    // local fallback to keep the popover usable in shells that don't
+    // wire the prop.
+    useEffect(() => {
+        if (!activeWalletId) {
+            setAccounts(null);
+            if (!onSwitchAccount) setActiveAccountIdLocal(null);
+            return undefined;
+        }
+        if (typeof messaging.listAccounts !== 'function') {
+            setAccounts([]);
+            if (!onSwitchAccount) setActiveAccountIdLocal(null);
+            return undefined;
+        }
+        let cancelled = false;
+        const walletId = activeWalletId;
+        messaging.listAccounts(walletId)
+            .then((list) => {
+                if (cancelled) return;
+                const sorted = Array.isArray(list)
+                    ? [...list].sort((a, b) => a.index - b.index)
+                    : [];
+                setAccounts(sorted);
+                if (!onSwitchAccount) {
+                    setActiveAccountIdLocal((prev) => {
+                        if (prev && sorted.some((a) => a.id === prev)) return prev;
+                        return sorted[0]?.id || null;
+                    });
+                }
+            })
+            .catch(() => {
+                if (cancelled) return;
+                setAccounts([]);
+                if (!onSwitchAccount) setActiveAccountIdLocal(null);
+            });
+        return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeWalletId, messaging]);
+
+    // Per-wallet load: balances, multisig indicator, pending airdrops,
+    // pending COINPAY obligations. Reruns when the active wallet OR
+    // active BIP44 account changes — switching either flushes stale
+    // state and refetches. When `activeAccountId` is null (data layer
+    // returned no accounts for this wallet, or pre-load), the calls
+    // fall back to wallet-wide aggregation.
+    useEffect(() => {
+        if (!activeWalletId) return undefined;
+        let cancelled = false;
+        setBalances(null);
+        setMultisig(null);
+        setPendingAirdrops([]);
+        setPendingCoinpays([]);
+        setLoadError(null);
+        const walletId = activeWalletId;
+        const accountId = activeAccountId || undefined;
+
+        (async () => {
+            try {
+                const b = await messaging.getWalletBalances(walletId, accountId);
+                if (!cancelled) setBalances(b);
+            } catch (err) {
+                if (!cancelled) setLoadError(err?.message || 'Failed to load balances.');
+            }
+
+            if (typeof messaging.getMultisigReceiveAddress === 'function') {
+                const btcChain = chainRegistry.byCoin('bitcoin')[0]?.id;
+                if (btcChain) {
+                    messaging.getMultisigReceiveAddress({ walletId, chainId: btcChain })
+                        .then((r) => {
+                            if (cancelled) return;
+                            if (r && Number.isInteger(r.threshold)) {
+                                setMultisig({
+                                    threshold: r.threshold,
+                                    cosignerCount: r.cosignerCount,
+                                    scheme: r.scheme,
+                                });
+                            }
+                        })
+                        .catch(() => { /* no multisig configured */ });
+                }
+            }
+
+            if (typeof messaging.listPendingAirdropsForWallet === 'function') {
+                try {
+                    const records = await messaging.listPendingAirdropsForWallet({ walletId });
+                    if (!cancelled) {
+                        const resumable = (records || []).filter(
+                            (r) => r.stage === 'waiting-index' || r.stage === 'ready-to-airdrop',
+                        );
+                        setPendingAirdrops(resumable);
+                    }
+                } catch { /* non-fatal */ }
+            }
+
+            if (typeof messaging.getCoinpayObligationsForAddress === 'function') {
+                try {
+                    const byChain = await messaging.getAddressesByChain(walletId, accountId);
+                    const pairs = [];
+                    for (const [cId, addrs] of Object.entries(byChain || {})) {
+                        for (const a of addrs) pairs.push({ chainId: cId, address: a.address });
+                    }
+                    const results = await Promise.all(pairs.map((p) =>
+                        messaging.getCoinpayObligationsForAddress({
+                            chainId: p.chainId, address: p.address,
+                        })
+                            .then((resp) => ({ ...p, rows: extractObligationRows(resp) }))
+                            .catch(() => ({ ...p, rows: [] }))
+                    ));
+                    if (cancelled) return;
+                    const obligations = [];
+                    for (const r of results) {
+                        for (const row of r.rows) {
+                            if (!isPendingForPayer(row, r.address)) continue;
+                            obligations.push({
+                                chainId: r.chainId,
+                                address: r.address,
+                                orderMatchActionIndex: String(row.action_index ?? row.actionIndex),
+                                coinAmount: row.coin_amount,
+                                payeeAddress: row.payee_address || row.payeeAddress,
+                                expiration: row.expiration,
+                            });
+                        }
+                    }
+                    setPendingCoinpays(obligations);
+                } catch { /* non-fatal */ }
+            }
+        })();
+        return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeWalletId, activeAccountId, messaging]);
 
     const handleLock = useCallback(async () => {
         if (locking) return;
@@ -208,10 +288,51 @@ export function Home({ onLocked, onSend, onReceive, onCreateToken, onActions, on
         />
     );
 
+    // Coin families surfaced in the dataset, in canonical order.
+    // Drives both the network filter and the per-tab "no balances on
+    // this network" empty messages.
+    const coinFamilies = (() => {
+        const seen = new Set();
+        if (balances) {
+            for (const cid of Object.keys(balances)) {
+                const desc = chainRegistry.get(cid);
+                if (desc) seen.add(desc.coin);
+            }
+        }
+        const ordered = ['bitcoin', 'litecoin', 'dogecoin'].filter((c) => seen.has(c));
+        for (const c of seen) if (!ordered.includes(c)) ordered.push(c);
+        return ordered;
+    })();
+
+    const accountList = Array.isArray(accounts) ? [...accounts].sort((a, b) => a.index - b.index) : [];
+    const activeAccount = accountList.find((a) => a.id === activeAccountId) || null;
+    const walletList = Array.isArray(wallets) ? wallets : [];
+    const walletNonDefault = walletList.length > 1 && walletList[0] && activeWalletId !== walletList[0].id;
+    const accountNonDefault = accountList.length > 1
+        && accountList[0]
+        && activeAccountId
+        && activeAccountId !== accountList[0].id;
+
+    const settingsButton = (
+        <HeaderSettingsButton
+            activeWallet={activeWallet}
+            activeAccount={activeAccount}
+            walletNonDefault={walletNonDefault}
+            accountNonDefault={accountNonDefault}
+            onOpenWalletPicker={onOpenWalletPicker}
+            onOpenAccountPicker={onOpenAccountPicker}
+            chainRegistry={chainRegistry}
+            coinFamilies={coinFamilies}
+            networkFilter={networkFilter}
+            onNetworkFilterChange={setNetworkFilter}
+        />
+    );
+
     const headerInner = isFull ? (
         <div className={styles.headerFull}>
             {brandBlock}
             <div className={styles.headerRight}>
+                {settingsButton}
                 <Button
                     variant="ghost"
                     size="sm"
@@ -226,18 +347,38 @@ export function Home({ onLocked, onSend, onReceive, onCreateToken, onActions, on
     ) : (
         <div className={styles.headerPopup}>
             {brandBlock}
-            <button
-                type="button"
-                className={styles.menuBtn}
-                onClick={() => setMenuOpen(true)}
-                aria-label="Open menu"
-                aria-haspopup="dialog"
-                aria-expanded={menuOpen ? 'true' : 'false'}
-            >
-                <Icon.MenuIcon />
-            </button>
+            <div className={styles.headerRight}>
+                <HeaderNetworkButton
+                    chainRegistry={chainRegistry}
+                    coinFamilies={coinFamilies}
+                    networkFilter={networkFilter}
+                    onNetworkFilterChange={setNetworkFilter}
+                />
+                <button
+                    type="button"
+                    className={styles.menuBtn}
+                    onClick={() => setMenuOpen(true)}
+                    aria-label="Open menu"
+                    aria-haspopup="dialog"
+                    aria-expanded={menuOpen ? 'true' : 'false'}
+                >
+                    <Icon.MenuIcon />
+                </button>
+            </div>
         </div>
     );
+
+    if (settingsOpen) {
+        return (
+            <Settings
+                onBack={() => setSettingsOpen(false)}
+                activeWallet={activeWallet}
+                activeAccount={activeAccount}
+                onOpenWalletPicker={onOpenWalletPicker}
+                onOpenAccountPicker={onOpenAccountPicker}
+            />
+        );
+    }
 
     return (
         <Screen variant={variant} header={headerInner}>
@@ -301,13 +442,55 @@ export function Home({ onLocked, onSend, onReceive, onCreateToken, onActions, on
                 ) : null}
 
                 {balances ? (
-                    <UnifiedBalanceList
+                    <HomeTabs
                         chainRegistry={chainRegistry}
                         balances={balances}
+                        networkFilter={networkFilter}
                         multisig={multisig}
                         multisigChainId={chainRegistry.byCoin('bitcoin')[0]?.id}
+                        actions={(
+                            <div className={styles.quickActions} role="group" aria-label="Quick actions">
+                                <button
+                                    type="button"
+                                    className={styles.quickAction}
+                                    onClick={onSend}
+                                    disabled={!onSend}
+                                >
+                                    <span className={styles.quickActionIcon} aria-hidden="true"><Icon.SendIcon /></span>
+                                    <span>Send</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    className={styles.quickAction}
+                                    onClick={onReceive}
+                                    disabled={!onReceive}
+                                >
+                                    <span className={styles.quickActionIcon} aria-hidden="true"><Icon.ReceiveIcon /></span>
+                                    <span>Receive</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    className={styles.quickAction}
+                                    onClick={onSwap}
+                                    disabled={!onSwap}
+                                >
+                                    <span className={styles.quickActionIcon} aria-hidden="true"><Icon.SwapIcon /></span>
+                                    <span>Swap</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    className={styles.quickAction}
+                                    onClick={onBuy}
+                                    disabled={!onBuy}
+                                >
+                                    <span className={styles.quickActionIcon} aria-hidden="true"><Icon.DollarIcon /></span>
+                                    <span>Buy</span>
+                                </button>
+                            </div>
+                        )}
                     />
                 ) : null}
+
 
                 {balances && Object.keys(balances).length === 0 ? (
                     <p className={styles.hint}>
@@ -422,18 +605,18 @@ export function Home({ onLocked, onSend, onReceive, onCreateToken, onActions, on
                     onClose={() => setMenuOpen(false)}
                     onAlerts={() => setAlertsOpen(true)}
                     alertCount={alerts.length}
-                    onSend={onSend}
-                    onReceive={onReceive}
-                    onCreateToken={onCreateToken}
                     onMarkets={onMarkets}
+                    onTokens={onActions}
                     onMessaging={onMessaging}
-                    onHistory={onHistory}
+                    onCrossChain={onCrossChain}
+                    onContacts={onContacts}
                     onAddresses={onAddresses}
                     onContracts={onContracts}
                     onStaking={onStaking}
-                    extraActions={extraActions}
+                    onMultisig={onMultisig}
                     onLock={handleLock}
                     locking={locking}
+                    onSettings={() => setSettingsOpen(true)}
                 />
             ) : null}
             {alertsOpen ? (

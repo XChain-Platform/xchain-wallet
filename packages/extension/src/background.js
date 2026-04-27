@@ -13,7 +13,7 @@
 // (wallet-session state machine, approval popup wiring, event fan-out
 // to content scripts) without reworking the entry.
 
-import { registry as registryLib, sdk as sdkLib, storage as storageLib } from '@xchain-wallet/core';
+import { registry as registryLib, sdk as sdkLib, signers as signersLib, storage as storageLib } from '@xchain-wallet/core';
 import {
     ChromeSessionBackend,
     ChromeStorageBackend,
@@ -27,6 +27,21 @@ import {
     createDevMockSdk,
     resolveSdkFactory,
 } from './background/index.js';
+import {
+    applyLayoutMode,
+    attachLayoutModeListener,
+    readLayoutMode,
+} from './background/layoutMode.js';
+
+// Apply the user's saved layout mode (popup vs sidepanel) at worker
+// boot, then watch storage for live changes from the in-wallet
+// settings UI. The user's preference is honoured the next time they
+// click the toolbar icon — no extension reload needed.
+(async () => {
+    const mode = await readLayoutMode();
+    await applyLayoutMode(mode);
+})();
+attachLayoutModeListener();
 
 // --- Lazy wiring --------------------------------------------------------
 // The service worker starts with no master key — it's in ChromeSessionBackend
@@ -64,6 +79,12 @@ const approvalBroker = new ApprovalBroker();
 let host = null;
 let vault = null;
 let detachHost = null;
+// SignerPool persists across the unlocked session. Populated by the
+// pre-host `wallet.unlock` handler while the password is in scope, so
+// account.create / receive.getAddress (etc.) can derive without a
+// per-op password prompt. Locked + cleared by `tearDownHost` on
+// `wallet.lock` or any teardown path.
+let signerPool = new signersLib.SignerPool();
 
 async function ensureHost() {
     if (host) return host;
@@ -82,6 +103,7 @@ async function ensureHost() {
         vault,
         chainRegistry,
         sdkRegistry,
+        signerPool,
         approvals: approvalBroker,
     });
     detachHost = attachChromeRuntime(host);
@@ -102,6 +124,13 @@ function tearDownHost() {
         try { vault.close(); } catch (_err) { /* best-effort */ }
         vault = null;
     }
+    if (signerPool) {
+        try { signerPool.lockAll(); } catch (_err) { /* best-effort */ }
+    }
+    // Replace rather than null — sessionMeta passes the pool by
+    // reference at construction time; swapping in a fresh empty pool
+    // keeps that reference stable for the next unlock.
+    signerPool = new signersLib.SignerPool();
     host = null;
 }
 
@@ -113,6 +142,10 @@ function tearDownHost() {
 attachSessionMetaListener({
     chainRegistry,
     get sdkRegistry() { return sdkRegistry; },
+    // Function-form so dispatchPreHost grabs the *current* pool — it
+    // gets swapped on tearDownHost so the reference can change between
+    // unlock cycles. (See sessionMeta.js handling of `signerPool`.)
+    signerPool: () => signerPool,
     onUnlocked: () =>
         ensureHost().catch((err) => {
             console.error('[xchain] ensureHost after unlock failed:', err);

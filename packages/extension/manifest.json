@@ -1,8 +1,8 @@
 {
     "manifest_version": 3,
     "name": "XChain Wallet",
-    "version": "0.102.0",
-    "version_name": "0.102.0",
+    "version": "0.103.0",
+    "version_name": "0.103.0",
     "description": "Self-custodial multi-chain wallet for the XChain Platform. Supports Bitcoin, Dogecoin, and Litecoin at launch.",
     "homepage_url": "https://github.com/XChain-platform/xchain-wallet",
     "icons": {
@@ -20,6 +20,9 @@
             "48": "icons/icon-48.png",
             "128": "icons/icon-128.png"
         }
+    },
+    "side_panel": {
+        "default_path": "sidepanel.html"
     },
     "background": {
         "service_worker": "background.js",
@@ -39,6 +42,6 @@
             "matches": ["http://*/*", "https://*/*"]
         }
     ],
-    "permissions": ["storage"],
+    "permissions": ["storage", "sidePanel"],
     "host_permissions": []
 }

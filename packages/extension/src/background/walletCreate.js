@@ -11,7 +11,7 @@
 
 import { crypto as cryptoLib, flows, storage as storageLib } from '@xchain-wallet/core';
 
-const DEFAULT_ACTIVE_CHAIN_IDS = [
+export const DEFAULT_ACTIVE_CHAIN_IDS = [
     'bitcoin-mainnet',
     'dogecoin-mainnet',
     'litecoin-mainnet',

@@ -6,7 +6,7 @@ import {
     AddressText,
     CopyButton,
     MultisigBadge,
-} from '@xchain-wallet/core/ui';
+ Icon,} from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './History.module.css';
@@ -28,9 +28,10 @@ const chainRegistry = registryLib.defaultRegistry();
  *
  * @param {object} props
  * @param {string} props.walletId
+ * @param {string} [props.accountId]   active BIP44 account; when set, only that account's addresses are shown
  * @param {() => void} props.onBack
  */
-export function AddressList({ walletId, onBack }) {
+export function AddressList({ walletId, accountId, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
 
@@ -46,7 +47,7 @@ export function AddressList({ walletId, onBack }) {
 
     useEffect(() => {
         let cancelled = false;
-        messaging.getAddressesByChain(walletId)
+        messaging.getAddressesByChain(walletId, accountId)
             .then((byChain) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain || {});
@@ -61,7 +62,7 @@ export function AddressList({ walletId, onBack }) {
                 if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
             });
         return () => { cancelled = true; };
-    }, [walletId, messaging]);
+    }, [walletId, accountId, messaging]);
 
     useEffect(() => {
         let cancelled = false;
@@ -147,7 +148,7 @@ export function AddressList({ walletId, onBack }) {
                 className={styles.back}
                 aria-label="Back"
             >
-                ← Back
+                <Icon.BackIcon />
             </button>
             <span className={styles.title}>Addresses</span>
             <span className={styles.spacer} />
@@ -163,7 +164,6 @@ export function AddressList({ walletId, onBack }) {
             <>
                 <div role="alert" className={styles.error}>{loadError}</div>
                 <div className={styles.actions}>
-                    <Button variant="ghost" onClick={onBack}>Back</Button>
                 </div>
             </>,
         );

@@ -5,7 +5,7 @@ import {
     Input,
     ChainBadge,
     AddressText,
-} from '@xchain-wallet/core/ui';
+ Icon,} from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
@@ -248,7 +248,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                 className={styles.back}
                 aria-label="Back"
             >
-                ← Back
+                <Icon.BackIcon />
             </button>
             <span className={styles.title}>Cross-chain swap</span>
             <span className={styles.spacer} />
@@ -266,7 +266,6 @@ export function CrossChainSwapForm({ walletId, onBack }) {
             <>
                 <div role="alert" className={styles.error}>{loadError}</div>
                 <div className={styles.actions}>
-                    <Button variant="ghost" onClick={onBack}>Back</Button>
                 </div>
             </>,
         );
@@ -477,14 +476,6 @@ export function CrossChainSwapForm({ walletId, onBack }) {
             ) : null}
 
             <div className={styles.actions}>
-                <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={onBack}
-                    disabled={stage === 'submitting'}
-                >
-                    Back
-                </Button>
                 <Button
                     type="submit"
                     variant="primary"

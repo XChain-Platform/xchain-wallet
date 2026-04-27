@@ -1,4 +1,6 @@
 export { createWallet } from './createWallet.js';
+export { createAccount } from './createAccount.js';
+export { renameWallet } from './renameWallet.js';
 export {
     unlockWallet,
     unlockWalletRecord,

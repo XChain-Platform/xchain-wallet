@@ -42,3 +42,28 @@
        Screen use its 100vh default. */
     --xc-screen-h: 600px;
 }
+
+/* ───── Sidebar preview — Chrome side-panel approximation ─────
+   Matches the `small` wrapper's WIDTH exactly (375 px) so the wallet
+   content inside lays out identically in both modes. The only
+   differences are POSITION (right-docked vs centered) and HEIGHT
+   (full viewport vs fixed 600 px). In a real Chrome side panel,
+   Chrome owns these — width is user-resizable, height is full
+   browser height. */
+
+.sidebarPage {
+    min-height: 100vh;
+    background: linear-gradient(180deg, #0B0F17 0%, #1B2231 100%);
+    display: flex;
+    align-items: stretch;
+    justify-content: flex-end;
+}
+
+.sidebarFrame {
+    width: 375px;
+    align-self: stretch;
+    background: var(--xc-bg, #FFFFFF);
+    border-left: 1px solid var(--xc-border, #E4E7EB);
+    box-shadow: -16px 0 40px rgba(0, 0, 0, 0.35);
+    overflow: hidden;
+}

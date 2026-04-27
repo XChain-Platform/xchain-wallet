@@ -1,0 +1,103 @@
+.wrap {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-3);
+    width: 100%;
+}
+
+/* ───── Tab strip ───── */
+
+.tabs {
+    display: flex;
+    gap: var(--xc-space-1);
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-bottom: 1px solid var(--xc-border);
+    padding-bottom: 1px;          /* pull active underline below the rule */
+    margin-bottom: -1px;
+    scrollbar-width: none;
+}
+
+.tabs::-webkit-scrollbar { display: none; }
+
+.tab {
+    appearance: none;
+    background: transparent;
+    border: none;
+    padding: var(--xc-space-3) var(--xc-space-3);
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    color: var(--xc-text-muted);
+    cursor: pointer;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    border-bottom: 2px solid transparent;
+    transition: color var(--xc-transition), border-color var(--xc-transition);
+    flex: 0 0 auto;
+}
+
+.tab:hover {
+    color: var(--xc-text);
+}
+
+.tab:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: -2px;
+}
+
+.tabActive {
+    color: var(--xc-accent-primary);
+    border-bottom-color: var(--xc-accent-primary);
+}
+
+.tabLabel {
+    font-weight: 700;
+}
+
+.tabCount {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: var(--xc-bg-muted);
+    color: var(--xc-text-muted);
+    line-height: 1.4;
+}
+
+.tabActive .tabCount {
+    background: var(--xc-accent-primary);
+    color: #FFFFFF;
+}
+
+/* ───── Tab panel ───── */
+
+.panel {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.placeholder {
+    background: var(--xc-surface);
+    border: 1px dashed var(--xc-border-strong);
+    border-radius: var(--xc-radius-md);
+    padding: var(--xc-space-5) var(--xc-space-4);
+    text-align: center;
+}
+
+.placeholderTitle {
+    font-size: var(--xc-text-md);
+    font-weight: 700;
+    color: var(--xc-text);
+    margin-bottom: var(--xc-space-2);
+}
+
+.placeholderBody {
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text-muted);
+    line-height: 1.5;
+    margin: 0;
+    text-align: justify;
+}

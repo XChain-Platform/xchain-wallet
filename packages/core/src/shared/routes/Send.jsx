@@ -5,7 +5,7 @@ import {
     Input,
     ChainBadge,
     AddressText,
- ChainPicker, } from '@xchain-wallet/core/ui';
+ ChainPicker,  Icon,} from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -224,7 +224,7 @@ export function Send({ walletId, onBack }) {
                 className={styles.back}
                 aria-label="Back to home"
             >
-                ← Back
+                <Icon.BackIcon />
             </button>
             <span className={styles.title}>
                 {stage === 'review' || stage === 'submitting' ? 'Review & Send' : 'Send'}
@@ -328,14 +328,6 @@ export function Send({ walletId, onBack }) {
                 ) : null}
                 <div className={styles.actions}>
                     <Button
-                        type="button"
-                        variant="ghost"
-                        onClick={() => setStage('form')}
-                        disabled={stage === 'submitting'}
-                    >
-                        Back
-                    </Button>
-                    <Button
                         type="submit"
                         variant="primary"
                         loading={stage === 'submitting'}
@@ -407,7 +399,6 @@ export function Send({ walletId, onBack }) {
                 <div role="alert" className={styles.error}>{formError}</div>
             ) : null}
             <div className={styles.actions}>
-                <Button type="button" variant="ghost" onClick={onBack}>Cancel</Button>
                 <Button
                     type="submit"
                     variant="primary"

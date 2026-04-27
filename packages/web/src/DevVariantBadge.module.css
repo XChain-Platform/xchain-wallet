@@ -1,7 +1,7 @@
 .badge {
     position: fixed;
     bottom: 12px;
-    right: 12px;
+    left: 12px;
     z-index: 9999;
     display: inline-flex;
     align-items: center;
@@ -37,6 +37,11 @@
 
 .value.full {
     background: #1E90C7;
+    color: #FFFFFF;
+}
+
+.value.sidebar {
+    background: #10B981;
     color: #FFFFFF;
 }
 

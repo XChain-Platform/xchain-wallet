@@ -87,6 +87,7 @@ export async function addressHistory({ sdkRegistry, chainId, address, opts }) {
 export async function walletBalances({
     vault,
     walletId,
+    accountId,
     chainRegistry,
     sdkRegistry,
     chainId,
@@ -99,9 +100,22 @@ export async function walletBalances({
     if (!chainRegistry) throw new Error('walletBalances: chainRegistry is required');
     if (!sdkRegistry) throw new Error('walletBalances: sdkRegistry is required');
 
-    // 1. Resolve which Account ids belong to this wallet.
+    // 1. Resolve which Account ids belong to this wallet. If `accountId`
+    //    is supplied, restrict to that one (and validate that it really
+    //    belongs to the wallet — silently dropping a mismatch would
+    //    return wallet-wide totals when the caller asked for one
+    //    account).
     const accounts = await vault.accounts.findBy('walletId', walletId);
-    const accountIds = new Set(accounts.map((a) => a.id));
+    let scopedAccountIds;
+    if (typeof accountId === 'string' && accountId.length > 0) {
+        if (!accounts.some((a) => a.id === accountId)) {
+            throw new Error(`walletBalances: account "${accountId}" does not belong to wallet "${walletId}"`);
+        }
+        scopedAccountIds = new Set([accountId]);
+    } else {
+        scopedAccountIds = new Set(accounts.map((a) => a.id));
+    }
+    const accountIds = scopedAccountIds;
     if (accountIds.size === 0) {
         // No accounts for this walletId — nothing to fetch.
         return {};

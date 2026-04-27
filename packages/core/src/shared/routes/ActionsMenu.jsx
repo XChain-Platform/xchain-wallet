@@ -1,4 +1,4 @@
-import { Screen, Button } from '@xchain-wallet/core/ui';
+import { Screen, Button , Icon} from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './ActionsMenu.module.css';
 
@@ -33,7 +33,7 @@ export function ActionsMenu({ entries, onBack }) {
                 className={styles.back}
                 aria-label="Back to home"
             >
-                ← Back
+                <Icon.BackIcon />
             </button>
             <span className={styles.title}>Actions</span>
             <span className={styles.spacer} />
@@ -59,7 +59,6 @@ export function ActionsMenu({ entries, onBack }) {
                 ))}
             </div>
             <div className={styles.actions}>
-                <Button variant="ghost" onClick={onBack}>Back</Button>
             </div>
         </Screen>
     );

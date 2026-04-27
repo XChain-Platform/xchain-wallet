@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Screen, Button, Input, AnimatedQrFrames, MultisigBadge, QrScanner } from '@xchain-wallet/core/ui';
+import { Screen, Button, Input, AnimatedQrFrames, MultisigBadge, QrScanner , Icon} from '@xchain-wallet/core/ui';
 import { schemas, uri as uriLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './IssueTokenForm.module.css';
@@ -350,7 +350,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
                 className={styles.back}
                 aria-label="Back"
             >
-                ← Back
+                <Icon.BackIcon />
             </button>
             <span className={styles.title}>
                 {activeId ? 'Multisig signing' : 'Multisig signing sessions'}
@@ -370,7 +370,6 @@ export function MultisigSigningSession({ walletId, onBack }) {
             <>
                 <div role="alert" className={styles.error}>{error}</div>
                 <div className={styles.actions}>
-                    <Button variant="ghost" onClick={onBack}>Back</Button>
                 </div>
             </>,
         );
@@ -390,7 +389,6 @@ export function MultisigSigningSession({ walletId, onBack }) {
                         wires the PSBT-QR transport that drives contributions.
                     </p>
                     <div className={styles.actions}>
-                        <Button variant="ghost" onClick={onBack}>Back</Button>
                     </div>
                 </>,
             );
@@ -429,7 +427,6 @@ export function MultisigSigningSession({ walletId, onBack }) {
                     })}
                 </ul>
                 <div className={styles.actions}>
-                    <Button variant="ghost" onClick={onBack}>Back</Button>
                 </div>
             </>,
         );

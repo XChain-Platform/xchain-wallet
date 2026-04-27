@@ -39,19 +39,39 @@ export function listWallets() {
     return /** @type {any} */ (sendMessage('wallet.list'));
 }
 
-/** @param {string} walletId */
-export function getWalletBalances(walletId) {
-    return /** @type {any} */ (sendMessage('balances.wallet', { walletId }));
+/** @param {object} opts */
+export function addImportedWallet(opts) {
+    return /** @type {any} */ (sendMessage('wallet.add.import', opts));
+}
+
+/** @param {object} opts */
+export function renameWallet(opts) {
+    return /** @type {any} */ (sendMessage('wallet.rename', opts));
 }
 
 /** @param {string} walletId */
-export function getAddressesByChain(walletId) {
-    return /** @type {any} */ (sendMessage('addresses.byChain', { walletId }));
+export function listAccounts(walletId) {
+    return /** @type {any} */ (sendMessage('account.list', { walletId }));
 }
 
-/** @param {string} walletId @param {string} chainId */
-export function getNewestAddress(walletId, chainId) {
-    return /** @type {any} */ (sendMessage('addresses.newest', { walletId, chainId }));
+/** @param {object} opts */
+export function createAccount(opts) {
+    return /** @type {any} */ (sendMessage('account.create', opts));
+}
+
+/** @param {string} walletId @param {string} [accountId] */
+export function getWalletBalances(walletId, accountId) {
+    return /** @type {any} */ (sendMessage('balances.wallet', { walletId, accountId }));
+}
+
+/** @param {string} walletId @param {string} [accountId] */
+export function getAddressesByChain(walletId, accountId) {
+    return /** @type {any} */ (sendMessage('addresses.byChain', { walletId, accountId }));
+}
+
+/** @param {string} walletId @param {string} chainId @param {string} [accountId] */
+export function getNewestAddress(walletId, chainId, accountId) {
+    return /** @type {any} */ (sendMessage('addresses.newest', { walletId, chainId, accountId }));
 }
 
 /** @param {object} opts */

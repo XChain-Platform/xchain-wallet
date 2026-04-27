@@ -3,7 +3,7 @@ import {
     Screen,
     Button,
     ChainBadge,
-} from '@xchain-wallet/core/ui';
+ Icon,} from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { MarketChart } from '../components/MarketChart.jsx';
@@ -76,7 +76,7 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack }) {
                 className={styles.back}
                 aria-label="Back"
             >
-                ← Back
+                <Icon.BackIcon />
             </button>
             <span className={styles.title}>{tick1}/{tick2}</span>
             <span className={styles.spacer} />
@@ -189,7 +189,6 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack }) {
             />
 
             <div className={styles.actions}>
-                <Button variant="ghost" onClick={onBack}>Back</Button>
             </div>
         </>,
     );

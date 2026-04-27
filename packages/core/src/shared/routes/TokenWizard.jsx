@@ -5,7 +5,7 @@ import {
     Input,
     ChainBadge,
     AddressText,
- ChainPicker, } from '@xchain-wallet/core/ui';
+ ChainPicker,  Icon,} from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -243,7 +243,7 @@ export function TokenWizard({ walletId, onBack }) {
                 className={styles.back}
                 aria-label="Back to home"
             >
-                ← Back
+                <Icon.BackIcon />
             </button>
             <span className={styles.title}>Create a token</span>
             <span className={styles.spacer} />
@@ -363,14 +363,6 @@ export function TokenWizard({ walletId, onBack }) {
                 error={submitError || undefined}
             />
             <div className={styles.actions}>
-                <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={() => setStage('details')}
-                    disabled={stage === 'sign'}
-                >
-                    Back
-                </Button>
                 <Button
                     type="submit"
                     variant="primary"
@@ -609,7 +601,6 @@ function renderChainStage({
             )}
 
             <div className={styles.actions}>
-                <Button type="button" variant="ghost" onClick={onBack}>Back</Button>
                 <Button
                     type="button"
                     variant="primary"
@@ -783,7 +774,6 @@ function renderDetailsStage({
                 <div role="alert" className={styles.error}>{formError}</div>
             ) : null}
             <div className={styles.actions}>
-                <Button type="button" variant="ghost" onClick={onBack}>Back</Button>
                 <Button type="submit" variant="primary">Preview</Button>
             </div>
         </form>

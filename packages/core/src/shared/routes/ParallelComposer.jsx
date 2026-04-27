@@ -5,7 +5,7 @@ import {
     Input,
     ChainBadge,
     AddressText,
-} from '@xchain-wallet/core/ui';
+ Icon,} from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
@@ -244,7 +244,7 @@ export function ParallelComposer({ walletId, onBack, initialRows }) {
                 className={styles.back}
                 aria-label="Back"
             >
-                ← Back
+                <Icon.BackIcon />
             </button>
             <span className={styles.title}>Parallel cross-chain actions</span>
             <span className={styles.spacer} />
@@ -262,7 +262,6 @@ export function ParallelComposer({ walletId, onBack, initialRows }) {
             <>
                 <div role="alert" className={styles.error}>{loadError}</div>
                 <div className={styles.actions}>
-                    <Button variant="ghost" onClick={onBack}>Back</Button>
                 </div>
             </>,
         );
@@ -446,7 +445,6 @@ export function ParallelComposer({ walletId, onBack, initialRows }) {
                 <p role="alert" className={styles.error}>{composeError}</p>
             ) : null}
             <div className={styles.actions}>
-                <Button type="button" variant="ghost" onClick={onBack}>Back</Button>
                 <Button
                     type="button"
                     variant="primary"

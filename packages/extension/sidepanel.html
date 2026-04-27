@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>XChain Wallet</title>
+</head>
+<body>
+    <!-- Side-panel mount. Reuses the popup's React tree verbatim — the
+         only difference is the host viewport (Chrome's sidebar can be
+         wider + taller than the popup). The wallet's `small` layout
+         variant fits the sidebar dimensions cleanly. -->
+    <div id="xchain-popup-root"></div>
+    <script type="module" src="./src/popup/main.jsx"></script>
+</body>
+</html>

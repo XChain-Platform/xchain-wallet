@@ -4,7 +4,7 @@ import {
     Button,
     ChainBadge,
     AddressText,
-} from '@xchain-wallet/core/ui';
+ Icon,} from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './ActionsMenu.module.css';
@@ -133,7 +133,7 @@ export function DispensersList({ walletId, onOpenDispenser, onBack }) {
                 className={styles.back}
                 aria-label="Back to home"
             >
-                ← Back
+                <Icon.BackIcon />
             </button>
             <span className={styles.title}>My dispensers</span>
             <span className={styles.spacer} />
@@ -146,7 +146,6 @@ export function DispensersList({ walletId, onOpenDispenser, onBack }) {
                 {children}
             </div>
             <div className={styles.actions}>
-                <Button variant="ghost" onClick={onBack}>Back</Button>
             </div>
         </Screen>
     );

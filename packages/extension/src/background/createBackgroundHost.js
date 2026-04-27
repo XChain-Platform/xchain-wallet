@@ -16,9 +16,12 @@ import { flows } from '@xchain-wallet/core';
 import { MessageHost } from './MessageHost.js';
 import { registerBridgeHandlers } from '../bridge/handlers.js';
 import * as signerBridge from './signerBridge.js';
+import { DEFAULT_ACTIVE_CHAIN_IDS } from './walletCreate.js';
 
 const {
     createWallet,
+    createAccount,
+    renameWallet,
     importMnemonic,
     unlockWallet,
     receiveAddress,
@@ -134,11 +137,20 @@ const {
  */
 async function addressesByChain(req, { vault, chainRegistry }) {
     const walletId = /** @type {any} */ (req)?.walletId;
+    const accountId = /** @type {any} */ (req)?.accountId;
     if (typeof walletId !== 'string' || walletId.length === 0) {
         throw new Error('addresses.byChain: walletId is required');
     }
     const accounts = await vault.accounts.findBy('walletId', walletId);
-    const accountIds = new Set(accounts.map((a) => a.id));
+    let accountIds;
+    if (typeof accountId === 'string' && accountId.length > 0) {
+        if (!accounts.some((a) => a.id === accountId)) {
+            throw new Error(`addresses.byChain: account "${accountId}" does not belong to wallet "${walletId}"`);
+        }
+        accountIds = new Set([accountId]);
+    } else {
+        accountIds = new Set(accounts.map((a) => a.id));
+    }
     if (accountIds.size === 0) return {};
     const all = await vault.addresses.list();
     /** @type {Record<string, any[]>} */
@@ -198,6 +210,7 @@ async function loadAddressForHwSigning(vault, req) {
  */
 async function newestAddress(req, { vault, chainRegistry }) {
     const walletId = /** @type {any} */ (req)?.walletId;
+    const accountId = /** @type {any} */ (req)?.accountId;
     const chainId = /** @type {any} */ (req)?.chainId;
     const addressType = /** @type {any} */ (req)?.addressType;
     if (typeof walletId !== 'string' || walletId.length === 0) {
@@ -213,7 +226,15 @@ async function newestAddress(req, { vault, chainRegistry }) {
     const type = addressType ?? descriptor.defaultAddressType;
 
     const accounts = await vault.accounts.findBy('walletId', walletId);
-    const accountIds = new Set(accounts.map((a) => a.id));
+    let accountIds;
+    if (typeof accountId === 'string' && accountId.length > 0) {
+        if (!accounts.some((a) => a.id === accountId)) {
+            throw new Error(`addresses.newest: account "${accountId}" does not belong to wallet "${walletId}"`);
+        }
+        accountIds = new Set([accountId]);
+    } else {
+        accountIds = new Set(accounts.map((a) => a.id));
+    }
     if (accountIds.size === 0) return null;
 
     const all = await vault.addresses.list();
@@ -295,6 +316,81 @@ export function createBackgroundHost(deps) {
             account: r.account,
             addresses: r.addresses,
         };
+    });
+
+    // Add a wallet to an already-open vault. Distinct from `wallet.import`
+    // (which the pre-host listener intercepts and rejects when a vault
+    // already exists). Same flow underneath; the difference is which
+    // path is reachable in which session state.
+    host.register('wallet.add.import', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        const activeChainIds = Array.isArray(req?.activeChainIds) && req.activeChainIds.length > 0
+            ? req.activeChainIds
+            : DEFAULT_ACTIVE_CHAIN_IDS;
+        const r = await importMnemonic({
+            ...req,
+            activeChainIds,
+            vault,
+            chainRegistry,
+            sdkRegistry,
+        });
+        // Stash the new wallet's signer in the pool while the password
+        // is in scope — keeps "no password on accounts" working for
+        // the wallet that was just added.
+        if (signerPool && req?.password) {
+            try {
+                await signerPool.unlockOne({
+                    wallet: r.wallet,
+                    password: req.password,
+                    bip39Passphrase: req.bip39Passphrase,
+                    chainRegistry,
+                    sdkRegistry,
+                });
+            } catch { /* best-effort — fallback is per-op password prompt */ }
+        }
+        return {
+            format: r.format,
+            wallet: toSafeWallet(r.wallet),
+            account: r.account,
+            addresses: r.addresses,
+        };
+    });
+
+    // Rename a wallet — updates the Wallet record's `name` field.
+    host.register('wallet.rename', async (req, { vault }) => {
+        const updated = await renameWallet({ ...req, vault });
+        return { wallet: toSafeWallet(updated) };
+    });
+
+    // List BIP44 accounts under a wallet, sorted ascending by index.
+    host.register('account.list', async (req, { vault }) => {
+        const walletId = req?.walletId;
+        if (typeof walletId !== 'string' || !walletId) return [];
+        const accounts = await vault.accounts.findBy('walletId', walletId);
+        return [...accounts].sort((a, b) => a.index - b.index);
+    });
+
+    // Create the next BIP44 account under a wallet (max(index)+1) +
+    // first address per active chain. When the host has a SignerPool
+    // (populated at unlock time), no password is needed — the
+    // pre-unlocked signer is reused. Falls back to a password-based
+    // unlock for shells/sessions that don't pre-populate the pool.
+    host.register('account.create', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        const activeChainIds = Array.isArray(req?.activeChainIds) && req.activeChainIds.length > 0
+            ? req.activeChainIds
+            : DEFAULT_ACTIVE_CHAIN_IDS;
+        const walletId = req?.walletId;
+        const cachedSigner = signerPool && typeof walletId === 'string'
+            ? signerPool.get(walletId)
+            : null;
+        const r = await createAccount({
+            ...req,
+            signer: cachedSigner || undefined,
+            activeChainIds,
+            vault,
+            chainRegistry,
+            sdkRegistry,
+        });
+        return { account: r.account, addresses: r.addresses };
     });
 
     host.register('wallet.checkPassword', async (req, { vault, chainRegistry, sdkRegistry }) => {

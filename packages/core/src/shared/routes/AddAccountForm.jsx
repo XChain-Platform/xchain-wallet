@@ -1,0 +1,125 @@
+import { useEffect, useRef, useState } from 'react';
+import { Screen, Button, Input, Icon } from '@xchain-wallet/core/ui';
+import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import styles from './CreateWallet.module.css';
+
+/**
+ * Add a new BIP44 account under the active wallet (§11.3.2). Derives
+ * the next free `index` for the wallet and persists an Account record
+ * + a first address per active chain.
+ *
+ * No password prompt: account creation reuses the SignerPool entry
+ * the host populated at wallet-unlock time. If the host can't find a
+ * pre-unlocked signer for the wallet (an extension/desktop shell that
+ * hasn't wired SignerPool yet), the call surfaces an error and the
+ * user has to lock + unlock to refresh the pool.
+ *
+ * @param {object} props
+ * @param {string} props.walletId
+ * @param {() => void} props.onBack
+ * @param {() => void} props.onCreated   refresh callers' account list and return to home
+ */
+export function AddAccountForm({ walletId, onBack, onCreated }) {
+    const { messaging, shell } = useMessaging();
+    const variant = screenVariantFor(shell);
+    const isFull = variant === 'full';
+
+    const [name, setName] = useState('Account');
+    const [error, setError] = useState(/** @type {string | null} */ (null));
+    const [busy, setBusy] = useState(false);
+    const nameRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const userEditedRef = useRef(false);
+
+    useEffect(() => {
+        setTimeout(() => nameRef.current?.focus(), 0);
+    }, []);
+
+    // Default the name to "Account N+1" once we know the current count.
+    // If the user types something before the fetch returns, leave their
+    // edit alone.
+    useEffect(() => {
+        let cancelled = false;
+        if (typeof messaging.listAccounts !== 'function') return undefined;
+        messaging.listAccounts(walletId)
+            .then((list) => {
+                if (cancelled || userEditedRef.current) return;
+                const next = (Array.isArray(list) ? list.length : 0) + 1;
+                setName(`Account ${next}`);
+            })
+            .catch(() => { /* keep default name */ });
+        return () => { cancelled = true; };
+    }, [walletId, messaging]);
+
+    async function handleSubmit(event) {
+        event.preventDefault();
+        if (busy) return;
+        if (name.trim().length === 0) {
+            setError('Account name is required.');
+            return;
+        }
+        if (typeof messaging.createAccount !== 'function') {
+            setError('messaging.createAccount is not available in this shell.');
+            return;
+        }
+        setError(null);
+        setBusy(true);
+        try {
+            await messaging.createAccount({
+                walletId,
+                name: name.trim(),
+            });
+            onCreated();
+        } catch (err) {
+            setError(err?.message || 'Failed to add account.');
+            setBusy(false);
+        }
+    }
+
+    const headClass = isFull ? styles.headFull : styles.headPopup;
+    const titleClass = isFull ? styles.titleFull : styles.titlePopup;
+    const subtitleClass = isFull ? styles.subtitleFull : styles.subtitlePopup;
+    const actionsClass = isFull ? styles.actionsFull : styles.actionsPopup;
+
+    const formBody = (
+        <form onSubmit={handleSubmit} noValidate>
+            <header className={headClass}>
+                <h1 className={titleClass}>
+                    {isFull ? 'Add a new account' : 'Add account'}
+                </h1>
+                <p className={subtitleClass}>
+                    A new set of derived addresses under the same recovery phrase.
+                </p>
+            </header>
+            <Input
+                ref={nameRef}
+                label="Account name"
+                value={name}
+                onChange={(e) => {
+                    userEditedRef.current = true;
+                    setName(e.target.value);
+                    if (error) setError(null);
+                }}
+                autoComplete="off"
+                error={error || undefined}
+            />
+            <div className={actionsClass}>
+                <Button
+                    type="submit"
+                    variant="primary"
+                    loading={busy}
+                    disabled={busy}
+                    size={isFull ? undefined : 'sm'}
+                    icon={<Icon.PlusIcon />}
+                >
+                    Add account
+                </Button>
+            </div>
+        </form>
+    );
+
+    return (
+        <Screen variant={variant}>
+            {isFull ? <div className={styles.card}>{formBody}</div> : formBody}
+        </Screen>
+    );
+}

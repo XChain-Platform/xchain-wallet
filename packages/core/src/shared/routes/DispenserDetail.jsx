@@ -5,7 +5,7 @@ import {
     Input,
     ChainBadge,
     AddressText,
-} from '@xchain-wallet/core/ui';
+ Icon,} from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -340,7 +340,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 className={styles.back}
                 aria-label="Back"
             >
-                ← Back
+                <Icon.BackIcon />
             </button>
             <span className={styles.title}>
                 {cancelStage === 'confirm' || cancelStage === 'submitting'
@@ -454,14 +454,6 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 ) : null}
                 <div className={styles.actions}>
                     <Button
-                        type="button"
-                        variant="ghost"
-                        onClick={() => setBuyStage('idle')}
-                        disabled={buyStage === 'submitting'}
-                    >
-                        Back
-                    </Button>
-                    <Button
                         type="submit"
                         variant="primary"
                         loading={buyStage === 'submitting'}
@@ -518,14 +510,6 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     <div role="alert" className={styles.error}>{cancelError}</div>
                 ) : null}
                 <div className={styles.actions}>
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        onClick={() => setCancelStage('idle')}
-                        disabled={cancelStage === 'submitting'}
-                    >
-                        Back
-                    </Button>
                     <Button
                         type="submit"
                         variant="danger"
@@ -704,7 +688,6 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             ) : null}
 
             <div className={styles.actions}>
-                <Button variant="ghost" onClick={onBack}>Back</Button>
                 {ownerAddress ? (
                     <Button
                         variant="danger"

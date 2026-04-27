@@ -5,7 +5,7 @@ import {
     Input,
     AddressText,
     ChainBadge,
-} from '@xchain-wallet/core/ui';
+ Icon,} from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
 } from '@xchain-wallet/core';
@@ -137,7 +137,7 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
                 className={styles.back}
                 aria-label="Back"
             >
-                ← Back
+                <Icon.BackIcon />
             </button>
             <span className={styles.title}>Show private key</span>
             <span className={styles.spacer} />
@@ -219,7 +219,6 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
                     )}
                 </ul>
                 <div className={styles.actions}>
-                    <Button variant="ghost" onClick={onBack}>Cancel</Button>
                     <Button variant="primary" onClick={() => setStage('password')}>
                         I understand — continue
                     </Button>
@@ -256,14 +255,6 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
                     error={submitError || undefined}
                 />
                 <div className={styles.actions}>
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        onClick={() => setStage('warning')}
-                        disabled={stage === 'submitting'}
-                    >
-                        Back
-                    </Button>
                     <Button
                         type="submit"
                         variant="primary"

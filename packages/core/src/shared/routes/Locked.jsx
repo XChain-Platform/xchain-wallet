@@ -53,14 +53,9 @@ export function Locked({ onUnlocked }) {
         <div className={isFull ? styles.heroFull : styles.heroPopup}>
             <img
                 src={branding.logoUrl()}
-                alt=""
-                aria-hidden="true"
+                alt={branding.PRODUCT_NAME}
                 className={isFull ? styles.logoFull : styles.logoPopup}
             />
-            <h1 className={isFull ? styles.nameFull : styles.namePopup}>
-                {branding.PRODUCT_NAME}
-            </h1>
-            <p className={styles.hint}>Wallet locked.</p>
         </div>
     );
 
@@ -86,7 +81,7 @@ export function Locked({ onUnlocked }) {
                 loading={busy}
                 disabled={password.length === 0}
             >
-                Unlock
+                Unlock Wallet
             </Button>
         </form>
     );

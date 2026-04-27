@@ -31,7 +31,8 @@ export class NoMatchingAccountError extends Error {
  * @property {import('../registry/index.js').ChainRegistry} chainRegistry
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
  * @property {string} chainId
- * @property {number} [accountIndex]            default 0
+ * @property {string} [accountId]               preferred — pick the Account by id
+ * @property {number} [accountIndex]            fallback — pick by BIP44 index (default 0). Ignored when `accountId` is supplied.
  * @property {string} [addressType]             defaults to descriptor.defaultAddressType
  * @property {string} [label]                   defaults to "Address #N+1"
  */
@@ -48,6 +49,7 @@ export async function receiveAddress({
     chainRegistry,
     sdkRegistry,
     chainId,
+    accountId,
     accountIndex = 0,
     addressType,
     label,
@@ -76,10 +78,20 @@ export async function receiveAddress({
         );
     }
 
-    // Find the matching Account by (walletId, index).
+    // Find the matching Account. Prefer `accountId` when supplied; fall
+    // back to (walletId, index) lookup so legacy callers still work.
     const accounts = await vault.accounts.findBy('walletId', walletId);
-    const account = accounts.find((a) => a.index === accountIndex);
-    if (!account) throw new NoMatchingAccountError(walletId, accountIndex);
+    let account;
+    let resolvedAccountIndex;
+    if (typeof accountId === 'string' && accountId.length > 0) {
+        account = accounts.find((a) => a.id === accountId);
+        if (!account) throw new NoMatchingAccountError(walletId, accountId);
+        resolvedAccountIndex = account.index;
+    } else {
+        account = accounts.find((a) => a.index === accountIndex);
+        if (!account) throw new NoMatchingAccountError(walletId, accountIndex);
+        resolvedAccountIndex = accountIndex;
+    }
 
     // Find the highest external (change=0) index for this
     // (account, chain, network, addressType) combination. -1 means "no
@@ -114,7 +126,7 @@ export async function receiveAddress({
     try {
         const [derived] = await signer.getAddresses({
             chainId,
-            accountIndex,
+            accountIndex: resolvedAccountIndex,
             change: 0,
             startIndex: nextIndex,
             count: 1,

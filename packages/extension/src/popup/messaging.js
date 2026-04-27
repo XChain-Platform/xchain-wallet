@@ -79,23 +79,74 @@ export function listWallets() {
 }
 
 /**
+ * Add a wallet to the already-open vault (unlocked-state add). Distinct
+ * from the pre-host `wallet.import` (which only runs on a fresh install
+ * via `assertFreshVault`).
+ *
+ * @param {object} opts
+ * @param {string} opts.password               encrypts the new wallet's seed
+ * @param {string} opts.mnemonic
+ * @param {string} [opts.name]
+ * @param {string} [opts.bip39Passphrase]
+ */
+export function addImportedWallet(opts) {
+    return /** @type {any} */ (sendMessage('wallet.add.import', opts));
+}
+
+/**
+ * Rename a wallet.
+ * @param {object} opts
+ * @param {string} opts.walletId
+ * @param {string} opts.name
+ */
+export function renameWallet(opts) {
+    return /** @type {any} */ (sendMessage('wallet.rename', opts));
+}
+
+/**
+ * List BIP44 accounts under a wallet, sorted by index.
+ *
+ * @param {string} walletId
+ * @returns {Promise<Array<{ id: string, walletId: string, name: string, index: number, createdAt: string }>>}
+ */
+export function listAccounts(walletId) {
+    return /** @type {any} */ (sendMessage('account.list', { walletId }));
+}
+
+/**
+ * Create the next BIP44 account under a wallet (max(index)+1). Persists
+ * an Account record + a first address per active chain.
+ *
+ * @param {object} opts
+ * @param {string} opts.walletId
+ * @param {string} opts.password
+ * @param {string} [opts.bip39Passphrase]
+ * @param {string} [opts.name]
+ */
+export function createAccount(opts) {
+    return /** @type {any} */ (sendMessage('account.create', opts));
+}
+
+/**
  * Aggregate balances for a wallet, grouped by chainId. Per-address
  * entries carry `balances: null` + a `error` string when the SDK
  * read fails — the Home screen renders those as retry rows.
  *
  * @param {string} walletId
+ * @param {string} [accountId]   when supplied, restrict to a single BIP44 account; otherwise aggregate across all accounts under the wallet
  * @returns {Promise<Record<string, Array<{ address: string, addressType: string, label: string, balances: unknown | null, error: string | null }>>>}
  */
-export function getWalletBalances(walletId) {
-    return /** @type {any} */ (sendMessage('balances.wallet', { walletId }));
+export function getWalletBalances(walletId, accountId) {
+    return /** @type {any} */ (sendMessage('balances.wallet', { walletId, accountId }));
 }
 
 /**
  * @param {string} walletId
+ * @param {string} [accountId]   when supplied, restrict to a single BIP44 account
  * @returns {Promise<Record<string, Array<{ address: string, label: string, addressType: string, derivationPath: string | null }>>>}
  */
-export function getAddressesByChain(walletId) {
-    return /** @type {any} */ (sendMessage('addresses.byChain', { walletId }));
+export function getAddressesByChain(walletId, accountId) {
+    return /** @type {any} */ (sendMessage('addresses.byChain', { walletId, accountId }));
 }
 
 /**
@@ -104,11 +155,12 @@ export function getAddressesByChain(walletId) {
  *
  * @param {string} walletId
  * @param {string} chainId
+ * @param {string} [accountId]   when supplied, restrict to a single BIP44 account
  * @returns {Promise<null | { address: string, label: string, addressType: string, derivationPath: string | null }>}
  */
-export function getNewestAddress(walletId, chainId) {
+export function getNewestAddress(walletId, chainId, accountId) {
     return /** @type {any} */ (
-        sendMessage('addresses.newest', { walletId, chainId })
+        sendMessage('addresses.newest', { walletId, chainId, accountId })
     );
 }
 

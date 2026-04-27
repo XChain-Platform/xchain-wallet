@@ -40,6 +40,9 @@ export class NoVaultError extends Error {
  * @property {import('../storage/ChromeStorageBackend.js').ChromeStorageBackend} storageBackend
  * @property {import('../storage/ChromeSessionBackend.js').ChromeSessionBackend} sessionBackend
  * @property {import('../storage/ChromeMetaBackend.js').ChromeMetaBackend} metaBackend
+ * @property {import('@xchain-wallet/core').signers.SignerPool} [signerPool]   when supplied, every Wallet record's signer is unlocked into the pool while the password is in scope; lets account.create / receive.getAddress (etc.) skip the per-op password prompt
+ * @property {import('@xchain-wallet/core').registry.ChainRegistry} [chainRegistry]   required iff `signerPool` is supplied
+ * @property {import('@xchain-wallet/core').sdk.SDKRegistry} [sdkRegistry]            required iff `signerPool` is supplied
  * @property {() => Promise<void> | void} [onUnlocked]
  */
 
@@ -68,6 +71,24 @@ export async function handleWalletUnlock(request, deps) {
         });
         try {
             await vault.open();
+
+            // Populate the SignerPool while the vault is open AND the
+            // password is in scope. Pool entries outlive this block;
+            // they live in background memory until `wallet.lock`.
+            if (deps.signerPool && deps.chainRegistry && deps.sdkRegistry) {
+                try {
+                    await deps.signerPool.populate({
+                        vault,
+                        password,
+                        chainRegistry: deps.chainRegistry,
+                        sdkRegistry: deps.sdkRegistry,
+                    });
+                } catch {
+                    // Best-effort: a pool populate failure shouldn't
+                    // block unlock. The per-op password prompt remains
+                    // as a fallback for any wallet not in the pool.
+                }
+            }
         } catch (err) {
             if (isAeadAuthFailure(err)) {
                 throw new InvalidPasswordError();

@@ -7,6 +7,7 @@ export {
 } from './Signer.js';
 
 export { SoftwareSigner } from './SoftwareSigner.js';
+export { SignerPool } from './SignerPool.js';
 export {
     TrezorSigner,
     deviceIdentifierFromFeatures,

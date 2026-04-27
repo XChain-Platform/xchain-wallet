@@ -3,7 +3,7 @@ import {
     Screen,
     Button,
     Input,
-} from '@xchain-wallet/core/ui';
+ Icon,} from '@xchain-wallet/core/ui';
 import {
     signers as signersLib,
 } from '@xchain-wallet/core';
@@ -120,7 +120,7 @@ export function PairSignerForm({
                 className={styles.back}
                 aria-label="Back"
             >
-                ← Back
+                <Icon.BackIcon />
             </button>
             <span className={styles.title}>Pair hardware signer</span>
             <span className={styles.spacer} />
@@ -169,7 +169,6 @@ export function PairSignerForm({
                     <div role="alert" className={styles.error}>{error}</div>
                 ) : null}
                 <div className={styles.actions}>
-                    <Button variant="ghost" onClick={onBack}>Cancel</Button>
                 </div>
             </>,
         );
@@ -254,14 +253,6 @@ export function PairSignerForm({
                 <div role="alert" className={styles.error}>{error}</div>
             ) : null}
             <div className={styles.actions}>
-                <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={() => setStage('vendor')}
-                    disabled={stage === 'saving'}
-                >
-                    Back
-                </Button>
                 <Button
                     type="submit"
                     variant="primary"

@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.104.0] - 2026-04-26
+
+Multi-wallet / multi-account substrate, navigation rework, and a quieter chrome.
+
+### Added
+
+- **Multi-wallet, multi-account vault.** A vault can now hold multiple `Wallet` records, each with multiple BIP44 `Account` records. New `flows/createAccount.js` derives the next free index + a first address per active chain. `wallet.add.import` MessageHost handler unlocks new wallets into the SignerPool; `wallet.rename` updates a Wallet's display name; `account.list` / `account.create` round-trip per-wallet account state.
+- **`SignerPool`** in `packages/core/src/signers/SignerPool.js` — keeps unlocked SoftwareSigners in memory for the lifetime of an unlocked session. Populated at `wallet.unlock` while the password is in scope; lets `account.create` (and other HD-derive ops) reuse pre-unlocked signers without prompting again. Locked + cleared on `wallet.lock` and tear-down.
+- **Per-account scoping** for balances and addresses. `walletBalances` / `addressesByChain` / `newestAddress` host helpers and `receiveAddress` flow now accept an optional `accountId`; Home / Receive / AddressList / History pass the active account through. App-level `activeAccountId` state replaces Home's local copy so route props stay in sync across navigation.
+- **Wallet picker / Account picker / Settings routes.** Compact summary rows in the gear-popover replaced by full-screen pickers reachable from Settings → Wallet / Account. Each row in the wallet picker carries an outlined info button that opens **Wallet Details** (read-only metadata: name, type, origin, 25th-word state, account count, created-at) with a primary "Rename wallet" action and a "Migrate to BIP39" action for FreeWallet-legacy entries.
+- **`AddAccountForm` route** — no password prompt; reuses the SignerPool entry for the active wallet and persists Account #N+1 with auto-named default ("Account 2", "Account 3", …).
+- **`RenameWalletForm` route** — name input only; Save lives in the header's right-side icon slot (matches the picker chrome).
+- **Header `Settings` entry + `Settings` route.** Gear icon moved out of the header into the pancake menu under a Settings row. The route surfaces Wallet + Account summary rows that drill into the pickers.
+- **Header network-filter button.** Filter icon next to the menu in the popup header opens a popover that lists every coin family directly — one click to open, one to pick. Accent dot indicates a non-`all` filter is active.
+- **Home quick-action row.** Send / Receive / Swap / Buy as four equal-width tiles between the total-balance hero and the tab strip. Outlined in the accent color, circular icon badges, hover swaps the background only.
+- **Activity tab** moved to the rightmost position in `HomeTabs`.
+
+### Changed
+
+- **Main menu reorganized** — collapsed ~25 mixed entries into a flat list of true app sections: Markets, Tokens (→ ActionsMenu), Messaging, Cross-chain (→ CrossChainTemplates), Contacts, Addresses, Contracts, Staking, Multisig, Settings. Send / Receive / Swap / Buy and the per-token sub-actions are gone from the menu — the quick-action row covers Send/Receive, the rest live behind their grouped entry.
+- **Back-button standardisation.** Every form's footer "Cancel" / "Back" button removed across 47 routes (~85 buttons). Single `<` icon in each route's header is now the only back affordance. Routes without a header (Onboarding / CreateWallet / ImportWallet) now render a back-arrow header when reachable from the unlocked add-wallet flow; Onboarding's back returns to the wallet picker rather than home.
+- **Locked screen** — dropped the "XChain Wallet" heading and "Wallet locked." subtitle. Logo + password input + "Unlock Wallet" button is the whole surface.
+- **Onboarding & FreeWallet legacy flows.** CreateWallet and ImportWallet take a `mode` prop (`'fresh' | 'add'`). Fresh-install uses the pre-host `wallet.import` (asserts an empty vault); add-mode uses the new host-side `wallet.add.import` against the open vault.
+- **DevVariantBadge** repositioned from `right: 12px` to `left: 12px` so it stops overlapping the menu items on the right edge of the popup.
+
+### Removed
+
+- The flat token-action `extraActions` list in the pancake menu — those entries reach via the new "Tokens" entry which navigates to the existing ActionsMenu route.
+- Legacy `Cancel` / `Back` form footers across the route layer.
+- "Tap to switch…" subtitles under the Wallet / Account rows in Settings — replaced with a `›` chevron on the right.
+
 ## [0.103.0] - 2026-04-25
 
 Major iteration session. Wallet was effectively never built or run before this — package.json deps were declared but `pnpm install` had not been run since v0.12.0, no `vitest` invocation had ever rendered a component, and several runtime paths (Web Crypto, getUserMedia, Clipboard API) were broken on the LAN-host HTTP origin the user actually loads from. This release brings the project from "code-complete spec on disk" to "actually runs in a browser, has a deep test substrate, and has a coherent design language."

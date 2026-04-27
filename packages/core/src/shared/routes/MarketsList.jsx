@@ -4,7 +4,7 @@ import {
     Button,
     Input,
     ChainBadge,
-} from '@xchain-wallet/core/ui';
+ Icon,} from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { DispenserBadge } from '../components/DispenserBadge.jsx';
@@ -149,7 +149,7 @@ export function MarketsList({ walletId, onOpenMarket, onBack }) {
                 className={styles.back}
                 aria-label="Back"
             >
-                ← Back
+                <Icon.BackIcon />
             </button>
             <span className={styles.title}>Markets</span>
             <span className={styles.spacer} />
@@ -259,7 +259,6 @@ export function MarketsList({ walletId, onOpenMarket, onBack }) {
             ) : null}
 
             <div className={styles.actions}>
-                <Button variant="ghost" onClick={onBack}>Back</Button>
             </div>
         </>,
     );

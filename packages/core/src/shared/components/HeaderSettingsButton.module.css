@@ -1,0 +1,207 @@
+.wrap {
+    position: relative;
+    flex: 0 0 auto;
+}
+
+.btn {
+    appearance: none;
+    background: transparent;
+    border: 1px solid var(--xc-border-strong);
+    border-radius: 8px;
+    width: 38px;
+    height: 38px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--xc-text);
+    cursor: pointer;
+    position: relative;
+}
+
+.btn:hover {
+    background: var(--xc-bg-muted);
+}
+
+.btn:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
+.btnActive {
+    color: var(--xc-accent-primary);
+    border-color: var(--xc-accent-primary);
+    background: color-mix(in srgb, var(--xc-accent-primary) 10%, transparent);
+}
+
+.dot {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--xc-accent-primary);
+    box-shadow: 0 0 0 1.5px var(--xc-surface);
+}
+
+/* ───── Popover ───── */
+
+.popover {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    z-index: 50;
+    width: 320px;
+    max-width: calc(100vw - 24px);
+    background: var(--xc-surface);
+    border: 1px solid var(--xc-border-strong);
+    border-radius: 12px;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
+    padding: var(--xc-space-2);
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-3);
+}
+
+.section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    padding: var(--xc-space-2);
+}
+
+.sectionLabel {
+    font-size: var(--xc-text-xs);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--xc-text-muted);
+}
+
+.empty {
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text-muted);
+    text-align: center;
+    padding: var(--xc-space-3);
+}
+
+/* ───── Account section ───── */
+
+.singleAccount {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    padding: var(--xc-space-2) var(--xc-space-3);
+    background: var(--xc-bg-muted);
+    border-radius: 8px;
+    color: var(--xc-text);
+}
+
+.accountName {
+    font-weight: 600;
+    font-size: var(--xc-text-sm);
+}
+
+.walletList {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--xc-border);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.walletRow {
+    appearance: none;
+    background: transparent;
+    border: none;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    padding: var(--xc-space-2) var(--xc-space-3);
+    cursor: pointer;
+    color: var(--xc-text);
+    text-align: left;
+    font-size: var(--xc-text-sm);
+}
+
+.walletRow + .walletRow {
+    border-top: 1px solid var(--xc-border);
+}
+
+.walletRow:hover {
+    background: var(--xc-bg-muted);
+}
+
+.walletRowActive {
+    background: color-mix(in srgb, var(--xc-accent-primary) 10%, transparent);
+    font-weight: 600;
+}
+
+.walletDot {
+    flex: 0 0 auto;
+    width: 18px;
+    height: 18px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--xc-accent-primary);
+}
+
+.walletName {
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Summary row — active wallet / account, click navigates to the
+   picker route. Whole row is the click target; chevron signals
+   "tap for more". */
+.summaryRow {
+    appearance: none;
+    background: transparent;
+    border: 1px solid var(--xc-border);
+    border-radius: 8px;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    padding: var(--xc-space-2) var(--xc-space-3);
+    cursor: pointer;
+    color: var(--xc-text);
+    text-align: left;
+    font-size: var(--xc-text-sm);
+}
+
+.summaryRow:hover {
+    background: var(--xc-bg-muted);
+}
+
+.summaryRow:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
+.summaryName {
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 600;
+}
+
+.summaryEmpty {
+    color: var(--xc-text-muted);
+    font-style: italic;
+    font-weight: 400;
+}
+
+.summaryChevron {
+    flex: 0 0 auto;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+}

@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { Icon } from '@xchain-wallet/core/ui';
-import { iconForLabel } from '@xchain-wallet/core/ui/icons/index.jsx';
+import { LayoutModeToggle } from './LayoutModeToggle.jsx';
 import styles from './HeaderActionMenu.module.css';
 
 /**
@@ -26,35 +26,35 @@ import styles from './HeaderActionMenu.module.css';
  * @param {() => void} props.onClose
  * @param {() => void} [props.onAlerts]
  * @param {number} [props.alertCount]
- * @param {() => void} [props.onSend]
- * @param {() => void} [props.onReceive]
- * @param {() => void} [props.onCreateToken]
  * @param {() => void} [props.onMarkets]
+ * @param {() => void} [props.onTokens]         opens ActionsMenu (token issue/mint/destroy/dispenser/dividend/airdrop/broadcast/advanced)
  * @param {() => void} [props.onMessaging]
- * @param {() => void} [props.onHistory]
+ * @param {() => void} [props.onCrossChain]     opens CrossChainTemplates (link/parallel/cross-chain swap)
+ * @param {() => void} [props.onContacts]
  * @param {() => void} [props.onAddresses]
- * @param {() => void} [props.onContracts]
- * @param {() => void} [props.onStaking]
- * @param {Array<{ id: string, label: string, onSelect?: () => void }>} [props.extraActions]
+ * @param {() => void} [props.onContracts]      BTC-only — host gates the prop based on hasBtcAddress
+ * @param {() => void} [props.onStaking]        BTC-only
+ * @param {() => void} [props.onMultisig]       opens the multisig create/sign route
  * @param {() => void} [props.onLock]
  * @param {boolean} [props.locking]
+ * @param {() => void} [props.onSettings]
  */
 export function HeaderActionMenu({
     onClose,
     onAlerts,
     alertCount = 0,
-    onSend,
-    onReceive,
-    onCreateToken,
     onMarkets,
+    onTokens,
     onMessaging,
-    onHistory,
+    onCrossChain,
+    onContacts,
     onAddresses,
     onContracts,
     onStaking,
-    extraActions = [],
+    onMultisig,
     onLock,
     locking,
+    onSettings,
 }) {
     useEffect(() => {
         const onKey = (e) => { if (e.key === 'Escape') onClose(); };
@@ -63,18 +63,16 @@ export function HeaderActionMenu({
     }, [onClose]);
 
     const primary = [
-        { id: 'send',      label: 'Send',         Icon: Icon.SendIcon,    handler: onSend },
-        { id: 'receive',   label: 'Receive',      Icon: Icon.ReceiveIcon, handler: onReceive },
-        { id: 'token',     label: 'Create token', Icon: Icon.TokenIcon,   handler: onCreateToken },
-        { id: 'markets',   label: 'Markets',      Icon: Icon.MarketIcon,  handler: onMarkets },
-        { id: 'messaging', label: 'Messaging',    Icon: Icon.MessageIcon, handler: onMessaging },
-        { id: 'history',   label: 'History',      Icon: Icon.HistoryIcon, handler: onHistory },
-        { id: 'addresses', label: 'Addresses',    Icon: Icon.AddressIcon, handler: onAddresses },
-        { id: 'contracts', label: 'Contracts',    Icon: Icon.ContractIcon, handler: onContracts },
-        { id: 'staking',   label: 'Staking',      Icon: Icon.StakeIcon,   handler: onStaking },
+        { id: 'markets',     label: 'Markets',     Icon: Icon.MarketIcon,   handler: onMarkets },
+        { id: 'tokens',      label: 'Tokens',      Icon: Icon.TokenIcon,    handler: onTokens },
+        { id: 'messaging',   label: 'Messaging',   Icon: Icon.MessageIcon,  handler: onMessaging },
+        { id: 'cross-chain', label: 'Cross-chain', Icon: Icon.LinkIcon,     handler: onCrossChain },
+        { id: 'contacts',    label: 'Contacts',    Icon: Icon.UsersIcon,    handler: onContacts },
+        { id: 'addresses',   label: 'Addresses',   Icon: Icon.AddressIcon,  handler: onAddresses },
+        { id: 'contracts',   label: 'Contracts',   Icon: Icon.ContractIcon, handler: onContracts },
+        { id: 'staking',     label: 'Staking',     Icon: Icon.StakeIcon,    handler: onStaking },
+        { id: 'multisig',    label: 'Multisig',    Icon: Icon.MultisigIcon, handler: onMultisig },
     ].filter((e) => typeof e.handler === 'function');
-
-    const extras = (extraActions || []).filter((e) => typeof e.onSelect === 'function');
 
     return (
         <div
@@ -149,34 +147,27 @@ export function HeaderActionMenu({
                                     </button>
                                 </li>
                             ))}
-                        </ul>
-                    ) : null}
-                    {extras.length > 0 ? (
-                        <ul className={styles.list} role="list">
-                            <li className={styles.section}>Actions</li>
-                            {extras.map(({ id, label, onSelect }) => {
-                                const ResolvedIcon = iconForLabel(label) || Icon.MoreIcon;
-                                return (
-                                    <li key={id}>
-                                        <button
-                                            type="button"
-                                            className={styles.row}
-                                            onClick={() => { onSelect(); onClose(); }}
-                                        >
-                                            <span className={styles.rowIcon} aria-hidden="true">
-                                                <ResolvedIcon />
-                                            </span>
-                                            <span className={styles.rowLabel}>{label}</span>
-                                            <span className={styles.rowChevron} aria-hidden="true">
-                                                <Icon.ForwardIcon />
-                                            </span>
-                                        </button>
-                                    </li>
-                                );
-                            })}
+                            {typeof onSettings === 'function' ? (
+                                <li>
+                                    <button
+                                        type="button"
+                                        className={styles.row}
+                                        onClick={() => { onSettings(); onClose(); }}
+                                    >
+                                        <span className={styles.rowIcon} aria-hidden="true">
+                                            <Icon.GearIcon />
+                                        </span>
+                                        <span className={styles.rowLabel}>Settings</span>
+                                        <span className={styles.rowChevron} aria-hidden="true">
+                                            <Icon.ForwardIcon />
+                                        </span>
+                                    </button>
+                                </li>
+                            ) : null}
                         </ul>
                     ) : null}
                 </div>
+                <LayoutModeToggle />
                 {typeof onLock === 'function' ? (
                     <div className={styles.lockBlock}>
                         <button

@@ -19,6 +19,9 @@ import { createContext } from 'react';
  * @property {(walletId: string, chainId: string) => Promise<any>} [getNewestAddress]
  * @property {(opts: any) => Promise<any>} [createWallet]
  * @property {(opts: any) => Promise<any>} [importMnemonic]
+ * @property {(opts: any) => Promise<any>} [addImportedWallet]
+ * @property {(walletId: string) => Promise<any>} [listAccounts]
+ * @property {(opts: any) => Promise<any>} [createAccount]
  * @property {(opts: any) => Promise<any>} [sendAsset]
  * @property {(opts: any) => Promise<any>} [generateReceiveAddress]
  *

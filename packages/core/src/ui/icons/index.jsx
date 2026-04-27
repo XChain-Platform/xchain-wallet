@@ -488,6 +488,26 @@ export function InfoIcon() {
     );
 }
 
+export function DollarIcon() {
+    return (
+        <svg {...STROKE_PROPS}>
+            <line x1="12" y1="3" x2="12" y2="21" />
+            <path d="M17 7H9.5a2.5 2.5 0 0 0 0 5h5a2.5 2.5 0 0 1 0 5H7" />
+        </svg>
+    );
+}
+
+export function UsersIcon() {
+    return (
+        <svg {...STROKE_PROPS}>
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+        </svg>
+    );
+}
+
 export function ExternalLinkIcon() {
     return (
         <svg {...STROKE_PROPS}>

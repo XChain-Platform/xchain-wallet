@@ -8,7 +8,7 @@ import {
     AddressText,
     CopyButton,
     MultisigBadge,
-} from '@xchain-wallet/core/ui';
+ Icon,} from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     uri as uriLib,
@@ -30,9 +30,10 @@ const chainRegistry = registryLib.defaultRegistry();
  *
  * @param {object} props
  * @param {string} props.walletId
+ * @param {string} [props.accountId]   active BIP44 account; when set, scopes addresses + new-receive derivation to that account
  * @param {() => void} [props.onBack]
  */
-export function Receive({ walletId, onBack }) {
+export function Receive({ walletId, accountId, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -70,7 +71,7 @@ export function Receive({ walletId, onBack }) {
         let cancelled = false;
         (async () => {
             try {
-                const byChain = await messaging.getAddressesByChain(walletId);
+                const byChain = await messaging.getAddressesByChain(walletId, accountId);
                 if (cancelled) return;
                 setChainsByWallet(byChain);
                 const firstChain = Object.keys(byChain)[0];
@@ -86,7 +87,7 @@ export function Receive({ walletId, onBack }) {
             }
         })();
         return () => { cancelled = true; };
-    }, [walletId, messaging]);
+    }, [walletId, accountId, messaging]);
 
     useEffect(() => {
         if (!activeChainId) return undefined;
@@ -96,6 +97,7 @@ export function Receive({ walletId, onBack }) {
                 const newest = await messaging.getNewestAddress(
                     walletId,
                     activeChainId,
+                    accountId,
                 );
                 if (!cancelled) setAddress(newest);
             } catch (err) {
@@ -105,7 +107,7 @@ export function Receive({ walletId, onBack }) {
             }
         })();
         return () => { cancelled = true; };
-    }, [walletId, activeChainId, messaging]);
+    }, [walletId, accountId, activeChainId, messaging]);
 
     // Derive the multisig output address whenever chain changes, if
     // this wallet has a MultisigConfig. Failures are non-fatal — we
@@ -209,6 +211,7 @@ export function Receive({ walletId, onBack }) {
         try {
             const fresh = await messaging.generateReceiveAddress({
                 walletId,
+                accountId,
                 chainId: activeChainId,
                 password: genPassword,
             });
@@ -236,7 +239,7 @@ export function Receive({ walletId, onBack }) {
                 className={styles.back}
                 aria-label="Back to home"
             >
-                ← Back
+                <Icon.BackIcon />
             </button>
             <span className={styles.title}>Receive</span>
             <span className={styles.spacer} />
@@ -363,15 +366,6 @@ export function Receive({ walletId, onBack }) {
                         error={genError || undefined}
                     />
                     <div className={styles.genButtons}>
-                        <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => { setGenOpen(false); setGenError(null); }}
-                            disabled={genBusy}
-                        >
-                            Cancel
-                        </Button>
                         <Button
                             type="submit"
                             variant="primary"

@@ -85,6 +85,9 @@ export function attachSessionMetaListener(deps = {}, chromeRuntime) {
                     metaBackend: new ChromeMetaBackend(),
                     chainRegistry: deps.chainRegistry,
                     sdkRegistry: deps.sdkRegistry,
+                    signerPool: typeof deps.signerPool === 'function'
+                        ? deps.signerPool()
+                        : deps.signerPool,
                     onUnlocked: deps.onUnlocked,
                     onLocked: deps.onLocked,
                 });
@@ -137,6 +140,9 @@ export async function dispatchPreHost(type, request, deps) {
                 storageBackend: deps.storageBackend,
                 sessionBackend: deps.sessionBackend,
                 metaBackend: deps.metaBackend,
+                signerPool: deps.signerPool,
+                chainRegistry: deps.chainRegistry,
+                sdkRegistry: deps.sdkRegistry,
                 onUnlocked: deps.onUnlocked,
             });
         case 'wallet.lock':

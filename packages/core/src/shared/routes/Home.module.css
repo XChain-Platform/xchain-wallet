@@ -108,6 +108,64 @@
     margin-top: var(--xc-space-3);
 }
 
+/* Quick-actions row — sits between the total-balance hero and the
+   tab strip. Send / Receive / Swap / Buy. Always 4 equal columns
+   regardless of shell. The HomeTabs wrap is a flex column with
+   `gap: var(--xc-space-3)`; negative top-margin shrinks the hero→
+   actions gap to match the inter-button gap so the row reads as a
+   single visual unit attached to the hero. */
+.quickActions {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--xc-space-2);
+    margin-top: calc(var(--xc-space-2) - var(--xc-space-3));
+}
+
+.quickAction {
+    appearance: none;
+    background: var(--xc-surface-raised);
+    border: 1px solid var(--xc-accent-primary);
+    border-radius: var(--xc-radius-md);
+    padding: var(--xc-space-3) var(--xc-space-1);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--xc-space-1);
+    cursor: pointer;
+    color: var(--xc-text);
+    font-family: inherit;
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+    min-height: 72px;
+    text-align: center;
+}
+
+.quickAction:hover:not(:disabled) {
+    background: var(--xc-bg-muted);
+}
+
+.quickAction:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
+.quickAction:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.quickActionIcon {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
+    color: var(--xc-accent-primary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
 .actionsFull {
     display: flex;
     gap: var(--xc-space-2);

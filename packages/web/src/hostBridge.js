@@ -23,6 +23,7 @@ import {
     crypto as cryptoLib,
     registry as registryLib,
     sdk as sdkLib,
+    signers as signersLib,
     storage as storageLib,
 } from '@xchain-wallet/core';
 // Cross-package relative path rather than `@xchain-wallet/extension` so
@@ -150,6 +151,7 @@ export const DEFAULT_ACTIVE_CHAIN_IDS = [
 
 let host = null;
 let vault = null;
+let signerPool = null;
 
 /**
  * Classify the current wallet-session state — matches the extension's
@@ -229,7 +231,15 @@ export async function createWalletLocal(req) {
         });
         await v.save();
         vault = v;
-        host = createBackgroundHost({ vault, chainRegistry, sdkRegistry });
+        signerPool = new signersLib.SignerPool();
+        await signerPool.populate({
+            vault,
+            password,
+            bip39Passphrase,
+            chainRegistry,
+            sdkRegistry,
+        });
+        host = createBackgroundHost({ vault, chainRegistry, sdkRegistry, signerPool });
         await meta.save({ kdfParams });
         return { mnemonic: result.mnemonic, walletName: result.wallet.name };
     } finally {
@@ -285,7 +295,15 @@ export async function importMnemonicLocal(req) {
         });
         await v.save();
         vault = v;
-        host = createBackgroundHost({ vault, chainRegistry, sdkRegistry });
+        signerPool = new signersLib.SignerPool();
+        await signerPool.populate({
+            vault,
+            password,
+            bip39Passphrase,
+            chainRegistry,
+            sdkRegistry,
+        });
+        host = createBackgroundHost({ vault, chainRegistry, sdkRegistry, signerPool });
         await meta.save({ kdfParams });
         return { format: result.format, walletName: result.wallet.name };
     } finally {
@@ -332,10 +350,24 @@ export async function unlockWalletLocal(req) {
             throw err;
         }
         vault = v;
+
+        // Populate the SignerPool while the password is in scope so
+        // subsequent HD-derive ops (account.create, receive.getAddress
+        // for software signers) reuse pre-unlocked signers without
+        // re-prompting. Pool is cleared in lockWalletLocal.
+        signerPool = new signersLib.SignerPool();
+        await signerPool.populate({
+            vault,
+            password,
+            chainRegistry,
+            sdkRegistry,
+        });
+
         host = createBackgroundHost({
             vault,
             chainRegistry,
             sdkRegistry,
+            signerPool,
         });
         return { unlocked: true };
     } finally {
@@ -350,6 +382,10 @@ export async function unlockWalletLocal(req) {
  * @returns {Promise<{ locked: true }>}
  */
 export async function lockWalletLocal() {
+    if (signerPool) {
+        try { signerPool.lockAll(); } catch (_err) { /* best-effort */ }
+    }
+    signerPool = null;
     if (vault) {
         try { vault.close(); } catch (_err) { /* best-effort */ }
     }

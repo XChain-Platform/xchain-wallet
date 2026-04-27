@@ -33,6 +33,7 @@ export class InvalidMessageError extends Error {
  * @property {import('@xchain-wallet/core').storage.Vault} vault
  * @property {import('@xchain-wallet/core').registry.ChainRegistry} chainRegistry
  * @property {import('@xchain-wallet/core').sdk.SDKRegistry} sdkRegistry
+ * @property {import('@xchain-wallet/core').signers.SignerPool} [signerPool]   present when the host wants HD-derive ops to skip the password prompt during an unlocked session
  */
 
 /**

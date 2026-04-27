@@ -15,3 +15,11 @@ export { ApprovalBroker } from './approvalBroker.js';
 export { resolveSdkFactory, createDevMockSdk } from './sdkFactory.js';
 export { attachSignerBridgeListener } from './signerBridgeListener.js';
 export * as signerBridge from './signerBridge.js';
+export {
+    LAYOUT_MODES,
+    isSidePanelSupported,
+    readLayoutMode,
+    writeLayoutMode,
+    applyLayoutMode,
+    attachLayoutModeListener,
+} from './layoutMode.js';

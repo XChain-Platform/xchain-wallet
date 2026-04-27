@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Screen, Button } from '@xchain-wallet/core/ui';
+import { Screen, Button , Icon} from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { CROSS_CHAIN_TEMPLATES } from '../../templates/cross-chain/index.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -109,7 +109,7 @@ export function CrossChainTemplates({ walletId, onLaunch, onBack }) {
                 className={styles.back}
                 aria-label="Back"
             >
-                ← Back
+                <Icon.BackIcon />
             </button>
             <span className={styles.title}>Cross-chain templates</span>
             <span className={styles.spacer} />
@@ -122,7 +122,6 @@ export function CrossChainTemplates({ walletId, onLaunch, onBack }) {
                 {children}
             </div>
             <div className={styles.actions}>
-                <Button variant="ghost" onClick={onBack}>Back</Button>
             </div>
         </Screen>
     );
