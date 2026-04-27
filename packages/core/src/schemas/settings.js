@@ -76,6 +76,7 @@ export const CLIPBOARD_AUTO_CLEAR_DEFAULT = 60;
  * @property {{ enabled: boolean }} panicMode                                                                v2 — duress-mode toggle; full §26.5 wiring lands later, the schema slot ships now so the Safety panel can flip it
  * @property {typeof BACKUP_REMINDER_CADENCES[number]} backupReminders                                       v2 — backup-reminder cadence
  * @property {string[]} [pinnedTokens]                                                                       v2-tolerant — list of `chainId:asset` keys the user pinned to the top of the balance list (§27.3 / G072)
+ * @property {string[]} [hiddenTokens]                                                                       v2-tolerant — list of `chainId:asset` keys the user hid (collapsed into the Hidden section at the bottom of each tab) (§27.4 / G073)
  */
 
 /** @returns {Settings} */
@@ -119,6 +120,7 @@ export function createDefaultSettings() {
         },
         backupReminders: 'off',
         pinnedTokens: [],
+        hiddenTokens: [],
     };
 }
 
@@ -244,6 +246,14 @@ export function validateSettings(record) {
             errors,
             'pinnedTokens',
             Array.isArray(r.pinnedTokens) && r.pinnedTokens.every(isString),
+            'must be an array of strings (chainId:asset keys)',
+        );
+    }
+    if (r.hiddenTokens !== undefined) {
+        check(
+            errors,
+            'hiddenTokens',
+            Array.isArray(r.hiddenTokens) && r.hiddenTokens.every(isString),
             'must be an array of strings (chainId:asset keys)',
         );
     }

@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { MultisigBadge, Icon } from '@xchain-wallet/core/ui';
 import { EmptyStateNudge } from './EmptyStateNudge.jsx';
@@ -21,6 +21,8 @@ import styles from './BalanceList.module.css';
  *        Click handler for a balance row — surfaces the §27.6 Token detail page (G071) when supplied.
  * @param {Set<string> | null} [props.pinnedKeys]    `chainId:asset` keys pinned by the user — pinned rows sort to the top (§27.3 / G072)
  * @param {(key: string, nextPinned: boolean) => void} [props.onTogglePin]   per-row pin/unpin callback; when supplied each row renders a star button
+ * @param {Set<string> | null} [props.hiddenKeys]    `chainId:asset` keys hidden by the user — hidden rows collapse into the Hidden footer section (§27.4 / G073)
+ * @param {(key: string, nextHidden: boolean) => void} [props.onToggleHide]  per-row hide/unhide callback; when supplied, each row gains a "hide" entry in its overflow menu
  */
 export function BalanceList({
     rows,
@@ -32,7 +34,10 @@ export function BalanceList({
     onSelectToken,
     pinnedKeys,
     onTogglePin,
+    hiddenKeys,
+    onToggleHide,
 }) {
+    const [hiddenExpanded, setHiddenExpanded] = useState(false);
     if (!rows || rows.length === 0) {
         return (
             <EmptyStateNudge
@@ -47,12 +52,18 @@ export function BalanceList({
     // Stable sort: pinned rows first (preserving each section's existing
     // chain/asset order), then unpinned. Caller already sorted within each
     // group via sortByChainThenAsset.
+    const visible = hiddenKeys
+        ? rows.filter((r) => !hiddenKeys.has(`${r.chainId}:${r.asset}`))
+        : rows;
+    const hidden = hiddenKeys
+        ? rows.filter((r) => hiddenKeys.has(`${r.chainId}:${r.asset}`))
+        : [];
     const sortedRows = pinnedKeys && pinnedKeys.size > 0
         ? [
-            ...rows.filter((r) => pinnedKeys.has(`${r.chainId}:${r.asset}`)),
-            ...rows.filter((r) => !pinnedKeys.has(`${r.chainId}:${r.asset}`)),
+            ...visible.filter((r) => pinnedKeys.has(`${r.chainId}:${r.asset}`)),
+            ...visible.filter((r) => !pinnedKeys.has(`${r.chainId}:${r.asset}`)),
         ]
-        : rows;
+        : visible;
     return (
         <div className={styles.list} role="list" aria-label="Balances">
             {sortedRows.map((r) => {
@@ -66,14 +77,45 @@ export function BalanceList({
                         onSelect={onSelectToken}
                         pinned={pinned}
                         onTogglePin={onTogglePin}
+                        hidden={false}
+                        onToggleHide={onToggleHide}
                     />
                 );
             })}
+            {hidden.length > 0 ? (
+                <>
+                    <button
+                        type="button"
+                        className={styles.hiddenToggle}
+                        onClick={() => setHiddenExpanded((v) => !v)}
+                        aria-expanded={hiddenExpanded}
+                    >
+                        {hiddenExpanded
+                            ? `Hide ${hidden.length} hidden token${hidden.length === 1 ? '' : 's'}`
+                            : `Show ${hidden.length} hidden token${hidden.length === 1 ? '' : 's'}`}
+                    </button>
+                    {hiddenExpanded ? hidden.map((r) => {
+                        const key = `${r.chainId}:${r.asset}`;
+                        return (
+                            <BalanceRowEl
+                                key={`hidden:${key}`}
+                                row={r}
+                                multisig={r.chainId === multisigChainId ? multisig : null}
+                                onSelect={onSelectToken}
+                                pinned={false}
+                                onTogglePin={onTogglePin}
+                                hidden
+                                onToggleHide={onToggleHide}
+                            />
+                        );
+                    }) : null}
+                </>
+            ) : null}
         </div>
     );
 }
 
-function BalanceRowEl({ row, multisig, onSelect, pinned, onTogglePin }) {
+function BalanceRowEl({ row, multisig, onSelect, pinned, onTogglePin, hidden, onToggleHide }) {
     const isNative = row.kind === 'native';
     const chainIconUrl = branding.chainIconSmallUrl(row.chainId);
     const subtitle = row.networkKind !== 'mainnet'
@@ -172,8 +214,60 @@ function BalanceRowEl({ row, multisig, onSelect, pinned, onTogglePin }) {
                     {pinned ? '★' : '☆'}
                 </span>
             ) : null}
+            {typeof onToggleHide === 'function' ? (
+                <span
+                    role="button"
+                    tabIndex={0}
+                    className={`${styles.hideBtn} ${hidden ? styles.hideBtnActive : ''}`}
+                    aria-pressed={hidden}
+                    aria-label={hidden ? `Unhide ${row.asset}` : `Hide ${row.asset}`}
+                    title={hidden ? 'Unhide' : 'Hide'}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        onToggleHide(pinKey, !hidden);
+                    }}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            onToggleHide(pinKey, !hidden);
+                        }
+                    }}
+                >
+                    {hidden ? '⊕' : '⊘'}
+                </span>
+            ) : null}
         </Tag>
     );
+}
+
+/**
+ * Heuristic for the "hide spam" affordance — flags rows that are
+ * tiny / unknown-issuer / zero-balance so the UI can surface a "hide all
+ * spam" sweep button. Conservative: only obvious noise. Callers pass the
+ * resulting key set into `<BalanceList>` `hiddenKeys`.
+ *
+ * @param {Array<{chainId: string, asset: string, kind: string, quantity: string, divisibility: number, fiatRate: number | null}>} rows
+ * @returns {string[]}                          `chainId:asset` keys flagged as likely spam
+ */
+export function detectSpamCandidates(rows) {
+    const flagged = [];
+    for (const r of rows || []) {
+        if (!r || r.kind === 'native') continue;
+        const q = safeBigInt(r.quantity);
+        if (q === 0n) {
+            flagged.push(`${r.chainId}:${r.asset}`);
+            continue;
+        }
+        // Subdivisible token whose magnitude rounds to 0.0001 of a unit
+        // and has no fiat price — almost always airdrop dust.
+        if (r.fiatRate === null && r.divisibility > 0) {
+            const div = 10n ** BigInt(r.divisibility);
+            if (q < div / 10000n) flagged.push(`${r.chainId}:${r.asset}`);
+        }
+    }
+    return flagged;
 }
 
 /* ───── Aggregation helpers exported for tab components ───── */

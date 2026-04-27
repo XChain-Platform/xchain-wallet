@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.179.0] - 2026-04-27
+
+§27.4 — Cluster I Step 2 — Hidden / spam tokens (G073).
+
+`Settings.hiddenTokens` (v2-tolerant string array) feeds a per-row hide toggle (⊘ / ⊕). Hidden rows collapse out of the main list and into a "Show N hidden tokens" expander at the bottom of each tab. Same persist pattern as pinned tokens. New `detectSpamCandidates(rows)` helper exported for future "auto-hide spam" sweep — flags zero-balance rows + sub-divisibility-dust rows with no fiat price.
+
+### Added
+
+- **`packages/core/src/schemas/settings.js`** — `hiddenTokens?: string[]` field; default `[]`; v2-tolerant validator.
+- **`packages/core/src/shared/components/BalanceList.jsx`** — `hiddenKeys` + `onToggleHide` props; visible / hidden split before pinned-first sort; collapsible "Show N hidden" footer; per-row hide button (⊘ / ⊕); exported `detectSpamCandidates(rows)` heuristic.
+- **`packages/core/src/shared/components/BalanceList.module.css`** — `.hideBtn` / `.hideBtnActive` / `.hiddenToggle` styles.
+- **`packages/core/src/shared/components/HomeTabs.jsx`** — passes `hiddenKeys` + `onToggleHide` through to BalanceList.
+- **`packages/core/src/shared/routes/Home.jsx`** — `hiddenTokens` state loaded alongside `pinnedTokens`; `handleToggleHide` mirrors `handleTogglePin`; both threaded into HomeTabs.
+
+Closes G073.
+
 ## [0.178.0] - 2026-04-27
 
 §27.3 — Cluster I Step 1 — Pinned tokens on Home (G072).

@@ -175,3 +175,45 @@
 .rowPinned {
     background: var(--xc-bg-muted-soft, var(--xc-bg-muted));
 }
+
+.hideBtn {
+    flex: 0 0 auto;
+    margin-left: var(--xc-space-1);
+    width: 24px;
+    height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    color: var(--xc-text-muted);
+    cursor: pointer;
+    user-select: none;
+    border-radius: var(--xc-radius-sm);
+    line-height: 1;
+}
+
+.hideBtn:hover {
+    background: var(--xc-bg-muted);
+    color: var(--xc-text);
+}
+
+.hideBtnActive {
+    color: var(--xc-text);
+}
+
+.hiddenToggle {
+    border: 0;
+    background: transparent;
+    padding: var(--xc-space-3);
+    border-top: 1px dashed var(--xc-border);
+    text-align: center;
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    cursor: pointer;
+    width: 100%;
+}
+
+.hiddenToggle:hover {
+    color: var(--xc-text);
+    background: var(--xc-bg-muted);
+}
