@@ -248,6 +248,32 @@ export function verifyMessageRequest(opts) {
 }
 
 /**
+ * §30.4 / G088 — read-only PSBT decompose. The PsbtSignForm uses this to
+ * surface inputs / outputs / fee on the paste screen before the user
+ * commits a password.
+ *
+ * @param {{ chainId: string, psbtHex: string }} opts
+ * @returns {Promise<{ decomposed: import('@xchain-wallet/core/signers/types').DecomposedPsbt }>}
+ */
+export function parsePsbtRequest(opts) {
+    return /** @type {any} */ (sendMessage('psbt.parse', opts));
+}
+
+/**
+ * §30.4 / G088 — user-initiated PSBT signing. Caller supplies the
+ * wallet's chosen signing address (`addressId`); background matches
+ * inputs by address and signs only those it owns, returning a
+ * partially- or fully-signed PSBT depending on what the wallet could
+ * cover.
+ *
+ * @param {{ walletId: string, addressId: string, password: string, psbtHex: string, bip39Passphrase?: string }} opts
+ * @returns {Promise<{ signedPsbtHex: string, txHex: string, txid: string }>}
+ */
+export function signPsbtUserInitiated(opts) {
+    return /** @type {any} */ (sendMessage('auth.signPsbt', opts));
+}
+
+/**
  * §19.3 — reveal the wallet's seed mnemonic.
  *
  * @param {{ walletId: string, password: string }} opts

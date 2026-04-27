@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.164.0] - 2026-04-27
+
+§30.4 — Step 2 of Cluster E — PSBT paste-in form (G088 + paired G042).
+
+A new `Sign PSBT` entry on the action menu opens `PsbtSignForm`, the user-initiated paste-in surface from §30.4. The form accepts hex or base64 (auto-converts the `cHNid…` base64-PSBT prefix), parses the blob through a new `psbt.parse` background handler that calls `sdk.wallet.decomposePsbt`, and surfaces a preview (input / output counts, total in / out, fee, and how many inputs the chosen signing address actually owns). On Sign, the new `auth.signPsbt` handler matches PSBT inputs against the chosen address, builds `signingPaths`, and runs `signPsbtFlow`; the result page surfaces the signed PSBT hex with a Copy affordance for round-tripping into Sparrow / Specter / Coldcard or another cosigner. Software signers only at this step — HW signing, QR scan, .psbt file drop, and in-wallet broadcast are tracked in FOLLOWUPS.
+
+### Added
+
+- **`shared/routes/PsbtSignForm.jsx`** (new) — paste, parse, chain + signer pick, preview, sign, copy. Exports `normalizePsbtInput` for hex / base64 normalization (also smoke-testable).
+- **`extension/src/popup/messaging.js`** + **`web/src/messaging.js`** — `parsePsbtRequest` and `signPsbtUserInitiated`.
+- **`extension/src/background/createBackgroundHost.js`** — `psbt.parse` (read-only `decomposePsbt`) and `auth.signPsbt` (decompose → match inputs by address → `signPsbtFlow`).
+- **`test/smoke/ui/psbt-sign-form.smoke.js`** — verifies the component, both messaging shims, both background handlers, and both shells' App.jsx + action-menu wiring.
+
+### Changed
+
+- **`packages/extension/src/popup/App.jsx`** + **`packages/web/src/App.jsx`** — render PsbtSignForm at `unlockedView === 'sign-psbt'`; new `onSignPsbt` callback in the action menu builder; new "Sign PSBT" menu entry.
+
+Closes G088 + G042. Smoke baseline preserved (24 / 165; new psbt-sign-form smoke passes).
+
 ## [0.163.0] - 2026-04-27
 
 §30.5 — Step 1 of Cluster E — User-cancel rejection toast (G089).

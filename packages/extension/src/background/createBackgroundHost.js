@@ -128,6 +128,7 @@ const {
     exportBackupFile,
     removeWallet,
     signMessageFlow,
+    signPsbtFlow,
     revealMnemonic,
     dryRunRestore,
     publishLabelsNow,
@@ -678,6 +679,83 @@ export function createBackgroundHost(deps) {
             path: isHd ? address.derivationPath : undefined,
             addressId: isHd ? undefined : addressId,
             message,
+        });
+    });
+
+    // §30.4 / G088 — read-only PSBT decompose. The form pastes hex/base64
+    // before any auth, so this handler doesn't touch vault — purely
+    // sdkRegistry. Caller normalizes hex before sending.
+    host.register('psbt.parse', async (req, { sdkRegistry }) => {
+        const chainId = req?.chainId;
+        const psbtHex = req?.psbtHex;
+        if (typeof chainId !== 'string' || !chainId) {
+            throw new Error('psbt.parse: chainId is required');
+        }
+        if (typeof psbtHex !== 'string' || psbtHex.length === 0) {
+            throw new Error('psbt.parse: psbtHex is required');
+        }
+        const sdk = sdkRegistry.get(chainId);
+        if (typeof sdk?.wallet?.decomposePsbt !== 'function') {
+            throw new Error(`psbt.parse: SDK for "${chainId}" lacks wallet.decomposePsbt`);
+        }
+        const decomposed = sdk.wallet.decomposePsbt(psbtHex);
+        return { decomposed };
+    });
+
+    // §30.4 / G088 — user-initiated PSBT signing. The caller supplies the
+    // wallet address whose key should sign; the handler decomposes the
+    // PSBT and matches inputs by address to build signingPaths. Mixed-
+    // address PSBTs are partially-signed (only inputs the chosen address
+    // owns) and the unsigned remainder stays in the returned PSBT for the
+    // next signer in the chain.
+    host.register('auth.signPsbt', async (req, { vault, chainRegistry, sdkRegistry }) => {
+        const walletId = req?.walletId;
+        const addressId = req?.addressId;
+        const password = req?.password;
+        const psbtHex = req?.psbtHex;
+        if (typeof walletId !== 'string' || !walletId) {
+            throw new Error('auth.signPsbt: walletId is required');
+        }
+        if (typeof addressId !== 'string' || !addressId) {
+            throw new Error('auth.signPsbt: addressId is required');
+        }
+        if (typeof password !== 'string' || password.length === 0) {
+            throw new Error('auth.signPsbt: password is required');
+        }
+        if (typeof psbtHex !== 'string' || psbtHex.length === 0) {
+            throw new Error('auth.signPsbt: psbtHex is required');
+        }
+        const address = await vault.addresses.get(addressId);
+        if (!address) {
+            throw new Error(`auth.signPsbt: address "${addressId}" not found`);
+        }
+        const chainId = address.chainId;
+        const sdk = sdkRegistry.get(chainId);
+        if (typeof sdk?.wallet?.decomposePsbt !== 'function') {
+            throw new Error(`auth.signPsbt: SDK for "${chainId}" lacks wallet.decomposePsbt`);
+        }
+        const decomposed = sdk.wallet.decomposePsbt(psbtHex);
+        const signingPaths = [];
+        for (let i = 0; i < decomposed.inputs.length; i += 1) {
+            if (decomposed.inputs[i].address === address.address) {
+                signingPaths.push({ inputIndex: i, path: address.derivationPath });
+            }
+        }
+        if (signingPaths.length === 0) {
+            throw new Error(
+                `auth.signPsbt: no PSBT inputs match address ${address.address}. The pasted PSBT may belong to a different wallet, or the chosen signer has no inputs to sign.`,
+            );
+        }
+        return signPsbtFlow({
+            vault,
+            walletId,
+            password,
+            bip39Passphrase: req?.bip39Passphrase,
+            chainRegistry,
+            sdkRegistry,
+            chainId,
+            psbtHex,
+            signingPaths,
         });
     });
 

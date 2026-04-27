@@ -71,6 +71,7 @@ import { History } from '@xchain-wallet/core/shared/routes/History.jsx';
 import { LinkForm } from '@xchain-wallet/core/shared/routes/LinkForm.jsx';
 import { SignMessageForm } from '@xchain-wallet/core/shared/routes/SignMessageForm.jsx';
 import { VerifySignatureForm } from '@xchain-wallet/core/shared/routes/VerifySignatureForm.jsx';
+import { PsbtSignForm } from '@xchain-wallet/core/shared/routes/PsbtSignForm.jsx';
 import { ParallelComposer } from '@xchain-wallet/core/shared/routes/ParallelComposer.jsx';
 import { CrossChainSwapForm } from '@xchain-wallet/core/shared/routes/CrossChainSwapForm.jsx';
 import { CrossChainTemplates } from '@xchain-wallet/core/shared/routes/CrossChainTemplates.jsx';
@@ -516,6 +517,14 @@ function AppInner() {
                     />
                 );
             }
+            if (unlockedView === 'sign-psbt' && activeWalletId) {
+                return (
+                    <PsbtSignForm
+                        walletId={activeWalletId}
+                        onBack={() => setUnlockedView('actions')}
+                    />
+                );
+            }
             if (unlockedView === 'parallel-compose' && activeWalletId) {
                 return (
                     <ParallelComposer
@@ -837,6 +846,7 @@ function AppInner() {
                             onContacts: () => setUnlockedView('contacts'),
                             onSignMessage: () => setUnlockedView('sign-message'),
                             onVerifySignature: () => setUnlockedView('verify-signature'),
+                            onSignPsbt: () => setUnlockedView('sign-psbt'),
                         })}
                         onBack={() => setUnlockedView('home')}
                     />
@@ -1022,6 +1032,7 @@ function AppInner() {
                         onContacts: () => setUnlockedView('contacts'),
                         onSignMessage: () => setUnlockedView('sign-message'),
                         onVerifySignature: () => setUnlockedView('verify-signature'),
+                        onSignPsbt: () => setUnlockedView('sign-psbt'),
                     }) : undefined}
                 />
             );
@@ -1057,6 +1068,7 @@ function buildActionEntries({
     onContacts,
     onSignMessage,
     onVerifySignature,
+    onSignPsbt,
 }) {
     return [
         {
@@ -1196,6 +1208,12 @@ function buildActionEntries({
             label: 'Verify signature',
             description: 'Verify a signature from any address, your own or someone else\'s (§17.5).',
             onSelect: onVerifySignature,
+        },
+        {
+            id: 'sign-psbt',
+            label: 'Sign PSBT',
+            description: 'Paste an unsigned PSBT (hex / base64) and sign it with one of your keys (§30.4 / §20).',
+            onSelect: onSignPsbt,
         },
         {
             id: 'advanced',

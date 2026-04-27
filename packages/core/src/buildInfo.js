@@ -5,7 +5,7 @@
 // package.json bump per the wallet's synchronized-versioning rule.
 // See CHANGELOG.md for the version's release context.
 
-export const WALLET_VERSION = '0.163.0';
+export const WALLET_VERSION = '0.164.0';
 
 // License identifiers matching repo metadata.
 export const LICENSE_NAME = 'Dankest Community License (Apache-2.0 + Additional Terms)';

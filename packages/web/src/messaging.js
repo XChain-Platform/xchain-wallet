@@ -169,6 +169,26 @@ export function verifyMessageRequest(opts) {
 }
 
 /**
+ * §30.4 / G088 — read-only PSBT decompose for the paste-in form preview.
+ *
+ * @param {{ chainId: string, psbtHex: string }} opts
+ * @returns {Promise<{ decomposed: import('@xchain-wallet/core/signers/types').DecomposedPsbt }>}
+ */
+export function parsePsbtRequest(opts) {
+    return /** @type {any} */ (sendMessage('psbt.parse', opts));
+}
+
+/**
+ * §30.4 / G088 — user-initiated PSBT signing.
+ *
+ * @param {{ walletId: string, addressId: string, password: string, psbtHex: string, bip39Passphrase?: string }} opts
+ * @returns {Promise<{ signedPsbtHex: string, txHex: string, txid: string }>}
+ */
+export function signPsbtUserInitiated(opts) {
+    return /** @type {any} */ (sendMessage('auth.signPsbt', opts));
+}
+
+/**
  * §19.3 — reveal the wallet's seed mnemonic. Returns plaintext;
  * caller is responsible for the reveal-screen guardrails.
  *
