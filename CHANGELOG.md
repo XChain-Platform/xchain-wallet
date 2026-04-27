@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.188.0] - 2026-04-27
+
+§53.3 — Cluster K Step 3 — `<StatusMessage>` ARIA-live primitive (G169).
+
+The codebase already has 183 `aria-live` / `role="alert"` occurrences across the shell layer (Send, sign forms, banners, ToastHost, Input, CopyButton — most of the high-traffic surfaces are covered). What was missing was a shared primitive that gives every form a one-line drop-in for status / error / success copy with the right `role` + `aria-live` per variant, instead of each caller re-declaring the attributes inline.
+
+`<StatusMessage variant="status|error|success">` is now exported from `@xchain-wallet/core/ui`. Renders nothing for empty children; `error` uses `role="alert" aria-live="assertive"`; `status` and `success` use `role="status" aria-live="polite"`. Existing per-form inline implementations stay where they are; new forms (and migration of older inline rows in a future FOLLOWUP) can drop the primitive in.
+
+### Added
+
+- **`packages/core/src/ui/StatusMessage.jsx` + `.module.css`** (new) — three-variant ARIA-live row.
+- **`packages/core/src/ui/index.js`** — `StatusMessage` re-export.
+
+Closes G169 — the foundational primitive is in place, with broad existing coverage already satisfying the per-form requirement.
+
 ## [0.187.0] - 2026-04-27
 
 §53.1 + §53.2 — Cluster K Steps 1+2 — Skip link + semantic landmarks (G167 + G168).

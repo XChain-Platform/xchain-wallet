@@ -1,0 +1,26 @@
+.row {
+    margin: var(--xc-space-2) 0;
+    padding: var(--xc-space-2) var(--xc-space-3);
+    border-radius: var(--xc-radius-sm);
+    font-size: var(--xc-text-sm);
+    line-height: 1.4;
+}
+
+.status {
+    background: var(--xc-bg-muted);
+    color: var(--xc-text);
+    border: 1px solid var(--xc-border);
+}
+
+.error {
+    background: var(--xc-danger);
+    color: #FFFFFF;
+    border: 1px solid var(--xc-danger);
+    font-weight: 500;
+}
+
+.success {
+    background: var(--xc-success-bg, var(--xc-bg-muted));
+    color: var(--xc-text);
+    border: 1px solid var(--xc-success, var(--xc-border));
+}

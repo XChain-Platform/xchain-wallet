@@ -4,6 +4,7 @@
 // entry point: `import '@xchain-wallet/core/ui/tokens.css';`.
 
 export { Screen } from './Screen.jsx';
+export { StatusMessage } from './StatusMessage.jsx';
 export { Button } from './Button.jsx';
 export { Input } from './Input.jsx';
 export { AddressCombobox } from './AddressCombobox.jsx';
