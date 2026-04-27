@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.183.0] - 2026-04-27
+
+§25.2 — Cluster J Step 1 — Try-before-commit demo entry (G058).
+
+Onboarding gains a "Try in demo mode" button that generates a 32-byte hex auto-password + a 12-word BIP39 mnemonic in-process, calls `messaging.importMnemonic` against the existing vault path with `name: 'Demo Wallet'`, and refreshes App into the unlocked tree. The demo wallet is marked via a localStorage flag (`xc:demoWalletId`) so future steps can render a persistent banner and offer a one-tap exit.
+
+### Added
+
+- **`packages/core/src/flows/demoMode.js`** (new) — `markDemoWallet` / `getDemoWalletId` / `clearDemoWalletId` / `isDemoWallet`; localStorage-backed; re-exported from `flows/index.js`.
+- **`packages/core/src/shared/routes/Onboarding.jsx`** — `handleEnterDemo`; "Try in demo mode" button gated on a new `onDemoEntered` callback prop.
+- **`packages/core/src/shared/routes/Onboarding.module.css`** — `.demoError` style.
+- **`packages/web/src/App.jsx`** + **`packages/extension/src/popup/App.jsx`** + **`packages/desktop/renderer/App.jsx`** — pass `onDemoEntered={refresh}` to `<Onboarding>` so the new button surfaces in every shell.
+
+Closes G058.
+
 ## [0.182.0] - 2026-04-27
 
 §28.5 — Cluster I Step 5 — History export (G081). Cluster I closed.

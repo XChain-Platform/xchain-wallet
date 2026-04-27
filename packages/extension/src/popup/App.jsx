@@ -242,6 +242,7 @@ function AppInner() {
                     onCreate={() => setOnboardingStep('create')}
                     onImport={() => setOnboardingStep('import')}
                     onImportFromFreeWallet={() => setOnboardingStep('import-freewallet')}
+                    onDemoEntered={refresh}
                 />
             );
         case 'locked':

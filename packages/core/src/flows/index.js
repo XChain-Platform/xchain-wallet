@@ -279,6 +279,12 @@ export {
     buildExportFilename,
 } from './historyExport.js';
 export {
+    markDemoWallet,
+    getDemoWalletId,
+    clearDemoWalletId,
+    isDemoWallet,
+} from './demoMode.js';
+export {
     discoverUsedAddresses,
     DEFAULT_GAP_LIMIT,
     DEFAULT_PER_QUERY_TIMEOUT_MS,
