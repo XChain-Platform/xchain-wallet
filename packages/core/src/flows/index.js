@@ -253,6 +253,10 @@ export {
     DuressNotConfiguredError,
 } from './duressPassphrase.js';
 export {
+    revealMnemonic,
+    NoMnemonicForWifOnlyError,
+} from './revealMnemonic.js';
+export {
     enqueueSignedTx,
     listQueuedBroadcasts,
     drainQueuedBroadcast,

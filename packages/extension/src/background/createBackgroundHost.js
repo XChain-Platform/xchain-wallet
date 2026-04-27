@@ -128,6 +128,7 @@ const {
     exportBackupFile,
     removeWallet,
     signMessageFlow,
+    revealMnemonic,
 } = flows;
 
 /**
@@ -417,6 +418,19 @@ export function createBackgroundHost(deps) {
             ? /** @type {Record<string, unknown>} */ (req.patch)
             : /** @type {Record<string, unknown>} */ (req ?? {});
         return updateSettings(vault, patch);
+    });
+
+    // §19.3 — reveal seed mnemonic. Decrypts the wallet's encrypted
+    // seed blob (the AEAD tag check doubles as the password probe) and
+    // returns the plaintext mnemonic for display. The shell UX owns
+    // tap-to-reveal, auto-hide on blur, no clipboard write — this
+    // handler is the pure primitive.
+    host.register('wallet.revealMnemonic', async (req, { vault }) => {
+        return revealMnemonic({
+            vault,
+            walletId: req?.walletId,
+            password: req?.password,
+        });
     });
 
     // §19.4 encrypted backup — returns the pretty-printed JSON envelope

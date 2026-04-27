@@ -1,6 +1,6 @@
 {
     "name": "@xchain-wallet/web",
-    "version": "0.150.0",
+    "version": "0.151.0",
     "private": true,
     "description": "Browser web-app shell for XChain Wallet",
     "main": "./src/index.js",

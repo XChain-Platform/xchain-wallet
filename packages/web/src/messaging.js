@@ -163,6 +163,17 @@ export function verifyMessageRequest(opts) {
 }
 
 /**
+ * §19.3 — reveal the wallet's seed mnemonic. Returns plaintext;
+ * caller is responsible for the reveal-screen guardrails.
+ *
+ * @param {{ walletId: string, password: string }} opts
+ * @returns {Promise<{ mnemonic: string, format: 'bip39' | 'counterwallet-legacy', passphraseEnabled: boolean }>}
+ */
+export function revealMnemonicRequest(opts) {
+    return /** @type {any} */ (sendMessage('wallet.revealMnemonic', opts));
+}
+
+/**
  * HW-wallet variant of sendAsset. No password. Background resolves
  * the `signerId` + routes the sign request through the renderer-side
  * signer bridge. See popup/messaging.js for the full shape.

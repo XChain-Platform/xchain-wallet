@@ -240,6 +240,16 @@ export function verifyMessageRequest(opts) {
 }
 
 /**
+ * §19.3 — reveal the wallet's seed mnemonic.
+ *
+ * @param {{ walletId: string, password: string }} opts
+ * @returns {Promise<{ mnemonic: string, format: string, passphraseEnabled: boolean }>}
+ */
+export function revealMnemonicRequest(opts) {
+    return /** @type {any} */ (sendMessage('wallet.revealMnemonic', opts));
+}
+
+/**
  * HW-wallet variant of sendAsset. No password (HW keys live on the
  * device). The background handler resolves the `signerId` to a
  * SignerRecord, builds a RemoteSigner wrapping a transport that

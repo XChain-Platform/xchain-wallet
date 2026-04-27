@@ -1,15 +1,13 @@
 // BackupSection — §35.1 Backup panel.
 //
-// Live this step:
+// Live:
 //   - Export encrypted backup (.xchain-wallet) — wires `exportBackupFile`
-//     core flow through the new `wallet.exportBackup` host handler. The
-//     renderer captures the JSON envelope and triggers a Blob download.
+//     core flow through the `wallet.exportBackup` host handler.
+//   - Back up seed phrase — wires `revealMnemonic` core flow through
+//     the `wallet.revealMnemonic` host handler. Inline password gate;
+//     mnemonic blurred until tapped; row collapses on done.
 //
 // Deferred (need additional flows / UI):
-//   - Back up seed phrase — needs a `wallet.revealSeed` host handler
-//     that re-derives the mnemonic via `unlockWallet` and returns it.
-//     Sensitive enough to warrant its own dedicated reveal screen
-//     rather than an inline panel.
 //   - Test backup (dry-run restore) — `dryRunRestore` flow exists but
 //     wants its own multi-step UI (paste mnemonic, gap-limit picker,
 //     per-chain comparison report).
@@ -41,6 +39,15 @@ export function BackupSection({ activeWallet }) {
     const [exportError, setExportError] = useState(/** @type {string | null} */ (null));
     const [pendingPassword, setPendingPassword] = useState(/** @type {string | null} */ (null));
 
+    // §19.3 reveal-seed state.
+    const [revealStage, setRevealStage] = useState(
+        /** @type {'idle' | 'password' | 'shown'} */ ('idle'),
+    );
+    const [revealing, setRevealing] = useState(false);
+    const [revealError, setRevealError] = useState(/** @type {string | null} */ (null));
+    const [mnemonic, setMnemonic] = useState('');
+    const [mnemonicHidden, setMnemonicHidden] = useState(true);
+
     const onExport = async (password) => {
         if (typeof messaging?.exportBackupFile !== 'function') {
             setExportError('Backup export is not wired in this shell yet.');
@@ -66,6 +73,43 @@ export function BackupSection({ activeWallet }) {
         }
     };
 
+    const onReveal = async (password) => {
+        if (typeof messaging?.revealMnemonicRequest !== 'function') {
+            setRevealError('Seed reveal is not wired in this shell yet.');
+            return;
+        }
+        if (!activeWallet?.id) {
+            setRevealError('No active wallet.');
+            return;
+        }
+        setRevealing(true);
+        setRevealError(null);
+        try {
+            const r = await messaging.revealMnemonicRequest({
+                walletId: activeWallet.id,
+                password,
+            });
+            setMnemonic(r?.mnemonic || '');
+            setRevealStage('shown');
+            setMnemonicHidden(true);
+        } catch (err) {
+            const name = err?.name || '';
+            const msg = name === 'NoMnemonicForWifOnlyError'
+                ? 'This wallet was imported from a private key only — there is no seed phrase to reveal.'
+                : (err?.message || 'Failed to reveal seed phrase.');
+            setRevealError(msg);
+        } finally {
+            setRevealing(false);
+        }
+    };
+
+    function handleHideMnemonic() {
+        setMnemonic('');
+        setMnemonicHidden(true);
+        setRevealStage('idle');
+        setRevealError(null);
+    }
+
     return (
         <div style={STACK}>
             {pendingPassword !== null ? (
@@ -87,13 +131,31 @@ export function BackupSection({ activeWallet }) {
                 />
             )}
 
-            <BackupRow
-                label="Back up seed phrase"
-                hint="Coming soon — reveal the BIP39 mnemonic for offline copy. Needs a dedicated wallet.revealSeed flow + reveal-screen UX."
-                actionLabel="Show…"
-                disabled
-                onClick={() => {}}
-            />
+            {revealStage === 'password' ? (
+                <UnlockPrompt
+                    label="Reveal seed phrase"
+                    hint="Enter your wallet password. The seed phrase is the master key — anyone who sees it can spend your funds. Make sure no one is looking over your shoulder."
+                    busy={revealing}
+                    onCancel={() => { setRevealStage('idle'); setRevealError(null); }}
+                    onSubmit={(pw) => onReveal(pw)}
+                    error={revealError}
+                />
+            ) : revealStage === 'shown' ? (
+                <RevealedMnemonic
+                    mnemonic={mnemonic}
+                    hidden={mnemonicHidden}
+                    onToggle={() => setMnemonicHidden((h) => !h)}
+                    onDone={handleHideMnemonic}
+                />
+            ) : (
+                <BackupRow
+                    label="Back up seed phrase"
+                    hint="Reveal the wallet's seed phrase so you can copy it onto paper or another device. Requires the wallet password every time."
+                    actionLabel="Show…"
+                    disabled={!activeWallet}
+                    onClick={() => { setRevealStage('password'); setRevealError(null); }}
+                />
+            )}
             <BackupRow
                 label="Test backup (dry-run restore)"
                 hint="Coming soon — re-derive addresses from a mnemonic and confirm they match this wallet's balances per §19.6."
@@ -131,6 +193,121 @@ function BackupRow({ label, hint, actionLabel, disabled, onClick }) {
             >
                 {actionLabel}
             </button>
+        </div>
+    );
+}
+
+/**
+ * Single-password unlock prompt — used by the §19.3 seed-phrase reveal
+ * flow. Differs from `<PasswordPrompt>` (the backup-export flow) by
+ * not asking for confirmation, since the user is entering an EXISTING
+ * password rather than picking a new one.
+ */
+function UnlockPrompt({ label, hint, busy, error, onCancel, onSubmit }) {
+    const [pw, setPw] = useState('');
+    return (
+        <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 'var(--xc-space-2)',
+            padding: 'var(--xc-space-3)',
+            background: 'var(--xc-surface-raised)',
+            border: '1px solid var(--xc-border)',
+            borderRadius: 'var(--xc-radius-md)',
+        }}>
+            <div style={{ color: 'var(--xc-text)', fontWeight: 500 }}>{label}</div>
+            {hint ? <div style={ROW_HINT}>{hint}</div> : null}
+            <input
+                type="password"
+                placeholder="Wallet password"
+                value={pw}
+                onChange={(e) => setPw(e.target.value)}
+                autoFocus
+                autoComplete="current-password"
+                aria-label="Wallet password"
+                style={passwordStyle}
+            />
+            {error ? <Status text={error} tone="error" /> : null}
+            <div style={{ display: 'flex', gap: 'var(--xc-space-2)', justifyContent: 'flex-end' }}>
+                <button type="button" onClick={onCancel} style={ACTION_BTN} disabled={busy}>Cancel</button>
+                <button
+                    type="button"
+                    onClick={() => onSubmit(pw)}
+                    disabled={busy || pw.length === 0}
+                    style={{
+                        ...ACTION_BTN,
+                        background: pw.length > 0 ? 'var(--xc-accent-primary)' : 'transparent',
+                        borderColor: pw.length > 0 ? 'var(--xc-accent-primary)' : 'var(--xc-border)',
+                        color: pw.length > 0 ? 'var(--xc-bg)' : 'var(--xc-text-muted)',
+                    }}
+                >
+                    {busy ? 'Revealing…' : 'Reveal'}
+                </button>
+            </div>
+        </div>
+    );
+}
+
+/**
+ * Tap-to-reveal mnemonic display. The seed is rendered with a CSS blur
+ * filter when hidden, so the layout is stable but the text isn't
+ * legible without an explicit user action. Window-blur privacy
+ * (§26 / G069) layers on top via `usePrivacyBlur`.
+ */
+function RevealedMnemonic({ mnemonic, hidden, onToggle, onDone }) {
+    return (
+        <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 'var(--xc-space-2)',
+            padding: 'var(--xc-space-3)',
+            background: 'var(--xc-surface-raised)',
+            border: '1px solid var(--xc-warning, var(--xc-border-strong))',
+            borderRadius: 'var(--xc-radius-md)',
+        }}>
+            <div style={{ color: 'var(--xc-text)', fontWeight: 500 }}>
+                Your seed phrase
+            </div>
+            <div style={ROW_HINT}>
+                Write it on paper or store it in a password manager. Never type or
+                paste it into anything else. The wallet has nothing else that can
+                recover this — losing the seed and your password loses the funds.
+            </div>
+            <button
+                type="button"
+                onClick={onToggle}
+                aria-label={hidden ? 'Reveal seed phrase' : 'Hide seed phrase'}
+                style={{
+                    background: 'var(--xc-bg)',
+                    border: '1px solid var(--xc-border)',
+                    borderRadius: 'var(--xc-radius-md)',
+                    padding: 'var(--xc-space-3)',
+                    fontFamily: 'var(--xc-font-mono)',
+                    fontSize: 'var(--xc-text-sm)',
+                    color: 'var(--xc-text)',
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    filter: hidden ? 'blur(8px)' : 'none',
+                    transition: 'filter 200ms',
+                    minHeight: 60,
+                    wordBreak: 'break-word',
+                    whiteSpace: 'pre-wrap',
+                }}
+            >
+                {mnemonic || ' '}
+            </button>
+            <div style={{
+                color: 'var(--xc-text-muted)',
+                fontSize: 'var(--xc-text-xs)',
+                textAlign: 'center',
+            }}>
+                {hidden ? 'Tap to reveal.' : 'Tap to hide again.'}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <button type="button" onClick={onDone} style={ACTION_BTN}>
+                    Done
+                </button>
+            </div>
         </div>
     );
 }

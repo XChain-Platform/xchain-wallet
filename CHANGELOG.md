@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.151.0] - 2026-04-27
+
+§19 Backup — Step 3 of Cluster B — Seed-phrase reveal flow.
+
+The Settings → Backup panel's "Back up seed phrase" row is now wired end-to-end. The user clicks Show, enters the wallet password, and the BIP39 (or Counterwallet-legacy) mnemonic appears in a tap-to-reveal blurred surface. Window-blur privacy from §26 / G069 layers on top automatically — alt-tab while revealed and the mnemonic blurs system-wide.
+
+### Added
+
+- **`flows/revealMnemonic.js`** — pure flow. Decrypts the wallet's encrypted seed blob via `crypto/walletBlob.decryptWalletSeed` (the AEAD tag check doubles as the password probe — wrong password throws), returns `{ mnemonic, format, passphraseEnabled }`. Wif-only wallets throw `NoMnemonicForWifOnlyError` since they have no seed by definition. The plaintext buffer is zeroed in a `try/finally`.
+- **`wallet.revealMnemonic` host handler** in `extension/src/background/createBackgroundHost.js`. Thin pass-through to the flow.
+- **`messaging.revealMnemonicRequest`** wrappers in web + popup messaging.
+- **Inline reveal UI in `BackupSection.jsx`** — three stages: idle (BackupRow with Show button), password (single-input UnlockPrompt with sensitive-action copy), shown (RevealedMnemonic with tap-to-toggle blur, "Tap to reveal." / "Tap to hide again." hint, Done button to return to idle and clear state). The mnemonic stays in component state only while the row is in the `'shown'` stage; clicking Done wipes it. Wrong-password errors surface as `Status` toned error; `NoMnemonicForWifOnlyError` maps to "This wallet was imported from a private key only — there is no seed phrase to reveal."
+- **`test/smoke/core/reveal-mnemonic.smoke.js`** — flow shape + wif-only rejection + zeroed-plaintext finally + flows/index re-export.
+- **`test/smoke/ui/reveal-mnemonic-ui.smoke.js`** — BackupSection wiring (revealStage union, both subcomponents, blur CSS, hint copy, NoMnemonicForWifOnlyError mapping, activeWallet gating); host handler; both messaging wrappers.
+- **SPEC_GAPS.md row G181** — new ledger row for the seed-phrase reveal gap (formerly tracked only as Settings close FOLLOWUP 1).
+
+### Changed
+
+- **`flows/index.js`** — re-exports `revealMnemonic` + `NoMnemonicForWifOnlyError`.
+- **`BackupSection.jsx`** — header comment updated to reflect that seed-phrase reveal is now Live (was: Deferred). The row's button is no longer permanently disabled; it activates whenever an `activeWallet` is supplied.
+
+### Behavior preserved
+
+- Encrypted backup export from v0.116.0 is unchanged; both flows share the same Settings panel and password-prompt primitives but route through different host handlers.
+- The wallet's vault format, KDF parameters, and AEAD ciphertext shape are untouched — `revealMnemonic` reads via the existing `decryptWalletSeed` and produces the same plaintext the SoftwareSigner unlock path produces.
+- Tap-to-reveal blur is purely a CSS `filter: blur(8px)` on the same DOM element; the underlying text is in the React tree as soon as the user enters the password (this is by design — the reveal screen exists exactly so the text is accessible). Privacy on top is the §26 / G069 window-blur sweep.
+
 ## [0.150.0] - 2026-04-27
 
 §17 Sign / Verify / Backup — Step 2 of 6 — Verify Signature route (G025).
