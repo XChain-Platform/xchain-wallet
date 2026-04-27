@@ -9,6 +9,7 @@ import {
 } from '../../flows/rbfReplace.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { EmptyStateNudge } from '../components/EmptyStateNudge.jsx';
+import { groupHistoryEntries } from '../utils/historyGrouping.js';
 import styles from './History.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -74,6 +75,8 @@ export function History({ walletId, accountId, onBack, onReceive }) {
     const [crossChainOnly, setCrossChainOnly] = useState(false);
     const [multisigOnly, setMultisigOnly] = useState(false);
     const [multisigAddress, setMultisigAddress] = useState(/** @type {string | null} */ (null));
+    const [groupingMode, setGroupingMode] = useState(/** @type {'grouped' | 'flat'} */ ('grouped'));
+    const [expandedGroups, setExpandedGroups] = useState(/** @type {Set<string>} */ (new Set()));
     const [selectedKey, setSelectedKey] = useState(/** @type {string | null} */ (null));
     const [peerCache, setPeerCache] = useState(
         /** @type {Record<string, { loading: boolean, action: any | null, error: string | null }>} */ ({}),
@@ -240,6 +243,23 @@ export function History({ walletId, accountId, onBack, onReceive }) {
         return set;
     }, [visibleEntries]);
 
+    // §28.2 activity-feed grouping. Computed AFTER all filters so a
+    // group only collapses when both leader and members survive the
+    // current filter set; otherwise members render as ungrouped rows.
+    const groupedItems = useMemo(
+        () => groupHistoryEntries(visibleEntries, groupingMode),
+        [visibleEntries, groupingMode],
+    );
+
+    const toggleGroupExpanded = (groupKey) => {
+        setExpandedGroups((prev) => {
+            const next = new Set(prev);
+            if (next.has(groupKey)) next.delete(groupKey);
+            else next.add(groupKey);
+            return next;
+        });
+    };
+
     const toggleChain = (cid) => {
         setEnabledChains((prev) => {
             const next = new Set(prev);
@@ -372,6 +392,16 @@ export function History({ walletId, accountId, onBack, onReceive }) {
                 >
                     🔐 Multisig only
                 </button>
+                <span className={styles.divider} aria-hidden="true" />
+                <button
+                    type="button"
+                    onClick={() => setGroupingMode((m) => (m === 'grouped' ? 'flat' : 'grouped'))}
+                    className={`${styles.chip} ${groupingMode === 'grouped' ? styles.chipActive : ''}`}
+                    aria-pressed={groupingMode === 'grouped'}
+                    title="Collapse related actions (issuance + mints, dispenser + dispenses, order + fills) into a single expandable card (§28.2)."
+                >
+                    {groupingMode === 'grouped' ? 'Grouped' : 'Flat'}
+                </button>
             </div>
 
             {loadingChains.size > 0 ? (
@@ -395,51 +425,45 @@ export function History({ walletId, accountId, onBack, onReceive }) {
             ) : null}
 
             <ul className={styles.timeline}>
-                {visibleEntries.map((entry) => {
-                    const d = chainRegistry.get(entry.chainId);
-                    const selected = selectedKey === entry.key;
-                    const showConnector = connectorByKey.has(entry.key);
-                    return (
-                        <li key={entry.key}>
-                            <button
-                                type="button"
-                                onClick={() => onRowClick(entry)}
-                                className={`${styles.row} ${selected ? styles.rowSelected : ''}`}
-                                aria-expanded={selected}
-                            >
-                                {showConnector ? (
-                                    <span className={styles.connector} aria-hidden="true" />
-                                ) : null}
-                                <span className={styles.rowHeader}>
-                                    {d ? <ChainBadge descriptor={d} size="sm" /> : null}
-                                    <span className={styles.actionBadge}>{entry.action}</span>
-                                    {entry.link ? (
-                                        <span
-                                            className={styles.crosschainBadge}
-                                            title={`Linked to ${entry.link.peerCoinTicker} #${entry.link.peerActionIndex}`}
-                                        >
-                                            🔗
-                                        </span>
-                                    ) : null}
-                                </span>
-                                <span className={styles.rowSummary}>
-                                    {summarizeRow(entry.raw, entry.action)}
-                                </span>
-                                <span className={styles.rowMeta}>
-                                    {entry.blockIndex ? `Block ${entry.blockIndex}` : 'unconfirmed'}
-                                    {' · '}
-                                    {entry.timestamp ? formatTimestamp(entry.timestamp) : '—'}
-                                    {entry.source ? ` · ${shorten(entry.source)}` : ''}
-                                </span>
-                            </button>
-                            {selected ? (
-                                <DetailCard
-                                    entry={entry}
-                                    peerCache={peerCache}
-                                    isFull={isFull}
+                {groupedItems.map((item) => {
+                    if (item.kind === 'group') {
+                        const expanded = expandedGroups.has(item.key);
+                        return (
+                            <li key={item.key}>
+                                <GroupCard
+                                    item={item}
+                                    expanded={expanded}
+                                    onToggle={() => toggleGroupExpanded(item.key)}
                                 />
-                            ) : null}
-                        </li>
+                                {expanded ? (
+                                    <ul className={styles.groupMembers}>
+                                        {item.members.map((entry) => (
+                                            <EntryRow
+                                                key={entry.key}
+                                                entry={entry}
+                                                selected={selectedKey === entry.key}
+                                                showConnector={connectorByKey.has(entry.key)}
+                                                onClick={() => onRowClick(entry)}
+                                                peerCache={peerCache}
+                                                isFull={isFull}
+                                            />
+                                        ))}
+                                    </ul>
+                                ) : null}
+                            </li>
+                        );
+                    }
+                    const entry = item.entry;
+                    return (
+                        <EntryRow
+                            key={entry.key}
+                            entry={entry}
+                            selected={selectedKey === entry.key}
+                            showConnector={connectorByKey.has(entry.key)}
+                            onClick={() => onRowClick(entry)}
+                            peerCache={peerCache}
+                            isFull={isFull}
+                        />
                     );
                 })}
             </ul>
@@ -565,6 +589,90 @@ function RbfActions({ entry }) {
             ) : null}
         </div>
     );
+}
+
+/**
+ * One history row. Used both for top-level entries and for member rows
+ * inside an expanded group card.
+ */
+function EntryRow({ entry, selected, showConnector, onClick, peerCache, isFull }) {
+    const d = chainRegistry.get(entry.chainId);
+    return (
+        <li>
+            <button
+                type="button"
+                onClick={onClick}
+                className={`${styles.row} ${selected ? styles.rowSelected : ''}`}
+                aria-expanded={selected}
+            >
+                {showConnector ? (
+                    <span className={styles.connector} aria-hidden="true" />
+                ) : null}
+                <span className={styles.rowHeader}>
+                    {d ? <ChainBadge descriptor={d} size="sm" /> : null}
+                    <span className={styles.actionBadge}>{entry.action}</span>
+                    {entry.link ? (
+                        <span
+                            className={styles.crosschainBadge}
+                            title={`Linked to ${entry.link.peerCoinTicker} #${entry.link.peerActionIndex}`}
+                        >
+                            🔗
+                        </span>
+                    ) : null}
+                </span>
+                <span className={styles.rowSummary}>
+                    {summarizeRow(entry.raw, entry.action)}
+                </span>
+                <span className={styles.rowMeta}>
+                    {entry.blockIndex ? `Block ${entry.blockIndex}` : 'unconfirmed'}
+                    {' · '}
+                    {entry.timestamp ? formatTimestamp(entry.timestamp) : '—'}
+                    {entry.source ? ` · ${shorten(entry.source)}` : ''}
+                </span>
+            </button>
+            {selected ? (
+                <DetailCard entry={entry} peerCache={peerCache} isFull={isFull} />
+            ) : null}
+        </li>
+    );
+}
+
+/**
+ * Collapsed group card (§28.2). Renders a single summary row that
+ * expands to reveal its member entries when clicked.
+ */
+function GroupCard({ item, expanded, onToggle }) {
+    const d = chainRegistry.get(item.leader.chainId);
+    const newest = item.members[0];
+    return (
+        <button
+            type="button"
+            onClick={onToggle}
+            className={`${styles.row} ${styles.groupCard} ${expanded ? styles.groupCardExpanded : ''}`}
+            aria-expanded={expanded}
+        >
+            <span className={styles.rowHeader}>
+                {d ? <ChainBadge descriptor={d} size="sm" /> : null}
+                <span className={styles.actionBadge}>{groupBadgeLabel(item.subkind)}</span>
+                <span className={styles.groupCount}>{item.members.length}</span>
+            </span>
+            <span className={styles.rowSummary}>{item.summary}</span>
+            <span className={styles.rowMeta}>
+                {newest?.timestamp ? `Latest ${formatTimestamp(newest.timestamp)}` : '—'}
+                {' · '}
+                <span className={styles.groupExpand} aria-hidden="true">
+                    {expanded ? 'Hide details ▾' : 'Show details ▸'}
+                </span>
+            </span>
+        </button>
+    );
+}
+
+function groupBadgeLabel(subkind) {
+    if (subkind === 'issue-mint') return 'LAUNCH';
+    if (subkind === 'dispenser-dispense') return 'DISPENSER';
+    if (subkind === 'order-fills') return 'ORDER';
+    return 'GROUP';
 }
 
 /** @typedef {{

@@ -275,3 +275,51 @@
     font-size: var(--xc-text-xs);
     line-height: 1.3;
 }
+
+/* §28.2 activity-feed grouping. The group card uses the same row
+ * surface as a normal entry but with a thicker accent border and a
+ * count badge so the user can tell at a glance that the row collapses
+ * multiple actions. */
+.groupCard {
+    border-color: var(--xc-accent-secondary, var(--xc-accent-primary));
+    border-width: 2px;
+    background: var(--xc-bg);
+}
+
+.groupCardExpanded {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+}
+
+.groupCount {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.5rem;
+    height: 1.25rem;
+    padding: 0 var(--xc-space-1);
+    border-radius: var(--xc-radius-pill, 999px);
+    background: var(--xc-accent-secondary, var(--xc-accent-primary));
+    color: var(--xc-on-accent, #fff);
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+    letter-spacing: 0;
+}
+
+.groupExpand {
+    color: var(--xc-text-muted);
+}
+
+.groupMembers {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    list-style: none;
+    margin: 0 0 var(--xc-space-1) 0;
+    padding: var(--xc-space-1) var(--xc-space-2);
+    border: 2px solid var(--xc-accent-secondary, var(--xc-accent-primary));
+    border-top: none;
+    border-bottom-left-radius: var(--xc-radius-md);
+    border-bottom-right-radius: var(--xc-radius-md);
+    background: var(--xc-surface-raised);
+}

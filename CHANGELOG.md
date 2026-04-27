@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.158.0] - 2026-04-27
+
+§28.2 — Step 4 of Cluster C — Activity feed grouping (G078).
+
+Related history rows now collapse into a single expandable card: ISSUE + every MINT of the same token, DISPENSER + its DISPENSEs, and ORDER + its fills. A new Grouped / Flat chip in the filter bar toggles collapse on (default) and off. BATCH grouping is deferred — the canonical batch-parent reference isn't exposed on history-row payloads we currently read; punted to FOLLOWUPS rather than ship a heuristic that could collapse unrelated rows.
+
+### Added
+
+- **`shared/utils/historyGrouping.js`** (new) — pure `groupHistoryEntries(entries, mode)`; emits `{ kind: 'entry' }` or `{ kind: 'group', subkind, leader, members, summary, key }` items in the input order, with each group bubbled to the position of its newest member so recent activity stays on top.
+- **`test/unit/util/historyGrouping.test.js`** (new) — 13 cases covering each grouping rule, flat passthrough, cross-chain isolation, missing-amount fallback, uppercase ACTION names, and ordering.
+
+### Changed
+
+- **`shared/routes/History.jsx`** — adds `groupingMode` + `expandedGroups` state, the Grouped / Flat toggle chip, and a `<GroupCard>` renderer that expands inline into its member rows. Entry rendering extracted into an `<EntryRow>` component shared by top-level rows and members inside an expanded group.
+- **`shared/routes/History.module.css`** — `.groupCard`, `.groupCardExpanded`, `.groupCount`, `.groupExpand`, `.groupMembers` for the collapsed card surface and its expanded member list.
+
+Closes G078. Smoke baseline preserved (24/160).
+
 ## [0.157.0] - 2026-04-27
 
 §27.7 / §28 — Step 3 of Cluster C — Empty-state nudges with Receive CTA (G077).
