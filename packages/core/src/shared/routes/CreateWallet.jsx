@@ -35,8 +35,10 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
     const isFull = variant === 'full';
 
     const [stage, setStage] = useState(
-        /** @type {'password'|'mnemonic'|'persisting'} */ ('password'),
+        /** @type {'password'|'mnemonic'|'persisting'|'ads-consent'} */ ('password'),
     );
+    const [adsBusy, setAdsBusy] = useState(false);
+    const [adsError, setAdsError] = useState(/** @type {string | null} */ (null));
     const [name, setName] = useState('Main Wallet');
     const [password, setPassword] = useState('');
     const [confirm, setConfirm] = useState('');
@@ -109,10 +111,29 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
             } else {
                 await messaging.importMnemonic({ password, mnemonic, name });
             }
-            onCreated();
+            // §36.1 ADS consent — one-time screen during wallet
+            // creation. ADS_DEFAULT_ENABLED is true so "Enable" is a
+            // no-op write; "Decline" persists ads.enabled = false. The
+            // user can flip in Settings → ADS afterwards either way.
+            setStage('ads-consent');
         } catch (err) {
             setPersistError(err?.message || 'Failed to create wallet.');
             setStage('mnemonic');
+        }
+    }
+
+    async function handleAdsChoice(enable) {
+        setAdsBusy(true);
+        setAdsError(null);
+        try {
+            if (typeof messaging?.updateSettings === 'function') {
+                await messaging.updateSettings({ ads: { enabled: Boolean(enable) } });
+            }
+            onCreated();
+        } catch (err) {
+            setAdsError(err?.message || 'Could not save your preference. Try again.');
+        } finally {
+            setAdsBusy(false);
         }
     }
 
@@ -137,6 +158,67 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
             <span />
         </div>
     );
+
+    if (stage === 'ads-consent') {
+        const consentBody = (
+            <>
+                <header className={headClass}>
+                    <h1 className={titleClass}>
+                        {isFull ? 'Support XChain development' : 'Support XChain'}
+                    </h1>
+                    <p className={subtitleClass}>
+                        The wallet can add a small donation to each transaction you send,
+                        helping fund XChain Platform development. This is entirely optional —
+                        you can change it any time in Settings → Automatic Donation System.
+                    </p>
+                </header>
+                <ul style={{
+                    margin: 0,
+                    padding: 'var(--xc-space-2) var(--xc-space-3)',
+                    background: 'var(--xc-surface-raised)',
+                    border: '1px solid var(--xc-border)',
+                    borderRadius: 'var(--xc-radius-md)',
+                    listStyle: 'none',
+                    fontSize: 'var(--xc-text-sm)',
+                    color: 'var(--xc-text-muted)',
+                }}>
+                    <li>Default: 1 sat per transaction (sent when accumulated &gt; 1,000 sats)</li>
+                    <li>Configurable per chain (Bitcoin / Litecoin / Dogecoin)</li>
+                    <li>No donation line on sign screens — runs invisibly after setup</li>
+                </ul>
+                {adsError ? (
+                    <div role="alert" className={styles.error}>{adsError}</div>
+                ) : null}
+                <div className={actionsClass}>
+                    <Button
+                        variant="primary"
+                        onClick={() => handleAdsChoice(true)}
+                        disabled={adsBusy}
+                        loading={adsBusy}
+                        block={!isFull}
+                        size={isFull ? undefined : 'sm'}
+                        icon={<Icon.CheckIcon />}
+                    >
+                        Enable and continue
+                    </Button>
+                    <Button
+                        variant="secondary"
+                        onClick={() => handleAdsChoice(false)}
+                        disabled={adsBusy}
+                        block={!isFull}
+                        size={isFull ? undefined : 'sm'}
+                    >
+                        Decline (I'll consider it later)
+                    </Button>
+                </div>
+            </>
+        );
+        return (
+            <Screen variant={variant} header={screenHeader}>
+                {isFull ? <div className={styles.card}>{consentBody}</div> : consentBody}
+            </Screen>
+        );
+    }
 
     if (stage === 'mnemonic' || stage === 'persisting') {
         const mnemonicBody = (

@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.121.0] - 2026-04-26
+
+Settings — Step 18 of 18 — ADS onboarding consent during wallet creation.
+
+Closes the §35 Settings build. CreateWallet.jsx grows a fourth stage `ads-consent` between `persisting` and the `onCreated()` callback. After the wallet record + first account + first address per active chain are persisted, the user sees a one-time consent screen presenting Enable / Decline with equal prominence (no dark pattern). Either choice writes `settings.ads.enabled` via `messaging.updateSettings` then advances; the user can flip the toggle any time in Settings → Automatic Donation System. Per spec §36.1 the screen surfaces the per-chain default amounts and notes that no donation line appears on sign screens after setup.
+
+ADS_DEFAULT_ENABLED stays true so "Enable" is a no-op write at the data layer; "Decline" persists `ads.enabled = false` before continuing.
+
+### Added
+
+- **`packages/core/src/shared/routes/CreateWallet.jsx`** — new `ads-consent` stage rendered between persistence and the `onCreated` callback. Two equally-styled buttons; busy / error state co-located with the choice handler.
+- **`test/smoke/ui/ads-onboarding-consent.smoke.js`** — stage-union widening, transition from persisting, both buttons wired with the right boolean, settings write via deep-merge nested `ads.enabled` patch, onCreated fired after the choice.
+
 ## [0.120.0] - 2026-04-26
 
 Settings — Step 17 of 18 — Keyboard Shortcuts panel (preview).
