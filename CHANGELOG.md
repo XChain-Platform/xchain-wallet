@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.160.0] - 2026-04-27
+
+§27.6 — Step 6 of Cluster C — Token detail page (G071); Cluster C closed.
+
+A balance row is now a button: tap it and the wallet routes into a dedicated single-token view with the asset's hero card (icon, name, ticker, chain badge, balance, fiat), a metadata panel, primary actions (Send / Receive / View activity), and a collapsible holders panel that lazy-loads from `messaging.getHoldersForToken` for tokens (skipped for native coins). "View activity" routes to History pre-populated with the token's tick via the new `initialSearchQuery` prop, so the user lands on a feed already filtered to that asset.
+
+Token-info richness, supply chart, and Phase-3 actions (Sell on DEX, Market view) are queued in FOLLOWUPS — they require host endpoints that don't exist yet.
+
+### Added
+
+- **`shared/routes/TokenDetail.jsx` + `TokenDetail.module.css`** (new) — full-page token view with header / metadata / actions / holders sections; hero card uses tickerColor + first-letter avatar to match the balance-list iconography.
+- **`test/smoke/ui/token-detail.smoke.js`** — verifies TokenDetail exports + props, BalanceList clickable variant, UnifiedBalanceList parity, HomeTabs forwarding, History `initialSearchQuery`, and both shells' App.jsx wiring.
+
+### Changed
+
+- **`shared/components/BalanceList.jsx` + `.module.css`** — `BalanceRowEl` accepts `onSelect`; row tag becomes a `<button>` when a handler is wired, with new `.rowClickable` styles. `BalanceList` accepts `onSelectToken` and forwards it.
+- **`shared/components/UnifiedBalanceList.jsx` + `.module.css`** — same `onSelectToken` + `.rowClickable` treatment for parity.
+- **`shared/components/HomeTabs.jsx`** — accepts `onSelectToken`, forwards it into Coins / Tokens / NFTs tabs.
+- **`shared/routes/Home.jsx`** — accepts `onSelectToken`, forwards it into HomeTabs.
+- **`shared/routes/History.jsx`** — accepts `initialSearchQuery`; seeds the search box state on mount and auto-opens the More filters panel so the pre-set filter is visible.
+- **`packages/web/src/App.jsx` + `packages/extension/src/popup/App.jsx`** — import TokenDetail; new `'token-detail'` view literal + `tokenDetailRef` + `historyInitialQuery` state; Home wires `onSelectToken={tok => { setTokenDetailRef(tok); setUnlockedView('token-detail'); }}`; the route renders `<TokenDetail>` with Send / Receive / View activity callbacks.
+
+Closes G071. Cluster C — §27 Balances + §28 History — closed at v0.160.0. Smoke baseline preserved (24 / 161; new token-detail smoke passes).
+
 ## [0.159.0] - 2026-04-27
 
 §28.6 — Step 5 of Cluster C — Advanced history filtering (G080).

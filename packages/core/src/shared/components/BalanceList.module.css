@@ -13,10 +13,32 @@
     gap: var(--xc-space-3);
     padding: var(--xc-space-3);
     border-top: 1px solid var(--xc-border);
+    width: 100%;
+    text-align: left;
+    color: inherit;
+    font: inherit;
 }
 
 .row:first-of-type {
     border-top: none;
+}
+
+/* Clickable variant — applied when an `onSelectToken` handler is wired
+ * through, which turns the row tag into a <button> for the §27.6 token
+ * detail page (G071). */
+.rowClickable {
+    background: transparent;
+    border-left: none;
+    border-right: none;
+    border-bottom: none;
+    cursor: pointer;
+}
+.rowClickable:hover {
+    background: var(--xc-bg-muted);
+}
+.rowClickable:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: -2px;
 }
 
 .iconWrap {

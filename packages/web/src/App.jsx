@@ -31,6 +31,7 @@ import { WalletDetails } from '@xchain-wallet/core/shared/routes/WalletDetails.j
 import { RenameWalletForm } from '@xchain-wallet/core/shared/routes/RenameWalletForm.jsx';
 import { Locked } from '@xchain-wallet/core/shared/routes/Locked.jsx';
 import { Home } from '@xchain-wallet/core/shared/routes/Home.jsx';
+import { TokenDetail } from '@xchain-wallet/core/shared/routes/TokenDetail.jsx';
 import { Send } from '@xchain-wallet/core/shared/routes/Send.jsx';
 import { Receive } from '@xchain-wallet/core/shared/routes/Receive.jsx';
 import { TokenWizard } from '@xchain-wallet/core/shared/routes/TokenWizard.jsx';
@@ -120,8 +121,12 @@ function AppInner() {
         /** @type {'welcome' | 'create' | 'import' | 'import-freewallet'} */ ('welcome'),
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'swap' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'staking-dashboard' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'link-form' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'addresses' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'swap' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'staking-dashboard' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'token-detail' | 'link-form' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'addresses' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename'} */ ('home'),
     );
+    const [tokenDetailRef, setTokenDetailRef] = useState(
+        /** @type {{ chainId: string, asset: string, kind: string, displayName: string, divisibility: number, fiatRate: number | null, quantity: string } | null} */ (null),
+    );
+    const [historyInitialQuery, setHistoryInitialQuery] = useState('');
     const [walletDetailsId, setWalletDetailsId] = useState(/** @type {string | null} */ (null));
     const [walletRenameTarget, setWalletRenameTarget] = useState(
         /** @type {{ id: string, name: string } | null} */ (null),
@@ -769,6 +774,28 @@ function AppInner() {
                         accountId={activeAccountId || undefined}
                         onBack={() => setUnlockedView('home')}
                         onReceive={() => setUnlockedView('receive')}
+                        initialSearchQuery={historyInitialQuery}
+                    />
+                );
+            }
+            if (unlockedView === 'token-detail' && activeWalletId && tokenDetailRef) {
+                return (
+                    <TokenDetail
+                        walletId={activeWalletId}
+                        chainId={tokenDetailRef.chainId}
+                        asset={tokenDetailRef.asset}
+                        kind={tokenDetailRef.kind}
+                        displayName={tokenDetailRef.displayName}
+                        divisibility={tokenDetailRef.divisibility}
+                        fiatRate={tokenDetailRef.fiatRate}
+                        quantity={tokenDetailRef.quantity}
+                        onBack={() => setUnlockedView('home')}
+                        onSend={() => setUnlockedView('send')}
+                        onReceive={() => setUnlockedView('receive')}
+                        onViewActivity={() => {
+                            setHistoryInitialQuery(tokenDetailRef.asset);
+                            setUnlockedView('history');
+                        }}
                     />
                 );
             }
@@ -952,6 +979,10 @@ function AppInner() {
                     onCrossChain={activeWalletId ? () => setUnlockedView('cross-chain-templates') : undefined}
                     onContacts={activeWalletId ? () => setUnlockedView('contacts') : undefined}
                     onMultisig={activeWalletId && hasBtcAddress ? () => setUnlockedView('multisig-create') : undefined}
+                    onSelectToken={activeWalletId ? (tok) => {
+                        setTokenDetailRef(tok);
+                        setUnlockedView('token-detail');
+                    } : undefined}
                     onOpenWalletPicker={() => setUnlockedView('wallet-picker')}
                     onOpenAccountPicker={activeWalletId ? () => setUnlockedView('account-picker') : undefined}
                     activeAccountId={activeAccountId}

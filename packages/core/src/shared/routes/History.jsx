@@ -64,8 +64,9 @@ const COIN_TICKER_TO_NAME = {
  * @param {string} [props.accountId]   active BIP44 account; when set, history is scoped to that account's addresses
  * @param {() => void} props.onBack
  * @param {() => void} [props.onReceive]   surfaces a Receive CTA in the empty-state nudges (G077)
+ * @param {string} [props.initialSearchQuery]   pre-populates the search box on mount; lets TokenDetail open History scoped to one tick (G071)
  */
-export function History({ walletId, accountId, onBack, onReceive }) {
+export function History({ walletId, accountId, onBack, onReceive, initialSearchQuery = '' }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -82,12 +83,12 @@ export function History({ walletId, accountId, onBack, onReceive }) {
     const [multisigAddress, setMultisigAddress] = useState(/** @type {string | null} */ (null));
     const [groupingMode, setGroupingMode] = useState(/** @type {'grouped' | 'flat'} */ ('grouped'));
     const [expandedGroups, setExpandedGroups] = useState(/** @type {Set<string>} */ (new Set()));
-    const [searchQuery, setSearchQuery] = useState('');
+    const [searchQuery, setSearchQuery] = useState(initialSearchQuery || '');
     const [actionTypeFilter, setActionTypeFilter] = useState(/** @type {Set<string>} */ (new Set()));
     const [statusFilter, setStatusFilter] = useState(/** @type {Set<string>} */ (new Set()));
     const [dateFrom, setDateFrom] = useState(/** @type {string} */ (''));
     const [dateTo, setDateTo] = useState(/** @type {string} */ (''));
-    const [moreFiltersOpen, setMoreFiltersOpen] = useState(false);
+    const [moreFiltersOpen, setMoreFiltersOpen] = useState(Boolean(initialSearchQuery));
     const [selectedKey, setSelectedKey] = useState(/** @type {string | null} */ (null));
     const [peerCache, setPeerCache] = useState(
         /** @type {Record<string, { loading: boolean, action: any | null, error: string | null }>} */ ({}),

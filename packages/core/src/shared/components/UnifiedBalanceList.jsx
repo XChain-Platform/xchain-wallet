@@ -18,8 +18,10 @@ import styles from './UnifiedBalanceList.module.css';
  * @param {Record<string, Array<{ address: string, label: string, balances: any | null, error: string | null }>>} props.balances
  * @param {{ threshold: number, cosignerCount: number, scheme: string } | null} [props.multisig]
  * @param {string} [props.multisigChainId]
+ * @param {(token: { chainId: string, asset: string, kind: string, displayName: string, divisibility: number, fiatRate: number | null, quantity: string }) => void} [props.onSelectToken]
+ *        Click handler for a balance row — surfaces the §27.6 Token detail page (G071) when supplied.
  */
-export function UnifiedBalanceList({ chainRegistry, balances, multisig, multisigChainId, onReceive }) {
+export function UnifiedBalanceList({ chainRegistry, balances, multisig, multisigChainId, onReceive, onSelectToken }) {
     const allRows = useMemo(() => buildRows(balances, chainRegistry), [balances, chainRegistry]);
 
     // Active filter — 'all' or a coin family ('bitcoin'/'litecoin'/...).
@@ -79,6 +81,7 @@ export function UnifiedBalanceList({ chainRegistry, balances, multisig, multisig
                         key={`${r.chainId}:${r.asset}`}
                         row={r}
                         multisig={r.chainId === multisigChainId ? multisig : null}
+                        onSelect={onSelectToken}
                     />
                 ))}
                 {tokens.length > 0 ? (
@@ -87,7 +90,12 @@ export function UnifiedBalanceList({ chainRegistry, balances, multisig, multisig
                     </div>
                 ) : null}
                 {tokens.map((r) => (
-                    <BalanceRow key={`${r.chainId}:${r.asset}`} row={r} multisig={null} />
+                    <BalanceRow
+                        key={`${r.chainId}:${r.asset}`}
+                        row={r}
+                        multisig={null}
+                        onSelect={onSelectToken}
+                    />
                 ))}
                 {natives.length === 0 && tokens.length === 0 ? (
                     <EmptyStateNudge
@@ -100,7 +108,7 @@ export function UnifiedBalanceList({ chainRegistry, balances, multisig, multisig
     );
 }
 
-function BalanceRow({ row, multisig }) {
+function BalanceRow({ row, multisig, onSelect }) {
     const isNative = row.kind === 'native';
     const chainIconUrl = branding.chainIconSmallUrl(row.chainId);
     // Subtitle is the ticker, with the network kind appended for
@@ -110,8 +118,29 @@ function BalanceRow({ row, multisig }) {
         ? `${row.asset} · ${row.networkKind}`
         : row.asset;
     const fiat = fiatValue(row.quantity, row.divisibility, row.fiatRate);
+    const clickable = typeof onSelect === 'function';
+    const handleClick = clickable
+        ? () => onSelect({
+            chainId: row.chainId,
+            asset: row.asset,
+            kind: row.kind,
+            displayName: row.displayName,
+            divisibility: row.divisibility,
+            fiatRate: row.fiatRate,
+            quantity: row.quantity,
+        })
+        : undefined;
+    const Tag = clickable ? 'button' : 'div';
     return (
-        <div className={styles.row} role="listitem">
+        <Tag
+            className={`${styles.row} ${clickable ? styles.rowClickable : ''}`}
+            role="listitem"
+            type={clickable ? 'button' : undefined}
+            onClick={handleClick}
+            aria-label={clickable
+                ? `Open ${row.displayName || row.asset} details`
+                : undefined}
+        >
             <div className={styles.iconWrap}>
                 {isNative && chainIconUrl ? (
                     <img
@@ -161,7 +190,7 @@ function BalanceRow({ row, multisig }) {
                 <div className={styles.qty}>{formatAmount(row.quantity, row.divisibility)}</div>
                 <div className={styles.fiat}>{formatFiat(fiat)}</div>
             </div>
-        </div>
+        </Tag>
     );
 }
 

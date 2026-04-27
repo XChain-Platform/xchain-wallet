@@ -17,6 +17,8 @@ import styles from './BalanceList.module.css';
  * @param {string} [props.emptyTitle]                empty-state headline
  * @param {string} [props.emptyBody]                 explanatory body copy
  * @param {() => void} [props.onReceive]             when supplied, the empty-state shows a Receive CTA
+ * @param {(token: { chainId: string, asset: string, kind: string, displayName: string, divisibility: number, fiatRate: number | null, quantity: string }) => void} [props.onSelectToken]
+ *        Click handler for a balance row — surfaces the §27.6 Token detail page (G071) when supplied.
  */
 export function BalanceList({
     rows,
@@ -25,6 +27,7 @@ export function BalanceList({
     emptyTitle = 'No balances yet',
     emptyBody,
     onReceive,
+    onSelectToken,
 }) {
     if (!rows || rows.length === 0) {
         return (
@@ -44,13 +47,14 @@ export function BalanceList({
                     key={`${r.chainId}:${r.asset}`}
                     row={r}
                     multisig={r.chainId === multisigChainId ? multisig : null}
+                    onSelect={onSelectToken}
                 />
             ))}
         </div>
     );
 }
 
-function BalanceRowEl({ row, multisig }) {
+function BalanceRowEl({ row, multisig, onSelect }) {
     const isNative = row.kind === 'native';
     const chainIconUrl = branding.chainIconSmallUrl(row.chainId);
     const subtitle = row.networkKind !== 'mainnet'
@@ -60,8 +64,29 @@ function BalanceRowEl({ row, multisig }) {
         () => fiatValue(row.quantity, row.divisibility, row.fiatRate),
         [row.quantity, row.divisibility, row.fiatRate],
     );
+    const clickable = typeof onSelect === 'function';
+    const handleClick = clickable
+        ? () => onSelect({
+            chainId: row.chainId,
+            asset: row.asset,
+            kind: row.kind,
+            displayName: row.displayName,
+            divisibility: row.divisibility,
+            fiatRate: row.fiatRate,
+            quantity: row.quantity,
+        })
+        : undefined;
+    const Tag = clickable ? 'button' : 'div';
     return (
-        <div className={styles.row} role="listitem">
+        <Tag
+            className={`${styles.row} ${clickable ? styles.rowClickable : ''}`}
+            role="listitem"
+            type={clickable ? 'button' : undefined}
+            onClick={handleClick}
+            aria-label={clickable
+                ? `Open ${row.displayName || row.asset} details`
+                : undefined}
+        >
             <div className={styles.iconWrap}>
                 {isNative && chainIconUrl ? (
                     <img src={chainIconUrl} alt="" aria-hidden="true" className={styles.iconImg} />
@@ -102,7 +127,7 @@ function BalanceRowEl({ row, multisig }) {
                 <div className={styles.qty}>{formatAmount(row.quantity, row.divisibility)}</div>
                 <div className={styles.fiat}>{formatFiat(fiat)}</div>
             </div>
-        </div>
+        </Tag>
     );
 }
 

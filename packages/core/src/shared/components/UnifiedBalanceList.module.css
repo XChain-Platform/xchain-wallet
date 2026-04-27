@@ -89,6 +89,29 @@
     gap: var(--xc-space-3);
     padding: var(--xc-space-3);
     border-top: 1px solid var(--xc-border);
+    width: 100%;
+    text-align: left;
+    color: inherit;
+    font: inherit;
+}
+
+/* Clickable variant — lifts the row when an `onSelectToken` handler is
+ * supplied so it reads as interactive without re-styling the whole list
+ * (G071 token detail navigation). The row tag becomes a <button> so the
+ * default chrome needs neutralizing. */
+.rowClickable {
+    background: transparent;
+    border-left: none;
+    border-right: none;
+    border-bottom: none;
+    cursor: pointer;
+}
+.rowClickable:hover {
+    background: var(--xc-bg-muted);
+}
+.rowClickable:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: -2px;
 }
 
 /* The first row directly under a section label already has the label's

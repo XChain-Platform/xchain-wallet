@@ -31,7 +31,7 @@ import styles from './HomeTabs.module.css';
  * @param {import('react').ReactNode} [props.actions]   slot rendered between the total-balance hero and the tab strip — used by Home for the Send / Receive / Swap / Buy quick-action row
  * @param {() => void} [props.onReceive]   forwarded to empty-state nudges so the "No balances yet" cards can render a one-tap Receive CTA (G077)
  */
-export function HomeTabs({ chainRegistry, balances, networkFilter, multisig, multisigChainId, actions, onReceive }) {
+export function HomeTabs({ chainRegistry, balances, networkFilter, multisig, multisigChainId, actions, onReceive, onSelectToken }) {
     const [active, setActive] = useState('coins');
 
     const allRows = useMemo(
@@ -107,6 +107,7 @@ export function HomeTabs({ chainRegistry, balances, networkFilter, multisig, mul
                             ? 'Receive Bitcoin, Litecoin, or Dogecoin to populate this list.'
                             : undefined}
                         onReceive={networkFilter === 'all' ? onReceive : undefined}
+                        onSelectToken={onSelectToken}
                     />
                 ) : null}
 
@@ -118,6 +119,7 @@ export function HomeTabs({ chainRegistry, balances, networkFilter, multisig, mul
                             ? 'Browse markets or accept a token transfer to populate this view.'
                             : undefined}
                         onReceive={networkFilter === 'all' ? onReceive : undefined}
+                        onSelectToken={onSelectToken}
                     />
                 ) : null}
 
@@ -129,6 +131,7 @@ export function HomeTabs({ chainRegistry, balances, networkFilter, multisig, mul
                             ? 'Indivisible tokens (Rare Pepe, Ordinals, Bitcoin Stamps) appear here once received.'
                             : undefined}
                         onReceive={networkFilter === 'all' ? onReceive : undefined}
+                        onSelectToken={onSelectToken}
                     />
                 ) : null}
 
