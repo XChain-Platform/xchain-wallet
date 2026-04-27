@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.192.0] - 2026-04-27
+
+§47.5 — Cluster L Step 3 — Desktop URI handler verify (G144).
+
+The desktop deep-link handler was already wired end-to-end (`registerProtocolClients` claims `xchain:` unconditionally + tier-2 BIP21 schemes by opt-in; `attachDeepLinkHandlers` covers macOS `open-url`, Windows/Linux argv parsing, `second-instance`, and single-instance lock; `electron-builder.config.cjs` declares the protocols at install time). The verify pass: `classifyDeepLink` for `xchain:` URIs now parses through the new `parseXchainUri` so the renderer receives a structured `XchainUriIntent` instead of `parsed: null`. Malformed URIs still fall back to `parsed: null` so the renderer can surface a generic error.
+
+### Changed
+
+- **`packages/desktop/main/protocol.js`** — imports `parseXchainUri`; `classifyDeepLink` for `xchain:` URIs returns `parsed: <intent>` (or `null` when intent is `unknown`).
+- **`test/smoke/shells/desktop-packaging.smoke.js`** — updated `xchain: broadcast?data=abc` assertion to expect the structured intent shape; preserved the malformed-BIP21 assertion which still expects `parsed: null`.
+
+Closes G144.
+
 ## [0.191.0] - 2026-04-27
 
 §47.1 — Cluster L Step 2 — Web protocol handler registration (G143).

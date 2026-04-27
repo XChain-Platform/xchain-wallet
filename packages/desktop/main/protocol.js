@@ -31,6 +31,7 @@
 // for payment URIs, action preview for xchain: URIs).
 
 import { parseBip21Uri, InvalidBip21Error } from '../../core/src/uri/bip21.js';
+import { parseXchainUri } from '../../core/src/uri/xchainUri.js';
 
 /** URI schemes the app is allowed to claim. */
 export const TIER_1_SCHEME = 'xchain';
@@ -145,9 +146,16 @@ export function classifyDeepLink(url) {
     if (!ALL_SCHEMES.includes(scheme)) return null;
 
     if (scheme === TIER_1_SCHEME) {
-        // xchain: URIs have their own action-encoded payload the
-        // renderer parses via the core action decoder. No BIP21.
-        return { scheme, raw: url, parsed: null };
+        // §47.4 / G145 — parse the URI into an actionable intent so the
+        // renderer doesn't have to re-classify. Falls back to `parsed: null`
+        // when the parser returns `kind: 'unknown'` so the renderer can
+        // still surface a generic "couldn't parse" message.
+        const intent = parseXchainUri(url);
+        return {
+            scheme,
+            raw: url,
+            parsed: intent.kind === 'unknown' ? null : intent,
+        };
     }
 
     // Tier-2 (coin) URIs: parse via BIP21. A malformed URI surfaces

@@ -207,12 +207,17 @@ assert.equal(classifyDeepLink('http://example.com'), null, 'unknown scheme → n
 assert.equal(classifyDeepLink('not a url at all'), null, 'non-URI → null');
 
 {
+    // §47.4 / G145 — `xchain:` URIs are now parsed via `parseXchainUri`
+    // and `parsed` carries the intent shape instead of being null. The
+    // renderer can act on the structured intent directly. A malformed
+    // URI still falls back to `parsed: null` (covered below).
     const e = classifyDeepLink('xchain:broadcast?data=abc');
-    assert.deepEqual(e, {
-        scheme: 'xchain',
-        raw: 'xchain:broadcast?data=abc',
-        parsed: null,
-    }, 'xchain: URIs bubble up raw + parsed:null (renderer decodes)');
+    assert.equal(e.scheme, 'xchain');
+    assert.equal(e.raw, 'xchain:broadcast?data=abc');
+    assert.ok(e.parsed && e.parsed.kind, 'xchain: URIs surface a structured intent');
+    assert.equal(e.parsed.kind, 'send');
+    assert.equal(e.parsed.address, 'broadcast');
+    assert.equal(e.parsed.params.data, 'abc');
 }
 
 {
