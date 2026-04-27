@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.190.0] - 2026-04-27
+
+§47.4 — Cluster L Step 1 — `xchain:` URI parser (G145).
+
+New `uri/xchainUri.js` exports `parseXchainUri(uri)` + `buildXchainUri(intent)`. Two URI shapes supported:
+
+- BIP21-style: `xchain:<address>?amount=&tick=&memo=&label=&message=` (delegates to `parseBip21Uri` and pulls `tick` → asset, `memo` → memo).
+- Path-style: `xchain://<chainId>/<asset>?amount=&to=&memo=&label=&kind=receive` for cases where the chain needs to be explicit (regtest endpoints, asset transfers).
+
+Output is a normalized `XchainUriIntent` with `kind: 'send' | 'receive' | 'unknown'`, `chainId?`, `asset?`, `address?`, `amount?`, `memo?`, plus the raw `params` map and `required[]` from `req-*` BIP21 extensions. Malformed URIs return `{ kind: 'unknown' }` instead of throwing — callers already had a string from a QR scan or paste and shouldn't have their flow aborted by a typo.
+
+The existing `detectQrContent` already classifies `xchain:` URIs as `xchain-uri` via the BIP21 fallback; the richer parser is a sibling that callers (Send / Receive / a future deep-link handler) can opt into for path-style support.
+
+### Added
+
+- **`packages/core/src/uri/xchainUri.js`** (new) — `parseXchainUri` / `buildXchainUri` / `XchainUriIntent` typedef.
+- **`packages/core/src/uri/index.js`** — re-exports both helpers.
+
+Closes G145.
+
 ## [0.189.0] - 2026-04-27
 
 §53.4 — Cluster K Step 4 — `prefers-contrast: more` variant (G170). Cluster K closed.

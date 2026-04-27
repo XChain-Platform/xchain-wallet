@@ -4,6 +4,7 @@ export {
     InvalidBip21Error,
 } from './bip21.js';
 export { detectQrContent, PSBT_HEX_PREFIX } from './detectQrContent.js';
+export { parseXchainUri, buildXchainUri } from './xchainUri.js';
 export {
     encodeXcwChunks,
     decodeXcwChunks,
