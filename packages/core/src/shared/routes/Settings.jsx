@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Screen, Icon } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { AboutSection } from '../components/settings/AboutSection.jsx';
+import { AdsSection } from '../components/settings/AdsSection.jsx';
 import { AppearanceSection } from '../components/settings/AppearanceSection.jsx';
 import { DeveloperModeSection } from '../components/settings/DeveloperModeSection.jsx';
 import { LanguageRegionSection } from '../components/settings/LanguageRegionSection.jsx';
@@ -169,7 +170,8 @@ export function Settings({
             title: 'Automatic Donation System',
             description: 'Toggle ADS, per-chain amounts and thresholds, lifetime stats.',
             keywords: 'donation ads automatic per chain amount threshold lifetime',
-            kind: 'stub',
+            kind: 'panel',
+            Component: AdsSection,
         },
         {
             id: 'keyboard',

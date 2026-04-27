@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.115.0] - 2026-04-26
+
+Settings — Step 12 of 18 — Automatic Donation System panel.
+
+The headline panel for the §35 build per spec §36. Master ON/OFF + per-chain block (per-tx amount in sats, trigger threshold, donation address shown for verification, lifetime stats: donated total, tx count, accumulated). Per-chain inputs disable when ADS is off so the user can't poke them mid-disable. Regtest chain blocks hide unless Developer Mode is on.
+
+The donation-address row honestly surfaces the `PLACEHOLDER_REPLACE_BEFORE_MAINNET` sentinel state — descriptors carrying the placeholder render `Pending — real <chain> donation address ships before mainnet GA` instead of pretending the sentinel is a real address.
+
+### Added
+
+- **`packages/core/src/shared/components/settings/AdsSection.jsx`** — master toggle + per-chain block editor. Writes use the deep-merge nested form for both `ads.enabled` and `ads.perChain[chainId]` patches.
+- **`test/smoke/ui/settings-ads.smoke.js`** — useSettings + placeholder import, toggle wiring, per-chain numeric edit shape, lifetime stat rendering, placeholder-vs-real branch, regtest gating, Settings.jsx hook-up.
+
+### Changed
+
+- **`packages/core/src/shared/routes/Settings.jsx`** — ads section flips from `kind: 'stub'` to `kind: 'panel'`.
+
 ## [0.114.0] - 2026-04-26
 
 Settings — Step 11 of 18 — Developer Mode panel + regtest reveal in Network & Endpoints.
