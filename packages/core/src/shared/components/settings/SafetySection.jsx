@@ -17,6 +17,7 @@ import { useSettings } from '../../hooks/useSettings.js';
 import { INPUT, ROW, ROW_LABEL, SELECT, STACK, Status, ToggleRow } from './_settingsPrimitives.jsx';
 import { BiometricRow } from './BiometricRow.jsx';
 import { PanicModeRow } from './PanicModeRow.jsx';
+import { DuressPassphraseRow } from './DuressPassphraseRow.jsx';
 
 const AUTOLOCK_OPTIONS = /** @type {const} */ ([
     { value: 1, label: '1 minute' },
@@ -95,6 +96,7 @@ export function SafetySection() {
             </div>
             <BiometricRow />
             <PanicModeRow />
+            <DuressPassphraseRow />
             <ToggleRow
                 label="Auto-arm panic mode"
                 hint="Reserved — duress-passphrase / shortcut auto-arming lands in a follow-up step. The persisted preference is honoured when that wiring ships; the Activate button above always works regardless."

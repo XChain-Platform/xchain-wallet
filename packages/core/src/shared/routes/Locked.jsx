@@ -9,6 +9,7 @@ import {
     isBiometricSupported,
     isBiometricRegistered,
     unlockWithBiometric,
+    tripDuressIfMatch,
 } from '@xchain-wallet/core/flows';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './Locked.module.css';
@@ -89,6 +90,13 @@ export function Locked({ onUnlocked }) {
         } catch (err) {
             const isBadPassword = err?.name === 'InvalidPasswordError';
             if (isBadPassword) {
+                // §26.5 / G068 — silently arm panic mode if the entered
+                // password is the configured duress passphrase. The user
+                // sees the SAME wrong-password UX an actual mistype
+                // produces, so an observer can't tell the duress flag
+                // fired. Lockout still increments — both branches must
+                // look identical from the outside.
+                tripDuressIfMatch(password);
                 const next = recordLockoutFailure();
                 setLockout(next);
                 const nextRemaining = getRemainingMs(next);

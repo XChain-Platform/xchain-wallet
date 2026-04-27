@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.148.0] - 2026-04-27
+
+§26 Lock & Panic — Step 6 of 6 — Duress passphrase (G068 part 2). **Closes the §26 cluster.**
+
+The wallet now supports a second password — a "duress passphrase" — that, when entered on the unlock screen, silently arms panic mode (24-hour signing freeze from Step 5) while showing the same wrong-password UX a normal mistype produces. An observer cannot tell the duress flag fired: the lockout counter still increments, the error copy is identical, and the visible delay matches.
+
+### Added
+
+- **`flows/duressPassphrase.js`** — pure flow with localStorage persistence at `xchain-wallet:duress`. Stored shape: `{ salt: base64, hash: base64, createdAt }` with `hash = sha256(salt || passphrase_utf8)` and a fresh 16-byte salt per `setDuressPassphrase` call. Plaintext never persisted. Exports: `isDuressConfigured`, `setDuressPassphrase`, `clearDuressPassphrase`, `isDuressMatch`, `tripDuressIfMatch`, `DuressNotConfiguredError`. Memory fallback when localStorage is unavailable. Constant-time hash comparison (`a[i] ^ b[i]` accumulator) to keep the verification side-channel-free even though the threat model doesn't strictly require it.
+- **`tripDuressIfMatch(candidate)`** — composes `isDuressMatch` with `activatePanicMode()`. When a candidate matches, panic mode is armed at the default 24h duration immediately and `true` is returned so the caller can present a normal-looking wrong-password UX. When it doesn't match, `false` is returned — no state mutation.
+- **`shared/components/settings/DuressPassphraseRow.jsx`** — Safety panel row with three states: not-configured ("Set" button), inline form (passphrase + confirm + cancel/save, mismatch + missing-value validation surfaced via `role="alert"`), and configured ("Disable" button). Inputs use `autoComplete="new-password"` so password managers don't try to save them as the wallet password. There is no "view" affordance: the passphrase cannot be recovered from storage.
+- **Locked.jsx duress trip** — inside the `InvalidPasswordError` branch, BEFORE the lockout counter increments. The trip runs unconditionally (`tripDuressIfMatch(password)` no-ops when nothing is configured). The lockout counter still increments and the error message is unchanged either way, so the visible behaviour is identical.
+- **`test/smoke/core/duress-passphrase.smoke.js`** — full coverage: not-configured initial state, set + verify round-trip, one-character-delta rejection, empty/null rejection, persisted record never contains plaintext, fresh salt per set (different hashes for the same passphrase), `tripDuressIfMatch` arms panic mode + freezes signing, non-match no-op, clear wipes record, corruption tolerance (malformed JSON, bad shape), memory fallback when localStorage is unavailable.
+- **`test/smoke/ui/duress-wiring.smoke.js`** — `flows/index.js` re-exports, Locked.jsx imports `tripDuressIfMatch`, the trip lives INSIDE the `InvalidPasswordError` branch (regex sequence assertion), the trip does NOT run on the success path (negative-match assertion that the success-path text is followed by `tripDuressIfMatch` only beyond a 200-character window — i.e., not in the success block), the trip does NOT skip the lockout increment (`tripDuressIfMatch` is followed by `recordLockoutFailure` within 200 characters), `SafetySection` imports + renders `<DuressPassphraseRow />`, the row's confirm-mismatch validation, `role="alert"` errors, `autoComplete="new-password"` on the form inputs.
+
+### Changed
+
+- **`flows/index.js`** — re-exports the six duress symbols.
+- **`Locked.jsx`** — imports `tripDuressIfMatch`. The bad-password branch gains a single-line silent trip ahead of the `recordLockoutFailure` call. No other branches change.
+- **`SafetySection.jsx`** — mounts `<DuressPassphraseRow />` between `<PanicModeRow />` and the auto-arm reservation toggle.
+
+### §26 Lock & Panic cluster — close
+
+Six steps shipped (v0.143.0 → v0.148.0). Cluster scope:
+
+| Gap | Title | Version |
+|---|---|---|
+| G067 | Caps-Lock warning in password fields | v0.143.0 |
+| G066 | Failed-attempts escalating delay | v0.144.0 |
+| G069 | Privacy blur on window blur | v0.145.0 |
+| G063 | Biometric unlock (WebAuthn PRF) | v0.146.0 |
+| G068 part 1 | Panic-mode signing freeze foundation | v0.147.0 |
+| G068 part 2 | Duress passphrase | v0.148.0 |
+
+Out of scope (deferred): G064 (auto-lock wired into web App), G065 (auto-lock timeout from settings) — both already-known gaps tracked separately. Close report follows.
+
+### Behavior preserved
+
+- Locked.jsx's caps-lock indicator (G067), lockout banner + countdown (G066), and biometric button (G063) all remain in place. The duress trip is the only addition to the bad-password branch.
+- `messaging.unlockWallet` is unchanged on success; the duress check only runs when the real wallet KDF rejects the input.
+- A duress passphrase that happens to collide with the real password is effectively a no-op (the real wallet unlocks first).
+- The panic-mode chokepoints (`submitWithSigner`, `signMessageFlow`, `signPsbtFlow`, `signMultisigLocally`) are unchanged from v0.147.0.
+
 ## [0.147.0] - 2026-04-27
 
 §26 Lock & Panic — Step 5 of 6 — Panic mode signing freeze foundation (G068 part 1).

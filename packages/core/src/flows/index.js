@@ -245,6 +245,14 @@ export {
     MAX_DURATION_MS as PANIC_MODE_MAX_DURATION_MS,
 } from './panicMode.js';
 export {
+    isDuressConfigured,
+    setDuressPassphrase,
+    clearDuressPassphrase,
+    isDuressMatch,
+    tripDuressIfMatch,
+    DuressNotConfiguredError,
+} from './duressPassphrase.js';
+export {
     enqueueSignedTx,
     listQueuedBroadcasts,
     drainQueuedBroadcast,
