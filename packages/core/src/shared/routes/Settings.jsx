@@ -5,6 +5,7 @@ import { AboutSection } from '../components/settings/AboutSection.jsx';
 import { AppearanceSection } from '../components/settings/AppearanceSection.jsx';
 import { LanguageRegionSection } from '../components/settings/LanguageRegionSection.jsx';
 import { PrivacySection } from '../components/settings/PrivacySection.jsx';
+import { FeesSection } from '../components/settings/FeesSection.jsx';
 import { NotificationsSection } from '../components/settings/NotificationsSection.jsx';
 import { SafetySection } from '../components/settings/SafetySection.jsx';
 import styles from './ActionsMenu.module.css';
@@ -128,7 +129,8 @@ export function Settings({
             title: 'Fees',
             description: 'Per-chain fee strategy, RBF defaults.',
             keywords: 'fees fee strategy rbf chain',
-            kind: 'stub',
+            kind: 'panel',
+            Component: FeesSection,
         },
         {
             id: 'network-endpoints',

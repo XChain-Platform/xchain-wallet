@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.112.0] - 2026-04-26
+
+Settings — Step 9 of 18 — Fees panel.
+
+Per-chain fee profile editor backed by `settings.fees`. One block per chain entry the `seedSettingsForChains` flow has populated; each block carries a strategy picker (low / normal / fast / custom matching the schema's `FEE_STRATEGIES` tuple), a custom sats-per-KB number input that surfaces only when strategy=custom, and an RBF-by-default toggle that disables itself when the chain descriptor's `feeStrategy.rbfSupported` is false.
+
+### Added
+
+- **`packages/core/src/shared/components/settings/FeesSection.jsx`** — chain-keyed iteration over `settings.fees`. Writes use the deep-merge nested form `update({ fees: { [chainId]: patch } })`. Pulls chain display names + RBF support from `chainRegistry.get(chainId)`.
+- **`test/smoke/ui/settings-fees.smoke.js`** — useSettings + chain-registry import, write path shape, strategy coverage matches `FEE_STRATEGIES`, custom-rate input gated on `strategy === 'custom'`, RBF toggle gated on `descriptor.feeStrategy.rbfSupported`, empty-state copy, Settings.jsx hook-up.
+
+### Changed
+
+- **`packages/core/src/shared/routes/Settings.jsx`** — fees section flips from `kind: 'stub'` to `kind: 'panel'`.
+
 ## [0.111.0] - 2026-04-26
 
 Settings — Step 8 of 18 — Notifications panel.
