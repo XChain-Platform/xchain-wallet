@@ -673,6 +673,17 @@ export function exportPrivateKey(opts) {
     return /** @type {any} */ (sendMessage('wallet.exportPrivateKey', opts));
 }
 
+// §35 Settings — read + patch the per-vault Settings record. Patch is a
+// deep-merge body; see flows/settings.js for the merge semantics.
+export function getSettings() {
+    return /** @type {any} */ (sendMessage('settings.get'));
+}
+
+/** @param {Record<string, unknown>} patch */
+export function updateSettings(patch) {
+    return /** @type {any} */ (sendMessage('settings.update', { patch }));
+}
+
 /**
  * Derive + persist the next unused external address for (wallet, chain).
  * Requires the user's password because the signer re-derives the HD

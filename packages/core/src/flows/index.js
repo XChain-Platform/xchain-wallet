@@ -138,6 +138,7 @@ export {
     SignerResolutionError,
 } from './resolveSigner.js';
 export { seedSettingsForChains, ensureSettings } from './seedSettings.js';
+export { getSettings, updateSettings } from './settings.js';
 export { receiveAddress, NoMatchingAccountError } from './receiveAddress.js';
 export {
     addressBalances,

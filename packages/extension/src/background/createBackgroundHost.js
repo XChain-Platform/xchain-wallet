@@ -123,6 +123,8 @@ const {
     listWatchlistForWallet,
     saveWatchlistEntry,
     clearWatchlistEntry,
+    getSettings,
+    updateSettings,
 } = flows;
 
 /**
@@ -399,6 +401,19 @@ export function createBackgroundHost(deps) {
         const signer = await unlockWallet({ ...req, vault, chainRegistry, sdkRegistry });
         signer.lock();
         return { ok: true };
+    });
+
+    // --- Settings ------------------------------------------------------------
+
+    host.register('settings.get', async (_req, { vault }) => {
+        return getSettings(vault);
+    });
+
+    host.register('settings.update', async (req, { vault }) => {
+        const patch = req && typeof req === 'object' && 'patch' in req
+            ? /** @type {Record<string, unknown>} */ (req.patch)
+            : /** @type {Record<string, unknown>} */ (req ?? {});
+        return updateSettings(vault, patch);
     });
 
     // --- Receive -------------------------------------------------------------

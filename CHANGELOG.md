@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.105.0] - 2026-04-26
+
+Settings — Step 1 + 2 of 18 — Substrate + sectioned page scaffold.
+
+First two steps of the §35 Settings build. The wallet ships with the data schema for every setting (theme, autolock, language, fees, sdkEndpoints, privacy, ads, notifications, developerMode, learnMode, grace) but the Settings route only surfaces Wallet + Account drilldowns; this release lays down the read/write substrate and the long-page section layout the rest of the build will fill in. No editable panels yet — those start at v0.106.0.
+
+### Added
+
+- **`getSettings(vault)` + `updateSettings(vault, patch)` flows** at `packages/core/src/flows/settings.js`. `updateSettings` does a deep merge: top-level scalars replace, nested plain objects merge one level, chain-keyed records (`sdkEndpoints` / `fees` / `ads.perChain`) merge by key, then validates against `validateSettings` before persisting. Invalid patches throw and the on-disk record stays untouched.
+- **`settings.get` + `settings.update` host handlers** registered in `createBackgroundHost.js`. Web shell reuses the same host via `hostBridge.js` — one registration covers both shells.
+- **`getSettings()` + `updateSettings(patch)` messaging wrappers** in `packages/web/src/messaging.js` and `packages/extension/src/popup/messaging.js`.
+- **`useSettings()` React hook** at `packages/core/src/shared/hooks/useSettings.js` — returns `{ settings, loading, error, refresh, update }`. Degrades to an `error` state (rather than throwing at render time) when a shell hasn't wired the messaging methods yet.
+- **`test/smoke/core/settings-flow.smoke.js`** — substrate behaviour: empty-vault default fallback, scalar replacement, nested merge, chain-keyed merge by key, validation rejection of bad values, source-level checks that messaging modules export the helpers and the host registers the handlers.
+- **`test/smoke/ui/settings-scaffold.smoke.js`** — all 16 §35.1 sections present in spec order, search input wired, drilldowns preserved, ComingSoon placeholder rendered for stub sections.
+
+### Changed
+
+- **`packages/core/src/shared/routes/Settings.jsx`** rebuilt as the §35.1 long-page scaffold. The previous 2-section layout (Wallet + Account drilldowns) is preserved and renamed in spec order to **This Wallet** + **Accounts & Addresses**. 14 stub sections added below them: Appearance, Language & Region, Privacy, Safety, Backup, Fees, Network & Endpoints, Notifications, Connected Sites, Contacts, Automatic Donation System, Keyboard Shortcuts, Developer Mode, About. Each stub renders a section heading + description + a `Coming soon` placeholder body. A non-functional search input at the top filters sections by title / description / keyword strings — wiring is live; the consumed surface is just the scaffold for now.
+
 ## [0.104.0] - 2026-04-26
 
 Multi-wallet / multi-account substrate, navigation rework, and a quieter chrome.

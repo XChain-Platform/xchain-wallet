@@ -1,18 +1,23 @@
+import { useMemo, useState } from 'react';
 import { Screen, Icon } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './ActionsMenu.module.css';
 import pickerStyles from './WalletPicker.module.css';
 
 /**
- * Settings page — full-screen replacement for the gear popover.
+ * Settings page — §35. Long sectioned layout with a search input at the
+ * top and one section per spec §35.1 group, in spec order.
  *
- *   ▸ Wallet     summary row showing the active wallet name; click
- *                navigates to WalletPicker
- *   ▸ Account    same shape — click navigates to AccountPicker
+ * Sections fall into three states:
  *
- * Reached from the pancake menu's "Settings" entry. The Network
- * filter lives in the header as a separate filter-icon popover so
- * users can toggle networks without entering Settings.
+ *   1. Built — drills into an existing picker / form (This Wallet,
+ *      Accounts & Addresses).
+ *   2. Stub — section heading is rendered, body shows a muted
+ *      "Coming soon" hint. These will be filled in across the
+ *      Settings build's later steps; the scaffold lives here so the
+ *      user can see the intended shape.
+ *   3. Search — input is non-functional in this scaffold; will be
+ *      wired in a later step (§35.2).
  *
  * @param {object} props
  * @param {() => void} props.onBack
@@ -30,6 +35,7 @@ export function Settings({
 }) {
     const { shell } = useMessaging();
     const variant = screenVariantFor(shell);
+    const [query, setQuery] = useState('');
 
     const walletLabel = activeWallet?.name || 'No wallet';
     const accountLabel = activeAccount?.name
@@ -51,42 +57,217 @@ export function Settings({
         </div>
     );
 
+    const sections = useMemo(() => /** @type {SectionDef[]} */ ([
+        {
+            id: 'this-wallet',
+            title: 'This Wallet',
+            description: 'Wallet name, remove wallet, migrate to BIP39.',
+            keywords: 'wallet name remove rename migrate bip39',
+            kind: 'drill',
+            visible: Boolean(onOpenWalletPicker),
+            label: walletLabel,
+            onOpen: onOpenWalletPicker,
+        },
+        {
+            id: 'accounts-addresses',
+            title: 'Accounts & Addresses',
+            description: 'Active account, change addresses, signer pairing.',
+            keywords: 'account address signer change addresses',
+            kind: 'drill',
+            visible: Boolean(onOpenAccountPicker && activeWallet),
+            label: accountLabel,
+            onOpen: onOpenAccountPicker,
+        },
+        {
+            id: 'appearance',
+            title: 'Appearance',
+            description: 'Theme, accent color, reduced motion.',
+            keywords: 'appearance theme color motion accent dark light',
+            kind: 'stub',
+        },
+        {
+            id: 'language-region',
+            title: 'Language & Region',
+            description: 'Language, currency.',
+            keywords: 'language region currency fiat locale',
+            kind: 'stub',
+        },
+        {
+            id: 'privacy',
+            title: 'Privacy',
+            description: 'Tor, change-address rotation, hide small balances.',
+            keywords: 'privacy tor rotation hide balances labels',
+            kind: 'stub',
+        },
+        {
+            id: 'safety',
+            title: 'Safety',
+            description: 'Auto-lock, undo-send, panic mode, backup reminders.',
+            keywords: 'safety autolock auto lock undo panic backup',
+            kind: 'stub',
+        },
+        {
+            id: 'backup',
+            title: 'Backup',
+            description: 'Seed phrase, dry-run restore, encrypted backup file.',
+            keywords: 'backup seed phrase restore encrypted file labels',
+            kind: 'stub',
+        },
+        {
+            id: 'fees',
+            title: 'Fees',
+            description: 'Per-chain fee strategy, RBF defaults.',
+            keywords: 'fees fee strategy rbf chain',
+            kind: 'stub',
+        },
+        {
+            id: 'network-endpoints',
+            title: 'Network & Endpoints',
+            description: 'Per-chain explorer, encoder, and hub URLs.',
+            keywords: 'network endpoints explorer encoder hub url chain registry',
+            kind: 'stub',
+        },
+        {
+            id: 'notifications',
+            title: 'Notifications',
+            description: 'Confirmations, receipts, dispenser fills, order fills, price alerts.',
+            keywords: 'notifications confirmations receipts dispenser order price alert',
+            kind: 'stub',
+        },
+        {
+            id: 'connected-sites',
+            title: 'Connected Sites',
+            description: 'dApp connections and per-site permissions.',
+            keywords: 'connected sites dapp permissions origin',
+            kind: 'stub',
+        },
+        {
+            id: 'contacts',
+            title: 'Contacts',
+            description: 'Export and import the address book.',
+            keywords: 'contacts address book export import',
+            kind: 'stub',
+        },
+        {
+            id: 'ads',
+            title: 'Automatic Donation System',
+            description: 'Toggle ADS, per-chain amounts and thresholds, lifetime stats.',
+            keywords: 'donation ads automatic per chain amount threshold lifetime',
+            kind: 'stub',
+        },
+        {
+            id: 'keyboard',
+            title: 'Keyboard Shortcuts',
+            description: 'Rebind global shortcuts.',
+            keywords: 'keyboard shortcuts rebind hotkey',
+            kind: 'stub',
+        },
+        {
+            id: 'developer',
+            title: 'Developer Mode',
+            description: 'Custom endpoints, regtest networks, raw PSBT inspector.',
+            keywords: 'developer mode regtest custom endpoints psbt raw',
+            kind: 'stub',
+        },
+        {
+            id: 'about',
+            title: 'About',
+            description: 'Version, license, reproducible build verification, release signatures.',
+            keywords: 'about version license repro reproducible signatures release security',
+            kind: 'stub',
+        },
+    ]), [walletLabel, accountLabel, onOpenWalletPicker, onOpenAccountPicker, activeWallet]);
+
+    const filtered = useMemo(() => {
+        const q = query.trim().toLowerCase();
+        if (!q) return sections;
+        return sections.filter((s) =>
+            s.title.toLowerCase().includes(q)
+            || s.description.toLowerCase().includes(q)
+            || s.keywords.toLowerCase().includes(q),
+        );
+    }, [sections, query]);
+
     return (
         <Screen variant={variant} header={header}>
             <div className={styles.listPopup}>
-                {onOpenWalletPicker ? (
-                    <Section title="Wallet">
-                        <button
-                            type="button"
-                            className={styles.entry}
-                            style={{ width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
-                            onClick={onOpenWalletPicker}
-                        >
-                            <span className={styles.entryLabel}>{walletLabel}</span>
-                            <span aria-hidden="true" style={{ color: 'var(--xc-text-muted)', display: 'inline-flex' }}><Icon.ForwardIcon /></span>
-                        </button>
-                    </Section>
+                <input
+                    type="search"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder="Search settings…"
+                    aria-label="Search settings"
+                    style={{
+                        width: '100%',
+                        padding: 'var(--xc-space-2) var(--xc-space-3)',
+                        background: 'var(--xc-surface-raised)',
+                        border: '1px solid var(--xc-border)',
+                        borderRadius: 'var(--xc-radius-md)',
+                        color: 'var(--xc-text)',
+                        fontSize: 'var(--xc-text-md)',
+                        marginBottom: 'var(--xc-space-3)',
+                    }}
+                />
+                {filtered.length === 0 ? (
+                    <div style={{
+                        padding: 'var(--xc-space-4)',
+                        textAlign: 'center',
+                        color: 'var(--xc-text-muted)',
+                        fontSize: 'var(--xc-text-sm)',
+                    }}>
+                        No settings match "{query}".
+                    </div>
                 ) : null}
-
-                {onOpenAccountPicker && activeWallet ? (
-                    <Section title="Account">
-                        <button
-                            type="button"
-                            className={styles.entry}
-                            style={{ width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
-                            onClick={onOpenAccountPicker}
+                {filtered.map((section) => {
+                    if (section.kind === 'drill') {
+                        if (!section.visible) return null;
+                        return (
+                            <SettingsSection
+                                key={section.id}
+                                title={section.title}
+                                description={section.description}
+                            >
+                                <button
+                                    type="button"
+                                    className={styles.entry}
+                                    style={{ width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
+                                    onClick={section.onOpen}
+                                >
+                                    <span className={styles.entryLabel}>{section.label}</span>
+                                    <span aria-hidden="true" style={{ color: 'var(--xc-text-muted)', display: 'inline-flex' }}><Icon.ForwardIcon /></span>
+                                </button>
+                            </SettingsSection>
+                        );
+                    }
+                    return (
+                        <SettingsSection
+                            key={section.id}
+                            title={section.title}
+                            description={section.description}
                         >
-                            <span className={styles.entryLabel}>{accountLabel}</span>
-                            <span aria-hidden="true" style={{ color: 'var(--xc-text-muted)', display: 'inline-flex' }}><Icon.ForwardIcon /></span>
-                        </button>
-                    </Section>
-                ) : null}
+                            <ComingSoon />
+                        </SettingsSection>
+                    );
+                })}
             </div>
         </Screen>
     );
 }
 
-function Section({ title, children }) {
+/**
+ * @typedef {{
+ *   id: string,
+ *   title: string,
+ *   description: string,
+ *   keywords: string,
+ *   kind: 'drill' | 'stub',
+ *   visible?: boolean,
+ *   label?: string,
+ *   onOpen?: () => void,
+ * }} SectionDef
+ */
+
+function SettingsSection({ title, description, children }) {
     return (
         <div style={{ marginBottom: 'var(--xc-space-3)' }}>
             <div style={{
@@ -97,7 +278,31 @@ function Section({ title, children }) {
                 color: 'var(--xc-text-muted)',
                 marginBottom: 'var(--xc-space-1)',
             }}>{title}</div>
+            {description ? (
+                <div style={{
+                    fontSize: 'var(--xc-text-xs)',
+                    color: 'var(--xc-text-muted)',
+                    marginBottom: 'var(--xc-space-2)',
+                    lineHeight: 1.4,
+                }}>{description}</div>
+            ) : null}
             {children}
+        </div>
+    );
+}
+
+function ComingSoon() {
+    return (
+        <div style={{
+            padding: 'var(--xc-space-3) var(--xc-space-4)',
+            background: 'var(--xc-surface-raised)',
+            border: '1px dashed var(--xc-border)',
+            borderRadius: 'var(--xc-radius-md)',
+            color: 'var(--xc-text-muted)',
+            fontSize: 'var(--xc-text-sm)',
+            fontStyle: 'italic',
+        }}>
+            Coming soon
         </div>
     );
 }
