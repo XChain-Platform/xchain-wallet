@@ -685,6 +685,17 @@ export function updateSettings(patch) {
 }
 
 /**
+ * §19.4 encrypted backup. Resolves to `{ fileContent }` — the
+ * pretty-printed JSON envelope ready to write to disk.
+ *
+ * @param {{ walletId: string, password: string, includePendingTxs?: boolean }} opts
+ * @returns {Promise<{ fileContent: string }>}
+ */
+export function exportBackupFile(opts) {
+    return /** @type {any} */ (sendMessage('wallet.exportBackup', opts));
+}
+
+/**
  * Derive + persist the next unused external address for (wallet, chain).
  * Requires the user's password because the signer re-derives the HD
  * key material; the vault-level unlock doesn't cover the per-wallet

@@ -125,6 +125,7 @@ const {
     clearWatchlistEntry,
     getSettings,
     updateSettings,
+    exportBackupFile,
 } = flows;
 
 /**
@@ -414,6 +415,18 @@ export function createBackgroundHost(deps) {
             ? /** @type {Record<string, unknown>} */ (req.patch)
             : /** @type {Record<string, unknown>} */ (req ?? {});
         return updateSettings(vault, patch);
+    });
+
+    // §19.4 encrypted backup — returns the pretty-printed JSON envelope
+    // string. The renderer is responsible for triggering the download.
+    host.register('wallet.exportBackup', async (req, { vault }) => {
+        const r = await exportBackupFile({
+            vault,
+            walletId: req?.walletId,
+            password: req?.password,
+            includePendingTxs: req?.includePendingTxs,
+        });
+        return { fileContent: r.fileContent };
     });
 
     // --- Receive -------------------------------------------------------------

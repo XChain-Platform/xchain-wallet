@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.116.0] - 2026-04-26
+
+Settings — Step 13 of 18 — Backup panel.
+
+Wires the §19.4 encrypted backup-file flow up through to the user. Click "Export…", enter a backup password (separate from the wallet-unlock password) twice for mismatch detection, the renderer downloads the encrypted JSON envelope as `<walletName>-YYYY-MM-DD.xchain-wallet`. Three additional spec items render as deferred rows: seed-phrase reveal (needs a new `wallet.revealSeed` flow), test-backup / dry-run restore (needs its own multi-step UI for `dryRunRestore`), published labels (§19.5.2 FILE-action transport).
+
+### Added
+
+- **`packages/core/src/shared/components/settings/BackupSection.jsx`** — export action with two-pass password prompt + Blob-download trigger; three deferred rows for seed phrase, dry-run restore, published labels.
+- **`wallet.exportBackup` host handler** in `createBackgroundHost.js` calling `flows.exportBackupFile`. Web shell shares via `hostBridge.js`.
+- **`exportBackupFile()` messaging wrappers** in popup + web messaging modules.
+- **`test/smoke/ui/settings-backup.smoke.js`** — section surface, host wiring, messaging wrappers, Settings.jsx render-switch panel-props plumbing.
+
+### Changed
+
+- **`packages/core/src/shared/routes/Settings.jsx`** — render switch now passes a `section.props` bag through to panel components (`<Component {...panelProps} />`). Backup section uses this to receive `activeWallet`. Backup section flips from `kind: 'stub'` to `kind: 'panel'`.
+
 ## [0.115.0] - 2026-04-26
 
 Settings — Step 12 of 18 — Automatic Donation System panel.

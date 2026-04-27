@@ -1254,3 +1254,14 @@ export function getSettings() {
 export function updateSettings(patch) {
     return /** @type {any} */ (sendMessage('settings.update', { patch }));
 }
+
+/**
+ * §19.4 encrypted backup. Resolves to `{ fileContent }` — the
+ * pretty-printed JSON envelope ready to write to disk.
+ *
+ * @param {{ walletId: string, password: string, includePendingTxs?: boolean }} opts
+ * @returns {Promise<{ fileContent: string }>}
+ */
+export function exportBackupFile(opts) {
+    return /** @type {any} */ (sendMessage('wallet.exportBackup', opts));
+}

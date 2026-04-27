@@ -4,6 +4,7 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { AboutSection } from '../components/settings/AboutSection.jsx';
 import { AdsSection } from '../components/settings/AdsSection.jsx';
 import { AppearanceSection } from '../components/settings/AppearanceSection.jsx';
+import { BackupSection } from '../components/settings/BackupSection.jsx';
 import { DeveloperModeSection } from '../components/settings/DeveloperModeSection.jsx';
 import { LanguageRegionSection } from '../components/settings/LanguageRegionSection.jsx';
 import { PrivacySection } from '../components/settings/PrivacySection.jsx';
@@ -125,7 +126,9 @@ export function Settings({
             title: 'Backup',
             description: 'Seed phrase, dry-run restore, encrypted backup file.',
             keywords: 'backup seed phrase restore encrypted file labels',
-            kind: 'stub',
+            kind: 'panel',
+            Component: BackupSection,
+            props: { activeWallet },
         },
         {
             id: 'fees',
@@ -196,7 +199,7 @@ export function Settings({
             kind: 'panel',
             Component: AboutSection,
         },
-    ]), [walletLabel, accountLabel, onOpenWalletPicker, onOpenAccountPicker, activeWallet]);
+    ]), [walletLabel, accountLabel, onOpenWalletPicker, onOpenAccountPicker, activeWallet, activeAccount]);
 
     const filtered = useMemo(() => {
         const q = query.trim().toLowerCase();
@@ -261,13 +264,14 @@ export function Settings({
                     }
                     if (section.kind === 'panel' && section.Component) {
                         const Component = section.Component;
+                        const panelProps = section.props || {};
                         return (
                             <SettingsSection
                                 key={section.id}
                                 title={section.title}
                                 description={section.description}
                             >
-                                <Component />
+                                <Component {...panelProps} />
                             </SettingsSection>
                         );
                     }
@@ -296,7 +300,8 @@ export function Settings({
  *   visible?: boolean,
  *   label?: string,
  *   onOpen?: () => void,
- *   Component?: () => any,
+ *   Component?: (props?: any) => any,
+ *   props?: Record<string, unknown>,
  * }} SectionDef
  */
 
