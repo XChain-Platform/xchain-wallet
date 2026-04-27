@@ -19,6 +19,7 @@
 // caller verbatim so the sign screen can show it.
 
 import { unlockWallet } from './unlockWallet.js';
+import { assertSigningAllowed } from './panicMode.js';
 import { fingerprintSessionRef } from '../uri/multisigPsbtEnvelope.js';
 
 /**
@@ -54,6 +55,9 @@ export async function signMultisigLocally(opts) {
     if (typeof opts.password !== 'string' || opts.password.length === 0) {
         throw new Error('signMultisigLocally: password is required (HW signer support is forthcoming)');
     }
+
+    // §26.5 panic-mode freeze.
+    assertSigningAllowed();
 
     const session = await opts.vault.multisigSigningSessions.get(opts.sessionId);
     if (!session) {

@@ -3,6 +3,9 @@
 // signing through a Signer interface instead of an in-memory WIF, so the
 // same wrapper drives Software, Trezor, and Ledger (once those land).
 //
+// §26.5 / G068 — panic-mode signing freeze is enforced at the top of
+// the flow via `assertSigningAllowed()`. See `flows/panicMode.js`.
+//
 // The wrapper does NOT re-derive the caller's pubkey — supply it via
 // `encoderOpts.pubkey`. The caller already knew which address/path they
 // were spending from when they built the action; duplicating derivation
@@ -13,6 +16,8 @@
 // bundles `ActionWaiter` but doesn't expose it on the instance — shells
 // wire this themselves (e.g., via `new ActionWaiter(sdk).waitForTxid`)
 // or skip the wait and poll separately.
+
+import { assertSigningAllowed } from '../flows/panicMode.js';
 
 /**
  * @typedef {Object} SubmitEncoderOpts
@@ -82,6 +87,10 @@ export async function submitWithSigner({
     if (!Array.isArray(signingPaths) || signingPaths.length === 0) {
         throw new Error('submitWithSigner: signingPaths must be a non-empty array');
     }
+
+    // §26.5 / G068 — refuse to drive any signer while panic mode is on.
+    // Cleared automatically once the timer expires.
+    assertSigningAllowed();
 
     const sdk = sdkRegistry.get(chainId);
     const encoder = sdk.encoder;

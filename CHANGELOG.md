@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.147.0] - 2026-04-27
+
+§26 Lock & Panic — Step 5 of 6 — Panic mode signing freeze foundation (G068 part 1).
+
+The wallet now ships a runtime panic-mode flag with a 24-hour default freeze on all signing. Activating it from Settings → Safety arms the freeze immediately; balances and history stay readable, but every flow that drives a Signer (`submitWithSigner`, `signMessageFlow`, `signPsbtFlow`, `signMultisigLocally`) refuses with a `PanicModeActiveError` until the timer expires or the user explicitly deactivates. The duress-passphrase / decoy-state UX layers on top of this in Step 6 — none of that is required for the freeze to work.
+
+### Added
+
+- **`flows/panicMode.js`** — pure flow with localStorage-backed state at `xchain-wallet:panic`. State shape: `{ activatedAt, expiresAt, durationMs }`. Exports: `emptyPanicModeState`, `getPanicModeState`, `getPanicRemainingMs`, `isSigningFrozen`, `activatePanicMode({ durationMs?, nowMs? })`, `deactivatePanicMode`, `clearPanicModeState`, `assertSigningAllowed(nowMs?)`, plus `PanicModeActiveError` (carries `remainingMs`) and the `DEFAULT_DURATION_MS` (24h) / `MIN_DURATION_MS` (1m floor for tests) / `MAX_DURATION_MS` (7d cap) constants. Memory fallback when localStorage is unavailable. Corruption-tolerant reads (malformed JSON, negative fields → empty). `assertSigningAllowed` auto-clears expired state inline so the timer is fully self-healing.
+- **`shared/components/settings/PanicModeRow.jsx`** — Safety-panel row with two states. Inactive: dangerous-styled "Activate" button + copy explaining the freeze. Active: countdown ("Xh Ym remaining" — minute granularity, `Math.ceil` round-up so the user never sees 0m while still locked) + a "Deactivate" button. The countdown ticks every 60 s; cleanup on unmount or timer expiry.
+- **Sign-path gating in three chokepoints** — `sdk/submitWithSigner.js` (top of the lifecycle, before encoder/signer interaction), `flows/signFlows.js` (both `signMessageFlow` + `signPsbtFlow`), and `flows/multisigSignLocally.js` (after sessionId / password validation, before vault lookup). All four entries call `assertSigningAllowed()` and surface `PanicModeActiveError` to callers.
+- **`test/smoke/core/panic-mode.smoke.js`** — full flow coverage: defaults (24h / 1m / 7d), empty state, persistence round-trip via fake localStorage, freeze boundary math (just-armed / 1ms-before-expiry / 1ms-after-expiry), mid-countdown remaining-ms, duration clamp (sub-minute → 1m floor; over-7d → 7d cap; NaN → default), `assertSigningAllowed` throws `PanicModeActiveError` with positive `remainingMs`, `deactivatePanicMode` removes the localStorage entry, corruption tolerance, auto-clear when `assertSigningAllowed` is called past expiry, memory fallback when localStorage is removed.
+- **`test/smoke/ui/panic-mode-wiring.smoke.js`** — `flows/index.js` re-export coverage, all three sign-path chokepoints import + call `assertSigningAllowed`, signFlows.js gates BOTH flows (count `assertSigningAllowed()` invocations === 2), SafetySection mounts `<PanicModeRow />` ungated by the schema toggle (always available for emergencies), toggle relabelled to "Auto-arm panic mode", PanicModeRow's setInterval+clearInterval lifecycle, copy strings, minute-granularity formatter with `Math.ceil`.
+
+### Changed
+
+- **`flows/index.js`** — re-exports the panic-mode surface (`getPanicModeState`, `getPanicRemainingMs`, `isSigningFrozen`, `activatePanicMode`, `deactivatePanicMode`, `assertSigningAllowed`, `PanicModeActiveError`, `PANIC_MODE_DEFAULT_DURATION_MS` / `_MIN_DURATION_MS` / `_MAX_DURATION_MS`).
+- **`SafetySection.jsx`** — mounts `<PanicModeRow />` between `<BiometricRow />` and the schema toggle. The schema toggle is relabelled "Auto-arm panic mode" with hint text noting the duress wiring lands in a follow-up step; the activation Button always renders regardless of the toggle so the emergency control is never gated on a forgotten preference.
+- **`sdk/submitWithSigner.js`** — header comment notes the panic-mode gate; new import + a one-line `assertSigningAllowed()` call after the input-validation block.
+- **`flows/signFlows.js`** — new import + `assertSigningAllowed()` call after each input-validation block (two flows).
+- **`flows/multisigSignLocally.js`** — new import + `assertSigningAllowed()` call before the multisig session lookup.
+- **`test/smoke/ui/settings-safety.smoke.js`** — updated to reflect the new row layout: `<BiometricRow />` mount (v0.146), `<PanicModeRow />` mount (v0.147), and the schema-toggle relabelling from "Panic mode" → "Auto-arm panic mode".
+
+### Behavior preserved
+
+- The schema field `settings.panicMode.enabled` retains its v2 semantics (boolean preference) and its existing migration path; only its UI label + intent changed.
+- Existing sign flows that don't go through one of the four gated chokepoints are unaffected — none today, by design (this is the chokepoint set).
+- `submitWithSigner`'s phase ordering (creating → encoding → signing → broadcasting → p2sh_spending → waiting → confirmed) is unchanged; the gate runs strictly before phase 1.
+- `Locked.jsx`, `Input.jsx`, `BiometricRow.jsx`, `usePrivacyBlur.js` from earlier §26 steps are untouched.
+
 ## [0.146.0] - 2026-04-27
 
 §26 Lock & Panic — Step 4 of 6 — Biometric unlock via WebAuthn PRF (G063).

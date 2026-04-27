@@ -231,6 +231,20 @@ export {
     BiometricPrfUnavailableError,
 } from './biometricUnlock.js';
 export {
+    emptyPanicModeState,
+    getPanicModeState,
+    getPanicRemainingMs,
+    isSigningFrozen,
+    activatePanicMode,
+    deactivatePanicMode,
+    clearPanicModeState,
+    assertSigningAllowed,
+    PanicModeActiveError,
+    DEFAULT_DURATION_MS as PANIC_MODE_DEFAULT_DURATION_MS,
+    MIN_DURATION_MS as PANIC_MODE_MIN_DURATION_MS,
+    MAX_DURATION_MS as PANIC_MODE_MAX_DURATION_MS,
+} from './panicMode.js';
+export {
     enqueueSignedTx,
     listQueuedBroadcasts,
     drainQueuedBroadcast,

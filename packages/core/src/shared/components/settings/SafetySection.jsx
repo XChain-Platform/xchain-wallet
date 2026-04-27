@@ -16,6 +16,7 @@
 import { useSettings } from '../../hooks/useSettings.js';
 import { INPUT, ROW, ROW_LABEL, SELECT, STACK, Status, ToggleRow } from './_settingsPrimitives.jsx';
 import { BiometricRow } from './BiometricRow.jsx';
+import { PanicModeRow } from './PanicModeRow.jsx';
 
 const AUTOLOCK_OPTIONS = /** @type {const} */ ([
     { value: 1, label: '1 minute' },
@@ -93,9 +94,10 @@ export function SafetySection() {
                 />
             </div>
             <BiometricRow />
+            <PanicModeRow />
             <ToggleRow
-                label="Panic mode"
-                hint="Reserved — toggle persists the preference. Full §26.5 duress-PIN flow lands separately."
+                label="Auto-arm panic mode"
+                hint="Reserved — duress-passphrase / shortcut auto-arming lands in a follow-up step. The persisted preference is honoured when that wiring ships; the Activate button above always works regardless."
                 checked={Boolean(settings.panicMode?.enabled)}
                 onChange={(v) => {
                     update({ panicMode: { enabled: v } }).catch((err) => {

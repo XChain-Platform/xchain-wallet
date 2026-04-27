@@ -33,11 +33,16 @@ for (const v of [1, 5, 15, 60]) {
 }
 assert.ok(src.includes('value: 0'), 'autolock supports 0 (never)');
 
-// Three rows live now: test-send warning, panic mode, backup reminders.
+// Live rows: test-send warning, biometric unlock, panic-mode activation,
+// auto-arm reservation toggle, backup reminders. (v0.146 added
+// BiometricRow; v0.147 added PanicModeRow + relabelled the schema toggle
+// from "Panic mode" to "Auto-arm panic mode".)
 assert.match(src, /Test-send warning \(sats\)/, 'test-send warning row present');
 assert.match(src, /testSendThresholdSats:\s*n/, 'test-send writes through grace.testSendThresholdSats');
-assert.match(src, /label="Panic mode"/, 'panic mode toggle present');
-assert.match(src, /panicMode:\s*\{\s*enabled:\s*v\s*\}/, 'panic mode writes through panicMode.enabled');
+assert.match(src, /<BiometricRow \/>/, 'biometric unlock row mounted');
+assert.match(src, /<PanicModeRow \/>/, 'panic-mode activation row mounted');
+assert.match(src, /label="Auto-arm panic mode"/, 'panic-mode auto-arm toggle present');
+assert.match(src, /panicMode:\s*\{\s*enabled:\s*v\s*\}/, 'panic mode toggle writes through panicMode.enabled');
 assert.match(src, /Backup reminders/, 'backup reminders row present');
 assert.match(src, /backupReminders:\s*e\.target\.value/, 'backup reminders writes through update');
 

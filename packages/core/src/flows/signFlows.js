@@ -12,6 +12,7 @@
 // guaranteed lock in `finally`.
 
 import { unlockWallet } from './unlockWallet.js';
+import { assertSigningAllowed } from './panicMode.js';
 
 /**
  * @typedef {Object} SignMessageFlowOpts
@@ -57,6 +58,8 @@ export async function signMessageFlow({
     if (typeof message !== 'string') {
         throw new Error('signMessageFlow: message must be a string');
     }
+    // §26.5 panic-mode freeze.
+    assertSigningAllowed();
     const signer = await unlockWallet({
         vault,
         walletId,
@@ -110,6 +113,8 @@ export async function signPsbtFlow({
     if (!Array.isArray(signingPaths) || signingPaths.length === 0) {
         throw new Error('signPsbtFlow: signingPaths must be a non-empty array');
     }
+    // §26.5 panic-mode freeze.
+    assertSigningAllowed();
     const signer = await unlockWallet({
         vault,
         walletId,
