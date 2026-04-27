@@ -6,6 +6,7 @@ import { AppearanceSection } from '../components/settings/AppearanceSection.jsx'
 import { LanguageRegionSection } from '../components/settings/LanguageRegionSection.jsx';
 import { PrivacySection } from '../components/settings/PrivacySection.jsx';
 import { FeesSection } from '../components/settings/FeesSection.jsx';
+import { NetworkEndpointsSection } from '../components/settings/NetworkEndpointsSection.jsx';
 import { NotificationsSection } from '../components/settings/NotificationsSection.jsx';
 import { SafetySection } from '../components/settings/SafetySection.jsx';
 import styles from './ActionsMenu.module.css';
@@ -137,7 +138,8 @@ export function Settings({
             title: 'Network & Endpoints',
             description: 'Per-chain explorer, encoder, and hub URLs.',
             keywords: 'network endpoints explorer encoder hub url chain registry',
-            kind: 'stub',
+            kind: 'panel',
+            Component: NetworkEndpointsSection,
         },
         {
             id: 'notifications',

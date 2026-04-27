@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.113.0] - 2026-04-26
+
+Settings — Step 10 of 18 — Network & Endpoints panel.
+
+Per-chain Explorer / Encoder / Hub URL editor backed by `settings.sdkEndpoints`. One block per registered chain (sorted coin → mainnet/testnet/regtest); each block carries the three URL inputs with the registry defaults as placeholders, a "Custom" / "Default" indicator, a "Save" button that commits a dirty buffer, and a "Reset to default" button that wipes the override. The schema's `custom` flag is computed automatically — set when the saved values diverge from defaults, cleared when they match — so the §49 reachability banner and any future hub-driven endpoint refresh have an honest signal.
+
+### Added
+
+- **`packages/core/src/shared/components/settings/NetworkEndpointsSection.jsx`** — iterates `chainRegistry.supportedChains()`, draft-buffer per chain, dirty-detect against current persisted entry, computed `custom` flag.
+- **`test/smoke/ui/settings-network-endpoints.smoke.js`** — useSettings + chain-registry imports, `supportedChains()` iteration, sort order, three URL labels, save/reset wiring, computed-custom flag, Settings.jsx hook-up.
+
+### Changed
+
+- **`packages/core/src/shared/routes/Settings.jsx`** — network-endpoints section flips from `kind: 'stub'` to `kind: 'panel'`.
+
 ## [0.112.0] - 2026-04-26
 
 Settings — Step 9 of 18 — Fees panel.
