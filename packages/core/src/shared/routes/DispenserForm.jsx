@@ -12,6 +12,8 @@ import {
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
+import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { useWalletMode } from '../hooks/useWalletMode.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -271,11 +273,14 @@ export function DispenserForm({ walletId, onBack }) {
     const [hwStatus, setHwStatus] = useState('idle');
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
 
+    // §20 / Cluster W FOLLOWUP 5 — watcher-mode encode-only branch.
+    const { isWatcherMode } = useWalletMode();
+
     async function handleSubmit(event) {
         event.preventDefault();
         if (stage === 'submitting') return;
-        if (!hw && password.length === 0) return;
-        if (hw && hwStatus !== 'available') return;
+        if (!isWatcherMode && !hw && password.length === 0) return;
+        if (!isWatcherMode && hw && hwStatus !== 'available') return;
         setStage('submitting');
         setSubmitError(null);
         try {
@@ -292,9 +297,18 @@ export function DispenserForm({ walletId, onBack }) {
                 },
                 params: actionParams,
             };
-            const res = hw
-                ? await messaging.dispenserActionHw({ ...base, signerId: fromAddress.signerId })
-                : await messaging.dispenserAction({ ...base, password });
+            let res;
+            if (isWatcherMode) {
+                res = await messaging.buildActionPsbtRequest({
+                    chainId,
+                    from: base.from,
+                    actionData: { action: 'DISPENSER', params: actionParams },
+                });
+            } else if (hw) {
+                res = await messaging.dispenserActionHw({ ...base, signerId: fromAddress.signerId });
+            } else {
+                res = await messaging.dispenserAction({ ...base, password });
+            }
             setResult(res);
             setPassword('');
             setStage('done');
@@ -306,11 +320,17 @@ export function DispenserForm({ walletId, onBack }) {
                     : err?.message || 'Dispenser creation failed.',
             );
             setStage('review');
-            if (!hw) {
+            if (!isWatcherMode && !hw) {
                 passwordRef.current?.focus();
                 passwordRef.current?.select();
             }
         }
+    }
+
+    function handleBuildAnother() {
+        setResult(null);
+        setSubmitError(null);
+        setStage('form');
     }
 
     const titleSuffix = descriptor ? ` on ${descriptor.displayName}` : '';
@@ -348,6 +368,15 @@ export function DispenserForm({ walletId, onBack }) {
 
     if (stage === 'done') {
         const txid = result?.txid || result?.broadcast?.txid;
+        if (result?.psbtHex && !txid) {
+            return wrap(
+                <WatcherResultPanel
+                    result={result}
+                    onBuildAnother={handleBuildAnother}
+                    onDone={onBack}
+                />,
+            );
+        }
         return wrap(
             <>
                 <h2 className={styles.successTitle}>Dispenser opened</h2>
@@ -391,21 +420,29 @@ export function DispenserForm({ walletId, onBack }) {
                         ))}
                     </div>
                 ) : null}
-                <SignCredentials
-                    fromAddress={fromAddress}
-                    chainId={chainId}
-                    password={password}
-                    onPasswordChange={(v) => {
-                        setPassword(v);
-                        if (submitError) setSubmitError(null);
-                    }}
-                    onStatusChange={onHwStatusChange}
-                    passwordRef={passwordRef}
-                    submitError={submitError}
-                    disabled={stage === 'submitting'}
-                    getSignerStatus={messaging.getSignerStatus}
-                />
-                {hw && submitError ? (
+                {isWatcherMode ? (
+                    <p className={styles.hint}>
+                        Watcher mode — this wallet will build an unsigned PSBT.
+                        Sign it on your Signer-mode wallet, then bring the
+                        signed PSBT to a Full-mode wallet to broadcast.
+                    </p>
+                ) : (
+                    <SignCredentials
+                        fromAddress={fromAddress}
+                        chainId={chainId}
+                        password={password}
+                        onPasswordChange={(v) => {
+                            setPassword(v);
+                            if (submitError) setSubmitError(null);
+                        }}
+                        onStatusChange={onHwStatusChange}
+                        passwordRef={passwordRef}
+                        submitError={submitError}
+                        disabled={stage === 'submitting'}
+                        getSignerStatus={messaging.getSignerStatus}
+                    />
+                )}
+                {(isWatcherMode || hw) && submitError ? (
                     <div role="alert" className={styles.error}>{submitError}</div>
                 ) : null}
                 <div className={styles.actions}>
@@ -413,11 +450,19 @@ export function DispenserForm({ walletId, onBack }) {
                         type="submit"
                         variant="primary"
                         loading={stage === 'submitting'}
-                        disabled={hw ? hwStatus !== 'available' : password.length === 0}
+                        disabled={
+                            isWatcherMode
+                                ? false
+                                : hw
+                                    ? hwStatus !== 'available'
+                                    : password.length === 0
+                        }
                     >
-                        {hw
-                            ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                            : (descriptor ? `Sign on ${descriptor.displayName}` : 'Sign')}
+                        {isWatcherMode
+                            ? 'Build unsigned PSBT'
+                            : hw
+                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                                : (descriptor ? `Sign on ${descriptor.displayName}` : 'Sign')}
                     </Button>
                 </div>
             </form>,

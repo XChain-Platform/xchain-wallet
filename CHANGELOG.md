@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.246.0] - 2026-04-28
+
+§20 — Cluster X Step 6 of N — DispenserForm watcher-mode branch.
+
+Same FOLLOWUP 5 pattern, action DISPENSER. `useWalletMode` hook, `isWatcherMode` submit branch through `buildActionPsbtRequest`, gates skipped, watcher-mode hint at review, "Build unsigned PSBT" button, shared `<WatcherResultPanel>` at done stage, `handleBuildAnother` reset.
+
+### Added
+
+- **`packages/core/src/shared/routes/DispenserForm.jsx`** — watcher-mode branch.
+- **`test/smoke/ui/dispenser-watcher-mode.smoke.js`** (new).
+
 ## [0.245.0] - 2026-04-28
 
 §20 — Cluster X Step 5 of N — MintForm watcher-mode branch.
