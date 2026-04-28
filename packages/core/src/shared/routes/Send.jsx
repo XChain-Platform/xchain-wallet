@@ -16,7 +16,7 @@ import {
 } from '@xchain-wallet/core';
 import { encodeXcwChunks } from '../../uri/psbtQr.js';
 import { encodeBbqrPsbtFrames } from '../../uri/bbqrPsbt.js';
-import { WALLET_MODE_DEFAULT } from '../../schemas/settings.js';
+import { useWalletMode } from '../hooks/useWalletMode.js';
 import { buildRecentDestinations } from '../../flows/recentDestinations.js';
 import { findLookalike } from '../utils/lookalike.js';
 import { checkPasteIntegrity } from '../utils/pasteIntegrity.js';
@@ -644,8 +644,7 @@ export function Send({ walletId, onBack }) {
     // unsigned PSBT for transport to a Signer-mode wallet. Read with the
     // explicit default fallback so v2 records without the field behave
     // like 'full' (the broadcast path).
-    const walletMode = settings?.walletMode || WALLET_MODE_DEFAULT;
-    const isWatcherMode = walletMode === 'watcher';
+    const { isWatcherMode } = useWalletMode();
     const hwSignerInfo = useMemo(() => {
         if (!isHwSource || !fromAddress?.signerId) return null;
         const rec = signersByWallet.find((s) => s?.id === fromAddress.signerId);

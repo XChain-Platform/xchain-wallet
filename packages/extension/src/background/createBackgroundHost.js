@@ -29,6 +29,7 @@ const {
     receiveAddress,
     sendAsset,
     buildSendPsbt,
+    buildActionPsbt,
     sweepAsset,
     issueToken,
     mintAsset,
@@ -778,6 +779,14 @@ export function createBackgroundHost(deps) {
     // unlock, no signer, no broadcast.
     host.register('action.send.psbt', async (req, { chainRegistry, sdkRegistry }) => {
         return buildSendPsbt({ ...req, chainRegistry, sdkRegistry });
+    });
+
+    // §20 / Cluster W FOLLOWUP 5 — generic watcher-mode helper for the
+    // non-Send action surface (ISSUE / MINT / DESTROY / DISPENSER / etc.).
+    // Same encode-only contract as `action.send.psbt`: no vault unlock,
+    // no signer, no broadcast — caller supplies `actionData` + `encoderOpts`.
+    host.register('action.psbt', async (req, { chainRegistry, sdkRegistry }) => {
+        return buildActionPsbt({ ...req, chainRegistry, sdkRegistry });
     });
 
     // §17.5 / G025 — verify signature. Pure SDK call, no signer / no

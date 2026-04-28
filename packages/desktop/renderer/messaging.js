@@ -124,6 +124,15 @@ export function buildSendPsbtRequest(opts) {
 }
 
 /**
+ * §20 / Cluster W FOLLOWUP 5 — generic watcher-mode encode-only helper
+ * for the non-Send action surface.
+ * @param {object} opts
+ */
+export function buildActionPsbtRequest(opts) {
+    return /** @type {any} */ (sendMessage('action.psbt', opts));
+}
+
+/**
  * §20 / G040 FOLLOWUP 1 — broadcast a signed transaction.
  * @param {{ chainId: string, txHex: string }} opts
  */

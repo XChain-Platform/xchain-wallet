@@ -111,21 +111,19 @@ assert.match(
     /import \{ encodeXcwChunks \} from '\.\.\/\.\.\/uri\/psbtQr\.js';/,
     'Send.jsx imports encodeXcwChunks',
 );
+// §20 Cluster X Step 2 — walletMode derivation lifted to a shared hook
+// (`useWalletMode`) so the same pattern can be reused across every
+// action authoring surface for FOLLOWUP 5.
 assert.match(
     sendSrc,
-    /import \{ WALLET_MODE_DEFAULT \} from '\.\.\/\.\.\/schemas\/settings\.js';/,
-    'Send.jsx imports WALLET_MODE_DEFAULT',
+    /import \{ useWalletMode \} from '\.\.\/hooks\/useWalletMode\.js';/,
+    'Send.jsx imports useWalletMode hook',
 );
 assert.match(sendSrc, /AnimatedQrFrames,/, 'Send.jsx imports AnimatedQrFrames from core/ui');
 assert.match(
     sendSrc,
-    /const walletMode = settings\?\.walletMode \|\| WALLET_MODE_DEFAULT;/,
-    'derives walletMode from settings with default fallback',
-);
-assert.match(
-    sendSrc,
-    /const isWatcherMode = walletMode === 'watcher';/,
-    'derives isWatcherMode',
+    /const \{ isWatcherMode \} = useWalletMode\(\);/,
+    'derives isWatcherMode via the shared hook',
 );
 assert.match(
     sendSrc,

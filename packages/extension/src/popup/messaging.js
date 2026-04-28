@@ -249,6 +249,22 @@ export function buildSendPsbtRequest(opts) {
 }
 
 /**
+ * §20 / Cluster W FOLLOWUP 5 — watcher-mode helper for the non-Send
+ * action surface. Builds an unsigned PSBT for any XChain action without
+ * unlocking the wallet, calling a signer, or broadcasting.
+ *
+ * @param {object} opts
+ * @param {string} opts.chainId
+ * @param {{ address: string, publicKey: string, derivationPath?: string, addressId?: string, source?: string, signerId?: string }} opts.from
+ * @param {{ action: string, params: object }} opts.actionData
+ * @param {object} [opts.encoderOpts]   passes-through to encoder.createTx (fee / feePerKb / rbf / etc.)
+ * @returns {Promise<{ psbtHex: string, encoding: string, actionString: string, action: string, chainId: string, fromAddress: string }>}
+ */
+export function buildActionPsbtRequest(opts) {
+    return /** @type {any} */ (sendMessage('action.psbt', opts));
+}
+
+/**
  * §17.4 / §30.1 / G024 — user-initiated message signing.
  *
  * @param {{ walletId: string, addressId: string, password: string, message: string, bip39Passphrase?: string }} opts

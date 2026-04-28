@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.242.0] - 2026-04-28
+
+§20 — Cluster X Step 2 of N — useWalletMode hook + generic `buildActionPsbt` foundation (Cluster W FOLLOWUP 5 prep).
+
+Foundation for the watcher-mode read-only sweep across non-Send action surfaces. Three pieces land together since they're co-dependent: a generic encode-only flow that any action can call, a host handler + three messaging shims that expose it, and a shared `useWalletMode` hook that subsequent forms will branch on.
+
+The new `buildActionPsbt` flow is the encode-only path through `submitWithSigner` — Steps 1 + 2 (`createAction` + `encoder.createTx`) and nothing else. Generalized over `actionData` so ISSUE / MINT / DESTROY / DISPENSER / ORDER / SWAP / etc. share one watcher-mode lane (SEND keeps `buildSendPsbt` because the Send form layers fee tiering / recent-destinations / ADS donations on top). The new `useWalletMode` hook lifts Send.jsx's `walletMode` derivation into a reusable shape so each action form can `const { isWatcherMode } = useWalletMode();` instead of re-reading settings + WALLET_MODE_DEFAULT inline.
+
+### Added
+
+- **`packages/core/src/flows/buildActionPsbt.js`** (new) — generic encode-only flow taking `{ chainId, from, actionData, encoderOpts? }`, returns the same `{ psbtHex, encoding, actionString, action, version, chainId, fromAddress }` envelope as `buildSendPsbt`. No vault / signer / broadcast.
+- **`packages/core/src/flows/index.js`** — re-exports `buildActionPsbt`.
+- **`packages/extension/src/background/createBackgroundHost.js`** — registers `action.psbt` host handler (chainRegistry + sdkRegistry deps; no vault).
+- **`packages/extension/src/popup/messaging.js`** + **`packages/web/src/messaging.js`** + **`packages/desktop/renderer/messaging.js`** — `buildActionPsbtRequest(opts)` shim routing to `action.psbt`.
+- **`packages/core/src/shared/hooks/useWalletMode.js`** (new) — reads settings via `useSettings`, falls back to `WALLET_MODE_DEFAULT`, returns `{ walletMode, isFullMode, isWatcherMode, isSignerMode }`.
+- **`test/smoke/ui/build-action-psbt-foundation.smoke.js`** (new) — pins the flow, the host handler, the three shims, and the hook.
+
+### Changed
+
+- **`packages/core/src/shared/routes/Send.jsx`** — drops the inline `walletMode = settings?.walletMode || WALLET_MODE_DEFAULT;` derivation in favour of `const { isWatcherMode } = useWalletMode();`. Behaviour identical; `WALLET_MODE_DEFAULT` import removed (the hook handles the fallback).
+- **`test/smoke/ui/send-watcher-mode.smoke.js`** — pins the new hook import + destructure shape.
+
+Foundation only — no action form has been migrated yet. Subsequent steps adopt `useWalletMode` + `buildActionPsbtRequest` across IssueTokenForm / MintForm / DispenserForm / OrderForm / etc.
+
 ## [0.241.0] - 2026-04-28
 
 §20 — Cluster X Step 1 of N — Cluster W FOLLOWUP 4 — BBQr export for `WatcherResultPanel`.
