@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.197.0] - 2026-04-27
+
+§13 — Cluster M Step 4 of 6 — `docs/ARCHITECTURE.md` (G013).
+
+In-repo architecture orientation document. Covers the three-shell model (web / extension / desktop), monorepo layout, per-package responsibilities, the four-layer signal flow (component → flow → host bridge → SDK), signer abstraction, storage substrate, dApp bridge architecture, approval broker, reachability / offline mode, synchronized versioning, and pointers to deeper docs. Distinct from the dApp-developer-facing `BRIDGE.md` (Step 5) and the protocol-spec sister doc maintained in the parent platform repo.
+
+### Added
+
+- **`docs/ARCHITECTURE.md`** (new) — practical in-repo architecture orientation.
+
+Closes G013.
+
 ## [0.196.0] - 2026-04-27
 
 §55 — Cluster M Step 3 of 6 — `CODE_OF_CONDUCT.md` (G177).
