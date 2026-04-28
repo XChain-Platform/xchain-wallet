@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.217.0] - 2026-04-28
+
+§54 — Cluster R Step 2 of 3 — i18n string-extraction ESLint rule (G172).
+
+New `tools/eslint/rules/no-jsx-literal-strings.js` flags inline JSX strings that should live in `i18n/locales/<bcp47>/index.js`. New `tools/eslint/plugin.js` packages the rule under the `@xchain` plugin namespace. Both ship as stand-alone modules — the rule is not enforced in CI per the project's "no CI during build phase" memory; developers who want it active can wire it into their local `.eslintrc.cjs`.
+
+What the rule checks:
+
+- Plain JSX text content (`<span>Sign in</span>`).
+- User-facing string attributes: `aria-label` / `aria-description` / `aria-roledescription` / `alt` / `title` / `placeholder` / `label` / `hint` / `caption` / `tooltip` (Literal or `JSXExpressionContainer { Literal }`).
+- `JSXExpressionContainer { Literal }` rendered as JSX content.
+
+What the rule allows (without flagging):
+
+- Whitespace-only / single-character / pure-punctuation / pure-digit strings (status dots, em-dashes, version chips).
+- Technical attributes: `className`, `style`, `id`, `key`, `role`, `type`, `htmlFor`, `name`, `data-*`, every `aria-*` except the user-facing trio above, and on-event handlers.
+- Strings shorter than a configurable `minLength` (default 2).
+- Strings on the per-config `allow` list.
+- Files matching the auto-ignored glob list — `*.smoke.js`, `*.test.[jt]sx?`, `test/**`, `tools/**`, `claude/**`, `dist/**`, `node_modules/**`.
+- Standard ESLint disable comments at the call site.
+
+The rule's `create()` returns no visitors at all when the filename matches an ignored path, so the rule cost is essentially zero on tests and tooling files.
+
+Existing call sites are NOT migrated in this step — that's a follow-up sweep.
+
+### Added
+
+- **`tools/eslint/rules/no-jsx-literal-strings.js`** (new) — the rule.
+- **`tools/eslint/plugin.js`** (new) — `@xchain` plugin entry that exposes the rule.
+- **`test/smoke/ui/eslint-no-jsx-literal-strings.smoke.js`** (new) — exercises `isTrivialString`, `findViolations`, ESLint `create()` against synthesised AST fragments + filename filtering, no eslint dependency.
+
+Closes G172.
+
 ## [0.216.0] - 2026-04-28
 
 §54 — Cluster R Step 1 of 3 — i18n locales directory + ICU format (G173).
