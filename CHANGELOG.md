@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.226.0] - 2026-04-28
+
+§24 — Cluster U Step 2 of 5 — Extension sidebar mode (Chrome Side Panel) verify (G056).
+
+The implementation already shipped — the manifest declares `side_panel.default_path: 'sidepanel.html'` + `sidePanel` permission, `background/layoutMode.js` controls the popup/sidepanel toggle, and `LayoutModeToggle.jsx` renders the user-facing switch. This step is a verify pass: a new smoke pins the four-piece wiring (manifest + HTML entry points + background controller + shared toggle UI) so a future edit cannot silently drop one of them.
+
+### Added
+
+- **`test/smoke/shells/extension-sidepanel.smoke.js`** (new) — pins manifest declarations (`side_panel.default_path`, `sidePanel` permission, `action.default_popup`), the two HTML entry points, the `layoutMode.js` controller exports + canonical storage key + Chrome API call shapes, the background.js boot wiring, and the `LayoutModeToggle` shared component shape.
+
+Closes G056.
+
 ## [0.225.0] - 2026-04-28
 
 §24 — Cluster U Step 1 of 5 — Resume-last-view on unlock (G055).
