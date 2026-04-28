@@ -19,6 +19,7 @@
 // isn't injected, or when the user dismisses it for the session.
 
 import { useCallback, useEffect, useState } from 'react';
+import { useLastView } from '@xchain-wallet/core/shared/hooks/useLastView.js';
 import { MessagingProvider } from '@xchain-wallet/core/shared/MessagingProvider.jsx';
 import { Loading } from '@xchain-wallet/core/shared/routes/Loading.jsx';
 import { Onboarding } from '@xchain-wallet/core/shared/routes/Onboarding.jsx';
@@ -244,6 +245,16 @@ function AppInner() {
     // §42.2 Contracts nav — show only when a BTC wallet address exists
     // (VM actions are BTC-only at launch per BITCOIN_ACTIONS).
     const hasBtcAddress = useBtcAddressesPresent(activeWalletId);
+
+    // §24 / G055 — resume the user's last view on unlock (persisted
+    // per-wallet in localStorage). Restricted to context-free views;
+    // anything that needs a prefilled state object falls through to
+    // Home. See `lastViewMemory.RESUMABLE_VIEWS` for the set.
+    useLastView({
+        walletId: activeWalletId,
+        currentView: unlockedView,
+        onResume: setUnlockedView,
+    });
 
     switch (status.state) {
         case 'loading':

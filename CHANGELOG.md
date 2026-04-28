@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.225.0] - 2026-04-28
+
+§24 — Cluster U Step 1 of 5 — Resume-last-view on unlock (G055).
+
+New `shared/utils/lastViewMemory.js` persists the user's last `unlockedView` per-wallet to localStorage; new `shared/hooks/useLastView` wraps the read/write into the React lifecycle each shell needs. All three shell App.jsx files (extension popup, web, desktop renderer) call the hook with the active walletId + current view + `setUnlockedView`, so unlocking a wallet resumes wherever the user left off.
+
+Resume safety: only context-free views (Home, History, Addresses, Actions, Contacts, Messaging, Markets, Staking dashboard, Contracts list, Cross-chain templates) are in the `RESUMABLE_VIEWS` allowlist. Anything that needs a prefilled state object (Send / TokenDetail / DispenserDetail / etc.) falls through to Home so a re-render can never hit a missing prop.
+
+Storage uses localStorage rather than `settings.lastView` per the project memory rule — ephemeral per-wallet UI prefs that should not survive a from-seed restore go to localStorage. Defensive helpers swallow storage-disabled / quota-exhausted failures.
+
+### Added
+
+- **`packages/core/src/shared/utils/lastViewMemory.js`** (new) — `readLastView` / `writeLastView` / `clearLastView` plus the frozen `RESUMABLE_VIEWS` allowlist.
+- **`packages/core/src/shared/hooks/useLastView.js`** (new) — wraps the helpers in two `useEffect`s (resume on walletId change, persist on view change) so the per-shell App.jsx wiring stays a one-line call.
+- **`test/smoke/ui/last-view-memory.smoke.js`** (new) — exercises the helper at runtime against a stub localStorage (round-trip, per-walletId isolation, non-resumable view filtering, Home-as-default no-op, throwing-storage defensiveness, spec-drift handling) and pins the hook + three-shell wiring.
+
+### Changed
+
+- **`packages/extension/src/popup/App.jsx`** — imports + calls `useLastView`.
+- **`packages/web/src/App.jsx`** — imports + calls `useLastView`.
+- **`packages/desktop/renderer/App.jsx`** — imports + calls `useLastView`.
+
+Closes G055.
+
 ## [0.224.0] - 2026-04-28
 
 §55 — Cluster T Step 4 of 4 — Wallet glossary (G179). **Cluster T closed.**
