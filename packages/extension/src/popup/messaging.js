@@ -339,6 +339,18 @@ export function signPsbtUserInitiated(opts) {
 }
 
 /**
+ * §20 / G040 FOLLOWUP 1 — broadcast a signed transaction. Caller passes
+ * the txHex extracted from a signed PSBT (see signPsbtUserInitiated's
+ * return shape) plus the chainId. Resolves with the broadcast txid.
+ *
+ * @param {{ chainId: string, txHex: string }} opts
+ * @returns {Promise<{ txid: string }>}
+ */
+export function broadcastSignedTxRequest(opts) {
+    return /** @type {any} */ (sendMessage('broadcast.signedTx', opts));
+}
+
+/**
  * §19.3 — reveal the wallet's seed mnemonic.
  *
  * @param {{ walletId: string, password: string }} opts

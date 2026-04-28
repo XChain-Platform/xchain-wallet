@@ -123,6 +123,14 @@ export function buildSendPsbtRequest(opts) {
     return /** @type {any} */ (sendMessage('action.send.psbt', opts));
 }
 
+/**
+ * §20 / G040 FOLLOWUP 1 — broadcast a signed transaction.
+ * @param {{ chainId: string, txHex: string }} opts
+ */
+export function broadcastSignedTxRequest(opts) {
+    return /** @type {any} */ (sendMessage('broadcast.signedTx', opts));
+}
+
 /** @param {object} opts */
 export function sendAssetHw(opts) {
     return /** @type {any} */ (sendMessage('action.send.hw', opts));

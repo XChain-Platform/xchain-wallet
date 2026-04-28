@@ -236,6 +236,16 @@ export function signPsbtUserInitiated(opts) {
 }
 
 /**
+ * §20 / G040 FOLLOWUP 1 — broadcast a signed transaction.
+ *
+ * @param {{ chainId: string, txHex: string }} opts
+ * @returns {Promise<{ txid: string }>}
+ */
+export function broadcastSignedTxRequest(opts) {
+    return /** @type {any} */ (sendMessage('broadcast.signedTx', opts));
+}
+
+/**
  * §19.3 — reveal the wallet's seed mnemonic. Returns plaintext;
  * caller is responsible for the reveal-screen guardrails.
  *

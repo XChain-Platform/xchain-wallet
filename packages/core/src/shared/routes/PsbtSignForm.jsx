@@ -142,6 +142,14 @@ export function PsbtSignForm({ walletId, onBack }) {
     const [signedPsbtHex, setSignedPsbtHex] = useState(
         /** @type {string | null} */ (null),
     );
+    // §20 / G040 FOLLOWUP 1 — capture the broadcastable txHex + txid from
+    // the sign result so the result page can offer in-wallet broadcast.
+    const [signedTxHex, setSignedTxHex] = useState(/** @type {string} */ (''));
+    const [broadcastState, setBroadcastState] = useState(
+        /** @type {'idle' | 'broadcasting' | 'broadcast' | 'error'} */ ('idle'),
+    );
+    const [broadcastTxid, setBroadcastTxid] = useState(/** @type {string} */ (''));
+    const [broadcastError, setBroadcastError] = useState(/** @type {string | null} */ (null));
 
     const psbtHex = useMemo(() => normalizePsbtInput(pasted), [pasted]);
 
@@ -322,6 +330,10 @@ export function PsbtSignForm({ walletId, onBack }) {
                 psbtHex,
             });
             setSignedPsbtHex(result?.signedPsbtHex || '');
+            setSignedTxHex(typeof result?.txHex === 'string' ? result.txHex : '');
+            setBroadcastState('idle');
+            setBroadcastTxid('');
+            setBroadcastError(null);
             setPassword('');
         } catch (err) {
             setError(
@@ -396,22 +408,92 @@ export function PsbtSignForm({ walletId, onBack }) {
                         fontFamily: 'var(--xc-font-mono)',
                     }}>{signedPsbtHex}</pre>
                 </div>
-                <p style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)' }}>
-                    Hand this signed PSBT to whoever broadcasts (or the next cosigner).
-                    Broadcast from inside the wallet will arrive in a later release.
-                </p>
-                <Button
-                    variant="ghost"
-                    block
-                    onClick={() => {
-                        setSignedPsbtHex(null);
-                        setPasted('');
-                        setDecomposed(null);
-                        setParseError(null);
-                    }}
-                >
-                    Sign another PSBT
-                </Button>
+                {broadcastState === 'broadcast' ? (
+                    <div
+                        role="status"
+                        aria-live="polite"
+                        style={{
+                            background: 'var(--xc-surface-raised)',
+                            border: '1px solid var(--xc-border)',
+                            borderRadius: 'var(--xc-radius-md)',
+                            padding: 'var(--xc-space-3)',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: 4,
+                        }}
+                    >
+                        <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>
+                            Broadcast — pending
+                        </span>
+                        <span style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)' }}>
+                            Transaction ID
+                        </span>
+                        <code style={{
+                            fontFamily: 'var(--xc-font-mono)',
+                            fontSize: 'var(--xc-text-xs)',
+                            wordBreak: 'break-all',
+                        }}>{broadcastTxid}</code>
+                        <CopyButton value={broadcastTxid} label="Copy txid" />
+                    </div>
+                ) : broadcastState === 'error' ? (
+                    <div role="alert" style={{ color: 'var(--xc-danger)', fontSize: 'var(--xc-text-sm)' }}>
+                        Broadcast failed: {broadcastError}
+                    </div>
+                ) : (
+                    <p style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)' }}>
+                        Broadcast directly from this wallet, or hand the signed PSBT
+                        off to a different broadcaster (or the next cosigner).
+                    </p>
+                )}
+                <div style={{ display: 'flex', gap: 'var(--xc-space-2)' }}>
+                    {broadcastState !== 'broadcast' ? (
+                        <Button
+                            variant="primary"
+                            block
+                            disabled={!signedTxHex || broadcastState === 'broadcasting'}
+                            loading={broadcastState === 'broadcasting'}
+                            onClick={async () => {
+                                if (!signedTxHex || !chainId) return;
+                                if (typeof messaging.broadcastSignedTxRequest !== 'function') {
+                                    setBroadcastError('messaging.broadcastSignedTxRequest is not available in this shell.');
+                                    setBroadcastState('error');
+                                    return;
+                                }
+                                setBroadcastState('broadcasting');
+                                setBroadcastError(null);
+                                try {
+                                    const res = await messaging.broadcastSignedTxRequest({
+                                        chainId,
+                                        txHex: signedTxHex,
+                                    });
+                                    setBroadcastTxid(res?.txid || '');
+                                    setBroadcastState('broadcast');
+                                } catch (err) {
+                                    setBroadcastError(err?.message || 'Broadcast failed.');
+                                    setBroadcastState('error');
+                                }
+                            }}
+                        >
+                            {broadcastState === 'broadcasting' ? 'Broadcasting…' : 'Broadcast'}
+                        </Button>
+                    ) : null}
+                    <Button
+                        variant="ghost"
+                        block
+                        onClick={() => {
+                            setSignedPsbtHex(null);
+                            setSignedTxHex('');
+                            setBroadcastState('idle');
+                            setBroadcastTxid('');
+                            setBroadcastError(null);
+                            setPasted('');
+                            setDecomposed(null);
+                            setParseError(null);
+                        }}
+                    >
+                        Sign another PSBT
+                    </Button>
+                </div>
             </div>
         );
         return (

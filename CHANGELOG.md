@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.237.0] - 2026-04-28
+
+§20 — Cluster D Step 1 of 2 — In-wallet broadcast for signed PSBTs (Cluster W FOLLOWUP 1).
+
+The watcher / signer pair shipped in Cluster W (v0.234.0 → v0.236.0) was half-built — a Watcher wallet built unsigned PSBTs (G040), a Signer wallet signed them (G088, v0.164.0), but to actually land the transaction on-chain the user had to copy the signed hex out of the wallet and broadcast via a block explorer or third-party tool. This step closes the loop by adding in-wallet broadcast.
+
+New host handler `broadcast.signedTx` (sdkRegistry-only, no vault — broadcast doesn't need keys) takes `{ chainId, txHex }`, calls `sdk.encoder.broadcastTx`, and normalizes the result to `{ txid }`. Three messaging shims expose `broadcastSignedTxRequest`. `PsbtSignForm` captures the broadcastable `txHex` from the existing sign-result envelope (the `auth.signPsbt` host already returned it; the form was throwing it away), tracks a four-state machine (`idle | broadcasting | broadcast | error`), and surfaces a primary "Broadcast" button on the result page next to the existing "Copy signed PSBT" affordance. On success, a status block replaces the body copy with the resulting txid + Copy txid button.
+
+The old "Broadcast from inside the wallet will arrive in a later release" placeholder copy is gone — replaced with "Broadcast directly from this wallet, or hand the signed PSBT off to a different broadcaster (or the next cosigner)".
+
+### Added
+
+- **`packages/extension/src/background/createBackgroundHost.js`** — `broadcast.signedTx` host handler.
+- **`packages/extension/src/popup/messaging.js`**, **`packages/web/src/messaging.js`**, **`packages/desktop/renderer/messaging.js`** — `broadcastSignedTxRequest` shim.
+- **`packages/core/src/shared/routes/PsbtSignForm.jsx`** — `signedTxHex` / `broadcastState` / `broadcastTxid` / `broadcastError` state, sign-success path captures txHex, Broadcast button + status block on the result page, "Sign another PSBT" reset clears the new state.
+- **`test/smoke/ui/psbt-sign-broadcast.smoke.js`** (new) — pins the host handler, the three shims, and the form's state + render wiring.
+
+Closes Cluster W FOLLOWUP 1. Watcher → Signer → Broadcaster round-trip is now wired end-to-end inside the wallet.
+
 ## [0.236.0] - 2026-04-28
 
 §20 — Cluster W Step 3 of 3 — Signer-mode Home variant (G041). **Cluster W closed.**

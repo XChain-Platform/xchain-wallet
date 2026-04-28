@@ -914,6 +914,38 @@ export function createBackgroundHost(deps) {
     // §30.4 / G088 — read-only PSBT decompose. The form pastes hex/base64
     // before any auth, so this handler doesn't touch vault — purely
     // sdkRegistry. Caller normalizes hex before sending.
+    // §20 / G040 FOLLOWUP 1 — broadcast a signed transaction (extracted
+    // from a signed PSBT by the renderer-side `auth.signPsbt` flow). No
+    // vault required; this is purely an SDK encoder call. The PsbtSignForm
+    // result page wires this so a Full-mode wallet can broadcast PSBTs
+    // round-tripped from a Watcher / Signer pair without the user having
+    // to copy-paste the txHex out to a block explorer.
+    host.register('broadcast.signedTx', async (req, { sdkRegistry }) => {
+        const chainId = req?.chainId;
+        const txHex = req?.txHex;
+        if (typeof chainId !== 'string' || !chainId) {
+            throw new Error('broadcast.signedTx: chainId is required');
+        }
+        if (typeof txHex !== 'string' || txHex.length === 0) {
+            throw new Error('broadcast.signedTx: txHex is required');
+        }
+        const sdk = sdkRegistry.get(chainId);
+        if (typeof sdk?.encoder?.broadcastTx !== 'function') {
+            throw new Error(`broadcast.signedTx: SDK encoder for "${chainId}" lacks broadcastTx`);
+        }
+        const result = await sdk.encoder.broadcastTx(txHex);
+        // Encoder result shape varies by chain (some return { txid }, some
+        // return the txid string directly). Normalize so the caller always
+        // sees { txid }.
+        const txid = typeof result === 'string'
+            ? result
+            : (result?.txid ?? result?.tx_hash ?? null);
+        if (typeof txid !== 'string' || !txid) {
+            throw new Error('broadcast.signedTx: SDK did not return a txid');
+        }
+        return { txid };
+    });
+
     host.register('psbt.parse', async (req, { sdkRegistry }) => {
         const chainId = req?.chainId;
         const psbtHex = req?.psbtHex;
