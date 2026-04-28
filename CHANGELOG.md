@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.218.0] - 2026-04-28
+
+§54 — Cluster R Step 3 of 3 — CSS logical properties for RTL (G174). **Cluster R closed.**
+
+Sweep across every `*.module.css` under `packages/` replaces physical inline-axis properties with logical equivalents so a future RTL locale lays out correctly without per-file flips.
+
+Substitutions applied:
+
+| Physical | Logical |
+|---|---|
+| `margin-left:` / `margin-right:` | `margin-inline-start:` / `margin-inline-end:` |
+| `padding-left:` / `padding-right:` | `padding-inline-start:` / `padding-inline-end:` |
+| `border-left[-color/style/width]:` / `border-right…` | `border-inline-start[-color/style/width]:` / `border-inline-end…` |
+| `border-top-left-radius:` / `border-top-right-radius:` | `border-start-start-radius:` / `border-start-end-radius:` |
+| `border-bottom-left-radius:` / `border-bottom-right-radius:` | `border-end-start-radius:` / `border-end-end-radius:` |
+| `left:` / `right:` (positioning) | `inset-inline-start:` / `inset-inline-end:` |
+| `text-align: left` / `text-align: right` | `text-align: start` / `text-align: end` |
+
+Block-direction properties (`top:`, `bottom:`, `padding-top:`, etc.) and explicit physical values that don't have a logical equivalent (`flex-direction: row-reverse`, `cursor: ew-resize`) are left alone — they're already RTL-safe or genuinely physical.
+
+28 module.css files modified, 63 line edits.
+
+### Added
+
+- **`test/smoke/ui/css-logical-properties.smoke.js`** (new) — walks every `*.module.css` under `packages/`, asserts no physical inline-axis properties remain. Catches drift the moment a future CSS edit reintroduces `margin-left:` etc.
+
+### Changed
+
+- **28 `*.module.css` files** under `packages/core/src/{ui,shared/components,shared/routes}` and `packages/web/src` — sweep applied.
+
+Closes G174. **Cluster R — §54 i18n — closed at v0.218.0.**
+
 ## [0.217.0] - 2026-04-28
 
 §54 — Cluster R Step 2 of 3 — i18n string-extraction ESLint rule (G172).

@@ -106,7 +106,7 @@
     border: 1px solid var(--xc-border-strong);
     position: absolute;
     top: 50%;
-    right: 8px;
+    inset-inline-end: 8px;
     transform: translateY(-50%);
     z-index: 1;
     width: 32px;
@@ -135,7 +135,7 @@
 .rowMenu {
     position: absolute;
     top: 100%;
-    right: 0;
+    inset-inline-end: 0;
     z-index: 10;
     min-width: 180px;
     background: var(--xc-surface);
@@ -152,7 +152,7 @@
     appearance: none;
     background: transparent;
     border: none;
-    text-align: left;
+    text-align: start;
     padding: var(--xc-space-2) var(--xc-space-3);
     font-size: var(--xc-text-sm);
     color: var(--xc-text);

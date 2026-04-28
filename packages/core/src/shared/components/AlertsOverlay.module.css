@@ -102,7 +102,7 @@
 
 .alert {
     background: var(--xc-bg-muted);
-    border-left: 4px solid var(--xc-text-muted);
+    border-inline-start: 4px solid var(--xc-text-muted);
     border-radius: 8px;
     padding: var(--xc-space-3);
     display: flex;

@@ -109,7 +109,7 @@
     font-weight: 500;
     color: var(--xc-text);
     cursor: pointer;
-    text-align: left;
+    text-align: start;
 }
 
 .row:hover {

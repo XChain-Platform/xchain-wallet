@@ -26,7 +26,7 @@
 
 .scope {
     font-weight: 500;
-    margin-left: 4px;
+    margin-inline-start: 4px;
     color: rgba(255, 255, 255, 0.6);
     text-transform: none;
     letter-spacing: 0;

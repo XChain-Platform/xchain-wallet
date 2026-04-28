@@ -25,7 +25,7 @@
     background: var(--xc-surface, transparent);
     color: var(--xc-text);
     cursor: pointer;
-    text-align: left;
+    text-align: start;
     display: flex;
     flex-direction: column;
     gap: 2px;

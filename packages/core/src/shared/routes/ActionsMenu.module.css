@@ -57,7 +57,7 @@
     background: var(--xc-surface-raised);
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-md);
-    text-align: left;
+    text-align: start;
     cursor: pointer;
     color: var(--xc-text);
     font-family: inherit;
@@ -95,7 +95,7 @@
     gap: var(--xc-space-2);
     margin-top: var(--xc-space-4);
     max-width: 1080px;
-    margin-left: auto;
-    margin-right: auto;
+    margin-inline-start: auto;
+    margin-inline-end: auto;
     padding: 0 var(--xc-space-4);
 }

@@ -10,9 +10,9 @@
 .popoverFull {
     position: fixed;
     top: 60px;
-    left: 50%;
+    inset-inline-start: 50%;
     transform: translateX(-50%);
-    right: auto;
+    inset-inline-end: auto;
     width: calc(min(375px, 100vw) - 24px);
     max-width: calc(100vw - 24px);
 }

@@ -15,7 +15,7 @@
     border-radius: 10px;
     color: var(--xc-text);
     cursor: pointer;
-    text-align: left;
+    text-align: start;
     transition: background var(--xc-transition), border-color var(--xc-transition);
 }
 
@@ -80,8 +80,8 @@
 .popover {
     position: absolute;
     top: calc(100% + 6px);
-    left: 0;
-    right: 0;
+    inset-inline-start: 0;
+    inset-inline-end: 0;
     z-index: 50;
     background: var(--xc-surface);
     border: 1px solid var(--xc-border-strong);
@@ -133,7 +133,7 @@
     padding: 8px 12px;
     cursor: pointer;
     color: var(--xc-text);
-    text-align: left;
+    text-align: start;
     font-size: var(--xc-text-sm);
 }
 

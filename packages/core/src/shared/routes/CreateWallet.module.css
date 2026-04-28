@@ -172,7 +172,7 @@
     text-transform: uppercase;
     letter-spacing: 0.05em;
     padding-bottom: 12px;
-    text-align: right;
+    text-align: end;
 }
 
 .quizRow > :global(*):not(.quizIndex) {

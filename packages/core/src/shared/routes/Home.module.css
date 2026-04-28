@@ -183,7 +183,7 @@
     background: var(--xc-bg-muted);
     margin-bottom: var(--xc-space-2);
     width: 100%;
-    text-align: left;
+    text-align: start;
     cursor: pointer;
 }
 
@@ -211,7 +211,7 @@
     background: var(--xc-bg-muted);
     margin-bottom: var(--xc-space-2);
     width: 100%;
-    text-align: left;
+    text-align: start;
     cursor: pointer;
 }
 

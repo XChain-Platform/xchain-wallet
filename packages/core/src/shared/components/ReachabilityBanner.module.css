@@ -52,7 +52,7 @@
 
 .staleness {
     font-style: italic;
-    margin-left: 4px;
+    margin-inline-start: 4px;
 }
 
 .retry {

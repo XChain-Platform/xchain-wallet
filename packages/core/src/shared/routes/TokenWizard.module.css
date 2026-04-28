@@ -128,7 +128,7 @@
     align-items: flex-start;
     gap: var(--xc-space-1);
     width: 100%;
-    text-align: left;
+    text-align: start;
     padding: var(--xc-space-3);
     border: 1px solid var(--xc-border-strong);
     border-radius: var(--xc-radius-md);

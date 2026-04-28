@@ -57,7 +57,7 @@
    it pins to the top-left in high contrast for sighted keyboard users. */
 .skipLink {
     position: absolute;
-    left: var(--xc-space-3);
+    inset-inline-start: var(--xc-space-3);
     top: -40px;
     background: var(--xc-text);
     color: var(--xc-bg);

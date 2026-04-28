@@ -60,7 +60,7 @@
     color: var(--xc-text-muted);
     text-transform: uppercase;
     letter-spacing: 0.06em;
-    margin-right: var(--xc-space-1);
+    margin-inline-end: var(--xc-space-1);
 }
 
 .chip {
@@ -116,7 +116,7 @@
     color: var(--xc-text);
     font-family: inherit;
     width: 100%;
-    text-align: left;
+    text-align: start;
     margin: var(--xc-space-1) 0;
 }
 
@@ -173,7 +173,7 @@
  * border, visually reaching up into the row above. */
 .connector {
     position: absolute;
-    left: 1.4rem;
+    inset-inline-start: 1.4rem;
     top: -1rem;
     width: 2px;
     height: 1rem;
@@ -239,8 +239,8 @@
     gap: var(--xc-space-2);
     margin-top: var(--xc-space-4);
     max-width: 1080px;
-    margin-left: auto;
-    margin-right: auto;
+    margin-inline-start: auto;
+    margin-inline-end: auto;
     padding: 0 var(--xc-space-4);
 }
 
@@ -344,8 +344,8 @@
 }
 
 .groupCardExpanded {
-    border-bottom-left-radius: 0;
-    border-bottom-right-radius: 0;
+    border-end-start-radius: 0;
+    border-end-end-radius: 0;
 }
 
 .groupCount {
@@ -376,8 +376,8 @@
     padding: var(--xc-space-1) var(--xc-space-2);
     border: 2px solid var(--xc-accent-secondary, var(--xc-accent-primary));
     border-top: none;
-    border-bottom-left-radius: var(--xc-radius-md);
-    border-bottom-right-radius: var(--xc-radius-md);
+    border-end-start-radius: var(--xc-radius-md);
+    border-end-end-radius: var(--xc-radius-md);
     background: var(--xc-surface-raised);
 }
 
@@ -408,7 +408,7 @@
 }
 
 .filterBadge {
-    margin-left: 0.25rem;
+    margin-inline-start: 0.25rem;
     color: var(--xc-accent-primary);
 }
 

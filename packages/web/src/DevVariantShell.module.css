@@ -63,7 +63,7 @@
     width: 375px;
     align-self: stretch;
     background: var(--xc-bg, #FFFFFF);
-    border-left: 1px solid var(--xc-border, #E4E7EB);
+    border-inline-start: 1px solid var(--xc-border, #E4E7EB);
     box-shadow: -16px 0 40px rgba(0, 0, 0, 0.35);
     overflow: hidden;
 }

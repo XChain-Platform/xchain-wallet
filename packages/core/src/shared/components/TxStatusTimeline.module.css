@@ -38,7 +38,7 @@
 .spine {
     grid-column: 1;
     position: absolute;
-    left: 8px;
+    inset-inline-start: 8px;
     top: 22px;
     bottom: -8px;
     width: 2px;

@@ -67,7 +67,7 @@
     background: var(--xc-surface-raised);
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-md);
-    text-align: left;
+    text-align: start;
     cursor: pointer;
     color: var(--xc-text);
     font-family: inherit;

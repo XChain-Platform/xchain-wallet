@@ -90,7 +90,7 @@
     padding: var(--xc-space-3);
     border-top: 1px solid var(--xc-border);
     width: 100%;
-    text-align: left;
+    text-align: start;
     color: inherit;
     font: inherit;
 }
@@ -101,8 +101,8 @@
  * default chrome needs neutralizing. */
 .rowClickable {
     background: transparent;
-    border-left: none;
-    border-right: none;
+    border-inline-start: none;
+    border-inline-end: none;
     border-bottom: none;
     cursor: pointer;
 }
@@ -146,7 +146,7 @@
 .chainOverlay {
     position: absolute;
     bottom: -2px;
-    right: -2px;
+    inset-inline-end: -2px;
     width: 16px;
     height: 16px;
     border-radius: 50%;
