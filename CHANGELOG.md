@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.230.0] - 2026-04-28
+
+§51 — Cluster V Step 1 of 3 — `tools/release/` scaffolding (G003).
+
+New `tools/release/` directory holds the release-signing pipeline scaffolding: `README.md` documents inputs / scripts / env vars / per-release procedure, `sign.sh` produces a deterministic `RELEASE_HASHES.txt` (LC_ALL=C-sorted top-level files) and a detached `.asc` GPG signature, `verify.sh` re-verifies the round-trip with `--no-sig` and `--recompute` modes for pre-G180 use.
+
+Both scripts use `set -euo pipefail`, accept `--input` / `--force` / `--no-sig` / `--recompute` flags, and refuse to overwrite existing manifests without `--force`. `sign.sh` exits with a clear diagnostic that cites G180 (release-key publication) when `XCHAIN_RELEASE_GPG_KEY` is unset, so the pre-G180 verification path (run with `--recompute` from `verify.sh`) is the documented fallback.
+
+The companion verification side already exists at `docs/VERIFY-RELEASE.md` (Cluster T Step 2, v0.222.0); the user-facing recipe there mirrors what `verify.sh` runs locally.
+
+### Added
+
+- **`tools/release/README.md`** (new) — release-signing pipeline orientation.
+- **`tools/release/sign.sh`** (new, executable) — manifest + GPG-signing entry point.
+- **`tools/release/verify.sh`** (new, executable) — local verification helper.
+- **`test/smoke/audits/release-tools.smoke.js`** (new) — pins directory + scripts existence + executable bits, README structural headings + canonical env var + G180 / §51 citations, both scripts' shape (shebang, strict-mode, accepted flags, key call shapes), and exercises the scripts at runtime against a stub artifact directory (recompute writes a deterministic sorted manifest, --no-sig validates without GPG, sign without `XCHAIN_RELEASE_GPG_KEY` exits 1 with the documented diagnostic, --help prints docs).
+
+Closes G003.
+
 ## [0.229.0] - 2026-04-28
 
 §9.7 — Cluster U Step 5 of 5 — Runtime chain-registry refresh from hub (G007, partial). **Cluster U closed.**
