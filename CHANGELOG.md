@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.263.0] - 2026-04-28
+
+§24 — Cluster Y Step 1 of N — G053 full-layout left navigation.
+
+New `<LeftNav>` + `<FullLayoutWithNav>` in `packages/core/src/shared/components/`. Web + desktop App.jsx wrap the unlocked-route render tree in `<FullLayoutWithNav>` so the sidebar is mounted alongside every unlocked view. Below 900px the sidebar collapses (display:none) and the route fills the viewport — §24.3 / G054 mobile bottom-tab bar will pick up below 600px in a follow-up step. Extension popup intentionally untouched (always compact per §24.1).
+
+Primary list: Home / History / Send / Receive / DEX / Dispensers / Contracts (BTC-only) / Messaging. Secondary: Contacts. Footer: wallet switcher, Lock. Active row gets `aria-current="page"`; drilldown views (token-detail, dispenser-detail, staking-dashboard, compose-message, …) keep the parent row highlighted via VIEW_GROUPS.
+
+### Added
+
+- **`packages/core/src/shared/components/LeftNav.jsx`** + **`LeftNav.module.css`** — `<LeftNav>` and `<FullLayoutWithNav>` exports.
+- **`packages/web/src/App.jsx`**, **`packages/desktop/renderer/App.jsx`** — unlocked switch case wrapped in `<FullLayoutWithNav>`; route render tree captured by an IIFE so existing `if (..) return ..` branches stay intact.
+- **`test/smoke/ui/left-nav.smoke.js`** (new).
+
+Closes G053.
+
 ## [0.262.0] - 2026-04-28
 
 §20 — Cluster X Step 22 of N — CoinpayForm watcher-mode branch (action COINPAY).

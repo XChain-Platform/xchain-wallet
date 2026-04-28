@@ -36,6 +36,7 @@ import { TokenDetail } from '@xchain-wallet/core/shared/routes/TokenDetail.jsx';
 import { ToastHost } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
 import { ReachabilityBanner } from '@xchain-wallet/core/shared/components/ReachabilityBanner.jsx';
 import { QueuedBroadcastBanner } from '@xchain-wallet/core/shared/components/QueuedBroadcastBanner.jsx';
+import { LeftNav, FullLayoutWithNav } from '@xchain-wallet/core/shared/components/LeftNav.jsx';
 import { Send } from '@xchain-wallet/core/shared/routes/Send.jsx';
 import { Receive } from '@xchain-wallet/core/shared/routes/Receive.jsx';
 import { TokenWizard } from '@xchain-wallet/core/shared/routes/TokenWizard.jsx';
@@ -88,7 +89,7 @@ import { pairTrezorSigner } from './signers/trezorFactory.js';
 import { pairLedgerSigner } from './signers/ledgerFactory.js';
 import { registerSigner as registerLocalSigner } from './signerBridge.js';
 import * as messaging from './messaging.js';
-import { getSessionStatus, listWallets, unlockWallet, listAccounts } from './messaging.js';
+import { getSessionStatus, listWallets, unlockWallet, lockWallet, listAccounts } from './messaging.js';
 import { readPassword, clearPassword } from './sessionPasswordCache.js';
 import { ExtensionBanner } from './components/ExtensionBanner.jsx';
 import { useActiveVariant, shellForVariant } from './devVariant.js';
@@ -297,7 +298,12 @@ function AppInner() {
             );
         case 'locked':
             return <Locked onUnlocked={refresh} />;
-        case 'unlocked':
+        case 'unlocked': {
+            // §24.2 / G053 — wrap the unlocked-route render tree in
+            // <FullLayoutWithNav> so the left nav is always visible at
+            // ≥900px viewports. Existing route returns are captured by
+            // the IIFE so the surrounding switch case stays readable.
+            const routeNode = (() => {
             if (unlockedView === 'send' && activeWalletId) {
                 return (
                     <Send
@@ -1079,6 +1085,27 @@ function AppInner() {
                     />
                 </>
             );
+            })();
+            return (
+                <FullLayoutWithNav
+                    nav={
+                        <LeftNav
+                            currentView={unlockedView}
+                            onSelect={(view) => setUnlockedView(view)}
+                            onLock={() => {
+                                lockWallet()
+                                    .then(refresh)
+                                    .catch(() => refresh());
+                            }}
+                            onOpenWalletPicker={() => setUnlockedView('wallet-picker')}
+                            hasBtcAddress={hasBtcAddress}
+                        />
+                    }
+                >
+                    {routeNode}
+                </FullLayoutWithNav>
+            );
+        }
         default:
             return <Loading error={`unknown state "${status.state}"`} />;
     }

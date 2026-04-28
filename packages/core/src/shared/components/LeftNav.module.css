@@ -1,0 +1,172 @@
+/* §24.2 / G053 — left-nav layout. The .layout flex container places
+   .sidebar alongside .main; below 900px (the §24.1 full-layout
+   breakpoint) the sidebar collapses so narrow viewports get the route
+   full-width. Once §24.3 / G054 lands, the mobile bottom tab bar
+   takes over below 600px. */
+
+.layout {
+    display: flex;
+    flex-direction: row;
+    height: var(--xc-screen-h, 100vh);
+    height: var(--xc-screen-h, 100dvh);
+    background: var(--xc-bg);
+    color: var(--xc-text);
+}
+
+.sidebar {
+    flex: 0 0 220px;
+    min-width: 0;
+    height: 100%;
+    overflow: hidden;
+}
+
+.main {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 100%;
+    overflow: hidden;
+    /* Override Screen's height so the route's Screen fills the main
+       pane instead of expanding to the document viewport. */
+    --xc-screen-h: 100%;
+}
+
+@media (max-width: 899px) {
+    .sidebar { display: none; }
+}
+
+.nav {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    width: 100%;
+    background: var(--xc-surface-raised);
+    border-inline-end: 1px solid var(--xc-border);
+    padding: var(--xc-space-3) 0;
+    overflow-y: auto;
+}
+
+.brand {
+    padding: var(--xc-space-2) var(--xc-space-4) var(--xc-space-3);
+    font-size: var(--xc-text-md);
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: var(--xc-text);
+}
+
+.list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.item {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-3);
+    width: 100%;
+    padding: var(--xc-space-2) var(--xc-space-4);
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    color: var(--xc-text);
+    font: inherit;
+    font-size: var(--xc-text-sm);
+    text-align: start;
+    cursor: pointer;
+    transition: background-color 80ms ease;
+}
+
+.item:hover,
+.item:focus-visible {
+    background: var(--xc-surface);
+    outline: none;
+}
+
+.item:focus-visible {
+    outline: 2px solid var(--xc-accent-primary, var(--xc-text));
+    outline-offset: -2px;
+}
+
+.itemActive {
+    background: var(--xc-surface);
+    font-weight: 600;
+    color: var(--xc-accent-primary, var(--xc-text));
+    box-shadow: inset 3px 0 0 var(--xc-accent-primary, var(--xc-text));
+}
+
+.icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    flex: 0 0 auto;
+}
+
+.label {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.divider {
+    border: 0;
+    border-top: 1px solid var(--xc-border);
+    margin: var(--xc-space-2) var(--xc-space-3);
+}
+
+.spacer {
+    flex: 1 1 auto;
+}
+
+.footer {
+    border-top: 1px solid var(--xc-border);
+    padding-top: var(--xc-space-2);
+    display: flex;
+    flex-direction: column;
+}
+
+.walletSwitcher {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--xc-space-2);
+    width: 100%;
+    padding: var(--xc-space-2) var(--xc-space-4);
+    background: transparent;
+    border: 0;
+    color: var(--xc-text);
+    font: inherit;
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    text-align: start;
+    cursor: pointer;
+}
+
+.walletSwitcher:hover,
+.walletSwitcher:focus-visible {
+    background: var(--xc-surface);
+    outline: none;
+}
+
+.walletSwitcher:focus-visible {
+    outline: 2px solid var(--xc-accent-primary, var(--xc-text));
+    outline-offset: -2px;
+}
+
+.walletName {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+@media (prefers-contrast: more) {
+    .itemActive {
+        outline: 2px solid currentColor;
+        outline-offset: -2px;
+    }
+}
