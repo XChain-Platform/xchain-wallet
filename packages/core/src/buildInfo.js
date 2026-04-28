@@ -5,19 +5,18 @@
 // package.json bump per the wallet's synchronized-versioning rule.
 // See CHANGELOG.md for the version's release context.
 
-export const WALLET_VERSION = '0.193.0';
+export const WALLET_VERSION = '0.194.0';
 
 // License identifiers matching repo metadata.
 export const LICENSE_NAME = 'Dankest Community License (Apache-2.0 + Additional Terms)';
 export const LICENSE_FILE = 'LICENSE.md';
 export const NOTICE_FILE = 'NOTICE.md';
 
-// Disclosure / security artifact paths. SECURITY.md doesn't exist yet
-// per the §35 gap audit (2026-04-26_unbuilt-from-spec.md); the field
-// stays here so the About panel renders the link slot, with a "not yet
-// published" indicator until the file lands.
+// Disclosure / security artifact paths. SECURITY.md ships at the repo
+// root and documents the private vulnerability disclosure path
+// (GitHub Security Advisories preferred; security@dankest.llc fallback).
 export const SECURITY_FILE = 'SECURITY.md';
-export const SECURITY_PUBLISHED = false;
+export const SECURITY_PUBLISHED = true;
 
 // Reproducible-build verification + release-signing artifacts. Pages
 // not yet hosted; current paths point at in-repo READMEs that document

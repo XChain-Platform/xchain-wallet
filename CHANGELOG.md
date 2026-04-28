@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.194.0] - 2026-04-27
+
+§55 — Cluster M Step 1 of 6 — `SECURITY.md` (G175 / G008).
+
+Adds a root-level `SECURITY.md` documenting the private vulnerability disclosure path (GitHub Security Advisories preferred; `security@dankest.llc` fallback), 72-hour ack / 90-day disclosure SLAs, in-scope and out-of-scope surfaces (referencing `docs/THREAT_MODEL.md` §3), researcher conduct expectations, and pointers to release-verification artifacts. `buildInfo.js` flips `SECURITY_PUBLISHED` from `false` to `true` so the About panel can render the link as live.
+
+### Added
+
+- **`SECURITY.md`** (new, repo root) — vulnerability disclosure policy.
+- **`packages/core/src/buildInfo.js`** — `SECURITY_PUBLISHED = true`; comment refreshed.
+
+Closes G175 + G008 (cross-listed §12 / §55 row pair).
+
 ## [0.193.0] - 2026-04-27
 
 §50 — Cluster L Step 4 — Diagnostic dump UI (G156). Cluster L closed.
