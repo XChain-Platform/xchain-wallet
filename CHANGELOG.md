@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.195.0] - 2026-04-27
+
+§13 — Cluster M Step 2 of 6 — `CONTRIBUTING.md` (G176).
+
+Adds a root-level `CONTRIBUTING.md` covering: repo layout, prerequisites (Node ≥ 18, pnpm 9.x, sibling `xchain-sdk` checkout), per-shell dev / build commands, the layered test suite + the 24 / 171 smoke baseline rule, synchronized-versioning bump procedure, CHANGELOG format, commit-message conventions, JS-only-no-TS / no-emoji / trailing-two-spaces style notes, PR gates, bug-reporting and Code-of-Conduct pointers. README's old "lands alongside v1.0.0 GA" placeholder for contribution guidance is now fulfilled by this file.
+
+### Added
+
+- **`CONTRIBUTING.md`** (new, repo root) — contributor onboarding + workflow guide.
+
+Closes G176.
+
 ## [0.194.0] - 2026-04-27
 
 §55 — Cluster M Step 1 of 6 — `SECURITY.md` (G175 / G008).
