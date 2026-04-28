@@ -170,5 +170,29 @@ assert.match(sendSrc, /<AnimatedQrFrames\b/, 'panel renders AnimatedQrFrames');
 assert.match(sendSrc, /readOnly[\s\S]+?value=\{psbtHex\}/, 'panel exposes the hex in a read-only textarea');
 assert.match(sendSrc, /Copy hex/, 'panel exposes a Copy hex affordance');
 assert.match(sendSrc, /Plain-text chunks/, 'panel exposes the plain-text chunks fallback');
+// §20 Cluster W FOLLOWUP 4 (closed at v0.241.0) — BBQr (hex) export
+// alongside XCW chunks so watcher-mode PSBTs are signable on
+// Sparrow / Coldcard / SeedSigner. WatcherResultPanel imports
+// encodeBbqrPsbtFrames and exposes a format toggle.
+assert.match(
+    sendSrc,
+    /import \{ encodeBbqrPsbtFrames \} from '\.\.\/\.\.\/uri\/bbqrPsbt\.js';/,
+    'Send.jsx imports encodeBbqrPsbtFrames',
+);
+assert.match(
+    sendSrc,
+    /encodeBbqrPsbtFrames\(psbtHex\)/,
+    'panel encodes hex into BBQr H frames when format === bbqr',
+);
+assert.match(
+    sendSrc,
+    /qrFormat === 'bbqr'/,
+    'panel branches export format on qrFormat',
+);
+assert.match(
+    sendSrc,
+    /BBQr \(Sparrow \/ Coldcard \/ SeedSigner\)/,
+    'panel labels the BBQr radio choice with target wallets',
+);
 
 console.log('send-watcher-mode smoke OK');

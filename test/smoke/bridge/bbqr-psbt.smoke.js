@@ -18,7 +18,7 @@ assert.ok(existsSync(join(root, bbqrPath)), `${bbqrPath} exists`);
 assert.ok(existsSync(join(root, fmtPath)), `${fmtPath} exists`);
 
 const bbqrSrc = read(bbqrPath);
-for (const fn of ['parseBbqrFrame', 'decodeBbqrFrames', 'decodeBbqrPsbt']) {
+for (const fn of ['parseBbqrFrame', 'decodeBbqrFrames', 'decodeBbqrPsbt', 'encodeBbqrPsbtFrames']) {
     assert.ok(new RegExp(`export function ${fn}\\(`).test(bbqrSrc),
         `bbqrPsbt exports ${fn}`);
 }
@@ -51,7 +51,7 @@ assert.equal(describeUnsupportedFormat(null), null);
 
 // 3. Runtime — BBQr decode (single-frame H).
 const bbqrUrl = `file://${join(root, bbqrPath)}`;
-const { parseBbqrFrame, decodeBbqrFrames, decodeBbqrPsbt, BbqrError } =
+const { parseBbqrFrame, decodeBbqrFrames, decodeBbqrPsbt, encodeBbqrPsbtFrames, BbqrError } =
     await import(bbqrUrl);
 
 // Build a fake single-frame BBQr-PSBT-H. PSBT magic is "70736274ff"
@@ -110,7 +110,42 @@ assert.throws(() => decodeBbqrPsbt([txFrame]),
 assert.throws(() => parseBbqrFrame('notbbqr'),
     BbqrError);
 
-// 4. PsbtSignForm wires the decoder into normalizePsbtInput.
+// 4. encodeBbqrPsbtFrames — round-trip + shape.
+//
+// Single-frame: payload fits in one chunk.
+const tinyHex = '70736274ff' + '00'.repeat(40);  // 45 bytes
+const singleFrames = encodeBbqrPsbtFrames(tinyHex, { payloadBytes: 200 });
+assert.equal(singleFrames.length, 1, 'small PSBT fits in one BBQr H frame');
+assert.ok(singleFrames[0].startsWith('B$HP0100'), 'frame header is B$HP0100 (total=1, index=0)');
+const tinyDecoded = decodeBbqrPsbt(singleFrames);
+assert.equal(tinyDecoded.psbtHex, tinyHex, 'BBQr H round-trip preserves the PSBT hex');
+
+// Multi-frame: force chunking with a small payloadBytes.
+const biggerHex = '70736274ff' + '01020304'.repeat(50);  // 205 bytes
+const multiFrames = encodeBbqrPsbtFrames(biggerHex, { payloadBytes: 100 });
+assert.ok(multiFrames.length >= 2, 'larger PSBT chunked into multiple BBQr frames');
+for (let i = 0; i < multiFrames.length; i++) {
+    const parsed = parseBbqrFrame(multiFrames[i]);
+    assert.equal(parsed.encoding, 'H');
+    assert.equal(parsed.fileType, 'P');
+    assert.equal(parsed.total, multiFrames.length);
+    assert.equal(parsed.index, i);
+}
+const biggerDecoded = decodeBbqrPsbt(multiFrames);
+assert.equal(biggerDecoded.psbtHex, biggerHex, 'multi-frame BBQr H round-trip preserves the PSBT hex');
+
+// Empty PSBT rejected.
+assert.throws(() => encodeBbqrPsbtFrames(''), /empty PSBT/);
+assert.throws(() => encodeBbqrPsbtFrames(new Uint8Array(0)), /empty PSBT/);
+
+// Invalid hex rejected.
+assert.throws(() => encodeBbqrPsbtFrames('not-hex'), /even-length 0-9a-f/);
+
+// Bad payloadBytes rejected.
+assert.throws(() => encodeBbqrPsbtFrames(tinyHex, { payloadBytes: 0 }),
+    /positive integer/);
+
+// 5. PsbtSignForm wires the decoder into normalizePsbtInput.
 const formSrc = read('packages/core/src/shared/routes/PsbtSignForm.jsx');
 assert.ok(/import \{ decodeBbqrPsbt \} from '\.\.\/\.\.\/uri\/bbqrPsbt\.js'/.test(formSrc),
     'PsbtSignForm imports decodeBbqrPsbt');

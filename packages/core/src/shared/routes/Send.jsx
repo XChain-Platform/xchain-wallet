@@ -15,6 +15,7 @@ import {
     uri as uriLib,
 } from '@xchain-wallet/core';
 import { encodeXcwChunks } from '../../uri/psbtQr.js';
+import { encodeBbqrPsbtFrames } from '../../uri/bbqrPsbt.js';
 import { WALLET_MODE_DEFAULT } from '../../schemas/settings.js';
 import { buildRecentDestinations } from '../../flows/recentDestinations.js';
 import { findLookalike } from '../utils/lookalike.js';
@@ -1254,18 +1255,22 @@ function DetailRow({ label, value }) {
  */
 function WatcherResultPanel({ result, onSendAnother, onDone }) {
     const psbtHex = result?.psbtHex || '';
+    const [qrFormat, setQrFormat] = useState('xcw');
     const exportFrames = useMemo(() => {
         if (!psbtHex) return null;
         try {
-            return encodeXcwChunks(psbtHex);
+            return qrFormat === 'bbqr'
+                ? encodeBbqrPsbtFrames(psbtHex)
+                : encodeXcwChunks(psbtHex);
         } catch (e) {
             return { error: e?.message || String(e) };
         }
-    }, [psbtHex]);
+    }, [psbtHex, qrFormat]);
     const copyHex = useCallback(() => {
         if (!psbtHex) return;
         try { navigator.clipboard?.writeText(psbtHex); } catch { /* best effort */ }
     }, [psbtHex]);
+    const formatLabel = qrFormat === 'bbqr' ? 'BBQr (hex)' : 'XCW chunks';
     return (
         <>
             <div className={styles.successCard} role="status" aria-live="polite">
@@ -1311,11 +1316,36 @@ function WatcherResultPanel({ result, onSendAnother, onDone }) {
                         </button>
                     </div>
                 </div>
+                <div className={styles.successTxidBlock}>
+                    <p className={styles.successLabel}>QR format</p>
+                    <div role="radiogroup" aria-label="Animated QR format">
+                        <label style={{ marginRight: '1rem' }}>
+                            <input
+                                type="radio"
+                                name="watcher-qr-format"
+                                value="xcw"
+                                checked={qrFormat === 'xcw'}
+                                onChange={() => setQrFormat('xcw')}
+                            />{' '}
+                            XCW (this wallet)
+                        </label>
+                        <label>
+                            <input
+                                type="radio"
+                                name="watcher-qr-format"
+                                value="bbqr"
+                                checked={qrFormat === 'bbqr'}
+                                onChange={() => setQrFormat('bbqr')}
+                            />{' '}
+                            BBQr (Sparrow / Coldcard / SeedSigner)
+                        </label>
+                    </div>
+                </div>
                 {exportFrames && exportFrames.error ? (
                     <StatusMessage variant="error">{exportFrames.error}</StatusMessage>
                 ) : exportFrames && Array.isArray(exportFrames) ? (
                     <>
-                        <p className={styles.successLabel}>Animated QR (XCW chunks)</p>
+                        <p className={styles.successLabel}>Animated QR ({formatLabel})</p>
                         <AnimatedQrFrames
                             frames={exportFrames}
                             alt="Unsigned PSBT animated QR"
@@ -1324,7 +1354,7 @@ function WatcherResultPanel({ result, onSendAnother, onDone }) {
                             <summary className={styles.hint}>Plain-text chunks</summary>
                             <textarea
                                 readOnly
-                                aria-label="Unsigned PSBT XCW chunks"
+                                aria-label={`Unsigned PSBT ${formatLabel}`}
                                 value={exportFrames.join('\n')}
                                 rows={6}
                                 style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.75rem' }}

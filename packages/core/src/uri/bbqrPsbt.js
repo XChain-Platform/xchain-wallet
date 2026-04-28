@@ -1,4 +1,4 @@
-// BBQr PSBT decode — §20.4 / G043 (partial).
+// BBQr PSBT encode + decode — §20.4 / G043 (partial).
 //
 // BBQr is the standard chunked-QR PSBT transport used by Sparrow,
 // Coldcard, and SeedSigner. The frame format is:
@@ -19,10 +19,15 @@
 // the QR code's own error correction.
 //
 // Coverage today:
-//   ✅ H (hex) — single + multi-frame
-//   ✅ B (base32, RFC 4648 no padding) — single + multi-frame
+//   ✅ H (hex) — single + multi-frame, encode + decode
+//   ✅ B (base32, RFC 4648 no padding) — single + multi-frame decode
 //   ⏸ Z (zlib + base32) — needs a zlib inflater (no project dep yet)
 //   ⏸ Multi-encoder fallback — N/A, user picks the encoder upstream
+//
+// Encode (Cluster W FOLLOWUP 4) emits H frames so a watcher-mode
+// wallet's unsigned PSBT can be imported by Sparrow / Coldcard /
+// SeedSigner. Hex is the simplest and least surprising choice — no
+// dep on a base32 encoder, every BBQr-aware reader supports it.
 
 import { base32 } from '@scure/base';
 
@@ -49,6 +54,51 @@ export const BBQR_FILE_TYPE_PSBT = 'P';
  * @property {number} index      0-based frame index
  * @property {string} payload    encoding-specific payload (rest of frame)
  */
+
+// Default H-payload-bytes per frame. Each frame is "B$HP<NN><XX>" + 2
+// hex chars per byte, so 200 payload bytes → 400 hex chars + 8-char
+// header = 408 chars. Comfortably below the ~480-char alphanumeric QR
+// ceiling at error-correction level M for version 27 — a size most
+// hardware-wallet cameras and phone cameras can read reliably.
+export const DEFAULT_BBQR_PAYLOAD_BYTES = 200;
+const BBQR_MAX_FRAMES = 1295;  // 36^2 - 1 because base36 NN goes 00..ZZ
+
+/**
+ * Encode a PSBT into BBQr H (hex) frames suitable for animated-QR
+ * display. Reciprocal to {@link decodeBbqrPsbt}. Frames are emitted
+ * in index order; callers feed them to AnimatedQrFrames or any
+ * generic chunked-QR renderer.
+ *
+ * @param {string | Uint8Array} psbt   hex string or raw bytes
+ * @param {{ payloadBytes?: number }} [opts]
+ * @returns {string[]}                 one BBQr frame per QR
+ */
+export function encodeBbqrPsbtFrames(psbt, opts = {}) {
+    const bytes = normalizePsbtBytes(psbt);
+    if (bytes.length === 0) {
+        throw new BbqrError('cannot encode an empty PSBT');
+    }
+    const payloadBytes = opts.payloadBytes ?? DEFAULT_BBQR_PAYLOAD_BYTES;
+    if (!Number.isInteger(payloadBytes) || payloadBytes < 1) {
+        throw new BbqrError('payloadBytes must be a positive integer');
+    }
+    const total = Math.ceil(bytes.length / payloadBytes);
+    if (total > BBQR_MAX_FRAMES) {
+        throw new BbqrError(
+            `PSBT too large: would need ${total} frames, BBQr max is ${BBQR_MAX_FRAMES}`,
+        );
+    }
+    /** @type {string[]} */
+    const frames = [];
+    for (let i = 0; i < total; i++) {
+        const slice = bytes.subarray(i * payloadBytes, (i + 1) * payloadBytes);
+        const totalStr = formatBase36(total);
+        const indexStr = formatBase36(i);
+        const hex = bytesToHexUpper(slice);
+        frames.push(`${BBQR_PREFIX}H${BBQR_FILE_TYPE_PSBT}${totalStr}${indexStr}${hex}`);
+    }
+    return frames;
+}
 
 /**
  * @param {string} frame
@@ -217,4 +267,35 @@ function bytesToHex(bytes) {
     let s = '';
     for (const b of bytes) s += b.toString(16).padStart(2, '0');
     return s;
+}
+
+function bytesToHexUpper(bytes) {
+    let s = '';
+    for (const b of bytes) s += b.toString(16).toUpperCase().padStart(2, '0');
+    return s;
+}
+
+function normalizePsbtBytes(psbt) {
+    if (psbt instanceof Uint8Array) return psbt;
+    if (typeof psbt !== 'string') {
+        throw new BbqrError('psbt must be a hex string or Uint8Array');
+    }
+    const clean = psbt.trim().toLowerCase().replace(/^0x/, '');
+    if (!/^[0-9a-f]*$/.test(clean) || clean.length % 2 !== 0) {
+        throw new BbqrError('psbt hex must be even-length 0-9a-f');
+    }
+    const out = new Uint8Array(clean.length / 2);
+    for (let i = 0; i < out.length; i++) {
+        out[i] = Number.parseInt(clean.substr(i * 2, 2), 16);
+    }
+    return out;
+}
+
+function formatBase36(n) {
+    if (!Number.isInteger(n) || n < 0 || n > BBQR_MAX_FRAMES) {
+        throw new BbqrError(`base36 input out of range: ${n}`);
+    }
+    const a = BBQR_BASE36_ALPHABET[Math.floor(n / 36) % 36];
+    const b = BBQR_BASE36_ALPHABET[n % 36];
+    return `${a}${b}`;
 }

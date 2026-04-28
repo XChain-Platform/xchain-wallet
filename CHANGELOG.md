@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.241.0] - 2026-04-28
+
+§20 — Cluster X Step 1 of N — Cluster W FOLLOWUP 4 — BBQr export for `WatcherResultPanel`.
+
+`WatcherResultPanel` (Send.jsx watcher-mode done stage) now offers a format toggle between XCW chunks (this wallet's native cross-chunk envelope) and BBQr H (hex) frames — the chunked-QR PSBT transport that Sparrow / Coldcard / SeedSigner natively understand. A user signing on a third-party wallet picks "BBQr (Sparrow / Coldcard / SeedSigner)" and gets a stream of `B$HP<NN><XX><hex>` frames their signer wallet can scan directly; the XCW option remains the default for sign-back into another XChain wallet.
+
+The encoder lives at `packages/core/src/uri/bbqrPsbt.js` as `encodeBbqrPsbtFrames(psbt, opts)`, reciprocal to the existing `decodeBbqrPsbt`. H encoding only — no new dep, hex is universally supported by BBQr-aware readers, and the round-trip flows through the same per-chunk header layout the decoder already validates. Frame size defaults to 200 payload bytes (~408 chars per frame including the 8-char header), which fits comfortably under the alphanumeric-QR ceiling for most cameras.
+
+### Added
+
+- **`packages/core/src/uri/bbqrPsbt.js`** — `encodeBbqrPsbtFrames(psbt, opts)` + `DEFAULT_BBQR_PAYLOAD_BYTES`. Internal `bytesToHexUpper` / `normalizePsbtBytes` / `formatBase36` helpers.
+- **`packages/core/src/shared/routes/Send.jsx`** — `WatcherResultPanel` imports `encodeBbqrPsbtFrames`, gains a `qrFormat` state (`'xcw' | 'bbqr'`), branches `exportFrames`, and renders a radio-group toggle.
+- **`test/smoke/bridge/bbqr-psbt.smoke.js`** — round-trip + multi-frame + error-path coverage for the encoder.
+- **`test/smoke/ui/send-watcher-mode.smoke.js`** — pins the new import, the BBQr branch, and the radio label.
+
+Closes Cluster W FOLLOWUP 4.
+
 ## [0.240.0] - 2026-04-28
 
 §52 — G162 — Signer mocks for Trezor / Ledger.
