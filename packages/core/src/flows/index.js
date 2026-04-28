@@ -291,3 +291,8 @@ export {
     DEFAULT_PER_QUERY_TIMEOUT_MS,
     DEFAULT_CHAIN_TIMEOUT_MS,
 } from './discoverUsedAddresses.js';
+export {
+    createSignThrottle,
+    SIGN_THROTTLE_DEFAULT_BURST,
+    SIGN_THROTTLE_DEFAULT_WINDOW_MS,
+} from './signThrottle.js';

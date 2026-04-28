@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.219.0] - 2026-04-28
+
+§12 — Cluster S Step 1 of 2 — Sign-request throttling per origin (G012).
+
+New `flows/signThrottle.js` exposes `createSignThrottle({ burst, windowMs, now })` — token-bucket-style sliding-window limiter keyed on origin. `bridge/handlers.js` constructs one at `registerBridgeHandlers` time (or accepts an injected instance) and the four sign methods — `signMessage`, `signAction`, `signPsbt`, `signIn` — call `assertNotThrottled(signThrottle, req)` after `requireSite`. Connect / disconnect / read methods stay un-throttled.
+
+When a site exceeds `burst` requests inside `windowMs` (defaults: 5 / 60 s) the handler throws a `THROTTLED` `BridgeError` carrying `retryAfterMs`, `burst`, and `windowMs` so the dApp shim can surface a wait hint to its UI. State is process-scoped — service-worker restarts reset the buckets, which is fine for a rate limit since the wallet never caches the password.
+
+### Added
+
+- **`packages/core/src/flows/signThrottle.js`** (new) — `createSignThrottle` factory + `SIGN_THROTTLE_DEFAULT_BURST` (5) + `SIGN_THROTTLE_DEFAULT_WINDOW_MS` (60_000); `flows` barrel re-exports them.
+- **`THROTTLED`** added to `BridgeErrorCode` union in `packages/bridge-spec/src/index.ts`; `BridgeErrorResult` gains optional `retryAfterMs` / `burst` / `windowMs`.
+- **`docs/BRIDGE.md`** error table gains the `THROTTLED` row describing the per-origin limit + retry hint.
+- **`test/smoke/bridge/sign-throttle.smoke.js`** (new) — exercises the throttle directly with a fake clock (burst, window expiry, per-origin isolation, clear), pins `assertNotThrottled` in all four sign handlers, asserts the read / connect handlers stay un-throttled, and pins `THROTTLED` in the spec union and docs table.
+
+### Changed
+
+- **`packages/extension/src/bridge/handlers.js`** — destructures `createSignThrottle` from flows; constructs a default throttle (overridable via `opts.signThrottle`); new `assertNotThrottled` helper called from each of the four sign handlers.
+
+Closes G012.
+
 ## [0.218.0] - 2026-04-28
 
 §54 — Cluster R Step 3 of 3 — CSS logical properties for RTL (G174). **Cluster R closed.**

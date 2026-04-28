@@ -31,16 +31,21 @@ const {
     signMessageFlow,
     signPsbtFlow,
     submitAction,
+    createSignThrottle,
 } = flows;
 
 const SUPPORTED_BRIDGE_ACTIONS = ['SEND', 'SWEEP'];
 
 /**
  * @param {import('../background/MessageHost.js').MessageHost} host
- * @param {{ approvals?: import('./Approvals.js').Approvals }} [opts]
+ * @param {{
+ *   approvals?: import('./Approvals.js').Approvals,
+ *   signThrottle?: ReturnType<typeof createSignThrottle>,
+ * }} [opts]
  */
 export function registerBridgeHandlers(host, opts = {}) {
     const approvals = opts.approvals ?? rejectAllApprovals;
+    const signThrottle = opts.signThrottle ?? createSignThrottle();
 
     host.register('bridge.connect', async (req, deps) => {
         assertOrigin(req);
@@ -191,6 +196,7 @@ export function registerBridgeHandlers(host, opts = {}) {
     host.register('bridge.signMessage', async (req, deps) => {
         const site = await requireSite(deps.vault, req);
         assertChainPermitted(site, req.chainId);
+        assertNotThrottled(signThrottle, req);
 
         if (!site.permissions.canSignMessage) {
             const decision = await approvals.signMessage({
@@ -233,6 +239,7 @@ export function registerBridgeHandlers(host, opts = {}) {
     host.register('bridge.signAction', async (req, deps) => {
         const site = await requireSite(deps.vault, req);
         assertChainPermitted(site, req.chainId);
+        assertNotThrottled(signThrottle, req);
         const actionName = req.action;
         if (!SUPPORTED_BRIDGE_ACTIONS.includes(actionName)) {
             // §43.2: unsupported actions return structured shape, not throw
@@ -294,6 +301,7 @@ export function registerBridgeHandlers(host, opts = {}) {
     host.register('bridge.signPsbt', async (req, deps) => {
         const site = await requireSite(deps.vault, req);
         assertChainPermitted(site, req.chainId);
+        assertNotThrottled(signThrottle, req);
         const decision = await approvals.signPsbt({
             origin: req.origin,
             kind: 'signPsbt',
@@ -329,6 +337,7 @@ export function registerBridgeHandlers(host, opts = {}) {
 
     host.register('bridge.signIn', async (req, deps) => {
         const site = await requireSite(deps.vault, req);
+        assertNotThrottled(signThrottle, req);
         const decision = await approvals.signIn({
             origin: req.origin,
             kind: 'signIn',
@@ -415,6 +424,19 @@ function assertChainPermitted(site, chainId) {
     if (!chains.includes(chainId)) {
         throw bridgeError('CHAIN_NOT_PERMITTED', chainId);
     }
+}
+
+function assertNotThrottled(throttle, req) {
+    const result = throttle.check(req?.origin);
+    if (result.allowed) return;
+    const err = bridgeError(
+        'THROTTLED',
+        `retry in ${Math.ceil(result.retryAfterMs / 1000)}s`,
+    );
+    err.retryAfterMs = result.retryAfterMs;
+    err.burst = result.burst;
+    err.windowMs = result.windowMs;
+    throw err;
 }
 
 async function siteHasAddress(vault, site, chainId, address, chainRegistry) {

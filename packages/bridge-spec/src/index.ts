@@ -128,6 +128,7 @@ export type BridgeErrorCode =
     | 'CHALLENGE_EXPIRED'
     | 'BROADCAST_FAILED'
     | 'PANIC_MODE'
+    | 'THROTTLED'
     | 'BRIDGE_VERSION_MISMATCH'
     | 'INTERNAL_ERROR';
 
@@ -135,6 +136,12 @@ export interface BridgeErrorResult {
     ok: false;
     error: BridgeErrorCode;
     message?: string;
+    // Populated when `error === 'THROTTLED'`. Hints how long the dApp
+    // should wait before retrying. Wallets MAY include `burst` /
+    // `windowMs` to describe the active limit.
+    retryAfterMs?: number;
+    burst?: number;
+    windowMs?: number;
 }
 
 // ---------------------------------------------------------------------------
