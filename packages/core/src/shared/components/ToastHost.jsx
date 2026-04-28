@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import styles from './ToastHost.module.css';
+import { useHaptic } from '../hooks/useHaptic.js';
 
 // §37.2 toast foundation. A single shared host renders an action queue
 // at the bottom of the screen; any route can drop a toast via the
@@ -44,6 +45,7 @@ const ToastContext = createContext(null);
 export function ToastHost({ children }) {
     const [toasts, setToasts] = useState(/** @type {ToastInput[]} */ ([]));
     const timersRef = useRef(/** @type {Map<string, ReturnType<typeof setTimeout>>} */ (new Map()));
+    const haptic = useHaptic();
 
     const dismissToast = useCallback((id) => {
         setToasts((prev) => prev.filter((t) => t.id !== id));
@@ -59,6 +61,12 @@ export function ToastHost({ children }) {
         const duration = Number.isFinite(input.durationMs) ? Math.max(0, input.durationMs) : 8000;
         const record = { ...input, id, durationMs: duration };
         setToasts((prev) => [...prev, record]);
+        // §37.3 — fire a haptic pulse keyed to the toast variant. The
+        // hook silently no-ops on non-vibration hosts and on
+        // prefers-reduced-motion, so this is safe everywhere.
+        if (record.variant === 'error') haptic.error();
+        else if (record.variant === 'success') haptic.success();
+        else haptic.tap();
         if (duration > 0) {
             const timer = setTimeout(() => {
                 timersRef.current.delete(id);
@@ -67,7 +75,7 @@ export function ToastHost({ children }) {
             timersRef.current.set(id, timer);
         }
         return id;
-    }, []);
+    }, [haptic]);
 
     const clearToasts = useCallback(() => {
         for (const timer of timersRef.current.values()) clearTimeout(timer);

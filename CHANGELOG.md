@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.208.0] - 2026-04-27
+
+§37 — Cluster P Step 1 of 5 — Haptic feedback (G120).
+
+New `shared/hooks/useHaptic.js` wraps `navigator.vibrate` behind a feature-detect and a `prefers-reduced-motion` guard. Exposes intent-named pulses — `tap` / `success` / `warn` / `error` — plus a generic `vibrate(pattern)` and `supported` / `reducedMotion` flags. Unsupported hosts and the reduced-motion preference both no-op silently so callers don't have to feature-detect. Vibration exceptions (background-tab restrictions, permissions-policy) are swallowed by a try/catch.
+
+ToastHost is the single chokepoint that fires variant-aware pulses for every app-wide success / error / default toast, so every existing toast site picks up haptic feedback without touching individual call sites. Send.jsx fires `haptic.success()` after a confirmed broadcast and `haptic.error()` on submit failure. Locked.jsx fires `haptic.success()` on password / biometric unlock and `haptic.error()` on bad password / biometric failure.
+
+### Added
+
+- **`packages/core/src/shared/hooks/useHaptic.js`** (new) — vibration hook + `HAPTIC_PATTERNS` map.
+- **`test/smoke/ui/haptic-feedback.smoke.js`** (new) — pins hook surface + ToastHost / Send / Locked wiring.
+
+### Changed
+
+- **`packages/core/src/shared/components/ToastHost.jsx`** — fires `haptic.error / success / tap` keyed to toast variant.
+- **`packages/core/src/shared/routes/Send.jsx`** — `haptic.success` after broadcast, `haptic.error` on submit failure.
+- **`packages/core/src/shared/routes/Locked.jsx`** — `haptic.success` on unlock, `haptic.error` on password / biometric failure.
+
+Closes G120.
+
 ## [0.207.0] - 2026-04-27
 
 §23 — Cluster O Step 4 of 4 — Chain filter remembers last choice (G052). Cluster O closed.

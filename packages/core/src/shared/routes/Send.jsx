@@ -32,6 +32,7 @@ import { HwSignBlock } from '../components/HwSignBlock.jsx';
 import { BalanceChanges } from '../components/BalanceChanges.jsx';
 import { RawPsbtViewer } from '../components/RawPsbtViewer.jsx';
 import { useToast } from '../components/ToastHost.jsx';
+import { useHaptic } from '../hooks/useHaptic.js';
 import styles from './Send.module.css';
 
 // §30.5 user-initiated cancel detection. HW-device libraries surface a
@@ -72,6 +73,7 @@ export function Send({ walletId, onBack }) {
     const { developerMode } = useDeveloperMode();
     const { settings } = useSettings();
     const { showToast } = useToast();
+    const haptic = useHaptic();
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -658,6 +660,7 @@ export function Send({ walletId, onBack }) {
             setResult(res);
             setPassword('');
             setStage('done');
+            haptic.success();
         } catch (err) {
             const isBadPassword = err?.name === 'InvalidPasswordError';
             const rawMsg = err?.message || '';
@@ -678,6 +681,7 @@ export function Send({ walletId, onBack }) {
                     : rawMsg || 'Send failed.',
             );
             setStage('review');
+            haptic.error();
             if (!isHwSource) {
                 passwordRef.current?.focus();
                 passwordRef.current?.select();

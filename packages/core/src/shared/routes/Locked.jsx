@@ -12,6 +12,7 @@ import {
     tripDuressIfMatch,
 } from '@xchain-wallet/core/flows';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useHaptic } from '../hooks/useHaptic.js';
 import styles from './Locked.module.css';
 
 /**
@@ -42,6 +43,7 @@ export function Locked({ onUnlocked }) {
     );
     const [biometricAvailable, setBiometricAvailable] = useState(false);
     const inputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const haptic = useHaptic();
 
     useEffect(() => {
         inputRef.current?.focus();
@@ -86,6 +88,7 @@ export function Locked({ onUnlocked }) {
             setLockout({ failedAttempts: 0, lockedUntilMs: 0 });
             setRemainingMs(0);
             setPassword('');
+            haptic.success();
             onUnlocked?.();
         } catch (err) {
             const isBadPassword = err?.name === 'InvalidPasswordError';
@@ -106,8 +109,10 @@ export function Locked({ onUnlocked }) {
                         ? `Incorrect password. Try again in ${formatCountdown(nextRemaining)}.`
                         : 'Incorrect password.',
                 );
+                haptic.error();
             } else {
                 setError(err?.message || 'Unlock failed.');
+                haptic.error();
             }
             setBusy(false);
             inputRef.current?.focus();
@@ -125,12 +130,14 @@ export function Locked({ onUnlocked }) {
             recordLockoutSuccess();
             setLockout({ failedAttempts: 0, lockedUntilMs: 0 });
             setRemainingMs(0);
+            haptic.success();
             onUnlocked?.();
         } catch (err) {
             // Biometric failures (cancelled prompt, missing credential,
             // PRF failure) are surfaced raw — they are not bad-password
             // guesses and must NOT increment the lockout counter.
             setError(err?.message || 'Biometric unlock failed.');
+            haptic.error();
             setBusy(false);
         }
     }
