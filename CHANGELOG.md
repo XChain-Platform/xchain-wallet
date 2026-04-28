@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.198.0] - 2026-04-27
+
+§13 — Cluster M Step 5 of 6 — `docs/BRIDGE.md` (G014).
+
+dApp-developer-facing reference for the `window.xchain` provider. Derived directly from `packages/bridge-spec/src/index.ts` so it cannot drift from the normative TypeScript types. Covers detection (`getProvider` + `PROVIDER_READY_EVENT`), lifecycle (`connect` / `disconnect`), read methods, sign methods (`signMessage` / `signAction` / `signPsbt` / `signIn` / `parallel`), the v1 Sign-In with XChain wire format, events, the full `BridgeErrorCode` set, the per-site permissions model, versioning, and a pointer to `packages/test-dapp/` as the copy-paste source.
+
+### Added
+
+- **`docs/BRIDGE.md`** (new) — `window.xchain` API reference for dApp developers.
+
+Closes G014.
+
 ## [0.197.0] - 2026-04-27
 
 §13 — Cluster M Step 4 of 6 — `docs/ARCHITECTURE.md` (G013).
