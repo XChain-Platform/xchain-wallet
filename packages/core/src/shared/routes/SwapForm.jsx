@@ -10,6 +10,8 @@ import {
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
+import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { useWalletMode } from '../hooks/useWalletMode.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -138,6 +140,9 @@ export function SwapForm({ walletId, onBack }) {
         return null;
     }, [giveTick, getTick, coinTicker]);
 
+    // §20 / Cluster W FOLLOWUP 5 — watcher-mode encode-only branch.
+    const { isWatcherMode } = useWalletMode();
+
     async function handleSubmit(event) {
         event.preventDefault();
         if (stage === 'submitting') return;
@@ -147,8 +152,8 @@ export function SwapForm({ walletId, onBack }) {
             setFormError('Fill give/get tickers and amounts before signing.');
             return;
         }
-        if (!hw && password.length === 0) return;
-        if (hw && hwStatus !== 'available') return;
+        if (!isWatcherMode && !hw && password.length === 0) return;
+        if (!isWatcherMode && hw && hwStatus !== 'available') return;
 
         setStage('submitting');
         setFormError(null);
@@ -177,20 +182,35 @@ export function SwapForm({ walletId, onBack }) {
                 },
                 params,
             };
-            const r = hw
-                ? await messaging.swapActionHw({ ...base, signerId: fromAddress.signerId })
-                : await messaging.swapAction({ ...base, password });
+            let r;
+            if (isWatcherMode) {
+                r = await messaging.buildActionPsbtRequest({
+                    chainId,
+                    from: base.from,
+                    actionData: { action: 'SWAP', params },
+                });
+            } else if (hw) {
+                r = await messaging.swapActionHw({ ...base, signerId: fromAddress.signerId });
+            } else {
+                r = await messaging.swapAction({ ...base, password });
+            }
             setResult(r);
             setStage('done');
         } catch (err) {
             const bad = err?.name === 'InvalidPasswordError';
             setSubmitError(bad ? 'Incorrect password.' : err?.message || 'Sign failed.');
             setStage('form');
-            if (!hw) {
+            if (!isWatcherMode && !hw) {
                 passwordRef.current?.focus();
                 passwordRef.current?.select();
             }
         }
+    }
+
+    function handleBuildAnother() {
+        setResult(null);
+        setSubmitError(null);
+        setStage('form');
     }
 
     const header = (
@@ -225,12 +245,22 @@ export function SwapForm({ walletId, onBack }) {
     }
 
     if (stage === 'done') {
+        const txid = result?.txid;
+        if (result?.psbtHex && !txid) {
+            return wrap(
+                <WatcherResultPanel
+                    result={result}
+                    onBuildAnother={handleBuildAnother}
+                    onDone={onBack}
+                />,
+            );
+        }
         return wrap(
             <>
                 <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>SWAP broadcast</p>
-                {result?.txid ? (
+                {txid ? (
                     <p style={{ margin: '0 0 0.5rem' }}>
-                        Transaction: <code>{result.txid}</code>
+                        Transaction: <code>{txid}</code>
                     </p>
                 ) : null}
                 <p className={styles.hint}>
@@ -337,21 +367,29 @@ export function SwapForm({ walletId, onBack }) {
                         </dd>
                     </dl>
 
-                    <SignCredentials
-                        fromAddress={fromAddress}
-                        chainId={chainId}
-                        password={password}
-                        onPasswordChange={(v) => {
-                            setPassword(v);
-                            if (submitError) setSubmitError(null);
-                        }}
-                        onStatusChange={onHwStatusChange}
-                        passwordRef={passwordRef}
-                        submitError={submitError}
-                        disabled={stage === 'submitting'}
-                        getSignerStatus={messaging.getSignerStatus}
-                    />
-                    {hw && submitError ? (
+                    {isWatcherMode ? (
+                        <p className={styles.hint}>
+                            Watcher mode — this wallet will build an unsigned PSBT.
+                            Sign it on your Signer-mode wallet, then bring the
+                            signed PSBT to a Full-mode wallet to broadcast.
+                        </p>
+                    ) : (
+                        <SignCredentials
+                            fromAddress={fromAddress}
+                            chainId={chainId}
+                            password={password}
+                            onPasswordChange={(v) => {
+                                setPassword(v);
+                                if (submitError) setSubmitError(null);
+                            }}
+                            onStatusChange={onHwStatusChange}
+                            passwordRef={passwordRef}
+                            submitError={submitError}
+                            disabled={stage === 'submitting'}
+                            getSignerStatus={messaging.getSignerStatus}
+                        />
+                    )}
+                    {(isWatcherMode || hw) && submitError ? (
                         <p role="alert" style={{ margin: '0.25rem 0 0', color: '#ef5350', fontSize: '0.75rem' }}>
                             {submitError}
                         </p>
@@ -373,11 +411,15 @@ export function SwapForm({ walletId, onBack }) {
                     disabled={!!validationError
                         || !fromAddress
                         || !giveTick || !giveAmount || !getTick || !getAmount
-                        || (hw ? hwStatus !== 'available' : password.length === 0)}
+                        || (isWatcherMode
+                            ? false
+                            : hw ? hwStatus !== 'available' : password.length === 0)}
                 >
-                    {hw
-                        ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                        : 'Sign swap'}
+                    {isWatcherMode
+                        ? 'Build unsigned PSBT'
+                        : hw
+                            ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                            : 'Sign swap'}
                 </Button>
             </div>
         </form>,
