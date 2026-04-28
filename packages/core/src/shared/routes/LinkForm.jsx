@@ -10,6 +10,8 @@ import {
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
+import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { useWalletMode } from '../hooks/useWalletMode.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -187,6 +189,9 @@ export function LinkForm({ walletId, onBack }) {
         return null;
     }, [ticker1, ticker2, actionIndex1, actionIndex2]);
 
+    // §20 / Cluster W FOLLOWUP 5 — watcher-mode encode-only branch.
+    const { isWatcherMode } = useWalletMode();
+
     async function handleSubmit(event) {
         event.preventDefault();
         if (stage === 'submitting') return;
@@ -197,8 +202,8 @@ export function LinkForm({ walletId, onBack }) {
             setFormError('Provide both action indices before signing.');
             return;
         }
-        if (!hw && password.length === 0) return;
-        if (hw && hwStatus !== 'available') return;
+        if (!isWatcherMode && !hw && password.length === 0) return;
+        if (!isWatcherMode && hw && hwStatus !== 'available') return;
 
         setStage('submitting');
         setFormError(null);
@@ -221,20 +226,45 @@ export function LinkForm({ walletId, onBack }) {
                 coin2ActionIndex: actionIndex2,
                 ...(memo.trim() ? { memo: memo.trim() } : {}),
             };
-            const r = hw
-                ? await messaging.linkActionHw({ ...base, signerId: fromAddress.signerId })
-                : await messaging.linkAction({ ...base, password });
+            let r;
+            if (isWatcherMode) {
+                // LINK action params per linkAction flow:
+                // VERSION / COIN1 / COIN1_ACTION_INDEX / COIN2 / COIN2_ACTION_INDEX / MEMO.
+                const linkParams = {
+                    VERSION: '0',
+                    COIN1: String(ticker1).toUpperCase(),
+                    COIN1_ACTION_INDEX: actionIndex1,
+                    COIN2: String(ticker2).toUpperCase(),
+                    COIN2_ACTION_INDEX: actionIndex2,
+                    MEMO: memo.trim() || '',
+                };
+                r = await messaging.buildActionPsbtRequest({
+                    chainId: submitChainId,
+                    from: base.from,
+                    actionData: { action: 'LINK', params: linkParams },
+                });
+            } else if (hw) {
+                r = await messaging.linkActionHw({ ...base, signerId: fromAddress.signerId });
+            } else {
+                r = await messaging.linkAction({ ...base, password });
+            }
             setResult(r);
             setStage('done');
         } catch (err) {
             const bad = err?.name === 'InvalidPasswordError';
             setSubmitError(bad ? 'Incorrect password.' : err?.message || 'Sign failed.');
             setStage('form');
-            if (!hw) {
+            if (!isWatcherMode && !hw) {
                 passwordRef.current?.focus();
                 passwordRef.current?.select();
             }
         }
+    }
+
+    function handleBuildAnother() {
+        setResult(null);
+        setSubmitError(null);
+        setStage('form');
     }
 
     const header = (
@@ -269,6 +299,16 @@ export function LinkForm({ walletId, onBack }) {
     }
 
     if (stage === 'done') {
+        const txid = result?.txid;
+        if (result?.psbtHex && !txid) {
+            return wrap(
+                <WatcherResultPanel
+                    result={result}
+                    onBuildAnother={handleBuildAnother}
+                    onDone={onBack}
+                />,
+            );
+        }
         return wrap(
             <>
                 <p className={styles.successTitle}>LINK broadcast</p>
@@ -382,21 +422,29 @@ export function LinkForm({ walletId, onBack }) {
                         </dd>
                     </dl>
 
-                    <SignCredentials
-                        fromAddress={fromAddress}
-                        chainId={submitChainId}
-                        password={password}
-                        onPasswordChange={(v) => {
-                            setPassword(v);
-                            if (submitError) setSubmitError(null);
-                        }}
-                        onStatusChange={onHwStatusChange}
-                        passwordRef={passwordRef}
-                        submitError={submitError}
-                        disabled={stage === 'submitting'}
-                        getSignerStatus={messaging.getSignerStatus}
-                    />
-                    {hw && submitError ? (
+                    {isWatcherMode ? (
+                        <p className={styles.hint}>
+                            Watcher mode — this wallet will build an unsigned PSBT.
+                            Sign it on your Signer-mode wallet, then bring the
+                            signed PSBT to a Full-mode wallet to broadcast.
+                        </p>
+                    ) : (
+                        <SignCredentials
+                            fromAddress={fromAddress}
+                            chainId={submitChainId}
+                            password={password}
+                            onPasswordChange={(v) => {
+                                setPassword(v);
+                                if (submitError) setSubmitError(null);
+                            }}
+                            onStatusChange={onHwStatusChange}
+                            passwordRef={passwordRef}
+                            submitError={submitError}
+                            disabled={stage === 'submitting'}
+                            getSignerStatus={messaging.getSignerStatus}
+                        />
+                    )}
+                    {(isWatcherMode || hw) && submitError ? (
                         <p role="alert" style={{ margin: '0.25rem 0 0', color: '#ef5350', fontSize: '0.75rem' }}>
                             {submitError}
                         </p>
@@ -416,11 +464,15 @@ export function LinkForm({ walletId, onBack }) {
                     disabled={!!validationError
                         || !fromAddress
                         || !actionIndex1 || !actionIndex2
-                        || (hw ? hwStatus !== 'available' : password.length === 0)}
+                        || (isWatcherMode
+                            ? false
+                            : hw ? hwStatus !== 'available' : password.length === 0)}
                 >
-                    {hw
-                        ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                        : 'Sign LINK'}
+                    {isWatcherMode
+                        ? 'Build unsigned PSBT'
+                        : hw
+                            ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                            : 'Sign LINK'}
                 </Button>
             </div>
         </form>,

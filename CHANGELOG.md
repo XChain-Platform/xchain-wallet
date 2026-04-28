@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.252.0] - 2026-04-28
+
+§20 — Cluster X Step 12 of N — LinkForm watcher-mode branch (action LINK).
+
+LinkForm composes the LINK action params explicitly (COIN1 / COIN1_ACTION_INDEX / COIN2 / COIN2_ACTION_INDEX / MEMO) since the legacy `messaging.linkAction` shim takes those as top-level fields rather than a `params` object — for the watcher-mode `buildActionPsbtRequest` call we re-wrap them into the canonical action-data shape that the linkAction flow internally builds.
+
+### Added
+
+- **`packages/core/src/shared/routes/LinkForm.jsx`** — watcher-mode branch with explicit LINK params construction.
+- **`test/smoke/ui/link-watcher-mode.smoke.js`** (new).
+
 ## [0.251.0] - 2026-04-28
 
 §20 — Cluster X Step 11 of N — AdvancedActionsForm watcher-mode branch.
