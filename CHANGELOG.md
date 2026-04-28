@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.200.0] - 2026-04-27
+
+§18 — Cluster N Step 1 of 4 — Ledger WebHID compatibility notice (G032).
+
+`PairSignerForm` now feature-detects `navigator.hid` before letting the user click the Ledger card. On a browser without WebHID (Firefox, Safari) the card is disabled and the tag explains which browsers do support it; clicking the card via keyboard surfaces the same message via `setError`. UA-sniffing is intentionally narrow — we identify Firefox + Safari by name so the copy is specific, but the gate is the feature detect. Trezor pairing is unaffected (Trezor Connect runs in its own popup independently of WebHID).
+
+### Added
+
+- **`packages/core/src/shared/utils/webhidSupport.js`** (new) — `isWebHidSupported()` + `detectBrowserFamilyForWebHidHint()` helpers.
+
+### Changed
+
+- **`packages/core/src/shared/routes/PairSignerForm.jsx`** — Ledger card disabled when WebHID unavailable; vendor-tag copy branches on Firefox / Safari / generic.
+
+Closes G032.
+
 ## [0.199.0] - 2026-04-27
 
 §13 — Cluster M Step 6 of 6 — `docs/QA-CHECKLIST.md` (G017). Cluster M closed.

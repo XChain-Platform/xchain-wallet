@@ -8,6 +8,7 @@ import {
     signers as signersLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { isWebHidSupported, detectBrowserFamilyForWebHidHint } from '../utils/webhidSupport.js';
 import styles from './PairSignerForm.module.css';
 
 const { checkFirmware } = signersLib;
@@ -65,10 +66,23 @@ export function PairSignerForm({
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [savedRecord, setSavedRecord] = useState(/** @type {any | null} */ (null));
 
+    const webHidSupported = isWebHidSupported();
+    const browserFamily = detectBrowserFamilyForWebHidHint();
+    const ledgerNeedsWebHid = !webHidSupported;
+    const ledgerCanPair = pairLedger && webHidSupported;
+
     async function handlePickVendor(v) {
         const factory = v === 'trezor' ? pairTrezor : pairLedger;
         if (!factory) {
             setError(`${labelFor(v)} pairing is not available in this context.`);
+            return;
+        }
+        if (v === 'ledger' && !webHidSupported) {
+            setError(
+                browserFamily === 'firefox' || browserFamily === 'safari'
+                    ? `Ledger pairing requires WebHID, which is not supported in ${browserFamily === 'firefox' ? 'Firefox' : 'Safari'}. Switch to Chrome, Edge, or Brave to pair a Ledger.`
+                    : 'Ledger pairing requires the WebHID API, which is not available in this browser. Switch to Chrome, Edge, or Brave to pair a Ledger.',
+            );
             return;
         }
         setVendor(v);
@@ -156,11 +170,19 @@ export function PairSignerForm({
                             type="button"
                             className={styles.vendorCard}
                             onClick={() => handlePickVendor('ledger')}
-                            disabled={!pairLedger}
+                            disabled={!ledgerCanPair}
                         >
                             <span className={styles.vendorName}>Ledger</span>
                             <span className={styles.vendorTag}>
-                                {pairLedger ? 'Connect via WebHID. Chrome/Edge/Brave only.' : 'Not available in this context.'}
+                                {!pairLedger
+                                    ? 'Not available in this context.'
+                                    : ledgerNeedsWebHid
+                                    ? browserFamily === 'firefox'
+                                        ? 'WebHID required — Firefox is not supported. Switch to Chrome, Edge, or Brave.'
+                                        : browserFamily === 'safari'
+                                        ? 'WebHID required — Safari is not supported. Switch to Chrome, Edge, or Brave.'
+                                        : 'WebHID required — this browser does not support it. Switch to Chrome, Edge, or Brave.'
+                                    : 'Connect via WebHID. Chrome, Edge, or Brave on desktop.'}
                             </span>
                         </button>
                     </li>
