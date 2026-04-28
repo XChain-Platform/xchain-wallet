@@ -28,6 +28,7 @@ const {
     unlockWallet,
     receiveAddress,
     sendAsset,
+    buildSendPsbt,
     sweepAsset,
     issueToken,
     mintAsset,
@@ -770,6 +771,13 @@ export function createBackgroundHost(deps) {
 
     host.register('action.send', async (req, { vault, chainRegistry, sdkRegistry }) => {
         return sendAsset({ ...req, vault, chainRegistry, sdkRegistry });
+    });
+
+    // §20 / G040 — watcher-mode helper: encode-only path that returns
+    // an unsigned PSBT for transport to a Signer-mode wallet. No vault
+    // unlock, no signer, no broadcast.
+    host.register('action.send.psbt', async (req, { chainRegistry, sdkRegistry }) => {
+        return buildSendPsbt({ ...req, chainRegistry, sdkRegistry });
     });
 
     // §17.5 / G025 — verify signature. Pure SDK call, no signer / no

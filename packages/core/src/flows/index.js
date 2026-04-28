@@ -18,6 +18,7 @@ export {
 } from './importMnemonic.js';
 export { submitAction } from './submitAction.js';
 export { sendAsset, normalizeSource } from './sendAsset.js';
+export { buildSendPsbt } from './buildSendPsbt.js';
 export { sweepAsset } from './sweepAsset.js';
 export { issueToken } from './issueToken.js';
 export { mintAsset } from './mintAsset.js';

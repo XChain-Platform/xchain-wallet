@@ -7,12 +7,15 @@ import {
     ChainBadge,
     AddressText,
     FeeSelector,
+    AnimatedQrFrames,
  ChainPicker,  Icon, InfoTip, StatusMessage,} from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
     uri as uriLib,
 } from '@xchain-wallet/core';
+import { encodeXcwChunks } from '../../uri/psbtQr.js';
+import { WALLET_MODE_DEFAULT } from '../../schemas/settings.js';
 import { buildRecentDestinations } from '../../flows/recentDestinations.js';
 import { findLookalike } from '../utils/lookalike.js';
 import { checkPasteIntegrity } from '../utils/pasteIntegrity.js';
@@ -636,6 +639,12 @@ export function Send({ walletId, onBack }) {
     }
 
     const isHwSource = fromAddress?.source === 'trezor' || fromAddress?.source === 'ledger';
+    // §20 / G040 — watcher mode skips signing + broadcast and produces an
+    // unsigned PSBT for transport to a Signer-mode wallet. Read with the
+    // explicit default fallback so v2 records without the field behave
+    // like 'full' (the broadcast path).
+    const walletMode = settings?.walletMode || WALLET_MODE_DEFAULT;
+    const isWatcherMode = walletMode === 'watcher';
     const hwSignerInfo = useMemo(() => {
         if (!isHwSource || !fromAddress?.signerId) return null;
         const rec = signersByWallet.find((s) => s?.id === fromAddress.signerId);
@@ -654,8 +663,10 @@ export function Send({ walletId, onBack }) {
     async function handleSubmit(event) {
         event.preventDefault();
         if (stage === 'submitting') return;
-        if (!isHwSource && password.length === 0) return;
-        if (isHwSource && hwStatus !== 'available') return;
+        if (!isWatcherMode) {
+            if (!isHwSource && password.length === 0) return;
+            if (isHwSource && hwStatus !== 'available') return;
+        }
         setStage('submitting');
         setSubmitError(null);
         try {
@@ -676,13 +687,22 @@ export function Send({ walletId, onBack }) {
                 memo: memo.trim() || undefined,
                 rbf: rbfEnabled,
             };
+            // §20 / G040 — watcher mode encodes only. No password, no signer,
+            // no broadcast. The result envelope carries `psbtHex` instead of
+            // a `txid` and the done stage branches on that to render the
+            // PSBT-export UI.
             // Software path: send password; background unlocks + signs.
             // HW path: bypass password; background routes the sign
             // request through the signer-bridge RPC to the renderer-
             // hosted Trezor/Ledger signer identified by `signerId`.
-            const res = isHwSource
-                ? await messaging.sendAssetHw({ ...base, signerId: fromAddress.signerId })
-                : await messaging.sendAsset({ ...base, password });
+            let res;
+            if (isWatcherMode) {
+                res = await messaging.buildSendPsbtRequest(base);
+            } else if (isHwSource) {
+                res = await messaging.sendAssetHw({ ...base, signerId: fromAddress.signerId });
+            } else {
+                res = await messaging.sendAsset({ ...base, password });
+            }
             setResult(res);
             setPassword('');
             draft.clear();
@@ -769,6 +789,14 @@ export function Send({ walletId, onBack }) {
             if (!txid) return;
             try { navigator.clipboard?.writeText(txid); } catch { /* best effort */ }
         };
+
+        // §20 / G040 — watcher mode result. The submit returned an unsigned
+        // PSBT instead of a broadcast txid; render the export UI (paste +
+        // animated QR) so the user can transport it to a Signer-mode wallet.
+        if (result?.psbtHex && !txid) {
+            return wrap(<WatcherResultPanel result={result} onSendAnother={sendAnother} onDone={onBack} />);
+        }
+
         return wrap(
             <>
                 <div className={styles.successCard} role="status" aria-live="polite">
@@ -917,7 +945,13 @@ export function Send({ walletId, onBack }) {
                         ...(memo.trim() ? { MEMO: memo.trim() } : {}),
                     }}
                 />
-                {isHwSource ? (
+                {isWatcherMode ? (
+                    <p className={styles.hint}>
+                        Watcher mode — this wallet will build an unsigned PSBT
+                        instead of signing and broadcasting. Bring the result
+                        to your Signer-mode wallet to sign.
+                    </p>
+                ) : isHwSource ? (
                     <HwSignBlock
                         signerKind={fromAddress.source}
                         signerName={fromAddress.signerLabel || (fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger')}
@@ -947,7 +981,7 @@ export function Send({ walletId, onBack }) {
                         error={submitError || undefined}
                     />
                 )}
-                {isHwSource && submitError ? (
+                {(isWatcherMode || isHwSource) && submitError ? (
                     <StatusMessage
                         variant="error"
                         recovery={
@@ -966,16 +1000,20 @@ export function Send({ walletId, onBack }) {
                         loading={stage === 'submitting'}
                         disabled={
                             !!testSendGate
-                            || (isHwSource
-                                ? hwStatus !== 'available'
-                                : password.length === 0)
+                            || (isWatcherMode
+                                ? false
+                                : isHwSource
+                                    ? hwStatus !== 'available'
+                                    : password.length === 0)
                         }
                     >
-                        {isHwSource
-                            ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                            : descriptor?.displayName
-                                ? `Sign on ${descriptor.displayName}`
-                                : 'Sign'}
+                        {isWatcherMode
+                            ? 'Build unsigned PSBT'
+                            : isHwSource
+                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                                : descriptor?.displayName
+                                    ? `Sign on ${descriptor.displayName}`
+                                    : 'Sign'}
                     </Button>
                 </div>
             </form>,
@@ -1187,6 +1225,110 @@ function DetailRow({ label, value }) {
         <>
             <dt className={styles.detailsLabel}>{label}</dt>
             <dd className={styles.detailsValue}>{value}</dd>
+        </>
+    );
+}
+
+/**
+ * §20 / G040 — Watcher-mode result panel. Renders the unsigned PSBT hex
+ * (the user's exit point from this wallet) plus an animated QR for
+ * cross-device transport. Users with the same wallet seed in Signer mode
+ * paste / scan the result, sign it there, then bring the signed PSBT
+ * back to a Full-mode wallet to broadcast. (G041 covers the signer-side
+ * Home variant.)
+ *
+ * @param {object} props
+ * @param {{ psbtHex: string, encoding?: string, fromAddress?: string, chainId?: string }} props.result
+ * @param {() => void} props.onSendAnother
+ * @param {() => void} props.onDone
+ */
+function WatcherResultPanel({ result, onSendAnother, onDone }) {
+    const psbtHex = result?.psbtHex || '';
+    const exportFrames = useMemo(() => {
+        if (!psbtHex) return null;
+        try {
+            return encodeXcwChunks(psbtHex);
+        } catch (e) {
+            return { error: e?.message || String(e) };
+        }
+    }, [psbtHex]);
+    const copyHex = useCallback(() => {
+        if (!psbtHex) return;
+        try { navigator.clipboard?.writeText(psbtHex); } catch { /* best effort */ }
+    }, [psbtHex]);
+    return (
+        <>
+            <div className={styles.successCard} role="status" aria-live="polite">
+                <h2 className={styles.successTitle}>Unsigned PSBT — ready for signing</h2>
+                <p className={styles.successHint}>
+                    Take this PSBT to your Signer-mode wallet — paste the hex,
+                    or scan the animated QR. Sign there, then paste the signed
+                    PSBT into a Full-mode wallet to broadcast.
+                </p>
+                {result?.encoding ? (
+                    <dl className={styles.successSummary}>
+                        <div className={styles.successRow}>
+                            <dt>Encoding</dt>
+                            <dd>{result.encoding}</dd>
+                        </div>
+                        {result.fromAddress ? (
+                            <div className={styles.successRow}>
+                                <dt>From</dt>
+                                <dd className={styles.successMono}>
+                                    {result.fromAddress.slice(0, 8)}…{result.fromAddress.slice(-6)}
+                                </dd>
+                            </div>
+                        ) : null}
+                    </dl>
+                ) : null}
+                <div className={styles.successTxidBlock}>
+                    <p className={styles.successLabel}>Unsigned PSBT (hex)</p>
+                    <textarea
+                        readOnly
+                        aria-label="Unsigned PSBT hex"
+                        value={psbtHex}
+                        rows={6}
+                        style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.75rem' }}
+                    />
+                    <div className={styles.successTxidRow}>
+                        <button
+                            type="button"
+                            className={styles.successLink}
+                            onClick={copyHex}
+                            aria-label="Copy unsigned PSBT hex"
+                        >
+                            Copy hex
+                        </button>
+                    </div>
+                </div>
+                {exportFrames && exportFrames.error ? (
+                    <StatusMessage variant="error">{exportFrames.error}</StatusMessage>
+                ) : exportFrames && Array.isArray(exportFrames) ? (
+                    <>
+                        <p className={styles.successLabel}>Animated QR (XCW chunks)</p>
+                        <AnimatedQrFrames
+                            frames={exportFrames}
+                            alt="Unsigned PSBT animated QR"
+                        />
+                        <details>
+                            <summary className={styles.hint}>Plain-text chunks</summary>
+                            <textarea
+                                readOnly
+                                aria-label="Unsigned PSBT XCW chunks"
+                                value={exportFrames.join('\n')}
+                                rows={6}
+                                style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.75rem' }}
+                            />
+                        </details>
+                    </>
+                ) : null}
+            </div>
+            <div className={styles.actions}>
+                <Button variant="secondary" onClick={onSendAnother}>
+                    Build another
+                </Button>
+                <Button variant="primary" onClick={onDone}>Done</Button>
+            </div>
         </>
     );
 }

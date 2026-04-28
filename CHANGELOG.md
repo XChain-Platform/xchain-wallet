@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.235.0] - 2026-04-28
+
+§20 — Cluster W Step 2 of 3 — Watcher-mode PSBT generation (G040).
+
+New `flows/buildSendPsbt.js` is an encode-only path: creates a SEND action string, calls `encoder.createTx`, returns the unsigned PSBT hex envelope. No vault unlock, no signer, no broadcast — a watcher wallet has pubkeys but no signing keys, so we stop after encoding. ADS donation + PendingTx tracking are also skipped since the broadcast happens on a different wallet.
+
+`createBackgroundHost` registers `action.send.psbt` (deps: `chainRegistry` + `sdkRegistry` only — no vault); three messaging shims expose `buildSendPsbtRequest` across extension popup / web / desktop renderer.
+
+`Send.jsx` reads `settings.walletMode` (default `'full'`) and branches on `isWatcherMode`:
+- Review stage: replaces the password / HW pair block with a hint explaining that this wallet builds an unsigned PSBT instead of signing.
+- Submit handler: routes through `messaging.buildSendPsbtRequest(base)` instead of `sendAsset` / `sendAssetHw`. Submit button label flips to "Build unsigned PSBT" and is enabled directly (no password gate).
+- Done stage: branches on result shape — when the envelope carries `psbtHex` instead of a `txid`, renders a new `WatcherResultPanel` with the hex in a read-only textarea, a Copy hex affordance, an `<AnimatedQrFrames>` block driven by `encodeXcwChunks`, and a plain-text chunks fallback.
+
+The signer-mode side of the round-trip (paste / scan signed PSBT, broadcast) reuses the existing `PsbtSignForm` from Cluster E + a future broadcast leg tracked as Cluster E FOLLOWUP 3. Signer-mode Home variant lands as Step 3 (G041).
+
+### Added
+
+- **`packages/core/src/flows/buildSendPsbt.js`** (new) — encode-only SEND path returning `{ psbtHex, encoding, actionString, action, version, chainId, fromAddress }`.
+- **`packages/core/src/flows/index.js`** — re-exports `buildSendPsbt`.
+- **`packages/extension/src/background/createBackgroundHost.js`** — destructures `buildSendPsbt` + registers `action.send.psbt` host handler.
+- **`packages/extension/src/popup/messaging.js`**, **`packages/web/src/messaging.js`**, **`packages/desktop/renderer/messaging.js`** — `buildSendPsbtRequest` shim across all three shells.
+- **`packages/core/src/shared/routes/Send.jsx`** — `walletMode` / `isWatcherMode` derivation, watcher branch in `handleSubmit`, watcher hint copy + relabelled submit button at review, `WatcherResultPanel` component (animated QR + plain-text chunks + Copy hex).
+- **`test/smoke/ui/send-watcher-mode.smoke.js`** (new) — pins the flow shape, the host registration, the three shims, the Send.jsx watcher branch, and the `WatcherResultPanel` render.
+
+Closes G040.
+
 ## [0.234.0] - 2026-04-28
 
 §20 — Cluster W Step 1 of 3 — Wallet mode selector (G039).

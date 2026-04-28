@@ -149,6 +149,26 @@ export function sendAsset(opts) {
 }
 
 /**
+ * §20 / G040 — Watcher-mode helper: encode an unsigned PSBT for a SEND
+ * action without unlocking the wallet, signing, or broadcasting.
+ *
+ * @param {object} opts
+ * @param {string} opts.chainId
+ * @param {{ address: string, publicKey: string, derivationPath?: string | null, addressId?: string }} opts.from
+ * @param {string} opts.to
+ * @param {string} opts.asset
+ * @param {string | number} opts.amount
+ * @param {string} [opts.memo]
+ * @param {number} [opts.fee]
+ * @param {number} [opts.feePerKb]
+ * @param {boolean} [opts.rbf]
+ * @returns {Promise<{ psbtHex: string, encoding: string, actionString: string, action: string, chainId: string, fromAddress: string }>}
+ */
+export function buildSendPsbtRequest(opts) {
+    return /** @type {any} */ (sendMessage('action.send.psbt', opts));
+}
+
+/**
  * §17.4 / §30.1 / G024 — user-initiated message signing.
  *
  * @param {{ walletId: string, addressId: string, password: string, message: string, bip39Passphrase?: string }} opts

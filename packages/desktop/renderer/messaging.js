@@ -115,6 +115,14 @@ export function sendAsset(opts) {
     return /** @type {any} */ (sendMessage('action.send', opts));
 }
 
+/**
+ * §20 / G040 — Watcher-mode encode-only helper.
+ * @param {object} opts
+ */
+export function buildSendPsbtRequest(opts) {
+    return /** @type {any} */ (sendMessage('action.send.psbt', opts));
+}
+
 /** @param {object} opts */
 export function sendAssetHw(opts) {
     return /** @type {any} */ (sendMessage('action.send.hw', opts));
