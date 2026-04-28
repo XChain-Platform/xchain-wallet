@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.244.0] - 2026-04-28
+
+§20 — Cluster X Step 4 of N — IssueTokenForm watcher-mode branch.
+
+First non-Send action surface to adopt the FOLLOWUP 5 pattern. `IssueTokenForm.jsx` reads `isWatcherMode` from `useWalletMode`, branches `handleSubmit` to `messaging.buildActionPsbtRequest({ chainId, from, actionData: { action: 'ISSUE', params } })` when watcher mode is on (skipping the password / HW gates entirely), swaps `<SignCredentials>` at review for an explanatory hint, flips the submit button label to "Build unsigned PSBT", and renders the shared `<WatcherResultPanel>` at the done stage when the result envelope carries `psbtHex` instead of `txid`. New `handleBuildAnother` resets the form back to its first stage so the user can compose another ISSUE without leaving the route.
+
+Smoke baseline drops from 24 to 23 failures: the existing `actions/issue-form.smoke.js` was already asserting `setStage('form')` (anticipating a "build another" path); the new `handleBuildAnother` satisfies that assertion as a side effect.
+
+### Added
+
+- **`packages/core/src/shared/routes/IssueTokenForm.jsx`** — `useWalletMode` + `WatcherResultPanel` imports; `isWatcherMode` derivation; watcher-mode submit branch; review-stage hint copy; "Build unsigned PSBT" button label; `handleBuildAnother` reset; done-stage `WatcherResultPanel` branch when `result.psbtHex && !txid`.
+- **`test/smoke/ui/issue-watcher-mode.smoke.js`** (new) — pins the new imports + hook usage + submit branch + done-stage panel + review-stage hint.
+
 ## [0.243.0] - 2026-04-28
 
 §20 — Cluster X Step 3 of N — Extract WatcherResultPanel to a shared component.
