@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.205.0] - 2026-04-27
+
+§26 — Cluster O Step 2 of 4 — Auto-lock timeout from settings (G065).
+
+`useAutoLock` was hardcoded to a 5-minute idle threshold even though `settings.autolockMinutes` already existed as a top-level field (default 15 min) with a Settings → Safety panel UI. `Home.jsx` now reads `autolockMinutes` via `useSettings()`, clamps to [1, 1440] minutes (defends against a hand-edited storage record), and passes the resulting `idleMs` to `useAutoLock`. The Safety section's existing dropdown now actually drives the timer.
+
+### Changed
+
+- **`packages/core/src/shared/routes/Home.jsx`** — `useSettings()` import + read; clamped `autolockMinutes`; `idleMs` plumbed into `useAutoLock`.
+
+Closes G065.
+
 ## [0.204.0] - 2026-04-27
 
 §26 — Cluster O Step 1 of 4 — Auto-lock wired into web App (G064).

@@ -4,6 +4,7 @@ import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useAutoLock } from '../hooks/useAutoLock.js';
+import { useSettings } from '../hooks/useSettings.js';
 import { HomeTabs } from '../components/HomeTabs.jsx';
 import { BackupReminderCard } from '../components/BackupReminderCard.jsx';
 import { DemoBanner } from '../components/DemoBanner.jsx';
@@ -311,8 +312,19 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onBuy, onCreateToken
         }
     }, [locking, onLocked, messaging]);
 
+    // Read autolockMinutes from settings; clamp to a sane floor (1 min)
+    // and ceiling (1440 min / 24h) so a corrupt or out-of-range value
+    // can't disable the hook by overflowing or underflowing. The
+    // Settings UI already only offers values inside that range; this
+    // guard handles a hand-edited storage record.
+    const settings = useSettings();
+    const autolockMinutes = Math.max(
+        1,
+        Math.min(1440, Number(settings?.autolockMinutes) || 5),
+    );
     useAutoLock(handleLock, {
         enabled: (shell === 'popup' || shell === 'web') && !locking,
+        idleMs: autolockMinutes * 60 * 1000,
     });
 
     const activeWallet = wallets && activeWalletId
