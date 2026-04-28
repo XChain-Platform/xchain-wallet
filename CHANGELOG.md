@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.223.0] - 2026-04-28
+
+§55 — Cluster T Step 3 of 4 — Maintainers doc (G178).
+
+New `MAINTAINERS.md` at the repo root names the lead maintainer (J-Dog), enumerates the canonical wallet sub-system areas (core flows / schemas / signers / bridge / three shells / docs / release engineering / smokes), publishes the escalation paths used elsewhere in the project (security@ / conduct@ / GitHub issues), and documents the maintainer addition + removal process plus decision-making scope.
+
+Honest framing: this is pre-launch with a single primary maintainer; the file exists so a future contributor or downstream packager can see the partition without pretending there's a multi-person team today.
+
+### Added
+
+- **`MAINTAINERS.md`** (new) — root maintainers + governance doc.
+- **`test/smoke/audits/maintainers-doc.smoke.js`** (new) — pins the structural headings, the lead's GitHub link, the areas table, the escalation channels (cross-references SECURITY.md + CODE_OF_CONDUCT.md), the cross-project relationships, and the honest pre-launch framing.
+
+Closes G178.
+
 ## [0.222.0] - 2026-04-28
 
 §13 — Cluster T Step 2 of 4 — User-facing release verification doc (G016).
