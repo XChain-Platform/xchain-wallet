@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.247.0] - 2026-04-28
+
+§20 — Cluster X Step 7 of N — DestroyForm watcher-mode branch.
+
+Same FOLLOWUP 5 pattern, action DESTROY. Destroy is destructive in full / HW signing, so the existing `variant="danger"` button stays put — but in watcher mode the form just emits an unsigned PSBT (the actual destruction happens later when a Signer-mode wallet signs and a Full-mode wallet broadcasts), so the variant flips to `'primary'` to match the other watcher-mode "Build unsigned PSBT" CTAs.
+
+### Added
+
+- **`packages/core/src/shared/routes/DestroyForm.jsx`** — watcher-mode branch + variant flip on the submit button.
+- **`test/smoke/ui/destroy-watcher-mode.smoke.js`** (new).
+
+### Changed
+
+- **`test/smoke/actions/destroy-form.smoke.js`** — variant assertion accepts the new conditional shape; still pins that the danger variant exists somewhere in the file.
+
 ## [0.246.0] - 2026-04-28
 
 §20 — Cluster X Step 6 of N — DispenserForm watcher-mode branch.

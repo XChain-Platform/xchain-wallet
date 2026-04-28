@@ -12,6 +12,8 @@ import {
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials } from '../components/SignCredentials.jsx';
+import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { useWalletMode } from '../hooks/useWalletMode.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -155,11 +157,14 @@ export function DestroyForm({ walletId, onBack }) {
     const [hwStatus, setHwStatus] = useState('idle');
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
 
+    // §20 / Cluster W FOLLOWUP 5 — watcher-mode encode-only branch.
+    const { isWatcherMode } = useWalletMode();
+
     async function handleSubmit(event) {
         event.preventDefault();
         if (stage === 'submitting') return;
-        if (!isHwSource && password.length === 0) return;
-        if (isHwSource && hwStatus !== 'available') return;
+        if (!isWatcherMode && !isHwSource && password.length === 0) return;
+        if (!isWatcherMode && isHwSource && hwStatus !== 'available') return;
         setStage('submitting');
         setSubmitError(null);
         try {
@@ -176,9 +181,18 @@ export function DestroyForm({ walletId, onBack }) {
                 },
                 params: actionParams,
             };
-            const res = isHwSource
-                ? await messaging.destroyAssetHw({ ...base, signerId: fromAddress.signerId })
-                : await messaging.destroyAsset({ ...base, password });
+            let res;
+            if (isWatcherMode) {
+                res = await messaging.buildActionPsbtRequest({
+                    chainId,
+                    from: base.from,
+                    actionData: { action: 'DESTROY', params: actionParams },
+                });
+            } else if (isHwSource) {
+                res = await messaging.destroyAssetHw({ ...base, signerId: fromAddress.signerId });
+            } else {
+                res = await messaging.destroyAsset({ ...base, password });
+            }
             setResult(res);
             setPassword('');
             setStage('done');
@@ -190,11 +204,17 @@ export function DestroyForm({ walletId, onBack }) {
                     : err?.message || 'Destroy failed.',
             );
             setStage('review');
-            if (!isHwSource) {
+            if (!isWatcherMode && !isHwSource) {
                 passwordRef.current?.focus();
                 passwordRef.current?.select();
             }
         }
+    }
+
+    function handleBuildAnother() {
+        setResult(null);
+        setSubmitError(null);
+        setStage('form');
     }
 
     const titleSuffix = descriptor ? ` on ${descriptor.displayName}` : '';
@@ -232,6 +252,15 @@ export function DestroyForm({ walletId, onBack }) {
 
     if (stage === 'done') {
         const txid = result?.txid || result?.broadcast?.txid;
+        if (result?.psbtHex && !txid) {
+            return wrap(
+                <WatcherResultPanel
+                    result={result}
+                    onBuildAnother={handleBuildAnother}
+                    onDone={onBack}
+                />,
+            );
+        }
         return wrap(
             <>
                 <h2 className={styles.successTitle}>Destroyed</h2>
@@ -274,37 +303,49 @@ export function DestroyForm({ walletId, onBack }) {
                         ))}
                     </div>
                 ) : null}
-                <SignCredentials
-                    fromAddress={fromAddress}
-                    chainId={chainId}
-                    password={password}
-                    onPasswordChange={(v) => {
-                        setPassword(v);
-                        if (submitError) setSubmitError(null);
-                    }}
-                    onStatusChange={onHwStatusChange}
-                    passwordRef={passwordRef}
-                    submitError={submitError}
-                    disabled={stage === 'submitting'}
-                    getSignerStatus={messaging.getSignerStatus}
-                />
-                {isHwSource && submitError ? (
+                {isWatcherMode ? (
+                    <p className={styles.hint}>
+                        Watcher mode — this wallet will build an unsigned PSBT.
+                        Sign it on your Signer-mode wallet, then bring the
+                        signed PSBT to a Full-mode wallet to broadcast.
+                    </p>
+                ) : (
+                    <SignCredentials
+                        fromAddress={fromAddress}
+                        chainId={chainId}
+                        password={password}
+                        onPasswordChange={(v) => {
+                            setPassword(v);
+                            if (submitError) setSubmitError(null);
+                        }}
+                        onStatusChange={onHwStatusChange}
+                        passwordRef={passwordRef}
+                        submitError={submitError}
+                        disabled={stage === 'submitting'}
+                        getSignerStatus={messaging.getSignerStatus}
+                    />
+                )}
+                {(isWatcherMode || isHwSource) && submitError ? (
                     <div role="alert" className={styles.error}>{submitError}</div>
                 ) : null}
                 <div className={styles.actions}>
                     <Button
                         type="submit"
-                        variant="danger"
+                        variant={isWatcherMode ? 'primary' : 'danger'}
                         loading={stage === 'submitting'}
                         disabled={
-                            isHwSource
-                                ? hwStatus !== 'available'
-                                : password.length === 0
+                            isWatcherMode
+                                ? false
+                                : isHwSource
+                                    ? hwStatus !== 'available'
+                                    : password.length === 0
                         }
                     >
-                        {isHwSource
-                            ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                            : (descriptor ? `Destroy on ${descriptor.displayName}` : 'Destroy')}
+                        {isWatcherMode
+                            ? 'Build unsigned PSBT'
+                            : isHwSource
+                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                                : (descriptor ? `Destroy on ${descriptor.displayName}` : 'Destroy')}
                     </Button>
                 </div>
             </form>,

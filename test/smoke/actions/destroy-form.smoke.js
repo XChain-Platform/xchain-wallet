@@ -78,10 +78,20 @@ assert.ok(
 );
 
 // --- 6. Danger variant on the sign button ------------------------------
+//
+// §20 Cluster X Step 7 — variant flips to 'primary' in watcher mode (the
+// "Build unsigned PSBT" CTA is not destructive — destruction happens at
+// broadcast on a different wallet). Pin the conditional shape so a future
+// drop of the danger variant doesn't go unnoticed.
 
 assert.ok(
-    /variant="danger"/.test(src),
-    'DestroyForm uses the danger variant on the sign button',
+    /variant=\{isWatcherMode \? 'primary' : 'danger'\}/.test(src)
+        || /variant="danger"/.test(src),
+    'DestroyForm uses the danger variant (or watcher-mode-conditional flip) on the sign button',
+);
+assert.ok(
+    src.includes("'danger'") || src.includes('"danger"'),
+    'DestroyForm still uses the danger variant for full / HW signing',
 );
 
 // --- 7. Core flow -----------------------------------------------------
