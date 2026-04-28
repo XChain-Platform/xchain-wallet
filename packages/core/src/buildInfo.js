@@ -5,7 +5,7 @@
 // package.json bump per the wallet's synchronized-versioning rule.
 // See CHANGELOG.md for the version's release context.
 
-export const WALLET_VERSION = '0.220.0';
+export const WALLET_VERSION = '0.221.0';
 
 // License identifiers matching repo metadata.
 export const LICENSE_NAME = 'Dankest Community License (Apache-2.0 + Additional Terms)';
@@ -19,9 +19,11 @@ export const SECURITY_FILE = 'SECURITY.md';
 export const SECURITY_PUBLISHED = true;
 
 // Reproducible-build verification + release-signing artifacts. Pages
-// not yet hosted; current paths point at in-repo READMEs that document
-// the procedure.
-export const REPRODUCIBLE_BUILD_DOC = 'packages/desktop/REPRODUCIBLE_BUILDS.md';
+// not yet hosted; current paths point at in-repo docs that document
+// the procedure. The root reproducible-build doc orients across every
+// shell; the desktop-specific recipe lives under `packages/desktop/`.
+export const REPRODUCIBLE_BUILD_DOC = 'docs/REPRODUCIBLE_BUILDS.md';
+export const REPRODUCIBLE_BUILD_DOC_DESKTOP = 'packages/desktop/REPRODUCIBLE_BUILDS.md';
 export const RELEASE_SIGNATURES_DOC = 'packages/extension/RELEASE_SIGNATURES.md';
 export const RELEASE_SIGNATURES_PUBLISHED = false;
 

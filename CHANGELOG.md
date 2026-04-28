@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.221.0] - 2026-04-28
+
+§13 — Cluster T Step 1 of 4 — Root reproducible-builds doc (G015).
+
+New `docs/REPRODUCIBLE_BUILDS.md` orients across every shell, captures the project-wide Level-2-pre-signing-artifact promise, and links out to the existing per-target deeper doc under `packages/desktop/`. Per-target table covers desktop / extension / web with a clear status note for each. Cross-links to `docs/VERIFY-RELEASE.md` (next step) and `SECURITY.md`.
+
+### Added
+
+- **`docs/REPRODUCIBLE_BUILDS.md`** (new) — root entry point for reproducible builds.
+- **`buildInfo.REPRODUCIBLE_BUILD_DOC_DESKTOP`** (new) — pointer to the desktop-specific deeper recipe so consumers that previously read `REPRODUCIBLE_BUILD_DOC` can still reach the desktop doc.
+- **`test/smoke/audits/repro-build-root-doc.smoke.js`** (new) — pins the doc's headings, per-target table coverage, cross-links, and the buildInfo constant flip.
+
+### Changed
+
+- **`packages/core/src/buildInfo.js`** — `REPRODUCIBLE_BUILD_DOC` now points at the new root doc (`docs/REPRODUCIBLE_BUILDS.md`); `REPRODUCIBLE_BUILD_DOC_DESKTOP` keeps the per-target path. `AboutSection` consumes `REPRODUCIBLE_BUILD_DOC` and automatically picks up the new path with no UI edit.
+
+Closes G015.
+
 ## [0.220.0] - 2026-04-28
 
 §12 — Cluster S Step 2 of 2 — Origin allowlist / blocklist infrastructure (G009). **Cluster S closed.**
