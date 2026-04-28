@@ -14,6 +14,7 @@ import {
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
+import { useWalletMode } from '../hooks/useWalletMode.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -324,6 +325,16 @@ export function AirdropForm({ walletId, resumeId = null, onBack }) {
     const [hwStatus, setHwStatus] = useState('idle');
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
 
+    // §20 / Cluster W FOLLOWUP 5 — AIRDROP is a multi-phase action: LIST is
+    // broadcast first, then the wallet polls for indexer confirmation, then
+    // AIRDROP is broadcast referencing the indexed LIST's ACTION_INDEX. The
+    // index-wait step is fundamentally incompatible with the watcher-mode
+    // contract (the wallet that builds the PSBT is not the wallet that
+    // broadcasts it, so it can't observe the broadcast hitting the indexer).
+    // Block the form in watcher mode with a redirect rather than ship a
+    // partial flow that strands the user mid-LIST.
+    const { isWatcherMode } = useWalletMode();
+
     async function handleSignList(event) {
         event.preventDefault();
         if (submitting) return;
@@ -475,6 +486,30 @@ export function AirdropForm({ walletId, resumeId = null, onBack }) {
     }
     if (!addressesByChain || !chainId) {
         return wrap(<p className={styles.hint}>Loading…</p>);
+    }
+    if (isWatcherMode) {
+        return wrap(
+            <>
+                <h2 className={styles.successTitle}>Not available in watcher mode</h2>
+                <p className={styles.hint}>
+                    Airdrop is a two-phase action — the wallet broadcasts a
+                    LIST transaction, waits for the indexer to confirm it,
+                    then broadcasts the AIRDROP transaction referencing the
+                    list. A watcher-mode wallet can't observe the LIST
+                    landing on-chain (broadcasting happens on a different
+                    wallet), so this flow can't be split across an
+                    air-gapped boundary today.
+                </p>
+                <p className={styles.hint}>
+                    Switch this wallet to <strong>full</strong> mode to
+                    author an airdrop, or use a Full-mode wallet that holds
+                    the same seed.
+                </p>
+                <div className={styles.actions}>
+                    <Button variant="primary" onClick={onBack}>Back</Button>
+                </div>
+            </>,
+        );
     }
 
     if (stage === 'done') {

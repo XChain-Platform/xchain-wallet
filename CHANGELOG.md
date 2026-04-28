@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.250.0] - 2026-04-28
+
+§20 — Cluster X Step 10 of N — AirdropForm watcher-mode block.
+
+AIRDROP is the first action in this sweep that genuinely doesn't fit the watcher-mode contract: it's a two-phase action (broadcast LIST, wait for indexer confirmation, broadcast AIRDROP referencing the indexed ACTION_INDEX). The index-wait step requires observing the LIST broadcast hitting the indexer — but in watcher mode the broadcast happens on a different wallet, so the watcher can't observe it. Wedging in a partial flow would strand the user mid-LIST. Block with a redirect instead.
+
+### Added
+
+- **`packages/core/src/shared/routes/AirdropForm.jsx`** — `useWalletMode` hook + early-return `<>` block in watcher mode (`Not available in watcher mode` panel + redirect to switch the wallet to full mode).
+- **`test/smoke/ui/airdrop-watcher-mode.smoke.js`** (new) — pins the block and asserts AirdropForm does NOT route through `buildActionPsbtRequest` (the action is blocked, not split).
+
 ## [0.249.0] - 2026-04-28
 
 §20 — Cluster X Step 9 of N — DividendForm watcher-mode branch (action DIVIDEND).
