@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.258.0] - 2026-04-28
+
+§20 — Cluster X Step 18 of N — ContractFundsForm watcher-mode branch (DEPOSIT / WITHDRAW).
+
+### Added
+
+- **`packages/core/src/shared/routes/ContractFundsForm.jsx`** — watcher-mode branch.
+- **`test/smoke/ui/contract-funds-watcher-mode.smoke.js`** (new).
+
 ## [0.257.0] - 2026-04-28
 
 §20 — Cluster X Step 17 of N — DelegationActionForm watcher-mode branch (DELEGATE / REVOKE_DELEGATION).
