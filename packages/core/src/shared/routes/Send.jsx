@@ -7,7 +7,7 @@ import {
     ChainBadge,
     AddressText,
     FeeSelector,
- ChainPicker,  Icon,} from '@xchain-wallet/core/ui';
+ ChainPicker,  Icon, InfoTip,} from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -1084,6 +1084,10 @@ export function Send({ walletId, onBack }) {
                     />
                     <span className={styles.rbfLabel}>
                         Replace-by-fee
+                        <InfoTip
+                            aria="Replace-by-fee help"
+                            label="Marks the transaction as replaceable (BIP125). While it sits in the mempool you can broadcast a new version with a higher fee to speed it up — or send a self-transfer at a higher fee to cancel it."
+                        />
                         <span className={styles.rbfHint}>
                             Allows speeding up or cancelling this transaction while it's in the mempool.
                         </span>

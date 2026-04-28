@@ -11,6 +11,7 @@
 // sentinel as if it were a real address.
 
 import { registry as registryLib } from '@xchain-wallet/core';
+import { InfoTip } from '@xchain-wallet/core/ui';
 import { useSettings } from '../../hooks/useSettings.js';
 import { ADS_DONATION_ADDRESS_PLACEHOLDER } from '../../../registry/validate.js';
 import { INPUT, ROW, ROW_HINT, ROW_LABEL, STACK, Status, ToggleRow } from './_settingsPrimitives.jsx';
@@ -122,7 +123,13 @@ export function AdsSection() {
                         </div>
 
                         <div style={FIELD_ROW}>
-                            <span style={SUBTLE}>Send when accumulated (sats)</span>
+                            <span style={SUBTLE}>
+                                Send when accumulated (sats)
+                                <InfoTip
+                                    aria="Trigger threshold help"
+                                    label="The wallet keeps a running per-chain donation accumulator and sends a single donation transaction once it reaches this amount. Higher thresholds amortise the network fee across more donations; too high and the donation never fires before you stop using the wallet."
+                                />
+                            </span>
                             <input
                                 type="number"
                                 min={0}

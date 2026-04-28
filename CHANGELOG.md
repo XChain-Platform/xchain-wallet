@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.210.0] - 2026-04-27
+
+§37 — Cluster P Step 3 of 5 — Contextual tooltips (G122).
+
+New `<InfoTip>` primitive in `@xchain-wallet/core/ui` ships a self-contained "?" affordance that surfaces a short explanation without claiming layout space. Real `<button type="button">` trigger so it doesn't submit forms; `aria-describedby` wires the bubble id to the trigger when open; `role="tooltip"` on the bubble; opens on hover / focus / click; dismisses on Esc, blur, or outside pointer. Honours `prefers-contrast: more`.
+
+Wired into the five spots §37 calls out as the most user-confusing controls:
+
+- **Send.jsx** — Replace-by-fee toggle.
+- **FeeSelector** — Network fee tier picker.
+- **CreateWallet** — BIP39 passphrase advanced toggle.
+- **DerivationPathCrossCheck** — Derivation path label (HW signing).
+- **AdsSection** — "Send when accumulated" trigger threshold.
+
+### Added
+
+- **`packages/core/src/ui/InfoTip.jsx`** + **`InfoTip.module.css`** (new) — primitive.
+- **`test/smoke/ui/info-tip.smoke.js`** (new) — pins primitive surface + 5 integrations.
+
+### Changed
+
+- **`packages/core/src/ui/index.js`** — re-exports `InfoTip`.
+- **`packages/core/src/ui/FeeSelector.jsx`** — InfoTip beside the "Network fee" label.
+- **`packages/core/src/shared/routes/Send.jsx`** — InfoTip beside the RBF toggle copy.
+- **`packages/core/src/shared/routes/CreateWallet.jsx`** — InfoTip beside the BIP39-passphrase advanced toggle.
+- **`packages/core/src/shared/components/DerivationPathCrossCheck.jsx`** — InfoTip beside the Derivation path label.
+- **`packages/core/src/shared/components/settings/AdsSection.jsx`** — InfoTip beside the "Send when accumulated" label.
+
+Closes G122.
+
 ## [0.209.0] - 2026-04-27
 
 §37 — Cluster P Step 2 of 5 — Drag-and-drop file handling (G123).

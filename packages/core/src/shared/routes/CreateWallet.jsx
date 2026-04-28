@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Screen, Button, Input, CopyButton, Icon } from '@xchain-wallet/core/ui';
+import { Screen, Button, Input, CopyButton, Icon, InfoTip } from '@xchain-wallet/core/ui';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { crypto as cryptoLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -531,6 +531,10 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                         }}
                     />
                     <span>Add a BIP39 passphrase (advanced)</span>
+                    <InfoTip
+                        aria="BIP39 passphrase help"
+                        label="An optional 25th word that mixes with your seed to derive a different wallet. Anyone who learns your recovery phrase but not the passphrase sees an empty decoy. Forget the passphrase and the funds are gone — it cannot be reset."
+                    />
                 </label>
                 {showPassphrase ? (
                     <>

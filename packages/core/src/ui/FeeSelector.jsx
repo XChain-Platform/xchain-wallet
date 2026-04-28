@@ -1,4 +1,5 @@
 import { useId, useMemo } from 'react';
+import { InfoTip } from './InfoTip.jsx';
 import styles from './FeeSelector.module.css';
 
 /**
@@ -68,7 +69,13 @@ export function FeeSelector({
 
     return (
         <div className={styles.wrap}>
-            <span className={styles.label} id={labelId}>Network fee</span>
+            <span className={styles.label} id={labelId}>
+                Network fee
+                <InfoTip
+                    aria="Network fee help"
+                    label="Higher fees confirm sooner. Low can take an hour or more under busy mempool conditions; Fast usually lands in the next 1–2 blocks. Custom lets you set a specific sat/vB rate."
+                />
+            </span>
             <div role="radiogroup" aria-labelledby={labelId} className={styles.tiers}>
                 {tierList.map(({ speed, estimate }) => {
                     const active = mode === speed;

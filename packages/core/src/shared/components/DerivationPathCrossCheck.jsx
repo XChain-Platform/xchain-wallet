@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { AddressText } from '@xchain-wallet/core/ui';
+import { AddressText, InfoTip } from '@xchain-wallet/core/ui';
 import styles from './DerivationPathCrossCheck.module.css';
 
 /**
@@ -69,7 +69,13 @@ export function DerivationPathCrossCheck({
             <dl className={styles.grid}>
                 <dt className={styles.label}>Signer</dt>
                 <dd className={styles.value}>{signerName}</dd>
-                <dt className={styles.label}>Derivation path</dt>
+                <dt className={styles.label}>
+                    Derivation path
+                    <InfoTip
+                        aria="Derivation path help"
+                        label="The BIP32 path that locates this account inside your seed. Different paths produce different addresses from the same seed — verify it matches what your device displays so the host can't trick the device into signing for a different sub-account."
+                    />
+                </dt>
                 <dd className={styles.value}><code className={styles.path}>{path}</code></dd>
                 <dt className={styles.label}>Address</dt>
                 <dd className={styles.value}><AddressText address={address} /></dd>

@@ -17,4 +17,5 @@ export { MultisigBadge } from './MultisigBadge.jsx';
 export { QrScanner } from './QrScanner.jsx';
 export { ChainPicker } from './ChainPicker.jsx';
 export { Skeleton } from './Skeleton.jsx';
+export { InfoTip } from './InfoTip.jsx';
 export * as Icon from './icons/index.jsx';
