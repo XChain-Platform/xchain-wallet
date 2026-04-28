@@ -1037,6 +1037,9 @@ function AppInner() {
                         } : undefined}
                         onOpenWalletPicker={() => setUnlockedView('wallet-picker')}
                         onOpenAccountPicker={activeWalletId ? () => setUnlockedView('account-picker') : undefined}
+                        onSignPsbt={activeWalletId ? () => setUnlockedView('sign-psbt') : undefined}
+                        onSignMessage={activeWalletId ? () => setUnlockedView('sign-message') : undefined}
+                        onVerifySignature={activeWalletId ? () => setUnlockedView('verify-signature') : undefined}
                         activeAccountId={activeAccountId}
                         onSwitchAccount={setActiveAccountId}
                         extraActions={activeWalletId ? buildActionEntries({

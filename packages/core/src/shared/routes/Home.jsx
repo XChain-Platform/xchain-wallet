@@ -13,6 +13,7 @@ import { HeaderSettingsButton } from '../components/HeaderSettingsButton.jsx';
 import { HeaderNetworkButton } from '../components/HeaderNetworkButton.jsx';
 import { AlertsOverlay } from '../components/AlertsOverlay.jsx';
 import { Settings } from './Settings.jsx';
+import { WALLET_MODE_DEFAULT } from '../../schemas/settings.js';
 import styles from './Home.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -49,6 +50,9 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {() => void} [props.onContracts]     navigate to the Contracts list (§42.2) — BTC-only, App.jsx gates the prop
  * @param {() => void} [props.onStaking]       navigate to the Staking dashboard (§42.7.4) — BTC-only, App.jsx gates the prop
  * @param {() => void} [props.onHistory]       navigate to the History route (§23 + §23.5 cross-chain threading)
+ * @param {() => void} [props.onSignPsbt]      navigate to the PSBT-sign route (§30.4) — surfaced as the marquee CTA when `settings.walletMode === 'signer'` (§20 / G041)
+ * @param {() => void} [props.onSignMessage]   navigate to the user-initiated message-sign route (§17.4)
+ * @param {() => void} [props.onVerifySignature]   navigate to the signature-verify route (§17.5)
  * @param {() => void} [props.onMigrateToBip39]           navigate to the §40.13 migration wizard when the active wallet is counterwallet-legacy
  * @param {() => void} [props.onOpenWalletPicker]         Settings row → host navigates to the WalletPicker route
  * @param {() => void} [props.onOpenAccountPicker]        Settings row → host navigates to the AccountPicker route
@@ -56,7 +60,7 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {(accountId: string) => void} [props.onSwitchAccount]   App-level setter for the active account (still used internally if a future inline picker lands)
  * @param {Array<{ id: string, label: string, description?: string, onSelect?: () => void }>} [props.extraActions]   §40+ entries surfaced in the small-mode pancake drawer; in full mode the host renders these via the dedicated ActionsMenu route
  */
-export function Home({ onLocked, onSend, onReceive, onSwap, onBuy, onCreateToken, onActions, onMarkets, onResumeAirdrop, onResumeCoinpay, onMessaging, onContracts, onStaking, onHistory, onAddresses, onMigrateToBip39, onOpenWalletPicker, onOpenAccountPicker, onCrossChain, onContacts, onMultisig, activeAccountId: activeAccountIdProp, onSwitchAccount, extraActions, onSelectToken }) {
+export function Home({ onLocked, onSend, onReceive, onSwap, onBuy, onCreateToken, onActions, onMarkets, onResumeAirdrop, onResumeCoinpay, onMessaging, onContracts, onStaking, onHistory, onAddresses, onMigrateToBip39, onOpenWalletPicker, onOpenAccountPicker, onCrossChain, onContacts, onMultisig, onSignPsbt, onSignMessage, onVerifySignature, activeAccountId: activeAccountIdProp, onSwitchAccount, extraActions, onSelectToken }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -322,6 +326,12 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onBuy, onCreateToken
         1,
         Math.min(1440, Number(settings?.autolockMinutes) || 5),
     );
+    // §20 / G041 — wallet-mode aware. The hook's return is the wrapper
+    // `{ settings, loading, error, refresh, update }`, so the actual
+    // Settings record lives at `.settings`. Read with the explicit
+    // default so v2 records without the field behave like 'full'.
+    const walletMode = settings.settings?.walletMode || WALLET_MODE_DEFAULT;
+    const isSignerMode = walletMode === 'signer';
     useAutoLock(handleLock, {
         enabled: (shell === 'popup' || shell === 'web') && !locking,
         idleMs: autolockMinutes * 60 * 1000,
@@ -444,6 +454,34 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onBuy, onCreateToken
                 onOpenWalletPicker={onOpenWalletPicker}
                 onOpenAccountPicker={onOpenAccountPicker}
             />
+        );
+    }
+
+    // §20 / G041 — signer-mode home variant. The wallet only signs PSBTs
+    // pasted in from a paired Watcher wallet; balances, history, send,
+    // and receive are not relevant. Render a stripped-down body with the
+    // sign / verify CTAs and a banner explaining the role. Header stays
+    // shared so the user can still lock / switch wallets / open Settings.
+    if (isSignerMode) {
+        return (
+            <Screen variant={variant} header={headerInner}>
+                <div className={isFull ? styles.bodyFull : styles.bodyPopup}>
+                    {loadError ? (
+                        <div role="alert" className={styles.error}>{loadError}</div>
+                    ) : null}
+                    {activeWalletId ? (
+                        <DemoBanner
+                            activeWalletId={activeWalletId}
+                            onExited={onLocked}
+                        />
+                    ) : null}
+                    <SignerHomeBody
+                        onSignPsbt={onSignPsbt}
+                        onSignMessage={onSignMessage}
+                        onVerifySignature={onVerifySignature}
+                    />
+                </div>
+            </Screen>
         );
     }
 
@@ -734,4 +772,73 @@ function extractObligationRows(resp) {
     if (Array.isArray(resp.obligations)) return resp.obligations;
     if (Array.isArray(resp.coinpay_obligations)) return resp.coinpay_obligations;
     return [];
+}
+
+/**
+ * §20 / G041 — Signer-mode landing body. Renders an explanatory banner
+ * and three role-appropriate CTAs (Sign a PSBT / Sign a message / Verify
+ * a signature). Send + Receive + balances are intentionally absent — a
+ * signer-mode wallet doesn't broadcast, watch chains, or expose receive
+ * addresses; its sole role is to sign PSBTs pasted in from a paired
+ * Watcher wallet (cf. G040 — Send.jsx watcher branch).
+ *
+ * @param {object} props
+ * @param {() => void} [props.onSignPsbt]
+ * @param {() => void} [props.onSignMessage]
+ * @param {() => void} [props.onVerifySignature]
+ */
+function SignerHomeBody({ onSignPsbt, onSignMessage, onVerifySignature }) {
+    return (
+        <div role="region" aria-label="Signer-mode home">
+            <div
+                role="status"
+                aria-live="polite"
+                style={{
+                    padding: 'var(--xc-space-3) var(--xc-space-4)',
+                    background: 'var(--xc-surface-raised)',
+                    border: '1px dashed var(--xc-border)',
+                    borderRadius: 'var(--xc-radius-md)',
+                    color: 'var(--xc-text-muted)',
+                    fontSize: 'var(--xc-text-sm)',
+                    marginBottom: 'var(--xc-space-3)',
+                    lineHeight: 1.4,
+                }}
+            >
+                <strong style={{ color: 'var(--xc-text)' }}>Signer mode</strong>
+                <span> — this wallet only signs PSBTs from a paired Watcher
+                wallet. Send / Receive / balances are not available.
+                Switch the wallet's mode in Settings → Wallet Mode if you
+                want full-wallet behaviour back.</span>
+            </div>
+            <div
+                style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 'var(--xc-space-2)',
+                }}
+            >
+                <Button
+                    variant="primary"
+                    onClick={onSignPsbt}
+                    disabled={!onSignPsbt}
+                >
+                    Sign a PSBT
+                </Button>
+                <Button
+                    variant="secondary"
+                    onClick={onSignMessage}
+                    disabled={!onSignMessage}
+                >
+                    Sign a message
+                </Button>
+                <Button
+                    variant="ghost"
+                    onClick={onVerifySignature}
+                    disabled={!onVerifySignature}
+                >
+                    Verify a signature
+                </Button>
+            </div>
+        </div>
+    );
 }

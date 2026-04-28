@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.236.0] - 2026-04-28
+
+§20 — Cluster W Step 3 of 3 — Signer-mode Home variant (G041). **Cluster W closed.**
+
+`Home.jsx` reads `settings.walletMode` and, when the field is `'signer'`, swaps the regular HomeTabs / quick-actions body for a stripped-down `SignerHomeBody` that shows an explanatory banner ("Signer mode — this wallet only signs PSBTs from a paired Watcher wallet") plus three role-appropriate CTAs: **Sign a PSBT** (marquee, primary), **Sign a message** (secondary), **Verify a signature** (tertiary). Send / Receive / balances / history are intentionally absent — a signer wallet doesn't broadcast, watch chains, or expose receive addresses; its sole role is to sign PSBTs pasted in from a paired Watcher (cf. G040, v0.235.0).
+
+The header (lock button, wallet picker, Settings) is shared with the regular Home so the user can still switch wallets, lock, or change mode back via Settings → Wallet Mode.
+
+Three new optional Home props (`onSignPsbt`, `onSignMessage`, `onVerifySignature`) plumb through the extension popup and web shells. The desktop shell does not yet register `sign-psbt` / `sign-message` / `verify-signature` routes, so those CTAs render disabled there — wiring lands as a Cluster W FOLLOWUP.
+
+**Cluster W — §20 Air-Gapped Signing — closed at v0.236.0.** All three rows fully closed (G039 + G040 + G041) across v0.234.0 → v0.236.0.
+
+### Added
+
+- **`packages/core/src/shared/routes/Home.jsx`** — `WALLET_MODE_DEFAULT` import; `walletMode` / `isSignerMode` derivation; signer-mode early return inside the shared `<Screen>`; new `SignerHomeBody` component; three new optional props (`onSignPsbt`, `onSignMessage`, `onVerifySignature`) documented in the JSDoc + threaded.
+- **`packages/extension/src/popup/App.jsx`**, **`packages/web/src/App.jsx`** — pass `onSignPsbt` / `onSignMessage` / `onVerifySignature` to Home.
+- **`test/smoke/ui/home-signer-mode.smoke.js`** (new) — pins the schema-derivation, the prop set, the signer-mode early return, the SignerHomeBody render, and the per-shell prop wiring (popup + web wired; desktop intentionally pending FOLLOWUP).
+
+Closes G041.
+
 ## [0.235.0] - 2026-04-28
 
 §20 — Cluster W Step 2 of 3 — Watcher-mode PSBT generation (G040).
