@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.251.0] - 2026-04-28
+
+§20 — Cluster X Step 11 of N — AdvancedActionsForm watcher-mode branch.
+
+The user-chosen `action` variable is passed straight into `actionData.action`, so the watcher-mode branch handles ANY XChain action through one `buildActionPsbtRequest` call. Any action types not yet covered by a dedicated form (Step 4–10) are still reachable via this form's watcher path.
+
+### Added
+
+- **`packages/core/src/shared/routes/AdvancedActionsForm.jsx`** — watcher-mode branch.
+- **`test/smoke/ui/advanced-watcher-mode.smoke.js`** (new).
+
 ## [0.250.0] - 2026-04-28
 
 §20 — Cluster X Step 10 of N — AirdropForm watcher-mode block.
