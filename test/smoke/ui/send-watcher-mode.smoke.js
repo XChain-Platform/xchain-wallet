@@ -1,5 +1,10 @@
 // Smoke for §20 / G040 — Send.jsx watcher-mode branch (Step 2 of 3).
 //
+// After Cluster X Step 3, the WatcherResultPanel is a shared component
+// — this smoke pins the Send.jsx integration only (hook + submit handler
+// + done-stage routing). The component's render shape lives in the
+// dedicated `watcher-result-panel.smoke.js`.
+//
 // Pins:
 //   - flows/buildSendPsbt.js exports an encode-only helper that requires
 //     the encoder, not a signer / password / vault.
@@ -8,13 +13,11 @@
 //     `action.send.psbt`.
 //   - All three messaging shims expose `buildSendPsbtRequest` calling
 //     `action.send.psbt`.
-//   - Send.jsx reads `settings.walletMode`, derives `isWatcherMode`,
+//   - Send.jsx reads walletMode via the shared useWalletMode hook,
 //     branches the submit handler to `messaging.buildSendPsbtRequest`,
 //     swaps the password / HW block for an explanatory hint at review,
-//     and renders a `WatcherResultPanel` in the done stage when the
-//     result envelope carries `psbtHex` instead of a `txid`.
-//   - WatcherResultPanel pulls in `encodeXcwChunks` from `uri/psbtQr.js`
-//     and renders an `<AnimatedQrFrames>` block + plain-text chunks.
+//     and renders the shared `<WatcherResultPanel>` in the done stage
+//     when the result envelope carries `psbtHex` instead of a `txid`.
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
@@ -60,8 +63,6 @@ assert.match(flowSrc, /sdk\.actions\.createAction\(\{ action: 'SEND', params \}\
 assert.match(flowSrc, /encoder\.createTx\(\{/, 'calls encoder.createTx');
 assert.match(flowSrc, /psbtHex: encoded\.psbt,/, 'returns psbtHex');
 // Watcher mode never broadcasts — guard against accidental signing / broadcast.
-// (Doc comments may legitimately mention "signer" / "signing" — pin against
-// import + call shapes instead of bare substrings.)
 assert.doesNotMatch(flowSrc, /import [\s\S]*signers\//, 'flow does not import any signer module');
 assert.doesNotMatch(flowSrc, /signer\.signPsbt/, 'no signer.signPsbt call in the flow');
 assert.doesNotMatch(flowSrc, /\.broadcastTx\(/, 'no broadcastTx call in the flow');
@@ -106,20 +107,19 @@ for (const [name, src] of [
 
 // ─── 5. Send.jsx watcher branch ---------------------------------
 
-assert.match(
-    sendSrc,
-    /import \{ encodeXcwChunks \} from '\.\.\/\.\.\/uri\/psbtQr\.js';/,
-    'Send.jsx imports encodeXcwChunks',
-);
 // §20 Cluster X Step 2 — walletMode derivation lifted to a shared hook
-// (`useWalletMode`) so the same pattern can be reused across every
-// action authoring surface for FOLLOWUP 5.
+// (`useWalletMode`). §20 Cluster X Step 3 — WatcherResultPanel extracted
+// to `shared/components/WatcherResultPanel.jsx`.
 assert.match(
     sendSrc,
     /import \{ useWalletMode \} from '\.\.\/hooks\/useWalletMode\.js';/,
     'Send.jsx imports useWalletMode hook',
 );
-assert.match(sendSrc, /AnimatedQrFrames,/, 'Send.jsx imports AnimatedQrFrames from core/ui');
+assert.match(
+    sendSrc,
+    /import \{ WatcherResultPanel \} from '\.\.\/components\/WatcherResultPanel\.jsx';/,
+    'Send.jsx imports the shared WatcherResultPanel',
+);
 assert.match(
     sendSrc,
     /const \{ isWatcherMode \} = useWalletMode\(\);/,
@@ -157,40 +157,25 @@ assert.match(
 assert.match(
     sendSrc,
     /if \(result\?\.psbtHex && !txid\) \{[\s\S]+?<WatcherResultPanel/,
-    'done stage branches to WatcherResultPanel when result.psbtHex is set',
+    'done stage renders the shared WatcherResultPanel when result.psbtHex is set',
 );
 
-// ─── 6. WatcherResultPanel ----------------------------------------
+// ─── 6. WatcherResultPanel no longer defined inline ------------
 
-assert.match(sendSrc, /function WatcherResultPanel\(\{ result, onSendAnother, onDone \}\)/, 'WatcherResultPanel defined');
-assert.match(sendSrc, /encodeXcwChunks\(psbtHex\)/, 'panel encodes hex into XCW chunks');
-assert.match(sendSrc, /<AnimatedQrFrames\b/, 'panel renders AnimatedQrFrames');
-assert.match(sendSrc, /readOnly[\s\S]+?value=\{psbtHex\}/, 'panel exposes the hex in a read-only textarea');
-assert.match(sendSrc, /Copy hex/, 'panel exposes a Copy hex affordance');
-assert.match(sendSrc, /Plain-text chunks/, 'panel exposes the plain-text chunks fallback');
-// §20 Cluster W FOLLOWUP 4 (closed at v0.241.0) — BBQr (hex) export
-// alongside XCW chunks so watcher-mode PSBTs are signable on
-// Sparrow / Coldcard / SeedSigner. WatcherResultPanel imports
-// encodeBbqrPsbtFrames and exposes a format toggle.
-assert.match(
+assert.doesNotMatch(
     sendSrc,
-    /import \{ encodeBbqrPsbtFrames \} from '\.\.\/\.\.\/uri\/bbqrPsbt\.js';/,
-    'Send.jsx imports encodeBbqrPsbtFrames',
+    /function WatcherResultPanel\(/,
+    'WatcherResultPanel must be the shared component, not a local function',
 );
-assert.match(
+assert.doesNotMatch(
     sendSrc,
-    /encodeBbqrPsbtFrames\(psbtHex\)/,
-    'panel encodes hex into BBQr H frames when format === bbqr',
+    /encodeXcwChunks/,
+    'Send.jsx no longer imports / uses encodeXcwChunks (lives in WatcherResultPanel)',
 );
-assert.match(
+assert.doesNotMatch(
     sendSrc,
-    /qrFormat === 'bbqr'/,
-    'panel branches export format on qrFormat',
-);
-assert.match(
-    sendSrc,
-    /BBQr \(Sparrow \/ Coldcard \/ SeedSigner\)/,
-    'panel labels the BBQr radio choice with target wallets',
+    /encodeBbqrPsbtFrames/,
+    'Send.jsx no longer imports / uses encodeBbqrPsbtFrames (lives in WatcherResultPanel)',
 );
 
 console.log('send-watcher-mode smoke OK');

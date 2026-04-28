@@ -7,15 +7,13 @@ import {
     ChainBadge,
     AddressText,
     FeeSelector,
-    AnimatedQrFrames,
  ChainPicker,  Icon, InfoTip, StatusMessage,} from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
     uri as uriLib,
 } from '@xchain-wallet/core';
-import { encodeXcwChunks } from '../../uri/psbtQr.js';
-import { encodeBbqrPsbtFrames } from '../../uri/bbqrPsbt.js';
+import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { buildRecentDestinations } from '../../flows/recentDestinations.js';
 import { findLookalike } from '../utils/lookalike.js';
@@ -1239,135 +1237,3 @@ function DetailRow({ label, value }) {
     );
 }
 
-/**
- * §20 / G040 — Watcher-mode result panel. Renders the unsigned PSBT hex
- * (the user's exit point from this wallet) plus an animated QR for
- * cross-device transport. Users with the same wallet seed in Signer mode
- * paste / scan the result, sign it there, then bring the signed PSBT
- * back to a Full-mode wallet to broadcast. (G041 covers the signer-side
- * Home variant.)
- *
- * @param {object} props
- * @param {{ psbtHex: string, encoding?: string, fromAddress?: string, chainId?: string }} props.result
- * @param {() => void} props.onSendAnother
- * @param {() => void} props.onDone
- */
-function WatcherResultPanel({ result, onSendAnother, onDone }) {
-    const psbtHex = result?.psbtHex || '';
-    const [qrFormat, setQrFormat] = useState('xcw');
-    const exportFrames = useMemo(() => {
-        if (!psbtHex) return null;
-        try {
-            return qrFormat === 'bbqr'
-                ? encodeBbqrPsbtFrames(psbtHex)
-                : encodeXcwChunks(psbtHex);
-        } catch (e) {
-            return { error: e?.message || String(e) };
-        }
-    }, [psbtHex, qrFormat]);
-    const copyHex = useCallback(() => {
-        if (!psbtHex) return;
-        try { navigator.clipboard?.writeText(psbtHex); } catch { /* best effort */ }
-    }, [psbtHex]);
-    const formatLabel = qrFormat === 'bbqr' ? 'BBQr (hex)' : 'XCW chunks';
-    return (
-        <>
-            <div className={styles.successCard} role="status" aria-live="polite">
-                <h2 className={styles.successTitle}>Unsigned PSBT — ready for signing</h2>
-                <p className={styles.successHint}>
-                    Take this PSBT to your Signer-mode wallet — paste the hex,
-                    or scan the animated QR. Sign there, then paste the signed
-                    PSBT into a Full-mode wallet to broadcast.
-                </p>
-                {result?.encoding ? (
-                    <dl className={styles.successSummary}>
-                        <div className={styles.successRow}>
-                            <dt>Encoding</dt>
-                            <dd>{result.encoding}</dd>
-                        </div>
-                        {result.fromAddress ? (
-                            <div className={styles.successRow}>
-                                <dt>From</dt>
-                                <dd className={styles.successMono}>
-                                    {result.fromAddress.slice(0, 8)}…{result.fromAddress.slice(-6)}
-                                </dd>
-                            </div>
-                        ) : null}
-                    </dl>
-                ) : null}
-                <div className={styles.successTxidBlock}>
-                    <p className={styles.successLabel}>Unsigned PSBT (hex)</p>
-                    <textarea
-                        readOnly
-                        aria-label="Unsigned PSBT hex"
-                        value={psbtHex}
-                        rows={6}
-                        style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.75rem' }}
-                    />
-                    <div className={styles.successTxidRow}>
-                        <button
-                            type="button"
-                            className={styles.successLink}
-                            onClick={copyHex}
-                            aria-label="Copy unsigned PSBT hex"
-                        >
-                            Copy hex
-                        </button>
-                    </div>
-                </div>
-                <div className={styles.successTxidBlock}>
-                    <p className={styles.successLabel}>QR format</p>
-                    <div role="radiogroup" aria-label="Animated QR format">
-                        <label style={{ marginRight: '1rem' }}>
-                            <input
-                                type="radio"
-                                name="watcher-qr-format"
-                                value="xcw"
-                                checked={qrFormat === 'xcw'}
-                                onChange={() => setQrFormat('xcw')}
-                            />{' '}
-                            XCW (this wallet)
-                        </label>
-                        <label>
-                            <input
-                                type="radio"
-                                name="watcher-qr-format"
-                                value="bbqr"
-                                checked={qrFormat === 'bbqr'}
-                                onChange={() => setQrFormat('bbqr')}
-                            />{' '}
-                            BBQr (Sparrow / Coldcard / SeedSigner)
-                        </label>
-                    </div>
-                </div>
-                {exportFrames && exportFrames.error ? (
-                    <StatusMessage variant="error">{exportFrames.error}</StatusMessage>
-                ) : exportFrames && Array.isArray(exportFrames) ? (
-                    <>
-                        <p className={styles.successLabel}>Animated QR ({formatLabel})</p>
-                        <AnimatedQrFrames
-                            frames={exportFrames}
-                            alt="Unsigned PSBT animated QR"
-                        />
-                        <details>
-                            <summary className={styles.hint}>Plain-text chunks</summary>
-                            <textarea
-                                readOnly
-                                aria-label={`Unsigned PSBT ${formatLabel}`}
-                                value={exportFrames.join('\n')}
-                                rows={6}
-                                style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.75rem' }}
-                            />
-                        </details>
-                    </>
-                ) : null}
-            </div>
-            <div className={styles.actions}>
-                <Button variant="secondary" onClick={onSendAnother}>
-                    Build another
-                </Button>
-                <Button variant="primary" onClick={onDone}>Done</Button>
-            </div>
-        </>
-    );
-}

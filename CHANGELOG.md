@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.243.0] - 2026-04-28
+
+§20 — Cluster X Step 3 of N — Extract WatcherResultPanel to a shared component.
+
+The watcher-mode result UI (unsigned PSBT hex + animated QR + format toggle) was a private function inside `Send.jsx`. Lifted out to `packages/core/src/shared/components/WatcherResultPanel.jsx` so the upcoming non-Send action surfaces (IssueTokenForm / MintForm / DispenserForm / OrderForm / etc.) can render the same panel for FOLLOWUP 5's read-only sweep. CSS cloned to a dedicated `.module.css`; Send.module.css keeps its own `success*` classes since the broadcast-success card uses the same idiom.
+
+The component accepts both `onBuildAnother` (the new prop name, since not every action surface is "Send") and `onSendAnother` (Send.jsx's legacy name) — they alias to the same handler. A `title` prop overrides the default "Unsigned PSBT — ready for signing" heading so each form can phrase its own copy.
+
+### Added
+
+- **`packages/core/src/shared/components/WatcherResultPanel.jsx`** (new) — shared component, named export.
+- **`packages/core/src/shared/components/WatcherResultPanel.module.css`** (new) — cloned from Send.module.css's `success*` rules.
+- **`test/smoke/ui/watcher-result-panel.smoke.js`** (new) — pins the extracted shape (imports, props, render, CSS classes).
+
+### Changed
+
+- **`packages/core/src/shared/routes/Send.jsx`** — drops the inline `WatcherResultPanel` function + the `encodeXcwChunks` / `encodeBbqrPsbtFrames` / `AnimatedQrFrames` imports (those move to the shared component); imports the shared `WatcherResultPanel` and renders it at the watcher-mode done stage.
+- **`test/smoke/ui/send-watcher-mode.smoke.js`** — pins the new import + the negative assertion that `WatcherResultPanel` is no longer a local function and `encodeXcwChunks` / `encodeBbqrPsbtFrames` no longer appear in Send.jsx.
+
 ## [0.242.0] - 2026-04-28
 
 §20 — Cluster X Step 2 of N — useWalletMode hook + generic `buildActionPsbt` foundation (Cluster W FOLLOWUP 5 prep).
