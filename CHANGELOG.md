@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.249.0] - 2026-04-28
+
+§20 — Cluster X Step 9 of N — DividendForm watcher-mode branch (action DIVIDEND).
+
+### Added
+
+- **`packages/core/src/shared/routes/DividendForm.jsx`** — watcher-mode branch.
+- **`test/smoke/ui/dividend-watcher-mode.smoke.js`** (new).
+
 ## [0.248.0] - 2026-04-28
 
 §20 — Cluster X Step 8 of N — BroadcastForm watcher-mode branch (action BROADCAST).
