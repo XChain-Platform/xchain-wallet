@@ -77,6 +77,7 @@ export const CLIPBOARD_AUTO_CLEAR_DEFAULT = 60;
  * @property {typeof BACKUP_REMINDER_CADENCES[number]} backupReminders                                       v2 — backup-reminder cadence
  * @property {string[]} [pinnedTokens]                                                                       v2-tolerant — list of `chainId:asset` keys the user pinned to the top of the balance list (§27.3 / G072)
  * @property {string[]} [hiddenTokens]                                                                       v2-tolerant — list of `chainId:asset` keys the user hid (collapsed into the Hidden section at the bottom of each tab) (§27.4 / G073)
+ * @property {boolean} [autoApproveLocalhost]                                                                v2-tolerant — when developerMode is also on, bridge.connect from localhost / 127.0.0.1 / [::1] origins skips the approval prompt (§48.6 / G151). Sign requests still prompt.
  */
 
 /** @returns {Settings} */
@@ -255,6 +256,14 @@ export function validateSettings(record) {
             'hiddenTokens',
             Array.isArray(r.hiddenTokens) && r.hiddenTokens.every(isString),
             'must be an array of strings (chainId:asset keys)',
+        );
+    }
+    if (r.autoApproveLocalhost !== undefined) {
+        check(
+            errors,
+            'autoApproveLocalhost',
+            isBoolean(r.autoApproveLocalhost),
+            'must be a boolean when present',
         );
     }
 

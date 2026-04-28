@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.213.0] - 2026-04-27
+
+§48 — Cluster Q Step 1 of 3 — Auto-approve for localhost dApps (G151).
+
+New `shared/utils/originAutoApprove.js` exports `isLocalhostOrigin(origin)` (parses URL, allowlists `localhost` / `127.0.0.1` / `[::1]` / `::1` on http(s)) and `shouldAutoApproveConnect({ origin, settings })`. Auto-approve fires only when **both** `settings.developerMode` and `settings.autoApproveLocalhost` are true and the origin is loopback. Sign requests (signMessage / signAction / signPsbt / signIn) ALWAYS go through the approval prompt — the password is required to sign and the wallet never caches it, so `bridge.connect` is the only safe step to short-circuit.
+
+`bridge.connect` reads live settings via `deps.vault.settings.get()`; on auto-approve it synthesizes a conservative connect decision: `canSignMessage:false` and `canSignAction:{}` so the connection capability is granted without granting any background signing rights.
+
+Settings → Developer Mode panel: the previously-disabled "Auto-approve localhost dApps" row now wires `settings.autoApproveLocalhost`, greyed out unless Developer Mode is on.
+
+### Added
+
+- **`packages/core/src/shared/utils/originAutoApprove.js`** (new) — origin classifier + auto-approve guard.
+- **`test/smoke/bridge/auto-approve-localhost.smoke.js`** (new) — pins helper surface, bridge.connect short-circuit, Settings toggle, and schema validation.
+
+### Changed
+
+- **`packages/core/src/schemas/settings.js`** — adds optional `autoApproveLocalhost: boolean` (v2-tolerant; missing is fine, present must be boolean).
+- **`packages/extension/src/bridge/handlers.js`** — `bridge.connect` consults `shouldAutoApproveConnect` before calling `approvals.connect`; synthesizes a permissive-but-non-signing decision when the gate fires.
+- **`packages/core/src/shared/components/settings/DeveloperModeSection.jsx`** — Auto-approve toggle row activated; gated on Developer Mode being on.
+
+Closes G151.
+
 ## [0.212.0] - 2026-04-27
 
 §37 — Cluster P Step 5 of 5 — Form-draft persistence (G125). **Cluster P closed.**

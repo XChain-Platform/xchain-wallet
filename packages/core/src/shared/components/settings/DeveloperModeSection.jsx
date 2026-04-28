@@ -8,12 +8,16 @@
 //   - Learn Mode toggle (`settings.learnMode`). Drives explanatory
 //     copy on confirmation screens; toggle ships now even though some
 //     consumers haven't been wired yet.
+//   - Auto-approve localhost dApps (`settings.autoApproveLocalhost`).
+//     §48.6 / G151 — when both this and Developer Mode are on,
+//     `bridge.connect` from localhost / 127.0.0.1 / [::1] origins
+//     skips the approval prompt. Sign requests still prompt (the
+//     password is required to sign and the wallet never caches it).
 //
 // Deferred (need new schema fields + flow wiring):
 //   - Custom chain registry (§9.7 user-added chains via
 //     `chainRegistry.addCustom`; UI to add a chain descriptor)
 //   - Raw PSBT inspector reveal on sign screens (§48.4)
-//   - Auto-approve sign requests from localhost dApps (§48.6)
 //   - Logs and diagnostics console (§48.5)
 
 import { useSettings } from '../../hooks/useSettings.js';
@@ -64,10 +68,10 @@ export function DeveloperModeSection() {
             />
             <ToggleRow
                 label="Auto-approve localhost dApps"
-                hint="Coming soon — skip approval prompts from http://localhost:* origins. §48.6."
-                checked={false}
-                disabled
-                onChange={() => {}}
+                hint="Skip the bridge.connect prompt for http://localhost / 127.0.0.1 / [::1] origins. Requires Developer Mode. Sign requests still prompt — the password is needed to sign and the wallet never caches it."
+                checked={Boolean(settings.autoApproveLocalhost)}
+                disabled={!settings.developerMode}
+                onChange={(v) => onToggle('autoApproveLocalhost', v)}
             />
             <ToggleRow
                 label="Logs and diagnostics console"

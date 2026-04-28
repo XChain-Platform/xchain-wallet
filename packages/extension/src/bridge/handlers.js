@@ -20,6 +20,7 @@
 // `NOT_CONNECTED` if no record exists.
 
 import { flows, schemas } from '@xchain-wallet/core';
+import { shouldAutoApproveConnect } from '@xchain-wallet/core/shared/utils/originAutoApprove.js';
 import { rejectAllApprovals, UserRejectedError } from './Approvals.js';
 
 const {
@@ -55,13 +56,30 @@ export function registerBridgeHandlers(host, opts = {}) {
             };
         }
 
-        const decision = await approvals.connect({
-            origin,
-            appName,
-            appIcon,
-            requestedChains: req.chains,
-            requestedAccounts: req.accounts,
-        });
+        // §48.6 / G151 — Developer-Mode auto-approve for localhost.
+        // Skips the approval prompt and synthesizes a permissive
+        // connect decision when settings allow + origin is localhost.
+        // Sign requests (signMessage / signAction / signPsbt / signIn)
+        // still go through approvals — the password is required to
+        // sign and the wallet never caches it, so connect is the only
+        // safe step to short-circuit.
+        const settings = await deps.vault.settings.get().catch(() => null);
+        const autoConnect = shouldAutoApproveConnect({ origin, settings });
+        const decision = autoConnect
+            ? {
+                approved: true,
+                chains: Array.isArray(req.chains) ? req.chains : [],
+                accounts: Array.isArray(req.accounts) ? req.accounts : [],
+                canSignMessage: false,
+                canSignAction: {},
+            }
+            : await approvals.connect({
+                origin,
+                appName,
+                appIcon,
+                requestedChains: req.chains,
+                requestedAccounts: req.accounts,
+            });
         if (!decision || !decision.approved) {
             throw new UserRejectedError('connect');
         }
