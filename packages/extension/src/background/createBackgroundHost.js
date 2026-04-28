@@ -141,6 +141,8 @@ const {
     listBlockedOrigins,
     addBlockedOrigin,
     removeBlockedOrigin,
+    refreshChainRegistry,
+    createChainRegistryStatus,
 } = flows;
 
 /**
@@ -331,6 +333,19 @@ async function newestAddress(req, { vault, chainRegistry }) {
  * Strip sensitive fields before handing a Wallet record to the popup/UI.
  * @param {import('@xchain-wallet/core').schemas.Wallet} w
  */
+function pickHubUrlFromRegistry(chainRegistry) {
+    if (!chainRegistry || typeof chainRegistry.supportedChains !== 'function') return null;
+    const chains = chainRegistry.supportedChains();
+    for (const d of chains) {
+        if (d?.networkKind === 'mainnet' && d?.hub?.defaultUrl) {
+            const port = d.hub.defaultPort;
+            const base = d.hub.defaultUrl.replace(/\/+$/, '');
+            return port && port !== 443 && port !== 80 ? `${base}:${port}` : base;
+        }
+    }
+    return null;
+}
+
 function toSafeWallet(w) {
     return {
         schemaVersion: w.schemaVersion,
@@ -681,6 +696,44 @@ export function createBackgroundHost(deps) {
         }
         return removeBlockedOrigin({ vault, origin });
     });
+
+    // §9.7 / G007 — runtime chain-registry refresh from hub. Wallet-side
+    // scaffolding only today; the hub-side `/api/v1/chain-registry`
+    // endpoint is pending (tracked as Cluster U FOLLOWUP). On boot we
+    // try once with a short timeout; failures fall back silently to
+    // the bundled descriptors. Settings → Network surfaces the status.
+    const chainRegistryStatus = createChainRegistryStatus();
+    host.register('chainRegistry.status', async () => chainRegistryStatus.get());
+    host.register('chainRegistry.refresh', async (_req, { chainRegistry: cr }) => {
+        const hubUrl = pickHubUrlFromRegistry(cr);
+        if (!hubUrl) {
+            const result = {
+                ok: false,
+                hubUrl: '',
+                lastRefreshedAt: null,
+                descriptorCount: 0,
+                error: 'no hub URL configured for any active chain',
+            };
+            chainRegistryStatus.update(result);
+            return result;
+        }
+        const result = await refreshChainRegistry({ hubUrl });
+        chainRegistryStatus.update(result);
+        return result;
+    });
+    // Kick off the boot-time refresh ~3s after host construction so
+    // the rest of init isn't blocked. Failures are silently captured
+    // in the status holder; the Settings UI surfaces them.
+    if (typeof setTimeout === 'function') {
+        setTimeout(async () => {
+            try {
+                const hubUrl = pickHubUrlFromRegistry(deps.chainRegistry);
+                if (!hubUrl) return;
+                const result = await refreshChainRegistry({ hubUrl });
+                chainRegistryStatus.update(result);
+            } catch { /* swallow — never crash boot on a refresh */ }
+        }, 3_000);
+    }
 
     // --- Receive -------------------------------------------------------------
 

@@ -303,3 +303,7 @@ export {
     addBlockedOrigin,
     removeBlockedOrigin,
 } from './blocklist.js';
+export {
+    refreshChainRegistry,
+    createChainRegistryStatus,
+} from './refreshChainRegistry.js';

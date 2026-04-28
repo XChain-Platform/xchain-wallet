@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.229.0] - 2026-04-28
+
+§9.7 — Cluster U Step 5 of 5 — Runtime chain-registry refresh from hub (G007, partial). **Cluster U closed.**
+
+Wallet-side scaffolding only — the hub-side `/api/v1/chain-registry` endpoint is pending. New `flows/refreshChainRegistry.js` exposes the canonical refresh API the wallet expects, with comprehensive failure-mode coverage so a hub that doesn't yet implement the route can never crash boot. New host handlers `chainRegistry.status` / `chainRegistry.refresh` and three messaging shims expose it to the renderer. `createBackgroundHost` schedules a single boot-time refresh ~3s after worker construction (non-blocking, swallowed failures). Settings → Network grows a "Chain registry refresh" row at the top showing last-refreshed timestamp, descriptor count, or the latest error — plus a manual "Refresh now" button.
+
+The actual hot-swap of fetched descriptors into the running ChainRegistry is intentionally NOT yet wired — that mutates state shared across active flows (Send / Sign / History). The safe model is "validate + cache, surface in diagnostics, apply on next service-worker restart" — design lives in the Cluster U FOLLOWUPs.
+
+### Added
+
+- **`packages/core/src/flows/refreshChainRegistry.js`** (new) — `refreshChainRegistry({ hubUrl, fetcher, timeoutMs })` always resolves; `createChainRegistryStatus()` in-memory holder. Documented assumed wire format: `GET ${hubUrl}/api/v1/chain-registry` returns `{ generatedAt, descriptors[] }`.
+- **`chainRegistry.status` / `chainRegistry.refresh`** host handlers in `createBackgroundHost`, plus a `pickHubUrlFromRegistry` helper that grabs the first mainnet descriptor's hub URL.
+- **`getChainRegistryStatus` / `refreshChainRegistry`** messaging shims in extension popup, web, and desktop renderer.
+- **`<ChainRegistryRefreshRow>`** component mounted at the top of `NetworkEndpointsSection` — feature-detects the shim, renders status (last refreshed / descriptor count / error), Refresh button.
+- **`test/smoke/audits/chain-registry-refresh.smoke.js`** (new) — exercises the flow at runtime against stub fetchers (happy path, trailing-slash hub URL, HTTP 500/404, malformed JSON, missing descriptors[], network error throw, invalid hubUrl) and pins the host wiring, three messaging shims, and Settings UI surface.
+
+Marked **🟡 partial** — wallet-side scaffolding ships now; hub-side endpoint, hot-swap into running ChainRegistry, and per-descriptor merge tracked as Cluster U FOLLOWUPs.
+
+Closes G007 (partial). **Cluster U — Pre-launch features sweep — closed at v0.229.0.** Three of five rows fully closed (G055 + G056 + G051), two ship as 🟡 partial (G043 + G007).
+
 ## [0.228.0] - 2026-04-28
 
 §23.5 — Cluster U Step 4 of 5 — Cross-chain LINK threading verify (G051).

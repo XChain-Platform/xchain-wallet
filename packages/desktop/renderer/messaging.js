@@ -623,3 +623,11 @@ export function blockOrigin(req) {
 export function unblockOrigin(req) {
     return /** @type {any} */ (sendMessage('sites.unblock', req));
 }
+
+// §9.7 / G007 — runtime chain-registry refresh from hub.
+export function getChainRegistryStatus() {
+    return /** @type {any} */ (sendMessage('chainRegistry.status'));
+}
+export function refreshChainRegistry() {
+    return /** @type {any} */ (sendMessage('chainRegistry.refresh'));
+}

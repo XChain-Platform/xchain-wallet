@@ -14,6 +14,7 @@
 import { useEffect, useState } from 'react';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useSettings } from '../../hooks/useSettings.js';
+import { useMessaging } from '../../useMessaging.js';
 import { INPUT, ROW_HINT, STACK, Status } from './_settingsPrimitives.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -75,6 +76,7 @@ export function NetworkEndpointsSection() {
 
     return (
         <div style={STACK}>
+            <ChainRegistryRefreshRow />
             {descriptors.map((d) => (
                 <ChainEndpointBlock
                     key={d.id}
@@ -92,6 +94,78 @@ export function NetworkEndpointsSection() {
             ))}
         </div>
     );
+}
+
+// §9.7 / G007 — Runtime chain-registry refresh from hub. The wallet
+// boot sequence kicks off one refresh; this row surfaces the result
+// + offers a manual refresh. The hub-side endpoint is pending — the
+// row shows a clear "not yet available" hint when the hub returns a
+// non-2xx (any HTTP error means the route doesn't exist yet today).
+function ChainRegistryRefreshRow() {
+    const { messaging } = useMessaging();
+    const wired = typeof messaging?.getChainRegistryStatus === 'function'
+        && typeof messaging?.refreshChainRegistry === 'function';
+    const [status, setStatus] = useState(/** @type {any} */ (null));
+    const [refreshing, setRefreshing] = useState(false);
+    useEffect(() => {
+        if (!wired) return;
+        messaging.getChainRegistryStatus()
+            .then((s) => setStatus(s))
+            .catch(() => setStatus(null));
+    }, [wired, messaging]);
+    if (!wired) return null;
+
+    const onRefresh = async () => {
+        try {
+            setRefreshing(true);
+            const next = await messaging.refreshChainRegistry();
+            setStatus(next);
+        } finally {
+            setRefreshing(false);
+        }
+    };
+
+    return (
+        <div style={CHAIN_BLOCK}>
+            <div style={HEADER_ROW}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>
+                        Chain registry refresh
+                    </span>
+                    <span style={ROW_HINT}>
+                        {status?.ok
+                            ? `Last refreshed ${formatRelative(status.lastRefreshedAt)} · ${status.descriptorCount} descriptors`
+                            : status?.error
+                                ? `Last attempt failed: ${status.error}`
+                                : 'No refresh yet — bundled descriptors active.'}
+                    </span>
+                </div>
+                <button
+                    type="button"
+                    onClick={onRefresh}
+                    disabled={refreshing}
+                    style={ACTION_BTN}
+                >
+                    {refreshing ? 'Refreshing…' : 'Refresh now'}
+                </button>
+            </div>
+        </div>
+    );
+}
+
+function formatRelative(iso) {
+    if (!iso) return 'never';
+    try {
+        const t = Date.parse(iso);
+        if (!Number.isFinite(t)) return iso;
+        const ageS = Math.max(0, (Date.now() - t) / 1000);
+        if (ageS < 60) return 'just now';
+        if (ageS < 3600) return `${Math.floor(ageS / 60)}m ago`;
+        if (ageS < 86400) return `${Math.floor(ageS / 3600)}h ago`;
+        return new Date(t).toISOString().slice(0, 10);
+    } catch {
+        return iso;
+    }
 }
 
 function ChainEndpointBlock({ descriptor, override, onSave }) {
