@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.256.0] - 2026-04-28
+
+§20 — Cluster X Step 16 of N — StakingActionForm watcher-mode branch.
+
+The form's `mode` prop drives the chosen action — `UNSTAKE` (Tier 1 / Tier 2 unstake) or `CLAIM_REWARDS` (collect pending staking rewards). Watcher branch maps `isUnstake` → `'UNSTAKE'` / `'CLAIM_REWARDS'` and routes through `buildActionPsbtRequest` with the appropriate action.
+
+### Added
+
+- **`packages/core/src/shared/routes/StakingActionForm.jsx`** — watcher-mode branch.
+- **`test/smoke/ui/staking-action-watcher-mode.smoke.js`** (new).
+
 ## [0.255.0] - 2026-04-28
 
 §20 — Cluster X Step 15 of N — CrossChainSwapForm watcher-mode branch (action SWAP, cross-chain GET_ADDRESS / EXPIRATION extras).
