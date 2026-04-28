@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.204.0] - 2026-04-27
+
+§26 — Cluster O Step 1 of 4 — Auto-lock wired into web App (G064).
+
+`Home.jsx` was gating `useAutoLock` on `shell === 'popup'` only, so the web tab never auto-locked despite the hook being shell-agnostic. Web was opted out historically on the assumption that tab-close implicitly locks; in practice users leave the tab open for hours, and a backgrounded tab benefits from idle timeout. Auto-lock now enables for both `popup` and `web` shells. Desktop continues to manage its own OS-keychain-backed lock cadence and stays opted out here. Timeout is still hardcoded to 5 minutes — Step 2 (G065) wires it to a settings field.
+
+### Changed
+
+- **`packages/core/src/shared/routes/Home.jsx`** — `useAutoLock` enabled gate now `(shell === 'popup' || shell === 'web') && !locking`; doc-comment updated to reflect the new scope.
+
+Closes G064.
+
 ## [0.203.0] - 2026-04-27
 
 §18 — Cluster N Step 4 of 4 — Firmware manifest JSON bundle (G029). Cluster N closed.

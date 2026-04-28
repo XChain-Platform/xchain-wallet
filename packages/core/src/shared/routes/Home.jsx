@@ -26,9 +26,12 @@ const chainRegistry = registryLib.defaultRegistry();
  * to sign), Home surfaces a resume card above the balance grid so the
  * user can pick up where they left off.
  *
- * Auto-lock is foreground-only and enabled for the popup shell only;
- * web tabs opt out today because their session lifetime already caps
- * with tab close. See `useAutoLock` for the scope limitation.
+ * Auto-lock is foreground-only and enabled for the popup + web shells.
+ * Web was opted out historically on the assumption that tab-close
+ * implicitly locks; in practice users leave the tab open for hours, and
+ * a backgrounded tab still benefits from idle timeout. Desktop manages
+ * its own OS-keychain-backed lock cadence and stays opted out here.
+ * See `useAutoLock` for the foreground-only scope limitation.
  *
  * @param {object} props
  * @param {() => void} [props.onLocked]        refresh upstream state machine
@@ -308,7 +311,9 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onBuy, onCreateToken
         }
     }, [locking, onLocked, messaging]);
 
-    useAutoLock(handleLock, { enabled: shell === 'popup' && !locking });
+    useAutoLock(handleLock, {
+        enabled: (shell === 'popup' || shell === 'web') && !locking,
+    });
 
     const activeWallet = wallets && activeWalletId
         ? wallets.find((w) => w.id === activeWalletId)
