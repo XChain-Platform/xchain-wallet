@@ -62,3 +62,42 @@
 .instruction strong {
     color: var(--xc-accent-primary);
 }
+
+.deviceHint {
+    margin: var(--xc-space-2) 0 0;
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    line-height: 1.4;
+    padding: 0 var(--xc-space-1);
+}
+
+.confirmRow {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--xc-space-2);
+    margin: var(--xc-space-3) 0 0;
+    padding: var(--xc-space-2) var(--xc-space-3);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-sm);
+    background: var(--xc-bg-muted);
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text);
+    cursor: pointer;
+    line-height: 1.4;
+}
+
+.confirmRow:hover {
+    border-color: var(--xc-accent-primary);
+}
+
+.confirmCheckbox {
+    margin-top: 3px;
+    accent-color: var(--xc-accent-primary);
+    flex-shrink: 0;
+}
+
+.confirmCheckbox:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+    border-radius: var(--xc-radius-sm);
+}

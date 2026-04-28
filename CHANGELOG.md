@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.202.0] - 2026-04-27
+
+§18 — Cluster N Step 3 of 4 — Derivation-path cross-check copy verification (G031).
+
+`DerivationPathCrossCheck` instruction copy now explicitly calls out that the user must verify **both** the derivation path **and** the address against what the device shows (the previous copy only mentioned the address — a malicious encoder could try to coax a signature from a different sub-account at a different path). New per-vendor hint paragraph describes what each device family actually displays so first-time HW users know where to look (Trezor: side-by-side; Ledger Nano: right-button step; Ledger Stax: stacked). New optional `requireExplicitConfirm` prop renders an "I've verified path + address" checkbox the parent form can require before enabling Submit; checkbox auto-resets whenever path or address changes so a stale "yes I verified" can't survive a sub-account switch. Existing callers render unchanged (prop is opt-in).
+
+### Changed
+
+- **`packages/core/src/shared/components/DerivationPathCrossCheck.jsx`** — verify-pass instruction copy + per-vendor hint + optional `requireExplicitConfirm` checkbox.
+- **`packages/core/src/shared/components/DerivationPathCrossCheck.module.css`** — `.deviceHint`, `.confirmRow`, `.confirmCheckbox` styles.
+
+Closes G031.
+
 ## [0.201.0] - 2026-04-27
 
 §18 — Cluster N Step 2 of 4 — Firmware-update warning banner in sign flow (G030).
