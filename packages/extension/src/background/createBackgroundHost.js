@@ -22,6 +22,7 @@ import { DEFAULT_ACTIVE_CHAIN_IDS } from './walletCreate.js';
 const {
     createWallet,
     createAccount,
+    activateChain,
     renameWallet,
     importMnemonic,
     unlockWallet,
@@ -469,6 +470,31 @@ export function createBackgroundHost(deps) {
         const signer = await unlockWallet({ ...req, vault, chainRegistry, sdkRegistry });
         signer.lock();
         return { ok: true };
+    });
+
+    // §48.3 / G149 — runtime chain activation. Seeds settings.fees +
+    // ads.perChain for the chainId, then derives the first address on
+    // that chain for every existing account in the wallet. Idempotent:
+    // re-activating a chain that already has fee + address records is
+    // a no-op. Software signers only — HW activation is FOLLOWUP work.
+    host.register('wallet.activateChain', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        const walletId = req?.walletId;
+        const signer = await pickSignerFromRequest({
+            vault,
+            walletId,
+            signerId: req?.signerId,
+            signerPool,
+        });
+        return activateChain({
+            walletId,
+            chainId: req?.chainId,
+            password: req?.password,
+            bip39Passphrase: req?.bip39Passphrase,
+            signer: signer || undefined,
+            vault,
+            chainRegistry,
+            sdkRegistry,
+        });
     });
 
     // --- Settings ------------------------------------------------------------

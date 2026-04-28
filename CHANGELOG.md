@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.214.0] - 2026-04-27
+
+§48 — Cluster Q Step 2 of 3 — Regtest chain exposure (G149).
+
+New `flows/activateChain.js` adds a chain to an existing wallet at runtime. Two operations, both idempotent:
+
+1. Seed `settings.fees[chainId]` and `settings.ads.perChain[chainId]` via the existing `seedSettingsForChains` helper. After this the chain shows up in `bridge.getActiveChains` and in surfaces that key off `settings.fees`.
+2. For every existing account in the wallet, derive the first address on the new chain and persist it. Mirrors the address loop inside `_persistHdWallet` / `createAccount`. Skipped for accounts that already have an address on this chain.
+
+HW signers refused — `signer.kind !== 'software'` raises an explanatory error. HW-aware activation lands as a follow-up. Custom chain registry (`chainRegistry.addCustom`) for non-bundled regtest networks is also follow-up work, but the same primitive will service it.
+
+New host handler `wallet.activateChain` in `createBackgroundHost`; messaging shim `activateChainRequest` across all three shells (extension popup / web / desktop).
+
+Settings → Developer Mode panel: the previously-disabled "Custom chain registry" row is replaced by a live "Regtest networks" subsection. Lists every bundled regtest descriptor with its endpoint URL + Active / Inactive state. Inactive rows show an "Activate…" button that reveals an inline password prompt; on success the chain is seeded and the first address is derived across every existing account.
+
+### Added
+
+- **`packages/core/src/flows/activateChain.js`** (new) — activation flow.
+- **`test/smoke/ui/regtest-activation.smoke.js`** (new) — pins flow surface, host handler, messaging shims, Settings UI.
+
+### Changed
+
+- **`packages/core/src/flows/index.js`** — re-exports `activateChain`.
+- **`packages/extension/src/background/createBackgroundHost.js`** — registers `wallet.activateChain`.
+- **`packages/extension/src/popup/messaging.js`** — exports `activateChainRequest`.
+- **`packages/web/src/messaging.js`** — exports `activateChainRequest`.
+- **`packages/desktop/renderer/messaging.js`** — exports `activateChainRequest`.
+- **`packages/core/src/shared/components/settings/DeveloperModeSection.jsx`** — replaces the deferred Custom-chain-registry row with `<RegtestNetworksRow>` + per-descriptor activation form.
+- **`test/smoke/ui/settings-developer-mode.smoke.js`** — pins the new "Regtest networks" subsection and Auto-approve row alongside the still-deferred Raw PSBT / Logs rows.
+
+Closes G149.
+
 ## [0.213.0] - 2026-04-27
 
 §48 — Cluster Q Step 1 of 3 — Auto-approve for localhost dApps (G151).

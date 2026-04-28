@@ -30,15 +30,21 @@ assert.match(src, /label="Learn Mode"/, 'Learn Mode toggle present');
 assert.match(src, /onToggle\('developerMode'/, 'developerMode field wired');
 assert.match(src, /onToggle\('learnMode'/, 'learnMode field wired');
 
-// Four deferred reveals: Custom registry, Raw PSBT, Auto-approve localhost, Logs
+// Two still-deferred reveals (Raw PSBT and Logs console). Custom chain
+// registry was replaced by the live "Regtest networks" subsection at
+// v0.214.0 (G149); Auto-approve localhost was activated at v0.213.0
+// (G151) — both labels still appear in the source but the assertions
+// are checked separately below.
 for (const label of [
-    'Custom chain registry',
     'Raw PSBT inspector',
-    'Auto-approve localhost dApps',
     'Logs and diagnostics console',
 ]) {
     assert.ok(src.includes(`label="${label}"`), `${label} deferred row present`);
 }
+assert.ok(src.includes('label="Auto-approve localhost dApps"'),
+    'Auto-approve localhost dApps row present (active, gated on Developer Mode)');
+assert.ok(/RegtestNetworksRow/.test(src),
+    'Regtest networks subsection mounted (replaces the deferred Custom chain registry row)');
 
 // ─── Regtest reveal in NetworkEndpointsSection ────────────────────
 

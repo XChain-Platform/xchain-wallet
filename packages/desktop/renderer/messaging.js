@@ -60,6 +60,11 @@ export function importBackupRequest(opts) {
     return /** @type {any} */ (sendMessage('wallet.importBackup', opts));
 }
 
+/** §48.3 / G149 — runtime chain activation. */
+export function activateChainRequest(opts) {
+    return /** @type {any} */ (sendMessage('wallet.activateChain', opts));
+}
+
 /** @param {{ walletId: string }} req */
 export function removeWallet(req) {
     return /** @type {any} */ (sendMessage('wallet.remove', req));

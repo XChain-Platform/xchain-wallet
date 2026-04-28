@@ -375,6 +375,18 @@ export function importBackupRequest(opts) {
 }
 
 /**
+ * §48.3 / G149 — runtime chain activation. Seeds settings.fees +
+ * ads.perChain for the chainId and derives the first address on that
+ * chain for every existing account. Idempotent.
+ *
+ * @param {{ walletId: string, chainId: string, password: string, bip39Passphrase?: string, signerId?: string | null }} opts
+ * @returns {Promise<{ chainId: string, addresses: Array<{ accountId: string, address: any }>, skippedAccounts: number }>}
+ */
+export function activateChainRequest(opts) {
+    return /** @type {any} */ (sendMessage('wallet.activateChain', opts));
+}
+
+/**
  * §50 / G156 — diagnostic dump for bug-report copy-paste. Resolves to a
  * `DiagnosticDump` object with wallet metadata + chain registry +
  * counts + recent errors.

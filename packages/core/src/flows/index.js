@@ -1,5 +1,6 @@
 export { createWallet } from './createWallet.js';
 export { createAccount } from './createAccount.js';
+export { activateChain } from './activateChain.js';
 export { renameWallet } from './renameWallet.js';
 export {
     unlockWallet,
