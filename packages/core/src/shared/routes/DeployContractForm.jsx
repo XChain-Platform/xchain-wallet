@@ -10,6 +10,8 @@ import {
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials } from '../components/SignCredentials.jsx';
+import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { useWalletMode } from '../hooks/useWalletMode.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -218,11 +220,14 @@ export function DeployContractForm({ walletId, onBack }) {
         setStage('review');
     }
 
+    // §20 / Cluster W FOLLOWUP 5 — watcher-mode encode-only branch.
+    const { isWatcherMode } = useWalletMode();
+
     async function handleSubmit(event) {
         event.preventDefault();
         if (stage === 'submitting') return;
-        if (!isHwSource && password.length === 0) return;
-        if (isHwSource && hwStatus !== 'available') return;
+        if (!isWatcherMode && !isHwSource && password.length === 0) return;
+        if (!isWatcherMode && isHwSource && hwStatus !== 'available') return;
         setStage('submitting');
         setSubmitError(null);
         try {
@@ -239,9 +244,18 @@ export function DeployContractForm({ walletId, onBack }) {
                 },
                 params: actionParams,
             };
-            const res = isHwSource
-                ? await messaging.deployActionHw({ ...base, signerId: fromAddress.signerId })
-                : await messaging.deployAction({ ...base, password });
+            let res;
+            if (isWatcherMode) {
+                res = await messaging.buildActionPsbtRequest({
+                    chainId,
+                    from: base.from,
+                    actionData: { action: 'DEPLOY', params: actionParams },
+                });
+            } else if (isHwSource) {
+                res = await messaging.deployActionHw({ ...base, signerId: fromAddress.signerId });
+            } else {
+                res = await messaging.deployAction({ ...base, password });
+            }
             setResult(res);
             setPassword('');
             setStage('done');
@@ -253,11 +267,17 @@ export function DeployContractForm({ walletId, onBack }) {
                     : err?.message || 'Deploy failed.',
             );
             setStage('review');
-            if (!isHwSource) {
+            if (!isWatcherMode && !isHwSource) {
                 passwordRef.current?.focus();
                 passwordRef.current?.select();
             }
         }
+    }
+
+    function handleBuildAnother() {
+        setResult(null);
+        setSubmitError(null);
+        setStage('form');
     }
 
     const header = (
@@ -298,6 +318,16 @@ export function DeployContractForm({ walletId, onBack }) {
     }
 
     if (stage === 'done' && result) {
+        const txid = result?.txid || result?.tx_hash;
+        if (result?.psbtHex && !txid) {
+            return wrap(
+                <WatcherResultPanel
+                    result={result}
+                    onBuildAnother={handleBuildAnother}
+                    onDone={onBack}
+                />,
+            );
+        }
         return wrap(
             <>
                 <p className={styles.summary}>
@@ -305,7 +335,7 @@ export function DeployContractForm({ walletId, onBack }) {
                 </p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Txid</dt>
-                    <dd className={styles.detailsValue}>{String(result?.txid || result?.tx_hash || '—')}</dd>
+                    <dd className={styles.detailsValue}>{String(txid || '—')}</dd>
                 </dl>
                 <div className={styles.actions}>
                     <Button variant="primary" onClick={onBack}>Done</Button>
@@ -352,21 +382,29 @@ export function DeployContractForm({ walletId, onBack }) {
                         ))}
                     </div>
                 ) : null}
-                <SignCredentials
-                    fromAddress={fromAddress}
-                    chainId={chainId}
-                    password={password}
-                    onPasswordChange={(v) => {
-                        setPassword(v);
-                        if (submitError) setSubmitError(null);
-                    }}
-                    onStatusChange={onHwStatusChange}
-                    passwordRef={passwordRef}
-                    submitError={submitError}
-                    disabled={stage === 'submitting'}
-                    getSignerStatus={messaging.getSignerStatus}
-                />
-                {isHwSource && submitError ? (
+                {isWatcherMode ? (
+                    <p className={styles.hint}>
+                        Watcher mode — this wallet will build an unsigned PSBT.
+                        Sign it on your Signer-mode wallet, then bring the
+                        signed PSBT to a Full-mode wallet to broadcast.
+                    </p>
+                ) : (
+                    <SignCredentials
+                        fromAddress={fromAddress}
+                        chainId={chainId}
+                        password={password}
+                        onPasswordChange={(v) => {
+                            setPassword(v);
+                            if (submitError) setSubmitError(null);
+                        }}
+                        onStatusChange={onHwStatusChange}
+                        passwordRef={passwordRef}
+                        submitError={submitError}
+                        disabled={stage === 'submitting'}
+                        getSignerStatus={messaging.getSignerStatus}
+                    />
+                )}
+                {(isWatcherMode || isHwSource) && submitError ? (
                     <div role="alert" className={styles.error}>{submitError}</div>
                 ) : null}
                 <div className={styles.actions}>
@@ -375,12 +413,16 @@ export function DeployContractForm({ walletId, onBack }) {
                         variant="primary"
                         loading={stage === 'submitting'}
                         disabled={
-                            isHwSource ? hwStatus !== 'available' : password.length === 0
+                            isWatcherMode
+                                ? false
+                                : isHwSource ? hwStatus !== 'available' : password.length === 0
                         }
                     >
-                        {isHwSource
-                            ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                            : (descriptor ? `Deploy on ${descriptor.displayName}` : 'Deploy')}
+                        {isWatcherMode
+                            ? 'Build unsigned PSBT'
+                            : isHwSource
+                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                                : (descriptor ? `Deploy on ${descriptor.displayName}` : 'Deploy')}
                     </Button>
                 </div>
             </form>,

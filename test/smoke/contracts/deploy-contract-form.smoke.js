@@ -86,8 +86,11 @@ for (const label of ['Validate code', 'Estimate size', 'Suggest gas']) {
 
 assert.ok(/SignCredentials\b/.test(formSrc),
     'DeployContractForm uses SignCredentials on the review screen');
+// §20 Cluster X Step 19 — handler refactored from a ternary into an
+// if/else cascade (watcher-mode wins first). Accept either shape.
 assert.ok(
-    /isHwSource\s*\n?\s*\?\s*await messaging\.deployActionHw/.test(formSrc),
+    /isHwSource\s*\n?\s*\?\s*await messaging\.deployActionHw/.test(formSrc)
+        || /else if \(isHwSource\) \{[\s\S]+?messaging\.deployActionHw/.test(formSrc),
     'DeployContractForm branches HW vs software signing at submit',
 );
 assert.ok(

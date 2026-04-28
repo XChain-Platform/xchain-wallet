@@ -1,7 +1,7 @@
 {
     "name": "xchain-wallet",
     "description": "Self-custodial multi-chain wallet for the XChain Platform — browser, Chrome extension, and desktop",
-    "version": "0.258.0",
+    "version": "0.259.0",
     "private": true,
     "type": "module",
     "license": "SEE LICENSE IN LICENSE.md",

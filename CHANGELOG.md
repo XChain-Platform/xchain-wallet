@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.259.0] - 2026-04-28
+
+§20 — Cluster X Step 19 of N — DeployContractForm watcher-mode branch (action DEPLOY).
+
+### Added
+
+- **`packages/core/src/shared/routes/DeployContractForm.jsx`** — watcher-mode branch.
+- **`test/smoke/ui/deploy-contract-watcher-mode.smoke.js`** (new).
+
+### Changed
+
+- **`test/smoke/contracts/deploy-contract-form.smoke.js`** — HW-branch assertion accepts the new if/else cascade shape.
+
 ## [0.258.0] - 2026-04-28
 
 §20 — Cluster X Step 18 of N — ContractFundsForm watcher-mode branch (DEPOSIT / WITHDRAW).
