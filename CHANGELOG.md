@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.212.0] - 2026-04-27
+
+§37 — Cluster P Step 5 of 5 — Form-draft persistence (G125). **Cluster P closed.**
+
+New `shared/hooks/useFormDraft.js` exposes a per-(view, walletId) localStorage helper for in-progress form drafts. Storage shape `{savedAt: <ms>, values: {...}}` keyed under `xc:formdraft:<view>:<walletId|none>`. 24 h TTL discards stale drafts on load. Empty-values writes remove the entry rather than persisting blank fields. `safeStorage()` probe guards against disabled / quota-exhausted localStorage so the rest of the form keeps working when persistence isn't available.
+
+Two integrations:
+
+- **Send.jsx** auto-saves `chainId` / `toAddress` / `asset` / `amount` / `memo`; never persists `password`. Restore banner offers Restore / Discard when a draft is found on mount; draft is cleared after a successful broadcast.
+- **SignMessageForm** auto-saves `chainId` / `addressId` / `message`; same restore-banner pattern; cleared after a successful sign.
+
+Per the hook docstring, **callers are responsible for keeping signing material out of the draft** — the hook does no field-level filtering.
+
+### Added
+
+- **`packages/core/src/shared/hooks/useFormDraft.js`** (new) — per-view / per-walletId localStorage helper with TTL.
+- **`test/smoke/ui/form-draft-persistence.smoke.js`** (new) — pins hook surface + Send / SignMessage wiring + the no-password assertion.
+
+### Changed
+
+- **`packages/core/src/shared/routes/Send.jsx`** — useFormDraft hook + restore banner + clear-on-success.
+- **`packages/core/src/shared/routes/SignMessageForm.jsx`** — useFormDraft hook + restore banner + clear-on-success.
+
+Closes G125. **Cluster P — §37 Micro-UX leftovers — closed at v0.212.0.**
+
 ## [0.211.0] - 2026-04-27
 
 §37 — Cluster P Step 4 of 5 — Error recovery one-click fixes (G121).

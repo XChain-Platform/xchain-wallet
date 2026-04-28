@@ -33,6 +33,7 @@ import { BalanceChanges } from '../components/BalanceChanges.jsx';
 import { RawPsbtViewer } from '../components/RawPsbtViewer.jsx';
 import { useToast } from '../components/ToastHost.jsx';
 import { useHaptic } from '../hooks/useHaptic.js';
+import { useFormDraft } from '../hooks/useFormDraft.js';
 import styles from './Send.module.css';
 
 // §30.5 user-initiated cancel detection. HW-device libraries surface a
@@ -97,6 +98,31 @@ export function Send({ walletId, onBack }) {
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+
+    // §37 / G125 — form-draft persistence. Persists only the user-visible
+    // composition fields; password / mnemonic / passphrase NEVER touch
+    // localStorage. The hook is keyed by walletId so a from-seed restore
+    // doesn't surface a stranger's draft.
+    const draft = useFormDraft({ view: 'send', walletId });
+    const [draftPending, setDraftPending] = useState(() => draft.hasDraft());
+    useEffect(() => {
+        if (stage !== 'form' || !draftPending) return;
+        draft.save({ chainId, toAddress, asset, amount, memo });
+    }, [stage, draftPending, draft, chainId, toAddress, asset, amount, memo]);
+    const restoreDraft = useCallback(() => {
+        const v = draft.load();
+        if (!v) { setDraftPending(false); return; }
+        if (typeof v.chainId === 'string') setChainId(v.chainId);
+        if (typeof v.toAddress === 'string') setToAddress(v.toAddress);
+        if (typeof v.asset === 'string') setAsset(v.asset);
+        if (typeof v.amount === 'string') setAmount(v.amount);
+        if (typeof v.memo === 'string') setMemo(v.memo);
+        setDraftPending(true);
+    }, [draft]);
+    const dismissDraft = useCallback(() => {
+        draft.clear();
+        setDraftPending(false);
+    }, [draft]);
 
     useEffect(() => {
         let cancelled = false;
@@ -659,6 +685,8 @@ export function Send({ walletId, onBack }) {
                 : await messaging.sendAsset({ ...base, password });
             setResult(res);
             setPassword('');
+            draft.clear();
+            setDraftPending(false);
             setStage('done');
             haptic.success();
         } catch (err) {
@@ -955,8 +983,34 @@ export function Send({ walletId, onBack }) {
     }
 
     // stage === 'form'
+    const draftBanner = draft.hasDraft() && !draftPending ? (
+        <StatusMessage
+            variant="status"
+            recovery={{ label: 'Restore', onAction: restoreDraft }}
+        >
+            You have an unfinished Send draft.
+            <button
+                type="button"
+                onClick={dismissDraft}
+                aria-label="Discard saved draft"
+                style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'inherit',
+                    textDecoration: 'underline',
+                    cursor: 'pointer',
+                    padding: 0,
+                    marginInlineStart: 'var(--xc-space-2)',
+                    fontSize: 'var(--xc-text-xs)',
+                }}
+            >
+                Discard
+            </button>
+        </StatusMessage>
+    ) : null;
     return wrap(
         <form onSubmit={handleReview} noValidate>
+            {draftBanner}
             {chainsWithAddresses.length > 1 ? (
                 <ChainPicker label="Chain" value={chainId} onChange={setChainId} chainIds={chainsWithAddresses} chainRegistry={chainRegistry} />
             ) : descriptor ? (

@@ -12,7 +12,7 @@
 // signers are NOT supported here yet; G024's HW counterpart lives in a
 // separate FOLLOWUP and will route through the signer bridge.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Screen,
     Button,
@@ -22,9 +22,11 @@ import {
     ChainPicker,
     CopyButton,
     Icon,
+    StatusMessage,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useFormDraft } from '../hooks/useFormDraft.js';
 import pickerStyles from './WalletPicker.module.css';
 import styles from './IssueTokenForm.module.css';
 
@@ -55,6 +57,27 @@ export function SignMessageForm({ walletId, onBack }) {
     const [signature, setSignature] = useState(/** @type {string | null} */ (null));
     const [signedMessage, setSignedMessage] = useState('');
     const [signedAddress, setSignedAddress] = useState('');
+
+    // §37 / G125 — form-draft persistence. Persists chain / address /
+    // message; password stays in component state only.
+    const draft = useFormDraft({ view: 'sign-message', walletId });
+    const [draftPending, setDraftPending] = useState(() => draft.hasDraft());
+    useEffect(() => {
+        if (signature || !draftPending) return;
+        draft.save({ chainId, addressId, message });
+    }, [signature, draftPending, draft, chainId, addressId, message]);
+    const restoreDraft = useCallback(() => {
+        const v = draft.load();
+        if (!v) { setDraftPending(false); return; }
+        if (typeof v.chainId === 'string') setChainId(v.chainId);
+        if (typeof v.addressId === 'string') setAddressId(v.addressId);
+        if (typeof v.message === 'string') setMessage(v.message);
+        setDraftPending(true);
+    }, [draft]);
+    const dismissDraft = useCallback(() => {
+        draft.clear();
+        setDraftPending(false);
+    }, [draft]);
 
     useEffect(() => {
         let cancelled = false;
@@ -138,6 +161,8 @@ export function SignMessageForm({ walletId, onBack }) {
             setSignedMessage(message);
             setSignedAddress(selectedAddress?.address || '');
             setPassword('');
+            draft.clear();
+            setDraftPending(false);
         } catch (err) {
             const msg = err?.name === 'InvalidPasswordError'
                 ? 'Incorrect password.'
@@ -244,8 +269,35 @@ export function SignMessageForm({ walletId, onBack }) {
         );
     }
 
+    const draftBanner = draft.hasDraft() && !draftPending && !signature ? (
+        <StatusMessage
+            variant="status"
+            recovery={{ label: 'Restore', onAction: restoreDraft }}
+        >
+            You have an unfinished message draft.
+            <button
+                type="button"
+                onClick={dismissDraft}
+                aria-label="Discard saved draft"
+                style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'inherit',
+                    textDecoration: 'underline',
+                    cursor: 'pointer',
+                    padding: 0,
+                    marginInlineStart: 'var(--xc-space-2)',
+                    fontSize: 'var(--xc-text-xs)',
+                }}
+            >
+                Discard
+            </button>
+        </StatusMessage>
+    ) : null;
+
     const formBody = (
         <form onSubmit={handleSubmit} noValidate>
+            {draftBanner}
             <div style={{ marginBottom: 'var(--xc-space-3)' }}>
                 <ChainPicker
                     chains={chainOptions}
