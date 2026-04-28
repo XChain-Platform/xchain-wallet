@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.228.0] - 2026-04-28
+
+§23.5 — Cluster U Step 4 of 5 — Cross-chain LINK threading verify (G051).
+
+The implementation already shipped end-to-end: `flows/linkQueries.js` wraps `sdk.getLinks(address, 'address')`, the host wires it as `links.forAddress`, all three messaging shims expose `getLinksForAddress`, History.jsx fans the call out per `(chain, address)` and builds a `(peerChainId, peerCoinTicker, peerActionIndex, linkActionIndex)` peer-cache; `sidesFromLink(link, localChainId)` resolves which side maps to the local chain (with same-chain fallback); a `connectorByKey` memo computes vertical connectors when consecutive rows share a `linkActionIndex`; the 🔗 Cross-chain filter chip surfaces the threaded subset; and the dual-side `DetailCard` renders peer info when a row is clicked.
+
+This step is a verify pass — a new smoke pins all six pieces so a future edit cannot silently drop the threading logic.
+
+### Added
+
+- **`test/smoke/ui/history-cross-chain-link.smoke.js`** (new) — pins `linkQueries.linksForAddress`, the `createBackgroundHost` wiring, the three messaging shims, History's `messaging.getLinksForAddress` call, the `sidesFromLink` resolver shape, the `connectorByKey` consecutive-row equality check, the 🔗 filter chip, and the dual-side DetailCard.
+
+Closes G051.
+
 ## [0.227.0] - 2026-04-28
 
 §20 — Cluster U Step 3 of 5 — BBQr / UR PSBT QR formats (G043, partial).
