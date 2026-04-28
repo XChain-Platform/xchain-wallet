@@ -96,10 +96,15 @@ assert.ok(
 );
 
 // --- 7. Lock-mode danger variant --------------------------------------
-
+//
+// §20 Cluster X Step 21 — variant flips to plain 'primary' in watcher
+// mode (the "Build unsigned PSBT" CTA is not destructive — destruction
+// happens later when the signed PSBT broadcasts). Pin both the legacy
+// shape AND the new wrapped shape. Either is acceptable.
 assert.ok(
-    /variant=\{mode === 'lock' \? 'danger' : 'primary'\}/.test(src),
-    'TokenAdminForm uses the danger variant only on lock mode',
+    /variant=\{mode === 'lock' \? 'danger' : 'primary'\}/.test(src)
+        || /variant=\{isWatcherMode \? 'primary' : \(mode === 'lock' \? 'danger' : 'primary'\)\}/.test(src),
+    'TokenAdminForm uses the danger variant only on lock mode (in non-watcher mode)',
 );
 
 // --- 8. ActionsMenu + App.jsx sub-routes ------------------------------

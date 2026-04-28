@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.261.0] - 2026-04-28
+
+§20 — Cluster X Step 21 of N — TokenAdminForm watcher-mode branch (action ISSUE — token admin uses ISSUE with admin-only fields).
+
+In watcher mode the lock-mode variant flips from `'danger'` to `'primary'` for the same reason as DestroyForm — the action becomes "Build unsigned PSBT" (non-destructive); the destruction (lock) happens later on broadcast.
+
+### Added
+
+- **`packages/core/src/shared/routes/TokenAdminForm.jsx`** — watcher-mode branch + variant flip for lock mode.
+- **`test/smoke/ui/token-admin-watcher-mode.smoke.js`** (new).
+
+### Changed
+
+- **`test/smoke/actions/token-admin-form.smoke.js`** — variant assertion accepts the new conditional shape.
+
 ## [0.260.0] - 2026-04-28
 
 §20 — Cluster X Step 20 of N — ExecuteContractForm watcher-mode branch (action EXECUTE).
