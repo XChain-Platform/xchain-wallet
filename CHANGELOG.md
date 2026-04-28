@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.196.0] - 2026-04-27
+
+§55 — Cluster M Step 3 of 6 — `CODE_OF_CONDUCT.md` (G177).
+
+Adds the canonical Contributor Covenant 2.1 at the repo root. Hugo TOML frontmatter stripped; reporting contact set to `conduct@dankest.llc`. The CONTRIBUTING.md "Code of Conduct" section already links to this file.
+
+### Added
+
+- **`CODE_OF_CONDUCT.md`** (new, repo root) — Contributor Covenant 2.1, project-customized contact.
+
+Closes G177.
+
 ## [0.195.0] - 2026-04-27
 
 §13 — Cluster M Step 2 of 6 — `CONTRIBUTING.md` (G176).
