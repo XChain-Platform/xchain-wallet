@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.240.0] - 2026-04-28
+
+§52 — G162 — Signer mocks for Trezor / Ledger.
+
+New `test/unit/signers/MockHardwareSigner` extends the abstract `Signer` base from `@xchain-wallet/core` so any unit / integration test that today reaches for a paired Trezor or Ledger can swap in a deterministic, in-process mock without touching the call sites. The mock is configurable via constructor (vendor / model / firmware / status / canned method results) and exposes a `setStatus(status, detail)` helper for driving transitions through the same listener pipeline the real signers use. Two factories — `makeMockTrezorSigner` / `makeMockLedgerSigner` — short-circuit the vendor flag.
+
+The companion vitest suite at `test/unit/signers/MockHardwareSigner.test.js` exercises every method-shaped contract point (`getStatus`, `getAddresses`, `signPsbt`, `signMessage`, `getPublicKey`) plus the status-transition listener path. Tests run under `pnpm test:unit`; a structural smoke at `test/smoke/audits/signer-mocks.smoke.js` pins the file layout + key API surface so a stale rename / unexport doesn't ship under the smoke baseline.
+
+This unblocks future signer-touching unit tests across the suite — anything wiring `submitWithSigner` / `signPsbtFlow` / `useSignerInfo` against HW kinds can now drop in the mock instead of stubbing methods ad-hoc.
+
+### Added
+
+- **`test/unit/signers/MockHardwareSigner.js`** (new) — `MockHardwareSigner` class + `makeMockTrezorSigner` / `makeMockLedgerSigner` factories.
+- **`test/unit/signers/MockHardwareSigner.test.js`** (new) — vitest suite exercising the contract surface + status-transition path.
+- **`test/smoke/audits/signer-mocks.smoke.js`** (new) — structural smoke pinning the mock + test layout.
+
+Closes G162.
+
 ## [0.239.0] - 2026-04-28
 
 §20 — Cluster W FOLLOWUP 3 — Watcher mode HW-source guard.
