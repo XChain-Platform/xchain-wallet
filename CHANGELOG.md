@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.222.0] - 2026-04-28
+
+§13 — Cluster T Step 2 of 4 — User-facing release verification doc (G016).
+
+New `docs/VERIFY-RELEASE.md` walks an end user through the three claims that combine into a real release verification — bit-for-bit reproducibility, hash integrity, and signature authenticity — with concrete shell commands for importing the maintainer's release key, downloading the artifact + manifest + signature, GPG-verifying the manifest, hash-checking the artifact, and (optionally) reproducing the build.
+
+The doc is honest about what verification does NOT prove (source bug-freeness, upstream supply chain safety, key-rotation events) and where each platform stands today (desktop Linux reproducible end-to-end; macOS / Windows / extension / web have hash + signature guarantees but per-target reproduce scripts are still gated on §51 work).
+
+### Added
+
+- **`docs/VERIFY-RELEASE.md`** (new) — end-user verification recipe.
+- **`test/smoke/audits/verify-release-doc.smoke.js`** (new) — pins the headings, the three claim names, the required shell commands, the cross-links to companion docs, the §51 spec citation, the stop-on-failure guidance, and the honest framing of verification's scope.
+
+Closes G016.
+
 ## [0.221.0] - 2026-04-28
 
 §13 — Cluster T Step 1 of 4 — Root reproducible-builds doc (G015).
