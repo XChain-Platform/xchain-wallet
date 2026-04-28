@@ -708,6 +708,7 @@ function DetailCard({ entry, peerCache }) {
                 <pre className={styles.detailDecoded}>
                     {decodeActionToText(entry.raw)}
                 </pre>
+                <SaveContactPrompt entry={entry} />
                 {replaceable.ok ? <RbfActions entry={entry} /> : null}
             </div>
             {isLinked ? (
@@ -735,6 +736,163 @@ function DetailCard({ entry, peerCache }) {
             ) : null}
         </div>
     );
+}
+
+/**
+ * §31.4 — Auto-suggest from history. When a history entry has a peer
+ * address (destination on a SEND, source on a RECEIVE) that isn't
+ * already saved as a contact and isn't the wallet's own address,
+ * surface a "Save as contact" affordance so the user can add it
+ * without leaving History.
+ *
+ * Fetches contacts on first mount and caches across re-renders so
+ * scrolling through several entries doesn't refetch repeatedly.
+ * Failure modes degrade silently — the prompt just doesn't show.
+ *
+ * @param {{ entry: any }} props
+ */
+function SaveContactPrompt({ entry }) {
+    const { messaging } = useMessaging();
+    const [contacts, setContacts] = useState(/** @type {any[]} */ ([]));
+    const [loaded, setLoaded] = useState(false);
+    const [stage, setStage] = useState(/** @type {'idle' | 'editing' | 'saving' | 'saved'} */ ('idle'));
+    const [name, setName] = useState('');
+    const [error, setError] = useState(/** @type {string | null} */ (null));
+
+    useEffect(() => {
+        let cancelled = false;
+        messaging.listContacts()
+            .then((rows) => {
+                if (cancelled) return;
+                setContacts(Array.isArray(rows) ? rows : []);
+                setLoaded(true);
+            })
+            .catch(() => { if (!cancelled) setLoaded(true); });
+        return () => { cancelled = true; };
+    }, [messaging]);
+
+    if (!loaded) return null;
+
+    const peer = peerAddressOfEntry(entry);
+    if (!peer) return null;
+    if (entry?.address && peer === entry.address) return null;
+
+    const isAlreadyContact = contacts.some((c) =>
+        Array.isArray(c?.entries) && c.entries.some((e) => e?.address === peer),
+    );
+    if (isAlreadyContact) return null;
+    if (stage === 'saved') return null;
+
+    const coin = coinOfChainId(entry.chainId);
+    if (!coin) return null;
+
+    async function handleSave(event) {
+        event.preventDefault();
+        if (!name.trim()) {
+            setError('Name is required.');
+            return;
+        }
+        setStage('saving');
+        setError(null);
+        try {
+            await messaging.saveContact({
+                input: {
+                    name: name.trim(),
+                    notes: '',
+                    entries: [{ chain: coin, address: peer, label: '' }],
+                },
+            });
+            setStage('saved');
+        } catch (err) {
+            setError(err?.message || 'Save failed.');
+            setStage('editing');
+        }
+    }
+
+    if (stage === 'idle') {
+        return (
+            <div className={styles.saveContactRow}>
+                <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setStage('editing')}
+                >
+                    Save as contact
+                </Button>
+            </div>
+        );
+    }
+
+    return (
+        <form className={styles.saveContactForm} onSubmit={handleSave}>
+            <label className={styles.saveContactLabel}>
+                Name
+                <input
+                    type="text"
+                    className={styles.saveContactInput}
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    autoFocus
+                    maxLength={80}
+                />
+            </label>
+            {error ? (
+                <p className={styles.saveContactError} role="alert">{error}</p>
+            ) : null}
+            <div className={styles.saveContactActions}>
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => { setStage('idle'); setName(''); setError(null); }}
+                    disabled={stage === 'saving'}
+                >
+                    Cancel
+                </Button>
+                <Button
+                    type="submit"
+                    variant="primary"
+                    size="sm"
+                    loading={stage === 'saving'}
+                >
+                    Save
+                </Button>
+            </div>
+        </form>
+    );
+}
+
+/**
+ * Pull the peer-side address out of a history entry. SEND uses
+ * destination/DESTINATION, RECEIVE uses source/SOURCE; other action
+ * kinds may not have a single salient peer address (returns null and
+ * the caller suppresses the prompt).
+ *
+ * @param {any} entry
+ * @returns {string | null}
+ */
+function peerAddressOfEntry(entry) {
+    const raw = entry?.raw || {};
+    const dest = raw.destination ?? raw.DESTINATION ?? raw.recipient ?? raw.RECIPIENT;
+    if (typeof dest === 'string' && dest.length > 0) return dest;
+    const src = raw.source ?? raw.SOURCE;
+    if (typeof src === 'string' && src.length > 0 && src !== entry.address) return src;
+    return null;
+}
+
+/**
+ * Map a chainId like "bitcoin-mainnet" / "litecoin-regtest" to the
+ * coin family ("bitcoin" / "litecoin") that the contacts schema
+ * expects. Returns null when the chainId is malformed.
+ *
+ * @param {string | undefined} chainId
+ * @returns {string | null}
+ */
+function coinOfChainId(chainId) {
+    if (typeof chainId !== 'string' || !chainId.includes('-')) return null;
+    const [coin] = chainId.split('-', 1);
+    return coin || null;
 }
 
 /**

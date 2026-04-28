@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.206.0] - 2026-04-27
+
+§31 — Cluster O Step 3 of 4 — Save-as-contact prompt in History (G090).
+
+History detail card now offers a "Save as contact" affordance whenever the entry has a peer address (destination on a SEND, source on a RECEIVE) that isn't already the user's own address and isn't already saved as a contact. Click → inline name input → calls `messaging.saveContact({ input: { name, entries: [{ chain, address }] } })`. Contacts are fetched once on first DetailCard mount, then deduplicated locally so scrolling through several entries doesn't refetch. Failure modes degrade silently — the prompt simply doesn't render. ChainId-to-coin mapping uses the prefix split (`bitcoin-mainnet` → `bitcoin`).
+
+### Added
+
+- **`packages/core/src/shared/routes/History.jsx`** — `<SaveContactPrompt>` inline component + `peerAddressOfEntry` / `coinOfChainId` helpers; mounted inside the DetailCard's local-side panel above RbfActions.
+- **`packages/core/src/shared/routes/History.module.css`** — `.saveContactRow`, `.saveContactForm`, `.saveContactLabel`, `.saveContactInput`, `.saveContactError`, `.saveContactActions` styles matching the existing RBF affordance pattern.
+
+Closes G090.
+
 ## [0.205.0] - 2026-04-27
 
 §26 — Cluster O Step 2 of 4 — Auto-lock timeout from settings (G065).
