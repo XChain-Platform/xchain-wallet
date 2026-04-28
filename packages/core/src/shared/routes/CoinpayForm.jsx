@@ -8,6 +8,8 @@ import {
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
+import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { useWalletMode } from '../hooks/useWalletMode.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -155,11 +157,14 @@ export function CoinpayForm({
         };
     }, [selected]);
 
+    // §20 / Cluster W FOLLOWUP 5 — watcher-mode encode-only branch.
+    const { isWatcherMode } = useWalletMode();
+
     async function handleSubmit(event) {
         event.preventDefault();
         if (!selected || !summary || stage === 'submitting') return;
-        if (!hw && password.length === 0) return;
-        if (hw && hwStatus !== 'available') return;
+        if (!isWatcherMode && !hw && password.length === 0) return;
+        if (!isWatcherMode && hw && hwStatus !== 'available') return;
         if (summary.coinAmount == null || !summary.payeeAddress) {
             setSubmitError('Obligation is missing payee or coin amount.');
             return;
@@ -183,24 +188,55 @@ export function CoinpayForm({
                 payeeAddress: summary.payeeAddress,
                 coinAmount: summary.coinAmount,
             };
-            const r = hw
-                ? await messaging.coinpayActionHw({ ...base, signerId: selected.addr.signerId })
-                : await messaging.coinpayAction({ ...base, password });
+            let r;
+            if (isWatcherMode) {
+                // COINPAY action params per coinpayAction flow:
+                //   VERSION / ORDER_MATCH_ACTION_INDEX
+                // Encoder needs `customOutputs` so the buyer pays the
+                // matched seller's address — preserved through encoderOpts.
+                const params = {
+                    VERSION: '0',
+                    ORDER_MATCH_ACTION_INDEX: String(summary.actionIndex),
+                };
+                r = await messaging.buildActionPsbtRequest({
+                    chainId: selected.chainId,
+                    from,
+                    actionData: { action: 'COINPAY', params },
+                    encoderOpts: {
+                        customOutputs: [{ address: summary.payeeAddress, value: summary.coinAmount }],
+                    },
+                });
+            } else if (hw) {
+                r = await messaging.coinpayActionHw({ ...base, signerId: selected.addr.signerId });
+            } else {
+                r = await messaging.coinpayAction({ ...base, password });
+            }
             setResult(r);
             setStage('done');
-            setObligations((prev) => prev.filter((o) =>
-                !(o.chainId === selected.chainId
-                  && String(o.obligation.action_index) === summary.actionIndex),
-            ));
+            // Only drop the obligation locally on a real broadcast; in
+            // watcher mode the obligation stays open until the signed
+            // PSBT actually broadcasts on a Full-mode wallet.
+            if (!isWatcherMode) {
+                setObligations((prev) => prev.filter((o) =>
+                    !(o.chainId === selected.chainId
+                      && String(o.obligation.action_index) === summary.actionIndex),
+                ));
+            }
         } catch (err) {
             const bad = err?.name === 'InvalidPasswordError';
             setSubmitError(bad ? 'Incorrect password.' : err?.message || 'Sign failed.');
             setStage('form');
-            if (!hw) {
+            if (!isWatcherMode && !hw) {
                 passwordRef.current?.focus();
                 passwordRef.current?.select();
             }
         }
+    }
+
+    function handleBuildAnother() {
+        setResult(null);
+        setSubmitError(null);
+        setStage('form');
     }
 
     const header = (
@@ -235,12 +271,22 @@ export function CoinpayForm({
     }
 
     if (stage === 'done') {
+        const txid = result?.txid;
+        if (result?.psbtHex && !txid) {
+            return wrap(
+                <WatcherResultPanel
+                    result={result}
+                    onBuildAnother={handleBuildAnother}
+                    onDone={onBack}
+                />,
+            );
+        }
         return wrap(
             <>
                 <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>COINPAY broadcast</p>
-                {result?.txid ? (
+                {txid ? (
                     <p style={{ margin: '0 0 0.5rem' }}>
-                        Transaction: <code>{result.txid}</code>
+                        Transaction: <code>{txid}</code>
                     </p>
                 ) : null}
                 <div className={styles.actions}>
@@ -353,21 +399,29 @@ export function CoinpayForm({
                         ) : null}
                     </dl>
 
-                    <SignCredentials
-                        fromAddress={selected.addr}
-                        chainId={selected.chainId}
-                        password={password}
-                        onPasswordChange={(v) => {
-                            setPassword(v);
-                            if (submitError) setSubmitError(null);
-                        }}
-                        onStatusChange={onHwStatusChange}
-                        passwordRef={passwordRef}
-                        submitError={submitError}
-                        disabled={stage === 'submitting'}
-                        getSignerStatus={messaging.getSignerStatus}
-                    />
-                    {hw && submitError ? (
+                    {isWatcherMode ? (
+                        <p className={styles.hint}>
+                            Watcher mode — this wallet will build an unsigned PSBT.
+                            Sign it on your Signer-mode wallet, then bring the
+                            signed PSBT to a Full-mode wallet to broadcast.
+                        </p>
+                    ) : (
+                        <SignCredentials
+                            fromAddress={selected.addr}
+                            chainId={selected.chainId}
+                            password={password}
+                            onPasswordChange={(v) => {
+                                setPassword(v);
+                                if (submitError) setSubmitError(null);
+                            }}
+                            onStatusChange={onHwStatusChange}
+                            passwordRef={passwordRef}
+                            submitError={submitError}
+                            disabled={stage === 'submitting'}
+                            getSignerStatus={messaging.getSignerStatus}
+                        />
+                    )}
+                    {(isWatcherMode || hw) && submitError ? (
                         <p role="alert" style={{ margin: '0.25rem 0 0', color: '#ef5350', fontSize: '0.75rem' }}>
                             {submitError}
                         </p>
@@ -378,11 +432,17 @@ export function CoinpayForm({
                             type="submit"
                             variant="primary"
                             loading={stage === 'submitting'}
-                            disabled={hw ? hwStatus !== 'available' : password.length === 0}
+                            disabled={
+                                isWatcherMode
+                                    ? false
+                                    : hw ? hwStatus !== 'available' : password.length === 0
+                            }
                         >
-                            {hw
-                                ? `Sign on ${selected.addr.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : 'Sign COINPAY'}
+                            {isWatcherMode
+                                ? 'Build unsigned PSBT'
+                                : hw
+                                    ? `Sign on ${selected.addr.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                                    : 'Sign COINPAY'}
                         </Button>
                     </div>
                 </form>

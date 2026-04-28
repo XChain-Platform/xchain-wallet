@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.262.0] - 2026-04-28
+
+§20 — Cluster X Step 22 of N — CoinpayForm watcher-mode branch (action COINPAY).
+
+COINPAY's PSBT needs `encoderOpts.customOutputs` to direct the buyer's payment to the matched seller's address — that's how the buyer-pays-seller leg of an ORDER match settles. In watcher mode, we explicitly pass `customOutputs: [{ address: summary.payeeAddress, value: summary.coinAmount }]` through `buildActionPsbtRequest`, mirroring the `coinpayAction` flow's encoder shape.
+
+The local-state obligation removal only fires on a real broadcast — in watcher mode the obligation stays open in the list until the signed PSBT actually broadcasts on a Full-mode wallet.
+
+### Added
+
+- **`packages/core/src/shared/routes/CoinpayForm.jsx`** — watcher-mode branch with explicit `encoderOpts.customOutputs` preservation.
+- **`test/smoke/ui/coinpay-watcher-mode.smoke.js`** (new).
+
 ## [0.261.0] - 2026-04-28
 
 §20 — Cluster X Step 21 of N — TokenAdminForm watcher-mode branch (action ISSUE — token admin uses ISSUE with admin-only fields).
