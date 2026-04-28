@@ -19,7 +19,7 @@ export default {
     reporters: ['progress', 'clear-text', 'html'],
     testRunner: 'vitest',
     vitest: {
-        configFile: 'vitest.config.js',
+        configFile: 'test/vitest/unit.config.js',
     },
     coverageAnalysis: 'perTest',
     mutate: [

@@ -14,11 +14,15 @@
 //
 // Vitest is scoped to ONE test type per config so that adding new
 // test categories doesn't expand the unit suite's runtime.
+//
+// `root: '../..'` resolves to the workspace root so include/setupFiles
+// patterns can reference `test/...` paths unchanged.
 
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig({
+    root: '../..',
     plugins: [react()],
     test: {
         environment: 'jsdom',

@@ -2,12 +2,13 @@ import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig({
+    root: '../..',
     plugins: [react()],
     test: {
         environment: 'jsdom',
-        include: ['test/a11y/**/*.a11y.test.{js,jsx}'],
-        setupFiles: ['./test/a11y/setup.js'],
+        include: ['test/regression/**/*.regression.test.{js,jsx}'],
+        setupFiles: ['./test/regression/setup.js'],
         globals: false,
-        testTimeout: 30_000,
+        testTimeout: 15_000,
     },
 });

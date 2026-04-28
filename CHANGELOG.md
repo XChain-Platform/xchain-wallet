@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.233.0] - 2026-04-28
+
+Repo tidy — vitest configs moved into `test/vitest/`.
+
+The eight `vitest.config*.js` files at the repo root are gone; equivalents land at `test/vitest/{unit,integration,a11y,boundary,chaos,fuzz,regression,security}.config.js` with `root: '../..'` so the existing `test/...` include + setupFiles paths resolve unchanged. `package.json` test scripts and `test/mutation/stryker.config.mjs` `configFile` updated to point at the new paths. Smoke baseline preserved (24 / 196 unchanged).
+
+### Changed
+
+- **`test/vitest/{unit,integration,a11y,boundary,chaos,fuzz,regression,security}.config.js`** (moved from repo root, prefix dropped) — now under a single `test/vitest/` directory; each config sets `root: '../..'`.
+- **`package.json`** scripts — `test:unit`, `test:unit:watch`, `test:unit:coverage`, `test:integration`, `test:integration:watch`, `test:boundary`, `test:chaos`, `test:fuzz`, `test:regression`, `test:security`, `test:a11y` reference the new paths.
+- **`test/mutation/stryker.config.mjs`** — `configFile` updated to `test/vitest/unit.config.js`.
+- **`test/integration/setup.js`** — comment pointer updated.
+
 ## [0.232.0] - 2026-04-28
 
 §9.3 — Cluster V Step 3 of 3 — Zustand-proxy state model deferred (G006). **Cluster V closed.**
