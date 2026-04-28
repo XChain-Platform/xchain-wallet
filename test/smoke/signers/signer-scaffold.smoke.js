@@ -56,6 +56,15 @@ assert.ok(
 );
 const manifest = signers.FIRMWARE_MANIFEST;
 assert.ok(manifest && typeof manifest === 'object', 'FIRMWARE_MANIFEST is an object');
+assert.equal(manifest.schema, 'firmware-manifest/1', 'manifest declares its schema');
+assert.ok(
+    typeof manifest.generatedAt === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(manifest.generatedAt),
+    'manifest carries generatedAt as ISO date',
+);
+assert.ok(
+    typeof manifest.walletVersion === 'string' && /^\d+\.\d+\.\d+/.test(manifest.walletVersion),
+    'manifest carries walletVersion (links advisory data to a release)',
+);
 assert.ok(manifest.vendors?.trezor, 'manifest includes trezor vendor');
 assert.ok(manifest.vendors?.ledger, 'manifest includes ledger vendor');
 assert.ok(

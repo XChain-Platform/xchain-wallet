@@ -1,20 +1,58 @@
 // Firmware manifest — §18.4. Bundled at build time, consulted by
 // `checkFirmware` to verdict a device's reported version.
 //
-// Schema note: `minimum` is the floor below which the wallet refuses
-// to sign; `recommended` is the version the UI nudges users toward.
-// `knownVulnerable` / `unsupported` accept exact strings, prefix
-// strings ending in ".", or "N.x" major-only patterns (see
-// `checkFirmware.js`'s findMatch).
+// Why JS not JSON: this manifest ships *inside* the wallet bundle so
+// every release pins its own version of the safety data. A JSON file
+// would either need an explicit fetch (every wallet boot taking a
+// network hit, with a fallback path that has to mirror the JSON
+// anyway) or a build-time JSON-to-JS step, which is one more step in
+// the pipeline for no real benefit. Keeping it as a JS module makes
+// the import graph clean for both Vite (bundles the constant) and
+// Node (resolves it like any other ESM dep). Smokes pin this design
+// choice — see `signers/signer-scaffold.smoke.js`.
 //
-// A future enhancement fetches the manifest at runtime so firmware
-// advisories can propagate between releases; per §18.4, until that
-// lands, the manifest travels with the wallet bundle and is refreshed
-// per release.
+// Updating the manifest: when a new firmware advisory or release lands
+// upstream (Trezor / Ledger), update the relevant model's `minimum`,
+// `recommended`, `knownVulnerable`, or `unsupported` fields, bump
+// `generatedAt`, then ship a new wallet release. The shipped wallet
+// version's manifest is the trust boundary — users on older releases
+// see older advisories. A runtime-fetch path that lets advisories
+// propagate between releases is tracked as Cluster N FOLLOWUP 1.
+//
+// Schema:
+//
+//   {
+//     schema:       'firmware-manifest/1' (string, immutable)
+//     generatedAt:  ISO date (string)
+//     walletVersion: WALLET_VERSION at release time (string)
+//     vendors: {
+//       <vendorKey>: {
+//         updateUrl: string
+//         models: {
+//           <modelKey>: {
+//             displayName:     string
+//             minimum:         dotted-version string (refuse-to-sign floor)
+//             recommended:     dotted-version string (nudge floor)
+//             knownVulnerable: array of exact / prefix / major-x patterns
+//             unsupported:     array of same
+//           }
+//         }
+//       }
+//     }
+//   }
+//
+// Match patterns in `knownVulnerable` / `unsupported` accept:
+//   - Exact:    "1.11.2"
+//   - Prefix:   "1.11."  (matches every "1.11.x")
+//   - Major-x:  "1.x"    (matches every "1.x.x")
+// See `checkFirmware.js`'s findMatch for the resolution logic.
+
+import { WALLET_VERSION } from '../buildInfo.js';
 
 export const FIRMWARE_MANIFEST = {
     schema: 'firmware-manifest/1',
-    generatedAt: '2026-04-23',
+    generatedAt: '2026-04-27',
+    walletVersion: WALLET_VERSION,
     vendors: {
         trezor: {
             updateUrl: 'https://trezor.io/start/',

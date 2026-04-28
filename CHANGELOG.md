@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.203.0] - 2026-04-27
+
+§18 — Cluster N Step 4 of 4 — Firmware manifest JSON bundle (G029). Cluster N closed.
+
+The firmware manifest already shipped as a bundled JS module (`packages/core/src/signers/firmware-manifest.js`) since the §18 scaffolding landed; the `signer-scaffold` smoke explicitly asserts the JS form is canonical and that no `firmware-manifest.json` exists. G029's "JSON bundle" framing in the original audit was a naming guess. This step closes the gap by treating the JS module as the spec-equivalent fulfillment + sharpening its metadata: the manifest now carries `schema`, `generatedAt` (ISO date), and a new `walletVersion` field imported from `buildInfo.WALLET_VERSION` so advisory data is linked to a release. Header comment expanded to document the design choice (why JS, why bundled, how to update). Smoke pins `schema`, `generatedAt`, and `walletVersion` so a future drift surfaces immediately. Runtime-fetch path for between-release advisories is tracked as Cluster N FOLLOWUP 1.
+
+### Changed
+
+- **`packages/core/src/signers/firmware-manifest.js`** — header comment expanded; `walletVersion` field added (imports from `buildInfo.WALLET_VERSION`); `generatedAt` bumped.
+- **`test/smoke/signers/signer-scaffold.smoke.js`** — asserts `schema`, `generatedAt` (ISO format), and `walletVersion` (semver-shaped).
+
+Closes G029. **Cluster N — §18 Hardware Wallet polish — closed at v0.203.0.**
+
 ## [0.202.0] - 2026-04-27
 
 §18 — Cluster N Step 3 of 4 — Derivation-path cross-check copy verification (G031).
