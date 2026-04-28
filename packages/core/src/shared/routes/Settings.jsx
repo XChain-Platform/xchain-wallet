@@ -17,6 +17,8 @@ import { NotificationsSection } from '../components/settings/NotificationsSectio
 import { PrivacySection } from '../components/settings/PrivacySection.jsx';
 import { SafetySection } from '../components/settings/SafetySection.jsx';
 import { ThisWalletSection } from '../components/settings/ThisWalletSection.jsx';
+import { WalletModeSection } from '../components/settings/WalletModeSection.jsx';
+import { WALLET_MODE_DEFAULT } from '../../schemas/settings.js';
 import styles from './ActionsMenu.module.css';
 import pickerStyles from './WalletPicker.module.css';
 
@@ -127,6 +129,15 @@ export function Settings({
             kind: 'internal-drill',
             Component: SafetySection,
             summary: safetySummary(settings),
+        },
+        {
+            id: 'wallet-mode',
+            title: 'Wallet Mode',
+            description: 'Full / Watcher (watch-only) / Signer (air-gapped). Pairs of watcher + signer wallets enable PSBT-via-QR signing.',
+            keywords: 'wallet mode full watcher watch only signer air gapped psbt cold storage',
+            kind: 'internal-drill',
+            Component: WalletModeSection,
+            summary: walletModeSummary(settings),
         },
         {
             id: 'backup',
@@ -469,6 +480,15 @@ function safetySummary(settings) {
     const mins = settings.autolockMinutes;
     if (mins === 0) return 'Auto-lock off';
     return `Auto-lock ${mins} min`;
+}
+
+function walletModeSummary(settings) {
+    if (!settings) return '—';
+    const mode = settings.walletMode || WALLET_MODE_DEFAULT;
+    if (mode === 'full') return 'Full';
+    if (mode === 'watcher') return 'Watcher (watch-only)';
+    if (mode === 'signer') return 'Signer (air-gapped)';
+    return mode;
 }
 
 function feesSummary(settings) {

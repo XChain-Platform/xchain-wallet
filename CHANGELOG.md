@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.234.0] - 2026-04-28
+
+§20 — Cluster W Step 1 of 3 — Wallet mode selector (G039).
+
+New v2-tolerant `settings.walletMode: 'full' | 'watcher' | 'signer'` field defaults to `'full'`. Settings page gains a Wallet Mode internal-drill row above Backup; the new `WalletModeSection` renders a fieldset with three radio options + per-mode hint copy and writes through `update({ walletMode })`. Settings drilldown summary surfaces the active mode.
+
+This step ships the schema + selector only — `Send.jsx` watcher branch (G040) and `Home.jsx` signer variant (G041) read the field in subsequent steps. Until those land the field persists but doesn't yet alter behavior; the section's own copy says so.
+
+### Added
+
+- **`packages/core/src/schemas/settings.js`** — `WALLET_MODES` const + `WALLET_MODE_DEFAULT` exports; `walletMode` v2-tolerant typedef field; `createDefaultSettings` seeds `'full'`; `validateSettings` rejects bogus values only when present.
+- **`packages/core/src/shared/components/settings/WalletModeSection.jsx`** (new) — fieldset of three radio options; each option has descriptive hint copy + `aria-describedby` wiring.
+- **`packages/core/src/shared/routes/Settings.jsx`** — registers the `wallet-mode` internal-drill section above Backup; new `walletModeSummary` helper.
+- **`test/smoke/ui/settings-wallet-mode.smoke.js`** (new) — pins the schema const + default + v2-tolerant validate, the section's radio set + update call shape + aria wiring, and the Settings.jsx registration + summary helper.
+
+Closes G039.
+
 ## [0.233.0] - 2026-04-28
 
 Repo tidy — vitest configs moved into `test/vitest/`.

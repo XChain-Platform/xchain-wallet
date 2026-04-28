@@ -1,6 +1,6 @@
 {
     "name": "@xchain-wallet/core",
-    "version": "0.233.0",
+    "version": "0.234.0",
     "private": true,
     "description": "Platform-agnostic components, state, SDK integration, and signer implementations for XChain Wallet",
     "type": "module",

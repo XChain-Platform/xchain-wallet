@@ -20,6 +20,15 @@ export const FEE_STRATEGIES = /** @type {const} */ (['low', 'normal', 'fast', 'c
 export const REDUCED_MOTION_MODES = /** @type {const} */ (['auto', 'always', 'never']);
 export const BACKUP_REMINDER_CADENCES = /** @type {const} */ (['off', 'monthly', 'quarterly']);
 
+// §20 / G039 — wallet mode. `full` is the everyday wallet (sign + broadcast on
+// this device). `watcher` builds unsigned PSBTs against pubkeys / xpubs and
+// hands them to a signer-mode wallet for signing. `signer` is the air-gapped
+// half — accepts pasted PSBTs, signs, returns the signed PSBT for broadcast
+// on the watcher side. Readers default missing field to `'full'` so v2
+// records without the field keep their existing behavior.
+export const WALLET_MODES = /** @type {const} */ (['full', 'watcher', 'signer']);
+export const WALLET_MODE_DEFAULT = 'full';
+
 // ADS default — single source of truth per §36. Flip this to false to
 // make ADS opt-in without touching call sites.
 export const ADS_DEFAULT_ENABLED = true;
@@ -79,6 +88,7 @@ export const CLIPBOARD_AUTO_CLEAR_DEFAULT = 60;
  * @property {string[]} [hiddenTokens]                                                                       v2-tolerant — list of `chainId:asset` keys the user hid (collapsed into the Hidden section at the bottom of each tab) (§27.4 / G073)
  * @property {boolean} [autoApproveLocalhost]                                                                v2-tolerant — when developerMode is also on, bridge.connect from localhost / 127.0.0.1 / [::1] origins skips the approval prompt (§48.6 / G151). Sign requests still prompt.
  * @property {string[]} [blockedOrigins]                                                                     v2-tolerant — user-managed origin blocklist (§12 / G009). bridge.connect + the four sign methods reject with BLOCKED_BY_USER for matching origins. Stored as URL.origin strings.
+ * @property {typeof WALLET_MODES[number]} [walletMode]                                                      v2-tolerant — `full` (default) signs + broadcasts here; `watcher` builds unsigned PSBTs for an air-gapped signer; `signer` accepts pasted PSBTs from a watcher and returns signed PSBTs (§20 / G039). Send / Home branch on this field in subsequent steps.
  */
 
 /** @returns {Settings} */
@@ -123,6 +133,7 @@ export function createDefaultSettings() {
         backupReminders: 'off',
         pinnedTokens: [],
         hiddenTokens: [],
+        walletMode: WALLET_MODE_DEFAULT,
     };
 }
 
@@ -273,6 +284,14 @@ export function validateSettings(record) {
             'blockedOrigins',
             Array.isArray(r.blockedOrigins) && r.blockedOrigins.every(isString),
             'must be an array of origin strings',
+        );
+    }
+    if (r.walletMode !== undefined) {
+        check(
+            errors,
+            'walletMode',
+            isOneOf(r.walletMode, WALLET_MODES),
+            `must be one of ${WALLET_MODES.join(', ')}`,
         );
     }
 
