@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.245.0] - 2026-04-28
+
+§20 — Cluster X Step 5 of N — MintForm watcher-mode branch.
+
+Same FOLLOWUP 5 pattern as IssueTokenForm: `useWalletMode` hook, watcher-mode submit branch through `buildActionPsbtRequest({ action: 'MINT', params })`, password / HW gates skipped, watcher-mode hint at review, "Build unsigned PSBT" button label, shared `<WatcherResultPanel>` at done stage, `handleBuildAnother` reset.
+
+### Added
+
+- **`packages/core/src/shared/routes/MintForm.jsx`** — watcher-mode branch.
+- **`test/smoke/ui/mint-watcher-mode.smoke.js`** (new) — pins the wiring.
+
 ## [0.244.0] - 2026-04-28
 
 §20 — Cluster X Step 4 of N — IssueTokenForm watcher-mode branch.
