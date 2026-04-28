@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.207.0] - 2026-04-27
+
+§23 — Cluster O Step 4 of 4 — Chain filter remembers last choice (G052). Cluster O closed.
+
+History page's `enabledChains` Set and UnifiedBalanceList's coin-family filter now persist to localStorage and restore on mount. New `shared/utils/chainFilterMemory.js` provides `readChainSet` / `writeChainSet` (for Sets of chainIds) and `readChainString` / `writeChainString` (for single coin-family values), each guarded against missing / disabled / corrupt localStorage. History intersects the restored Set with the wallet's currently-active chains so a removed chain doesn't leave a stale entry; UnifiedBalanceList falls back to 'all' silently when the persisted family is no longer in the dataset. Per project memory, ephemeral per-wallet UI prefs live in localStorage so a from-seed restore lands the user on a fresh "show all" view rather than inheriting cross-device filter state.
+
+This step also flips G093 (delete-contact undo toast) to ✅ as a bookkeeping entry — the actual code shipped at v0.161.0 (Cluster D Step 1 / G119) but the SPEC_GAPS row was missed when G119 closed. Inspecting `ContactsList.jsx:121` confirms full snapshot + restore + saveContact wiring already exists.
+
+### Added
+
+- **`packages/core/src/shared/utils/chainFilterMemory.js`** (new) — defensive localStorage helpers under the `xc:chainFilter:` namespace.
+
+### Changed
+
+- **`packages/core/src/shared/components/UnifiedBalanceList.jsx`** — filter state seeds from `readChainString`, persists via `writeChainString`, falls back to 'all' on stale value.
+- **`packages/core/src/shared/routes/History.jsx`** — `enabledChains` initial state honours the persisted Set (intersected with active chains); `toggleChain` writes the new Set back inside the setState updater so batched toggles all persist.
+
+### Bookkeeping
+
+- **`SPEC_GAPS.md`** — G093 flipped to ✅ at v0.161.0 (already shipped via Cluster D Step 1 / G119 work; row was missed).
+
+Closes G052 + G093 (bookkeeping). **Cluster O — §26 + §31 + §23 polish — closed at v0.207.0.**
+
 ## [0.206.0] - 2026-04-27
 
 §31 — Cluster O Step 3 of 4 — Save-as-contact prompt in History (G090).

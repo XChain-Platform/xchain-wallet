@@ -1,9 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { MultisigBadge, Icon } from '@xchain-wallet/core/ui';
 import { NetworkFilter } from './NetworkFilter.jsx';
 import { EmptyStateNudge } from './EmptyStateNudge.jsx';
+import { readChainString, writeChainString } from '../utils/chainFilterMemory.js';
 import styles from './UnifiedBalanceList.module.css';
+
+const FILTER_MEMORY_KEY = 'unifiedBalances';
 
 /**
  * Single unified list of every balance across every chain. Coins first,
@@ -25,7 +28,16 @@ export function UnifiedBalanceList({ chainRegistry, balances, multisig, multisig
     const allRows = useMemo(() => buildRows(balances, chainRegistry), [balances, chainRegistry]);
 
     // Active filter — 'all' or a coin family ('bitcoin'/'litecoin'/...).
-    const [filter, setFilter] = useState('all');
+    // Initial value seeds from localStorage so navigating away and
+    // back restores the user's last choice (§23.5 / G052). Persisted
+    // value is validated against the actual coin families that show
+    // up in the dataset before we accept it — a memory of "litecoin"
+    // is not useful if the user removed all their LTC addresses since.
+    const [filter, setFilter] = useState(() => readChainString(FILTER_MEMORY_KEY) || 'all');
+
+    useEffect(() => {
+        writeChainString(FILTER_MEMORY_KEY, filter);
+    }, [filter]);
 
     // Coin families that show up in the dataset, in canonical order.
     // Added chains slot in at the end automatically.
@@ -37,10 +49,21 @@ export function UnifiedBalanceList({ chainRegistry, balances, multisig, multisig
         return ordered;
     }, [allRows]);
 
+    // If the persisted filter no longer matches any visible coin
+    // family (e.g. user removed all LTC addresses since the last
+    // session), fall back to 'all' silently.
+    const effectiveFilter = filter === 'all' || coinFamilies.includes(filter) ? filter : 'all';
+    if (effectiveFilter !== filter) {
+        // Schedule a state correction so future renders match. setState
+        // inside render is allowed once per render path (React tolerates
+        // it for filter-correction cases like this).
+        queueMicrotask(() => setFilter('all'));
+    }
+
     const visibleRows = useMemo(() => {
-        if (filter === 'all') return allRows;
-        return allRows.filter((r) => coinFromChainId(r.chainId) === filter);
-    }, [allRows, filter]);
+        if (effectiveFilter === 'all') return allRows;
+        return allRows.filter((r) => coinFromChainId(r.chainId) === effectiveFilter);
+    }, [allRows, effectiveFilter]);
 
     const natives = visibleRows
         .filter((r) => r.kind === 'native')
@@ -66,7 +89,7 @@ export function UnifiedBalanceList({ chainRegistry, balances, multisig, multisig
             <NetworkFilter
                 chainRegistry={chainRegistry}
                 coinFamilies={coinFamilies}
-                value={filter}
+                value={effectiveFilter}
                 onChange={setFilter}
             />
 

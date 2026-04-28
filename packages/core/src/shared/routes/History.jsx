@@ -18,7 +18,10 @@ import {
     ACTION_TYPE_OPTIONS,
     STATUS_OPTIONS,
 } from '../utils/historyFilter.js';
+import { readChainSet, writeChainSet } from '../utils/chainFilterMemory.js';
 import styles from './History.module.css';
+
+const HISTORY_CHAIN_FILTER_KEY = 'history';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -105,12 +108,17 @@ export function History({ walletId, accountId, onBack, onReceive, initialSearchQ
             .then((byChain) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain || {});
-                const initial = new Set(
+                const all = new Set(
                     Object.entries(byChain || {})
                         .filter(([, addrs]) => Array.isArray(addrs) && addrs.length > 0)
                         .map(([cid]) => cid),
                 );
-                setEnabledChains(initial);
+                // §23.5 / G052 — restore the user's last chain-filter
+                // choice if one is stored, intersected with the wallet's
+                // currently-active chains so a removed chain doesn't
+                // leave a stale entry. Falls back to "all enabled".
+                const remembered = readChainSet(HISTORY_CHAIN_FILTER_KEY, all);
+                setEnabledChains(remembered ?? all);
             })
             .catch((err) => {
                 if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
@@ -351,10 +359,15 @@ export function History({ walletId, accountId, onBack, onReceive, initialSearchQ
     };
 
     const toggleChain = (cid) => {
+        // §23.5 / G052 — persist the new filter set so the user's
+        // choice survives navigation. Capture the post-toggle Set
+        // inside the updater so the write reflects the new state
+        // even if React batches multiple toggles.
         setEnabledChains((prev) => {
             const next = new Set(prev);
             if (next.has(cid)) next.delete(cid);
             else next.add(cid);
+            writeChainSet(HISTORY_CHAIN_FILTER_KEY, next);
             return next;
         });
     };
