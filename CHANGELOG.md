@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.232.0] - 2026-04-28
+
+§9.3 — Cluster V Step 3 of 3 — Zustand-proxy state model deferred (G006). **Cluster V closed.**
+
+The spec at §9.3 describes a Zustand store in the SW with `chrome.runtime.connect`-proxied mirrors in each UI context. The wallet ships with a different model — `MessagingProvider` (React Context wrapping a per-shell messaging module) plus per-component fetch from the source of truth (vault → MessageHost → flow). Both models work; the shipping model is simpler cross-shell, has fewer state-sync footguns, and has no measured performance bottleneck after 230+ releases across three shells.
+
+This step records the architectural decision in `claude/reports/specs/2026-04-28_zustand-proxy-deferred.md` (an ADR-style doc) and flips G006 from ⬜ open → ⏸ deferred. Triggers that would justify reopening (real-time subscription requirements that span surfaces, profiling-backed latency complaints, integration-test coordination pain) are documented inline so a future contributor knows what signal to watch for.
+
+The ADR also flags a spec-revision question: when `XCHAIN_WALLET_SPEC.md` next updates, §9.3 should either adopt the shipping reality or stay aspirational with an explicit "current implementation diverges" note pointing at this ADR.
+
+### Added
+
+- **`claude/reports/specs/2026-04-28_zustand-proxy-deferred.md`** (new) — ADR documenting the spec divergence, the shipping pattern, the four reasons we kept it, the trigger conditions for reopening, and the spec-revision implications.
+- **`test/smoke/audits/zustand-proxy-deferred.smoke.js`** (new) — pins the ADR exists with its required headings + G006 + spec-section citations; pins that the codebase ships the MessagingProvider pattern (no zustand dep in `@xchain-wallet/core`, no `proxyStore.{js,ts}` under core); pins MessagingProvider as a named export and the extension popup as a `<MessagingProvider>` consumer. If a future cluster adopts Zustand the ADR + this smoke must update together.
+
+Closes G006 (deferred). **Cluster V — §9 Architecture lightweight — closed at v0.232.0.** Two of three rows fully closed (G003 + G004); G006 ships as ⏸ deferred with the ADR.
+
 ## [0.231.0] - 2026-04-28
 
 §52 — Cluster V Step 2 of 3 — `tools/regtest/` scaffolding (G004).

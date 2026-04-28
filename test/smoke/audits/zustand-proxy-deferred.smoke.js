@@ -1,0 +1,84 @@
+// Smoke for §9.3 / G006 — Zustand-proxy state model deferred.
+//
+// The spec calls for a Zustand-proxy pattern; the wallet ships with
+// a MessagingProvider + per-component fetch pattern. The decision to
+// keep the shipping model is captured in
+// `claude/reports/specs/2026-04-28_zustand-proxy-deferred.md`. This
+// smoke pins that ADR exists and that the codebase ships the
+// MessagingProvider model (no Zustand layer). If a future Cluster
+// adopts Zustand it should both (a) update the ADR and (b) update
+// this smoke.
+
+import { strict as assert } from 'node:assert';
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const here = dirname(fileURLToPath(import.meta.url));
+const root = join(here, '..', '..', '..');
+const repoRoot = join(root, '..');
+const read = (p) => readFileSync(join(root, p), 'utf8');
+const readRepo = (p) => readFileSync(join(repoRoot, p), 'utf8');
+
+// 1. ADR exists with the expected structure.
+const adrRel = 'claude/reports/specs/2026-04-28_zustand-proxy-deferred.md';
+assert.ok(existsSync(join(repoRoot, adrRel)), `${adrRel} exists`);
+const adr = readRepo(adrRel);
+for (const heading of [
+    '# Zustand-proxy state model — deferred',
+    '## What the spec described',
+    '## What we actually shipped',
+    '## Why we kept the shipping model',
+    '## What we keep an eye on',
+    '## What this means for the spec',
+]) {
+    assert.ok(adr.includes(heading), `ADR has heading: ${heading}`);
+}
+assert.ok(/G006/.test(adr), 'ADR cites G006');
+assert.ok(/§9\.3/.test(adr) || /§9\.2/.test(adr),
+    'ADR cites the relevant spec section');
+
+// 2. Codebase ships the MessagingProvider pattern (no Zustand
+//    package dep, no proxyStore module). If any of these flip a
+//    decision was made — update the ADR + this smoke together.
+const corePkg = JSON.parse(read('packages/core/package.json'));
+const allDeps = {
+    ...(corePkg.dependencies ?? {}),
+    ...(corePkg.devDependencies ?? {}),
+    ...(corePkg.peerDependencies ?? {}),
+};
+assert.equal(allDeps.zustand, undefined,
+    'core package does not depend on zustand (ADR: shipping model is MessagingProvider)');
+
+// No `proxyStore.{js,ts}` lives under core/state/.
+const stateDirCandidates = [
+    'packages/core/src/state',
+    'packages/core/src/store',
+];
+for (const candidate of stateDirCandidates) {
+    if (existsSync(join(root, candidate))) {
+        // If the directory exists at all (some refactor created it),
+        // make sure it doesn't contain a proxy store. The ADR keeps
+        // this smoke honest.
+        const proxy = ['proxyStore.js', 'proxyStore.ts'].some((f) =>
+            existsSync(join(root, candidate, f)));
+        assert.equal(proxy, false,
+            `${candidate} must not contain proxyStore.{js,ts} (ADR: shipping model is MessagingProvider)`);
+    }
+}
+
+// 3. MessagingProvider is the documented entry point.
+const mpPath = 'packages/core/src/shared/MessagingProvider.jsx';
+assert.ok(existsSync(join(root, mpPath)), `${mpPath} exists`);
+const mp = read(mpPath);
+assert.ok(/export function MessagingProvider/.test(mp),
+    'MessagingProvider is a named export');
+
+// 4. The shells use `useMessaging()` hooks — pin that pattern in at
+//    least one shell so a future migration would have to update the
+//    smoke explicitly.
+const shellSrc = read('packages/extension/src/popup/App.jsx');
+assert.ok(/<MessagingProvider /.test(shellSrc),
+    'extension popup wraps the tree in MessagingProvider');
+
+console.log('OK — Zustand-proxy deferred ADR + MessagingProvider shipping pattern smoke');
