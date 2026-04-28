@@ -18,6 +18,7 @@
 
 import { useSignerStatus } from '../hooks/useSignerStatus.js';
 import { DerivationPathCrossCheck } from './DerivationPathCrossCheck.jsx';
+import { HwFirmwareBanner } from './HwFirmwareBanner.jsx';
 import styles from './HwSignBlock.module.css';
 
 /**
@@ -29,6 +30,7 @@ import styles from './HwSignBlock.module.css';
  * @param {string} [props.chainId]                    forwarded to getStatus (Ledger uses it for wrong-app detection)
  * @param {((opts?: object) => Promise<any>) | null} props.getStatus   signer.getStatus; pass null to disable polling
  * @param {(state: { status: string, detail: string | null, refresh: () => void }) => void} [props.onStatusChange]   parent subscribes to status
+ * @param {{ vendor: string, model: string, firmwareVersion: string | null } | null} [props.signerInfo]   firmware metadata for the warning banner; when omitted the banner is suppressed (graceful for callers that don't have the SignerRecord on hand)
  */
 export function HwSignBlock({
     signerKind,
@@ -38,6 +40,7 @@ export function HwSignBlock({
     chainId,
     getStatus,
     onStatusChange,
+    signerInfo,
 }) {
     const { status, detail, refresh } = useSignerStatus({ getStatus, chainId });
 
@@ -49,6 +52,7 @@ export function HwSignBlock({
 
     return (
         <div className={styles.root}>
+            {signerInfo ? <HwFirmwareBanner signerInfo={signerInfo} /> : null}
             <DerivationPathCrossCheck
                 signerKind={signerKind}
                 signerName={signerName}

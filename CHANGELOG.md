@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.201.0] - 2026-04-27
+
+§18 — Cluster N Step 2 of 4 — Firmware-update warning banner in sign flow (G030).
+
+A new `<HwFirmwareBanner>` component runs `checkFirmware()` against the paired device's vendor / model / firmwareVersion at sign time and renders a severity-tiered banner (error for vulnerable / unsupported, warning for outdated, neutral note for unknown, no banner for ok). Mounted inside `<HwSignBlock>` whenever the caller threads `signerInfo`. `<SignCredentials>` accepts the same prop and threads through. `Send.jsx` (the highest-traffic HW sign surface) looks up the SignerRecord via a new `messaging.listSigners(walletId)` effect and passes `{ vendor, model, firmwareVersion }` to HwSignBlock. Other forms can adopt the same pattern in follow-ups; until they do, they render gracefully without the banner since the prop is optional.
+
+### Added
+
+- **`packages/core/src/shared/components/HwFirmwareBanner.jsx`** + **`HwFirmwareBanner.module.css`** (new) — sign-flow firmware-warning banner; exposes `isFirmwareSignBlocked()` helper for callers that want to hard-gate Submit on `unsupported`.
+
+### Changed
+
+- **`packages/core/src/shared/components/HwSignBlock.jsx`** — accepts optional `signerInfo` prop; renders `<HwFirmwareBanner>` above the derivation cross-check when supplied.
+- **`packages/core/src/shared/components/SignCredentials.jsx`** — threads `signerInfo` through to HwSignBlock.
+- **`packages/core/src/shared/routes/Send.jsx`** — fetches the wallet's signer list once on mount, derives `hwSignerInfo` for the current source address, passes it into HwSignBlock.
+
+Closes G030.
+
 ## [0.200.0] - 2026-04-27
 
 §18 — Cluster N Step 1 of 4 — Ledger WebHID compatibility notice (G032).

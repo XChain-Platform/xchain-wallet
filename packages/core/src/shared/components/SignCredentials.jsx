@@ -37,6 +37,7 @@ import { HwSignBlock } from './HwSignBlock.jsx';
  * @param {string | null} [props.submitError]
  * @param {boolean} [props.disabled]
  * @param {(opts: { signerId: string, chainId?: string }) => Promise<any>} [props.getSignerStatus]
+ * @param {{ vendor: string, model: string, firmwareVersion: string | null } | null} [props.signerInfo]   firmware metadata; passed through to HwSignBlock so the firmware-update warning banner renders. Optional — when omitted, no banner shows (callers that haven't yet looked up the SignerRecord render gracefully).
  */
 export function SignCredentials({
     fromAddress,
@@ -48,6 +49,7 @@ export function SignCredentials({
     submitError,
     disabled,
     getSignerStatus,
+    signerInfo,
 }) {
     const src = fromAddress?.source;
     const isHw = src === 'trezor' || src === 'ledger';
@@ -67,6 +69,7 @@ export function SignCredentials({
                     })
                     : null}
                 onStatusChange={onStatusChange}
+                signerInfo={signerInfo}
             />
         );
     }
