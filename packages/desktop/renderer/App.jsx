@@ -74,6 +74,9 @@ import { MultisigCreate } from '@xchain-wallet/core/shared/routes/MultisigCreate
 import { MultisigSigningSession } from '@xchain-wallet/core/shared/routes/MultisigSigningSession.jsx';
 import { AddressList } from '@xchain-wallet/core/shared/routes/AddressList.jsx';
 import { PairSignerForm } from '@xchain-wallet/core/shared/routes/PairSignerForm.jsx';
+import { SignMessageForm } from '@xchain-wallet/core/shared/routes/SignMessageForm.jsx';
+import { VerifySignatureForm } from '@xchain-wallet/core/shared/routes/VerifySignatureForm.jsx';
+import { PsbtSignForm } from '@xchain-wallet/core/shared/routes/PsbtSignForm.jsx';
 import { useBtcAddressesPresent } from '@xchain-wallet/core/shared/hooks/useBtcAddressesPresent.js';
 import * as messaging from './messaging.js';
 import { getSessionStatus, listWallets, listAccounts } from './messaging.js';
@@ -95,7 +98,7 @@ function AppInner() {
         /** @type {'welcome' | 'create' | 'import' | 'import-freewallet'} */ ('welcome'),
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'swap' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'staking-dashboard' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'link-form' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'addresses' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'swap' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'staking-dashboard' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'link-form' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'addresses' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'sign-message' | 'verify-signature' | 'sign-psbt'} */ ('home'),
     );
     const [walletDetailsId, setWalletDetailsId] = useState(/** @type {string | null} */ (null));
     const [walletRenameTarget, setWalletRenameTarget] = useState(
@@ -403,6 +406,31 @@ function AppInner() {
                         onSignerPaired={registerLocalSigner}
                         onBack={() => setUnlockedView('actions')}
                         onPaired={() => setUnlockedView('actions')}
+                    />
+                );
+            }
+            // §20 / G041 (Cluster W FOLLOWUP 2) — sign / verify / sign-PSBT
+            // routes, in parity with the extension popup + web shells.
+            if (unlockedView === 'sign-psbt' && activeWalletId) {
+                return (
+                    <PsbtSignForm
+                        walletId={activeWalletId}
+                        onBack={() => setUnlockedView('home')}
+                    />
+                );
+            }
+            if (unlockedView === 'sign-message' && activeWalletId) {
+                return (
+                    <SignMessageForm
+                        walletId={activeWalletId}
+                        onBack={() => setUnlockedView('home')}
+                    />
+                );
+            }
+            if (unlockedView === 'verify-signature' && activeWalletId) {
+                return (
+                    <VerifySignatureForm
+                        onBack={() => setUnlockedView('home')}
                     />
                 );
             }
@@ -905,6 +933,9 @@ function AppInner() {
                     onMultisig={activeWalletId && hasBtcAddress ? () => setUnlockedView('multisig-create') : undefined}
                     onOpenWalletPicker={() => setUnlockedView('wallet-picker')}
                     onOpenAccountPicker={activeWalletId ? () => setUnlockedView('account-picker') : undefined}
+                    onSignPsbt={activeWalletId ? () => setUnlockedView('sign-psbt') : undefined}
+                    onSignMessage={activeWalletId ? () => setUnlockedView('sign-message') : undefined}
+                    onVerifySignature={activeWalletId ? () => setUnlockedView('verify-signature') : undefined}
                     activeAccountId={activeAccountId}
                     onSwitchAccount={setActiveAccountId}
                 />

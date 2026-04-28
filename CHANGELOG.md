@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.238.0] - 2026-04-28
+
+§20 — Cluster D Step 2 of 2 — Desktop shell parity for sign / verify routes (Cluster W FOLLOWUP 2). **Cluster D closed.**
+
+The signer-mode Home variant shipped at v0.236.0 wired the three sign-related CTAs on the extension and web shells but not desktop — the renderer App.jsx didn't register `sign-psbt` / `sign-message` / `verify-signature` routes, so Home's three new props were intentionally not threaded on desktop. A desktop signer-mode wallet had no in-wallet path to actually sign anything. This step closes that gap.
+
+`packages/desktop/renderer/App.jsx` now imports `PsbtSignForm` / `SignMessageForm` / `VerifySignatureForm`, registers `unlockedView === 'sign-psbt' / 'sign-message' / 'verify-signature'` branches mirroring the extension popup + web shells, and threads `onSignPsbt` / `onSignMessage` / `onVerifySignature` through to `<Home>`. The `unlockedView` typedef gains the three new view names. The `home-signer-mode` smoke flips from "desktop intentionally not wired" to pinning the imports + routes + prop wiring as live.
+
+**Cluster D — §20 Watcher / Signer round-trip — closed at v0.238.0.** Two steps closed both Cluster W FOLLOWUPs (1 + 2). The watcher → signer → broadcaster loop is now wired end-to-end inside the wallet AND works on every shell.
+
+### Added
+
+- **`packages/desktop/renderer/App.jsx`** — three new imports, three new view branches, three new Home props (`onSignPsbt` / `onSignMessage` / `onVerifySignature`), `unlockedView` typedef extended.
+- **`test/smoke/ui/home-signer-mode.smoke.js`** — desktop section flipped from negative assertion to positive: imports, routes, and prop wiring all pinned.
+
+Closes Cluster W FOLLOWUP 2.
+
 ## [0.237.0] - 2026-04-28
 
 §20 — Cluster D Step 1 of 2 — In-wallet broadcast for signed PSBTs (Cluster W FOLLOWUP 1).

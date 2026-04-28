@@ -141,12 +141,53 @@ assert.match(
     'web shell wires onVerifySignature',
 );
 
-// ─── 7. Desktop shell intentionally NOT wired (FOLLOWUP) ---------
+// ─── 7. Desktop shell wiring (Cluster W FOLLOWUP 2 closed at v0.238.0) ---
 
-assert.doesNotMatch(
+assert.match(
     desktopAppSrc,
-    /onSignPsbt=\{activeWalletId/,
-    'desktop shell does not wire onSignPsbt yet (sign-psbt route not registered) — Cluster W FOLLOWUP',
+    /onSignPsbt=\{activeWalletId \? \(\) => setUnlockedView\('sign-psbt'\) : undefined\}/,
+    'desktop shell wires onSignPsbt',
+);
+assert.match(
+    desktopAppSrc,
+    /onSignMessage=\{activeWalletId \? \(\) => setUnlockedView\('sign-message'\) : undefined\}/,
+    'desktop shell wires onSignMessage',
+);
+assert.match(
+    desktopAppSrc,
+    /onVerifySignature=\{activeWalletId \? \(\) => setUnlockedView\('verify-signature'\) : undefined\}/,
+    'desktop shell wires onVerifySignature',
+);
+// And the routes that those props navigate to actually exist now.
+assert.match(
+    desktopAppSrc,
+    /import \{ PsbtSignForm \} from '@xchain-wallet\/core\/shared\/routes\/PsbtSignForm\.jsx';/,
+    'desktop imports PsbtSignForm',
+);
+assert.match(
+    desktopAppSrc,
+    /import \{ SignMessageForm \} from '@xchain-wallet\/core\/shared\/routes\/SignMessageForm\.jsx';/,
+    'desktop imports SignMessageForm',
+);
+assert.match(
+    desktopAppSrc,
+    /import \{ VerifySignatureForm \} from '@xchain-wallet\/core\/shared\/routes\/VerifySignatureForm\.jsx';/,
+    'desktop imports VerifySignatureForm',
+);
+assert.match(
+    desktopAppSrc,
+    /unlockedView === 'sign-psbt' && activeWalletId/,
+    'desktop renders sign-psbt route',
+);
+assert.match(
+    desktopAppSrc,
+    /unlockedView === 'sign-message' && activeWalletId/,
+    'desktop renders sign-message route',
+);
+assert.match(
+    desktopAppSrc,
+    /unlockedView === 'verify-signature' && activeWalletId/,
+    'desktop renders verify-signature route',
 );
 
 console.log('home-signer-mode smoke OK');
