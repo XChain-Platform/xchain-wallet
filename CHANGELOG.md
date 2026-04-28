@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.224.0] - 2026-04-28
+
+§55 — Cluster T Step 4 of 4 — Wallet glossary (G179). **Cluster T closed.**
+
+New `docs/GLOSSARY.md` defines the canonical wallet vocabulary across architecture (core / shell / vault / flow / MessageHost), signing (HD wallet, BIP39 passphrase, signer, SignerPool, panic mode), the dApp bridge (ConnectedSite, approval, throttle, blocklist, SIWX, every error code), storage (Wallet / Account / Address / Settings record, v2-tolerant, ADS), onboarding (dry-run restore, word-quiz, backup reminder, demo mode), and build / release (reproducible build, synchronized versioning, smoke, spec gap ledger, cluster).
+
+Protocol-level terms (ACTION, encoding type, BATCH, magic prefix) are NOT duplicated — the doc cross-links to the upstream `xchain-documentation/getting-started/KEY_TERMS.md` for those.
+
+### Added
+
+- **`docs/GLOSSARY.md`** (new) — wallet glossary.
+- **`test/smoke/audits/glossary-doc.smoke.js`** (new) — pins the structural sections, every required term (40+ entries) as a bold-prefixed definition, the cross-link to the upstream protocol glossary, the companion wallet doc references (REPRODUCIBLE_BUILDS, BRIDGE), and the anti-staleness framing.
+
+Closes G179. **Cluster T — §13 + §55 Pre-launch Docs — closed at v0.224.0.** §13 fully closed (5/5 rows); §55 down to G180 (gated on GPG key publication).
+
 ## [0.223.0] - 2026-04-28
 
 §55 — Cluster T Step 3 of 4 — Maintainers doc (G178).
