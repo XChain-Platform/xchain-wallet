@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.253.0] - 2026-04-28
+
+§20 — Cluster X Step 13 of N — StakeForm watcher-mode branch (action STAKE).
+
+### Added
+
+- **`packages/core/src/shared/routes/StakeForm.jsx`** — watcher-mode branch.
+- **`test/smoke/ui/stake-watcher-mode.smoke.js`** (new).
+
+### Changed
+
+- **`test/smoke/staking/stake-form.smoke.js`** — HW-vs-software-signing assertion accepts the new if/else cascade (was pinning the legacy ternary, which moved into the watcher-mode branch refactor).
+
 ## [0.252.0] - 2026-04-28
 
 §20 — Cluster X Step 12 of N — LinkForm watcher-mode branch (action LINK).
