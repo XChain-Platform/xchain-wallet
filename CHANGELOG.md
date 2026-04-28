@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.199.0] - 2026-04-27
+
+§13 — Cluster M Step 6 of 6 — `docs/QA-CHECKLIST.md` (G017). Cluster M closed.
+
+Manual pre-release checklist a release manager runs against every shell (web / extension / desktop) before tagging. Sections cover pre-flight, onboarding, send, receive, history, token detail, sign screens, lock / unlock / panic, backup and recovery, hardware signers, multisig, dApp bridge, offline mode, accessibility, URI schemes, and build / release artifacts. Sign-off block at the end captures the release manager, version under test, and any waivers. Status icons (✅ / ⬜ / ❌ / ⏸) used throughout per project memory rule (no GFM checkboxes). Cluster M (§13 + §55 docs / legal pre-launch paperwork) closes here at six rows shipped (G008 / G013 / G014 / G017 / G175 / G176 / G177).
+
+### Added
+
+- **`docs/QA-CHECKLIST.md`** (new) — manual pre-release feature-correctness checklist.
+
+Closes G017. **Cluster M — §13 + §55 Docs & Legal — closed at v0.199.0.**
+
 ## [0.198.0] - 2026-04-27
 
 §13 — Cluster M Step 5 of 6 — `docs/BRIDGE.md` (G014).
