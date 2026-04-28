@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.216.0] - 2026-04-28
+
+§54 — Cluster R Step 1 of 3 — i18n locales directory + ICU format (G173).
+
+The flat `i18n/en.js` dictionary moves into `i18n/locales/en/index.js`, with `i18n/en.js` kept as a one-line back-compat re-export so existing consumers keep working. New locales drop into `locales/<bcp47>/index.js` and call `registerLocale('<bcp47>', dictionary)` at app boot.
+
+`format()` in `i18n/index.js` gains a pragmatic ICU MessageFormat subset:
+
+- `{name}` — simple substitution (unchanged).
+- `{count, plural, one {…} other {…}}` — Intl.PluralRules-driven category match. `=N` exact-match cases win over the category match.
+- `{kind, select, mainnet {…} other {…}}` — exact-match select with `other` fallback.
+
+Inside cases, `#` is replaced by the argument's stringified value. Nested ICU patterns and offset / ordinal plurals are out of scope for this subset — formatjs can be swapped in later without changing the dictionary shape, so authored strings stay correct.
+
+`home.addressCount.one` / `home.addressCount.many` collapse into a single ICU plural key `home.addressCount`. No consumers were using the old keys yet (verified via grep).
+
+### Added
+
+- **`packages/core/src/i18n/locales/en/index.js`** (new) — relocated dictionary.
+- **`test/smoke/ui/i18n-icu-subset.smoke.js`** (new) — runtime exercise of the ICU subset (plural, select, mixed substitution) + layout assertions.
+
+### Changed
+
+- **`packages/core/src/i18n/index.js`** — gains the ICU subset interpreter (balanced-brace reader, plural via `Intl.PluralRules`, select with `other` fallback). Imports the dictionary from `./locales/en/index.js`.
+- **`packages/core/src/i18n/en.js`** — collapsed to a one-line re-export shim.
+
+Closes G173.
+
 ## [0.215.0] - 2026-04-27
 
 §48 — Cluster Q Step 3 of 3 — Log console in Developer Mode (G150). **Cluster Q closed.**
