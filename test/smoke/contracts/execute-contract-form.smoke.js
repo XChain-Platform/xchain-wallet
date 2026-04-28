@@ -48,8 +48,12 @@ assert.ok(/paramsText\.split\('\|'\)/.test(formSrc),
 assert.ok(/PARAMS\b/.test(formSrc), 'ExecuteContractForm composes a PARAMS field');
 
 // HW branch + wrong-password distinguished.
-assert.ok(/isHwSource\s*\n?\s*\?\s*await messaging\.executeActionHw/.test(formSrc),
-    'ExecuteContractForm branches HW vs software signing');
+// §20 Cluster X Step 20 — ternary refactored into if/else cascade.
+assert.ok(
+    /isHwSource\s*\n?\s*\?\s*await messaging\.executeActionHw/.test(formSrc)
+        || /else if \(isHwSource\) \{[\s\S]+?messaging\.executeActionHw/.test(formSrc),
+    'ExecuteContractForm branches HW vs software signing',
+);
 assert.ok(/InvalidPasswordError/.test(formSrc),
     'ExecuteContractForm distinguishes wrong-password');
 
