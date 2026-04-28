@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.211.0] - 2026-04-27
+
+§37 — Cluster P Step 4 of 5 — Error recovery one-click fixes (G121).
+
+`StatusMessage` gains a `recovery: { label, onAction, ariaLabel? }` slot that renders an inline action button next to the message — the recovery affordance shares the same `aria-live` region so screen readers announce the diagnostic and the fix together. Rejections from `recovery.onAction` are swallowed so the original error message stays visible while the caller surfaces its own follow-up.
+
+Four high-traffic forms wire recovery actions:
+
+- **Send.jsx** form-error row offers "Use Max" when the failure copy mentions the amount and a non-zero balance is available; the same recovery surfaces on `submitError` strings matching `/insufficient|not enough/i`.
+- **PsbtSignForm** offers "Clear" on the unrecognized-paste error to wipe the textarea in one click.
+- **ImportWallet** backup lane offers "Browse" on missing-file errors, routed through the existing dropzone `openFilePicker`.
+- **PairSignerForm** offers "Try again" on transient pairing failures, gated to skip WebHID-unsupported errors where retry is pointless.
+
+### Added
+
+- **`test/smoke/ui/error-recovery.smoke.js`** (new) — pins `recovery` prop + the four wiring sites.
+
+### Changed
+
+- **`packages/core/src/ui/StatusMessage.jsx`** + **`StatusMessage.module.css`** — `recovery` slot, flex layout for message-plus-button.
+- **`packages/core/src/shared/routes/Send.jsx`** — form-error and submit-error rows swap to `<StatusMessage>` with conditional Use-Max recovery.
+- **`packages/core/src/shared/routes/PsbtSignForm.jsx`** — invalid-paste row gains a Clear recovery.
+- **`packages/core/src/shared/routes/ImportWallet.jsx`** — error row gains a Browse recovery for the backup lane.
+- **`packages/core/src/shared/routes/PairSignerForm.jsx`** — pairing error row gains a Try-again recovery.
+
+Closes G121.
+
 ## [0.210.0] - 2026-04-27
 
 §37 — Cluster P Step 3 of 5 — Contextual tooltips (G122).

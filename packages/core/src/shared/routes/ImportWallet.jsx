@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Screen, Button, Input, Icon, QrScanner } from '@xchain-wallet/core/ui';
+import { Screen, Button, Input, Icon, QrScanner, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDropZone } from '../hooks/useDropZone.js';
 import styles from './ImportWallet.module.css';
@@ -272,7 +272,16 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
             </header>
             {laneSwitcher}
             {error ? (
-                <div role="alert" className={styles.error}>{error}</div>
+                <StatusMessage
+                    variant="error"
+                    recovery={
+                        lane === 'backup' && /backup file|paste/i.test(error)
+                            ? { label: 'Browse', onAction: backupDrop.openFilePicker }
+                            : undefined
+                    }
+                >
+                    {error}
+                </StatusMessage>
             ) : null}
             {lane === 'backup' ? (
                 <>

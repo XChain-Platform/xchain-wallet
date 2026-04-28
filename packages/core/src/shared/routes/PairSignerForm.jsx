@@ -3,7 +3,7 @@ import {
     Screen,
     Button,
     Input,
- Icon,} from '@xchain-wallet/core/ui';
+ Icon, StatusMessage,} from '@xchain-wallet/core/ui';
 import {
     signers as signersLib,
 } from '@xchain-wallet/core';
@@ -188,7 +188,16 @@ export function PairSignerForm({
                     </li>
                 </ul>
                 {error ? (
-                    <div role="alert" className={styles.error}>{error}</div>
+                    <StatusMessage
+                        variant="error"
+                        recovery={
+                            vendor && !/WebHID|not supported|not available/i.test(error)
+                                ? { label: 'Try again', onAction: () => handlePickVendor(vendor) }
+                                : undefined
+                        }
+                    >
+                        {error}
+                    </StatusMessage>
                 ) : null}
                 <div className={styles.actions}>
                 </div>

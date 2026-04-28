@@ -33,6 +33,7 @@ import {
     ChainPicker,
     CopyButton,
     Icon,
+    StatusMessage,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -499,9 +500,12 @@ export function PsbtSignForm({ walletId, onBack }) {
                     </Button>
                 </div>
                 {pasted && !psbtHex ? (
-                    <div role="alert" style={{ color: 'var(--xc-danger)', fontSize: 'var(--xc-text-sm)', marginTop: 4 }}>
+                    <StatusMessage
+                        variant="error"
+                        recovery={{ label: 'Clear', onAction: () => { setPasted(''); if (error) setError(null); } }}
+                    >
                         Doesn't look like hex or base64 PSBT. Strip whitespace, paste the full blob.
-                    </div>
+                    </StatusMessage>
                 ) : null}
                 {parsing ? (
                     <div style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)', marginTop: 4 }}>

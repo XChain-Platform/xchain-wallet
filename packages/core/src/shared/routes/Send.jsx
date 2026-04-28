@@ -7,7 +7,7 @@ import {
     ChainBadge,
     AddressText,
     FeeSelector,
- ChainPicker,  Icon, InfoTip,} from '@xchain-wallet/core/ui';
+ ChainPicker,  Icon, InfoTip, StatusMessage,} from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -920,7 +920,16 @@ export function Send({ walletId, onBack }) {
                     />
                 )}
                 {isHwSource && submitError ? (
-                    <div role="alert" className={styles.error}>{submitError}</div>
+                    <StatusMessage
+                        variant="error"
+                        recovery={
+                            /insufficient|not enough/i.test(submitError) && sourceBalance && parseFloat(sourceBalance.amount || '0') > 0
+                                ? { label: 'Use Max', onAction: () => { setStage('form'); onMax(); } }
+                                : undefined
+                        }
+                    >
+                        {submitError}
+                    </StatusMessage>
                 ) : null}
                 <div className={styles.actions}>
                     <Button
@@ -1095,7 +1104,16 @@ export function Send({ walletId, onBack }) {
                 </label>
             ) : null}
             {formError ? (
-                <div role="alert" className={styles.error}>{formError}</div>
+                <StatusMessage
+                    variant="error"
+                    recovery={
+                        /amount/i.test(formError) && sourceBalance && parseFloat(sourceBalance.amount || '0') > 0
+                            ? { label: 'Use Max', onAction: onMax }
+                            : undefined
+                    }
+                >
+                    {formError}
+                </StatusMessage>
             ) : null}
             <div className={styles.actions}>
                 <Button

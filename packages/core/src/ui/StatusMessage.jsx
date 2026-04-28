@@ -14,13 +14,20 @@ import styles from './StatusMessage.module.css';
  * component conditionally inside an effect-driven flow without an
  * extra null branch.
  *
+ * §37 / G121 — `recovery` slot lets a caller surface a one-click fix
+ * inline with the error message ("Insufficient balance — Use Max",
+ * "Backup file missing — Browse"). The button shares the message
+ * row's aria-live region so the recovery affordance is announced
+ * together with the diagnostic.
+ *
  * @param {object} props
  * @param {'status' | 'error' | 'success'} [props.variant]   default 'status'
  * @param {string} [props.id]
  * @param {import('react').ReactNode} props.children
  * @param {string} [props.className]                          appended after the variant class so callers can space-suffix layout adjustments
+ * @param {{ label: string, onAction: () => void | Promise<void>, ariaLabel?: string }} [props.recovery]   one-click fix shown inline with the message
  */
-export function StatusMessage({ variant = 'status', id, children, className }) {
+export function StatusMessage({ variant = 'status', id, children, className, recovery }) {
     if (children === null || children === undefined || children === '') return null;
     const role = variant === 'error' ? 'alert' : 'status';
     const live = variant === 'error' ? 'assertive' : 'polite';
@@ -32,7 +39,21 @@ export function StatusMessage({ variant = 'status', id, children, className }) {
     const classNames = [styles.row, variantClass, className].filter(Boolean).join(' ');
     return (
         <div role={role} aria-live={live} id={id} className={classNames}>
-            {children}
+            <span className={styles.text}>{children}</span>
+            {recovery && recovery.label && typeof recovery.onAction === 'function' ? (
+                <button
+                    type="button"
+                    className={styles.recovery}
+                    aria-label={recovery.ariaLabel || recovery.label}
+                    onClick={() => {
+                        Promise.resolve(recovery.onAction()).catch(() => {
+                            /* swallow — caller surfaces its own follow-up */
+                        });
+                    }}
+                >
+                    {recovery.label}
+                </button>
+            ) : null}
         </div>
     );
 }

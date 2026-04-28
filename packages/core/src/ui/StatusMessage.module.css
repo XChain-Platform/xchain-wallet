@@ -1,9 +1,38 @@
 .row {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
     margin: var(--xc-space-2) 0;
     padding: var(--xc-space-2) var(--xc-space-3);
     border-radius: var(--xc-radius-sm);
     font-size: var(--xc-text-sm);
     line-height: 1.4;
+}
+
+.text {
+    flex: 1;
+    min-width: 0;
+}
+
+.recovery {
+    flex: 0 0 auto;
+    background: rgba(255, 255, 255, 0.18);
+    color: inherit;
+    border: 1px solid currentColor;
+    border-radius: var(--xc-radius-sm);
+    padding: 2px var(--xc-space-2);
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+    cursor: pointer;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+.recovery:hover,
+.recovery:focus-visible {
+    background: rgba(255, 255, 255, 0.3);
+    outline: 2px solid currentColor;
+    outline-offset: 1px;
 }
 
 .status {
