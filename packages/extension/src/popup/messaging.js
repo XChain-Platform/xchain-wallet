@@ -1465,6 +1465,19 @@ export function deleteConnectedSite(req) {
     return /** @type {any} */ (sendMessage('sites.delete', req));
 }
 
+// §12 / G009 — origin blocklist.
+export function listBlockedOrigins() {
+    return /** @type {Promise<string[]>} */ (sendMessage('sites.listBlocked'));
+}
+/** @param {{ origin: string }} req */
+export function blockOrigin(req) {
+    return /** @type {any} */ (sendMessage('sites.block', req));
+}
+/** @param {{ origin: string }} req */
+export function unblockOrigin(req) {
+    return /** @type {any} */ (sendMessage('sites.unblock', req));
+}
+
 /**
  * Destructively remove a wallet and every record linked to it.
  *

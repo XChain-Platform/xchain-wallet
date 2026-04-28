@@ -138,6 +138,9 @@ const {
     publishLabelsNow,
     importWif,
     diagnosticDump,
+    listBlockedOrigins,
+    addBlockedOrigin,
+    removeBlockedOrigin,
 } = flows;
 
 /**
@@ -655,6 +658,28 @@ export function createBackgroundHost(deps) {
         }
         await vault.connectedSites.delete(id);
         return { ok: true };
+    });
+
+    // §12 / G009 — origin blocklist. listBlockedOrigins reads from
+    // settings.blockedOrigins; addBlockedOrigin also evicts any
+    // ConnectedSite record on the same origin so an in-flight session
+    // can't keep signing.
+    host.register('sites.listBlocked', async (_req, { vault }) => {
+        return listBlockedOrigins({ vault });
+    });
+    host.register('sites.block', async (req, { vault }) => {
+        const origin = req?.origin;
+        if (typeof origin !== 'string' || !origin) {
+            throw new Error('sites.block: origin is required');
+        }
+        return addBlockedOrigin({ vault, origin });
+    });
+    host.register('sites.unblock', async (req, { vault }) => {
+        const origin = req?.origin;
+        if (typeof origin !== 'string' || !origin) {
+            throw new Error('sites.unblock: origin is required');
+        }
+        return removeBlockedOrigin({ vault, origin });
     });
 
     // --- Receive -------------------------------------------------------------

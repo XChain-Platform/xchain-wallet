@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.220.0] - 2026-04-28
+
+§12 — Cluster S Step 2 of 2 — Origin allowlist / blocklist infrastructure (G009). **Cluster S closed.**
+
+New `flows/blocklist.js` exposes `normalizeOrigin` / `isOriginBlocked` plus async `listBlockedOrigins` / `addBlockedOrigin` / `removeBlockedOrigin` helpers backed by a new `settings.blockedOrigins?: string[]` v2-tolerant field. `bridge/handlers.js` calls a new `assertNotBlocked(req, deps)` guard from `bridge.connect` and the four sign methods (`signMessage`, `signAction`, `signPsbt`, `signIn`); blocked origins reject with `BLOCKED_BY_USER`.
+
+`addBlockedOrigin` also evicts any matching `ConnectedSite` record so an in-flight session can't keep signing through a stale grant. The Connected Sites Settings panel grows a per-row Block button, a "Blocked origins" subsection with Unblock buttons, and an inline manual-block form for blocking origins that aren't already connected.
+
+### Added
+
+- **`packages/core/src/flows/blocklist.js`** (new) — `normalizeOrigin`, `isOriginBlocked`, `listBlockedOrigins`, `addBlockedOrigin`, `removeBlockedOrigin`. `flows` barrel re-exports them.
+- **`settings.blockedOrigins?: string[]`** — v2-tolerant typedef + validator addition; missing is fine, present must be `string[]`.
+- **`BLOCKED_BY_USER`** added to `BridgeErrorCode` union in `packages/bridge-spec/src/index.ts`.
+- **`docs/BRIDGE.md`** error table gains the `BLOCKED_BY_USER` row.
+- **`sites.listBlocked` / `sites.block` / `sites.unblock`** host handlers in `createBackgroundHost`.
+- **`listBlockedOrigins` / `blockOrigin` / `unblockOrigin`** messaging shims in extension popup, web, and desktop renderer.
+- **`test/smoke/bridge/origin-blocklist.smoke.js`** (new) — exercises normalize + isBlocked at runtime, pins schema validator, bridge wiring across connect + four sign methods, host handlers, three messaging shims, ConnectedSitesSection UI, spec union, and docs table.
+
+### Changed
+
+- **`packages/extension/src/bridge/handlers.js`** — destructures `isOriginBlocked` from flows; new `assertNotBlocked` async helper; called at the top of `bridge.connect` and each of the four sign handlers (before throttle check, since user intent overrides rate limiting).
+- **`packages/extension/src/background/createBackgroundHost.js`** — destructures the three blocklist flows and registers the three new `sites.*` handlers.
+- **`packages/core/src/shared/components/settings/ConnectedSitesSection.jsx`** — feature-detects blocklist wiring on the messaging surface; per-row Block button (when wired); new BlockedOriginsPanel subsection lists blocked origins with Unblock + accepts manual entry.
+
+Closes G009. **Cluster S — §12 Security — closed at v0.220.0.** §12 fully closed (5/5 rows).
+
 ## [0.219.0] - 2026-04-28
 
 §12 — Cluster S Step 1 of 2 — Sign-request throttling per origin (G012).

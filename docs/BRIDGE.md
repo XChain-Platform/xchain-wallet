@@ -235,6 +235,7 @@ A handler removed via `off` will not fire for events emitted after removal.
 | `BROADCAST_FAILED` | The wallet signed but the network rejected the broadcast. |
 | `PANIC_MODE` | The user has placed the wallet in panic mode (24h signing freeze). All sign methods reject with this until the freeze lifts. |
 | `THROTTLED` | The site exceeded the per-origin sign-request rate limit. Result includes `retryAfterMs` (also `burst` / `windowMs`). Connect / disconnect / read methods are not throttled — only `signMessage` / `signAction` / `signPsbt` / `signIn`. |
+| `BLOCKED_BY_USER` | The user has explicitly blocked this origin from Settings → Connected Sites. `connect` and the four sign methods reject with this; the dApp has no programmatic recovery — the user must un-block the origin first. |
 | `BRIDGE_VERSION_MISMATCH` | The dApp's `requiredBridgeVersion` is outside the wallet's supported range. |
 | `INTERNAL_ERROR` | Catch-all for unexpected wallet-side failures. Log it, but don't try to recover programmatically. |
 

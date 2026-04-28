@@ -296,3 +296,10 @@ export {
     SIGN_THROTTLE_DEFAULT_BURST,
     SIGN_THROTTLE_DEFAULT_WINDOW_MS,
 } from './signThrottle.js';
+export {
+    normalizeOrigin,
+    isOriginBlocked,
+    listBlockedOrigins,
+    addBlockedOrigin,
+    removeBlockedOrigin,
+} from './blocklist.js';

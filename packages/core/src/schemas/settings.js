@@ -78,6 +78,7 @@ export const CLIPBOARD_AUTO_CLEAR_DEFAULT = 60;
  * @property {string[]} [pinnedTokens]                                                                       v2-tolerant — list of `chainId:asset` keys the user pinned to the top of the balance list (§27.3 / G072)
  * @property {string[]} [hiddenTokens]                                                                       v2-tolerant — list of `chainId:asset` keys the user hid (collapsed into the Hidden section at the bottom of each tab) (§27.4 / G073)
  * @property {boolean} [autoApproveLocalhost]                                                                v2-tolerant — when developerMode is also on, bridge.connect from localhost / 127.0.0.1 / [::1] origins skips the approval prompt (§48.6 / G151). Sign requests still prompt.
+ * @property {string[]} [blockedOrigins]                                                                     v2-tolerant — user-managed origin blocklist (§12 / G009). bridge.connect + the four sign methods reject with BLOCKED_BY_USER for matching origins. Stored as URL.origin strings.
  */
 
 /** @returns {Settings} */
@@ -264,6 +265,14 @@ export function validateSettings(record) {
             'autoApproveLocalhost',
             isBoolean(r.autoApproveLocalhost),
             'must be a boolean when present',
+        );
+    }
+    if (r.blockedOrigins !== undefined) {
+        check(
+            errors,
+            'blockedOrigins',
+            Array.isArray(r.blockedOrigins) && r.blockedOrigins.every(isString),
+            'must be an array of origin strings',
         );
     }
 

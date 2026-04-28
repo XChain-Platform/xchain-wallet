@@ -610,3 +610,16 @@ export function unregisterSigner(signerId) {
 export function exportPrivateKey(opts) {
     return /** @type {any} */ (sendMessage('wallet.exportPrivateKey', opts));
 }
+
+// §12 / G009 — origin blocklist.
+export function listBlockedOrigins() {
+    return /** @type {Promise<string[]>} */ (sendMessage('sites.listBlocked'));
+}
+/** @param {{ origin: string }} req */
+export function blockOrigin(req) {
+    return /** @type {any} */ (sendMessage('sites.block', req));
+}
+/** @param {{ origin: string }} req */
+export function unblockOrigin(req) {
+    return /** @type {any} */ (sendMessage('sites.unblock', req));
+}

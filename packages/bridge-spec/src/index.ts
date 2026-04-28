@@ -129,6 +129,7 @@ export type BridgeErrorCode =
     | 'BROADCAST_FAILED'
     | 'PANIC_MODE'
     | 'THROTTLED'
+    | 'BLOCKED_BY_USER'
     | 'BRIDGE_VERSION_MISMATCH'
     | 'INTERNAL_ERROR';
 

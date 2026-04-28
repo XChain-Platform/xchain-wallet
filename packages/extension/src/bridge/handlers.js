@@ -32,6 +32,7 @@ const {
     signPsbtFlow,
     submitAction,
     createSignThrottle,
+    isOriginBlocked,
 } = flows;
 
 const SUPPORTED_BRIDGE_ACTIONS = ['SEND', 'SWEEP'];
@@ -49,6 +50,7 @@ export function registerBridgeHandlers(host, opts = {}) {
 
     host.register('bridge.connect', async (req, deps) => {
         assertOrigin(req);
+        await assertNotBlocked(req, deps);
         const { origin, appName = origin, appIcon } = req;
 
         const existing = await findConnectedSite(deps.vault, origin);
@@ -194,6 +196,7 @@ export function registerBridgeHandlers(host, opts = {}) {
     });
 
     host.register('bridge.signMessage', async (req, deps) => {
+        await assertNotBlocked(req, deps);
         const site = await requireSite(deps.vault, req);
         assertChainPermitted(site, req.chainId);
         assertNotThrottled(signThrottle, req);
@@ -237,6 +240,7 @@ export function registerBridgeHandlers(host, opts = {}) {
     });
 
     host.register('bridge.signAction', async (req, deps) => {
+        await assertNotBlocked(req, deps);
         const site = await requireSite(deps.vault, req);
         assertChainPermitted(site, req.chainId);
         assertNotThrottled(signThrottle, req);
@@ -299,6 +303,7 @@ export function registerBridgeHandlers(host, opts = {}) {
     });
 
     host.register('bridge.signPsbt', async (req, deps) => {
+        await assertNotBlocked(req, deps);
         const site = await requireSite(deps.vault, req);
         assertChainPermitted(site, req.chainId);
         assertNotThrottled(signThrottle, req);
@@ -336,6 +341,7 @@ export function registerBridgeHandlers(host, opts = {}) {
     });
 
     host.register('bridge.signIn', async (req, deps) => {
+        await assertNotBlocked(req, deps);
         const site = await requireSite(deps.vault, req);
         assertNotThrottled(signThrottle, req);
         const decision = await approvals.signIn({
@@ -423,6 +429,15 @@ function assertChainPermitted(site, chainId) {
     if (chains.length === 0) return;  // empty list = all permitted (per §43.3)
     if (!chains.includes(chainId)) {
         throw bridgeError('CHAIN_NOT_PERMITTED', chainId);
+    }
+}
+
+async function assertNotBlocked(req, deps) {
+    if (!req || typeof req.origin !== 'string' || !req.origin) return;
+    const settings = await deps.vault.settings.get().catch(() => null);
+    if (!settings) return;
+    if (isOriginBlocked(settings.blockedOrigins, req.origin)) {
+        throw bridgeError('BLOCKED_BY_USER', req.origin);
     }
 }
 
