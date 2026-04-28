@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.248.0] - 2026-04-28
+
+§20 — Cluster X Step 8 of N — BroadcastForm watcher-mode branch (action BROADCAST).
+
+### Added
+
+- **`packages/core/src/shared/routes/BroadcastForm.jsx`** — watcher-mode branch.
+- **`test/smoke/ui/broadcast-watcher-mode.smoke.js`** (new).
+
 ## [0.247.0] - 2026-04-28
 
 §20 — Cluster X Step 7 of N — DestroyForm watcher-mode branch.
