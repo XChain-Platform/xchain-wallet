@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.255.0] - 2026-04-28
+
+§20 — Cluster X Step 15 of N — CrossChainSwapForm watcher-mode branch (action SWAP, cross-chain GET_ADDRESS / EXPIRATION extras).
+
+### Added
+
+- **`packages/core/src/shared/routes/CrossChainSwapForm.jsx`** — watcher-mode branch.
+- **`test/smoke/ui/cross-chain-swap-watcher-mode.smoke.js`** (new).
+
 ## [0.254.0] - 2026-04-28
 
 §20 — Cluster X Step 14 of N — SwapForm watcher-mode branch (action SWAP).
