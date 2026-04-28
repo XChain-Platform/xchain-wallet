@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.215.0] - 2026-04-27
+
+§48 — Cluster Q Step 3 of 3 — Log console in Developer Mode (G150). **Cluster Q closed.**
+
+New `shared/utils/logConsole.js` singleton ring buffer (default capacity 500) captures `console.log/info/warn/error` output process-wide. `attach()` is idempotent and preserves the originals so DevTools still receives every entry. `record({ level, source, message, data })` lets flows / bridge handlers contribute synthetic entries that never went through `console.*`. `subscribe(listener)` notifies on every push.
+
+New `<LogConsole>` component (in `packages/core/src/shared/components/`) renders the buffer as a compact monospace list with per-level filter chips (log / info / warn / error), a free-text search, Clear, and Copy-to-clipboard. Self-attaches to `console.*` on mount.
+
+Settings → Developer Mode panel: the previously-disabled "Logs and diagnostics console" row is replaced by `<LogConsoleRow>` — a Show / Hide affordance that mounts `<LogConsole>` inline. Gated on Developer Mode being on.
+
+Scoped to one Settings surface — does not touch the three shell App.jsx files for a global drawer (would have crossed the cluster's "multiple ~1000-line shell App.jsx files" stop condition).
+
+### Added
+
+- **`packages/core/src/shared/utils/logConsole.js`** (new) — ring-buffer singleton with attach/detach/record/entries/subscribe/clear.
+- **`packages/core/src/shared/components/LogConsole.jsx`** (new) — filter / search / clear / copy panel.
+- **`test/smoke/ui/log-console.smoke.js`** (new) — pins singleton surface + component wiring + Developer-Mode gating.
+
+### Changed
+
+- **`packages/core/src/shared/components/settings/DeveloperModeSection.jsx`** — replaces the deferred Logs toggle with `<LogConsoleRow>`.
+- **`test/smoke/ui/settings-developer-mode.smoke.js`** — pins the new LogConsoleRow alongside the still-deferred Raw PSBT row.
+
+Closes G150. **Cluster Q — §48 Developer Mode leftovers — closed at v0.215.0.**
+
 ## [0.214.0] - 2026-04-27
 
 §48 — Cluster Q Step 2 of 3 — Regtest chain exposure (G149).

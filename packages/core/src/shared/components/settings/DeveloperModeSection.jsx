@@ -28,6 +28,7 @@ import { useEffect, useState } from 'react';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging } from '../../useMessaging.js';
 import { useSettings } from '../../hooks/useSettings.js';
+import { LogConsole } from '../LogConsole.jsx';
 import { STACK, Status, ToggleRow } from './_settingsPrimitives.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -76,13 +77,50 @@ export function DeveloperModeSection() {
                 disabled={!settings.developerMode}
                 onChange={(v) => onToggle('autoApproveLocalhost', v)}
             />
-            <ToggleRow
-                label="Logs and diagnostics console"
-                hint="Coming soon — surface SDK requests, signing operations, storage I/O. §48.5."
-                checked={false}
-                disabled
-                onChange={() => {}}
-            />
+            <LogConsoleRow developerMode={Boolean(settings.developerMode)} />
+        </div>
+    );
+}
+
+function LogConsoleRow({ developerMode }) {
+    const [open, setOpen] = useState(false);
+    return (
+        <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 'var(--xc-space-2)',
+            padding: 'var(--xc-space-3)',
+            background: 'var(--xc-surface-raised)',
+            border: '1px solid var(--xc-border)',
+            borderRadius: 'var(--xc-radius-md)',
+        }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--xc-space-2)' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                    <span style={{ fontWeight: 500, color: 'var(--xc-text)' }}>Logs and diagnostics console</span>
+                    <span style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)' }}>
+                        Process-wide ring buffer of console.* output. Useful when DevTools isn't available (popup, packaged desktop). Captures from now on — already-emitted entries are not replayed.
+                        {!developerMode ? ' Turn Developer Mode on to view.' : ''}
+                    </span>
+                </div>
+                <button
+                    type="button"
+                    onClick={() => setOpen((v) => !v)}
+                    disabled={!developerMode}
+                    style={{
+                        background: 'transparent',
+                        border: '1px solid var(--xc-border)',
+                        color: 'var(--xc-text)',
+                        borderRadius: 'var(--xc-radius-sm)',
+                        padding: 'var(--xc-space-1) var(--xc-space-3)',
+                        fontSize: 'var(--xc-text-xs)',
+                        cursor: developerMode ? 'pointer' : 'not-allowed',
+                        opacity: developerMode ? 1 : 0.5,
+                    }}
+                >
+                    {open ? 'Hide' : 'Show'}
+                </button>
+            </div>
+            {open && developerMode ? <LogConsole /> : null}
         </div>
     );
 }

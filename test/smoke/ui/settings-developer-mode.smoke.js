@@ -30,21 +30,20 @@ assert.match(src, /label="Learn Mode"/, 'Learn Mode toggle present');
 assert.match(src, /onToggle\('developerMode'/, 'developerMode field wired');
 assert.match(src, /onToggle\('learnMode'/, 'learnMode field wired');
 
-// Two still-deferred reveals (Raw PSBT and Logs console). Custom chain
-// registry was replaced by the live "Regtest networks" subsection at
-// v0.214.0 (G149); Auto-approve localhost was activated at v0.213.0
-// (G151) — both labels still appear in the source but the assertions
-// are checked separately below.
-for (const label of [
-    'Raw PSBT inspector',
-    'Logs and diagnostics console',
-]) {
-    assert.ok(src.includes(`label="${label}"`), `${label} deferred row present`);
-}
+// Only Raw PSBT remains as a placeholder ToggleRow at v0.215.0:
+//  - Custom chain registry row → replaced by RegtestNetworksRow (G149, v0.214.0)
+//  - Auto-approve localhost → wired ToggleRow (G151, v0.213.0)
+//  - Logs and diagnostics console → replaced by LogConsoleRow (G150, v0.215.0)
+assert.ok(src.includes('label="Raw PSBT inspector"'),
+    'Raw PSBT inspector deferred row still present');
 assert.ok(src.includes('label="Auto-approve localhost dApps"'),
     'Auto-approve localhost dApps row present (active, gated on Developer Mode)');
 assert.ok(/RegtestNetworksRow/.test(src),
     'Regtest networks subsection mounted (replaces the deferred Custom chain registry row)');
+assert.ok(/LogConsoleRow/.test(src),
+    'Logs and diagnostics console row mounted (replaces the deferred toggle)');
+assert.ok(/Logs and diagnostics console/.test(src),
+    'Logs and diagnostics console label preserved on the LogConsoleRow');
 
 // ─── Regtest reveal in NetworkEndpointsSection ────────────────────
 
