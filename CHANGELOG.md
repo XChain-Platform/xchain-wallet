@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.209.0] - 2026-04-27
+
+§37 — Cluster P Step 2 of 5 — Drag-and-drop file handling (G123).
+
+New `shared/hooks/useDropZone.js` factors the (preventDefault → setDragOver → validate → FileReader) plumbing into a reusable hook. Configurable `accept` allowlist (extension or MIME), `maxBytes` cap (default 2 MB), and `readAs: 'text' | 'arrayBuffer'` mode. Returns `{ rootProps, isDragOver, openFilePicker, pickerProps }` so a host can spread drop handlers onto any container and mount a hidden `<input type="file">` for a Browse fallback.
+
+Three integrations land at the same time:
+
+- **PsbtSignForm** picks up binary `.psbt` drop + Browse: hook reads as ArrayBuffer, helper converts to hex, the existing `normalizePsbtInput` pipeline takes it from there. Closes the FOLLOWUP from Cluster E Step 2 (PSBT file drop).
+- **Settings → Contacts** Import row gains drop support (JSON only); the existing click-to-pick + the new drop both route through a shared `importFromText` helper.
+- **ImportWallet** backup-restore lane gains drop support on the textarea (.xchain-wallet / JSON / .txt); seeds the existing `backupContent` / `backupFileName` state so the rest of the lane is unchanged.
+
+The pre-existing one-off mnemonic-txt drop in ImportWallet keeps its bespoke wiring — the hook is opt-in for new sites.
+
+### Added
+
+- **`packages/core/src/shared/hooks/useDropZone.js`** (new) — shared drop hook + hidden-input picker.
+- **`test/smoke/ui/dropzone-hook.smoke.js`** (new) — pins hook surface + the three integrations.
+
+### Changed
+
+- **`packages/core/src/shared/routes/PsbtSignForm.jsx`** — wraps the textarea in the drop zone, adds Browse for .psbt button, routes ArrayBuffer → hex through the existing paste pipeline.
+- **`packages/core/src/shared/components/settings/ContactsSection.jsx`** — JSON drop on the Import row routes through a new `importFromText` helper shared with the click-to-pick path.
+- **`packages/core/src/shared/routes/ImportWallet.jsx`** — backup-restore textarea picks up drop; hint copy updated.
+
+Closes G123.
+
 ## [0.208.0] - 2026-04-27
 
 §37 — Cluster P Step 1 of 5 — Haptic feedback (G120).

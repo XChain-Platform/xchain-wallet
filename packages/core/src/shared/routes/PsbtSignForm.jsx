@@ -36,8 +36,18 @@ import {
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDropZone } from '../hooks/useDropZone.js';
 import pickerStyles from './WalletPicker.module.css';
 import styles from './IssueTokenForm.module.css';
+
+function arrayBufferToHex(buf) {
+    const view = new Uint8Array(buf);
+    let hex = '';
+    for (let i = 0; i < view.length; i += 1) {
+        hex += view[i].toString(16).padStart(2, '0');
+    }
+    return hex;
+}
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -107,6 +117,24 @@ export function PsbtSignForm({ walletId, onBack }) {
     );
 
     const psbtHex = useMemo(() => normalizePsbtInput(pasted), [pasted]);
+
+    // .psbt file drop / picker — binary blobs are read as ArrayBuffer and
+    // converted to hex before being routed through the same paste pipeline.
+    const drop = useDropZone({
+        accept: ['.psbt', 'application/octet-stream', 'text/plain'],
+        readAs: 'arrayBuffer',
+        onError: setError,
+        disabled: busy,
+        onFile: ({ content }) => {
+            try {
+                const hex = arrayBufferToHex(content);
+                setPasted(hex);
+                if (error) setError(null);
+            } catch (_e) {
+                setError('Could not decode the dropped PSBT file.');
+            }
+        },
+    });
 
     useEffect(() => {
         let cancelled = false;
@@ -427,26 +455,49 @@ export function PsbtSignForm({ walletId, onBack }) {
                 >
                     PSBT (hex or base64)
                 </label>
-                <textarea
-                    id="psbt-sign-paste"
-                    value={pasted}
-                    onChange={(e) => { setPasted(e.target.value); if (error) setError(null); }}
-                    placeholder="Paste PSBT hex (70736274ff…) or base64 (cHNid…)"
-                    rows={6}
-                    aria-label="PSBT"
+                <div
+                    {...drop.rootProps}
                     style={{
-                        width: '100%',
-                        background: 'var(--xc-bg)',
-                        color: 'var(--xc-text)',
-                        border: '1px solid var(--xc-border)',
+                        position: 'relative',
+                        border: drop.isDragOver ? '2px dashed var(--xc-accent)' : '1px solid transparent',
                         borderRadius: 'var(--xc-radius-sm)',
-                        padding: 'var(--xc-space-2)',
-                        fontSize: 'var(--xc-text-xs)',
-                        fontFamily: 'var(--xc-font-mono)',
-                        resize: 'vertical',
-                        wordBreak: 'break-all',
+                        padding: drop.isDragOver ? 0 : 1,
+                        transition: 'border-color 120ms ease',
                     }}
-                />
+                >
+                    <textarea
+                        id="psbt-sign-paste"
+                        value={pasted}
+                        onChange={(e) => { setPasted(e.target.value); if (error) setError(null); }}
+                        placeholder="Paste PSBT hex (70736274ff…) or base64 (cHNid…) — or drop a .psbt file"
+                        rows={6}
+                        aria-label="PSBT"
+                        style={{
+                            width: '100%',
+                            background: 'var(--xc-bg)',
+                            color: 'var(--xc-text)',
+                            border: '1px solid var(--xc-border)',
+                            borderRadius: 'var(--xc-radius-sm)',
+                            padding: 'var(--xc-space-2)',
+                            fontSize: 'var(--xc-text-xs)',
+                            fontFamily: 'var(--xc-font-mono)',
+                            resize: 'vertical',
+                            wordBreak: 'break-all',
+                        }}
+                    />
+                    <input {...drop.pickerProps} />
+                </div>
+                <div style={{ marginTop: 4, fontSize: 'var(--xc-text-sm)', color: 'var(--xc-text-muted)', display: 'flex', alignItems: 'center', gap: 'var(--xc-space-2)' }}>
+                    <span>Or</span>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={drop.openFilePicker}
+                        disabled={busy}
+                    >
+                        Browse for .psbt file
+                    </Button>
+                </div>
                 {pasted && !psbtHex ? (
                     <div role="alert" style={{ color: 'var(--xc-danger)', fontSize: 'var(--xc-text-sm)', marginTop: 4 }}>
                         Doesn't look like hex or base64 PSBT. Strip whitespace, paste the full blob.

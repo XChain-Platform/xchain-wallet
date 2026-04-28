@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Screen, Button, Input, Icon, QrScanner } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDropZone } from '../hooks/useDropZone.js';
 import styles from './ImportWallet.module.css';
 import pickerStyles from './WalletPicker.module.css';
 
@@ -87,6 +88,22 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
         };
         reader.readAsText(file);
     }
+
+    // Encrypted-backup drop zone — same .xchain-wallet / JSON / text MIME
+    // set the file picker accepts; reads the content as text and seeds
+    // the existing backupContent state so the rest of the lane behaves
+    // identically to a click-to-pick.
+    const backupDrop = useDropZone({
+        accept: ['.xchain-wallet', 'application/json', '.json', 'text/plain', '.txt'],
+        readAs: 'text',
+        disabled: busy,
+        onError: setError,
+        onFile: ({ file, content }) => {
+            setBackupFileName(file.name);
+            setBackupContent(typeof content === 'string' ? content : '');
+            if (error) setError(null);
+        },
+    });
 
     async function handleBackupSubmit(event) {
         event.preventDefault();
@@ -273,9 +290,10 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                     {backupFileName ? (
                         <p className={styles.backupHint}>Loaded {backupFileName} ({backupContent.length.toLocaleString()} bytes).</p>
                     ) : (
-                        <p className={styles.backupHint}>Or paste the file contents below.</p>
+                        <p className={styles.backupHint}>Or drop a backup file onto the box below — or paste its contents.</p>
                     )}
                     <textarea
+                        {...backupDrop.rootProps}
                         className={mnemonicClass}
                         value={backupContent}
                         onChange={(e) => {
@@ -290,6 +308,10 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                         autoComplete="off"
                         rows={4}
                         disabled={busy}
+                        style={{
+                            outline: backupDrop.isDragOver ? '2px dashed var(--xc-accent)' : undefined,
+                            outlineOffset: backupDrop.isDragOver ? 2 : undefined,
+                        }}
                     />
                     <Input
                         type="password"

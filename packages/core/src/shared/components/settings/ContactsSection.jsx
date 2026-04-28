@@ -11,6 +11,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useMessaging } from '../../useMessaging.js';
+import { useDropZone } from '../../hooks/useDropZone.js';
 import { ROW, ROW_HINT, STACK, Status } from './_settingsPrimitives.jsx';
 
 const ACTION_BTN = {
@@ -56,12 +57,10 @@ export function ContactsSection() {
         }
     };
 
-    const onImportFile = async (file) => {
-        if (!file) return;
+    const importFromText = async (text) => {
         setImportStatus(null);
         setError(null);
         try {
-            const text = await file.text();
             const parsed = JSON.parse(text);
             if (!Array.isArray(parsed)) {
                 throw new Error('Expected a JSON array of contact records.');
@@ -88,6 +87,23 @@ export function ContactsSection() {
         }
     };
 
+    const onImportFile = async (file) => {
+        if (!file) return;
+        try {
+            const text = await file.text();
+            await importFromText(text);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : String(err));
+        }
+    };
+
+    const importDrop = useDropZone({
+        accept: ['.json', 'application/json'],
+        readAs: 'text',
+        onError: setError,
+        onFile: ({ content }) => importFromText(typeof content === 'string' ? content : ''),
+    });
+
     return (
         <div style={STACK}>
             <div style={ROW}>
@@ -107,10 +123,20 @@ export function ContactsSection() {
                     Export…
                 </button>
             </div>
-            <div style={ROW}>
+            <div
+                {...importDrop.rootProps}
+                style={{
+                    ...ROW,
+                    border: importDrop.isDragOver ? '2px dashed var(--xc-accent)' : '1px solid transparent',
+                    borderRadius: 'var(--xc-radius-sm)',
+                    transition: 'border-color 120ms ease',
+                }}
+            >
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
                     <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>Import</span>
-                    <span style={ROW_HINT}>Reads a contacts JSON file. Existing contacts with the same id are overwritten.</span>
+                    <span style={ROW_HINT}>
+                        Reads a contacts JSON file or drop one here. Existing contacts with the same id are overwritten.
+                    </span>
                 </div>
                 <input
                     ref={fileInputRef}
