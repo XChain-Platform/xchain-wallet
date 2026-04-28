@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.227.0] - 2026-04-28
+
+§20 — Cluster U Step 3 of 5 — BBQr / UR PSBT QR formats (G043, partial).
+
+New `uri/bbqrPsbt.js` decodes BBQr (Sparrow / Coldcard / SeedSigner standard) PSBT frames — single and multi-frame, H (hex) and B (base32) encodings. Z (zlib) encoding throws with a clear "not yet supported" error since zlib is not in the dep tree. New `uri/qrPsbtFormat.js` detects all three known formats (XCW / BBQr / UR) and surfaces a friendly message when a UR frame is recognized but cannot be decoded yet.
+
+`PsbtSignForm.normalizePsbtInput` picks up BBQr-only line-separated pastes and routes them through `decodeBbqrPsbt`. Pastes that detect as a known-but-unsupported format (UR, or BBQr-Z) surface the format-specific hint in the error row instead of the generic "doesn't look like hex" copy.
+
+Marked **🟡 partial** since BBQr-Z and UR fountain-coded multi-part are still pending — see Cluster U FOLLOWUPs.
+
+### Added
+
+- **`packages/core/src/uri/bbqrPsbt.js`** (new) — `parseBbqrFrame` / `decodeBbqrFrames` / `decodeBbqrPsbt`. Handles header parsing (B$EFNNXX), base36 frame counts, hex / base32 decoding (RFC 4648 no-pad via `@scure/base`), out-of-order frame collection, duplicate-frame deduplication. Z encoding + non-PSBT file types throw clear errors.
+- **`packages/core/src/uri/qrPsbtFormat.js`** (new) — `detectQrFrameFormat` returns `'xcw' | 'bbqr' | 'ur' | null`; `describeUnsupportedFormat` returns a UR-specific user-facing hint.
+- **`test/smoke/bridge/bbqr-psbt.smoke.js`** (new) — exercises detection (every format + null cases), single + multi-frame BBQr-H decode (in-order, out-of-order, deduplicated), error paths (missing frame / total mismatch / encoding mismatch / Z encoding / non-PSBT file type / garbage frame), and the PsbtSignForm wiring.
+
+### Changed
+
+- **`packages/core/src/shared/routes/PsbtSignForm.jsx`** — `normalizePsbtInput` recognizes line-separated BBQr frame batches; new `unsupportedFormatHint` surfaces format-specific errors for UR + BBQr-Z; fallback error mentions BBQr alongside hex/base64.
+
+Closes G043 (UI + decoder ship now; BBQr-Z + UR fountain-coded multi-part tracked as Cluster U FOLLOWUPs).
+
 ## [0.226.0] - 2026-04-28
 
 §24 — Cluster U Step 2 of 5 — Extension sidebar mode (Chrome Side Panel) verify (G056).

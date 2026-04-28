@@ -38,6 +38,8 @@ import {
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDropZone } from '../hooks/useDropZone.js';
+import { decodeBbqrPsbt } from '../../uri/bbqrPsbt.js';
+import { detectQrFrameFormat, describeUnsupportedFormat } from '../../uri/qrPsbtFormat.js';
 import pickerStyles from './WalletPicker.module.css';
 import styles from './IssueTokenForm.module.css';
 
@@ -59,15 +61,39 @@ const BASE64_PSBT_PREFIX = 'cHNid';
 
 /**
  * Convert a pasted blob to a normalized hex PSBT. Returns `null` if the
- * input doesn't look like either a hex or a base64-encoded PSBT.
+ * input doesn't look like a hex / base64 / BBQr PSBT.
+ *
+ * Recognized input forms:
+ *   • hex          — 0-9a-f, even-length
+ *   • base64       — starts with the standard PSBT magic ("cHNidP")
+ *   • BBQr (H / B) — single or multi-frame, line-separated
+ *                    (§20.4 / G043). Z (zlib) encoding throws via
+ *                    decodeBbqrPsbt; UR is recognized but not yet
+ *                    supported and surfaces null here so the caller's
+ *                    detector can branch on `detectQrFrameFormat`.
  *
  * @param {string} raw
  * @returns {string | null}
  */
 export function normalizePsbtInput(raw) {
     if (typeof raw !== 'string') return null;
-    const trimmed = raw.trim().replace(/\s+/g, '');
-    if (trimmed.length === 0) return null;
+    const trimmedRaw = raw.trim();
+    if (trimmedRaw.length === 0) return null;
+
+    // BBQr — multi-frame inputs may arrive as one big paste with line
+    // breaks between frames. Split on whitespace, detect each line,
+    // and route to the BBQr decoder if every non-empty line looks
+    // like a BBQr frame.
+    const frames = trimmedRaw.split(/\s+/).filter((s) => s.length > 0);
+    if (frames.length > 0 && frames.every((f) => detectQrFrameFormat(f) === 'bbqr')) {
+        try {
+            return decodeBbqrPsbt(frames).psbtHex;
+        } catch {
+            return null;
+        }
+    }
+
+    const trimmed = trimmedRaw.replace(/\s+/g, '');
     if (HEX_RE.test(trimmed) && trimmed.length % 2 === 0) {
         return trimmed.toLowerCase();
     }
@@ -118,6 +144,28 @@ export function PsbtSignForm({ walletId, onBack }) {
     );
 
     const psbtHex = useMemo(() => normalizePsbtInput(pasted), [pasted]);
+
+    // §20.4 / G043 — when a paste fails to normalize, check whether it
+    // matched a known-but-unsupported QR format (UR, or BBQr-Z) so the
+    // error message tells the user *why* instead of saying "not hex or
+    // base64". The first non-empty token is enough for UR; BBQr-Z
+    // surfaces via `decodeBbqrPsbt`'s thrown error which we catch.
+    const unsupportedFormatHint = useMemo(() => {
+        if (!pasted || psbtHex) return null;
+        const firstToken = pasted.trim().split(/\s+/)[0];
+        const fmt = detectQrFrameFormat(firstToken);
+        const generic = describeUnsupportedFormat(fmt);
+        if (generic) return generic;
+        if (fmt === 'bbqr') {
+            // Format detected as BBQr but normalize returned null —
+            // most likely a Z (zlib) frame. Try a one-frame decode to
+            // surface the BBQr-specific error message.
+            try { decodeBbqrPsbt([firstToken]); } catch (e) {
+                return e?.message ?? 'BBQr decode failed';
+            }
+        }
+        return null;
+    }, [pasted, psbtHex]);
 
     // .psbt file drop / picker — binary blobs are read as ArrayBuffer and
     // converted to hex before being routed through the same paste pipeline.
@@ -504,7 +552,8 @@ export function PsbtSignForm({ walletId, onBack }) {
                         variant="error"
                         recovery={{ label: 'Clear', onAction: () => { setPasted(''); if (error) setError(null); } }}
                     >
-                        Doesn't look like hex or base64 PSBT. Strip whitespace, paste the full blob.
+                        {unsupportedFormatHint
+                            || "Doesn't look like hex, base64, or BBQr PSBT. Strip whitespace, paste the full blob."}
                     </StatusMessage>
                 ) : null}
                 {parsing ? (

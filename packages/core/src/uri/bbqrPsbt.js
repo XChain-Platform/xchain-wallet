@@ -1,0 +1,220 @@
+// BBQr PSBT decode — §20.4 / G043 (partial).
+//
+// BBQr is the standard chunked-QR PSBT transport used by Sparrow,
+// Coldcard, and SeedSigner. The frame format is:
+//
+//   B$<E><F><NN><XX><payload>
+//
+//   • B$       2-char magic prefix
+//   • E        encoding char: H (hex) | B (base32) | Z (zlib + base32)
+//   • F        file type: P (PSBT) | T (transaction) | R (binary) |
+//                          C (CBOR) | U (UTF-8) | J (JSON) | X (executable)
+//   • NN       2-char base36 (0-9A-Z) — total frame count
+//   • XX       2-char base36 — frame index (0-based)
+//   • payload  encoding-specific bytes (rest of the frame)
+//
+// Multi-frame reassembly: collect frames in order of `index`,
+// concatenate payloads, decode the full bytestream once. BBQr does
+// NOT carry per-chunk integrity (unlike XCW's CRC32) — it relies on
+// the QR code's own error correction.
+//
+// Coverage today:
+//   ✅ H (hex) — single + multi-frame
+//   ✅ B (base32, RFC 4648 no padding) — single + multi-frame
+//   ⏸ Z (zlib + base32) — needs a zlib inflater (no project dep yet)
+//   ⏸ Multi-encoder fallback — N/A, user picks the encoder upstream
+
+import { base32 } from '@scure/base';
+
+export const BBQR_PREFIX = 'B$';
+const BBQR_HEADER_LEN = 8;  // "B$EFNNXX"
+const BBQR_BASE36_ALPHABET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+export class BbqrError extends Error {
+    constructor(msg) {
+        super(`bbqr: ${msg}`);
+        this.name = 'BbqrError';
+    }
+}
+
+export const BBQR_ENCODINGS = /** @type {const} */ (['H', 'B', 'Z']);
+export const BBQR_FILE_TYPES = /** @type {const} */ (['P', 'T', 'R', 'C', 'U', 'J', 'X']);
+export const BBQR_FILE_TYPE_PSBT = 'P';
+
+/**
+ * @typedef {Object} BbqrFrame
+ * @property {'H' | 'B' | 'Z'} encoding
+ * @property {string} fileType   one of BBQR_FILE_TYPES
+ * @property {number} total      total frame count (1..1295)
+ * @property {number} index      0-based frame index
+ * @property {string} payload    encoding-specific payload (rest of frame)
+ */
+
+/**
+ * @param {string} frame
+ * @returns {BbqrFrame}
+ */
+export function parseBbqrFrame(frame) {
+    if (typeof frame !== 'string') {
+        throw new BbqrError('frame must be a string');
+    }
+    const trimmed = frame.trim();
+    if (trimmed.length < BBQR_HEADER_LEN) {
+        throw new BbqrError(`frame too short (${trimmed.length} < ${BBQR_HEADER_LEN})`);
+    }
+    if (!trimmed.startsWith(BBQR_PREFIX)) {
+        throw new BbqrError(`frame does not start with magic prefix "${BBQR_PREFIX}"`);
+    }
+    const encoding = trimmed[2];
+    const fileType = trimmed[3];
+    const totalStr = trimmed.slice(4, 6);
+    const indexStr = trimmed.slice(6, 8);
+    const payload = trimmed.slice(BBQR_HEADER_LEN);
+
+    if (!BBQR_ENCODINGS.includes(encoding)) {
+        throw new BbqrError(`unsupported encoding char "${encoding}"`);
+    }
+    if (!BBQR_FILE_TYPES.includes(fileType)) {
+        throw new BbqrError(`unsupported file type char "${fileType}"`);
+    }
+    const total = parseBase36(totalStr);
+    const index = parseBase36(indexStr);
+    if (total < 1 || total > 1295) {
+        throw new BbqrError(`bad total ${total}`);
+    }
+    if (index < 0 || index >= total) {
+        throw new BbqrError(`bad index ${index} (0-based, must be < total ${total})`);
+    }
+    return { encoding, fileType, total, index, payload };
+}
+
+/**
+ * Decode an array of BBQr frames into raw bytes. Frames may arrive
+ * in any order; duplicates are tolerated. Encoding must match across
+ * frames (the spec says all frames in a transmission share an
+ * encoding). Returns the decoded payload as Uint8Array.
+ *
+ * @param {string[]} frames
+ * @returns {{ bytes: Uint8Array, fileType: string, encoding: 'H' | 'B' }}
+ */
+export function decodeBbqrFrames(frames) {
+    if (!Array.isArray(frames) || frames.length === 0) {
+        throw new BbqrError('frames must be a non-empty array');
+    }
+    let total = null;
+    let encoding = null;
+    let fileType = null;
+    /** @type {(string | null)[]} */
+    const slots = [];
+    for (const raw of frames) {
+        const parsed = parseBbqrFrame(raw);
+        if (total === null) {
+            total = parsed.total;
+            slots.length = parsed.total;
+            slots.fill(null);
+            encoding = parsed.encoding;
+            fileType = parsed.fileType;
+        } else {
+            if (parsed.total !== total) {
+                throw new BbqrError(`total mismatch: saw ${parsed.total}, expected ${total}`);
+            }
+            if (parsed.encoding !== encoding) {
+                throw new BbqrError(`encoding mismatch: saw "${parsed.encoding}", expected "${encoding}"`);
+            }
+            if (parsed.fileType !== fileType) {
+                throw new BbqrError(`fileType mismatch: saw "${parsed.fileType}", expected "${fileType}"`);
+            }
+        }
+        if (slots[parsed.index] != null && slots[parsed.index] !== parsed.payload) {
+            throw new BbqrError(`payload mismatch on duplicate index ${parsed.index}`);
+        }
+        slots[parsed.index] = parsed.payload;
+    }
+    for (let i = 0; i < slots.length; i++) {
+        if (slots[i] == null) {
+            throw new BbqrError(`missing frame index ${i} (have ${slots.filter(Boolean).length} of ${total})`);
+        }
+    }
+    const joined = slots.join('');
+    let bytes;
+    if (encoding === 'H') {
+        bytes = decodeHexUpper(joined);
+    } else if (encoding === 'B') {
+        bytes = decodeBase32NoPad(joined);
+    } else {
+        // Z = zlib + base32. Tracked as FOLLOWUP — pulling in a zlib
+        // implementation is out of scope for this step.
+        throw new BbqrError(`encoding "Z" (zlib) not yet supported — open a frame in another wallet using "H" or "B"`);
+    }
+    return { bytes, fileType, encoding };
+}
+
+/**
+ * Convenience: decode and return both bytes and hex form. Asserts the
+ * file type is `P` (PSBT) so a caller scanning a non-PSBT BBQr stream
+ * (e.g., a transaction or a JSON dump) gets a clear error rather
+ * than silently treating arbitrary bytes as a PSBT.
+ *
+ * @param {string[]} frames
+ * @returns {{ psbt: Uint8Array, psbtHex: string }}
+ */
+export function decodeBbqrPsbt(frames) {
+    const { bytes, fileType } = decodeBbqrFrames(frames);
+    if (fileType !== BBQR_FILE_TYPE_PSBT) {
+        throw new BbqrError(`expected PSBT (file type P), got "${fileType}"`);
+    }
+    return { psbt: bytes, psbtHex: bytesToHex(bytes) };
+}
+
+// --- Internal helpers -------------------------------------------------------
+
+function parseBase36(s) {
+    if (typeof s !== 'string' || s.length !== 2) {
+        throw new BbqrError(`base36 input must be exactly 2 chars, got "${s}"`);
+    }
+    let n = 0;
+    for (const ch of s) {
+        const idx = BBQR_BASE36_ALPHABET.indexOf(ch.toUpperCase());
+        if (idx < 0) {
+            throw new BbqrError(`bad base36 char "${ch}" (alphabet 0-9A-Z)`);
+        }
+        n = n * 36 + idx;
+    }
+    return n;
+}
+
+function decodeHexUpper(s) {
+    const clean = s.toUpperCase();
+    if (!/^[0-9A-F]*$/.test(clean) || clean.length % 2 !== 0) {
+        throw new BbqrError('hex payload must be even-length 0-9A-F');
+    }
+    const out = new Uint8Array(clean.length / 2);
+    for (let i = 0; i < out.length; i++) {
+        out[i] = Number.parseInt(clean.substr(i * 2, 2), 16);
+    }
+    return out;
+}
+
+function decodeBase32NoPad(s) {
+    // BBQr's base32 is RFC 4648 with NO padding. @scure/base's `base32`
+    // requires padding to a multiple of 8 chars. Pad with '=' before
+    // delegating; @scure rejects malformed alphabets so an invalid
+    // payload still gets caught.
+    const clean = s.toUpperCase();
+    if (!/^[A-Z2-7]*$/.test(clean)) {
+        throw new BbqrError('base32 payload must be A-Z and 2-7 only');
+    }
+    const padLen = (8 - (clean.length % 8)) % 8;
+    const padded = clean + '='.repeat(padLen);
+    try {
+        return base32.decode(padded);
+    } catch (e) {
+        throw new BbqrError(`base32 decode failed: ${e?.message ?? e}`);
+    }
+}
+
+function bytesToHex(bytes) {
+    let s = '';
+    for (const b of bytes) s += b.toString(16).padStart(2, '0');
+    return s;
+}
