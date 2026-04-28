@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.231.0] - 2026-04-28
+
+§52 — Cluster V Step 2 of 3 — `tools/regtest/` scaffolding (G004).
+
+New `tools/regtest/` directory holds the wallet's thin glue around the upstream `xchain-node` regtest stack — the actual stack is NOT vendored here, just probed. `bootstrap.sh` checks every required service (3 coin RPCs + decoder + indexer + explorer + hub) and emits a structured per-service ✓/✗ readiness report; `wait-ready.sh` polls bootstrap until ready or `XCHAIN_REGTEST_TIMEOUT_MS` expires; `down.sh` delegates to the upstream `xchain-node.sh stop`. `README.md` documents the seven service endpoints, env vars (`XCHAIN_REGTEST_BASE_URL`, `XCHAIN_REGTEST_TIMEOUT_MS`, `XCHAIN_REGTEST_VERBOSE`), per-test-suite procedure, and pairs with G163 for full one-command provisioning.
+
+Unblocks the §52 / G163 E2E Playwright row that was previously gated on this scaffolding.
+
+### Added
+
+- **`tools/regtest/README.md`** (new) — orientation: why this exists, path forward, seven service endpoints table, scripts, env vars, per-test-suite procedure, status today.
+- **`tools/regtest/bootstrap.sh`** (new, executable) — readiness probe with structured per-service report + diagnostic pointing at `xchain-node.sh start` on failure.
+- **`tools/regtest/wait-ready.sh`** (new, executable) — polling wrapper around bootstrap with `XCHAIN_REGTEST_TIMEOUT_MS` ceiling.
+- **`tools/regtest/down.sh`** (new, executable) — thin delegate to `xchain-node.sh stop`; honours `XCHAIN_PLATFORM_DIR` override.
+- **`test/smoke/audits/regtest-tools.smoke.js`** (new) — pins directory + script existence + executable bits, README structural headings + canonical env vars + §52 / G163 / xchain-node citations, each script's shape (shebang, strict-mode, env-var honouring, key call shapes), the seven-service probe list, and exercises the runtime failure path (bootstrap.sh against TEST-NET-1 IP exits 1 with the documented diagnostic; wait-ready.sh with 1s timeout exits 1 with the timeout diagnostic).
+
+Closes G004.
+
 ## [0.230.0] - 2026-04-28
 
 §51 — Cluster V Step 1 of 3 — `tools/release/` scaffolding (G003).
