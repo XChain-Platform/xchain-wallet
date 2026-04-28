@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.239.0] - 2026-04-28
+
+§20 — Cluster W FOLLOWUP 3 — Watcher mode HW-source guard.
+
+When a user picks a HW-paired source address (Trezor / Ledger) in watcher mode, `Send.jsx` now surfaces a `<StatusMessage>` at review time clarifying that the pairing on this wallet is decorative for watcher mode — the same HW device must be paired on the Signer-mode wallet to actually sign the produced PSBT. The address still works (its pubkey is what matters for encoding); the hint just keeps users from being surprised when "Build unsigned PSBT" doesn't trigger their HW device.
+
+### Added
+
+- **`packages/core/src/shared/routes/Send.jsx`** — extra HW-aware StatusMessage inside the watcher-mode review-stage hint stack; rendered only when `isWatcherMode && isHwSource`.
+- **`test/smoke/ui/send-watcher-mode.smoke.js`** — pins the new HW-aware copy (vendor name + Signer-mode wallet redirect).
+
+Closes Cluster W FOLLOWUP 3.
+
 ## [0.238.0] - 2026-04-28
 
 §20 — Cluster D Step 2 of 2 — Desktop shell parity for sign / verify routes (Cluster W FOLLOWUP 2). **Cluster D closed.**

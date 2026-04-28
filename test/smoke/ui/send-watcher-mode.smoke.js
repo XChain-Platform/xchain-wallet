@@ -142,6 +142,20 @@ assert.match(
     /Watcher mode — this wallet will build an unsigned PSBT/,
     'review-stage hint copy explains watcher mode',
 );
+// §20 Cluster W FOLLOWUP 3 (closed at v0.239.0) — when the source address is
+// HW-paired AND watcher mode is on, an extra StatusMessage explains that the
+// pairing here is decorative and the same HW device must be paired on the
+// Signer-mode wallet to actually sign the PSBT.
+assert.match(
+    sendSrc,
+    /Source address is paired to \{fromAddress\.source === 'trezor' \? 'Trezor' : 'Ledger'\} on/,
+    'watcher-mode HW-source hint pins vendor name',
+);
+assert.match(
+    sendSrc,
+    /Pair the same \{fromAddress\.source === 'trezor' \? 'Trezor' : 'Ledger'\} on your\s+Signer-mode wallet to sign/,
+    'hint redirects user to pair on Signer wallet',
+);
 assert.match(
     sendSrc,
     /if \(result\?\.psbtHex && !txid\) \{[\s\S]+?<WatcherResultPanel/,
