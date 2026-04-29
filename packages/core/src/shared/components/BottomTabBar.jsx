@@ -6,12 +6,13 @@ import styles from './BottomTabBar.module.css';
  * §24.3 / G054 — mobile bottom-sheet navigation.
  *
  * Five thumb-reachable tabs at the bottom of the viewport:
- *   [Home] [History] [Send] [Receive] [More]
+ *   [Home] [History] [Send] [Scan] [More]
  *
  * "More" toggles a bottom-sheet drawer that lists the rest of the
- * navigation (DEX, Dispensers, Contracts, Messaging, Contacts) plus
- * the wallet switcher, Settings, and Lock — same surface set as
- * `<LeftNav>` so the user sees a single coherent map of the wallet.
+ * navigation (Receive, DEX, Dispensers, Contracts, Messaging,
+ * Contacts) plus the wallet switcher, Settings, and Lock — same
+ * surface set as `<LeftNav>` so the user sees a single coherent map
+ * of the wallet.
  *
  * Visibility: this component renders itself unconditionally; the
  * parent (`<FullLayoutWithNav>`) hides it via CSS above 600px so
@@ -19,10 +20,11 @@ import styles from './BottomTabBar.module.css';
  * sheet floats above main content and the route gets enough
  * bottom-padding to clear the bar.
  *
- * Spec deviation note: the spec lists [Balances] [History] [Send]
- * [Scan] [More]. Send + Receive are the daily-use pair on mobile, so
- * the Scan slot is folded into More until a dedicated scan-and-route
- * surface ships (FOLLOWUP §24.3).
+ * §24.3 / Cluster Y FOLLOWUP 1: the Scan slot now occupies the
+ * primary tab row per spec — `<ScanRoute>` (the dedicated scan-and-
+ * classify surface) ships at v0.285.0. Receive moves into the More
+ * sheet (still daily-use, but the wallet's primary intent is "act on
+ * something I scanned" more often than "show my address").
  *
  * @param {object} props
  * @param {string} props.currentView
@@ -37,10 +39,11 @@ const PRIMARY_TABS = [
     { id: 'home', label: 'Home', Icon: Icon.HomeIcon, group: ['home', 'token-detail', 'addresses', 'wallet-picker', 'account-picker', 'wallet-details', 'wallet-rename', 'add-account', 'add-wallet'] },
     { id: 'history', label: 'History', Icon: Icon.HistoryIcon, group: ['history'] },
     { id: 'send', label: 'Send', Icon: Icon.SendIcon, group: ['send'] },
-    { id: 'receive', label: 'Receive', Icon: Icon.ReceiveIcon, group: ['receive'] },
+    { id: 'scan', label: 'Scan', Icon: Icon.ScanIcon, group: ['scan'] },
 ];
 
 const SHEET_PRIMARY = [
+    { id: 'receive', label: 'Receive', Icon: Icon.ReceiveIcon, group: ['receive'] },
     { id: 'markets', label: 'DEX', Icon: Icon.MarketIcon, group: ['markets', 'market'] },
     { id: 'dispensers-list', label: 'Dispensers', Icon: Icon.DollarIcon, group: ['dispensers-list', 'dispenser-detail', 'dispenser-explorer', 'dispenser'] },
     { id: 'contracts-list', label: 'Contracts', Icon: Icon.ContractIcon, group: ['contracts-list', 'contract-detail', 'contract-deploy', 'contract-execute', 'contract-deposit', 'contract-withdraw', 'staking-dashboard', 'stake-form', 'staking-unstake', 'staking-claim', 'staking-delegate', 'staking-revoke', 'operator-dashboard'], requiresBtc: true },

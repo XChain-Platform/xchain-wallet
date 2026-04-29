@@ -34,6 +34,7 @@ import { Home } from '@xchain-wallet/core/shared/routes/Home.jsx';
 import { Settings } from '@xchain-wallet/core/shared/routes/Settings.jsx';
 import { Send } from '@xchain-wallet/core/shared/routes/Send.jsx';
 import { Receive } from '@xchain-wallet/core/shared/routes/Receive.jsx';
+import { ScanRoute } from '@xchain-wallet/core/shared/routes/ScanRoute.jsx';
 import { TokenWizard } from '@xchain-wallet/core/shared/routes/TokenWizard.jsx';
 import { ActionsMenu } from '@xchain-wallet/core/shared/routes/ActionsMenu.jsx';
 import { IssueTokenForm } from '@xchain-wallet/core/shared/routes/IssueTokenForm.jsx';
@@ -102,7 +103,7 @@ function AppInner() {
         /** @type {'welcome' | 'create' | 'import' | 'import-freewallet'} */ ('welcome'),
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'swap' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'staking-dashboard' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'link-form' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'addresses' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'sign-message' | 'verify-signature' | 'sign-psbt'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'swap' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'staking-dashboard' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'link-form' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'addresses' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'sign-message' | 'verify-signature' | 'sign-psbt' | 'scan'} */ ('home'),
     );
     const [walletDetailsId, setWalletDetailsId] = useState(/** @type {string | null} */ (null));
     const [walletRenameTarget, setWalletRenameTarget] = useState(
@@ -117,6 +118,12 @@ function AppInner() {
     );
     const [composePrefill, setComposePrefill] = useState(
         /** @type {{ chainId?: string, fromAddressId?: string, toAddress?: string } | null} */ (null),
+    );
+    // §24.3 / Cluster Y FOLLOWUP 1 — `<ScanRoute>` outcomes route into
+    // the existing 'send' view via this prefill slot. Cleared after
+    // submit / back to avoid leaking a stale prefill into a future Send.
+    const [sendPrefill, setSendPrefill] = useState(
+        /** @type {{ address?: string, amount?: string, asset?: string, chainId?: string, memo?: string } | null} */ (null),
     );
     const [activeWalletId, setActiveWalletId] = useState(
         /** @type {string | null} */ (null),
@@ -261,7 +268,11 @@ function AppInner() {
                 return (
                     <Send
                         walletId={activeWalletId}
-                        onBack={() => setUnlockedView('home')}
+                        prefill={sendPrefill}
+                        onBack={() => {
+                            setSendPrefill(null);
+                            setUnlockedView('home');
+                        }}
                     />
                 );
             }
@@ -271,6 +282,29 @@ function AppInner() {
                         walletId={activeWalletId}
                         accountId={activeAccountId || undefined}
                         onBack={() => setUnlockedView('home')}
+                    />
+                );
+            }
+            if (unlockedView === 'scan' && activeWalletId) {
+                return (
+                    <ScanRoute
+                        onBack={() => setUnlockedView('home')}
+                        onClassified={(outcome) => {
+                            if (outcome.kind === 'send') {
+                                setSendPrefill({
+                                    address: outcome.address,
+                                    amount: outcome.amount,
+                                    asset: outcome.asset,
+                                    chainId: outcome.chainId,
+                                    memo: outcome.memo,
+                                });
+                                setUnlockedView('send');
+                            } else if (outcome.kind === 'receive') {
+                                setUnlockedView('receive');
+                            } else if (outcome.kind === 'psbt') {
+                                setUnlockedView('sign-psbt');
+                            }
+                        }}
                     />
                 );
             }

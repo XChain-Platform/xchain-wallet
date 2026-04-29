@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.285.0] - 2026-04-28
+
+§24.3 / Cluster Y FOLLOWUP 1 — dedicated scan-and-classify route.
+
+`shared/routes/ScanRoute.jsx` ships a top-level Scan view that mounts `<QrScanner>` (with a textarea paste fallback for browsers without `BarcodeDetector`) over the existing §32.2 `detectQrContent` classifier. Each scanned frame runs through detect + (for `xchain:` URIs) `parseXchainUri`, and on the first recognised payload the scanner stops and `onClassified` fires once with one of `{ kind: 'send', address, amount, asset, chainId, memo }`, `{ kind: 'receive' }`, or `{ kind: 'psbt', psbtHex }`. WIF / mnemonic / multi-frame XCW classifications surface a clear "use Import Wallet" or "use the Sign panel" message instead — secret material is never auto-imported from a casual scan.
+
+`shared/components/BottomTabBar.jsx` swaps Receive for Scan in `PRIMARY_TABS` per §24.3 spec (`[Home] [History] [Send] [Scan] [More]`) and lists Receive in the More sheet so the surface stays one tap away. `shared/components/LeftNav.jsx` grows a Scan row between Receive and DEX with a matching `VIEW_GROUPS.scan` entry.
+
+Web + desktop + extension popup `App.jsx` all import `ScanRoute`, declare a `'scan'` top-level view guarded on `activeWalletId`, and route the three outcomes via the existing `setSendPrefill` + `setUnlockedView('send' | 'receive' | 'sign-psbt')` paths. Desktop additionally gains a `sendPrefill` state slot — it didn't have one yet because the `?uri=` deep-link route only existed in web + popup.
+
+### Added
+
+- **`packages/core/src/shared/routes/ScanRoute.jsx`** — new component.
+- **`packages/core/src/shared/components/BottomTabBar.jsx`** — Scan in PRIMARY_TABS, Receive moved to SHEET_PRIMARY.
+- **`packages/core/src/shared/components/LeftNav.jsx`** — Scan row + `VIEW_GROUPS.scan`.
+- **`packages/web/src/App.jsx`** — ScanRoute import + 'scan' view + outcome routing.
+- **`packages/desktop/renderer/App.jsx`** — ScanRoute import + 'scan' view + `sendPrefill` state + outcome routing.
+- **`packages/extension/src/popup/App.jsx`** — ScanRoute import + 'scan' view + outcome routing.
+- **`test/smoke/audits/scan-route.smoke.js`** (new).
+
+Closes Cluster Y FOLLOWUP 1.
+
 ## [0.284.0] - 2026-04-28
 
 §50 / Cluster L FOLLOWUP 3 — diagnostic dump redaction sweep + AboutSection preview.

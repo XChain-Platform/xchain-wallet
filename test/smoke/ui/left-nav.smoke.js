@@ -38,7 +38,7 @@ assert.ok(/export function FullLayoutWithNav\b/.test(navSrc),
 // --- 2. Primary nav items -----------------------------------------------
 
 const expectedPrimaryLabels = [
-    'Home', 'History', 'Send', 'Receive', 'DEX',
+    'Home', 'History', 'Send', 'Receive', 'Scan', 'DEX',
     'Dispensers', 'Contracts', 'Messaging',
 ];
 for (const label of expectedPrimaryLabels) {
@@ -123,5 +123,5 @@ assert.ok(!/LeftNav/.test(popupApp),
     'Extension popup intentionally does NOT mount LeftNav (always compact per §24.1)');
 
 console.log(
-    'OK — left-nav smoke (§24.2 / G053 LeftNav + FullLayoutWithNav exports; primary list Home/History/Send/Receive/DEX/Dispensers/Contracts/Messaging + Contacts secondary; Contracts gated on hasBtcAddress; active row aria-current="page"; 220px sidebar collapses below 900px; web + desktop App.jsx wrap unlocked tree, popup left compact)',
+    'OK — left-nav smoke (§24.2 / G053 LeftNav + FullLayoutWithNav exports; primary list Home/History/Send/Receive/Scan/DEX/Dispensers/Contracts/Messaging + Contacts secondary; Contracts gated on hasBtcAddress; active row aria-current="page"; 220px sidebar collapses below 900px; web + desktop App.jsx wrap unlocked tree, popup left compact)',
 );

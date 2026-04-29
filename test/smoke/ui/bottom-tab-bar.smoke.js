@@ -3,13 +3,14 @@
 // Asserts:
 //   1. BottomTabBar.jsx + BottomTabBar.module.css exist; BottomTabBar
 //      is a named export.
-//   2. The five primary tabs are Home / History / Send / Receive /
-//      More (the daily-use pair on mobile + an overflow drawer); the
-//      "More" button toggles a bottom sheet via aria-expanded.
-//   3. The sheet lists the rest of the §24.2 nav (DEX, Dispensers,
-//      Contracts, Messaging, Contacts) plus the optional footer items
-//      (Switch wallet / Settings / Lock); Contracts is gated on
-//      hasBtcAddress.
+//   2. The five primary tabs are Home / History / Send / Scan /
+//      More per §24.3 spec (Cluster Y FOLLOWUP 1 closed at v0.285.0
+//      swapped Receive→Scan; Receive moved into the More sheet).
+//      The "More" button toggles a bottom sheet via aria-expanded.
+//   3. The sheet lists Receive + the rest of the §24.2 nav (DEX,
+//      Dispensers, Contracts, Messaging, Contacts) plus the optional
+//      footer items (Switch wallet / Settings / Lock); Contracts is
+//      gated on hasBtcAddress.
 //   4. CSS module declares a 56px fixed bar that respects the iOS
 //      safe-area inset.
 //   5. FullLayoutWithNav grew a `bottomBar` slot; web + desktop
@@ -39,7 +40,7 @@ assert.ok(/export function BottomTabBar\b/.test(barSrc),
 
 // --- 2. Primary tabs + More toggle --------------------------------------
 
-const expectedPrimary = ['Home', 'History', 'Send', 'Receive'];
+const expectedPrimary = ['Home', 'History', 'Send', 'Scan'];
 for (const label of expectedPrimary) {
     assert.ok(
         new RegExp(`label:\\s*'${label}'`).test(barSrc),
@@ -55,7 +56,7 @@ assert.ok(/aria-controls="xc-bottom-sheet"/.test(barSrc),
 
 // --- 3. Sheet rows + hasBtcAddress gating + footer rows -----------------
 
-const sheetLabels = ['DEX', 'Dispensers', 'Contracts', 'Messaging', 'Contacts'];
+const sheetLabels = ['Receive', 'DEX', 'Dispensers', 'Contracts', 'Messaging', 'Contacts'];
 for (const label of sheetLabels) {
     assert.ok(
         new RegExp(`label:\\s*'${label}'`).test(barSrc),
@@ -137,5 +138,5 @@ assert.ok(!/BottomTabBar/.test(popupApp),
     'Extension popup intentionally does NOT mount BottomTabBar (always compact per §24.1)');
 
 console.log(
-    'OK — bottom-tab-bar smoke (§24.3 / G054 BottomTabBar with Home/History/Send/Receive primary tabs + More-toggled sheet listing DEX/Dispensers/Contracts(BTC-gated)/Messaging/Contacts + Switch wallet/Settings/Lock; 56px fixed bar with iOS safe-area inset; FullLayoutWithNav.bottomBar slot collapses above 600px; web + desktop App.jsx wire it through; popup left compact)',
+    'OK — bottom-tab-bar smoke (§24.3 / G054 BottomTabBar with Home/History/Send/Scan primary tabs + More-toggled sheet listing Receive/DEX/Dispensers/Contracts(BTC-gated)/Messaging/Contacts + Switch wallet/Settings/Lock; 56px fixed bar with iOS safe-area inset; FullLayoutWithNav.bottomBar slot collapses above 600px; web + desktop App.jsx wire it through; popup left compact)',
 );

@@ -42,6 +42,7 @@ import { BottomTabBar } from '@xchain-wallet/core/shared/components/BottomTabBar
 import { uri as coreUri } from '@xchain-wallet/core';
 import { Send } from '@xchain-wallet/core/shared/routes/Send.jsx';
 import { Receive } from '@xchain-wallet/core/shared/routes/Receive.jsx';
+import { ScanRoute } from '@xchain-wallet/core/shared/routes/ScanRoute.jsx';
 import { TokenWizard } from '@xchain-wallet/core/shared/routes/TokenWizard.jsx';
 import { ActionsMenu } from '@xchain-wallet/core/shared/routes/ActionsMenu.jsx';
 import { IssueTokenForm } from '@xchain-wallet/core/shared/routes/IssueTokenForm.jsx';
@@ -134,7 +135,7 @@ function AppInner() {
         /** @type {'welcome' | 'create' | 'import' | 'import-freewallet'} */ ('welcome'),
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'swap' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'staking-dashboard' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'token-detail' | 'link-form' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'addresses' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'swap' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'staking-dashboard' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'token-detail' | 'link-form' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'addresses' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'scan'} */ ('home'),
     );
     const [tokenDetailRef, setTokenDetailRef] = useState(
         /** @type {{ chainId: string, asset: string, kind: string, displayName: string, divisibility: number, fiatRate: number | null, quantity: string } | null} */ (null),
@@ -377,6 +378,29 @@ function AppInner() {
                         walletId={activeWalletId}
                         accountId={activeAccountId || undefined}
                         onBack={() => setUnlockedView('home')}
+                    />
+                );
+            }
+            if (unlockedView === 'scan' && activeWalletId) {
+                return (
+                    <ScanRoute
+                        onBack={() => setUnlockedView('home')}
+                        onClassified={(outcome) => {
+                            if (outcome.kind === 'send') {
+                                setSendPrefill({
+                                    address: outcome.address,
+                                    amount: outcome.amount,
+                                    asset: outcome.asset,
+                                    chainId: outcome.chainId,
+                                    memo: outcome.memo,
+                                });
+                                setUnlockedView('send');
+                            } else if (outcome.kind === 'receive') {
+                                setUnlockedView('receive');
+                            } else if (outcome.kind === 'psbt') {
+                                setUnlockedView('sign-psbt');
+                            }
+                        }}
                     />
                 );
             }

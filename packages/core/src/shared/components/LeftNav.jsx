@@ -3,9 +3,10 @@ import styles from './LeftNav.module.css';
 
 /**
  * §24.2 / G053 — full-layout left navigation. Renders a fixed-width
- * sidebar listing primary surfaces (Home, History, Send, Receive, DEX,
- * Dispensers, Contracts, Messaging) plus a contacts row, a wallet
- * switcher, Settings, and Lock. Active row gets `aria-current="page"`.
+ * sidebar listing primary surfaces (Home, History, Send, Receive,
+ * Scan, DEX, Dispensers, Contracts, Messaging) plus a contacts row,
+ * a wallet switcher, Settings, and Lock. Active row gets
+ * `aria-current="page"`.
  *
  * Visibility is the parent's responsibility: this component renders
  * itself unconditionally; `<FullLayoutWithNav>` wraps it in a flex
@@ -30,6 +31,7 @@ const VIEW_GROUPS = {
     history: ['history'],
     send: ['send'],
     receive: ['receive'],
+    scan: ['scan'],
     markets: ['markets', 'market'],
     'dispensers-list': ['dispensers-list', 'dispenser-detail', 'dispenser-explorer', 'dispenser'],
     'contracts-list': ['contracts-list', 'contract-detail', 'contract-deploy', 'contract-execute', 'contract-deposit', 'contract-withdraw', 'staking-dashboard', 'stake-form', 'staking-unstake', 'staking-claim', 'staking-delegate', 'staking-revoke', 'operator-dashboard'],
@@ -67,6 +69,7 @@ export function LeftNav({
         { id: 'history', label: 'History', Icon: Icon.HistoryIcon },
         { id: 'send', label: 'Send', Icon: Icon.SendIcon },
         { id: 'receive', label: 'Receive', Icon: Icon.ReceiveIcon },
+        { id: 'scan', label: 'Scan', Icon: Icon.ScanIcon },
         { id: 'markets', label: 'DEX', Icon: Icon.MarketIcon },
         { id: 'dispensers-list', label: 'Dispensers', Icon: Icon.DollarIcon },
         ...(hasBtcAddress
