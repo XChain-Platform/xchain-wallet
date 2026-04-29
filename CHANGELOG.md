@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.283.0] - 2026-04-28
+
+§47 / Cluster L FOLLOWUP 2 — extension popup deep-link via manifest `protocol_handlers`.
+
+The web shell wired `navigator.registerProtocolHandler('web+xchain', '/?uri=%s')` at v0.191.0; v0.193.0's Cluster L FOLLOWUP 1 added consumer-side `?uri=` parsing in the web App.jsx. This step mirrors that wiring in the extension popup so a `web+xchain:` click anywhere in the browser lands directly inside the popup with the Send route prefilled. Manifest gains a `protocol_handlers` block claiming `web+xchain` → `popup.html?uri=%s`. Popup App.jsx imports `uri as coreUri` from `@xchain-wallet/core`, declares a `sendPrefill` state slot, parses `?uri=` once on mount, routes send/receive, and strips the param via `history.replaceState` so a re-open doesn't re-trigger. Send renders with `prefill={sendPrefill}`; back-navigation clears the prefill.
+
+### Added
+
+- **`packages/extension/manifest.json`** — `protocol_handlers` block.
+- **`packages/extension/src/popup/App.jsx`** — `coreUri` import + `sendPrefill` state + `?uri=` parsing effect + `<Send prefill=...>` wiring.
+- **`test/smoke/ui/extension-uri-deeplink.smoke.js`** (new).
+
+Closes Cluster L FOLLOWUP 2.
+
 ## [0.282.0] - 2026-04-28
 
 §18.4 / Cluster N FOLLOWUP 1 — runtime-fetched firmware manifest with bundled fallback.

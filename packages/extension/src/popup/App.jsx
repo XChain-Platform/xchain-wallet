@@ -15,6 +15,7 @@
 // down to session-state polling and sub-route navigation.
 
 import { useCallback, useEffect, useState } from 'react';
+import { uri as coreUri } from '@xchain-wallet/core';
 import { useLastView } from '@xchain-wallet/core/shared/hooks/useLastView.js';
 import { MessagingProvider } from '@xchain-wallet/core/shared/MessagingProvider.jsx';
 import { Loading } from '@xchain-wallet/core/shared/routes/Loading.jsx';
@@ -128,6 +129,13 @@ function AppInner() {
     const [composePrefill, setComposePrefill] = useState(
         /** @type {{ chainId?: string, fromAddressId?: string, toAddress?: string } | null} */ (null),
     );
+    // §47 / Cluster L FOLLOWUP 2 — `web+xchain:` deep links arriving via
+    // the manifest's `protocol_handlers` route to popup.html?uri=<uri>.
+    // Parsed on mount, prefill goes into the Send route, then the param
+    // is stripped via history.replaceState.
+    const [sendPrefill, setSendPrefill] = useState(
+        /** @type {{ address?: string, amount?: string, asset?: string, chainId?: string, memo?: string } | null} */ (null),
+    );
     const [activeWalletId, setActiveWalletId] = useState(
         /** @type {string | null} */ (null),
     );
@@ -162,6 +170,41 @@ function AppInner() {
     }, []);
 
     useEffect(() => { refresh(); }, [refresh]);
+
+    // §47 / Cluster L FOLLOWUP 2 — consume `?uri=` from popup.html's
+    // location.search when the popup boots. Manifest's
+    // `protocol_handlers` block routes `web+xchain:` clicks here. Strip
+    // the param via history.replaceState so a re-open or refresh doesn't
+    // re-trigger the auto-route.
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        const params = new URLSearchParams(window.location.search);
+        const raw = params.get('uri');
+        if (!raw) return;
+        try {
+            const intent = coreUri.parseXchainUri(raw);
+            if (intent && intent.kind === 'send') {
+                setSendPrefill({
+                    address: intent.address,
+                    amount: intent.amount,
+                    asset: intent.asset,
+                    chainId: intent.chainId,
+                    memo: intent.memo,
+                });
+                setUnlockedView('send');
+            } else if (intent && intent.kind === 'receive') {
+                setUnlockedView('receive');
+            }
+        } catch {
+            // Parser surfaces unknown via kind === 'unknown'; defensive
+            // try/catch in case future parser changes regress.
+        } finally {
+            params.delete('uri');
+            const next = params.toString();
+            const url = window.location.pathname + (next ? `?${next}` : '') + window.location.hash;
+            window.history.replaceState(null, '', url);
+        }
+    }, []);
 
     useEffect(() => {
         if (status.state !== 'unlocked') {
@@ -263,7 +306,11 @@ function AppInner() {
                 return (
                     <Send
                         walletId={activeWalletId}
-                        onBack={() => setUnlockedView('home')}
+                        prefill={sendPrefill}
+                        onBack={() => {
+                            setSendPrefill(null);
+                            setUnlockedView('home');
+                        }}
                     />
                 );
             }

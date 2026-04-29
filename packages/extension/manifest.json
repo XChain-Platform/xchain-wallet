@@ -43,5 +43,12 @@
         }
     ],
     "permissions": ["storage", "sidePanel"],
-    "host_permissions": []
+    "host_permissions": [],
+    "protocol_handlers": [
+        {
+            "protocol": "web+xchain",
+            "name": "XChain Wallet",
+            "uriTemplate": "popup.html?uri=%s"
+        }
+    ]
 }
