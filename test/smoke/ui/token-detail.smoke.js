@@ -63,16 +63,12 @@ const blCss = readFileSync(join(components, 'BalanceList.module.css'), 'utf8');
 assert.ok(/\.rowClickable\b/.test(blCss),
     'BalanceList CSS has the .rowClickable variant');
 
-// --- 3. UnifiedBalanceList: same treatment for parity --------------------
+// (UnifiedBalanceList parity used to be section 3 here. Cluster I
+//  FOLLOWUP 7 retired UnifiedBalanceList at v0.287.0 — it had been
+//  orphaned since the BalanceList consolidation, with no caller mounting
+//  it in any shell. The previous parity assertions are gone.)
 
-const ublSrc = readFileSync(join(components, 'UnifiedBalanceList.jsx'), 'utf8');
-assert.ok(/onSelectToken\b/.test(ublSrc),
-    'UnifiedBalanceList accepts onSelectToken');
-const ublCss = readFileSync(join(components, 'UnifiedBalanceList.module.css'), 'utf8');
-assert.ok(/\.rowClickable\b/.test(ublCss),
-    'UnifiedBalanceList CSS has the .rowClickable variant');
-
-// --- 4. HomeTabs + Home thread onSelectToken downwards --------------------
+// --- 3. HomeTabs + Home thread onSelectToken downwards --------------------
 
 const htSrc = readFileSync(join(components, 'HomeTabs.jsx'), 'utf8');
 assert.ok(/onSelectToken\b/.test(htSrc),
@@ -87,7 +83,7 @@ assert.ok(/onSelectToken\b/.test(homeSrc),
 assert.ok(/onSelectToken=\{onSelectToken\}/.test(homeSrc),
     'Home forwards onSelectToken into HomeTabs');
 
-// --- 5. History gains initialSearchQuery prop ----------------------------
+// --- 4. History gains initialSearchQuery prop ----------------------------
 
 const histSrc = readFileSync(join(routes, 'History.jsx'), 'utf8');
 assert.ok(/initialSearchQuery\b/.test(histSrc),
@@ -95,7 +91,7 @@ assert.ok(/initialSearchQuery\b/.test(histSrc),
 assert.ok(/useState\(initialSearchQuery/.test(histSrc),
     'History seeds searchQuery state from initialSearchQuery');
 
-// --- 6. Web + extension App.jsx wire the route ---------------------------
+// --- 5. Web + extension App.jsx wire the route ---------------------------
 
 const webApp = readFileSync(join(web, 'src', 'App.jsx'), 'utf8');
 assert.ok(/from '@xchain-wallet\/core\/shared\/routes\/TokenDetail\.jsx'/.test(webApp),

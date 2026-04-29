@@ -4,7 +4,7 @@
 
 import { describe, it, expect } from 'vitest';
 
-// Inline the formatAmount used inside UnifiedBalanceList so the
+// Inline the formatAmount used by the balance-row layout so the
 // boundary test pins the formatting contract independently of the
 // component file (which is a JSX module + React).
 function formatAmount(quantityStr, divisibility) {

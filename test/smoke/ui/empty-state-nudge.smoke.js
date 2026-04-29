@@ -1,19 +1,21 @@
 // Smoke for §27.7 / §28 / G077 — EmptyStateNudge component + integration
-// into BalanceList, UnifiedBalanceList, History, and AddressList.
+// into BalanceList, History, and AddressList.
+//
+// (Cluster I FOLLOWUP 7 closed at v0.287.0 retired UnifiedBalanceList —
+//  it had been an orphaned variant since the BalanceList consolidation;
+//  the previous "UnifiedBalanceList parity" assertions are gone.)
 //
 // Verifies:
 //   1. EmptyStateNudge.jsx + module.css exist; component is named export
 //      with title / body / actionLabel / onAction / icon props.
 //   2. BalanceList renders <EmptyStateNudge> instead of bare <p>; old
 //      `emptyMessage` prop is renamed to `emptyTitle` + `emptyBody`.
-//   3. UnifiedBalanceList renders <EmptyStateNudge> for both the
-//      no-rows case and the network-filtered no-rows case.
-//   4. HomeTabs accepts + forwards `onReceive` so the empty-state
+//   3. HomeTabs accepts + forwards `onReceive` so the empty-state
 //      nudges show the Receive CTA.
-//   5. Home.jsx threads `onReceive` into HomeTabs.
-//   6. History + AddressList accept an `onReceive` prop and render
+//   4. Home.jsx threads `onReceive` into HomeTabs.
+//   5. History + AddressList accept an `onReceive` prop and render
 //      <EmptyStateNudge> with a Receive CTA in their empty states.
-//   7. Web + extension App.jsx wire `onReceive` into both routes.
+//   6. Web + extension App.jsx wire `onReceive` into both routes.
 
 import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
@@ -72,23 +74,7 @@ assert.ok(
     'BalanceList no longer renders the bare <p className=empty> placeholder',
 );
 
-// --- 3. UnifiedBalanceList swaps both empty branches ---------------------
-
-const unifiedSrc = readFileSync(join(components, 'UnifiedBalanceList.jsx'), 'utf8');
-assert.ok(
-    /from\s*['"]\.\/EmptyStateNudge\.jsx['"]/.test(unifiedSrc),
-    'UnifiedBalanceList imports EmptyStateNudge',
-);
-assert.ok(
-    (unifiedSrc.match(/<EmptyStateNudge\b/g) || []).length >= 2,
-    'UnifiedBalanceList renders the nudge in both no-rows and network-filtered-no-rows branches',
-);
-assert.ok(
-    /\bonReceive\b/.test(unifiedSrc),
-    'UnifiedBalanceList accepts onReceive prop',
-);
-
-// --- 4. HomeTabs forwards onReceive --------------------------------------
+// --- 3. HomeTabs forwards onReceive --------------------------------------
 
 const homeTabsSrc = readFileSync(join(components, 'HomeTabs.jsx'), 'utf8');
 assert.ok(
@@ -100,7 +86,7 @@ assert.ok(
     'HomeTabs only forwards onReceive when the filter is "all" — network-filtered empty states avoid the misleading CTA',
 );
 
-// --- 5. Home.jsx threads onReceive into HomeTabs --------------------------
+// --- 4. Home.jsx threads onReceive into HomeTabs --------------------------
 
 const homeSrc = readFileSync(join(routes, 'Home.jsx'), 'utf8');
 assert.ok(
@@ -108,7 +94,7 @@ assert.ok(
     'Home.jsx threads onReceive into HomeTabs',
 );
 
-// --- 6. History + AddressList ---------------------------------------------
+// --- 5. History + AddressList ---------------------------------------------
 
 const historySrc = readFileSync(join(routes, 'History.jsx'), 'utf8');
 assert.ok(
@@ -138,7 +124,7 @@ assert.ok(
     'AddressList renders <EmptyStateNudge> in its empty branch',
 );
 
-// --- 7. App.jsx wires onReceive into both routes -------------------------
+// --- 6. App.jsx wires onReceive into both routes -------------------------
 
 for (const [shell, appPath] of [
     ['popup', join(ext, 'src', 'popup', 'App.jsx')],

@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.287.0] - 2026-04-28
+
+§27 / Cluster I FOLLOWUP 7 — retire `<UnifiedBalanceList>`.
+
+`packages/core/src/shared/components/UnifiedBalanceList.jsx` and its CSS module had been orphaned since the BalanceList consolidation — `grep` across every shell turns up zero JSX usage and zero imports. The FOLLOWUP shape said "either retire or thread pin/hide through it"; verifying no caller mounts it makes retirement the right call. Both files removed; the dangling references in `chainFilterMemory.js` (header comment) and `test/boundary/amounts/bigint-format.test.js` (formatAmount provenance comment) reworded to point at the balance-row layout instead.
+
+The two existing smokes that asserted UnifiedBalanceList parity (`empty-state-nudge.smoke.js` and `token-detail.smoke.js`) drop their UnifiedBalanceList sections and renumber the rest. New smoke pins the *absence* of the file + zero references in source + the smoke-section renumbering — so a future regression that recreates the orphan gets caught immediately.
+
+### Removed
+
+- **`packages/core/src/shared/components/UnifiedBalanceList.jsx`**.
+- **`packages/core/src/shared/components/UnifiedBalanceList.module.css`**.
+
+### Changed
+
+- **`packages/core/src/shared/utils/chainFilterMemory.js`** — header reword.
+- **`test/smoke/ui/empty-state-nudge.smoke.js`** — drop section 3, renumber.
+- **`test/smoke/ui/token-detail.smoke.js`** — drop section 3, renumber.
+- **`test/boundary/amounts/bigint-format.test.js`** — provenance comment.
+
+### Added
+
+- **`test/smoke/audits/unified-balance-list-retired.smoke.js`** (new).
+
+Closes Cluster I FOLLOWUP 7.
+
 ## [0.286.0] - 2026-04-28
 
 §27.3 / §27.4 / Cluster I FOLLOWUP 1 — Settings → Display panel for pinned + hidden token management.
