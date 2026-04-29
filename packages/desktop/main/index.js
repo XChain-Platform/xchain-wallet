@@ -33,6 +33,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { registry as registryLib, sdk as sdkLib } from '@xchain-wallet/core';
+import { WALLET_VERSION } from '@xchain-wallet/core/buildInfo.js';
 import { createDevMockSdk } from '@xchain-wallet/extension/src/background/sdkFactory.js';
 
 import { IPC_CHANNEL } from './messageHost.js';
@@ -112,6 +113,20 @@ function buildRuntime() {
         sdkRegistry: new sdkLib.SDKRegistry({
             chainRegistry,
             sdkFactory: createDevMockSdk,
+        }),
+        // §50 / Cluster L FOLLOWUP 4 — desktop diagnostic env + build.
+        // Electron version + OS + Chromium UA help support narrow down
+        // whether a bug is shell-specific.
+        getDiagnosticContext: async () => ({
+            env: {
+                shell: 'desktop',
+                userAgent: `Electron/${process.versions.electron} Chrome/${process.versions.chrome} Node/${process.versions.node}`,
+                platform: `${process.platform} ${process.arch}`,
+            },
+            build: {
+                walletVersion: WALLET_VERSION,
+                target: app.getVersion(),
+            },
         }),
     });
 }

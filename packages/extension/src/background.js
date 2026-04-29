@@ -14,6 +14,7 @@
 // to content scripts) without reworking the entry.
 
 import { registry as registryLib, sdk as sdkLib, signers as signersLib, storage as storageLib } from '@xchain-wallet/core';
+import { WALLET_VERSION } from '@xchain-wallet/core/buildInfo.js';
 import {
     ChromeSessionBackend,
     ChromeStorageBackend,
@@ -105,6 +106,22 @@ async function ensureHost() {
         sdkRegistry,
         signerPool,
         approvals: approvalBroker,
+        // §50 / Cluster L FOLLOWUP 4 — shell-specific diagnostic env + build.
+        getDiagnosticContext: async () => ({
+            env: {
+                shell: 'extension',
+                userAgent:
+                    typeof navigator !== 'undefined' ? navigator.userAgent : undefined,
+                platform:
+                    typeof navigator !== 'undefined' ? navigator.platform : undefined,
+            },
+            build: {
+                walletVersion: WALLET_VERSION,
+                target: typeof chrome !== 'undefined' && chrome.runtime?.getManifest
+                    ? chrome.runtime.getManifest().version
+                    : undefined,
+            },
+        }),
     });
     detachHost = attachChromeRuntime(host);
     return host;

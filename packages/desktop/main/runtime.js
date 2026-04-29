@@ -55,6 +55,9 @@ import { createDesktopMessageHost } from './messageHost.js';
  * @property {{ load: () => Promise<unknown | null>, save: (obj: unknown) => Promise<void>, clear: () => Promise<void> }} metaBackend
  * @property {import('@xchain-wallet/core').registry.ChainRegistry} chainRegistry
  * @property {import('@xchain-wallet/core').sdk.SDKRegistry} sdkRegistry
+ * @property {() => Promise<{env?: object, build?: object}>} [getDiagnosticContext]
+ *        §50 / Cluster L FOLLOWUP 4 — supplied by main/index.js so the
+ *        diagnostic dump records electron version + OS + walletVersion.
  *
  * @typedef {DesktopRuntimeDeps & {
  *   vault: import('@xchain-wallet/core').storage.Vault | null,
@@ -78,6 +81,7 @@ export function createRuntime(deps) {
         metaBackend: deps.metaBackend,
         chainRegistry: deps.chainRegistry,
         sdkRegistry: deps.sdkRegistry,
+        getDiagnosticContext: deps.getDiagnosticContext,
         vault: null,
         host: null,
     };
@@ -107,6 +111,7 @@ export async function ensureHost(runtime) {
             vault,
             chainRegistry: runtime.chainRegistry,
             sdkRegistry: runtime.sdkRegistry,
+            getDiagnosticContext: runtime.getDiagnosticContext,
         });
         return runtime.host;
     } catch (err) {

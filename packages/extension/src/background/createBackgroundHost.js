@@ -362,11 +362,37 @@ function toSafeWallet(w) {
 }
 
 /**
- * @param {import('./MessageHost.js').MessageHostDeps & { approvals?: import('../bridge/Approvals.js').Approvals }} deps
+ * @typedef {object} DiagnosticEnv
+ * @property {'extension' | 'web' | 'desktop'} [shell]
+ * @property {string} [userAgent]
+ * @property {string} [platform]
+ *
+ * @typedef {object} DiagnosticBuild
+ * @property {string} [walletVersion]
+ * @property {string} [gitSha]
+ * @property {string} [target]
+ *
+ * @typedef {object} DiagnosticSigner
+ * @property {string} id
+ * @property {string} vendor
+ * @property {string} model
+ * @property {string | null} firmwareVersion
+ *
+ * @callback DiagnosticContext
+ * @returns {Promise<{
+ *   env?: DiagnosticEnv,
+ *   build?: DiagnosticBuild,
+ *   signers?: DiagnosticSigner[],
+ * }>}
+ *
+ * @param {import('./MessageHost.js').MessageHostDeps & {
+ *   approvals?: import('../bridge/Approvals.js').Approvals,
+ *   getDiagnosticContext?: DiagnosticContext,
+ * }} deps
  * @returns {MessageHost}
  */
 export function createBackgroundHost(deps) {
-    const { approvals, ...hostDeps } = deps ?? {};
+    const { approvals, getDiagnosticContext, ...hostDeps } = deps ?? {};
     const host = new MessageHost(hostDeps);
 
     // --- Wallet management ---------------------------------------------------
@@ -576,10 +602,43 @@ export function createBackgroundHost(deps) {
     // report. No secrets included — this passes the diagnosticDump flow's
     // own redaction.
     host.register('diagnostic.dump', async (_req, { vault, chainRegistry }) => {
+        // §50 / Cluster L FOLLOWUP 4 — fill env / build / signers so the
+        // dump tells support which shell + build + paired devices were
+        // running. The shell-supplied callback contributes env + build
+        // (it's the only place that knows shell / UA / manifest /
+        // electron version). The signers list is computed here from the
+        // open vault so each shell doesn't have to duplicate the
+        // per-wallet iteration.
+        let ctx = {};
+        try {
+            ctx = (await getDiagnosticContext?.()) || {};
+        } catch {
+            ctx = {};
+        }
+        let signers = [];
+        try {
+            const wallets = await vault.wallets.list();
+            for (const w of wallets) {
+                const rows = await listSignersForWallet(vault, w.id);
+                for (const r of rows) {
+                    signers.push({
+                        id: r.id,
+                        vendor: r.vendor,
+                        model: r.model,
+                        firmwareVersion: r.firmwareVersion ?? null,
+                    });
+                }
+            }
+        } catch {
+            signers = [];
+        }
         return diagnosticDump({
             vault,
             chainRegistry,
             walletVersion: WALLET_VERSION,
+            env: ctx.env,
+            build: ctx.build,
+            signers,
         });
     });
 

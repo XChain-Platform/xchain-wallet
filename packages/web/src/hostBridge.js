@@ -32,7 +32,24 @@ import {
 // at build time. Candidate for a lower-level package extraction once a
 // third shell appears.
 import { createBackgroundHost } from '../../extension/src/background/createBackgroundHost.js';
+import { WALLET_VERSION } from '@xchain-wallet/core/buildInfo.js';
 import { fakeBalanceFor } from './devFakeBalances.js';
+
+// §50 / Cluster L FOLLOWUP 4 — shell-specific diagnostic env + build
+// for the dump handler. Same shape across all three createBackgroundHost
+// call sites (create-from-fresh, create-from-existing, unlock).
+const webDiagnosticContext = async () => ({
+    env: {
+        shell: 'web',
+        userAgent:
+            typeof navigator !== 'undefined' ? navigator.userAgent : undefined,
+        platform:
+            typeof navigator !== 'undefined' ? navigator.platform : undefined,
+    },
+    build: {
+        walletVersion: WALLET_VERSION,
+    },
+});
 import { IndexedDBStorageBackend } from './storage/IndexedDBStorageBackend.js';
 import { WebMetaBackend } from './storage/WebMetaBackend.js';
 import { resolveSdkFactory } from './sdkFactory.js';
@@ -239,7 +256,13 @@ export async function createWalletLocal(req) {
             chainRegistry,
             sdkRegistry,
         });
-        host = createBackgroundHost({ vault, chainRegistry, sdkRegistry, signerPool });
+        host = createBackgroundHost({
+            vault,
+            chainRegistry,
+            sdkRegistry,
+            signerPool,
+            getDiagnosticContext: webDiagnosticContext,
+        });
         await meta.save({ kdfParams });
         return { mnemonic: result.mnemonic, walletName: result.wallet.name };
     } finally {
@@ -303,7 +326,13 @@ export async function importMnemonicLocal(req) {
             chainRegistry,
             sdkRegistry,
         });
-        host = createBackgroundHost({ vault, chainRegistry, sdkRegistry, signerPool });
+        host = createBackgroundHost({
+            vault,
+            chainRegistry,
+            sdkRegistry,
+            signerPool,
+            getDiagnosticContext: webDiagnosticContext,
+        });
         await meta.save({ kdfParams });
         return { format: result.format, walletName: result.wallet.name };
     } finally {
@@ -368,6 +397,7 @@ export async function unlockWalletLocal(req) {
             chainRegistry,
             sdkRegistry,
             signerPool,
+            getDiagnosticContext: webDiagnosticContext,
         });
         return { unlocked: true };
     } finally {

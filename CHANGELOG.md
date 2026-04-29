@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.277.0] - 2026-04-28
+
+§50 / Cluster L FOLLOWUP 4 — diagnostic dump fills env / build / signers.
+
+The `diagnostic.dump` host handler in `createBackgroundHost` now accepts a `getDiagnosticContext` callback that supplies `env` + `build`. The signers list is computed inside the handler from `vault.wallets.list()` + `listSignersForWallet(vault, walletId)` so each shell doesn't have to duplicate the per-wallet iteration.
+
+Each shell wires its own callback:
+- **Extension** (`background.js`): `shell: 'extension'` + `navigator.userAgent` + manifest version.
+- **Web** (`hostBridge.js`): `shell: 'web'` + `navigator.userAgent` (across all three `createBackgroundHost` call sites: create / create-existing / unlock).
+- **Desktop** (`main/index.js` → `runtime.js` → `messageHost.js`): `shell: 'desktop'` + Electron/Chrome/Node versions + OS platform/arch + `app.getVersion()`. The callback threads through `createRuntime` deps so `ensureHost` keeps it alive across lock cycles.
+
+Result: support tickets that include the diagnostic dump now identify which shell + build + paired devices were running, instead of the previous bare wallet metadata.
+
+### Added
+
+- **`packages/extension/src/background/createBackgroundHost.js`** — `getDiagnosticContext` dep + signer iteration in the dump handler.
+- **`packages/extension/src/background.js`**, **`packages/web/src/hostBridge.js`**, **`packages/desktop/main/index.js`** — shell-specific callbacks.
+- **`packages/desktop/main/runtime.js`** — passes `getDiagnosticContext` through to `createDesktopMessageHost`.
+- **`test/smoke/audits/diagnostic-dump-shell-context.smoke.js`** (new).
+
+Closes Cluster L FOLLOWUP 4.
+
 ## [0.276.0] - 2026-04-28
 
 §18.4 / Cluster N FOLLOWUP 2 (final) — useSignerInfo sweep across HW sign surfaces.
