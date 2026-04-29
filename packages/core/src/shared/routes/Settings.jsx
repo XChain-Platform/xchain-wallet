@@ -46,6 +46,7 @@ import pickerStyles from './WalletPicker.module.css';
  * @param {{ id: string, name: string, index: number } | null} [props.activeAccount]
  * @param {() => void} [props.onOpenWalletPicker]
  * @param {() => void} [props.onOpenAccountPicker]
+ * @param {string} [props.initialSubpageId]   §24 Cluster Y FOLLOWUP 2 — open this drilldown panel on mount (e.g. 'connected-sites' from a deep nav row)
  */
 export function Settings({
     onBack,
@@ -53,11 +54,12 @@ export function Settings({
     activeAccount,
     onOpenWalletPicker,
     onOpenAccountPicker,
+    initialSubpageId = null,
 }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const [query, setQuery] = useState('');
-    const [subpageId, setSubpageId] = useState(/** @type {string | null} */ (null));
+    const [subpageId, setSubpageId] = useState(/** @type {string | null} */ (initialSubpageId || null));
     const [siteCount, setSiteCount] = useState(/** @type {number | null} */ (null));
 
     const { settings } = useSettings();

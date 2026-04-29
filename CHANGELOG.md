@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.268.0] - 2026-04-28
+
+§24 Cluster Y FOLLOWUPs 2+3 — Settings entry-point from nav + wallet-name surfacing.
+
+LeftNav's Settings footer button now actually navigates: web + desktop App.jsx ship a new `'settings'` top-level view that renders `<Settings>` directly (mirroring how Home renders it inline). A `'connected-sites'` alias deep-links into the Connected Sites drilldown via the new `Settings.initialSubpageId` prop, so the spec's implied "Connected" left-nav row has somewhere to land.
+
+LeftNav's wallet switcher now shows the active wallet's name. App.jsx tracks `walletList` alongside `activeWalletId` and derives `activeWalletName` via `.find()` for both LeftNav (footer label) and the new Settings route (passes `activeWallet` through to the Settings component, mirroring Home).
+
+LeftNav VIEW_GROUPS gains a `settings: ['settings', 'connected-sites']` mapping so the gear row stays highlighted across both routes; the Settings footer button gets `aria-current="page"` like the primary rows.
+
+### Added
+
+- **`packages/core/src/shared/routes/Settings.jsx`** — new `initialSubpageId` prop seeds the drilldown state on mount.
+- **`packages/core/src/shared/components/LeftNav.jsx`** — `VIEW_GROUPS.settings` covers `'settings'` + `'connected-sites'`; Settings footer button gets `aria-current` + `itemActive` styling.
+- **`packages/web/src/App.jsx`** + **`packages/desktop/renderer/App.jsx`** — `Settings` import; `walletList` state; `'settings' | 'connected-sites'` top-level route; `handleOpenSettings`; `walletName` thread into `<LeftNav>`; `onOpenSettings` thread into both navs.
+- **`test/smoke/ui/left-nav-settings-route.smoke.js`** (new) — pins all of the above.
+
+Closes Cluster Y FOLLOWUPs 2 + 3.
+
 ## [0.267.0] - 2026-04-28
 
 §9 — Cluster Z Step 2 of 2 — G002 standalone `@xchain-wallet/signers-ledger` package.

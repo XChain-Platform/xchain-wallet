@@ -35,6 +35,7 @@ const VIEW_GROUPS = {
     'contracts-list': ['contracts-list', 'contract-detail', 'contract-deploy', 'contract-execute', 'contract-deposit', 'contract-withdraw', 'staking-dashboard', 'stake-form', 'staking-unstake', 'staking-claim', 'staking-delegate', 'staking-revoke', 'operator-dashboard'],
     messaging: ['messaging', 'compose-message'],
     contacts: ['contacts'],
+    settings: ['settings', 'connected-sites'],
 };
 
 function isActive(itemId, currentView) {
@@ -138,7 +139,8 @@ export function LeftNav({
                 {onOpenSettings ? (
                     <button
                         type="button"
-                        className={styles.item}
+                        className={`${styles.item} ${isActive('settings', currentView) ? styles.itemActive : ''}`}
+                        aria-current={isActive('settings', currentView) ? 'page' : undefined}
                         onClick={onOpenSettings}
                     >
                         <span className={styles.icon} aria-hidden="true">

@@ -32,6 +32,7 @@ import { WalletDetails } from '@xchain-wallet/core/shared/routes/WalletDetails.j
 import { RenameWalletForm } from '@xchain-wallet/core/shared/routes/RenameWalletForm.jsx';
 import { Locked } from '@xchain-wallet/core/shared/routes/Locked.jsx';
 import { Home } from '@xchain-wallet/core/shared/routes/Home.jsx';
+import { Settings } from '@xchain-wallet/core/shared/routes/Settings.jsx';
 import { TokenDetail } from '@xchain-wallet/core/shared/routes/TokenDetail.jsx';
 import { ToastHost } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
 import { ReachabilityBanner } from '@xchain-wallet/core/shared/components/ReachabilityBanner.jsx';
@@ -163,6 +164,11 @@ function AppInner() {
     const [activeAccountId, setActiveAccountId] = useState(
         /** @type {string | null} */ (null),
     );
+    // §24 Cluster Y FOLLOWUP 3 — track the resolved active-wallet record
+    // so LeftNav / BottomTabBar can label the wallet switcher and so
+    // the new 'settings' top-level view can pass `activeWallet` through
+    // to the Settings drilldown the same way Home does.
+    const [walletList, setWalletList] = useState(/** @type {Array<{ id: string, name: string }>} */ ([]));
     const [dispenserRef, setDispenserRef] = useState(
         /** @type {{ chainId: string, actionIndex: string } | null} */ (null),
     );
@@ -210,14 +216,17 @@ function AppInner() {
         if (status.state !== 'unlocked') {
             setActiveWalletId(null);
             setActiveAccountId(null);
+            setWalletList([]);
             return;
         }
         let cancelled = false;
         listWallets()
             .then((list) => {
                 if (cancelled) return;
-                if (Array.isArray(list) && list.length > 0) {
-                    setActiveWalletId(list[0].id);
+                const arr = Array.isArray(list) ? list : [];
+                setWalletList(arr);
+                if (arr.length > 0) {
+                    setActiveWalletId(arr[0].id);
                 }
             })
             .catch(() => { /* Home surfaces load errors */ });
@@ -913,6 +922,28 @@ function AppInner() {
                     />
                 );
             }
+            if (unlockedView === 'settings' || unlockedView === 'connected-sites') {
+                // §24 Cluster Y FOLLOWUP 2 — Settings is reachable as a
+                // top-level route from LeftNav / BottomTabBar. The
+                // 'connected-sites' alias deep-links straight into the
+                // Connected Sites drilldown (§35.9 / G108) so the spec's
+                // implied "Connected" left-nav row has somewhere to land.
+                const activeWallet = walletList.find((w) => w.id === activeWalletId) || null;
+                return (
+                    <Settings
+                        onBack={() => setUnlockedView('home')}
+                        activeWallet={activeWallet}
+                        activeAccount={null}
+                        onOpenWalletPicker={() => setUnlockedView('wallet-picker')}
+                        onOpenAccountPicker={
+                            activeWalletId ? () => setUnlockedView('account-picker') : undefined
+                        }
+                        initialSubpageId={
+                            unlockedView === 'connected-sites' ? 'connected-sites' : null
+                        }
+                    />
+                );
+            }
             if (unlockedView === 'wallet-details' && walletDetailsId) {
                 return (
                     <WalletDetails
@@ -1093,6 +1124,9 @@ function AppInner() {
                     .catch(() => refresh());
             };
             const handleOpenWalletPicker = () => setUnlockedView('wallet-picker');
+            const handleOpenSettings = () => setUnlockedView('settings');
+            const activeWalletName =
+                walletList.find((w) => w.id === activeWalletId)?.name || undefined;
             return (
                 <FullLayoutWithNav
                     nav={
@@ -1101,6 +1135,8 @@ function AppInner() {
                             onSelect={(view) => setUnlockedView(view)}
                             onLock={handleNavLock}
                             onOpenWalletPicker={handleOpenWalletPicker}
+                            onOpenSettings={handleOpenSettings}
+                            walletName={activeWalletName}
                             hasBtcAddress={hasBtcAddress}
                         />
                     }
@@ -1110,6 +1146,7 @@ function AppInner() {
                             onSelect={(view) => setUnlockedView(view)}
                             onLock={handleNavLock}
                             onOpenWalletPicker={handleOpenWalletPicker}
+                            onOpenSettings={handleOpenSettings}
                             hasBtcAddress={hasBtcAddress}
                         />
                     }
