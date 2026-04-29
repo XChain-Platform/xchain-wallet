@@ -1089,9 +1089,11 @@ function AppInner() {
                     />
                 );
             }
+            // §49 / Cluster G FOLLOWUP 4 — QueuedBroadcastBanner is now
+            // mounted in FullLayoutWithNav.header below so it persists
+            // across every unlocked view, not only Home.
             return (
                 <>
-                    {activeWalletId ? <QueuedBroadcastBanner walletId={activeWalletId} /> : null}
                     <Home
                         onLocked={refresh}
                         onSend={activeWalletId ? () => setUnlockedView('send') : undefined}
@@ -1198,6 +1200,9 @@ function AppInner() {
                             onOpenSettings={handleOpenSettings}
                             hasBtcAddress={hasBtcAddress}
                         />
+                    }
+                    header={
+                        activeWalletId ? <QueuedBroadcastBanner walletId={activeWalletId} /> : null
                     }
                 >
                     {routeNode}

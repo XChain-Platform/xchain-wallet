@@ -83,6 +83,7 @@ import * as messaging from './messaging.js';
 import { getSessionStatus, listWallets, lockWallet, listAccounts } from './messaging.js';
 import { LeftNav, FullLayoutWithNav } from '@xchain-wallet/core/shared/components/LeftNav.jsx';
 import { BottomTabBar } from '@xchain-wallet/core/shared/components/BottomTabBar.jsx';
+import { QueuedBroadcastBanner } from '@xchain-wallet/core/shared/components/QueuedBroadcastBanner.jsx';
 import { registerSigner as registerLocalSigner } from './signerBridge.js';
 import { pairTrezorSigner } from './signerFactories/trezorFactory.js';
 import { pairLedgerSigner } from './signerFactories/ledgerFactory.js';
@@ -1007,6 +1008,9 @@ function AppInner() {
                             onOpenSettings={handleOpenSettings}
                             hasBtcAddress={hasBtcAddress}
                         />
+                    }
+                    header={
+                        activeWalletId ? <QueuedBroadcastBanner walletId={activeWalletId} /> : null
                     }
                 >
                     {routeNode}

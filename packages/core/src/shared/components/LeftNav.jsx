@@ -177,16 +177,24 @@ export function LeftNav({
  * `<Screen>` (which defaults to `100dvh`) fills its flex parent instead
  * of overflowing the document.
  *
+ * The `header` slot (§49 / Cluster G FOLLOWUP 4) renders persistent
+ * banners (queued broadcasts, …) above the route content so they
+ * survive route changes — Home no longer has to mount them itself.
+ *
  * @param {object} props
  * @param {import('react').ReactNode} props.nav
  * @param {import('react').ReactNode} [props.bottomBar]
+ * @param {import('react').ReactNode} [props.header]
  * @param {import('react').ReactNode} props.children
  */
-export function FullLayoutWithNav({ nav, bottomBar, children }) {
+export function FullLayoutWithNav({ nav, bottomBar, header, children }) {
     return (
         <div className={`${styles.layout} ${bottomBar ? styles.layoutWithBottomBar : ''}`}>
             <aside className={styles.sidebar}>{nav}</aside>
-            <div className={styles.main}>{children}</div>
+            <div className={styles.main}>
+                {header ? <div className={styles.header}>{header}</div> : null}
+                <div className={styles.mainBody}>{children}</div>
+            </div>
             {bottomBar ? <div className={styles.bottomBarSlot}>{bottomBar}</div> : null}
         </div>
     );

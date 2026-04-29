@@ -92,8 +92,13 @@ assert.ok(/\.sheet\s*\{[\s\S]*?max-height:\s*70vh/.test(cssSrc),
 
 const navJsxPath = join(core, 'src', 'shared', 'components', 'LeftNav.jsx');
 const navJsxSrc = readFileSync(navJsxPath, 'utf8');
-assert.ok(/FullLayoutWithNav\(\{ nav, bottomBar, children \}\)/.test(navJsxSrc),
-    'FullLayoutWithNav exposes a bottomBar slot');
+// Cluster G FOLLOWUP 4 added a `header` slot; accept both the original
+// signature and the post-FOLLOWUP one so each cluster's smoke stays
+// independent.
+assert.ok(
+    /FullLayoutWithNav\(\{ nav, bottomBar(?:, header)?, children \}\)/.test(navJsxSrc),
+    'FullLayoutWithNav exposes a bottomBar slot',
+);
 assert.ok(/\{bottomBar \? <div className=\{styles\.bottomBarSlot\}>\{bottomBar\}<\/div>/.test(navJsxSrc),
     'FullLayoutWithNav renders the bottomBar slot when provided');
 

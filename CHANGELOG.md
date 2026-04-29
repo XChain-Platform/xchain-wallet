@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.272.0] - 2026-04-28
+
+§49 / Cluster G FOLLOWUP 4 — QueuedBroadcastBanner persists across every unlocked view.
+
+`FullLayoutWithNav` grew a `header` slot rendered above the route content. Web + desktop App.jsx mount `<QueuedBroadcastBanner walletId={activeWalletId} />` there so the banner survives navigation between Send / History / Markets / etc., not only Home. The web shell drops its Home-only mount; the desktop shell gains the banner for the first time.
+
+CSS rework: `.main` becomes a flex column (header + body); `.header` takes natural height; `.mainBody` fills remaining space and re-asserts `--xc-screen-h: 100%` so the route's `<Screen>` still fills the available area.
+
+### Added
+
+- **`packages/core/src/shared/components/LeftNav.jsx`** — `FullLayoutWithNav` accepts a `header` prop.
+- **`packages/core/src/shared/components/LeftNav.module.css`** — `.header` + `.mainBody` flex-column rules.
+- **`packages/web/src/App.jsx`** + **`packages/desktop/renderer/App.jsx`** — pass QueuedBroadcastBanner through the new header slot. Web App's pre-existing Home-fallback mount removed.
+- **`test/smoke/ui/queued-broadcast-banner-persistence.smoke.js`** (new).
+
+### Changed
+
+- **`test/smoke/ui/bottom-tab-bar.smoke.js`** — FullLayoutWithNav-signature assertion accepts the post-FOLLOWUP `header` slot.
+
+Closes Cluster G FOLLOWUP 4.
+
 ## [0.271.0] - 2026-04-28
 
 §47 / Cluster L FOLLOWUP 1 — web `?uri=` deep-link routing.

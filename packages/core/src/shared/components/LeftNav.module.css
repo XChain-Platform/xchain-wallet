@@ -25,9 +25,28 @@
     min-width: 0;
     height: 100%;
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
     /* Override Screen's height so the route's Screen fills the main
        pane instead of expanding to the document viewport. */
     --xc-screen-h: 100%;
+}
+
+/* §49 / Cluster G FOLLOWUP 4 — persistent header slot for banners
+   (QueuedBroadcastBanner, etc) that should survive route changes. The
+   slot collapses when no header is supplied (parent renders nothing). */
+.header {
+    flex: 0 0 auto;
+}
+
+.mainBody {
+    flex: 1 1 auto;
+    min-height: 0;
+    /* Reset --xc-screen-h on the immediate Screen child so it fills
+       the remaining flex space below the header. */
+    --xc-screen-h: 100%;
+    display: flex;
+    flex-direction: column;
 }
 
 @media (max-width: 899px) {
