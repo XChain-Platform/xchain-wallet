@@ -50,6 +50,15 @@ export interface MockProviderOptions {
     // If true, any sign* method returns USER_REJECTED. Lets tests exercise
     // the error path.
     rejectAll?: boolean;
+    // If true, every connect / sign* call returns BLOCKED_BY_USER —
+    // models the "user un-blocks in wallet Settings" flow (§12 / Cluster S
+    // FOLLOWUP 5). Higher priority than `rejectAll` so the dApp branch
+    // for "blocked, no retry" is reachable.
+    blockedSite?: boolean;
+    // If set, every sign* call returns THROTTLED with the supplied
+    // `retryAfterMs` (and optional `burst` / `windowMs`). Higher priority
+    // than `rejectAll`. Used to exercise the dApp's retry-after path.
+    throttle?: { retryAfterMs: number; burst?: number; windowMs?: number };
     // Only these ACTION types are claimed as supported by signAction;
     // anything else returns UNSUPPORTED_ACTION. Default Phase 1 set.
     supportedActions?: string[];
@@ -89,7 +98,9 @@ export class MockXChainProvider implements XChainProvider {
     readonly version: string = BRIDGE_SPEC_VERSION;
     readonly isXChainWallet = true as const;
 
-    private readonly opts: Required<MockProviderOptions>;
+    private readonly opts: Required<Omit<MockProviderOptions, 'throttle'>> & {
+        throttle: { retryAfterMs: number; burst?: number; windowMs?: number } | null;
+    };
     private connected = false;
     private grantedPermissions: SitePermissions | null = null;
     private readonly listeners = new Map<
@@ -120,8 +131,32 @@ export class MockXChainProvider implements XChainProvider {
             activeChains: opts.activeChains ?? [DEFAULT_CHAIN.id],
             autoApprove: opts.autoApprove ?? true,
             rejectAll: opts.rejectAll ?? false,
+            blockedSite: opts.blockedSite ?? false,
+            throttle: opts.throttle ?? null,
             supportedActions: opts.supportedActions ?? ['SEND', 'SWEEP'],
         };
+    }
+
+    // Priority: blockedSite > throttle > rejectAll. Returning the
+    // matching error result lets sign* methods short-circuit before
+    // doing any work — mirrors how the production wallet checks site
+    // status before opening an approval window.
+    private maybeBlockedOrThrottled(): { ok: false; error: 'BLOCKED_BY_USER' } | { ok: false; error: 'THROTTLED'; retryAfterMs: number; burst?: number; windowMs?: number } | null {
+        if (this.opts.blockedSite) {
+            return { ok: false, error: 'BLOCKED_BY_USER' };
+        }
+        if (this.opts.throttle) {
+            const t = this.opts.throttle;
+            const out: { ok: false; error: 'THROTTLED'; retryAfterMs: number; burst?: number; windowMs?: number } = {
+                ok: false,
+                error: 'THROTTLED',
+                retryAfterMs: t.retryAfterMs,
+            };
+            if (typeof t.burst === 'number') out.burst = t.burst;
+            if (typeof t.windowMs === 'number') out.windowMs = t.windowMs;
+            return out;
+        }
+        return null;
     }
 
     // Install as window.xchain and fire the ready event. Returns an
@@ -139,6 +174,8 @@ export class MockXChainProvider implements XChainProvider {
     }
 
     async connect(_opts?: ConnectOpts): Promise<ConnectResult> {
+        const blockedOrThrottled = this.maybeBlockedOrThrottled();
+        if (blockedOrThrottled) return blockedOrThrottled;
         if (!this.opts.autoApprove) {
             return { ok: false, error: 'USER_REJECTED' };
         }
@@ -189,6 +226,8 @@ export class MockXChainProvider implements XChainProvider {
     }
 
     async signMessage(params: SignMessageParams): Promise<SignMessageResult> {
+        const blockedOrThrottled = this.maybeBlockedOrThrottled();
+        if (blockedOrThrottled) return blockedOrThrottled;
         if (this.opts.rejectAll) return { ok: false, error: 'USER_REJECTED' };
         this.assertConnected();
         return {
@@ -202,6 +241,8 @@ export class MockXChainProvider implements XChainProvider {
     async signAction<TParams = Record<string, unknown>>(
         params: SignActionParams<TParams>,
     ): Promise<SignActionResult> {
+        const blockedOrThrottled = this.maybeBlockedOrThrottled();
+        if (blockedOrThrottled) return blockedOrThrottled;
         if (this.opts.rejectAll) return { ok: false, error: 'USER_REJECTED' };
         this.assertConnected();
         if (!this.opts.supportedActions.includes(params.action)) {
@@ -221,6 +262,8 @@ export class MockXChainProvider implements XChainProvider {
     }
 
     async signPsbt(params: SignPsbtParams): Promise<SignPsbtResult> {
+        const blockedOrThrottled = this.maybeBlockedOrThrottled();
+        if (blockedOrThrottled) return blockedOrThrottled;
         if (this.opts.rejectAll) return { ok: false, error: 'USER_REJECTED' };
         this.assertConnected();
         const signed = params.psbtHex + 'deadbeef';
@@ -236,6 +279,8 @@ export class MockXChainProvider implements XChainProvider {
     }
 
     async signIn(params: SignInParams): Promise<SignInResult> {
+        const blockedOrThrottled = this.maybeBlockedOrThrottled();
+        if (blockedOrThrottled) return blockedOrThrottled;
         if (this.opts.rejectAll) return { ok: false, error: 'USER_REJECTED' };
         this.assertConnected();
         const firstAddress = this.opts.addresses[this.opts.activeChains[0]!]?.[0];

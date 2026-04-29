@@ -17,9 +17,13 @@ import {
     makeSignInParams,
     parseSignInChallenge,
     validateSignInChallenge,
+    type BridgeErrorCode,
+    type BridgeErrorResult,
     type SendActionParams,
     type SignActionParams,
+    type SignActionResult,
 } from '@xchain-wallet/bridge-spec';
+import { MockXChainProvider } from './mock-provider.js';
 
 const APP_ID = 'example.com';
 
@@ -109,4 +113,150 @@ export async function runExample(): Promise<ExampleReport> {
 
     await provider.disconnect();
     return report;
+}
+
+// ---------------------------------------------------------------------------
+// Error-code branching reference (§12 / Cluster S FOLLOWUP 5)
+// ---------------------------------------------------------------------------
+//
+// Bridge results that fail come back as `{ ok: false, error: <code>, ... }`.
+// dApp authors should branch on `error` only — the human-readable
+// `message` is for logging, not display logic. The `BLOCKED_BY_USER` and
+// `THROTTLED` codes are the §12 security additions; they need explicit
+// UX:
+//
+//   BLOCKED_BY_USER  — user blocked this site in wallet Settings. There
+//                      is no retry that the dApp can do automatically;
+//                      surface a static "Blocked — un-block in wallet
+//                      Settings" message and stop pushing requests.
+//
+//   THROTTLED        — wallet rate-limited this origin. The result
+//                      includes `retryAfterMs` (and optional `burst` /
+//                      `windowMs`); show "Retry in {seconds}s" with a
+//                      disabled retry control that re-enables when the
+//                      timer elapses, then re-issue the original call.
+//
+// `handleSignActionResult` is the helper a dApp's UI layer would call.
+// It returns a tagged shape so the caller can render the right state.
+
+export type SignActionUiOutcome =
+    | { kind: 'success'; txid: string }
+    | { kind: 'rejected' }                                          // USER_REJECTED
+    | { kind: 'walletLocked' }                                      // WALLET_LOCKED
+    | { kind: 'panic' }                                             // PANIC_MODE
+    | { kind: 'unsupported'; supportedActions?: string[] }          // UNSUPPORTED_ACTION
+    | { kind: 'blocked'; message: string }                          // BLOCKED_BY_USER
+    | { kind: 'throttled'; retryAfterMs: number; burst?: number; windowMs?: number; message: string }
+    | { kind: 'error'; error: BridgeErrorCode; message?: string };  // anything else
+
+export function handleSignActionResult(
+    result: SignActionResult,
+): SignActionUiOutcome {
+    if (result.ok) return { kind: 'success', txid: result.txid };
+    const err = result as BridgeErrorResult & { supportedActions?: string[] };
+    switch (err.error) {
+        case 'USER_REJECTED':
+            return { kind: 'rejected' };
+        case 'WALLET_LOCKED':
+            return { kind: 'walletLocked' };
+        case 'PANIC_MODE':
+            return { kind: 'panic' };
+        case 'UNSUPPORTED_ACTION':
+            return {
+                kind: 'unsupported',
+                supportedActions: err.supportedActions,
+            };
+        case 'BLOCKED_BY_USER':
+            return {
+                kind: 'blocked',
+                message: 'Blocked by user — un-block in wallet Settings.',
+            };
+        case 'THROTTLED': {
+            const retryAfterMs = err.retryAfterMs ?? 0;
+            const seconds = Math.ceil(retryAfterMs / 1000);
+            const out: SignActionUiOutcome = {
+                kind: 'throttled',
+                retryAfterMs,
+                message: `Throttled by wallet — retry in ${seconds}s.`,
+            };
+            if (typeof err.burst === 'number') out.burst = err.burst;
+            if (typeof err.windowMs === 'number') out.windowMs = err.windowMs;
+            return out;
+        }
+        default:
+            return { kind: 'error', error: err.error, message: err.message };
+    }
+}
+
+// Re-issue the same signAction once the wallet's `retryAfterMs` window
+// has elapsed. UI surfaces should disable the retry control until the
+// returned promise resolves so users can't queue duplicate requests.
+export async function signActionWithRetry<TParams = Record<string, unknown>>(
+    provider: { signAction: (p: SignActionParams<TParams>) => Promise<SignActionResult> },
+    params: SignActionParams<TParams>,
+    opts: { maxRetries?: number; sleep?: (ms: number) => Promise<void> } = {},
+): Promise<SignActionResult> {
+    const maxRetries = opts.maxRetries ?? 3;
+    const sleep = opts.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
+    let attempt = 0;
+    while (true) {
+        const result = await provider.signAction(params);
+        if (result.ok) return result;
+        const err = result as BridgeErrorResult;
+        if (err.error !== 'THROTTLED' || attempt >= maxRetries) return result;
+        await sleep(err.retryAfterMs ?? 0);
+        attempt += 1;
+    }
+}
+
+export interface ErrorScenarioReport {
+    blockedOutcome: SignActionUiOutcome;
+    throttledOutcome: SignActionUiOutcome;
+    retryAttempts: number;
+    retryFinalKind: SignActionUiOutcome['kind'];
+}
+
+// Walk the BLOCKED_BY_USER and THROTTLED branches against the mock
+// provider so a developer copy-pasting from test-dapp gets coverage by
+// default. Returns the rendered outcomes the UI would surface.
+export async function runErrorScenarios(): Promise<ErrorScenarioReport> {
+    const params: SignActionParams<SendActionParams> = {
+        chainId: 'bitcoin-regtest',
+        action: 'SEND',
+        params: {
+            fromAddress: 'bcrt1qexampleaddressforsmoketesting0000000000',
+            toAddress: 'bcrt1qrecipientaddress0000000000000000000000',
+            asset: 'BTC',
+            amountRaw: '10000',
+        },
+    };
+
+    // Site is on the user's blocklist — no retry should happen.
+    const blocked = new MockXChainProvider({ blockedSite: true });
+    await blocked.connect({ appName: 'Example dApp' });
+    const blockedRaw = await blocked.signAction(params);
+    const blockedOutcome = handleSignActionResult(blockedRaw);
+
+    // Wallet is rate-limiting; the helper's setTimeout-based retry
+    // resolves to the post-throttle outcome (still THROTTLED in the
+    // mock — the test exercises that retries don't loop forever).
+    const throttled = new MockXChainProvider({
+        throttle: { retryAfterMs: 5, burst: 2, windowMs: 1000 },
+    });
+    await throttled.connect({ appName: 'Example dApp' });
+    const throttledRaw = await throttled.signAction(params);
+    const throttledOutcome = handleSignActionResult(throttledRaw);
+
+    let retryAttempts = 0;
+    const retried = await signActionWithRetry(throttled, params, {
+        maxRetries: 2,
+        sleep: async (ms) => {
+            retryAttempts += 1;
+            // Don't actually sleep in the example — keeps the smoke fast.
+            void ms;
+        },
+    });
+    const retryFinalKind = handleSignActionResult(retried).kind;
+
+    return { blockedOutcome, throttledOutcome, retryAttempts, retryFinalKind };
 }

@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.279.0] - 2026-04-28
+
+§12 / Cluster S FOLLOWUP 5 — test-dapp surfaces BLOCKED_BY_USER + THROTTLED.
+
+`MockProviderOptions` gains `blockedSite` and `throttle: { retryAfterMs, burst?, windowMs? }`. A new `maybeBlockedOrThrottled()` helper short-circuits `connect` / `signMessage` / `signAction` / `signPsbt` / `signIn` before any other work — the dApp branch for "blocked, no retry" and "throttled, retry-after" is now reachable from the mock without touching the production wallet.
+
+`example.ts` adds `handleSignActionResult` (returns a tagged `SignActionUiOutcome` with 7 branches: success / rejected / walletLocked / panic / unsupported / blocked / throttled / error) and `signActionWithRetry` (loops on THROTTLED up to `maxRetries`, sleeping `retryAfterMs` between attempts, with an injectable sleep for tests). `runErrorScenarios` walks both branches against the mock and returns the rendered outcomes a UI would surface. The blocked branch produces a static "Blocked by user — un-block in wallet Settings." message; the throttled branch produces "Retry in {seconds}s." with `retryAfterMs` / `burst` / `windowMs` forwarded for the caller.
+
+### Added
+
+- **`packages/test-dapp/src/mock-provider.ts`** — `blockedSite` + `throttle` options; `maybeBlockedOrThrottled` helper threaded through five sign* methods.
+- **`packages/test-dapp/src/example.ts`** — `handleSignActionResult` + `SignActionUiOutcome` type + `signActionWithRetry` + `runErrorScenarios` + `ErrorScenarioReport`.
+- **`packages/test-dapp/src/index.ts`** — re-exports the new symbols + types.
+- **`test/smoke/bridge/test-dapp-error-scenarios.smoke.js`** (new).
+
+Closes Cluster S FOLLOWUP 5.
+
 ## [0.278.0] - 2026-04-28
 
 §47 / Cluster L FOLLOWUP 5 — `describeXchainIntent` localized intent labels.

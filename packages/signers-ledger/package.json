@@ -1,6 +1,6 @@
 {
     "name": "@xchain-wallet/signers-ledger",
-    "version": "0.278.0",
+    "version": "0.279.0",
     "private": true,
     "description": "LedgerSigner — XChain Wallet HW-signer integration for Ledger devices (§17.3 / §18). Vendor-specific implementation extracted from @xchain-wallet/core per §9 / G002.",
     "type": "module",
