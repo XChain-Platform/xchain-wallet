@@ -58,15 +58,28 @@ assert.ok(/if \(!walletId \|\| typeof messaging\?\.listSigners !== 'function'\) 
 //        through SignCredentials. Each form's lookup uses the same
 //        `isHwSource ? fromAddress?.signerId : null` shape.
 
-const adopters = [
+const routes = join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes');
+
+// Two adoption shapes:
+//   A) `isHwSource` boolean: Send / BroadcastForm / DividendForm /
+//      DestroyForm / TokenAdminForm / ExecuteContractForm /
+//      StakingActionForm — gate via `isHwSource ? fromAddress?.signerId : null`.
+//   B) `hw` from `isHwSource(fromAddress)` helper: SwapForm / ComposeMessage.
+const adoptersA = [
     ['Send.jsx', sendPath],
-    ['BroadcastForm.jsx', join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', 'BroadcastForm.jsx')],
-    ['DividendForm.jsx', join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', 'DividendForm.jsx')],
-    ['DestroyForm.jsx', join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', 'DestroyForm.jsx')],
-    ['TokenAdminForm.jsx', join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', 'TokenAdminForm.jsx')],
+    ['BroadcastForm.jsx', join(routes, 'BroadcastForm.jsx')],
+    ['DividendForm.jsx', join(routes, 'DividendForm.jsx')],
+    ['DestroyForm.jsx', join(routes, 'DestroyForm.jsx')],
+    ['TokenAdminForm.jsx', join(routes, 'TokenAdminForm.jsx')],
+    ['ExecuteContractForm.jsx', join(routes, 'ExecuteContractForm.jsx')],
+    ['StakingActionForm.jsx', join(routes, 'StakingActionForm.jsx')],
+];
+const adoptersB = [
+    ['SwapForm.jsx', join(routes, 'SwapForm.jsx')],
+    ['ComposeMessage.jsx', join(routes, 'ComposeMessage.jsx')],
 ];
 
-for (const [label, path] of adopters) {
+for (const [label, path] of adoptersA) {
     const src = readFileSync(path, 'utf8');
     assert.ok(
         /import\s*\{\s*useSignerInfo\s*\}\s*from\s*'\.\.\/hooks\/useSignerInfo\.js'/.test(src),
@@ -77,12 +90,23 @@ for (const [label, path] of adopters) {
         `${label} calls useSignerInfo with isHwSource-gated signerId`,
     );
     if (label !== 'Send.jsx') {
-        // Send is the canonical adopter that already passed signerInfo
-        // via its own HwSignBlock; the others thread it through
-        // SignCredentials.
         assert.ok(/<SignCredentials\b[\s\S]*?signerInfo=\{hwSignerInfo\}/.test(src),
             `${label} passes signerInfo into <SignCredentials>`);
     }
+}
+
+for (const [label, path] of adoptersB) {
+    const src = readFileSync(path, 'utf8');
+    assert.ok(
+        /import\s*\{\s*useSignerInfo\s*\}\s*from\s*'\.\.\/hooks\/useSignerInfo\.js'/.test(src),
+        `${label} imports useSignerInfo`,
+    );
+    assert.ok(
+        /useSignerInfo\(\{[\s\S]*?walletId,[\s\S]*?signerId:\s*hw \? fromAddress\?\.signerId : null,?[\s\S]*?\}\)/.test(src),
+        `${label} calls useSignerInfo with hw-gated signerId (helper-style adoption)`,
+    );
+    assert.ok(/<SignCredentials\b[\s\S]*?signerInfo=\{hwSignerInfo\}/.test(src),
+        `${label} passes signerInfo into <SignCredentials>`);
 }
 
 assert.ok(

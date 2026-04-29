@@ -12,6 +12,7 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
+import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -123,6 +124,10 @@ export function SwapForm({ walletId, onBack }) {
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
     const hw = isHwSource(fromAddress);
+    const hwSignerInfo = useSignerInfo({
+        walletId,
+        signerId: hw ? fromAddress?.signerId : null,
+    });
 
     const validationError = useMemo(() => {
         if (!giveTick) return null;
@@ -387,6 +392,7 @@ export function SwapForm({ walletId, onBack }) {
                             submitError={submitError}
                             disabled={stage === 'submitting'}
                             getSignerStatus={messaging.getSignerStatus}
+                            signerInfo={hwSignerInfo}
                         />
                     )}
                     {(isWatcherMode || hw) && submitError ? (

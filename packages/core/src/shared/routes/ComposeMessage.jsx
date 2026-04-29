@@ -10,6 +10,7 @@ import {
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
+import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -136,6 +137,10 @@ export function ComposeMessage({
 
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
     const hw = isHwSource(fromAddress);
+    const hwSignerInfo = useSignerInfo({
+        walletId,
+        signerId: hw ? fromAddress?.signerId : null,
+    });
 
     async function handleSubmit(event) {
         event.preventDefault();
@@ -346,6 +351,7 @@ export function ComposeMessage({
                         submitError={submitError}
                         disabled={stage === 'submitting'}
                         getSignerStatus={messaging.getSignerStatus}
+                        signerInfo={hwSignerInfo}
                     />
                     {hw && submitError ? (
                         <p role="alert" style={{ margin: '0.25rem 0 0', color: '#ef5350', fontSize: '0.75rem' }}>

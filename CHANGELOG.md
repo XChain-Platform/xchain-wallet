@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.276.0] - 2026-04-28
+
+§18.4 / Cluster N FOLLOWUP 2 (final) — useSignerInfo sweep across HW sign surfaces.
+
+Last four authoring surfaces adopt the hook: ExecuteContractForm, StakingActionForm (boolean-`isHwSource` shape) plus SwapForm and ComposeMessage (helper-`hw = isHwSource(fromAddress)` shape). Each threads `signerInfo={hwSignerInfo}` into its `<SignCredentials>` block. Total: 9 of ~10 sign surfaces now consume the hook; the multisig signing flow runs a different code path and stays a future FOLLOWUP if needed.
+
+### Changed
+
+- **`packages/core/src/shared/routes/ExecuteContractForm.jsx`**, **`StakingActionForm.jsx`**, **`SwapForm.jsx`**, **`ComposeMessage.jsx`** — adopt useSignerInfo; thread signerInfo through SignCredentials.
+- **`test/smoke/ui/use-signer-info.smoke.js`** — extended to pin both adoption shapes (boolean isHwSource + helper-style `hw`).
+
+Closes Cluster N FOLLOWUP 2.
+
 ## [0.275.0] - 2026-04-28
 
 §18.4 / Cluster N FOLLOWUP 2 (continued) — useSignerInfo sweep across HW sign surfaces.
