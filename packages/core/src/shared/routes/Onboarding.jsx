@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { Screen, Button, Icon } from '@xchain-wallet/core/ui';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
-import { LICENSE_NAME, LICENSE_FILE } from '../../buildInfo.js';
+import { LICENSE_NAME, LICENSE_FILE, LICENSE_VERSION } from '../../buildInfo.js';
 import { crypto as cryptoLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './Onboarding.module.css';
 import pickerStyles from './WalletPicker.module.css';
 
 const LICENSE_STORAGE_KEY = 'xc:licenseAcceptedAt';
+const LICENSE_VERSION_KEY = 'xc:licenseAcceptedVersion';
 
 const LICENSE_SUMMARY = [
     `By using ${branding.PRODUCT_NAME} you agree to the ${LICENSE_NAME}.`,
@@ -28,9 +29,18 @@ function readAcceptedAt() {
     }
 }
 
+function readAcceptedVersion() {
+    try {
+        return globalThis.localStorage?.getItem(LICENSE_VERSION_KEY) || null;
+    } catch {
+        return null;
+    }
+}
+
 function markAccepted() {
     try {
         globalThis.localStorage?.setItem(LICENSE_STORAGE_KEY, new Date().toISOString());
+        globalThis.localStorage?.setItem(LICENSE_VERSION_KEY, LICENSE_VERSION);
     } catch { /* best-effort */ }
 }
 
@@ -59,12 +69,16 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onDemoE
     const [demoError, setDemoError] = useState(/** @type {string | null} */ (null));
     // §25.1 / G061 — license-acceptance gate. Persisted to localStorage so
     // a returning user (e.g. after wiping a demo wallet) doesn't have to
-    // re-accept. The "Add Wallet" path (when `onBack` is supplied) is
-    // already inside an unlocked vault, so the gate is skipped.
+    // re-accept. Cluster J FOLLOWUP 4: a `LICENSE_VERSION` constant tracks
+    // the binding terms; if the stored version doesn't match the current
+    // version, the gate fires regardless of `onBack` so re-acceptance
+    // can't be bypassed via the unlocked-vault Add-Wallet shortcut.
     const [licenseAcceptedAt, setLicenseAcceptedAt] = useState(() => readAcceptedAt());
+    const [licenseAcceptedVersion, setLicenseAcceptedVersion] = useState(() => readAcceptedVersion());
     const [scrolledToEnd, setScrolledToEnd] = useState(false);
     const [licenseAck, setLicenseAck] = useState(false);
     const licenseScrollRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+    const licenseSatisfied = !!licenseAcceptedAt && licenseAcceptedVersion === LICENSE_VERSION;
 
     useEffect(() => {
         // If the panel is already short enough that the user can see
@@ -72,7 +86,7 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onDemoE
         const el = licenseScrollRef.current;
         if (!el) return;
         if (el.scrollHeight <= el.clientHeight + 4) setScrolledToEnd(true);
-    }, [licenseAcceptedAt]);
+    }, [licenseSatisfied]);
 
     function handleLicenseScroll(event) {
         const el = event.currentTarget;
@@ -85,6 +99,7 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onDemoE
     function handleAcceptLicense() {
         markAccepted();
         setLicenseAcceptedAt(new Date().toISOString());
+        setLicenseAcceptedVersion(LICENSE_VERSION);
     }
 
     async function handleEnterDemo() {
@@ -137,9 +152,11 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onDemoE
         </div>
     ) : null;
 
-    // First-launch gate. The "Add wallet" path skips it because the user
-    // is already inside an unlocked vault — they accepted at install time.
-    if (!licenseAcceptedAt && !onBack) {
+    // First-launch + version-bump gate. The Add-Wallet shortcut (when
+    // `onBack` is supplied) skips the gate ONLY when the user has
+    // accepted the *current* LICENSE_VERSION; a version bump forces
+    // re-acceptance through every entry path.
+    if (!licenseSatisfied) {
         return (
             <Screen variant={variant} header={null}>
                 <div className={isFull ? styles.heroFull : styles.heroPopup}>

@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.281.0] - 2026-04-28
+
+§25.1 / Cluster J FOLLOWUP 4 — license re-acceptance gate covers the unlocked Add-Wallet lane.
+
+`buildInfo.js` exports a new `LICENSE_VERSION` constant (initial value `'1'`). Onboarding persists the version alongside the existing `xc:licenseAcceptedAt` timestamp under a new `xc:licenseAcceptedVersion` key, and gates on `licenseSatisfied = !!licenseAcceptedAt && licenseAcceptedVersion === LICENSE_VERSION`. The gate condition is now `if (!licenseSatisfied)` — the previous `&& !onBack` bypass is gone, so a version bump forces re-acceptance even from the unlocked-vault Add-Wallet entry point. Pre-versioned acceptances (anyone who accepted before this release) read back as null version → treated as stale → users see the gate once on next launch and re-accept.
+
+### Added
+
+- **`packages/core/src/buildInfo.js`** — `LICENSE_VERSION = '1'`.
+- **`packages/core/src/shared/routes/Onboarding.jsx`** — `LICENSE_VERSION_KEY` + `readAcceptedVersion()` + `licenseAcceptedVersion` state + `licenseSatisfied` derived flag; `markAccepted` writes both keys; gate fires on `!licenseSatisfied` regardless of `onBack`.
+- **`test/smoke/onboarding/license-version-gate.smoke.js`** (new).
+
+Closes Cluster J FOLLOWUP 4.
+
 ## [0.280.0] - 2026-04-28
 
 §43.2 / Cluster F FOLLOWUP 1 — actually emit bridge events.
