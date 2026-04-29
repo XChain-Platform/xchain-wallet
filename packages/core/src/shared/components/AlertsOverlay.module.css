@@ -77,6 +77,13 @@
     color: var(--xc-text);
 }
 
+/* §53 / Cluster K FOLLOWUP 2 — explicit focus ring; the browser
+   default is unreadable on the high-contrast and dark themes. */
+.close:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
 .body {
     flex: 1 1 auto;
     min-height: 0;

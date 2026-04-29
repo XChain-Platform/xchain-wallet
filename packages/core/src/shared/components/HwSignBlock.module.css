@@ -76,3 +76,9 @@
 .refresh:hover {
     background: var(--xc-surface-raised);
 }
+
+/* §53 / Cluster K FOLLOWUP 2 — explicit focus ring. */
+.refresh:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}

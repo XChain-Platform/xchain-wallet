@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.273.0] - 2026-04-28
+
+§53 / Cluster K FOLLOWUP 2 — focus-visible ring sweep on interactive primitives.
+
+Eight clickable primitives that previously relied on the browser-default focus ring now declare an explicit `:focus-visible { outline: 2px solid var(--xc-focus-ring); outline-offset: 2px }` rule. The default ring becomes invisible against the dark + high-contrast palettes; the explicit rule keys to the `--xc-focus-ring` token (which itself shifts per palette) so keyboard users see a consistent indicator everywhere.
+
+Targets: `AlertsOverlay.close`, `BackupReminderCard.dismissBtn`, `HwSignBlock.refresh`, `QueuedBroadcastBanner.{broadcastBtn,discardBtn}`, `RawPsbtViewer.{toggle,copyBtn}`, `ReachabilityBanner.retry`, `FeeSelector.tier`. HeaderNetworkButton inherits `.btn:focus-visible` from `HeaderSettingsButton.module.css` so it didn't need an additional rule.
+
+### Added
+
+- **`packages/core/src/shared/components/AlertsOverlay.module.css`** etc. (7 files) — `:focus-visible` rules.
+- **`packages/core/src/ui/FeeSelector.module.css`** — `.tier:focus-visible`.
+- **`test/smoke/ui/focus-visible-sweep.smoke.js`** (new) — pins each rule to `--xc-focus-ring`.
+
+Closes Cluster K FOLLOWUP 2.
+
 ## [0.272.0] - 2026-04-28
 
 §49 / Cluster G FOLLOWUP 4 — QueuedBroadcastBanner persists across every unlocked view.
