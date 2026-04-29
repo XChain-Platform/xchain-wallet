@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.264.0] - 2026-04-28
+
+§24 — Cluster Y Step 2 of N — G054 mobile bottom-sheet navigation.
+
+New `<BottomTabBar>` in `packages/core/src/shared/components/`. Five thumb-reachable tabs at the bottom of the viewport (Home / History / Send / Receive / More); More toggles a bottom-sheet drawer listing the rest of the §24.2 nav (DEX / Dispensers / Contracts (BTC-gated) / Messaging / Contacts) plus footer items (Switch wallet, Settings, Lock). Esc and selecting a destination both dismiss the sheet.
+
+`<FullLayoutWithNav>` grew a `bottomBar` slot. Web + desktop App.jsx pass `<BottomTabBar>` to that slot; the slot collapses above 600px so tablets and desktops keep the left-nav layout. Below 600px the route's main pane reserves bottom-padding equal to the 56px bar (+ iOS safe-area inset) so content doesn't hide behind the bar.
+
+Spec deviation: §24.3 lists [Balances] [History] [Send] [Scan] [More]; the Scan slot is folded into More until a dedicated scan-and-classify route ships (FOLLOWUP §24.3).
+
+### Added
+
+- **`packages/core/src/shared/components/BottomTabBar.jsx`** + **`BottomTabBar.module.css`** — `<BottomTabBar>` named export.
+- **`packages/core/src/shared/components/LeftNav.jsx`** — `FullLayoutWithNav` accepts a `bottomBar` prop.
+- **`packages/core/src/shared/components/LeftNav.module.css`** — `.bottomBarSlot` (display:contents → none above 600px) + `.layoutWithBottomBar > .main` bottom-padding rule below 600px.
+- **`packages/web/src/App.jsx`**, **`packages/desktop/renderer/App.jsx`** — pass a `<BottomTabBar>` to the new slot; lock + wallet-picker handlers extracted so both navs share them.
+- **`test/smoke/ui/bottom-tab-bar.smoke.js`** (new).
+
+### Changed
+
+- **`test/smoke/ui/left-nav.smoke.js`** — onLock assertion accepts the extracted `handleNavLock` shape.
+
+Closes G054.
+
 ## [0.263.0] - 2026-04-28
 
 §24 — Cluster Y Step 1 of N — G053 full-layout left navigation.

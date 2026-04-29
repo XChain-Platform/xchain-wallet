@@ -37,6 +37,7 @@ import { ToastHost } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
 import { ReachabilityBanner } from '@xchain-wallet/core/shared/components/ReachabilityBanner.jsx';
 import { QueuedBroadcastBanner } from '@xchain-wallet/core/shared/components/QueuedBroadcastBanner.jsx';
 import { LeftNav, FullLayoutWithNav } from '@xchain-wallet/core/shared/components/LeftNav.jsx';
+import { BottomTabBar } from '@xchain-wallet/core/shared/components/BottomTabBar.jsx';
 import { Send } from '@xchain-wallet/core/shared/routes/Send.jsx';
 import { Receive } from '@xchain-wallet/core/shared/routes/Receive.jsx';
 import { TokenWizard } from '@xchain-wallet/core/shared/routes/TokenWizard.jsx';
@@ -1086,18 +1087,29 @@ function AppInner() {
                 </>
             );
             })();
+            const handleNavLock = () => {
+                lockWallet()
+                    .then(refresh)
+                    .catch(() => refresh());
+            };
+            const handleOpenWalletPicker = () => setUnlockedView('wallet-picker');
             return (
                 <FullLayoutWithNav
                     nav={
                         <LeftNav
                             currentView={unlockedView}
                             onSelect={(view) => setUnlockedView(view)}
-                            onLock={() => {
-                                lockWallet()
-                                    .then(refresh)
-                                    .catch(() => refresh());
-                            }}
-                            onOpenWalletPicker={() => setUnlockedView('wallet-picker')}
+                            onLock={handleNavLock}
+                            onOpenWalletPicker={handleOpenWalletPicker}
+                            hasBtcAddress={hasBtcAddress}
+                        />
+                    }
+                    bottomBar={
+                        <BottomTabBar
+                            currentView={unlockedView}
+                            onSelect={(view) => setUnlockedView(view)}
+                            onLock={handleNavLock}
+                            onOpenWalletPicker={handleOpenWalletPicker}
                             hasBtcAddress={hasBtcAddress}
                         />
                     }

@@ -81,6 +81,7 @@ import { useBtcAddressesPresent } from '@xchain-wallet/core/shared/hooks/useBtcA
 import * as messaging from './messaging.js';
 import { getSessionStatus, listWallets, lockWallet, listAccounts } from './messaging.js';
 import { LeftNav, FullLayoutWithNav } from '@xchain-wallet/core/shared/components/LeftNav.jsx';
+import { BottomTabBar } from '@xchain-wallet/core/shared/components/BottomTabBar.jsx';
 import { registerSigner as registerLocalSigner } from './signerBridge.js';
 import { pairTrezorSigner } from './signerFactories/trezorFactory.js';
 import { pairLedgerSigner } from './signerFactories/ledgerFactory.js';
@@ -947,18 +948,29 @@ function AppInner() {
                 />
             );
             })();
+            const handleNavLock = () => {
+                lockWallet()
+                    .then(refresh)
+                    .catch(() => refresh());
+            };
+            const handleOpenWalletPicker = () => setUnlockedView('wallet-picker');
             return (
                 <FullLayoutWithNav
                     nav={
                         <LeftNav
                             currentView={unlockedView}
                             onSelect={(view) => setUnlockedView(view)}
-                            onLock={() => {
-                                lockWallet()
-                                    .then(refresh)
-                                    .catch(() => refresh());
-                            }}
-                            onOpenWalletPicker={() => setUnlockedView('wallet-picker')}
+                            onLock={handleNavLock}
+                            onOpenWalletPicker={handleOpenWalletPicker}
+                            hasBtcAddress={hasBtcAddress}
+                        />
+                    }
+                    bottomBar={
+                        <BottomTabBar
+                            currentView={unlockedView}
+                            onSelect={(view) => setUnlockedView(view)}
+                            onLock={handleNavLock}
+                            onOpenWalletPicker={handleOpenWalletPicker}
                             hasBtcAddress={hasBtcAddress}
                         />
                     }

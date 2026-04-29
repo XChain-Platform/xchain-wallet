@@ -34,6 +34,29 @@
     .sidebar { display: none; }
 }
 
+/* §24.3 / G054 — when a bottom-tab bar is supplied, give the main pane
+   enough bottom-padding to clear the fixed 56px bar (+ iOS safe-area
+   inset). Above 600px the bar collapses (see .bottomBarSlot below) so
+   the padding becomes 0. */
+
+.layoutWithBottomBar > .main {
+    padding-bottom: 0;
+}
+
+@media (max-width: 600px) {
+    .layoutWithBottomBar > .main {
+        padding-bottom: calc(56px + env(safe-area-inset-bottom, 0));
+    }
+}
+
+.bottomBarSlot {
+    display: contents;
+}
+
+@media (min-width: 601px) {
+    .bottomBarSlot { display: none; }
+}
+
 .nav {
     display: flex;
     flex-direction: column;

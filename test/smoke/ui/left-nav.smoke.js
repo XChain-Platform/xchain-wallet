@@ -107,8 +107,16 @@ for (const [label, src] of [['web', webApp], ['desktop', desktopApp]]) {
         `${label} App wraps the unlocked-route tree in <FullLayoutWithNav>`);
     assert.ok(/<LeftNav\b[\s\S]*?currentView=\{unlockedView\}/.test(src),
         `${label} App passes the active unlockedView into LeftNav`);
-    assert.ok(/onLock=\{\(\)\s*=>\s*\{[\s\S]*?lockWallet\(\)/.test(src),
-        `${label} App wires LeftNav.onLock through lockWallet()`);
+    // onLock is wired through a small handler that calls lockWallet();
+    // accept either the inline arrow form (Step 1 ship) or the named
+    // handler form (Step 2 ship — both LeftNav and BottomTabBar share
+    // the lock callback).
+    assert.ok(
+        /onLock=\{\(\)\s*=>\s*\{[\s\S]*?lockWallet\(\)/.test(src)
+            || (/const handleNavLock = \(\)\s*=>\s*\{[\s\S]*?lockWallet\(\)/.test(src)
+                && /onLock=\{handleNavLock\}/.test(src)),
+        `${label} App wires LeftNav.onLock through lockWallet()`,
+    );
 }
 
 assert.ok(!/LeftNav/.test(popupApp),

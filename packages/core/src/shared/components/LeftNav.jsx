@@ -167,8 +167,9 @@ export function LeftNav({
 /**
  * Wraps the unlocked-route render tree in a flex layout that places
  * `<LeftNav>` alongside the active route. Below 900px the sidebar
- * collapses (display:none) and the route fills the viewport — the
- * §24.3 mobile bottom-tab bar (G054) takes over there once it ships.
+ * collapses (display:none); below 600px the optional `bottomBar` slot
+ * (`<BottomTabBar>`, §24.3 / G054) renders fixed at the bottom of the
+ * viewport instead.
  *
  * The wrapper sets `--xc-screen-h: 100%` on the main pane so the route's
  * `<Screen>` (which defaults to `100dvh`) fills its flex parent instead
@@ -176,13 +177,15 @@ export function LeftNav({
  *
  * @param {object} props
  * @param {import('react').ReactNode} props.nav
+ * @param {import('react').ReactNode} [props.bottomBar]
  * @param {import('react').ReactNode} props.children
  */
-export function FullLayoutWithNav({ nav, children }) {
+export function FullLayoutWithNav({ nav, bottomBar, children }) {
     return (
-        <div className={styles.layout}>
+        <div className={`${styles.layout} ${bottomBar ? styles.layoutWithBottomBar : ''}`}>
             <aside className={styles.sidebar}>{nav}</aside>
             <div className={styles.main}>{children}</div>
+            {bottomBar ? <div className={styles.bottomBarSlot}>{bottomBar}</div> : null}
         </div>
     );
 }

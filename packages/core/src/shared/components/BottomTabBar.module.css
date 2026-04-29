@@ -1,0 +1,151 @@
+/* §24.3 / G054 — bottom-tab bar + bottom-sheet drawer. The bar is
+   thumb-reachable on mobile-portrait viewports; the sheet floats above
+   the route content with a dimmed scrim. */
+
+.bar {
+    position: fixed;
+    inset-inline-start: 0;
+    inset-inline-end: 0;
+    bottom: 0;
+    height: 56px;
+    display: flex;
+    flex-direction: row;
+    background: var(--xc-surface-raised);
+    border-top: 1px solid var(--xc-border);
+    z-index: 50;
+    /* Respect iOS safe-area insets so the bar floats above the home indicator. */
+    padding-bottom: env(safe-area-inset-bottom, 0);
+    box-sizing: content-box;
+}
+
+.tab {
+    flex: 1 1 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    background: transparent;
+    border: 0;
+    color: var(--xc-text-muted, var(--xc-text));
+    font: inherit;
+    font-size: var(--xc-text-xs);
+    cursor: pointer;
+    padding: var(--xc-space-1) var(--xc-space-2);
+}
+
+.tab:focus-visible {
+    outline: 2px solid var(--xc-accent-primary, var(--xc-text));
+    outline-offset: -3px;
+}
+
+.tabActive {
+    color: var(--xc-accent-primary, var(--xc-text));
+    font-weight: 600;
+}
+
+.tabIcon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+}
+
+.tabLabel {
+    line-height: 1.1;
+}
+
+/* Scrim + bottom sheet. The sheet sits above the bar so its safe-area
+   padding stacks correctly. */
+
+.scrim {
+    position: fixed;
+    inset: 0;
+    background: var(--xc-overlay, rgba(0, 0, 0, 0.45));
+    z-index: 60;
+}
+
+.sheet {
+    position: fixed;
+    inset-inline-start: 0;
+    inset-inline-end: 0;
+    bottom: 0;
+    background: var(--xc-surface-raised);
+    color: var(--xc-text);
+    border-top: 1px solid var(--xc-border);
+    border-start-start-radius: var(--xc-radius-lg, 12px);
+    border-start-end-radius: var(--xc-radius-lg, 12px);
+    z-index: 70;
+    max-height: 70vh;
+    overflow-y: auto;
+    padding: var(--xc-space-2) 0 env(safe-area-inset-bottom, var(--xc-space-3));
+    box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.18);
+}
+
+.handle {
+    width: 36px;
+    height: 4px;
+    margin: var(--xc-space-2) auto var(--xc-space-3);
+    border-radius: 2px;
+    background: var(--xc-border);
+}
+
+.sheetList {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.sheetItem {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-3);
+    width: 100%;
+    padding: var(--xc-space-3) var(--xc-space-4);
+    background: transparent;
+    border: 0;
+    color: var(--xc-text);
+    font: inherit;
+    font-size: var(--xc-text-md);
+    text-align: start;
+    cursor: pointer;
+}
+
+.sheetItem:hover,
+.sheetItem:focus-visible {
+    background: var(--xc-surface);
+    outline: none;
+}
+
+.sheetItem:focus-visible {
+    outline: 2px solid var(--xc-accent-primary, var(--xc-text));
+    outline-offset: -2px;
+}
+
+.sheetItemActive {
+    color: var(--xc-accent-primary, var(--xc-text));
+    font-weight: 600;
+}
+
+.sheetIcon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    flex: 0 0 auto;
+}
+
+.sheetDivider {
+    border-top: 1px solid var(--xc-border);
+    margin: var(--xc-space-2) var(--xc-space-3);
+}
+
+@media (prefers-contrast: more) {
+    .tabActive,
+    .sheetItemActive {
+        outline: 2px solid currentColor;
+        outline-offset: -2px;
+    }
+}

@@ -1,0 +1,205 @@
+import { useEffect, useState } from 'react';
+import { Icon } from '@xchain-wallet/core/ui';
+import styles from './BottomTabBar.module.css';
+
+/**
+ * §24.3 / G054 — mobile bottom-sheet navigation.
+ *
+ * Five thumb-reachable tabs at the bottom of the viewport:
+ *   [Home] [History] [Send] [Receive] [More]
+ *
+ * "More" toggles a bottom-sheet drawer that lists the rest of the
+ * navigation (DEX, Dispensers, Contracts, Messaging, Contacts) plus
+ * the wallet switcher, Settings, and Lock — same surface set as
+ * `<LeftNav>` so the user sees a single coherent map of the wallet.
+ *
+ * Visibility: this component renders itself unconditionally; the
+ * parent (`<FullLayoutWithNav>`) hides it via CSS above 600px so
+ * tablets and desktops keep the left-nav layout. Below 600px the
+ * sheet floats above main content and the route gets enough
+ * bottom-padding to clear the bar.
+ *
+ * Spec deviation note: the spec lists [Balances] [History] [Send]
+ * [Scan] [More]. Send + Receive are the daily-use pair on mobile, so
+ * the Scan slot is folded into More until a dedicated scan-and-route
+ * surface ships (FOLLOWUP §24.3).
+ *
+ * @param {object} props
+ * @param {string} props.currentView
+ * @param {(view: string) => void} props.onSelect
+ * @param {() => void} [props.onLock]
+ * @param {() => void} [props.onOpenSettings]
+ * @param {() => void} [props.onOpenWalletPicker]
+ * @param {boolean} [props.hasBtcAddress]
+ */
+
+const PRIMARY_TABS = [
+    { id: 'home', label: 'Home', Icon: Icon.HomeIcon, group: ['home', 'token-detail', 'addresses', 'wallet-picker', 'account-picker', 'wallet-details', 'wallet-rename', 'add-account', 'add-wallet'] },
+    { id: 'history', label: 'History', Icon: Icon.HistoryIcon, group: ['history'] },
+    { id: 'send', label: 'Send', Icon: Icon.SendIcon, group: ['send'] },
+    { id: 'receive', label: 'Receive', Icon: Icon.ReceiveIcon, group: ['receive'] },
+];
+
+const SHEET_PRIMARY = [
+    { id: 'markets', label: 'DEX', Icon: Icon.MarketIcon, group: ['markets', 'market'] },
+    { id: 'dispensers-list', label: 'Dispensers', Icon: Icon.DollarIcon, group: ['dispensers-list', 'dispenser-detail', 'dispenser-explorer', 'dispenser'] },
+    { id: 'contracts-list', label: 'Contracts', Icon: Icon.ContractIcon, group: ['contracts-list', 'contract-detail', 'contract-deploy', 'contract-execute', 'contract-deposit', 'contract-withdraw', 'staking-dashboard', 'stake-form', 'staking-unstake', 'staking-claim', 'staking-delegate', 'staking-revoke', 'operator-dashboard'], requiresBtc: true },
+    { id: 'messaging', label: 'Messaging', Icon: Icon.MessageIcon, group: ['messaging', 'compose-message'] },
+    { id: 'contacts', label: 'Contacts', Icon: Icon.UsersIcon, group: ['contacts'] },
+];
+
+function isActive(view, group) {
+    return group.includes(view);
+}
+
+export function BottomTabBar({
+    currentView,
+    onSelect,
+    onLock,
+    onOpenSettings,
+    onOpenWalletPicker,
+    hasBtcAddress = false,
+}) {
+    const [sheetOpen, setSheetOpen] = useState(false);
+
+    // Close the sheet whenever the user navigates — the parent flips
+    // currentView, which is enough of a signal that the user picked a
+    // destination and the sheet should get out of the way.
+    useEffect(() => {
+        if (sheetOpen) setSheetOpen(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [currentView]);
+
+    // Esc closes the sheet (sheet acts as a transient overlay).
+    useEffect(() => {
+        if (!sheetOpen) return undefined;
+        function onKey(e) {
+            if (e.key === 'Escape') setSheetOpen(false);
+        }
+        document.addEventListener('keydown', onKey);
+        return () => document.removeEventListener('keydown', onKey);
+    }, [sheetOpen]);
+
+    const sheetRows = SHEET_PRIMARY.filter(
+        (row) => !row.requiresBtc || hasBtcAddress,
+    );
+
+    return (
+        <>
+            <nav className={styles.bar} aria-label="Bottom navigation">
+                {PRIMARY_TABS.map((tab) => {
+                    const active = isActive(currentView, tab.group);
+                    return (
+                        <button
+                            key={tab.id}
+                            type="button"
+                            className={`${styles.tab} ${active ? styles.tabActive : ''}`}
+                            aria-current={active ? 'page' : undefined}
+                            onClick={() => onSelect(tab.id)}
+                        >
+                            <span className={styles.tabIcon} aria-hidden="true">
+                                <tab.Icon />
+                            </span>
+                            <span className={styles.tabLabel}>{tab.label}</span>
+                        </button>
+                    );
+                })}
+                <button
+                    type="button"
+                    className={`${styles.tab} ${sheetOpen ? styles.tabActive : ''}`}
+                    aria-expanded={sheetOpen ? 'true' : 'false'}
+                    aria-controls="xc-bottom-sheet"
+                    onClick={() => setSheetOpen((v) => !v)}
+                >
+                    <span className={styles.tabIcon} aria-hidden="true">
+                        <Icon.MenuIcon />
+                    </span>
+                    <span className={styles.tabLabel}>More</span>
+                </button>
+            </nav>
+
+            {sheetOpen ? (
+                <>
+                    <div
+                        className={styles.scrim}
+                        onClick={() => setSheetOpen(false)}
+                        aria-hidden="true"
+                    />
+                    <div
+                        id="xc-bottom-sheet"
+                        role="dialog"
+                        aria-label="More navigation"
+                        className={styles.sheet}
+                    >
+                        <div className={styles.handle} aria-hidden="true" />
+                        <ul className={styles.sheetList} role="list">
+                            {sheetRows.map((row) => {
+                                const active = isActive(currentView, row.group);
+                                return (
+                                    <li key={row.id}>
+                                        <button
+                                            type="button"
+                                            className={`${styles.sheetItem} ${active ? styles.sheetItemActive : ''}`}
+                                            aria-current={active ? 'page' : undefined}
+                                            onClick={() => onSelect(row.id)}
+                                        >
+                                            <span className={styles.sheetIcon} aria-hidden="true">
+                                                <row.Icon />
+                                            </span>
+                                            <span>{row.label}</span>
+                                        </button>
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                        <div className={styles.sheetDivider} />
+                        <ul className={styles.sheetList} role="list">
+                            {onOpenWalletPicker ? (
+                                <li>
+                                    <button
+                                        type="button"
+                                        className={styles.sheetItem}
+                                        onClick={onOpenWalletPicker}
+                                    >
+                                        <span className={styles.sheetIcon} aria-hidden="true">
+                                            <Icon.MoreIcon />
+                                        </span>
+                                        <span>Switch wallet</span>
+                                    </button>
+                                </li>
+                            ) : null}
+                            {onOpenSettings ? (
+                                <li>
+                                    <button
+                                        type="button"
+                                        className={styles.sheetItem}
+                                        onClick={onOpenSettings}
+                                    >
+                                        <span className={styles.sheetIcon} aria-hidden="true">
+                                            <Icon.GearIcon />
+                                        </span>
+                                        <span>Settings</span>
+                                    </button>
+                                </li>
+                            ) : null}
+                            {onLock ? (
+                                <li>
+                                    <button
+                                        type="button"
+                                        className={styles.sheetItem}
+                                        onClick={onLock}
+                                    >
+                                        <span className={styles.sheetIcon} aria-hidden="true">
+                                            <Icon.LockIcon />
+                                        </span>
+                                        <span>Lock</span>
+                                    </button>
+                                </li>
+                            ) : null}
+                        </ul>
+                    </div>
+                </>
+            ) : null}
+        </>
+    );
+}
