@@ -14,6 +14,7 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
+import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -241,6 +242,10 @@ export function DividendForm({ walletId, onBack }) {
     }
 
     const isHwSource = fromAddress?.source === 'trezor' || fromAddress?.source === 'ledger';
+    const hwSignerInfo = useSignerInfo({
+        walletId,
+        signerId: isHwSource ? fromAddress?.signerId : null,
+    });
     const [hwStatus, setHwStatus] = useState('idle');
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
 
@@ -432,6 +437,7 @@ export function DividendForm({ walletId, onBack }) {
                         submitError={submitError}
                         disabled={stage === 'submitting'}
                         getSignerStatus={messaging.getSignerStatus}
+                        signerInfo={hwSignerInfo}
                     />
                 )}
                 {(isWatcherMode || isHwSource) && submitError ? (

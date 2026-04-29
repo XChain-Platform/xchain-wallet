@@ -14,6 +14,7 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
+import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -192,6 +193,12 @@ export function BroadcastForm({ walletId, onBack }) {
     }
 
     const isHwSource = fromAddress?.source === 'trezor' || fromAddress?.source === 'ledger';
+    // §18.4 / Cluster N FOLLOWUP 2 — surface firmware advisories when
+    // the source is HW. Hook handles the SignerRecord lookup + cache.
+    const hwSignerInfo = useSignerInfo({
+        walletId,
+        signerId: isHwSource ? fromAddress?.signerId : null,
+    });
     const [hwStatus, setHwStatus] = useState('idle');
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
 
@@ -361,6 +368,7 @@ export function BroadcastForm({ walletId, onBack }) {
                         submitError={submitError}
                         disabled={stage === 'submitting'}
                         getSignerStatus={messaging.getSignerStatus}
+                        signerInfo={hwSignerInfo}
                     />
                 )}
                 {(isWatcherMode || isHwSource) && submitError ? (

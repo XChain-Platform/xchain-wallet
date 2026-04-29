@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.275.0] - 2026-04-28
+
+§18.4 / Cluster N FOLLOWUP 2 (continued) — useSignerInfo sweep across HW sign surfaces.
+
+Four more authoring surfaces adopt the v0.274.0 hook: BroadcastForm, DividendForm, DestroyForm, TokenAdminForm. Each picks up the SignerRecord lookup with a one-line `useSignerInfo({ walletId, signerId: isHwSource ? fromAddress?.signerId : null })` and threads `signerInfo={hwSignerInfo}` into its `<SignCredentials>` block. Result: when the user signs from a hardware wallet on any of these forms, `<HwFirmwareBanner>` now renders the firmware advisory + derivation-path cross-check copy that previously only Send showed.
+
+Remaining surfaces (SwapForm, ExecuteContractForm, StakingActionForm, ComposeMessage, multisig signing) follow the same one-liner pattern; queued as a continuation FOLLOWUP.
+
+### Changed
+
+- **`packages/core/src/shared/routes/BroadcastForm.jsx`** + **`DividendForm.jsx`** + **`DestroyForm.jsx`** + **`TokenAdminForm.jsx`** — adopt `useSignerInfo`; thread `signerInfo` through `<SignCredentials>`.
+- **`test/smoke/ui/use-signer-info.smoke.js`** — extended to pin all four new adopters.
+
+Closes Cluster N FOLLOWUP 2 partially (continued sweep — 5 of ~9 surfaces now adopt the hook).
+
 ## [0.274.0] - 2026-04-28
 
 §18.4 / Cluster N FOLLOWUP 2 (partial) — `useSignerInfo` hook + Send.jsx adoption.

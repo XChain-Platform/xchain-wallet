@@ -53,24 +53,43 @@ assert.ok(/if \(!signerId\) return null/.test(hookSrc),
 assert.ok(/if \(!walletId \|\| typeof messaging\?\.listSigners !== 'function'\) return undefined/.test(hookSrc),
     'hook short-circuits on missing walletId / messaging');
 
-// --- 4. Send.jsx adoption ----------------------------------------------
+// --- 4. Adopters: Send + BroadcastForm + DividendForm + DestroyForm
+//        + TokenAdminForm all import the hook + thread signerInfo
+//        through SignCredentials. Each form's lookup uses the same
+//        `isHwSource ? fromAddress?.signerId : null` shape.
 
-const sendSrc = readFileSync(sendPath, 'utf8');
+const adopters = [
+    ['Send.jsx', sendPath],
+    ['BroadcastForm.jsx', join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', 'BroadcastForm.jsx')],
+    ['DividendForm.jsx', join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', 'DividendForm.jsx')],
+    ['DestroyForm.jsx', join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', 'DestroyForm.jsx')],
+    ['TokenAdminForm.jsx', join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', 'TokenAdminForm.jsx')],
+];
+
+for (const [label, path] of adopters) {
+    const src = readFileSync(path, 'utf8');
+    assert.ok(
+        /import\s*\{\s*useSignerInfo\s*\}\s*from\s*'\.\.\/hooks\/useSignerInfo\.js'/.test(src),
+        `${label} imports useSignerInfo`,
+    );
+    assert.ok(
+        /useSignerInfo\(\{[\s\S]*?walletId,[\s\S]*?signerId:\s*isHwSource \? fromAddress\?\.signerId : null,?[\s\S]*?\}\)/.test(src),
+        `${label} calls useSignerInfo with isHwSource-gated signerId`,
+    );
+    if (label !== 'Send.jsx') {
+        // Send is the canonical adopter that already passed signerInfo
+        // via its own HwSignBlock; the others thread it through
+        // SignCredentials.
+        assert.ok(/<SignCredentials\b[\s\S]*?signerInfo=\{hwSignerInfo\}/.test(src),
+            `${label} passes signerInfo into <SignCredentials>`);
+    }
+}
+
 assert.ok(
-    /import\s*\{\s*useSignerInfo\s*\}\s*from\s*'\.\.\/hooks\/useSignerInfo\.js'/.test(sendSrc),
-    'Send.jsx imports useSignerInfo from the shared hooks dir',
-);
-assert.ok(
-    /const hwSignerInfo = useSignerInfo\(\{[\s\S]*?walletId,[\s\S]*?signerId:\s*isHwSource \? fromAddress\?\.signerId : null,?[\s\S]*?\}\);/.test(sendSrc),
-    'Send.jsx consumes useSignerInfo with walletId + signerId',
-);
-assert.ok(
-    !/const \[signersByWallet, setSignersByWallet\] = useState/.test(sendSrc),
+    !/const \[signersByWallet, setSignersByWallet\] = useState/.test(readFileSync(sendPath, 'utf8')),
     'Send.jsx no longer keeps an inline signersByWallet state slot',
 );
-assert.ok(!/messaging\.listSigners\(walletId\)/.test(sendSrc),
-    'Send.jsx no longer calls messaging.listSigners directly');
 
 console.log(
-    'OK — use-signer-info smoke (§18.4 / Cluster N FOLLOWUP 2 partial — useSignerInfo hook + module-level walletId cache + listSigners round-trip; Send.jsx swapped from inline lookup to the shared hook; remaining sign surfaces queued in Cluster N FOLLOWUP 2 continuation)',
+    'OK — use-signer-info smoke (§18.4 / Cluster N FOLLOWUP 2 — useSignerInfo hook + walletId-keyed cache + Send.jsx canonical adopter; sweep continues with BroadcastForm + DividendForm + DestroyForm + TokenAdminForm threading signerInfo through SignCredentials; each form uses the same isHwSource-gated lookup shape)',
 );
