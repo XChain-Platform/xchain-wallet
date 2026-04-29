@@ -48,6 +48,7 @@ import { validateSettings } from '../schemas/settings.js';
 import { validateSignerRecord } from '../schemas/signer.js';
 import { validateWallet } from '../schemas/wallet.js';
 import { validateWatchlistEntry } from '../schemas/watchlistEntry.js';
+import { logConsole } from '../shared/utils/logConsole.js';
 
 export class VaultStateError extends Error {
     constructor(msg) {
@@ -142,6 +143,11 @@ export class Vault {
             ? await decodeDocument(this._masterKey, blob, this._aad)
             : emptyDocument();
         this._opened = true;
+        logConsole.record({
+            source: 'vault',
+            level: 'info',
+            message: blob ? 'open (existing)' : 'open (empty)',
+        });
     }
 
     /** Flush the current document to the backend. */
@@ -159,6 +165,7 @@ export class Vault {
         await this._backend.clear();
         this._doc = null;
         this._opened = false;
+        logConsole.record({ source: 'vault', level: 'info', message: 'clear' });
     }
 
     /** Zero the cached master key and close. Safe to call multiple times. */
@@ -167,6 +174,7 @@ export class Vault {
         this._masterKey = null;
         this._doc = null;
         this._opened = false;
+        logConsole.record({ source: 'vault', level: 'info', message: 'close' });
     }
 
     get documentVersion() {

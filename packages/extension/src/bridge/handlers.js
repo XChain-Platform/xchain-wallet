@@ -21,6 +21,7 @@
 
 import { flows, schemas } from '@xchain-wallet/core';
 import { shouldAutoApproveConnect } from '@xchain-wallet/core/shared/utils/originAutoApprove.js';
+import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
 import { rejectAllApprovals, UserRejectedError } from './Approvals.js';
 import { emitPermissionDiff, noopBridgeEvents } from './bridgeEvents.js';
 
@@ -51,7 +52,41 @@ export function registerBridgeHandlers(host, opts = {}) {
     const signThrottle = opts.signThrottle ?? createSignThrottle();
     const events = opts.events ?? noopBridgeEvents;
 
-    host.register('bridge.connect', async (req, deps) => {
+    // Cluster Q FOLLOWUP 4 — every bridge handler logs entry / exit /
+    // error to logConsole. The `source` is `bridge:<channel>` so the
+    // Developer Mode log viewer can filter by `bridge:` to see only
+    // dApp traffic. Origins are short (`http(s)://host[:port]`) so
+    // we include them verbatim — they are by definition known to the
+    // dApp making the request.
+    const register = (name, handler) => {
+        host.register(name, async (req, deps) => {
+            const origin = (req && typeof req.origin === 'string') ? req.origin : '?';
+            logConsole.record({
+                source: `bridge:${name}`,
+                level: 'info',
+                message: `→ ${origin}`,
+            });
+            try {
+                const result = await handler(req, deps);
+                logConsole.record({
+                    source: `bridge:${name}`,
+                    level: 'info',
+                    message: '← ok',
+                });
+                return result;
+            } catch (err) {
+                const code = err?.code ?? err?.name ?? 'Error';
+                logConsole.record({
+                    source: `bridge:${name}`,
+                    level: 'warn',
+                    message: `← ${code}`,
+                });
+                throw err;
+            }
+        });
+    };
+
+    register('bridge.connect', async (req, deps) => {
         assertOrigin(req);
         await assertNotBlocked(req, deps);
         const { origin, appName = origin, appIcon } = req;
@@ -111,7 +146,7 @@ export function registerBridgeHandlers(host, opts = {}) {
         };
     });
 
-    host.register('bridge.disconnect', async (req, deps) => {
+    register('bridge.disconnect', async (req, deps) => {
         assertOrigin(req);
         const site = await findConnectedSite(deps.vault, req.origin);
         if (!site) return { disconnected: false };
@@ -123,7 +158,7 @@ export function registerBridgeHandlers(host, opts = {}) {
         return { disconnected: true };
     });
 
-    host.register('bridge.getAccounts', async (req, deps) => {
+    register('bridge.getAccounts', async (req, deps) => {
         const site = await requireSite(deps.vault, req);
         const allAccounts = await deps.vault.accounts.list();
         const ids = new Set(site.permissions.accounts);
@@ -134,7 +169,7 @@ export function registerBridgeHandlers(host, opts = {}) {
         return accounts;
     });
 
-    host.register('bridge.getAddresses', async (req, deps) => {
+    register('bridge.getAddresses', async (req, deps) => {
         const site = await requireSite(deps.vault, req);
         assertChainPermitted(site, req.chainId);
         const descriptor = deps.chainRegistry.get(req.chainId);
@@ -159,7 +194,7 @@ export function registerBridgeHandlers(host, opts = {}) {
         }));
     });
 
-    host.register('bridge.getBalances', async (req, deps) => {
+    register('bridge.getBalances', async (req, deps) => {
         const site = await requireSite(deps.vault, req);
         assertChainPermitted(site, req.chainId);
         // Ensure the requested address is one the site is permitted to see.
@@ -172,7 +207,7 @@ export function registerBridgeHandlers(host, opts = {}) {
         });
     });
 
-    host.register('bridge.getSupportedChains', async (_req, deps) => {
+    register('bridge.getSupportedChains', async (_req, deps) => {
         return deps.chainRegistry.supportedChains().map((d) => ({
             id: d.id,
             coin: d.coin,
@@ -193,7 +228,7 @@ export function registerBridgeHandlers(host, opts = {}) {
         }));
     });
 
-    host.register('bridge.getActiveChains', async (req, deps) => {
+    register('bridge.getActiveChains', async (req, deps) => {
         await requireSite(deps.vault, req);
         const settings = await deps.vault.settings.get();
         if (!settings) return [];
@@ -202,7 +237,7 @@ export function registerBridgeHandlers(host, opts = {}) {
         return Object.keys(settings.fees ?? {});
     });
 
-    host.register('bridge.signMessage', async (req, deps) => {
+    register('bridge.signMessage', async (req, deps) => {
         await assertNotBlocked(req, deps);
         const site = await requireSite(deps.vault, req);
         assertChainPermitted(site, req.chainId);
@@ -246,7 +281,7 @@ export function registerBridgeHandlers(host, opts = {}) {
         });
     });
 
-    host.register('bridge.signAction', async (req, deps) => {
+    register('bridge.signAction', async (req, deps) => {
         await assertNotBlocked(req, deps);
         const site = await requireSite(deps.vault, req);
         assertChainPermitted(site, req.chainId);
@@ -309,7 +344,7 @@ export function registerBridgeHandlers(host, opts = {}) {
         throw bridgeError('UNREACHABLE', 'supported action fell through');
     });
 
-    host.register('bridge.signPsbt', async (req, deps) => {
+    register('bridge.signPsbt', async (req, deps) => {
         await assertNotBlocked(req, deps);
         const site = await requireSite(deps.vault, req);
         assertChainPermitted(site, req.chainId);
@@ -335,7 +370,7 @@ export function registerBridgeHandlers(host, opts = {}) {
         });
     });
 
-    host.register('bridge.parallel', async () => {
+    register('bridge.parallel', async () => {
         // §43.2 parallel() ships in Phase 4+ alongside cross-chain
         // orchestration (§42.8.2). Returning a structured shape (not
         // throwing) mirrors bridge.signAction's UNSUPPORTED_ACTION
@@ -347,7 +382,7 @@ export function registerBridgeHandlers(host, opts = {}) {
         };
     });
 
-    host.register('bridge.signIn', async (req, deps) => {
+    register('bridge.signIn', async (req, deps) => {
         await assertNotBlocked(req, deps);
         const site = await requireSite(deps.vault, req);
         assertNotThrottled(signThrottle, req);

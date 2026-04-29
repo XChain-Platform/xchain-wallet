@@ -66,10 +66,13 @@ for (const route of [
     'bridge.signPsbt',
     'bridge.signIn',
 ]) {
-    assert.ok(
-        new RegExp(`host\\.register\\(\\s*['"]${route.replace(/\./g, '\\.')}['"]`).test(handlers),
-        `background registers ${route}`,
-    );
+    // v0.290.0 / Cluster Q FOLLOWUP 4: handlers.js shadows host.register
+    // with a local register() that wraps every channel in entry/exit
+    // logging. Either form satisfies "background registers <route>".
+    const escaped = route.replace(/\./g, '\\.');
+    const wrapped = new RegExp(`\\bregister\\(\\s*['"]${escaped}['"]`).test(handlers);
+    const bare = new RegExp(`host\\.register\\(\\s*['"]${escaped}['"]`).test(handlers);
+    assert.ok(wrapped || bare, `background registers ${route}`);
 }
 // Permission gating must run on the read methods — getAddresses /
 // getBalances / getActiveChains all sit behind requireSite.

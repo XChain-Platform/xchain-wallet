@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.290.0] - 2026-04-28
+
+§48.5 / Cluster Q FOLLOWUP 4 — `logConsole.record(...)` calls land at the highest-leverage emission points so the Developer Mode log viewer surfaces real wallet activity, not just `console.*` output.
+
+`packages/core/src/storage/Vault.js` records `vault` lifecycle (open / close / clear). `packages/core/src/signers/SoftwareSigner.js` records `signer:software` events: unlock (per format including `wif-only`), lock, signPsbt, signMessage, signMultisigClassical, signMultisigPsbt — all with `chainId` for filtering, no key material in the message. `packages/core/src/flows/buildActionPsbt.js` records the `encoder` round-trip with action name and chainId. `packages/extension/src/bridge/handlers.js` shadows `host.register` with a local `register(name, handler)` that wraps every bridge channel in entry / exit / error log lines tagged `bridge:<channel>` — applied to all 11 handlers (connect, disconnect, getAccounts, getAddresses, getBalances, getSupportedChains, getActiveChains, signMessage, signAction, signPsbt, parallel, signIn) without touching their bodies.
+
+Cross-process `developerMode` gating (e.g. extension SW vs popup not sharing the flag) stays deferred — the same-process buffer cap of 500 entries keeps memory bounded in the meantime, so this MVP can ship without the gate. The cross-process `logConsole.setEnabled()` plumbing flipped from a background settings-change listener will land alongside Cluster Q FOLLOWUP 5 (logConsole persistence + diagnostic-dump integration).
+
+### Added
+
+- **`packages/core/src/storage/Vault.js`** — `logConsole` import + `record(...)` calls on `open` / `close` / `clear`.
+- **`packages/core/src/signers/SoftwareSigner.js`** — `logConsole` import + `record(...)` calls in unlock (BIP39 + counterwallet + wif-only branches) / lock / signPsbt / signMessage / signMultisigClassical / signMultisigPsbt.
+- **`packages/core/src/flows/buildActionPsbt.js`** — `logConsole` import + encoder request + response records.
+- **`packages/extension/src/bridge/handlers.js`** — `logConsole` import + local `register(name, handler)` wrapper; all 11 bridge channels routed through it.
+- **`test/smoke/ui/log-console-emissions.smoke.js`** (new) — pins the emission points and behavioural API contract.
+- **`test/smoke/bridge/dapp-bridge-completeness.smoke.js`** — accepts either the bare `host.register('bridge.X')` form or the new wrapped `register('bridge.X')` form, since handlers.js now shadows host.register with a logging wrapper.
+
+Closes Cluster Q FOLLOWUP 4.
+
 ## [0.289.0] - 2026-04-28
 
 §27.4 / Cluster I FOLLOWUP 2 — auto-hide-spam toast wired into Home.

@@ -21,6 +21,7 @@
 //     the donation cannot atomically tie to "this user's broadcast".
 
 import { normalizeSource } from './sendAsset.js';
+import { logConsole } from '../shared/utils/logConsole.js';
 
 /**
  * @typedef {Object} BuildActionPsbtOpts
@@ -79,10 +80,20 @@ export async function buildActionPsbt(opts) {
     const createResult = sdk.actions.createAction(opts.actionData);
 
     const encoderOpts = opts.encoderOpts || {};
+    logConsole.record({
+        source: 'encoder',
+        level: 'info',
+        message: `createTx action=${opts.actionData.action} chain=${opts.chainId}`,
+    });
     const encoded = await encoder.createTx({
         data: createResult.actionString,
         pubkey: source.publicKey,
         ...encoderOpts,
+    });
+    logConsole.record({
+        source: 'encoder',
+        level: 'info',
+        message: `createTx ok action=${opts.actionData.action} encoding=${encoded.encoding}`,
     });
 
     return {

@@ -23,6 +23,7 @@ import {
     Signer,
     SignerLockedError,
 } from './Signer.js';
+import { logConsole } from '../shared/utils/logConsole.js';
 
 /**
  * @typedef {Object} WalletEncryptionInputs
@@ -144,6 +145,11 @@ export class SoftwareSigner extends Signer {
                 seed: new Uint8Array(0),
                 importedWifs,
             });
+            logConsole.record({
+                source: 'signer:software',
+                level: 'info',
+                message: `unlock id=${this._id} format=wif-only`,
+            });
             return;
         }
 
@@ -198,6 +204,11 @@ export class SoftwareSigner extends Signer {
             seed,
             importedWifs,
         });
+        logConsole.record({
+            source: 'signer:software',
+            level: 'info',
+            message: `unlock id=${this._id} format=${format}`,
+        });
     }
 
     /** Zero the in-memory seed and flip back to locked. */
@@ -211,6 +222,11 @@ export class SoftwareSigner extends Signer {
         if (this._status !== 'locked') {
             this._status = 'locked';
             this._emitStatus('locked');
+            logConsole.record({
+                source: 'signer:software',
+                level: 'info',
+                message: `lock id=${this._id}`,
+            });
         }
     }
 
@@ -297,6 +313,11 @@ export class SoftwareSigner extends Signer {
         const wif = this._resolveWifForEntry(chainId, entry);
         const sdk = this._sdkRegistry.get(chainId);
         const { txHex, txid, psbtHex: signedPsbtHex } = sdk.wallet.signPsbt(psbtHex, wif);
+        logConsole.record({
+            source: 'signer:software',
+            level: 'info',
+            message: `signPsbt chain=${chainId} txid=${txid ?? '?'}`,
+        });
         return { signedPsbtHex, txHex, txid };
     }
 
@@ -336,6 +357,11 @@ export class SoftwareSigner extends Signer {
                 'SoftwareSigner.signMessage: SDK returned no signature string',
             );
         }
+        logConsole.record({
+            source: 'signer:software',
+            level: 'info',
+            message: `signMessage chain=${chainId}`,
+        });
         return { signature };
     }
 
@@ -589,6 +615,11 @@ export class SoftwareSigner extends Signer {
                 throw new Error(`SoftwareSigner.signMultisigClassical: no private key at path ${path}`);
             }
             const sigBytes = sdk.wallet.signEcdsa(hexToBytes(msgHash), new Uint8Array(dk.privateKey));
+            logConsole.record({
+                source: 'signer:software',
+                level: 'info',
+                message: `signMultisigClassical chain=${chainId}`,
+            });
             return {
                 sig: bytesToHex(sigBytes),
                 publicKey: dk.publicKeyHex,
@@ -627,6 +658,11 @@ export class SoftwareSigner extends Signer {
             );
         }
         const { psbtHex: signedPsbtHex } = sdk.wallet.signMultisigPsbt(psbtHex, wif);
+        logConsole.record({
+            source: 'signer:software',
+            level: 'info',
+            message: `signMultisigPsbt chain=${chainId}`,
+        });
         return { psbtHex: signedPsbtHex };
     }
 
