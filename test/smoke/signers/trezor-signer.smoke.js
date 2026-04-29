@@ -29,6 +29,11 @@ const wsRoot = join(here, '..', '..', '..');
 const core = join(wsRoot, 'packages', 'core');
 const ext = join(wsRoot, 'packages', 'extension');
 const web = join(wsRoot, 'packages', 'web');
+// §9 / G001 — TrezorSigner.js + trezorFormat.js moved to the standalone
+// signers-trezor workspace package; the back-compat shim in
+// `core/src/signers/index.js` keeps the `signers.TrezorSigner` runtime
+// re-export working, so the in-process import above still resolves.
+const trezorPkg = join(wsRoot, 'packages', 'signers-trezor');
 
 const {
     TrezorSigner,
@@ -645,22 +650,35 @@ for (const [shell, msgPath] of [
 // --- 11. TrezorSigner doesn't import @trezor/connect-web directly ----
 
 const trezorSrc = readFileSync(
-    join(core, 'src', 'signers', 'TrezorSigner.js'),
+    join(trezorPkg, 'src', 'TrezorSigner.js'),
     'utf8',
 );
 assert.ok(
     !/from ['"]@trezor\/connect-web['"]/.test(trezorSrc),
-    'TrezorSigner class does NOT import @trezor/connect-web — DI keeps core decoupled',
+    'TrezorSigner class does NOT import @trezor/connect-web — DI keeps the package decoupled',
 );
 assert.ok(
     !/import ['"]@trezor/.test(trezorSrc),
     'TrezorSigner class has no Trezor SDK imports at all',
 );
 
+// §9 / G001 — TrezorSigner now lives in @xchain-wallet/signers-trezor;
+// back-compat shim in core/src/signers/index.js keeps the runtime
+// re-export reachable (in-process `signers.TrezorSigner` above) and
+// the ENOENT-prone direct path read is gone.
+assert.ok(
+    !existsSync(join(core, 'src', 'signers', 'TrezorSigner.js')),
+    'TrezorSigner.js no longer lives in @xchain-wallet/core (moved to @xchain-wallet/signers-trezor)',
+);
+assert.ok(
+    existsSync(join(trezorPkg, 'package.json')),
+    '@xchain-wallet/signers-trezor package.json exists',
+);
+
 // --- 12. trezorFormat.js envelope builder exists + exports -----------
 
-const fmtPath = join(core, 'src', 'signers', 'trezorFormat.js');
-assert.ok(existsSync(fmtPath), 'trezorFormat.js exists');
+const fmtPath = join(trezorPkg, 'src', 'trezorFormat.js');
+assert.ok(existsSync(fmtPath), 'trezorFormat.js exists in signers-trezor');
 const fmtSrc = readFileSync(fmtPath, 'utf8');
 for (const sym of ['pathToAddressN', 'toTrezorSignTransaction', 'chainIdToTrezorCoin']) {
     assert.ok(

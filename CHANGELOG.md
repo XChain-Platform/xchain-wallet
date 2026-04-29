@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.266.0] - 2026-04-28
+
+§9 — Cluster Z Step 1 of 2 — G001 standalone `@xchain-wallet/signers-trezor` package.
+
+`packages/signers-trezor/` ships as a new workspace package. `TrezorSigner.js` + `trezorFormat.js` move out of `packages/core/src/signers/` into `packages/signers-trezor/src/`; the new package's `src/index.js` is the canonical export entry. Cross-package imports use relative paths (`../../core/src/signers/Signer.js`) — the established convention so Node smokes resolve modules without depending on pnpm workspace symlinks.
+
+`packages/core/src/signers/index.js` keeps a back-compat re-export pointing at the new location, so existing consumers that go through `import { signers } from '@xchain-wallet/core'` keep working without churn. `pnpm install --no-frozen-lockfile` (run as part of this commit) registered the new workspace project (now 9 packages) and updated the lockfile.
+
+`makeTrezorFactory` (in `core/src/signerFactories/`) still owns the post-init pair sequence; it imports `TrezorSigner` via the back-compat re-export, so the factory stays untouched. Ledger remains in `core` for now — Cluster Z Step 2 (G002) will mirror this move for Ledger.
+
+### Added
+
+- **`packages/signers-trezor/package.json`** — workspace package with `exports` map covering the entry + the two impl files.
+- **`packages/signers-trezor/src/index.js`** — canonical export entry (TrezorSigner + helpers + trezorFormat helpers).
+- **`packages/signers-trezor/src/TrezorSigner.js`** — moved from `packages/core/src/signers/TrezorSigner.js`; Signer base imported via relative cross-package path.
+- **`packages/signers-trezor/src/trezorFormat.js`** — moved from `packages/core/src/signers/trezorFormat.js`.
+- **`test/smoke/signers/signers-trezor-package.smoke.js`** (new) — pins the package layout, exports map, and back-compat shim.
+
+### Changed
+
+- **`packages/core/src/signers/index.js`** — TrezorSigner re-export now points at `../../../signers-trezor/src/TrezorSigner.js` (back-compat shim).
+- **`pnpm-lock.yaml`** — refreshed to register the new workspace project.
+- **`test/smoke/signers/trezor-signer.smoke.js`** — reads TrezorSigner.js + trezorFormat.js from the new package path.
+- **`test/smoke/multisig/multisig-psbt-signing.smoke.js`** + **`test/smoke/multisig/multisig-signer.smoke.js`** — direct TrezorSigner.js path imports follow the move (these smokes are pre-existing baseline FAILs for unrelated multisig reasons; path update is mechanical so they're current when the underlying issue ships).
+
+Closes G001.
+
 ## [0.265.0] - 2026-04-28
 
 §24 — Cluster Y Step 3 of N — G057 desktop multi-window support.

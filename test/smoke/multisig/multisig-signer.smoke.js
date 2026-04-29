@@ -11,7 +11,7 @@ if (!globalThis.crypto) {
     globalThis.crypto = webcrypto;
 }
 
-import { TrezorSigner } from '../../../packages/core/src/signers/TrezorSigner.js';
+import { TrezorSigner } from '../../../packages/signers-trezor/src/TrezorSigner.js';
 import { LedgerSigner } from '../../../packages/core/src/signers/LedgerSigner.js';
 import { Signer, AbstractMethodError } from '../../../packages/core/src/signers/Signer.js';
 import { flows } from '../../../packages/core/src/index.js';

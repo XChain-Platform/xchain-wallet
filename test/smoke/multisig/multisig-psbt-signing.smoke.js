@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { TrezorSigner } from '../../../packages/core/src/signers/TrezorSigner.js';
+import { TrezorSigner } from '../../../packages/signers-trezor/src/TrezorSigner.js';
 import { LedgerSigner } from '../../../packages/core/src/signers/LedgerSigner.js';
 import { Signer, AbstractMethodError } from '../../../packages/core/src/signers/Signer.js';
 import { SoftwareSigner } from '../../../packages/core/src/signers/SoftwareSigner.js';

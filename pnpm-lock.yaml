@@ -42,15 +42,6 @@ importers:
         specifier: ^2.1.0
         version: 2.1.9(@types/node@25.6.0)(jsdom@25.0.1)
 
-  e2e:
-    devDependencies:
-      '@axe-core/playwright':
-        specifier: ^4.10.0
-        version: 4.11.2(playwright-core@1.59.1)
-      '@playwright/test':
-        specifier: ^1.48.0
-        version: 1.59.1
-
   packages/bridge-spec: {}
 
   packages/core:
@@ -191,6 +182,8 @@ importers:
         specifier: ^0.22.0
         version: 0.22.0(rollup@4.60.2)(vite@5.4.21(@types/node@25.6.0))
 
+  packages/signers-trezor: {}
+
   packages/test-dapp:
     dependencies:
       '@xchain-wallet/bridge-spec':
@@ -242,6 +235,15 @@ importers:
       vite-plugin-node-polyfills:
         specifier: ^0.22.0
         version: 0.22.0(rollup@4.60.2)(vite@5.4.21(@types/node@25.6.0))
+
+  test/e2e:
+    devDependencies:
+      '@axe-core/playwright':
+        specifier: ^4.10.0
+        version: 4.11.2(playwright-core@1.59.1)
+      '@playwright/test':
+        specifier: ^1.48.0
+        version: 1.59.1
 
 packages:
 

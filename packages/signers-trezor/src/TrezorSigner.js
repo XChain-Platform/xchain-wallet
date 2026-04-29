@@ -3,13 +3,20 @@
 // a `@trezor/connect` node-transport factory in desktop). The class
 // itself imports nothing from the Trezor SDK — `connect` is injected
 // so the signer stays testable without hardware and doesn't pull the
-// SDK into core's dep graph.
+// SDK into the package's dep graph.
+//
+// §9 / G001 — this module lives in `@xchain-wallet/signers-trezor`
+// (its own workspace package). The base `Signer` class is shared
+// across vendors and stays in `@xchain-wallet/core/signers/Signer.js`;
+// we reach it via a relative cross-package path so Node smoke tests
+// resolve the module without depending on pnpm workspace symlinks
+// (matches the convention in packages/web/src/signers/trezorFactory.js).
 //
 // Per-target transports live in the shell packages:
 //
 //   packages/extension/src/signers/trezorFactory.js
 //   packages/web/src/signers/trezorFactory.js
-//   packages/desktop/src/signers/trezorFactory.js    (Piece 5)
+//   packages/desktop/renderer/signerFactories/trezorFactory.js
 //
 // Each factory dynamic-imports its transport package, initializes it
 // with the wallet's Trezor Connect manifest, and constructs a
@@ -18,9 +25,10 @@
 // signPsbt / signMessage also require `sdkRegistry` so the signer can
 // ask `sdk.wallet.decomposePsbt` to turn an encoder-produced PSBT into
 // the normalized shape the Trezor envelope builder consumes. That
-// keeps `bitcoinjs-lib` out of core (per SDKRegistry.js's rationale).
+// keeps `bitcoinjs-lib` out of @xchain-wallet/core (per SDKRegistry.js's
+// rationale).
 
-import { Signer, SignerStatusError } from './Signer.js';
+import { Signer, SignerStatusError } from '../../core/src/signers/Signer.js';
 import { chainIdToTrezorCoin, toTrezorSignTransaction } from './trezorFormat.js';
 
 /**
