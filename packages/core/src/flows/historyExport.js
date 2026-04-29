@@ -5,8 +5,14 @@
 //
 // CSV is RFC-4180 — fields with commas / quotes / newlines get wrapped
 // in double quotes and inner double quotes are doubled.
+//
+// Cluster I FOLLOWUP 5 (v0.288.0) — both converters now accept an
+// optional `columns` parameter that filters which fields land in the
+// output. Default behaviour matches the pre-FOLLOWUP shape (all fields
+// in EXPORT_COLUMNS order), so existing callers keep working without
+// touching the call site.
 
-const CSV_HEADERS = [
+export const EXPORT_COLUMNS = /** @type {const} */ ([
     'chainId',
     'address',
     'action',
@@ -16,29 +22,42 @@ const CSV_HEADERS = [
     'timestamp',
     'iso',
     'source',
-];
+]);
+
+const COLUMN_SET = new Set(EXPORT_COLUMNS);
+
+function pickColumns(columns) {
+    if (!Array.isArray(columns) || columns.length === 0) return EXPORT_COLUMNS.slice();
+    const seen = new Set();
+    const out = [];
+    for (const c of columns) {
+        if (typeof c === 'string' && COLUMN_SET.has(c) && !seen.has(c)) {
+            seen.add(c);
+            out.push(c);
+        }
+    }
+    return out.length > 0 ? out : EXPORT_COLUMNS.slice();
+}
+
+function valueFor(entry, column) {
+    if (column === 'iso') {
+        return Number.isFinite(entry?.timestamp) && entry.timestamp > 0
+            ? new Date(entry.timestamp * 1000).toISOString()
+            : '';
+    }
+    return entry?.[column];
+}
 
 /**
  * @param {Array<{ chainId: string, address: string, action: string, actionIndex: string, txHash: string, blockIndex: number, timestamp: number, source: string, raw?: object, link?: object | null }>} entries
+ * @param {{ columns?: string[] }} [opts]       optional column filter; defaults to every EXPORT_COLUMNS field
  * @returns {string}                            RFC-4180 CSV text
  */
-export function entriesToCsv(entries) {
-    const lines = [CSV_HEADERS.join(',')];
+export function entriesToCsv(entries, opts = {}) {
+    const cols = pickColumns(opts.columns);
+    const lines = [cols.join(',')];
     for (const e of entries || []) {
-        const iso = Number.isFinite(e?.timestamp) && e.timestamp > 0
-            ? new Date(e.timestamp * 1000).toISOString()
-            : '';
-        const row = [
-            e?.chainId,
-            e?.address,
-            e?.action,
-            e?.actionIndex,
-            e?.txHash,
-            e?.blockIndex,
-            e?.timestamp,
-            iso,
-            e?.source,
-        ].map(csvField).join(',');
+        const row = cols.map((c) => valueFor(e, c)).map(csvField).join(',');
         lines.push(row);
     }
     return lines.join('\n') + '\n';
@@ -46,31 +65,58 @@ export function entriesToCsv(entries) {
 
 /**
  * @param {Array<object>} entries
- * @param {object} [meta]                       { exportedAt, walletId, scope, ... }
+ * @param {{ columns?: string[], [key: string]: any }} [meta]   { exportedAt, walletId, scope, columns, ... }
  * @returns {string}                            pretty-printed JSON
  */
 export function entriesToJson(entries, meta) {
+    const { columns: requestedColumns, ...metaRest } = meta || {};
+    const cols = pickColumns(requestedColumns);
     const payload = {
         format: 'xchain-wallet-history-export@1',
         exportedAt: new Date().toISOString(),
-        ...(meta || {}),
-        entries: (entries || []).map((e) => ({
-            chainId: e?.chainId,
-            address: e?.address,
-            action: e?.action,
-            actionIndex: e?.actionIndex,
-            txHash: e?.txHash,
-            blockIndex: e?.blockIndex,
-            timestamp: e?.timestamp,
-            iso: Number.isFinite(e?.timestamp) && e.timestamp > 0
-                ? new Date(e.timestamp * 1000).toISOString()
-                : null,
-            source: e?.source,
-            link: e?.link || null,
-            raw: e?.raw,
-        })),
+        ...metaRest,
+        columns: cols,
+        entries: (entries || []).map((e) => {
+            const row = {};
+            for (const c of cols) {
+                if (c === 'iso') {
+                    row.iso = Number.isFinite(e?.timestamp) && e.timestamp > 0
+                        ? new Date(e.timestamp * 1000).toISOString()
+                        : null;
+                } else {
+                    row[c] = e?.[c];
+                }
+            }
+            // Preserve link + raw outside the column-set so JSON exports
+            // stay decodable end-to-end (CSV intentionally drops them).
+            if (e?.link !== undefined) row.link = e.link || null;
+            if (e?.raw !== undefined) row.raw = e.raw;
+            return row;
+        }),
     };
     return JSON.stringify(payload, null, 2);
+}
+
+/**
+ * Filter entries by a `[fromTs, toTs]` epoch-seconds window. Rows
+ * outside the window — or with no timestamp — are dropped. Either
+ * bound can be null/undefined to leave that side open.
+ *
+ * @param {Array<{ timestamp?: number }>} entries
+ * @param {{ fromTs?: number | null, toTs?: number | null }} range
+ */
+export function filterEntriesByDateRange(entries, range = {}) {
+    const arr = Array.isArray(entries) ? entries : [];
+    const from = Number.isFinite(range?.fromTs) ? Number(range.fromTs) : null;
+    const to = Number.isFinite(range?.toTs) ? Number(range.toTs) : null;
+    if (from === null && to === null) return arr.slice();
+    return arr.filter((e) => {
+        const ts = Number(e?.timestamp);
+        if (!Number.isFinite(ts) || ts <= 0) return false;
+        if (from !== null && ts < from) return false;
+        if (to !== null && ts > to) return false;
+        return true;
+    });
 }
 
 /**

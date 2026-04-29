@@ -96,6 +96,18 @@ export function History({ walletId, accountId, onBack, onReceive, initialSearchQ
     const [dateFrom, setDateFrom] = useState(/** @type {string} */ (''));
     const [dateTo, setDateTo] = useState(/** @type {string} */ (''));
     const [moreFiltersOpen, setMoreFiltersOpen] = useState(Boolean(initialSearchQuery));
+    // Cluster I FOLLOWUP 5 — single-modal export. Holds the modal's
+    // open state + the field choices (format / column set / date-range
+    // override). Initial column set = every field; date range defaults
+    // to the active filter when the modal opens.
+    const [exportModalOpen, setExportModalOpen] = useState(false);
+    const [exportFormat, setExportFormat] = useState(/** @type {'csv' | 'json'} */ ('csv'));
+    const [exportColumns, setExportColumns] = useState(
+        /** @type {Set<string>} */ (new Set(flowsLib.EXPORT_COLUMNS)),
+    );
+    const [exportFromDate, setExportFromDate] = useState('');
+    const [exportToDate, setExportToDate] = useState('');
+    const [exportScope, setExportScope] = useState(/** @type {'filtered' | 'all'} */ ('filtered'));
     const [selectedKey, setSelectedKey] = useState(/** @type {string | null} */ (null));
     const [peerCache, setPeerCache] = useState(
         /** @type {Record<string, { loading: boolean, action: any | null, error: string | null }>} */ ({}),
@@ -508,23 +520,59 @@ export function History({ walletId, accountId, onBack, onReceive, initialSearchQ
                 <span className={styles.divider} aria-hidden="true" />
                 <button
                     type="button"
-                    onClick={() => exportVisibleHistory({ entries: visibleEntries, scope: chainScopeLabel(enabledChains, activeChainIds), format: 'csv' })}
-                    disabled={visibleEntries.length === 0}
+                    onClick={() => {
+                        // Pre-fill date range from the active filter so
+                        // the modal is "ready to go" if the user just
+                        // wants to export what's on screen.
+                        setExportFromDate(dateFrom);
+                        setExportToDate(dateTo);
+                        setExportScope('filtered');
+                        setExportModalOpen(true);
+                    }}
+                    disabled={entries.length === 0}
                     className={styles.chip}
-                    title="Export the filtered history rows as CSV (§28.5)."
+                    title="Export history with format / column / date-range options (§28.5)."
+                    aria-haspopup="dialog"
+                    aria-expanded={exportModalOpen}
                 >
-                    Export CSV
-                </button>
-                <button
-                    type="button"
-                    onClick={() => exportVisibleHistory({ entries: visibleEntries, scope: chainScopeLabel(enabledChains, activeChainIds), format: 'json' })}
-                    disabled={visibleEntries.length === 0}
-                    className={styles.chip}
-                    title="Export the filtered history rows as JSON."
-                >
-                    Export JSON
+                    Export…
                 </button>
             </div>
+            {exportModalOpen ? (
+                <ExportModal
+                    onClose={() => setExportModalOpen(false)}
+                    format={exportFormat}
+                    setFormat={setExportFormat}
+                    columns={exportColumns}
+                    setColumns={setExportColumns}
+                    fromDate={exportFromDate}
+                    setFromDate={setExportFromDate}
+                    toDate={exportToDate}
+                    setToDate={setExportToDate}
+                    scope={exportScope}
+                    setScope={setExportScope}
+                    activeFilterFromDate={dateFrom}
+                    activeFilterToDate={dateTo}
+                    visibleCount={visibleEntries.length}
+                    totalCount={entries.length}
+                    onConfirm={() => {
+                        const sourceEntries = exportScope === 'all' ? entries : visibleEntries;
+                        const ranged = (exportFromDate || exportToDate)
+                            ? flowsLib.filterEntriesByDateRange(sourceEntries, {
+                                fromTs: exportFromDate ? Math.floor(Date.parse(exportFromDate) / 1000) : null,
+                                toTs: exportToDate ? Math.floor((Date.parse(exportToDate) + 24 * 60 * 60 * 1000 - 1) / 1000) : null,
+                            })
+                            : sourceEntries;
+                        runExport({
+                            entries: ranged,
+                            scope: chainScopeLabel(enabledChains, activeChainIds),
+                            format: exportFormat,
+                            columns: Array.from(exportColumns),
+                        });
+                        setExportModalOpen(false);
+                    }}
+                />
+            ) : null}
 
             <div className={styles.searchRow}>
                 <input
@@ -1203,12 +1251,12 @@ function chainScopeLabel(enabledChains, activeChainIds) {
     return Array.from(enabledChains).sort().join('+');
 }
 
-function exportVisibleHistory({ entries, scope, format }) {
+function runExport({ entries, scope, format, columns }) {
     if (!Array.isArray(entries) || entries.length === 0) return;
     const filename = flowsLib.buildExportFilename({ scope, format });
     const fileContent = format === 'csv'
-        ? flowsLib.entriesToCsv(entries)
-        : flowsLib.entriesToJson(entries, { scope });
+        ? flowsLib.entriesToCsv(entries, { columns })
+        : flowsLib.entriesToJson(entries, { scope, columns });
     const mime = format === 'csv' ? 'text/csv;charset=utf-8' : 'application/json';
     const blob = new Blob([fileContent], { type: mime });
     const url = URL.createObjectURL(blob);
@@ -1220,4 +1268,199 @@ function exportVisibleHistory({ entries, scope, format }) {
     a.click();
     document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/* ───── Cluster I FOLLOWUP 5 — export modal ───────────────────────── */
+
+const MODAL_SCRIM = {
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(0, 0, 0, 0.45)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 50,
+};
+const MODAL_CARD = {
+    background: 'var(--xc-bg)',
+    color: 'var(--xc-text)',
+    border: '1px solid var(--xc-border)',
+    borderRadius: 'var(--xc-radius-md)',
+    padding: 'var(--xc-space-3)',
+    width: 'min(420px, 90vw)',
+    maxHeight: '80vh',
+    overflowY: 'auto',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 'var(--xc-space-3)',
+    boxShadow: '0 12px 32px rgba(0, 0, 0, 0.25)',
+};
+const MODAL_FIELDSET = {
+    border: '1px solid var(--xc-border)',
+    borderRadius: 'var(--xc-radius-sm)',
+    padding: 'var(--xc-space-2)',
+    margin: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 'var(--xc-space-1)',
+    fontSize: 'var(--xc-text-sm)',
+};
+const MODAL_LEGEND = {
+    color: 'var(--xc-text-muted)',
+    fontSize: 'var(--xc-text-xs)',
+    padding: '0 var(--xc-space-1)',
+};
+const MODAL_LABEL = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 'var(--xc-space-2)',
+    fontSize: 'var(--xc-text-sm)',
+};
+const MODAL_ACTIONS = {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    gap: 'var(--xc-space-2)',
+};
+
+function ExportModal({
+    onClose,
+    format, setFormat,
+    columns, setColumns,
+    fromDate, setFromDate,
+    toDate, setToDate,
+    scope, setScope,
+    activeFilterFromDate, activeFilterToDate,
+    visibleCount, totalCount,
+    onConfirm,
+}) {
+    useEffect(() => {
+        function onKey(e) { if (e.key === 'Escape') onClose(); }
+        document.addEventListener('keydown', onKey);
+        return () => document.removeEventListener('keydown', onKey);
+    }, [onClose]);
+
+    const toggleColumn = (col) => {
+        const next = new Set(columns);
+        if (next.has(col)) next.delete(col);
+        else next.add(col);
+        setColumns(next);
+    };
+
+    const filterChanged = fromDate !== activeFilterFromDate || toDate !== activeFilterToDate;
+    const sourceCount = scope === 'all' ? totalCount : visibleCount;
+
+    return (
+        <div
+            style={MODAL_SCRIM}
+            onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+            role="presentation"
+        >
+            <div
+                style={MODAL_CARD}
+                role="dialog"
+                aria-modal="true"
+                aria-label="Export history"
+            >
+                <h2 style={{ margin: 0, fontSize: 'var(--xc-text-base)' }}>Export history</h2>
+
+                <fieldset style={MODAL_FIELDSET}>
+                    <legend style={MODAL_LEGEND}>Format</legend>
+                    <label style={MODAL_LABEL}>
+                        <input
+                            type="radio"
+                            name="export-format"
+                            value="csv"
+                            checked={format === 'csv'}
+                            onChange={() => setFormat('csv')}
+                        />
+                        CSV (RFC-4180; compact, opens in spreadsheets)
+                    </label>
+                    <label style={MODAL_LABEL}>
+                        <input
+                            type="radio"
+                            name="export-format"
+                            value="json"
+                            checked={format === 'json'}
+                            onChange={() => setFormat('json')}
+                        />
+                        JSON (preserves the full row including link / raw)
+                    </label>
+                </fieldset>
+
+                <fieldset style={MODAL_FIELDSET}>
+                    <legend style={MODAL_LEGEND}>Columns</legend>
+                    {flowsLib.EXPORT_COLUMNS.map((col) => (
+                        <label key={col} style={MODAL_LABEL}>
+                            <input
+                                type="checkbox"
+                                checked={columns.has(col)}
+                                onChange={() => toggleColumn(col)}
+                            />
+                            <span style={{ fontFamily: 'var(--xc-font-mono, monospace)', fontSize: 'var(--xc-text-xs)' }}>{col}</span>
+                        </label>
+                    ))}
+                </fieldset>
+
+                <fieldset style={MODAL_FIELDSET}>
+                    <legend style={MODAL_LEGEND}>Scope</legend>
+                    <label style={MODAL_LABEL}>
+                        <input
+                            type="radio"
+                            name="export-scope"
+                            value="filtered"
+                            checked={scope === 'filtered'}
+                            onChange={() => setScope('filtered')}
+                        />
+                        Filtered ({visibleCount.toLocaleString()} row{visibleCount === 1 ? '' : 's'})
+                    </label>
+                    <label style={MODAL_LABEL}>
+                        <input
+                            type="radio"
+                            name="export-scope"
+                            value="all"
+                            checked={scope === 'all'}
+                            onChange={() => setScope('all')}
+                        />
+                        Everything loaded ({totalCount.toLocaleString()} row{totalCount === 1 ? '' : 's'})
+                    </label>
+                </fieldset>
+
+                <fieldset style={MODAL_FIELDSET}>
+                    <legend style={MODAL_LEGEND}>
+                        Date range {filterChanged ? '(overrides active filter)' : '(matches active filter)'}
+                    </legend>
+                    <label style={MODAL_LABEL}>
+                        From
+                        <input
+                            type="date"
+                            value={fromDate}
+                            onChange={(e) => setFromDate(e.target.value)}
+                            style={{ marginLeft: 'auto' }}
+                        />
+                    </label>
+                    <label style={MODAL_LABEL}>
+                        To
+                        <input
+                            type="date"
+                            value={toDate}
+                            onChange={(e) => setToDate(e.target.value)}
+                            style={{ marginLeft: 'auto' }}
+                        />
+                    </label>
+                </fieldset>
+
+                <div style={MODAL_ACTIONS}>
+                    <button type="button" className={styles.chip} onClick={onClose}>Cancel</button>
+                    <button
+                        type="button"
+                        className={styles.chip}
+                        onClick={onConfirm}
+                        disabled={sourceCount === 0 || columns.size === 0}
+                    >
+                        Export
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
 }

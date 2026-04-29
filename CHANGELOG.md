@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.288.0] - 2026-04-28
+
+§28.5 / Cluster I FOLLOWUP 5 — History export gets a single modal with format / columns / date-range options.
+
+`flows/historyExport.js` grows an optional `columns` parameter on `entriesToCsv` and `entriesToJson` (defaults to every `EXPORT_COLUMNS` field for backward compatibility) plus a `filterEntriesByDateRange({ fromTs, toTs })` helper that filters by inclusive epoch-second bounds and drops timestamp-less rows. JSON payload now echoes the column set used in its `columns` field; both `link` and `raw` sidecars stay outside the column-set so JSON exports remain decodable end-to-end.
+
+`shared/routes/History.jsx` replaces the two Export-CSV / Export-JSON chips with a single "Export…" trigger that opens an inline `<ExportModal>` (`role="dialog"` + `aria-modal`, Esc-to-close, scrim-click-to-close). The modal carries: format radio (CSV / JSON), per-column checkbox group sourced from `EXPORT_COLUMNS`, scope radio (filtered vs everything-loaded), and date-range inputs that pre-fill from the active `dateFrom` / `dateTo` filter and override only when changed. `runExport` (renamed from `exportVisibleHistory`) threads the column subset through to the generators.
+
+### Added
+
+- **`packages/core/src/flows/historyExport.js`** — `EXPORT_COLUMNS`, `filterEntriesByDateRange`, optional `columns` arg.
+- **`packages/core/src/flows/index.js`** — re-exports the new symbols.
+- **`packages/core/src/shared/routes/History.jsx`** — `ExportModal` component + state slots + scope/columns/date wiring.
+- **`test/smoke/audits/history-export-modal.smoke.js`** (new).
+
+Closes Cluster I FOLLOWUP 5.
+
 ## [0.287.0] - 2026-04-28
 
 §27 / Cluster I FOLLOWUP 7 — retire `<UnifiedBalanceList>`.

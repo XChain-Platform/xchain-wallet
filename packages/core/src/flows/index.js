@@ -280,6 +280,8 @@ export {
     entriesToCsv,
     entriesToJson,
     buildExportFilename,
+    filterEntriesByDateRange,
+    EXPORT_COLUMNS,
 } from './historyExport.js';
 export {
     markDemoWallet,
