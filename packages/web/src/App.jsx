@@ -39,6 +39,7 @@ import { ReachabilityBanner } from '@xchain-wallet/core/shared/components/Reacha
 import { QueuedBroadcastBanner } from '@xchain-wallet/core/shared/components/QueuedBroadcastBanner.jsx';
 import { LeftNav, FullLayoutWithNav } from '@xchain-wallet/core/shared/components/LeftNav.jsx';
 import { BottomTabBar } from '@xchain-wallet/core/shared/components/BottomTabBar.jsx';
+import { uri as coreUri } from '@xchain-wallet/core';
 import { Send } from '@xchain-wallet/core/shared/routes/Send.jsx';
 import { Receive } from '@xchain-wallet/core/shared/routes/Receive.jsx';
 import { TokenWizard } from '@xchain-wallet/core/shared/routes/TokenWizard.jsx';
@@ -184,6 +185,12 @@ function AppInner() {
     const [activeMarket, setActiveMarket] = useState(
         /** @type {{ chainId: string, tick1: string, tick2: string } | null} */ (null),
     );
+    // §47 / Cluster L FOLLOWUP 1 — deep-link prefill for Send. Populated
+    // once on mount from `?uri=` in `location.search`; consumed by the
+    // 'send' route below and cleared after the user submits or backs out.
+    const [sendPrefill, setSendPrefill] = useState(
+        /** @type {{ address?: string, amount?: string, asset?: string, chainId?: string, memo?: string } | null} */ (null),
+    );
 
     const refresh = useCallback(() => {
         setStatus({ state: 'loading' });
@@ -197,6 +204,44 @@ function AppInner() {
     }, []);
 
     useEffect(() => { refresh(); }, [refresh]);
+
+    // §47 / Cluster L FOLLOWUP 1 — consume `?uri=` from location.search
+    // when the SPA boots (e.g. after the user clicked an `xchain:` link
+    // and the browser routed it through the protocol-handler we
+    // registered at v0.191.0). Strip the param via history.replaceState
+    // so a refresh doesn't re-trigger the auto-route. Runs once on
+    // mount; the parser tolerates malformed input by returning
+    // `{ kind: 'unknown' }` which we ignore.
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        const params = new URLSearchParams(window.location.search);
+        const raw = params.get('uri');
+        if (!raw) return;
+        try {
+            const intent = coreUri.parseXchainUri(raw);
+            if (intent && intent.kind === 'send') {
+                setSendPrefill({
+                    address: intent.address,
+                    amount: intent.amount,
+                    asset: intent.asset,
+                    chainId: intent.chainId,
+                    memo: intent.memo,
+                });
+                setUnlockedView('send');
+            } else if (intent && intent.kind === 'receive') {
+                setUnlockedView('receive');
+            }
+        } catch {
+            // Parser surfaces unknown via kind === 'unknown'; nothing else
+            // throws here. Defensive try/catch in case future parser
+            // changes regress.
+        } finally {
+            params.delete('uri');
+            const next = params.toString();
+            const url = window.location.pathname + (next ? `?${next}` : '') + window.location.hash;
+            window.history.replaceState(null, '', url);
+        }
+    }, []);
 
     // Auto-unlock from the session cache: if the user unlocked
     // earlier in this tab session, the password sits in sessionStorage
@@ -318,7 +363,11 @@ function AppInner() {
                 return (
                     <Send
                         walletId={activeWalletId}
-                        onBack={() => setUnlockedView('home')}
+                        onBack={() => {
+                            setSendPrefill(null);
+                            setUnlockedView('home');
+                        }}
+                        prefill={sendPrefill}
                     />
                 );
             }

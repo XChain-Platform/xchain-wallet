@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.271.0] - 2026-04-28
+
+§47 / Cluster L FOLLOWUP 1 — web `?uri=` deep-link routing.
+
+v0.191.0 registered the web SPA as the protocol handler for `xchain:` URIs (`/?uri=%s`). This commit adds the consumer side: on mount the SPA reads `?uri=` from `location.search`, parses via `coreUri.parseXchainUri`, and routes to Send (with `address` / `amount` / `asset` / `chainId` / `memo` prefilled) or Receive based on the parsed intent's `kind`. The query param is stripped via `history.replaceState` so a refresh doesn't re-trigger.
+
+`Send.jsx` grew an opt-in `prefill` prop. Initial form state seeds from `prefill?.address` / `prefill?.amount` / `prefill?.asset` / `prefill?.chainId` / `prefill?.memo`. The first-chain auto-select effect now preserves a prefilled `chainId` (`setChainId((prev) => prev || firstChain)`) so the deep-link's choice survives the addresses-by-chain load.
+
+### Added
+
+- **`packages/core/src/shared/routes/Send.jsx`** — new `prefill` prop seeding the form state.
+- **`packages/web/src/App.jsx`** — `coreUri` import, `sendPrefill` state slot, mount-time `?uri=` parse + route effect, query-param strip via `history.replaceState`, Send route reads `prefill={sendPrefill}` and clears on back.
+- **`test/smoke/ui/web-uri-deeplink.smoke.js`** (new).
+
+Closes Cluster L FOLLOWUP 1.
+
 ## [0.270.0] - 2026-04-28
 
 §37 / Cluster D FOLLOWUP 4 — toast queue stacking limit.

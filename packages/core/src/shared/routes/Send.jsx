@@ -68,8 +68,14 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {object} props
  * @param {string} props.walletId
  * @param {() => void} props.onBack
+ * @param {{ address?: string, amount?: string, asset?: string, chainId?: string, memo?: string }} [props.prefill]
+ *        §47 Cluster L FOLLOWUP 1 — initial form values from a deep-link
+ *        intent (parseXchainUri). Each field is applied once on mount;
+ *        the user can override before submitting. Address comes from
+ *        the URI path / `to=` param; chainId from the URI path or the
+ *        BIP21 `chain=` param; asset from the URI path or `tick=`.
  */
-export function Send({ walletId, onBack }) {
+export function Send({ walletId, onBack, prefill = null }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -83,14 +89,16 @@ export function Send({ walletId, onBack }) {
     );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
 
-    const [chainId, setChainId] = useState(/** @type {string | null} */ (null));
+    const [chainId, setChainId] = useState(/** @type {string | null} */ (
+        prefill?.chainId || null
+    ));
     const [fromAddressId, setFromAddressId] = useState(
         /** @type {string | null} */ (null),
     );
-    const [toAddress, setToAddress] = useState('');
-    const [asset, setAsset] = useState('');
-    const [amount, setAmount] = useState('');
-    const [memo, setMemo] = useState('');
+    const [toAddress, setToAddress] = useState(prefill?.address || '');
+    const [asset, setAsset] = useState(prefill?.asset || '');
+    const [amount, setAmount] = useState(prefill?.amount || '');
+    const [memo, setMemo] = useState(prefill?.memo || '');
     const [password, setPassword] = useState('');
 
     const [stage, setStage] = useState(
@@ -139,7 +147,10 @@ export function Send({ walletId, onBack }) {
                     );
                     return;
                 }
-                setChainId(firstChain);
+                // §47 Cluster L FOLLOWUP 1 — preserve a prefilled chainId
+                // if the route opened from a deep-link intent. Falls back
+                // to the first available chain when no prefill exists.
+                setChainId((prev) => prev || firstChain);
             })
             .catch((err) => {
                 if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
