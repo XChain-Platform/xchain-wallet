@@ -1,0 +1,186 @@
+// DisplaySection — §27.3 / §27.4 / Cluster I FOLLOWUP 1.
+//
+// Pinned / hidden token management. Pinned tokens float to the top of
+// the balance list in the array's order; hidden tokens collapse into
+// each tab's "Show N hidden" footer. Until this panel landed, the
+// only way to manage either list was the per-row star / hide affordance
+// on Home — there was no surface to see the whole list at a glance,
+// reorder pinned tokens, or bulk-unhide.
+//
+// MVP scope (per FOLLOWUPS.md note "drag-reorder is non-trivial; an
+// MVP without reorder still closes the gap"): up / down buttons rather
+// than drag handles. Bulk "Unhide all" + per-row Unpin / Unhide.
+// Token keys render as `chainId:asset` — sufficient to identify a row
+// without a separate `messaging.getAssetInfo` round-trip.
+
+import { useCallback } from 'react';
+import { Button, Icon } from '@xchain-wallet/core/ui';
+import { useSettings } from '../../hooks/useSettings.js';
+import { ROW, ROW_LABEL, STACK, Status } from './_settingsPrimitives.jsx';
+
+const SECTION_HEADER = {
+    fontSize: 'var(--xc-text-sm)',
+    fontWeight: 600,
+    color: 'var(--xc-text)',
+    marginTop: 'var(--xc-space-3)',
+    marginBottom: 'var(--xc-space-1)',
+};
+const SECTION_HINT = {
+    color: 'var(--xc-text-muted)',
+    fontSize: 'var(--xc-text-xs)',
+    lineHeight: 1.3,
+    marginBottom: 'var(--xc-space-2)',
+};
+const KEY_TEXT = {
+    color: 'var(--xc-text)',
+    fontFamily: 'var(--xc-font-mono, monospace)',
+    fontSize: 'var(--xc-text-xs)',
+    flex: 1,
+    minWidth: 0,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+};
+const ACTIONS = {
+    display: 'flex',
+    gap: 'var(--xc-space-1)',
+    flexShrink: 0,
+};
+const EMPTY_HINT = { ...ROW_LABEL, fontStyle: 'italic' };
+
+export function DisplaySection() {
+    const { settings, loading, error, update } = useSettings();
+
+    const pinned = Array.isArray(settings?.pinnedTokens) ? settings.pinnedTokens : [];
+    const hidden = Array.isArray(settings?.hiddenTokens) ? settings.hiddenTokens : [];
+
+    const writePinned = useCallback(async (next) => {
+        try {
+            await update({ pinnedTokens: next });
+        } catch (err) {
+            // eslint-disable-next-line no-console
+            console.error('display.pinnedTokens update failed:', err);
+        }
+    }, [update]);
+
+    const writeHidden = useCallback(async (next) => {
+        try {
+            await update({ hiddenTokens: next });
+        } catch (err) {
+            // eslint-disable-next-line no-console
+            console.error('display.hiddenTokens update failed:', err);
+        }
+    }, [update]);
+
+    const movePin = useCallback((idx, delta) => {
+        const next = pinned.slice();
+        const target = idx + delta;
+        if (target < 0 || target >= next.length) return;
+        const [row] = next.splice(idx, 1);
+        next.splice(target, 0, row);
+        writePinned(next);
+    }, [pinned, writePinned]);
+
+    const unpin = useCallback((key) => {
+        writePinned(pinned.filter((k) => k !== key));
+    }, [pinned, writePinned]);
+
+    const unhide = useCallback((key) => {
+        writeHidden(hidden.filter((k) => k !== key));
+    }, [hidden, writeHidden]);
+
+    const unhideAll = useCallback(() => {
+        if (hidden.length === 0) return;
+        writeHidden([]);
+    }, [hidden, writeHidden]);
+
+    if (loading) return <Status text="Loading…" />;
+    if (error) return <Status text={`Settings unavailable: ${error.message}`} tone="error" />;
+    if (!settings) return <Status text="Settings unavailable." tone="error" />;
+
+    return (
+        <div style={STACK}>
+            <h3 style={SECTION_HEADER}>Pinned tokens ({pinned.length})</h3>
+            <p style={SECTION_HINT}>
+                Pinned tokens float to the top of every balance tab in this order. Use ↑ / ↓ to reorder, ✕ to unpin.
+            </p>
+            {pinned.length === 0 ? (
+                <div style={ROW}>
+                    <span style={EMPTY_HINT}>No pinned tokens. Tap the star on a balance row to pin it.</span>
+                </div>
+            ) : (
+                pinned.map((key, idx) => (
+                    <div key={key} style={ROW}>
+                        <span style={KEY_TEXT} title={key}>{key}</span>
+                        <div style={ACTIONS}>
+                            <Button
+                                size="sm"
+                                variant="ghost"
+                                icon={null}
+                                onClick={() => movePin(idx, -1)}
+                                disabled={idx === 0}
+                                aria-label={`Move ${key} up`}
+                            >
+                                ↑
+                            </Button>
+                            <Button
+                                size="sm"
+                                variant="ghost"
+                                icon={null}
+                                onClick={() => movePin(idx, 1)}
+                                disabled={idx === pinned.length - 1}
+                                aria-label={`Move ${key} down`}
+                            >
+                                ↓
+                            </Button>
+                            <Button
+                                size="sm"
+                                variant="ghost"
+                                icon={null}
+                                onClick={() => unpin(key)}
+                                aria-label={`Unpin ${key}`}
+                            >
+                                <Icon.XIcon />
+                            </Button>
+                        </div>
+                    </div>
+                ))
+            )}
+
+            <h3 style={SECTION_HEADER}>Hidden tokens ({hidden.length})</h3>
+            <p style={SECTION_HINT}>
+                Hidden tokens collapse into the "Show N hidden" footer of each balance tab. Unhide individually or all at once.
+            </p>
+            {hidden.length === 0 ? (
+                <div style={ROW}>
+                    <span style={EMPTY_HINT}>No hidden tokens. Tap the hide affordance on a balance row to hide it.</span>
+                </div>
+            ) : (
+                <>
+                    {hidden.map((key) => (
+                        <div key={key} style={ROW}>
+                            <span style={KEY_TEXT} title={key}>{key}</span>
+                            <div style={ACTIONS}>
+                                <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    icon={null}
+                                    onClick={() => unhide(key)}
+                                    aria-label={`Unhide ${key}`}
+                                >
+                                    Unhide
+                                </Button>
+                            </div>
+                        </div>
+                    ))}
+                    <div style={ROW}>
+                        <span style={ROW_LABEL}>{hidden.length} hidden</span>
+                        <Button size="sm" variant="secondary" icon={null} onClick={unhideAll}>
+                            Unhide all
+                        </Button>
+                    </div>
+                </>
+            )}
+        </div>
+    );
+}

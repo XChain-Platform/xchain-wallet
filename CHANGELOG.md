@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.286.0] - 2026-04-28
+
+§27.3 / §27.4 / Cluster I FOLLOWUP 1 — Settings → Display panel for pinned + hidden token management.
+
+`shared/components/settings/DisplaySection.jsx` is a new internal-drill panel that surfaces both lists at a glance. Pinned tokens render in their array order with ↑ / ↓ reorder buttons (drag-reorder deferred per FOLLOWUPS.md note — up/down still closes the gap), Unpin removes the row. Hidden tokens render below with a per-row Unhide and a bulk "Unhide all". Both lists go through the existing `useSettings().update` path so the mutations land on the shared `messaging.updateSettings` flow that Home already drives from its star / hide affordances.
+
+`Settings.jsx` mounts the panel between Appearance and Language & Region with a search-keyword bag (`pinned hidden tokens reorder unhide bulk star`) and a `displaySummary` that reads "N pinned · M hidden" or "No customization" so the list view shows current state without drilling in.
+
+### Added
+
+- **`packages/core/src/shared/components/settings/DisplaySection.jsx`** — new panel.
+- **`packages/core/src/shared/routes/Settings.jsx`** — DisplaySection import + section entry + `displaySummary` helper.
+- **`test/smoke/audits/display-settings-panel.smoke.js`** (new).
+
+Closes Cluster I FOLLOWUP 1.
+
 ## [0.285.0] - 2026-04-28
 
 §24.3 / Cluster Y FOLLOWUP 1 — dedicated scan-and-classify route.

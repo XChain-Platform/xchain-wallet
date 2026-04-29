@@ -10,6 +10,7 @@ import { BackupSection } from '../components/settings/BackupSection.jsx';
 import { ConnectedSitesSection } from '../components/settings/ConnectedSitesSection.jsx';
 import { ContactsSection } from '../components/settings/ContactsSection.jsx';
 import { DeveloperModeSection } from '../components/settings/DeveloperModeSection.jsx';
+import { DisplaySection } from '../components/settings/DisplaySection.jsx';
 import { FeesSection } from '../components/settings/FeesSection.jsx';
 import { LanguageRegionSection } from '../components/settings/LanguageRegionSection.jsx';
 import { NetworkEndpointsSection } from '../components/settings/NetworkEndpointsSection.jsx';
@@ -105,6 +106,15 @@ export function Settings({
             keywords: 'appearance theme color motion accent dark light reduced',
             kind: 'panel',
             Component: AppearanceSection,
+        },
+        {
+            id: 'display',
+            title: 'Display',
+            description: 'Pinned and hidden tokens — reorder pinned, bulk-unhide hidden.',
+            keywords: 'display pinned hidden tokens reorder unhide bulk star',
+            kind: 'internal-drill',
+            Component: DisplaySection,
+            summary: displaySummary(settings),
         },
         {
             id: 'language-region',
@@ -482,6 +492,17 @@ function safetySummary(settings) {
     const mins = settings.autolockMinutes;
     if (mins === 0) return 'Auto-lock off';
     return `Auto-lock ${mins} min`;
+}
+
+function displaySummary(settings) {
+    if (!settings) return '—';
+    const pinned = Array.isArray(settings.pinnedTokens) ? settings.pinnedTokens.length : 0;
+    const hidden = Array.isArray(settings.hiddenTokens) ? settings.hiddenTokens.length : 0;
+    if (pinned === 0 && hidden === 0) return 'No customization';
+    const parts = [];
+    if (pinned > 0) parts.push(`${pinned} pinned`);
+    if (hidden > 0) parts.push(`${hidden} hidden`);
+    return parts.join(' · ');
 }
 
 function walletModeSummary(settings) {
