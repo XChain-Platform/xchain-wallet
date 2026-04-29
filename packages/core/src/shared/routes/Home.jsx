@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, Button, Icon, Skeleton } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
@@ -6,6 +6,8 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useAutoLock } from '../hooks/useAutoLock.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { HomeTabs } from '../components/HomeTabs.jsx';
+import { buildBalanceRows, detectSpamCandidates } from '../components/BalanceList.jsx';
+import { useToast } from '../components/ToastHost.jsx';
 import { BackupReminderCard } from '../components/BackupReminderCard.jsx';
 import { DemoBanner } from '../components/DemoBanner.jsx';
 import { HeaderActionMenu } from '../components/HeaderActionMenu.jsx';
@@ -105,6 +107,12 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onBuy, onCreateToken
     // §27.4 / G073 — hidden tokens. Same pattern as pinned. Hidden rows
     // collapse into the "Show N hidden tokens" footer of each tab.
     const [hiddenTokens, setHiddenTokens] = useState(/** @type {string[]} */ ([]));
+    const { showToast } = useToast();
+    // Cluster I FOLLOWUP 2 — auto-hide-spam toast. We only ever nudge
+    // once per (wallet, mount) tuple. Re-prompting on every balance
+    // refresh would be noisy; the user explicitly opting Hide / dismissing
+    // the toast counts as "they decided" for the rest of the session.
+    const spamNudgedForWalletRef = useRef(/** @type {string | null} */ (null));
 
     // §27.3 + §27.4 / G072 + G073 — load pinnedTokens + hiddenTokens from Settings on mount.
     useEffect(() => {
@@ -147,6 +155,37 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onBuy, onCreateToken
             return next;
         });
     }, [messaging]);
+
+    // Cluster I FOLLOWUP 2 — auto-hide-spam nudge. After the first
+    // balance load that yields candidate spam rows, surface a one-shot
+    // toast with a Hide-all action. The candidate set excludes anything
+    // the user already hid; if it's empty after that filter, we say
+    // nothing. Nudge fires at most once per (wallet, mount) tuple so a
+    // mid-session rebalance doesn't re-prompt.
+    useEffect(() => {
+        if (!balances || !activeWalletId) return;
+        if (spamNudgedForWalletRef.current === activeWalletId) return;
+        const rows = buildBalanceRows(balances, chainRegistry);
+        const candidates = detectSpamCandidates(rows);
+        const hiddenSet = new Set(hiddenTokens);
+        const fresh = candidates.filter((k) => !hiddenSet.has(k));
+        if (fresh.length === 0) return;
+        spamNudgedForWalletRef.current = activeWalletId;
+        showToast({
+            message: `${fresh.length} likely-spam token${fresh.length === 1 ? '' : 's'} detected — bulk-hide?`,
+            actionLabel: `Hide ${fresh.length}`,
+            durationMs: 12000,
+            onAction: () => {
+                setHiddenTokens((prev) => {
+                    const merged = Array.from(new Set([...prev, ...fresh]));
+                    if (typeof messaging?.updateSettings === 'function') {
+                        messaging.updateSettings({ hiddenTokens: merged }).catch(() => { /* best-effort */ });
+                    }
+                    return merged;
+                });
+            },
+        });
+    }, [balances, activeWalletId, hiddenTokens, messaging, showToast]);
 
     // Load the wallets list once. The user picks the active one via
     // HeaderSettingsButton → onSwitchWallet → setActiveWalletId →

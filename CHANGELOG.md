@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.289.0] - 2026-04-28
+
+§27.4 / Cluster I FOLLOWUP 2 — auto-hide-spam toast wired into Home.
+
+`shared/routes/Home.jsx` mounts a one-shot useEffect after the balance load that aggregates raw `balances` via the existing `buildBalanceRows`, runs the v0.179.0 `detectSpamCandidates` heuristic, filters out anything the user already hid, and — when the fresh-candidate set is non-empty — surfaces a `useToast` nudge: `"N likely-spam tokens detected — bulk-hide?"` with a `Hide N` action that merges the candidates into `hiddenTokens` via `messaging.updateSettings`. A per-wallet ref guard (`spamNudgedForWalletRef`) prevents re-prompting on mid-session rebalances; switching to a different wallet resets it. Toast `durationMs` is 12s — long enough to read but shorter than the user's typical attention window. The classifier itself stays untouched (already conservative — only zero-balance non-native rows + sub-divisible no-fiat-rate dust).
+
+### Added
+
+- **`packages/core/src/shared/routes/Home.jsx`** — `useToast` import + `buildBalanceRows`/`detectSpamCandidates` import + `spamNudgedForWalletRef` + auto-nudge effect.
+- **`test/smoke/audits/auto-hide-spam.smoke.js`** (new).
+
+Closes Cluster I FOLLOWUP 2.
+
 ## [0.288.0] - 2026-04-28
 
 §28.5 / Cluster I FOLLOWUP 5 — History export gets a single modal with format / columns / date-range options.
