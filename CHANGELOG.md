@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.265.0] - 2026-04-28
+
+§24 — Cluster Y Step 3 of N — G057 desktop multi-window support.
+
+`packages/desktop/main/index.js` swaps the singleton `mainWindow` for a `windows` Set; `createWindow()` is a factory each call adds to the Set and `closed` removes from it. New `buildApplicationMenu()` installs a native menu with `File → New Window` (CmdOrCtrl+N) so the user can open additional windows that share the main-process MessageHost (vault + signers stay singleton per §9.3.2). Deep-link forwarding now picks the focused window (or last-created fallback); updater events broadcast to every live window.
+
+Detach-pending-tx (§24.6 third bullet) defers to FOLLOWUP — that's a renderer-side context-menu integration on History rows + a window-options "open at view" route prefill, separable from the multi-window plumbing this step ships.
+
+### Added
+
+- **`packages/desktop/main/index.js`** — `windows` Set + `liveWindows()` / `pickFocusWindow()` / `broadcastToWindows()` helpers; `createWindow()` factory; `buildApplicationMenu()` with File → New Window; updater broadcast across all windows.
+- **`test/smoke/shells/desktop-multi-window.smoke.js`** (new).
+
+Closes G057. Cluster Y closed at v0.265.0 — §24 has no remaining open rows.
+
 ## [0.264.0] - 2026-04-28
 
 §24 — Cluster Y Step 2 of N — G054 mobile bottom-sheet navigation.

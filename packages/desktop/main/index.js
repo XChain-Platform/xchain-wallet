@@ -28,7 +28,7 @@
 //     cache is silently disabled — the user re-enters their password
 //     every launch rather than having the key written insecurely.
 
-import { app, BrowserWindow, ipcMain, safeStorage, session } from 'electron';
+import { app, BrowserWindow, Menu, ipcMain, safeStorage, session } from 'electron';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -57,21 +57,45 @@ import {
 
 const here = dirname(fileURLToPath(import.meta.url));
 
-let mainWindow = /** @type {BrowserWindow | null} */ (null);
+// §24.6 / G057 — multi-window: instead of a singleton mainWindow, the
+// main process keeps a Set of every open BrowserWindow so File → New
+// Window can open additional renderers that share the same vault +
+// signer state via the main-process MessageHost. Existing logic
+// (deep-link forward, updater broadcast) targets the focused window
+// when one exists, otherwise the most-recently-created.
+const windows = /** @type {Set<BrowserWindow>} */ (new Set());
 let runtime = /** @type {ReturnType<typeof createRuntime> | null} */ (null);
 
 /** @type {{ scheme: string, raw: string, parsed: any } | null} */
 let pendingDeepLink = null;
 
+function liveWindows() {
+    return [...windows].filter((w) => !w.isDestroyed());
+}
+
+function pickFocusWindow() {
+    const live = liveWindows();
+    if (live.length === 0) return null;
+    return BrowserWindow.getFocusedWindow() || live[live.length - 1];
+}
+
+function broadcastToWindows(channel, payload) {
+    for (const w of liveWindows()) {
+        w.webContents.send(channel, payload);
+    }
+}
+
 function forwardDeepLink(event) {
     // Renderer may not exist yet at app start; queue the first one and
-    // replay when the window is ready.
-    if (!mainWindow || mainWindow.isDestroyed()) {
+    // replay when a window is ready. Multi-window: the deep link goes
+    // to the focused window so the user's current context wins.
+    const target = pickFocusWindow();
+    if (!target) {
         pendingDeepLink = event;
         return;
     }
-    mainWindow.webContents.send('xchain:uri', event);
-    if (!mainWindow.isFocused()) mainWindow.focus();
+    target.webContents.send('xchain:uri', event);
+    if (!target.isFocused()) target.focus();
 }
 
 function buildRuntime() {
@@ -92,8 +116,17 @@ function buildRuntime() {
     });
 }
 
-function createMainWindow() {
-    mainWindow = new BrowserWindow({
+/**
+ * Open a renderer window. Safe to call repeatedly — every call returns
+ * a fresh `BrowserWindow` connected to the same main-process MessageHost
+ * (vault + signers stay singleton). Each window registers itself with
+ * the `windows` set and unregisters on `closed`.
+ *
+ * §24.6 / G057 — File → New Window invokes this for additional
+ * windows; the first call from `app.whenReady` opens the primary one.
+ */
+function createWindow() {
+    const win = new BrowserWindow({
         width: 420,
         height: 720,
         minWidth: 360,
@@ -109,19 +142,106 @@ function createMainWindow() {
 
     // Renderer is built into packages/desktop/renderer/dist by Step 19's
     // packaging pipeline (vite build). In packaged mode that's what
-    // `mainWindow.loadFile` points at; in dev the same path works
-    // because `pnpm run start` runs vite first.
-    mainWindow.loadFile(join(here, '..', 'renderer', 'dist', 'index.html'));
-    mainWindow.once('ready-to-show', () => {
-        mainWindow?.show();
-        // Replay any deep link that arrived before the window was up.
+    // `loadFile` points at; in dev the same path works because
+    // `pnpm run start` runs vite first.
+    win.loadFile(join(here, '..', 'renderer', 'dist', 'index.html'));
+    win.once('ready-to-show', () => {
+        if (!win.isDestroyed()) win.show();
+        // Replay any deep link that arrived before the first window
+        // came up. Subsequent windows ignore the queue — once one
+        // renderer has consumed it, additional renderers shouldn't
+        // double-handle the same URI.
         if (pendingDeepLink) {
             const event = pendingDeepLink;
             pendingDeepLink = null;
             forwardDeepLink(event);
         }
     });
-    mainWindow.on('closed', () => { mainWindow = null; });
+    win.on('closed', () => { windows.delete(win); });
+
+    windows.add(win);
+    return win;
+}
+
+/**
+ * Wire the macOS-style application menu. The custom slot we care about
+ * is `File → New Window` (Cmd+N / Ctrl+N) which calls `createWindow()`.
+ * The rest of the menu uses Electron's `role: ...` defaults so standard
+ * editing / window-management behaviors stay native to each platform.
+ *
+ * §24.6 / G057.
+ */
+function buildApplicationMenu() {
+    const isMac = process.platform === 'darwin';
+    /** @type {Electron.MenuItemConstructorOptions[]} */
+    const template = [
+        ...(isMac ? [{
+            label: app.name,
+            submenu: [
+                { role: 'about' },
+                { type: 'separator' },
+                { role: 'services' },
+                { type: 'separator' },
+                { role: 'hide' },
+                { role: 'hideOthers' },
+                { role: 'unhide' },
+                { type: 'separator' },
+                { role: 'quit' },
+            ],
+        }] : []),
+        {
+            label: '&File',
+            submenu: [
+                {
+                    label: 'New Window',
+                    accelerator: 'CmdOrCtrl+N',
+                    click: () => { createWindow(); },
+                },
+                { type: 'separator' },
+                isMac ? { role: 'close' } : { role: 'quit' },
+            ],
+        },
+        {
+            label: '&Edit',
+            submenu: [
+                { role: 'undo' },
+                { role: 'redo' },
+                { type: 'separator' },
+                { role: 'cut' },
+                { role: 'copy' },
+                { role: 'paste' },
+                { role: 'selectAll' },
+            ],
+        },
+        {
+            label: '&View',
+            submenu: [
+                { role: 'reload' },
+                { role: 'forceReload' },
+                { role: 'toggleDevTools' },
+                { type: 'separator' },
+                { role: 'resetZoom' },
+                { role: 'zoomIn' },
+                { role: 'zoomOut' },
+                { type: 'separator' },
+                { role: 'togglefullscreen' },
+            ],
+        },
+        {
+            label: '&Window',
+            submenu: [
+                { role: 'minimize' },
+                { role: 'zoom' },
+                ...(isMac ? [
+                    { type: 'separator' },
+                    { role: 'front' },
+                ] : [
+                    { role: 'close' },
+                ]),
+            ],
+        },
+    ];
+    Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
 // §40.12 Step 19: single-instance lock + deep-link dispatch must run
@@ -159,14 +279,12 @@ app.whenReady().then(async () => {
     registerProtocolClients(app, { optedInSchemes: [] });
 
     // electron-updater — only active in packaged builds (isUpdaterActive
-    // returns false in dev). Events relay to the renderer via IPC so
-    // the Home screen can surface an "update available" toast.
+    // returns false in dev). Events relay to every open renderer via
+    // IPC so any window can surface the "update available" toast.
     try {
         const { checkForUpdates } = await attachUpdater({
             onEvent: (event) => {
-                if (mainWindow && !mainWindow.isDestroyed()) {
-                    mainWindow.webContents.send('xchain:updater', event);
-                }
+                broadcastToWindows('xchain:updater', event);
             },
         });
         // Kick a check on launch. User-triggered re-checks land later
@@ -192,10 +310,14 @@ app.whenReady().then(async () => {
     // same process-wide `signerBridge` registry this listener feeds.
     attachSignerBridgeListener({ ipcMain });
 
-    createMainWindow();
+    // §24.6 / G057 — install the application menu (File → New Window)
+    // before opening the primary window so the accelerator is live the
+    // moment the renderer focuses.
+    buildApplicationMenu();
+    createWindow();
 
     app.on('activate', () => {
-        if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
+        if (BrowserWindow.getAllWindows().length === 0) createWindow();
     });
 });
 
