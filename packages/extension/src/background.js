@@ -28,6 +28,7 @@ import {
     createDevMockSdk,
     resolveSdkFactory,
 } from './background/index.js';
+import { createBridgeEventBroadcaster } from './bridge/bridgeEvents.js';
 import {
     applyLayoutMode,
     attachLayoutModeListener,
@@ -106,6 +107,14 @@ async function ensureHost() {
         sdkRegistry,
         signerPool,
         approvals: approvalBroker,
+        // §43.2 / Cluster F FOLLOWUP 1 — fan-out for bridge events so
+        // dApps subscribed via provider.on(...) get accountsChanged /
+        // chainChanged / disconnect when the wallet mutates connected
+        // site state. Background uses chrome.tabs to find tabs sitting
+        // on the matching origin.
+        bridgeEvents: typeof chrome !== 'undefined' && chrome.tabs
+            ? createBridgeEventBroadcaster({ tabs: chrome.tabs, runtime: chrome.runtime })
+            : undefined,
         // §50 / Cluster L FOLLOWUP 4 — shell-specific diagnostic env + build.
         getDiagnosticContext: async () => ({
             env: {

@@ -22,6 +22,7 @@
 import { flows, schemas } from '@xchain-wallet/core';
 import { shouldAutoApproveConnect } from '@xchain-wallet/core/shared/utils/originAutoApprove.js';
 import { rejectAllApprovals, UserRejectedError } from './Approvals.js';
+import { emitPermissionDiff, noopBridgeEvents } from './bridgeEvents.js';
 
 const {
     walletBalances,
@@ -42,11 +43,13 @@ const SUPPORTED_BRIDGE_ACTIONS = ['SEND', 'SWEEP'];
  * @param {{
  *   approvals?: import('./Approvals.js').Approvals,
  *   signThrottle?: ReturnType<typeof createSignThrottle>,
+ *   events?: typeof noopBridgeEvents,
  * }} [opts]
  */
 export function registerBridgeHandlers(host, opts = {}) {
     const approvals = opts.approvals ?? rejectAllApprovals;
     const signThrottle = opts.signThrottle ?? createSignThrottle();
+    const events = opts.events ?? noopBridgeEvents;
 
     host.register('bridge.connect', async (req, deps) => {
         assertOrigin(req);
@@ -113,6 +116,10 @@ export function registerBridgeHandlers(host, opts = {}) {
         const site = await findConnectedSite(deps.vault, req.origin);
         if (!site) return { disconnected: false };
         await deps.vault.connectedSites.delete(site.id);
+        // §43.2 — fire `disconnect` so the dApp's listener can clear
+        // session state without polling. Reason mirrors the bridge-spec
+        // BridgeEventMap.disconnect signature.
+        await events.disconnect(req.origin, 'user-requested');
         return { disconnected: true };
     });
 
@@ -217,7 +224,7 @@ export function registerBridgeHandlers(host, opts = {}) {
                 bip39Passphrase: decision.bip39Passphrase,
             });
             if (decision.savePermanent) {
-                await updateSitePermissions(deps.vault, site, { canSignMessage: true });
+                await updateSitePermissions(deps.vault, site, { canSignMessage: true }, { events });
             }
             return result;
         }
@@ -271,7 +278,7 @@ export function registerBridgeHandlers(host, opts = {}) {
                     ...site.permissions.canSignAction,
                     [actionName]: 'always',
                 },
-            });
+            }, { events });
         }
 
         const params = req.params ?? {};
@@ -468,13 +475,38 @@ async function siteHasAddress(vault, site, chainId, address, chainRegistry) {
     );
 }
 
-async function updateSitePermissions(vault, site, patch) {
+async function updateSitePermissions(vault, site, patch, eventCtx) {
     const next = {
         ...site,
         permissions: { ...site.permissions, ...patch },
         lastUsedAt: new Date().toISOString(),
     };
     await vault.connectedSites.put(next);
+    if (eventCtx?.events) {
+        let payload;
+        const accountsChanged = patch.accounts !== undefined
+            && sortedKey(site.permissions.accounts) !== sortedKey(next.permissions.accounts);
+        if (accountsChanged) {
+            const allAccounts = await vault.accounts.list();
+            const ids = new Set(next.permissions.accounts ?? []);
+            payload = (ids.size > 0
+                ? allAccounts.filter((a) => ids.has(a.id))
+                : allAccounts
+            ).map((a) => ({ id: a.id, name: a.name }));
+        }
+        await emitPermissionDiff({
+            events: eventCtx.events,
+            origin: site.origin,
+            prevPermissions: site.permissions,
+            nextPermissions: next.permissions,
+            accountsChangedPayload: payload,
+        });
+    }
+}
+
+function sortedKey(list) {
+    if (!Array.isArray(list)) return '';
+    return [...new Set(list)].sort().join(',');
 }
 
 async function walletIdForAddress(vault, addressOrId) {

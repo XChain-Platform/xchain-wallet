@@ -392,7 +392,7 @@ function toSafeWallet(w) {
  * @returns {MessageHost}
  */
 export function createBackgroundHost(deps) {
-    const { approvals, getDiagnosticContext, ...hostDeps } = deps ?? {};
+    const { approvals, getDiagnosticContext, bridgeEvents, ...hostDeps } = deps ?? {};
     const host = new MessageHost(hostDeps);
 
     // --- Wallet management ---------------------------------------------------
@@ -1658,7 +1658,7 @@ export function createBackgroundHost(deps) {
     // popup window; the default rejects everything with
     // USER_APPROVAL_REQUIRED, giving dApps a structured error instead of
     // a hang when the shell's approval popup isn't wired yet.
-    registerBridgeHandlers(host, { approvals });
+    registerBridgeHandlers(host, { approvals, events: bridgeEvents });
 
     return host;
 }

@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.280.0] - 2026-04-28
+
+§43.2 / Cluster F FOLLOWUP 1 — actually emit bridge events.
+
+The provider listener pipeline was wired in Phase 1 (content script relays `chrome.runtime.onMessage({ type: 'bridge.event', … })` → page postMessage → inject script dispatches to subscribers registered through `provider.on(...)`), but no background sender existed — dApps subscribed and never received anything. v0.280.0 adds a broadcaster + threads it through the bridge handlers.
+
+`createBridgeEventBroadcaster({ tabs, runtime })` returns `{ accountsChanged, chainChanged, disconnect }`. Each method runs `chrome.tabs.query`, filters tabs by `URL.origin` against the supplied origin, and `chrome.tabs.sendMessage`s a `{ type: 'bridge.event', event, payload }` envelope to each match. Tabs without a `url`, with malformed URLs, or sitting on a different origin are silently dropped (a dApp on origin A must never see another origin's events). Without a `chrome.tabs` surface the broadcaster degrades to a no-op so non-extension shells don't crash.
+
+`emitPermissionDiff` is the diff helper that bridge handlers call after `updateSitePermissions` — it fires `accountsChanged` only when the accounts set actually changes and `chainChanged` only when a single new chain is added. `bridge.disconnect` fires `events.disconnect(origin, 'user-requested')` after the connected-site delete.
+
+Partial coverage note: bare-vault `vault.accounts.put` writes (e.g. a new account created from Settings while a site permits all accounts) still need a vault-level subscription to surface `accountsChanged`. That land alongside the Settings → Connected Sites editor.
+
+### Added
+
+- **`packages/extension/src/bridge/bridgeEvents.js`** — `createBridgeEventBroadcaster` + `emitPermissionDiff` + `noopBridgeEvents`.
+- **`packages/extension/src/bridge/index.js`** — re-exports the new symbols.
+- **`packages/extension/src/bridge/handlers.js`** — `events` opt threaded through `bridge.disconnect` + `updateSitePermissions`.
+- **`packages/extension/src/background/createBackgroundHost.js`** — accepts `bridgeEvents` dep; passes through.
+- **`packages/extension/src/background.js`** — constructs broadcaster against `chrome.tabs` + `chrome.runtime`.
+- **`test/smoke/bridge/bridge-events-emit.smoke.js`** (new).
+
+Closes Cluster F FOLLOWUP 1.
+
 ## [0.279.0] - 2026-04-28
 
 §12 / Cluster S FOLLOWUP 5 — test-dapp surfaces BLOCKED_BY_USER + THROTTLED.

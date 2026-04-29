@@ -4,3 +4,8 @@ export {
     ApprovalRequiredError,
     UserRejectedError,
 } from './Approvals.js';
+export {
+    createBridgeEventBroadcaster,
+    emitPermissionDiff,
+    noopBridgeEvents,
+} from './bridgeEvents.js';
