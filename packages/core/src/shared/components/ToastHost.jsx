@@ -13,6 +13,16 @@ import { useHaptic } from '../hooks/useHaptic.js';
 // re-renders: a toast survives navigation back to Home from the form
 // that triggered it (the user might dismiss the source surface and we
 // still owe them the Undo affordance).
+//
+// Cluster D FOLLOWUP 4 — at most `VISIBLE_LIMIT` toasts render at once.
+// Older entries stay in the queue with their auto-dismiss timers
+// running; as those fire and the queue shrinks, hidden toasts surface
+// in arrival order. This keeps the bottom-right column from growing
+// into a wall when the user fires several destructive actions back to
+// back. The full toast list is still aria-live'd via the viewport
+// region so a screen reader catches every announcement.
+
+const VISIBLE_LIMIT = 3;
 
 /**
  * @typedef {{
@@ -92,6 +102,13 @@ export function ToastHost({ children }) {
         showToast, dismissToast, clearToasts,
     ]);
 
+    // Render at most VISIBLE_LIMIT toasts. Newest land at the bottom
+    // (the queue is appended); slicing from the end shows the most
+    // recent feedback first. Older queued toasts surface as their
+    // predecessors auto-dismiss.
+    const visibleToasts = toasts.slice(-VISIBLE_LIMIT);
+    const hiddenCount = Math.max(0, toasts.length - visibleToasts.length);
+
     return (
         <ToastContext.Provider value={api}>
             {children}
@@ -101,7 +118,12 @@ export function ToastHost({ children }) {
                 aria-label="Notifications"
                 aria-live="polite"
             >
-                {toasts.map((t) => (
+                {hiddenCount > 0 ? (
+                    <div className={styles.overflowBadge} aria-hidden="true">
+                        {`+${hiddenCount} more`}
+                    </div>
+                ) : null}
+                {visibleToasts.map((t) => (
                     <ToastItem
                         key={t.id}
                         toast={t}

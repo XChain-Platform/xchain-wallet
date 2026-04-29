@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.270.0] - 2026-04-28
+
+§37 / Cluster D FOLLOWUP 4 — toast queue stacking limit.
+
+ToastHost caps the number of simultaneously visible toasts at 3 (`VISIBLE_LIMIT`). When a fourth toast lands, the oldest stays in the queue (with its auto-dismiss timer running) but doesn't render; an aria-hidden `+N more` badge floats above the visible stack to signal the queue depth. As earlier toasts dismiss, queued ones surface in arrival order so every action's feedback is eventually seen.
+
+The aria-live region still announces queued toasts as they surface — the badge is decorative; screen readers don't double-count it.
+
+### Added
+
+- **`packages/core/src/shared/components/ToastHost.jsx`** — `VISIBLE_LIMIT = 3`; `toasts.slice(-VISIBLE_LIMIT)` drives the render set; conditional `+N more` overflow badge.
+- **`packages/core/src/shared/components/ToastHost.module.css`** — `.overflowBadge` style (small pill, muted color, no pointer events).
+- **`test/smoke/ui/toast-stacking-limit.smoke.js`** (new).
+
+Closes Cluster D FOLLOWUP 4.
+
 ## [0.269.0] - 2026-04-28
 
 §26 / Cluster O FOLLOWUP 1 — auto-lock for the desktop shell.

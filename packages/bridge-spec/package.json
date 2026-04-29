@@ -1,6 +1,6 @@
 {
     "name": "@xchain-wallet/bridge-spec",
-    "version": "0.269.0",
+    "version": "0.270.0",
     "private": true,
     "description": "TypeScript type definitions and reference client for the window.xchain dApp bridge",
     "main": "./src/index.ts",

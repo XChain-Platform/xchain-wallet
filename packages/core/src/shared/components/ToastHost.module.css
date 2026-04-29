@@ -21,6 +21,22 @@
     width: min(28rem, calc(100vw - 2 * var(--xc-space-4)));
 }
 
+/* Cluster D FOLLOWUP 4 — overflow indicator. Surfaces above the
+   visible stack when more toasts are queued than the VISIBLE_LIMIT
+   allows on screen at once. Visual only (aria-hidden) since the
+   queued toasts continue to fire their aria-live announcements as
+   they surface. */
+.overflowBadge {
+    pointer-events: none;
+    align-self: center;
+    padding: 2px var(--xc-space-2);
+    border-radius: 999px;
+    background: var(--xc-surface-raised);
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    border: 1px solid var(--xc-border);
+}
+
 .toast {
     pointer-events: auto;
     display: flex;
