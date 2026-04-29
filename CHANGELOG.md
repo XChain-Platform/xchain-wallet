@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.269.0] - 2026-04-28
+
+§26 / Cluster O FOLLOWUP 1 — auto-lock for the desktop shell.
+
+`Home.useAutoLock` enable predicate gains `shell === 'desktop'` so an idle Electron renderer auto-locks on the same `settings.autolockMinutes` cadence as the popup + web shells. The shared hook listens for window-level `mousemove` / `keydown` / `scroll` / `click` / `touchstart` events; Electron renderer is Chromium so the same listener set works unchanged.
+
+`useAutoLock.js` header rewritten — no longer claims web is the lone opt-out; the hook now serves all three shells.
+
+### Changed
+
+- **`packages/core/src/shared/routes/Home.jsx`** — `useAutoLock` enable predicate covers popup + web + desktop.
+- **`packages/core/src/shared/hooks/useAutoLock.js`** — header comment reflects the new tri-shell behaviour.
+
+### Added
+
+- **`test/smoke/ui/auto-lock-desktop.smoke.js`** (new).
+
+Closes Cluster O FOLLOWUP 1.
+
 ## [0.268.0] - 2026-04-28
 
 §24 Cluster Y FOLLOWUPs 2+3 — Settings entry-point from nav + wallet-name surfacing.

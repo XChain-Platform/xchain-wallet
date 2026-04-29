@@ -16,8 +16,10 @@ import { useEffect, useRef } from 'react';
  * service worker to read on startup, tracked separately.
  *
  * Pass `enabled: false` to make the hook a no-op — the React hook
- * rules forbid skipping the call itself, so shells pass a flag when
- * they want auto-lock off (today: web).
+ * rules forbid skipping the call itself, so callers pass a flag when
+ * they want auto-lock off (e.g. while a lock action is already
+ * in-flight). All three shells (popup, web, desktop) opt in via the
+ * Home route's `useAutoLock` call.
  *
  * @param {() => void} onLock
  * @param {object} [opts]

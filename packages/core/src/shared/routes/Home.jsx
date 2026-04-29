@@ -332,8 +332,15 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onBuy, onCreateToken
     // default so v2 records without the field behave like 'full'.
     const walletMode = settings.settings?.walletMode || WALLET_MODE_DEFAULT;
     const isSignerMode = walletMode === 'signer';
+    // §26 / G064 — auto-lock runs in every shell. The hook listens for
+    // user-input events on `window`, which is identical in the Electron
+    // renderer and the browser, so a user-idle desktop wallet now locks
+    // on the same cadence as web + popup. Cluster O FOLLOWUP 1 closes
+    // here. Future hardening could complement this with a
+    // `powerMonitor.getSystemIdleTime()` driver in the desktop main
+    // process so the wallet locks on OS-level lock / sleep too.
     useAutoLock(handleLock, {
-        enabled: (shell === 'popup' || shell === 'web') && !locking,
+        enabled: (shell === 'popup' || shell === 'web' || shell === 'desktop') && !locking,
         idleMs: autolockMinutes * 60 * 1000,
     });
 
