@@ -97,6 +97,21 @@ export const en = {
         'You can use your extension wallet — click its icon in the browser toolbar.',
     'extBanner.dismiss': 'Dismiss',
 
+    // --- xchain: URI intent labels (Cluster L FOLLOWUP 5) ---------
+    'uri.intent.send': 'Send',
+    'uri.intent.sendTo': 'Send to {address}',
+    'uri.intent.sendAsset': 'Send {asset}',
+    'uri.intent.sendAssetTo': 'Send {asset} to {address}',
+    'uri.intent.sendAmount': 'Send {amount} {asset}',
+    'uri.intent.sendAmountTo': 'Send {amount} {asset} to {address}',
+    'uri.intent.receive': 'Receive',
+    'uri.intent.receiveAt': 'Receive at {address}',
+    'uri.intent.receiveAsset': 'Receive {asset}',
+    'uri.intent.receiveAssetAt': 'Receive {asset} at {address}',
+    'uri.intent.receiveAmount': 'Receive {amount} {asset}',
+    'uri.intent.receiveAmountAt': 'Receive {amount} {asset} at {address}',
+    'uri.intent.unknown': 'Unrecognized link',
+
     // --- errors ---------------------------------------------------
     'error.vaultClosed': 'Wallet is locked — unlock to continue.',
     'error.genericLoad': 'Failed to load.',

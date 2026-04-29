@@ -149,6 +149,62 @@ function parseQuery(queryPart) {
 }
 
 /**
+ * Render a localized human-readable description of a parsed intent.
+ * Used by confirmation prompts and deep-link previews ("Send 0.5 BTC to
+ * bc1q…7qz3"). Consumers pass through the i18n namespace exported from
+ * `@xchain-wallet/core` so the helper picks up the active locale.
+ *
+ * The shape of the returned string is driven by which fields the intent
+ * actually carries: a bare `xchain://bitcoin-mainnet` URI yields just
+ * "Send"; a fully-populated send yields the full sentence.
+ *
+ * @param {XchainUriIntent} intent
+ * @param {{ i18n: { t: (key: string, vars?: Record<string, string | number>) => string } }} deps
+ * @returns {string}
+ */
+export function describeXchainIntent(intent, deps) {
+    const t = deps?.i18n?.t;
+    if (typeof t !== 'function') {
+        throw new Error('describeXchainIntent: deps.i18n.t is required');
+    }
+    if (!intent || intent.kind === 'unknown') {
+        return t('uri.intent.unknown');
+    }
+    const isReceive = intent.kind === 'receive';
+    const hasAmount = Boolean(intent.amount && intent.asset);
+    const hasAsset = Boolean(intent.asset && !intent.amount);
+    const hasAddress = typeof intent.address === 'string' && intent.address.length > 0;
+    const vars = {};
+    if (hasAmount) {
+        vars.amount = intent.amount;
+        vars.asset = intent.asset;
+    } else if (hasAsset) {
+        vars.asset = intent.asset;
+    }
+    if (hasAddress) vars.address = shortenAddress(intent.address);
+
+    if (isReceive) {
+        if (hasAmount && hasAddress) return t('uri.intent.receiveAmountAt', vars);
+        if (hasAmount) return t('uri.intent.receiveAmount', vars);
+        if (hasAsset && hasAddress) return t('uri.intent.receiveAssetAt', vars);
+        if (hasAsset) return t('uri.intent.receiveAsset', vars);
+        if (hasAddress) return t('uri.intent.receiveAt', vars);
+        return t('uri.intent.receive');
+    }
+    if (hasAmount && hasAddress) return t('uri.intent.sendAmountTo', vars);
+    if (hasAmount) return t('uri.intent.sendAmount', vars);
+    if (hasAsset && hasAddress) return t('uri.intent.sendAssetTo', vars);
+    if (hasAsset) return t('uri.intent.sendAsset', vars);
+    if (hasAddress) return t('uri.intent.sendTo', vars);
+    return t('uri.intent.send');
+}
+
+function shortenAddress(addr) {
+    if (typeof addr !== 'string' || addr.length <= 14) return addr;
+    return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
+}
+
+/**
  * Build an `xchain://` URI from an intent. Inverse of `parseXchainUri`
  * for path-style URIs. Useful for share / receive surfaces that want to
  * generate URIs for the user to copy.

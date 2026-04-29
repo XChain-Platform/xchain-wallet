@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.278.0] - 2026-04-28
+
+§47 / Cluster L FOLLOWUP 5 — `describeXchainIntent` localized intent labels.
+
+New helper alongside `parseXchainUri` that renders a human-readable sentence for a parsed `xchain:` URI: "Send 0.5 BTC to bc1qxy…0wlh", "Receive 100 XCP", "Unrecognized link", etc. Picks one of 13 send/receive templates based on which fields the intent carries (amount + asset, asset alone, address alone, bare). Address gets middle-truncated (head 6 / tail 4) when over 14 chars. Consumers pass the i18n namespace from `@xchain-wallet/core` so the active locale drives translation; missing keys fall back to English.
+
+### Added
+
+- **`packages/core/src/uri/xchainUri.js`** — `describeXchainIntent(intent, { i18n })` helper + `shortenAddress` internal.
+- **`packages/core/src/uri/index.js`** — re-exports `describeXchainIntent`.
+- **`packages/core/src/i18n/locales/en/index.js`** — 13 `uri.intent.*` keys.
+- **`test/smoke/core/xchain-uri-describe.smoke.js`** (new).
+
+Closes Cluster L FOLLOWUP 5.
+
 ## [0.277.0] - 2026-04-28
 
 §50 / Cluster L FOLLOWUP 4 — diagnostic dump fills env / build / signers.
