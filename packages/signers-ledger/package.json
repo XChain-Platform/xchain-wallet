@@ -1,0 +1,17 @@
+{
+    "name": "@xchain-wallet/signers-ledger",
+    "version": "0.267.0",
+    "private": true,
+    "description": "LedgerSigner — XChain Wallet HW-signer integration for Ledger devices (§17.3 / §18). Vendor-specific implementation extracted from @xchain-wallet/core per §9 / G002.",
+    "type": "module",
+    "main": "./src/index.js",
+    "exports": {
+        ".": "./src/index.js",
+        "./LedgerSigner.js": "./src/LedgerSigner.js",
+        "./ledgerFormat.js": "./src/ledgerFormat.js"
+    },
+    "scripts": {},
+    "dependencies": {
+        "@noble/hashes": "^1.5.0"
+    }
+}

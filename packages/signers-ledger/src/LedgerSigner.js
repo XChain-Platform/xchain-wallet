@@ -32,8 +32,15 @@
 // Bitcoin-message signature xchain-sdk's `auth.verifyMessage`
 // accepts.
 
+// §9 / G002 — this module lives in `@xchain-wallet/signers-ledger`
+// (its own workspace package). The base `Signer` class is shared
+// across vendors and stays in `@xchain-wallet/core/signers/Signer.js`;
+// we reach it via a relative cross-package path so Node smoke tests
+// resolve the module without depending on pnpm workspace symlinks
+// (matches the convention in @xchain-wallet/signers-trezor).
+
 import { sha256 } from '@noble/hashes/sha2';
-import { Signer, SignerStatusError } from './Signer.js';
+import { Signer, SignerStatusError } from '../../core/src/signers/Signer.js';
 import {
     composeBitcoinCompactSignature,
     toLedgerCreatePayment,

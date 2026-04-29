@@ -28,6 +28,11 @@ const wsRoot = join(here, '..', '..', '..');
 const core = join(wsRoot, 'packages', 'core');
 const ext = join(wsRoot, 'packages', 'extension');
 const web = join(wsRoot, 'packages', 'web');
+// §9 / G002 — LedgerSigner.js + ledgerFormat.js moved to the standalone
+// signers-ledger workspace package; the back-compat shim in
+// `core/src/signers/index.js` keeps the `signers.LedgerSigner` runtime
+// re-export working, so the in-process import above still resolves.
+const ledgerPkg = join(wsRoot, 'packages', 'signers-ledger');
 
 const {
     LedgerSigner,
@@ -477,7 +482,7 @@ assert.ok(webPkg.dependencies['@ledgerhq/hw-app-btc']);
 // --- 11. LedgerSigner doesn't import Ledger SDK ------------------------
 
 const ledgerSrc = readFileSync(
-    join(core, 'src', 'signers', 'LedgerSigner.js'),
+    join(ledgerPkg, 'src', 'LedgerSigner.js'),
     'utf8',
 );
 assert.ok(
@@ -485,10 +490,22 @@ assert.ok(
     'LedgerSigner class does NOT import any @ledgerhq package',
 );
 
+// §9 / G002 — LedgerSigner now lives in @xchain-wallet/signers-ledger;
+// back-compat shim in core/src/signers/index.js keeps the runtime
+// re-export reachable.
+assert.ok(
+    !existsSync(join(core, 'src', 'signers', 'LedgerSigner.js')),
+    'LedgerSigner.js no longer lives in @xchain-wallet/core (moved to @xchain-wallet/signers-ledger)',
+);
+assert.ok(
+    existsSync(join(ledgerPkg, 'package.json')),
+    '@xchain-wallet/signers-ledger package.json exists',
+);
+
 // --- 12. ledgerFormat.js envelope builder exists + exports -----------
 
-const fmtPath = join(core, 'src', 'signers', 'ledgerFormat.js');
-assert.ok(existsSync(fmtPath), 'ledgerFormat.js exists');
+const fmtPath = join(ledgerPkg, 'src', 'ledgerFormat.js');
+assert.ok(existsSync(fmtPath), 'ledgerFormat.js exists in signers-ledger');
 const fmtSrc = readFileSync(fmtPath, 'utf8');
 for (const sym of [
     'chainIdToLedgerCurrency',

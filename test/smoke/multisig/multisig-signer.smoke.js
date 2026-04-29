@@ -12,7 +12,7 @@ if (!globalThis.crypto) {
 }
 
 import { TrezorSigner } from '../../../packages/signers-trezor/src/TrezorSigner.js';
-import { LedgerSigner } from '../../../packages/core/src/signers/LedgerSigner.js';
+import { LedgerSigner } from '../../../packages/signers-ledger/src/LedgerSigner.js';
 import { Signer, AbstractMethodError } from '../../../packages/core/src/signers/Signer.js';
 import { flows } from '../../../packages/core/src/index.js';
 import { fingerprintSessionRef } from '../../../packages/core/src/uri/multisigPsbtEnvelope.js';

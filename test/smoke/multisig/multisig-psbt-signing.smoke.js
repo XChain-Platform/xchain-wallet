@@ -8,7 +8,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { TrezorSigner } from '../../../packages/signers-trezor/src/TrezorSigner.js';
-import { LedgerSigner } from '../../../packages/core/src/signers/LedgerSigner.js';
+import { LedgerSigner } from '../../../packages/signers-ledger/src/LedgerSigner.js';
 import { Signer, AbstractMethodError } from '../../../packages/core/src/signers/Signer.js';
 import { SoftwareSigner } from '../../../packages/core/src/signers/SoftwareSigner.js';
 

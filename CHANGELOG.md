@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.267.0] - 2026-04-28
+
+§9 — Cluster Z Step 2 of 2 — G002 standalone `@xchain-wallet/signers-ledger` package.
+
+Mirror of v0.266.0's signers-trezor split. `packages/signers-ledger/` ships as a new workspace package; `LedgerSigner.js` + `ledgerFormat.js` move out of `packages/core/src/signers/` into `packages/signers-ledger/src/`. Cross-package Signer base import via `../../core/src/signers/Signer.js` (relative path convention). `@noble/hashes` declared as a runtime dep (used by `deriveLedgerDeviceIdentifier`'s `sha256`).
+
+`packages/core/src/signers/index.js` keeps a back-compat re-export for `LedgerSigner` / `deriveLedgerDeviceIdentifier` / `modelFromLedgerTransport`. `pnpm install --no-frozen-lockfile` registered the second new package (10 packages total). `makeLedgerFactory` in core stays as the post-init pair sequence.
+
+**Cluster Z closed at v0.267.0** — both vendor-signer packages (Trezor + Ledger) now live in their own workspace projects per the §9 architecture goal. Future signer vendors (Coldcard, BitBox, etc.) follow the same split.
+
+### Added
+
+- **`packages/signers-ledger/package.json`** — workspace package with `exports` map covering the entry + the two impl files; `@noble/hashes` runtime dep.
+- **`packages/signers-ledger/src/index.js`** — canonical export entry (LedgerSigner + helpers + ledgerFormat helpers).
+- **`packages/signers-ledger/src/LedgerSigner.js`** — moved from `packages/core/src/signers/LedgerSigner.js`; Signer base imported via relative cross-package path.
+- **`packages/signers-ledger/src/ledgerFormat.js`** — moved from `packages/core/src/signers/ledgerFormat.js`.
+- **`test/smoke/signers/signers-ledger-package.smoke.js`** (new) — pins the package layout, exports map, and back-compat shim.
+
+### Changed
+
+- **`packages/core/src/signers/index.js`** — LedgerSigner re-export now points at `../../../signers-ledger/src/LedgerSigner.js`.
+- **`pnpm-lock.yaml`** — refreshed to register the second new workspace project.
+- **`test/smoke/signers/ledger-signer.smoke.js`** — reads LedgerSigner.js + ledgerFormat.js from the new package path.
+- **`test/smoke/multisig/multisig-psbt-signing.smoke.js`** + **`test/smoke/multisig/multisig-signer.smoke.js`** — direct LedgerSigner.js path imports follow the move (mechanical update; these smokes are pre-existing baseline FAILs for unrelated multisig reasons).
+
+Closes G002. Cluster Z closed.
+
 ## [0.266.0] - 2026-04-28
 
 §9 — Cluster Z Step 1 of 2 — G001 standalone `@xchain-wallet/signers-trezor` package.

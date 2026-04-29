@@ -20,11 +20,13 @@ export {
     firmwareVersionFromFeatures,
 } from '../../../signers-trezor/src/TrezorSigner.js';
 
+// §9 / G002 — LedgerSigner now lives in @xchain-wallet/signers-ledger.
+// Same back-compat shim as @xchain-wallet/signers-trezor above.
 export {
     LedgerSigner,
     deriveLedgerDeviceIdentifier,
     modelFromLedgerTransport,
-} from './LedgerSigner.js';
+} from '../../../signers-ledger/src/LedgerSigner.js';
 
 export { RemoteSigner } from './RemoteSigner.js';
 

@@ -182,6 +182,12 @@ importers:
         specifier: ^0.22.0
         version: 0.22.0(rollup@4.60.2)(vite@5.4.21(@types/node@25.6.0))
 
+  packages/signers-ledger:
+    dependencies:
+      '@noble/hashes':
+        specifier: ^1.5.0
+        version: 1.8.0
+
   packages/signers-trezor: {}
 
   packages/test-dapp:
