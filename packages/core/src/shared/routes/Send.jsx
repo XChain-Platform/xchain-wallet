@@ -36,6 +36,7 @@ import { RawPsbtViewer } from '../components/RawPsbtViewer.jsx';
 import { useToast } from '../components/ToastHost.jsx';
 import { useHaptic } from '../hooks/useHaptic.js';
 import { useFormDraft } from '../hooks/useFormDraft.js';
+import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import styles from './Send.module.css';
 
 // §30.5 user-initiated cancel detection. HW-device libraries surface a
@@ -160,17 +161,9 @@ export function Send({ walletId, onBack, prefill = null }) {
 
     // §18.4 firmware-warning support. When the source address is HW we
     // need vendor / model / firmwareVersion to render the warning banner
-    // inside HwSignBlock. We look up the matching SignerRecord lazily —
-    // listSigners is small (a few records per wallet), runs once per
-    // walletId change, and is graceful if it fails.
-    const [signersByWallet, setSignersByWallet] = useState(/** @type {any[]} */ ([]));
-    useEffect(() => {
-        let cancelled = false;
-        messaging.listSigners(walletId)
-            .then((rows) => { if (!cancelled) setSignersByWallet(Array.isArray(rows) ? rows : []); })
-            .catch(() => { /* silent — banner just doesn't render */ });
-        return () => { cancelled = true; };
-    }, [walletId, messaging]);
+    // inside HwSignBlock. The shared `useSignerInfo` hook (Cluster N
+    // FOLLOWUP 2) consolidates the SignerRecord lookup and caches the
+    // signer list across re-mounts.
 
     // §29.4 / §21.6 autocomplete source data. Contacts cover the whole
     // vault and load once; history is per-chain × per-address and
@@ -654,16 +647,10 @@ export function Send({ walletId, onBack, prefill = null }) {
     // explicit default fallback so v2 records without the field behave
     // like 'full' (the broadcast path).
     const { isWatcherMode } = useWalletMode();
-    const hwSignerInfo = useMemo(() => {
-        if (!isHwSource || !fromAddress?.signerId) return null;
-        const rec = signersByWallet.find((s) => s?.id === fromAddress.signerId);
-        if (!rec) return null;
-        return {
-            vendor: rec.vendor,
-            model: rec.model,
-            firmwareVersion: rec.firmwareVersion ?? null,
-        };
-    }, [isHwSource, fromAddress, signersByWallet]);
+    const hwSignerInfo = useSignerInfo({
+        walletId,
+        signerId: isHwSource ? fromAddress?.signerId : null,
+    });
     const [hwStatus, setHwStatus] = useState(/** @type {string} */ ('idle'));
     const onHwStatusChange = useCallback(({ status }) => {
         setHwStatus(status);

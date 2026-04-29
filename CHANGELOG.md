@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.274.0] - 2026-04-28
+
+§18.4 / Cluster N FOLLOWUP 2 (partial) — `useSignerInfo` hook + Send.jsx adoption.
+
+`packages/core/src/shared/hooks/useSignerInfo.js` consolidates the SignerRecord-lookup plumbing every HW sign surface needs to render `<HwFirmwareBanner>` + the derivation-path advisory copy. The hook owns a module-level walletId-keyed cache so re-mounting a sign surface inside the same view doesn't refetch `messaging.listSigners`.
+
+Send.jsx is the first adopter — its previous inline `signersByWallet` state + useEffect + useMemo lookup collapses to one `useSignerInfo({ walletId, signerId })` call. The remaining sign surfaces (TokenAdminForm, BroadcastForm, DividendForm, SwapForm, ExecuteContractForm, DestroyForm, StakingActionForm, ComposeMessage, plus the multisig signing flow) follow the same pattern; this commit closes the FOLLOWUP partially with the hook + first-class adopter shipped, and the broader sweep continues as a successor FOLLOWUP.
+
+### Added
+
+- **`packages/core/src/shared/hooks/useSignerInfo.js`** — hook + `__clearSignerInfoCache` test helper.
+- **`test/smoke/ui/use-signer-info.smoke.js`** (new).
+
+### Changed
+
+- **`packages/core/src/shared/routes/Send.jsx`** — swap inline lookup for `useSignerInfo`.
+
+Closes Cluster N FOLLOWUP 2 partially (hook landed; sweep across remaining HW sign surfaces continues).
+
 ## [0.273.0] - 2026-04-28
 
 §53 / Cluster K FOLLOWUP 2 — focus-visible ring sweep on interactive primitives.
