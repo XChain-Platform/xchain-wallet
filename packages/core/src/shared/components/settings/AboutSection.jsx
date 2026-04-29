@@ -45,6 +45,17 @@ export function AboutSection() {
     const [busy, setBusy] = useState(false);
     const [status, setStatus] = useState(/** @type {string | null} */ (null));
     const [error, setError] = useState(/** @type {string | null} */ (null));
+    const [preview, setPreview] = useState(/** @type {string | null} */ (null));
+    const [previewOpen, setPreviewOpen] = useState(false);
+    const [previewBusy, setPreviewBusy] = useState(false);
+
+    async function fetchDump() {
+        if (typeof messaging?.getDiagnosticDump !== 'function') {
+            throw new Error('Diagnostic dump is not available in this shell.');
+        }
+        const dump = await messaging.getDiagnosticDump();
+        return JSON.stringify(dump, null, 2);
+    }
 
     async function handleCopyDiagnostics() {
         if (busy) return;
@@ -52,17 +63,36 @@ export function AboutSection() {
         setStatus(null);
         setError(null);
         try {
-            if (typeof messaging?.getDiagnosticDump !== 'function') {
-                throw new Error('Diagnostic dump is not available in this shell.');
-            }
-            const dump = await messaging.getDiagnosticDump();
-            const text = JSON.stringify(dump, null, 2);
+            const text = preview ?? (await fetchDump());
+            if (preview === null) setPreview(text);
             await navigator.clipboard?.writeText?.(text);
             setStatus(`Copied — ${text.length.toLocaleString()} bytes. Paste into your bug report.`);
         } catch (err) {
             setError(err?.message || 'Could not copy diagnostics.');
         } finally {
             setBusy(false);
+        }
+    }
+
+    async function handleTogglePreview() {
+        if (previewOpen) {
+            setPreviewOpen(false);
+            return;
+        }
+        setError(null);
+        if (preview !== null) {
+            setPreviewOpen(true);
+            return;
+        }
+        setPreviewBusy(true);
+        try {
+            const text = await fetchDump();
+            setPreview(text);
+            setPreviewOpen(true);
+        } catch (err) {
+            setError(err?.message || 'Could not load diagnostics preview.');
+        } finally {
+            setPreviewBusy(false);
         }
     }
 
@@ -98,16 +128,50 @@ export function AboutSection() {
                 )}
             </Row>
             <Row label="Diagnostics">
-                <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={handleCopyDiagnostics}
-                    loading={busy}
-                    disabled={busy}
-                >
-                    Copy diagnostics
-                </Button>
+                <div style={{ display: 'flex', gap: 'var(--xc-space-2)', alignItems: 'center' }}>
+                    <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={handleTogglePreview}
+                        loading={previewBusy}
+                        disabled={previewBusy}
+                        aria-expanded={previewOpen}
+                        aria-controls="diagnostic-dump-preview"
+                    >
+                        {previewOpen ? 'Hide preview' : 'Show preview'}
+                    </Button>
+                    <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={handleCopyDiagnostics}
+                        loading={busy}
+                        disabled={busy}
+                    >
+                        Copy diagnostics
+                    </Button>
+                </div>
             </Row>
+            {previewOpen && preview !== null ? (
+                <pre
+                    id="diagnostic-dump-preview"
+                    style={{
+                        margin: 0,
+                        padding: 'var(--xc-space-3)',
+                        background: 'var(--xc-surface-sunken, var(--xc-surface-raised))',
+                        border: '1px solid var(--xc-border)',
+                        borderRadius: 'var(--xc-radius-md)',
+                        fontSize: 'var(--xc-text-xs)',
+                        fontFamily: 'var(--xc-font-mono, monospace)',
+                        color: 'var(--xc-text-muted)',
+                        whiteSpace: 'pre-wrap',
+                        wordBreak: 'break-all',
+                        maxHeight: '24rem',
+                        overflow: 'auto',
+                    }}
+                >
+                    {preview}
+                </pre>
+            ) : null}
             {status ? (
                 <div role="status" aria-live="polite" style={{ ...ROW_VALUE_MUTED, padding: 'var(--xc-space-2) var(--xc-space-3)' }}>
                     {status}

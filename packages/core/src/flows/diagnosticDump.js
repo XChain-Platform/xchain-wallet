@@ -14,8 +14,13 @@
 //                  connected-sites, pending-txs.
 //   INCLUDE:       non-sensitive settings (theme, autolock, fiat,
 //                  privacy flags, ADS counters), chain descriptor ids
-//                  + kind, endpoints + user-custom flag, signer kinds,
-//                  recent errors (truncated), build metadata.
+//                  + kind, default endpoints, signer kinds, recent
+//                  errors (truncated), build metadata.
+//   HASH (Cluster L FOLLOWUP 3): user-supplied free-form text that
+//                  could identify the wallet — custom endpoint URLs.
+//                  Replaced with `redacted:sha256:<8-hex>` so two
+//                  dumps from the same user remain comparable without
+//                  exposing the original string.
 //
 // Callers pass optional `recentErrors` (last N from the shell's
 // error hook), `signers` (installed signer kinds — just type/model,
@@ -24,8 +29,12 @@
 // `null` in the output rather than throwing, so a diagnostic dump is
 // always producible even on a half-configured wallet.
 
+import { sha256 } from '@noble/hashes/sha2';
+import { bytesToHex } from '@noble/hashes/utils';
+
 const RECENT_ERRORS_LIMIT = 50;
 const ERROR_MESSAGE_LIMIT = 500;
+const REDACTED_HASH_PREFIX_LEN = 8;
 
 /**
  * @typedef {Object} DiagnosticDumpEnv
@@ -118,14 +127,14 @@ export async function diagnosticDump(opts = {}) {
 
     const endpoints = chainRegistry
         ? chainRegistry.supportedChains().map((d) => {
-              const custom = settingsSnapshot?.sdkEndpoints?.[d.id];
-              if (custom) {
+              const override = settingsSnapshot?.sdkEndpoints?.[d.id];
+              if (override) {
                   return {
                       chainId: d.id,
-                      explorerUrl: custom.explorerUrl,
-                      encoderUrl: custom.encoderUrl,
-                      hubUrl: custom.hubUrl,
-                      custom: custom.custom === true,
+                      explorerUrl: redactCustomUrl(override.explorerUrl),
+                      encoderUrl: redactCustomUrl(override.encoderUrl),
+                      hubUrl: redactCustomUrl(override.hubUrl),
+                      custom: override.custom === true,
                   };
               }
               return {
@@ -300,4 +309,15 @@ function joinEndpoint(e) {
     if (!e) return '';
     if (e.defaultPort === 80 || e.defaultPort === 443) return e.defaultUrl;
     return `${e.defaultUrl}:${e.defaultPort}`;
+}
+
+// Custom endpoint URLs are user-supplied free-form strings (private
+// node hostnames, internal proxies). Replace with a stable hash prefix
+// so two dumps from the same user remain comparable but the original
+// URL never leaves the wallet.
+function redactCustomUrl(url) {
+    if (typeof url !== 'string' || url.length === 0) return '';
+    const bytes = new TextEncoder().encode(url);
+    const hex = bytesToHex(sha256(bytes)).slice(0, REDACTED_HASH_PREFIX_LEN);
+    return `redacted:sha256:${hex}`;
 }

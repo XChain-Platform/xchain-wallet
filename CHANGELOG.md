@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.284.0] - 2026-04-28
+
+§50 / Cluster L FOLLOWUP 3 — diagnostic dump redaction sweep + AboutSection preview.
+
+`flows/diagnosticDump.js` now hashes user-supplied custom endpoint URLs (`settings.sdkEndpoints[chainId].{explorerUrl,encoderUrl,hubUrl}`) into stable `redacted:sha256:<8-hex>` strings via `redactCustomUrl`. Built-in defaults from the chain registry continue to pass through verbatim. The hash is deterministic across runs so a single user's dumps remain comparable, but the original hostname (private node, internal proxy) never leaves the wallet. Header comment grows a HASH category alongside NEVER / COUNT / INCLUDE so future Settings additions know the rule.
+
+`shared/components/settings/AboutSection.jsx` ships a "Show preview" toggle next to "Copy diagnostics". The preview pre fetches the dump via the existing `messaging.getDiagnosticDump` path, caches it, and renders the pretty-printed JSON inside a scrollable monospace region wired with `aria-expanded` + `aria-controls` for assistive tech. The user sees exactly what they're about to paste before they paste it.
+
+### Added
+
+- **`packages/core/src/flows/diagnosticDump.js`** — `redactCustomUrl` helper + sha256 import; HASH section in header docstring.
+- **`packages/core/src/shared/components/settings/AboutSection.jsx`** — `previewOpen` / `preview` / `previewBusy` state; `fetchDump` extraction; `handleTogglePreview`; preview region with aria wiring.
+- **`test/smoke/audits/diagnostic-dump-redaction.smoke.js`** (new).
+
+Closes Cluster L FOLLOWUP 3.
+
 ## [0.283.0] - 2026-04-28
 
 §47 / Cluster L FOLLOWUP 2 — extension popup deep-link via manifest `protocol_handlers`.
