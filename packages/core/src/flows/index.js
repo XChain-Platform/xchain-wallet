@@ -309,3 +309,9 @@ export {
     refreshChainRegistry,
     createChainRegistryStatus,
 } from './refreshChainRegistry.js';
+export {
+    refreshFirmwareManifest,
+    resolveActiveFirmwareManifest,
+    createInMemoryFirmwareManifestCache,
+    FIRMWARE_MANIFEST_CACHE_KEY,
+} from './firmwareManifestRefresh.js';

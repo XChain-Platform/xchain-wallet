@@ -5,7 +5,7 @@
 // package.json bump per the wallet's synchronized-versioning rule.
 // See CHANGELOG.md for the version's release context.
 
-export const WALLET_VERSION = '0.281.0';
+export const WALLET_VERSION = '0.282.0';
 
 // License identifiers matching repo metadata.
 export const LICENSE_NAME = 'Dankest Community License (Apache-2.0 + Additional Terms)';
@@ -37,3 +37,24 @@ export const RELEASE_SIGNATURES_PUBLISHED = false;
 // Update channel — currently only "development". Production / beta
 // channels land at v1.0 GA per spec §51.
 export const UPDATE_CHANNEL = 'development';
+
+// §18.4 / Cluster N FOLLOWUP 1 — runtime-fetched firmware manifest.
+//
+// The wallet ships with a bundled `FIRMWARE_MANIFEST` (see
+// signers/firmware-manifest.js). Newer advisories published between
+// wallet releases can be picked up via `refreshFirmwareManifest()`
+// fetching a signed JSON file from `FIRMWARE_MANIFEST_URL` and
+// verifying it against `FIRMWARE_MANIFEST_PUBLIC_KEY`.
+//
+// Pre-launch posture: both the signing key and the hosted endpoint are
+// gated on §51 release-signing infrastructure publication. Empty
+// values short-circuit the refresh flow — `refreshFirmwareManifest`
+// returns `{ ok: false, reason: 'not-configured' }` so callers don't
+// hit a placeholder URL. When the signing key is published, fill
+// these constants and ship a release.
+export const FIRMWARE_MANIFEST_URL = '';
+export const FIRMWARE_MANIFEST_PUBLIC_KEY = '';
+// Cache TTL — fresh-ness window for a previously refreshed manifest.
+// Older cache entries fall back to the bundled manifest. 24 hours
+// matches the §18.4 deferred-shape sketch.
+export const FIRMWARE_MANIFEST_TTL_MS = 24 * 60 * 60 * 1000;

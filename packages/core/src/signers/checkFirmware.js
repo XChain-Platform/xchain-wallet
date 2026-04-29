@@ -31,8 +31,6 @@
 
 import { FIRMWARE_MANIFEST } from './firmware-manifest.js';
 
-const manifest = FIRMWARE_MANIFEST;
-
 /** @typedef {'ok' | 'outdated' | 'vulnerable' | 'unsupported' | 'unknown'} FirmwareStatus */
 
 /**
@@ -49,10 +47,11 @@ const manifest = FIRMWARE_MANIFEST;
  */
 
 /**
- * @param {{ vendor: string, model: string, version: string }} input
+ * @param {{ vendor: string, model: string, version: string, manifest?: object }} input
  * @returns {FirmwareVerdict}
  */
-export function checkFirmware({ vendor, model, version }) {
+export function checkFirmware({ vendor, model, version, manifest: manifestArg }) {
+    const manifest = manifestArg ?? FIRMWARE_MANIFEST;
     const vendorEntry = manifest.vendors?.[vendor];
     if (!vendorEntry) {
         return unknown({ vendor, model, version, updateUrl: null });

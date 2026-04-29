@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.282.0] - 2026-04-28
+
+§18.4 / Cluster N FOLLOWUP 1 — runtime-fetched firmware manifest with bundled fallback.
+
+`flows/firmwareManifestRefresh.js` adds the orchestrator: `refreshFirmwareManifest({ fetch, verify, cache, url, publicKey, now })` fetches a signed JSON envelope `{ manifest, signature }`, verifies the signature against the bundled public key, and writes the verified payload to a pluggable cache backend with a `fetchedAt` timestamp. Failure modes return structured codes — `not-configured`, `network`, `schema`, `signature` — and never write the cache, so a CDN outage or a tampered payload cannot downgrade the safety baseline.
+
+`resolveActiveFirmwareManifest({ cache, now, ttlMs })` is the consumer-facing resolver. Cache hit within TTL → use cached payload (`source: 'cache'`). Cache empty or stale (older than `FIRMWARE_MANIFEST_TTL_MS = 24h`) → fall back to the bundled `FIRMWARE_MANIFEST` (`source: 'bundled'`). Stale cache is treated identically to cache miss to prevent silent downgrades on extended outages.
+
+`checkFirmware` gains an optional `manifest` arg (back-compat default = bundled), so callers can pass the resolver's output through.
+
+`buildInfo.js` exports `FIRMWARE_MANIFEST_URL`, `FIRMWARE_MANIFEST_PUBLIC_KEY` (both empty pre-launch — gated on §51 release-signing key publication), and `FIRMWARE_MANIFEST_TTL_MS`. The refresh flow short-circuits to `not-configured` until both are filled.
+
+Partial coverage note: the cache backend is plumbed but only the in-memory adapter (`createInMemoryFirmwareManifestCache`) ships today — chrome.storage.local / IndexedDB / userData adapters land alongside the §51 release-signing infrastructure.
+
+### Added
+
+- **`packages/core/src/flows/firmwareManifestRefresh.js`** — `refreshFirmwareManifest` + `resolveActiveFirmwareManifest` + `createInMemoryFirmwareManifestCache` + `FIRMWARE_MANIFEST_CACHE_KEY`.
+- **`packages/core/src/flows/index.js`** — re-exports the new symbols.
+- **`packages/core/src/buildInfo.js`** — `FIRMWARE_MANIFEST_URL`, `FIRMWARE_MANIFEST_PUBLIC_KEY`, `FIRMWARE_MANIFEST_TTL_MS`.
+- **`packages/core/src/signers/checkFirmware.js`** — optional `manifest` arg.
+- **`test/smoke/signers/firmware-manifest-refresh.smoke.js`** (new).
+
+Closes Cluster N FOLLOWUP 1 (with a partial-coverage note on shell cache backends — those land with the release-signing key).
+
 ## [0.281.0] - 2026-04-28
 
 §25.1 / Cluster J FOLLOWUP 4 — license re-acceptance gate covers the unlocked Add-Wallet lane.
