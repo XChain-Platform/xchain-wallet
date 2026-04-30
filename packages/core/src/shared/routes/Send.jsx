@@ -22,6 +22,7 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDeveloperMode } from '../hooks/useDeveloperMode.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { checkRecipientNovelty } from '../../flows/recipientNovelty.js';
+import { classifySignRisk } from '../../flows/signRiskClassifier.js';
 import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
@@ -656,12 +657,57 @@ export function Send({ walletId, onBack, prefill = null }) {
         setHwStatus(status);
     }, []);
 
+    // §18.5 / Cluster N FOLLOWUP 3 — risk classifier drives the explicit
+    // cross-check confirm checkbox on HW signs. Re-runs whenever the
+    // risk inputs change (signer, amount, recipient, settings). HW path
+    // only — software signers never render the cross-check block.
+    const [hwExplicitConfirmed, setHwExplicitConfirmed] = useState(false);
+    const signRisk = useMemo(() => {
+        if (!isHwSource) return { requireExplicitConfirm: false, reason: null };
+        const desc = chainId ? chainRegistry.get(chainId) : null;
+        const nativeTicker = desc?.coin?.toUpperCase();
+        const amt = parseFloat(String(amount).trim());
+        const isNativeSend = !!nativeTicker
+            && asset.trim().toUpperCase() === nativeTicker
+            && Number.isFinite(amt) && amt > 0;
+        const amountSats = isNativeSend ? Math.floor(amt * 1e8) : 0;
+        let recipientNovel = false;
+        if (toAddress.trim() && desc?.coin) {
+            const novelty = checkRecipientNovelty({
+                address: toAddress.trim(),
+                chainCoin: desc.coin,
+                contacts,
+                historyRows,
+            });
+            recipientNovel = novelty.novel === true;
+        }
+        return classifySignRisk({
+            signerKind: fromAddress?.source,
+            amountSats,
+            recipientNovel,
+            multisig: false, // Send.jsx is single-sig; multisig flow is separate.
+            settings: {
+                testSendThresholdSats: Number(settings?.grace?.testSendThresholdSats) || 0,
+                alwaysRequireHwExplicitConfirm: settings?.privacy?.alwaysRequireHwExplicitConfirm === true,
+            },
+        });
+    }, [isHwSource, fromAddress?.source, chainId, asset, amount, toAddress, contacts, historyRows, settings]);
+    // Reset the confirm state whenever the requirement flips on, so a
+    // user can't carry a stale "yes" through a recipient/amount change.
+    useEffect(() => {
+        setHwExplicitConfirmed(false);
+    }, [signRisk.requireExplicitConfirm, fromAddress?.address, toAddress, amount]);
+
     async function handleSubmit(event) {
         event.preventDefault();
         if (stage === 'submitting') return;
         if (!isWatcherMode) {
             if (!isHwSource && password.length === 0) return;
             if (isHwSource && hwStatus !== 'available') return;
+            // Cluster N FOLLOWUP 3 — block submit if the risk classifier
+            // demands an explicit cross-check confirm and the user
+            // hasn't checked the box.
+            if (isHwSource && signRisk.requireExplicitConfirm && !hwExplicitConfirmed) return;
         }
         setStage('submitting');
         setSubmitError(null);
@@ -970,6 +1016,9 @@ export function Send({ walletId, onBack, prefill = null }) {
                         })}
                         onStatusChange={onHwStatusChange}
                         signerInfo={hwSignerInfo}
+                        requireExplicitConfirm={signRisk.requireExplicitConfirm}
+                        requireExplicitConfirmReason={signRisk.reason}
+                        onConfirmedChange={setHwExplicitConfirmed}
                     />
                 ) : (
                     <Input
@@ -1009,7 +1058,8 @@ export function Send({ walletId, onBack, prefill = null }) {
                             || (isWatcherMode
                                 ? false
                                 : isHwSource
-                                    ? hwStatus !== 'available'
+                                    ? (hwStatus !== 'available'
+                                        || (signRisk.requireExplicitConfirm && !hwExplicitConfirmed))
                                     : password.length === 0)
                         }
                     >

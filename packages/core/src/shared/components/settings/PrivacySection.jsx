@@ -95,6 +95,12 @@ export function PrivacySection() {
                 checked={settings.privacy.hapticsEnabled !== false}
                 onChange={(v) => onToggle('hapticsEnabled', v)}
             />
+            <ToggleRow
+                label="Always require hardware cross-check confirm"
+                hint="Forces the explicit “I’ve verified path + address” checkbox on every hardware-wallet sign, regardless of amount or recipient. The wallet already requires it for risky signs (large amounts, first-time recipients, multisig). Turn this on to require it on every HW sign."
+                checked={settings.privacy.alwaysRequireHwExplicitConfirm === true}
+                onChange={(v) => onToggle('alwaysRequireHwExplicitConfirm', v)}
+            />
             <div style={ROW}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
                     <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>

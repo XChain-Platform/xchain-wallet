@@ -31,6 +31,9 @@ import styles from './HwSignBlock.module.css';
  * @param {((opts?: object) => Promise<any>) | null} props.getStatus   signer.getStatus; pass null to disable polling
  * @param {(state: { status: string, detail: string | null, refresh: () => void }) => void} [props.onStatusChange]   parent subscribes to status
  * @param {{ vendor: string, model: string, firmwareVersion: string | null } | null} [props.signerInfo]   firmware metadata for the warning banner; when omitted the banner is suppressed (graceful for callers that don't have the SignerRecord on hand)
+ * @param {boolean} [props.requireExplicitConfirm]   Cluster N FOLLOWUP 3 — when true, render the cross-check confirm checkbox; parent gates Submit on the result via onConfirmedChange.
+ * @param {string | null} [props.requireExplicitConfirmReason]   user-facing one-liner explaining *why* the explicit confirm is required (e.g. "First-time recipient — confirm…"). Surfaces above the checkbox.
+ * @param {(confirmed: boolean) => void} [props.onConfirmedChange]   parent subscribes to the checkbox state.
  */
 export function HwSignBlock({
     signerKind,
@@ -41,6 +44,9 @@ export function HwSignBlock({
     getStatus,
     onStatusChange,
     signerInfo,
+    requireExplicitConfirm,
+    requireExplicitConfirmReason,
+    onConfirmedChange,
 }) {
     const { status, detail, refresh } = useSignerStatus({ getStatus, chainId });
 
@@ -53,11 +59,29 @@ export function HwSignBlock({
     return (
         <div className={styles.root}>
             {signerInfo ? <HwFirmwareBanner signerInfo={signerInfo} /> : null}
+            {requireExplicitConfirm && requireExplicitConfirmReason ? (
+                <p
+                    role="status"
+                    style={{
+                        margin: 0,
+                        padding: 'var(--xc-space-2) var(--xc-space-3)',
+                        background: 'var(--xc-warning-bg, var(--xc-surface-raised))',
+                        border: '1px solid var(--xc-warning, var(--xc-border))',
+                        borderRadius: 'var(--xc-radius-sm)',
+                        fontSize: 'var(--xc-text-sm)',
+                        color: 'var(--xc-text)',
+                    }}
+                >
+                    {requireExplicitConfirmReason}
+                </p>
+            ) : null}
             <DerivationPathCrossCheck
                 signerKind={signerKind}
                 signerName={signerName}
                 path={path}
                 address={address}
+                requireExplicitConfirm={requireExplicitConfirm}
+                onConfirmedChange={onConfirmedChange}
             />
             {status !== 'idle' ? (
                 <div className={styles.statusRow} data-status={status} role="status">

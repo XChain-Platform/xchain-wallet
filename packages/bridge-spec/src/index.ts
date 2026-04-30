@@ -16,6 +16,27 @@
 // Kept in sync with this package's package.json version.
 export const BRIDGE_SPEC_VERSION = '0.1.0';
 
+// Cluster F FOLLOWUP 3 — version negotiation. Versions a wallet
+// claiming to implement BRIDGE_SPEC_VERSION can speak. dApps requesting
+// a version outside this list get a clean BRIDGE_VERSION_MISMATCH from
+// `connect`, instead of a generic error when they later call a method
+// the wallet doesn't recognize.
+//
+// Today we ship one supported version (0.1.0). When 0.2.0 lands and the
+// wallet supports both, this becomes ['0.1.0', '0.2.0']. When 0.1.0 is
+// retired, drop it.
+export const BRIDGE_SUPPORTED_VERSIONS: readonly string[] = ['0.1.0'];
+
+/**
+ * @returns true when the requested bridge version is one this wallet
+ * supports. Empty / non-string requests pass through (the connect
+ * handler will fall back to BRIDGE_SPEC_VERSION as the assumed version).
+ */
+export function isBridgeVersionSupported(requested: unknown): boolean {
+    if (typeof requested !== 'string' || requested.length === 0) return true;
+    return BRIDGE_SUPPORTED_VERSIONS.includes(requested);
+}
+
 // Version of the Sign-in with XChain challenge format (§43.6).
 export const SIGN_IN_CHALLENGE_VERSION = 1;
 

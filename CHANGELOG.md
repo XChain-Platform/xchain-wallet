@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.317.0] - 2026-04-29
+
+§18.5 / Cluster N FOLLOWUP 3 — sign-flow risk classifier drives the HW cross-check explicit-confirm checkbox. v0.202.0 added a `requireExplicitConfirm` opt-in to `<DerivationPathCrossCheck>` but no caller flipped it on. v0.317.0 ships a per-flow risk classifier so high-risk signs (large amounts, first-time recipients, multisig coordinator approvals, or always-on per user setting) require an explicit "I've verified path + address" checkbox before Submit enables; everything else stays frictionless.
+
+`packages/core/src/flows/signRiskClassifier.js` (new) exports `classifySignRisk({ signerKind, amountSats, recipientNovel, multisig, settings })` returning `{ requireExplicitConfirm: boolean, reason: string | null }`. Pure function — no I/O. Software signers always return false (the cross-check block isn't rendered for them). Priority order on HW: settings.alwaysRequireHwExplicitConfirm > multisig > recipient novelty > amount over `testSendThresholdSats`. The reason copy surfaces above the checkbox so the user knows *why* the wallet is asking for explicit confirmation.
+
+`packages/core/src/schemas/settings.js` adds `privacy.alwaysRequireHwExplicitConfirm?: boolean` as v2-tolerant. `<PrivacySection>` adds the toggle. `<HwSignBlock>` accepts `requireExplicitConfirm`, `requireExplicitConfirmReason`, and `onConfirmedChange` props; threads the first two into a reason banner above the cross-check block, and the first + third into `<DerivationPathCrossCheck>`.
+
+`<Send>` imports `classifySignRisk`, computes `signRisk` in a useMemo (re-runs on signer / amount / recipient / settings changes), passes it into `<HwSignBlock>`, and gates Submit on `hwExplicitConfirmed` whenever the classifier requires it. Submit handler also bails on the same condition for defense-in-depth. The confirm state resets whenever the requirement flips on or the recipient/amount changes so a stale "yes" can't carry through.
+
+### Added
+
+- **`packages/core/src/flows/signRiskClassifier.js`** (new) — `classifySignRisk` export.
+- **`packages/core/src/flows/index.js`** — re-exports it.
+- **`packages/core/src/schemas/settings.js`** — `alwaysRequireHwExplicitConfirm` field + validator branch.
+- **`packages/core/src/shared/components/HwSignBlock.jsx`** — three new props + reason banner.
+- **`packages/core/src/shared/components/settings/PrivacySection.jsx`** — always-on toggle.
+- **`packages/core/src/shared/routes/Send.jsx`** — risk classifier + submit gate.
+- **`test/smoke/ui/sign-risk-classifier.smoke.js`** (new) — pins behavioral classifier output, schema acceptance, HwSignBlock + Send wiring, PrivacySection toggle.
+
+Closes Cluster N FOLLOWUP 3.
+
+## [0.316.0] - 2026-04-29
+
+§43 / Cluster F FOLLOWUP 3 — bridge version negotiation. The connect handler used to mirror `req.bridgeVersion` back at the dApp regardless of whether we actually implemented it; a dApp asking for a future version got a friendly success on connect followed by mysterious failures when version-specific methods weren't recognized. v0.316.0 ships an explicit supported-version list and rejects connect cleanly when the request asks for something outside it.
+
+`packages/bridge-spec/src/index.ts` exports `BRIDGE_SUPPORTED_VERSIONS: readonly string[] = ['0.1.0']` plus an `isBridgeVersionSupported(requested)` helper. Empty / non-string requests pass through (the connect handler falls back to `BRIDGE_SPEC_VERSION` for those — keeps the existing dApp behavior intact). The `BRIDGE_VERSION_MISMATCH` error code was already declared in the `BridgeErrorCode` union; this commit wires it.
+
+`packages/extension/src/bridge/handlers.js` calls `isBridgeVersionSupported(req.bridgeVersion)` at the top of `bridge.connect` (after origin + blocklist checks), throwing a `bridgeError('BRIDGE_VERSION_MISMATCH', detail)` on mismatch. Both connect return paths (existing-site and new-grant) now carry `supportedVersions: [...BRIDGE_SUPPORTED_VERSIONS]` so dApps can pre-detect via `provider.version + supportedVersions` before attempting any version-specific method. The hardcoded `'0.1.0'` literal in the version field was replaced with the `BRIDGE_SPEC_VERSION` constant — single source of truth.
+
+### Added
+
+- **`packages/bridge-spec/src/index.ts`** — `BRIDGE_SUPPORTED_VERSIONS` + `isBridgeVersionSupported`.
+- **`packages/extension/src/bridge/handlers.js`** — version-check + supportedVersions in connect return.
+- **`test/smoke/bridge/bridge-version-negotiation.smoke.js`** (new) — pins the export, the connect rejection path, and the new return shape.
+
+Closes Cluster F FOLLOWUP 3.
+
 ## [0.315.0] - 2026-04-29
 
 §24 / Cluster U FOLLOWUP 6 — multi-wallet last-view threading. Switching wallets while sitting on a non-Home view (e.g. /history under wallet A → switch to wallet B) was incorrectly persisting wallet A's current view (`history`) under wallet B's localStorage key, stomping any saved state for B. The persist effect now waits for the resume effect to fire for the new walletId before persisting; the first persist tick after a switch is a grace tick that absorbs the resume's setUnlockedView before any write can happen.

@@ -22,6 +22,11 @@
 import { flows, schemas } from '@xchain-wallet/core';
 import { shouldAutoApproveConnect } from '@xchain-wallet/core/shared/utils/originAutoApprove.js';
 import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
+import {
+    BRIDGE_SPEC_VERSION,
+    BRIDGE_SUPPORTED_VERSIONS,
+    isBridgeVersionSupported,
+} from '@xchain-wallet/bridge-spec';
 import { rejectAllApprovals, UserRejectedError } from './Approvals.js';
 import { emitPermissionDiff, noopBridgeEvents } from './bridgeEvents.js';
 
@@ -89,13 +94,24 @@ export function registerBridgeHandlers(host, opts = {}) {
     register('bridge.connect', async (req, deps) => {
         assertOrigin(req);
         await assertNotBlocked(req, deps);
+        // Cluster F FOLLOWUP 3 — version negotiation. Reject the
+        // connect cleanly when the dApp asks for a bridge version
+        // we don't implement, instead of accepting and failing later
+        // when a version-specific method gets called.
+        if (!isBridgeVersionSupported(req.bridgeVersion)) {
+            throw bridgeError(
+                'BRIDGE_VERSION_MISMATCH',
+                `requested ${JSON.stringify(req.bridgeVersion)}; supported: ${BRIDGE_SUPPORTED_VERSIONS.join(', ')}`,
+            );
+        }
         const { origin, appName = origin, appIcon } = req;
 
         const existing = await findConnectedSite(deps.vault, origin);
         if (existing) {
             await touchLastUsed(deps.vault, existing);
             return {
-                version: req.bridgeVersion ?? '0.1.0',
+                version: req.bridgeVersion ?? BRIDGE_SPEC_VERSION,
+                supportedVersions: [...BRIDGE_SUPPORTED_VERSIONS],
                 chains: existing.permissions.chains,
                 accounts: existing.permissions.accounts,
             };
@@ -140,7 +156,8 @@ export function registerBridgeHandlers(host, opts = {}) {
         });
         await deps.vault.connectedSites.put(site);
         return {
-            version: req.bridgeVersion ?? '0.1.0',
+            version: req.bridgeVersion ?? BRIDGE_SPEC_VERSION,
+            supportedVersions: [...BRIDGE_SUPPORTED_VERSIONS],
             chains: permissions.chains,
             accounts: permissions.accounts,
         };
