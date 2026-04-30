@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.318.0] - 2026-04-29
+
+§37 / Cluster P FOLLOWUP 6 — form-draft retention surfaced in Settings → Privacy. v0.212.0 hard-coded a 24h TTL for in-progress Send / sign-message draft persistence; v0.318.0 makes the retention window user-configurable (Off / 1h / 24h / 7d).
+
+`packages/core/src/schemas/settings.js` exports `FORM_DRAFT_TTL_OFF / _1H / _24H / _7D / _DEFAULT / _OPTIONS` and adds `privacy.formDraftTtlMs?: number` as v2-tolerant. Validator accepts undefined or one of the four allowed durations; anything else fails.
+
+`packages/core/src/shared/hooks/useFormDraft.js` honors `ttlMs === 0` as a kill switch — `load()` evicts any persisted entry and returns null, `save()` short-circuits, `clear()` still works (for cleanup of pre-existing drafts when the user switches from 24h → Off). `Send.jsx` and `SignMessageForm.jsx` read `settings.privacy.formDraftTtlMs` and thread it into `useFormDraft`.
+
+`<PrivacySection>` mounts a new `<FormDraftTtlRow>` with a 4-option `<select>` wired through `update({ privacy: { formDraftTtlMs } })`.
+
+### Added
+
+- **`packages/core/src/schemas/settings.js`** — five new constants + `formDraftTtlMs` field + validator branch.
+- **`packages/core/src/shared/hooks/useFormDraft.js`** — `draftDisabled` short-circuit on `ttlMs=0`.
+- **`packages/core/src/shared/routes/Send.jsx`**, **`SignMessageForm.jsx`** — read settings, thread ttlMs into useFormDraft.
+- **`packages/core/src/shared/components/settings/PrivacySection.jsx`** — `<FormDraftTtlRow>` dropdown.
+- **`test/smoke/ui/form-draft-retention.smoke.js`** (new) — pins constants, schema validator, Off-mode behavior, call-site threading, dropdown wiring.
+
+Closes Cluster P FOLLOWUP 6.
+
 ## [0.317.0] - 2026-04-29
 
 §18.5 / Cluster N FOLLOWUP 3 — sign-flow risk classifier drives the HW cross-check explicit-confirm checkbox. v0.202.0 added a `requireExplicitConfirm` opt-in to `<DerivationPathCrossCheck>` but no caller flipped it on. v0.317.0 ships a per-flow risk classifier so high-risk signs (large amounts, first-time recipients, multisig coordinator approvals, or always-on per user setting) require an explicit "I've verified path + address" checkbox before Submit enables; everything else stays frictionless.

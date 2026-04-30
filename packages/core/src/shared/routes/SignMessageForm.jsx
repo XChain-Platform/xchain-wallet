@@ -27,6 +27,7 @@ import {
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useFormDraft } from '../hooks/useFormDraft.js';
+import { useSettings } from '../hooks/useSettings.js';
 import pickerStyles from './WalletPicker.module.css';
 import styles from './IssueTokenForm.module.css';
 
@@ -39,6 +40,7 @@ const chainRegistry = registryLib.defaultRegistry();
  */
 export function SignMessageForm({ walletId, onBack }) {
     const { messaging, shell } = useMessaging();
+    const { settings } = useSettings();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
 
@@ -60,7 +62,11 @@ export function SignMessageForm({ walletId, onBack }) {
 
     // §37 / G125 — form-draft persistence. Persists chain / address /
     // message; password stays in component state only.
-    const draft = useFormDraft({ view: 'sign-message', walletId });
+    // Cluster P FOLLOWUP 6 — honor settings.privacy.formDraftTtlMs.
+    const formDraftTtlMs = Number.isFinite(settings?.privacy?.formDraftTtlMs)
+        ? Number(settings.privacy.formDraftTtlMs)
+        : undefined;
+    const draft = useFormDraft({ view: 'sign-message', walletId, ttlMs: formDraftTtlMs });
     const [draftPending, setDraftPending] = useState(() => draft.hasDraft());
     useEffect(() => {
         if (signature || !draftPending) return;

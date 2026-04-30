@@ -52,9 +52,10 @@ function safeStorage() {
  * @param {object} options
  * @param {string} options.view              short view name (e.g. 'send', 'sign-message')
  * @param {string | null | undefined} options.walletId  active wallet id; falsy → keyed under 'none'
- * @param {number} [options.ttlMs]           drafts older than this are discarded on load. Default 24h.
+ * @param {number} [options.ttlMs]           drafts older than this are discarded on load. Default 24h. Cluster P FOLLOWUP 6 — pass `0` to disable persistence entirely (the user's privacy.formDraftTtlMs = 0 setting case). load() returns null + save() no-ops + clear() still works (so the call site can clean up an existing draft from a previous setting).
  */
 export function useFormDraft({ view, walletId, ttlMs = DEFAULT_TTL_MS }) {
+    const draftDisabled = ttlMs === 0;
     const storageKey = useMemo(
         () => `${NS}${view || 'unknown'}:${walletId || 'none'}`,
         [view, walletId],
@@ -63,6 +64,13 @@ export function useFormDraft({ view, walletId, ttlMs = DEFAULT_TTL_MS }) {
     const load = useCallback(() => {
         const store = safeStorage();
         if (!store) return null;
+        // Cluster P FOLLOWUP 6 — Off setting evicts any persisted
+        // draft and returns null. Switching from 24h → Off should
+        // wipe pre-existing drafts on next load, not orphan them.
+        if (draftDisabled) {
+            try { store.removeItem(storageKey); } catch { /* swallow */ }
+            return null;
+        }
         try {
             const raw = store.getItem(storageKey);
             if (!raw) return null;
@@ -79,9 +87,10 @@ export function useFormDraft({ view, walletId, ttlMs = DEFAULT_TTL_MS }) {
         } catch {
             return null;
         }
-    }, [storageKey, ttlMs]);
+    }, [storageKey, ttlMs, draftDisabled]);
 
     const save = useCallback((values) => {
+        if (draftDisabled) return;
         const store = safeStorage();
         if (!store) return;
         if (!values || typeof values !== 'object') return;
@@ -102,7 +111,7 @@ export function useFormDraft({ view, walletId, ttlMs = DEFAULT_TTL_MS }) {
         } catch {
             /* QuotaExceeded etc. — swallow; the draft is best-effort */
         }
-    }, [storageKey]);
+    }, [storageKey, draftDisabled]);
 
     const clear = useCallback(() => {
         const store = safeStorage();

@@ -76,7 +76,7 @@ export const CLIPBOARD_AUTO_CLEAR_DEFAULT = 60;
  * @property {string} language
  * @property {Record<string, SdkEndpoint>} sdkEndpoints
  * @property {Record<string, FeeSettings>} fees
- * @property {{ torRouting: boolean, changeAddressRotation: boolean, hideSmallBalances: boolean, blurOnBlur: boolean, labelsSurviveRestore: boolean, clipboardAutoClearSeconds?: number, hapticsEnabled?: boolean, alwaysRequireHwExplicitConfirm?: boolean }} privacy   v2 — adds blurOnBlur (window-unfocus blur of sensitive data), labelsSurviveRestore (§19.5.2 on-chain label sync opt-in); clipboardAutoClearSeconds is optional v2-tolerant — 0–600 inclusive, 0 = never clear, default 60 (§17.7.1 / G028); hapticsEnabled is v2-tolerant — defaults true when absent, set false to suppress every `useHaptic` pulse alongside the OS-level reduced-motion preference (Cluster P FOLLOWUP 1); alwaysRequireHwExplicitConfirm is v2-tolerant — defaults false; when true the HW sign-screen cross-check confirm is required on every sign regardless of the risk classifier (Cluster N FOLLOWUP 3).
+ * @property {{ torRouting: boolean, changeAddressRotation: boolean, hideSmallBalances: boolean, blurOnBlur: boolean, labelsSurviveRestore: boolean, clipboardAutoClearSeconds?: number, hapticsEnabled?: boolean, alwaysRequireHwExplicitConfirm?: boolean }} privacy   v2 — adds blurOnBlur (window-unfocus blur of sensitive data), labelsSurviveRestore (§19.5.2 on-chain label sync opt-in); clipboardAutoClearSeconds is optional v2-tolerant — 0–600 inclusive, 0 = never clear, default 60 (§17.7.1 / G028); hapticsEnabled is v2-tolerant — defaults true when absent, set false to suppress every `useHaptic` pulse alongside the OS-level reduced-motion preference (Cluster P FOLLOWUP 1); alwaysRequireHwExplicitConfirm is v2-tolerant — defaults false; when true the HW sign-screen cross-check confirm is required on every sign regardless of the risk classifier (Cluster N FOLLOWUP 3); formDraftTtlMs is v2-tolerant — defaults to 24h, allowed values are FORM_DRAFT_TTL_OPTIONS (Cluster P FOLLOWUP 6).
  * @property {{ enabled: boolean, perChain: Record<string, AdsChainState> }} ads
  * @property {{ txConfirmations: boolean, incomingReceipts: boolean, dispenserFills: boolean, orderFills: boolean, priceAlerts: boolean }} notifications
  * @property {boolean} developerMode
@@ -92,6 +92,23 @@ export const CLIPBOARD_AUTO_CLEAR_DEFAULT = 60;
  * @property {{ burst?: number, windowMs?: number }} [signThrottle]                                          v2-tolerant — per-origin sign-request token-bucket limits (§12 / G012 / Cluster S FOLLOWUP 1). `burst` is positive integer max requests per window; `windowMs` is window length in ms (positive integer). Either field may be omitted to fall back to SIGN_THROTTLE_DEFAULT_BURST / SIGN_THROTTLE_DEFAULT_WINDOW_MS.
  * @property {typeof WALLET_MODES[number]} [walletMode]                                                      v2-tolerant — `full` (default) signs + broadcasts here; `watcher` builds unsigned PSBTs for an air-gapped signer; `signer` accepts pasted PSBTs from a watcher and returns signed PSBTs (§20 / G039). Send / Home branch on this field in subsequent steps.
  */
+
+// Form-draft retention — surfaced in Settings → Privacy (Cluster P FU 6).
+// Values are durations in ms; 0 means "off" (no drafts persisted at all).
+// Only the four spec-listed values are accepted; any other input fails
+// validation. Off/24h/7d/1h covers the common postures (paranoid, default,
+// long-running send composition, brief).
+export const FORM_DRAFT_TTL_OFF = 0;
+export const FORM_DRAFT_TTL_1H = 60 * 60 * 1000;
+export const FORM_DRAFT_TTL_24H = 24 * 60 * 60 * 1000;
+export const FORM_DRAFT_TTL_7D = 7 * 24 * 60 * 60 * 1000;
+export const FORM_DRAFT_TTL_DEFAULT = FORM_DRAFT_TTL_24H;
+export const FORM_DRAFT_TTL_OPTIONS = Object.freeze([
+    FORM_DRAFT_TTL_OFF,
+    FORM_DRAFT_TTL_1H,
+    FORM_DRAFT_TTL_24H,
+    FORM_DRAFT_TTL_7D,
+]);
 
 // Sign-throttle limits — surfaced in Settings (Cluster S FOLLOWUP 1).
 // Bounds are wide enough that the user can effectively disable throttling
@@ -226,7 +243,13 @@ export function validateSettings(record) {
             // alwaysRequireHwExplicitConfirm is v2-tolerant: missing →
             // default false; when present, require boolean.
             && (r.privacy.alwaysRequireHwExplicitConfirm === undefined
-                || isBoolean(r.privacy.alwaysRequireHwExplicitConfirm)),
+                || isBoolean(r.privacy.alwaysRequireHwExplicitConfirm))
+            // formDraftTtlMs is v2-tolerant: missing → default 24h;
+            // when present, must be one of the allowed values (Off /
+            // 1h / 24h / 7d).
+            && (r.privacy.formDraftTtlMs === undefined
+                || (Number.isFinite(r.privacy.formDraftTtlMs)
+                    && FORM_DRAFT_TTL_OPTIONS.includes(r.privacy.formDraftTtlMs))),
         'malformed',
     );
 

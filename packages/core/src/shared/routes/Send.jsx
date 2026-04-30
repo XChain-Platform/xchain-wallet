@@ -115,7 +115,14 @@ export function Send({ walletId, onBack, prefill = null }) {
     // composition fields; password / mnemonic / passphrase NEVER touch
     // localStorage. The hook is keyed by walletId so a from-seed restore
     // doesn't surface a stranger's draft.
-    const draft = useFormDraft({ view: 'send', walletId });
+    // Cluster P FOLLOWUP 6 — honor the user's privacy.formDraftTtlMs
+    // setting (Off / 1h / 24h / 7d). Default 24h matches the prior
+    // hardcoded behavior. `0` (Off) disables save() + evicts any
+    // existing draft on load.
+    const formDraftTtlMs = Number.isFinite(settings?.privacy?.formDraftTtlMs)
+        ? Number(settings.privacy.formDraftTtlMs)
+        : undefined;
+    const draft = useFormDraft({ view: 'send', walletId, ttlMs: formDraftTtlMs });
     const [draftPending, setDraftPending] = useState(() => draft.hasDraft());
     useEffect(() => {
         if (stage !== 'form' || !draftPending) return;

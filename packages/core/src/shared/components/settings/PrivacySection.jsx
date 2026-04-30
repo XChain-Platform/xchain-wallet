@@ -20,6 +20,11 @@ import {
     CLIPBOARD_AUTO_CLEAR_DEFAULT,
     CLIPBOARD_AUTO_CLEAR_MAX,
     CLIPBOARD_AUTO_CLEAR_MIN,
+    FORM_DRAFT_TTL_OFF,
+    FORM_DRAFT_TTL_1H,
+    FORM_DRAFT_TTL_24H,
+    FORM_DRAFT_TTL_7D,
+    FORM_DRAFT_TTL_DEFAULT,
 } from '../../../schemas/settings.js';
 import { INPUT, ROW, ROW_HINT, ToggleRow, Status, STACK } from './_settingsPrimitives.jsx';
 
@@ -101,6 +106,7 @@ export function PrivacySection() {
                 checked={settings.privacy.alwaysRequireHwExplicitConfirm === true}
                 onChange={(v) => onToggle('alwaysRequireHwExplicitConfirm', v)}
             />
+            <FormDraftTtlRow settings={settings} update={update} />
             <div style={ROW}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
                     <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>
@@ -123,6 +129,52 @@ export function PrivacySection() {
                     style={{ ...INPUT, width: 96 }}
                 />
             </div>
+        </div>
+    );
+}
+
+// Cluster P FOLLOWUP 6 — form-draft retention dropdown.
+function FormDraftTtlRow({ settings, update }) {
+    const current = Number.isFinite(settings?.privacy?.formDraftTtlMs)
+        ? Number(settings.privacy.formDraftTtlMs)
+        : FORM_DRAFT_TTL_DEFAULT;
+    const onChange = async (e) => {
+        const next = Number(e.target.value);
+        try {
+            await update({ privacy: { formDraftTtlMs: next } });
+        } catch (err) {
+            // eslint-disable-next-line no-console
+            console.error('privacy.formDraftTtlMs update failed:', err);
+        }
+    };
+    return (
+        <div style={ROW}>
+            <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+                <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>
+                    Form draft retention
+                </span>
+                <span style={ROW_HINT}>
+                    Send / sign-message forms persist a draft of in-progress
+                    fields so a tab close or wallet lock doesn't lose what
+                    you typed. Drafts older than the retention window are
+                    discarded automatically; "Off" disables persistence and
+                    wipes any existing drafts on next form load.
+                </span>
+            </div>
+            <select
+                value={current}
+                onChange={onChange}
+                aria-label="Form draft retention"
+                style={{
+                    ...INPUT,
+                    width: '7.5rem',
+                }}
+            >
+                <option value={FORM_DRAFT_TTL_OFF}>Off</option>
+                <option value={FORM_DRAFT_TTL_1H}>1 hour</option>
+                <option value={FORM_DRAFT_TTL_24H}>24 hours</option>
+                <option value={FORM_DRAFT_TTL_7D}>7 days</option>
+            </select>
         </div>
     );
 }
