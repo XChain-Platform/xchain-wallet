@@ -87,9 +87,19 @@ export const CLIPBOARD_AUTO_CLEAR_DEFAULT = 60;
  * @property {string[]} [pinnedTokens]                                                                       v2-tolerant — list of `chainId:asset` keys the user pinned to the top of the balance list (§27.3 / G072)
  * @property {string[]} [hiddenTokens]                                                                       v2-tolerant — list of `chainId:asset` keys the user hid (collapsed into the Hidden section at the bottom of each tab) (§27.4 / G073)
  * @property {boolean} [autoApproveLocalhost]                                                                v2-tolerant — when developerMode is also on, bridge.connect from localhost / 127.0.0.1 / [::1] origins skips the approval prompt (§48.6 / G151). Sign requests still prompt.
- * @property {string[]} [blockedOrigins]                                                                     v2-tolerant — user-managed origin blocklist (§12 / G009). bridge.connect + the four sign methods reject with BLOCKED_BY_USER for matching origins. Stored as URL.origin strings.
+ * @property {string[]} [blockedOrigins]                                                                     v2-tolerant — user-managed origin blocklist (§12 / G009). bridge.connect + the four sign methods reject with BLOCKED_BY_USER for matching origins. Stored as URL.origin strings or wildcard patterns (`*.example.com`, Cluster S FOLLOWUP 3).
+ * @property {Array<{ at: number, action: 'add' | 'remove', entry: string, evictedSiteIds?: string[] }>} [blocklistAuditLog]   v2-tolerant — ring-buffer of recent blocklist mutations (Cluster S FOLLOWUP 4). Capped at 50 entries.
+ * @property {{ burst?: number, windowMs?: number }} [signThrottle]                                          v2-tolerant — per-origin sign-request token-bucket limits (§12 / G012 / Cluster S FOLLOWUP 1). `burst` is positive integer max requests per window; `windowMs` is window length in ms (positive integer). Either field may be omitted to fall back to SIGN_THROTTLE_DEFAULT_BURST / SIGN_THROTTLE_DEFAULT_WINDOW_MS.
  * @property {typeof WALLET_MODES[number]} [walletMode]                                                      v2-tolerant — `full` (default) signs + broadcasts here; `watcher` builds unsigned PSBTs for an air-gapped signer; `signer` accepts pasted PSBTs from a watcher and returns signed PSBTs (§20 / G039). Send / Home branch on this field in subsequent steps.
  */
+
+// Sign-throttle limits — surfaced in Settings (Cluster S FOLLOWUP 1).
+// Bounds are wide enough that the user can effectively disable throttling
+// (very large burst, large window) while still preventing nonsense values.
+export const SIGN_THROTTLE_BURST_MIN = 1;
+export const SIGN_THROTTLE_BURST_MAX = 1000;
+export const SIGN_THROTTLE_WINDOW_MS_MIN = 1_000;
+export const SIGN_THROTTLE_WINDOW_MS_MAX = 24 * 60 * 60 * 1000;
 
 /** @returns {Settings} */
 export function createDefaultSettings() {
@@ -289,6 +299,40 @@ export function validateSettings(record) {
             'blockedOrigins',
             Array.isArray(r.blockedOrigins) && r.blockedOrigins.every(isString),
             'must be an array of origin strings',
+        );
+    }
+    if (r.blocklistAuditLog !== undefined) {
+        check(
+            errors,
+            'blocklistAuditLog',
+            Array.isArray(r.blocklistAuditLog)
+                && r.blocklistAuditLog.every((entry) =>
+                    isPlainObject(entry)
+                    && Number.isFinite(entry.at)
+                    && (entry.action === 'add' || entry.action === 'remove')
+                    && isNonEmptyString(entry.entry)
+                    && (entry.evictedSiteIds === undefined
+                        || (Array.isArray(entry.evictedSiteIds)
+                            && entry.evictedSiteIds.every(isString)))),
+            'must be an array of audit-entry objects',
+        );
+    }
+    if (r.signThrottle !== undefined) {
+        check(
+            errors,
+            'signThrottle',
+            isPlainObject(r.signThrottle)
+                // Both fields v2-tolerant individually — undefined falls
+                // back to the default at read time.
+                && (r.signThrottle.burst === undefined
+                    || (Number.isInteger(r.signThrottle.burst)
+                        && r.signThrottle.burst >= SIGN_THROTTLE_BURST_MIN
+                        && r.signThrottle.burst <= SIGN_THROTTLE_BURST_MAX))
+                && (r.signThrottle.windowMs === undefined
+                    || (Number.isInteger(r.signThrottle.windowMs)
+                        && r.signThrottle.windowMs >= SIGN_THROTTLE_WINDOW_MS_MIN
+                        && r.signThrottle.windowMs <= SIGN_THROTTLE_WINDOW_MS_MAX)),
+            'malformed',
         );
     }
     if (r.walletMode !== undefined) {

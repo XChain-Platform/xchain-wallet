@@ -302,10 +302,14 @@ export {
 } from './signThrottle.js';
 export {
     normalizeOrigin,
+    parseWildcardPattern,
+    normalizeBlocklistEntry,
     isOriginBlocked,
     listBlockedOrigins,
     addBlockedOrigin,
     removeBlockedOrigin,
+    listBlocklistAuditLog,
+    clearBlocklistAuditLog,
 } from './blocklist.js';
 export {
     refreshChainRegistry,

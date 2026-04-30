@@ -18,6 +18,7 @@ import { MessageHost } from './MessageHost.js';
 import { registerBridgeHandlers } from '../bridge/handlers.js';
 import * as signerBridge from './signerBridge.js';
 import { createBroadcastQueueStorage } from './broadcastQueueStorage.js';
+import { createSignThrottleStorage } from './signThrottleStorage.js';
 import { DEFAULT_ACTIVE_CHAIN_IDS } from './walletCreate.js';
 
 const {
@@ -144,8 +145,11 @@ const {
     listBlockedOrigins,
     addBlockedOrigin,
     removeBlockedOrigin,
+    listBlocklistAuditLog,
+    clearBlocklistAuditLog,
     refreshChainRegistry,
     createChainRegistryStatus,
+    createSignThrottle,
 } = flows;
 
 /**
@@ -402,9 +406,58 @@ export function createBackgroundHost(deps) {
         // localStorage (web/desktop renderers); pass `null` explicitly
         // to opt out (in-memory only, the v0.292.0 behaviour).
         broadcastQueueStorage = createBroadcastQueueStorage(),
+        // Cluster S FOLLOWUP 2 — pluggable sign-throttle persistence.
+        // Same shape as the broadcast-queue adapter; pass null to opt
+        // out (in-memory only, the v0.219.0 behavior).
+        signThrottleStorage = createSignThrottleStorage(),
         ...hostDeps
     } = deps ?? {};
     const host = new MessageHost(hostDeps);
+
+    // Cluster S FOLLOWUP 1 — sign-throttle limits read from settings.
+    // The throttle's `getLimits` returns from a closure cache so reads
+    // are sync. The cache is hydrated asynchronously (vault.settings.get
+    // is async) by `refreshThrottleLimitsFromVault()`, called both at
+    // host construction and after every successful settings.update.
+    // While the cache is null (first refresh hasn't completed yet), the
+    // throttle falls back to its defaults — fine for a short window.
+    let cachedThrottleLimits = /** @type {{ burst?: number, windowMs?: number } | null} */ (null);
+    /** @type {import('@xchain-wallet/core').storage.Vault | null} */
+    let throttleVault = null;
+    async function refreshThrottleLimitsFromVault() {
+        if (!throttleVault) return;
+        try {
+            const settings = await throttleVault.settings.get();
+            cachedThrottleLimits = settings?.signThrottle ?? null;
+        } catch {
+            // Vault not open yet (boot race) or read failed — keep
+            // whatever was previously cached. The next refresh will
+            // try again.
+        }
+    }
+    // Cluster S FOLLOWUP 2 — persist throttle state across SW restarts.
+    // The throttle is constructed with onPersist wired to the storage
+    // adapter; bucket state is hydrated asynchronously via the throttle's
+    // `seed()` method as soon as the load resolves. While hydration is
+    // pending, the throttle accepts requests against an empty bucket —
+    // worst case a first-request-after-SW-restart slips through, no
+    // worse than today's reset-on-restart behavior.
+    const signThrottle = createSignThrottle({
+        getLimits: () => cachedThrottleLimits || {},
+        onPersist: signThrottleStorage
+            ? (snapshot) => signThrottleStorage.save(snapshot)
+            : undefined,
+    });
+    if (signThrottleStorage) {
+        void (async () => {
+            try {
+                const snapshot = await signThrottleStorage.load();
+                signThrottle.seed(snapshot?.buckets || {});
+            } catch {
+                // Hydration failed — start fresh.
+            }
+        })();
+    }
 
     // --- Wallet management ---------------------------------------------------
 
@@ -557,6 +610,15 @@ export function createBackgroundHost(deps) {
     // --- Settings ------------------------------------------------------------
 
     host.register('settings.get', async (_req, { vault }) => {
+        // Cluster S FOLLOWUP 1 — opportunistic throttle-limits cache
+        // hydration. The bridge handlers don't await this, so the very
+        // first sign request after SW restart may run on stale defaults
+        // for one bucket; the second onward sees the user-configured
+        // limits.
+        if (!throttleVault) {
+            throttleVault = vault;
+            void refreshThrottleLimitsFromVault();
+        }
         return getSettings(vault);
     });
 
@@ -564,7 +626,15 @@ export function createBackgroundHost(deps) {
         const patch = req && typeof req === 'object' && 'patch' in req
             ? /** @type {Record<string, unknown>} */ (req.patch)
             : /** @type {Record<string, unknown>} */ (req ?? {});
-        return updateSettings(vault, patch);
+        const result = await updateSettings(vault, patch);
+        // Cluster S FOLLOWUP 1 — refresh the sign-throttle limit cache
+        // when the patch touches signThrottle so users see the change
+        // take effect on the very next sign request.
+        if (patch && Object.prototype.hasOwnProperty.call(patch, 'signThrottle')) {
+            throttleVault = vault;
+            await refreshThrottleLimitsFromVault();
+        }
+        return result;
     });
 
     // §19.6 — dry-run restore. Derive the first N addresses per active
@@ -789,6 +859,14 @@ export function createBackgroundHost(deps) {
             throw new Error('sites.unblock: origin is required');
         }
         return removeBlockedOrigin({ vault, origin });
+    });
+
+    // Cluster S FOLLOWUP 4 — blocklist audit-log surface.
+    host.register('sites.auditLog.list', async (_req, { vault }) => {
+        return listBlocklistAuditLog({ vault });
+    });
+    host.register('sites.auditLog.clear', async (_req, { vault }) => {
+        return clearBlocklistAuditLog({ vault });
     });
 
     // §9.7 / G007 — runtime chain-registry refresh from hub. Wallet-side
@@ -1884,7 +1962,7 @@ export function createBackgroundHost(deps) {
     // popup window; the default rejects everything with
     // USER_APPROVAL_REQUIRED, giving dApps a structured error instead of
     // a hang when the shell's approval popup isn't wired yet.
-    registerBridgeHandlers(host, { approvals, events: bridgeEvents });
+    registerBridgeHandlers(host, { approvals, events: bridgeEvents, signThrottle });
 
     return host;
 }

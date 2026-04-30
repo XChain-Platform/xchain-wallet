@@ -947,6 +947,16 @@ export function unblockOrigin(req) {
     return /** @type {any} */ (sendMessage('sites.unblock', req));
 }
 
+/** Cluster S FOLLOWUP 4 — blocklist audit log surface. */
+export function listBlocklistAuditLog() {
+    return /** @type {Promise<Array<{ at: number, action: 'add' | 'remove', entry: string, evictedSiteIds?: string[] }>>} */ (
+        sendMessage('sites.auditLog.list')
+    );
+}
+export function clearBlocklistAuditLog() {
+    return /** @type {Promise<{ cleared: number }>} */ (sendMessage('sites.auditLog.clear'));
+}
+
 // §9.7 / G007 — runtime chain-registry refresh from hub.
 export function getChainRegistryStatus() {
     return /** @type {any} */ (sendMessage('chainRegistry.status'));

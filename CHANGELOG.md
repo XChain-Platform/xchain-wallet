@@ -7,6 +7,86 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.306.0] - 2026-04-29
+
+§12 / Cluster S FOLLOWUP 4 — blocklist mutation audit log. Adding or removing an entry in `settings.blockedOrigins` now records a `{ at, action, entry, evictedSiteIds? }` row in `settings.blocklistAuditLog`. Capped at 50 entries (oldest fall off). Idempotent re-adds and no-op removes are skipped — only real state changes are logged.
+
+`packages/core/src/flows/blocklist.js` adds `withAudit` / `trimAudit` helpers, plus `listBlocklistAuditLog` + `clearBlocklistAuditLog` exports. `addBlockedOrigin` records the evicted site count when a wildcard pattern triggers cascade eviction. `packages/extension/src/background/createBackgroundHost.js` registers `sites.auditLog.list` + `sites.auditLog.clear` host routes; popup + web messaging both grow `listBlocklistAuditLog` + `clearBlocklistAuditLog` shims.
+
+`packages/core/src/shared/components/settings/ConnectedSitesSection.jsx` mounts a new `<BlocklistAuditPanel>` between the blocked-origins panel and the throttle panel. The panel renders entries newest-first, scrollable, with a Clear log button. Mount is gated on `messaging.listBlocklistAuditLog` availability so non-extension shells without the wiring degrade silently.
+
+`packages/core/src/schemas/settings.js` adds the `blocklistAuditLog?: AuditEntry[]` field as a v2-tolerant typedef + validator branch.
+
+### Added
+
+- **`packages/core/src/flows/blocklist.js`** — audit ring-buffer + 4 new exports (`withAudit`, `trimAudit`, `listBlocklistAuditLog`, `clearBlocklistAuditLog`).
+- **`packages/core/src/flows/index.js`** — re-exports the new symbols.
+- **`packages/core/src/schemas/settings.js`** — `blocklistAuditLog` typedef + validator branch.
+- **`packages/extension/src/background/createBackgroundHost.js`** — `sites.auditLog.list` + `sites.auditLog.clear` host routes.
+- **`packages/extension/src/popup/messaging.js`**, **`packages/web/src/messaging.js`** — `listBlocklistAuditLog` + `clearBlocklistAuditLog` shims.
+- **`packages/core/src/shared/components/settings/ConnectedSitesSection.jsx`** — `<BlocklistAuditPanel>`.
+- **`test/smoke/ui/blocklist-audit-log.smoke.js`** (new) — pins flow exports, behavioral add/remove/idempotent/cap behavior, schema validator, host routes, messaging shims, panel wiring.
+
+Closes Cluster S FOLLOWUP 4.
+
+## [0.305.0] - 2026-04-29
+
+§12 / Cluster S FOLLOWUP 3 — wildcard / domain blocklist entries. v0.220.0 only matched exact origins; a malicious operator with multiple subdomains under one parent could rotate hosts to skirt the blocklist. v0.305.0 accepts patterns like `*.example.com` so users can block whole domains in one entry.
+
+`packages/core/src/flows/blocklist.js` adds `parseWildcardPattern` (returns the bare domain on match) and `normalizeBlocklistEntry` (wildcard kept verbatim, exact origins normalized to `URL.origin`). `isOriginBlocked` recognizes wildcard entries and matches subdomains via `URL.host` + `endsWith('.<domain>')`. The bare apex is NOT matched by `*.example.com` — users add the apex separately if they want it covered, mirroring browser cookie scoping conventions.
+
+`addBlockedOrigin` accepts wildcards and, when the new entry is a wildcard, walks `connectedSites.list()` to evict every existing record whose origin matches the pattern (the existing exact-match `findBy('origin', …)` only handles exact origins). UI hint in `ConnectedSitesSection` updated to mention wildcards + the apex caveat; manual-block input placeholder shows both forms.
+
+### Added
+
+- **`packages/core/src/flows/blocklist.js`** — `parseWildcardPattern` + `normalizeBlocklistEntry` + wildcard branch in `isOriginBlocked` / `addBlockedOrigin`.
+- **`packages/core/src/flows/index.js`** — re-exports `parseWildcardPattern` + `normalizeBlocklistEntry`.
+- **`packages/core/src/shared/components/settings/ConnectedSitesSection.jsx`** — UI hints + placeholder updated for wildcards.
+- **`test/smoke/ui/blocklist-wildcards.smoke.js`** (new) — pins parse rules, isOriginBlocked branches, addBlockedOrigin wildcard cascade, and UI hints.
+
+Closes Cluster S FOLLOWUP 3.
+
+## [0.304.0] - 2026-04-29
+
+§12 / Cluster S FOLLOWUP 2 — persistent throttle state across SW restarts. The token-bucket sign-throttle was process-scoped — a service-worker restart wiped the bucket map, so a malicious dApp that just got rate-limited could burst-spam right after reload because the wallet "forgot" its recent timestamps. v0.304.0 persists the bucket state so the limit holds across restarts.
+
+`packages/core/src/flows/signThrottle.js` extends `createSignThrottle` to accept `onPersist(snapshot)` (fired fire-and-forget on every check / clear), `initialState.buckets` (hydrate at construction), and a new `seed(persistedBuckets)` method (splice persisted timestamps into the live map without re-firing onPersist; merges + sorts so the windowMs eviction stays chronological — no Set dedupe so distinct same-millisecond requests survive).
+
+`packages/extension/src/background/signThrottleStorage.js` (new) mirrors the broadcast-queue-storage shape: `chrome.storage.local` for extension SW, `localStorage` for web/desktop renderers, `null` for tests. Defensive `coerceSnapshot` filters anything that isn't a finite-number array so a corrupt persisted shape can't crash the background process at boot.
+
+`createBackgroundHost` constructs the throttle with `onPersist` wired to `signThrottleStorage.save` and kicks off async hydration via `signThrottle.seed`. While hydration is pending the throttle starts on an empty bucket — worst case a first-request-after-SW-restart slips through, no worse than the v0.219.0 reset-on-restart behavior.
+
+### Added
+
+- **`packages/core/src/flows/signThrottle.js`** — `onPersist`, `initialState`, `seed()`, `snapshot()` exports.
+- **`packages/extension/src/background/signThrottleStorage.js`** (new) — pluggable persistence adapter.
+- **`packages/extension/src/background/createBackgroundHost.js`** — wires storage adapter into the throttle.
+- **`test/smoke/ui/sign-throttle-persistence.smoke.js`** (new) — pins flow surface, behavioral persistence round-trip, storage adapter shape, and host wiring.
+
+Closes Cluster S FOLLOWUP 2.
+
+## [0.303.0] - 2026-04-29
+
+§12 / Cluster S FOLLOWUP 1 — sign-throttle limits exposed in Settings. The per-origin token-bucket limiter has shipped since v0.219.0 with hardcoded defaults (5 requests / 60 s); some users hit it during legitimate heavy use (cross-chain swap pipelines that issue 6+ signs back-to-back), while others want tighter limits for hardened security postures. v0.303.0 makes both axes user-configurable.
+
+`packages/core/src/schemas/settings.js` adds `signThrottle?: { burst?: number, windowMs?: number }` as a v2-tolerant field with bounds constants (`SIGN_THROTTLE_BURST_MIN/MAX = 1/1000`, `SIGN_THROTTLE_WINDOW_MS_MIN/MAX = 1_000/86_400_000`). Either field may be omitted to fall back to the throttle-layer default.
+
+`packages/core/src/flows/signThrottle.js` extends `createSignThrottle` to accept a `getLimits()` callback that's called on every `check()` so settings updates take effect on the very next request without rebuilding the throttle (in-flight buckets keep their timestamps). Static `burst` / `windowMs` options remain for back-compat.
+
+`packages/extension/src/background/createBackgroundHost.js` constructs the throttle with `getLimits` reading from a closure cache hydrated by `vault.settings.get`. The cache refreshes on every `settings.update` whose patch touches `signThrottle`, plus opportunistic hydration on the first `settings.get` after SW boot.
+
+`packages/core/src/shared/components/settings/ConnectedSitesSection.jsx` mounts a `<SignThrottlePanel>` at the bottom with burst + window-seconds inputs and an Apply button. The panel surfaces the "Currently in effect" values so users can see what's running even when their input fields are blank (i.e., using defaults).
+
+### Added
+
+- **`packages/core/src/schemas/settings.js`** — `signThrottle` typedef, bounds constants, validator branch.
+- **`packages/core/src/flows/signThrottle.js`** — `getLimits` callback support; live-reactive limits.
+- **`packages/extension/src/background/createBackgroundHost.js`** — closure cache + opportunistic refresh; passes throttle into `registerBridgeHandlers`.
+- **`packages/core/src/shared/components/settings/ConnectedSitesSection.jsx`** — `<SignThrottlePanel>`.
+- **`test/smoke/ui/sign-throttle-settings.smoke.js`** (new) — pins schema fields, getLimits wiring, host cache refresh, and panel UI.
+
+Closes Cluster S FOLLOWUP 1.
+
 ## [0.302.0] - 2026-04-29
 
 §19.5 / Cluster H FOLLOWUP 7 — `Home.jsx` BackupReminderCard CTA now lands users directly on the Backup section instead of dropping them at the Settings root + forcing them to find the panel themselves.
