@@ -85,6 +85,7 @@ import { getSessionStatus, listWallets, lockWallet, listAccounts } from './messa
 import { LeftNav, FullLayoutWithNav } from '@xchain-wallet/core/shared/components/LeftNav.jsx';
 import { BottomTabBar } from '@xchain-wallet/core/shared/components/BottomTabBar.jsx';
 import { QueuedBroadcastBanner } from '@xchain-wallet/core/shared/components/QueuedBroadcastBanner.jsx';
+import { DemoBanner } from '@xchain-wallet/core/shared/components/DemoBanner.jsx';
 import { registerSigner as registerLocalSigner } from './signerBridge.js';
 import { pairTrezorSigner } from './signerFactories/trezorFactory.js';
 import { pairLedgerSigner } from './signerFactories/ledgerFactory.js';
@@ -1044,7 +1045,14 @@ function AppInner() {
                         />
                     }
                     header={
-                        activeWalletId ? <QueuedBroadcastBanner walletId={activeWalletId} /> : null
+                        activeWalletId ? (
+                            <>
+                                {/* Cluster J FOLLOWUP 2 — DemoBanner persists across every
+                                    unlocked view via the shared layout header slot. */}
+                                <DemoBanner activeWalletId={activeWalletId} onExited={refresh} />
+                                <QueuedBroadcastBanner walletId={activeWalletId} />
+                            </>
+                        ) : null
                     }
                 >
                     {routeNode}

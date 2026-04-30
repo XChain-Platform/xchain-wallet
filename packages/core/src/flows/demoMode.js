@@ -8,14 +8,35 @@
 // no schema bump, no host-handler changes. When the user exits demo
 // mode the shell calls the existing `wallet.remove` flow and then
 // `clearDemoWalletId()`.
+//
+// Cluster J FOLLOWUP 6 — auto-expire. `markDemoWallet` records the
+// walletId AND a creation timestamp. `getDemoWalletExpiry` returns the
+// epoch-ms past which the demo wallet should be auto-wiped (default
+// 24 hours from creation; overridable via `markDemoWallet(walletId, ttl)`).
+// `isDemoWalletExpired()` short-circuits the banner / shell into
+// triggering an exit + wipe.
 
 const STORAGE_KEY = 'xc:demoWalletId';
+const TIMESTAMP_KEY = 'xc:demoWalletCreatedAt';
+const TTL_KEY = 'xc:demoWalletTtlMs';
+export const DEMO_DEFAULT_TTL_MS = 24 * 60 * 60 * 1000;
 
-/** @param {string} walletId */
-export function markDemoWallet(walletId) {
+/**
+ * @param {string} walletId
+ * @param {object} [opts]
+ * @param {number} [opts.ttlMs]   Override the default 24-hour expiry.
+ * @param {number} [opts.now]     Clock injection for tests.
+ */
+export function markDemoWallet(walletId, opts = {}) {
     if (typeof walletId !== 'string' || !walletId) return;
+    const now = typeof opts.now === 'number' ? opts.now : Date.now();
+    const ttlMs = Number.isFinite(opts.ttlMs) && opts.ttlMs > 0
+        ? Math.floor(opts.ttlMs)
+        : DEMO_DEFAULT_TTL_MS;
     try {
         globalThis.localStorage?.setItem(STORAGE_KEY, walletId);
+        globalThis.localStorage?.setItem(TIMESTAMP_KEY, String(now));
+        globalThis.localStorage?.setItem(TTL_KEY, String(ttlMs));
     } catch { /* best-effort */ }
 }
 
@@ -29,9 +50,45 @@ export function getDemoWalletId() {
     }
 }
 
+/**
+ * @returns {{ createdAt: number, ttlMs: number, expiresAt: number } | null}
+ */
+export function getDemoWalletExpiry() {
+    try {
+        const tsRaw = globalThis.localStorage?.getItem(TIMESTAMP_KEY);
+        const ttlRaw = globalThis.localStorage?.getItem(TTL_KEY);
+        if (!tsRaw || !ttlRaw) return null;
+        const createdAt = Number(tsRaw);
+        const ttlMs = Number(ttlRaw);
+        if (!Number.isFinite(createdAt) || !Number.isFinite(ttlMs) || ttlMs <= 0) return null;
+        return { createdAt, ttlMs, expiresAt: createdAt + ttlMs };
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Cluster J FOLLOWUP 6 — true when the demo wallet exists AND its TTL
+ * has elapsed. Used by the shell to trigger an auto-exit on the next
+ * mount of the demo banner / wallet picker.
+ *
+ * @param {object} [opts]
+ * @param {number} [opts.now]  Clock injection for tests.
+ * @returns {boolean}
+ */
+export function isDemoWalletExpired(opts = {}) {
+    if (!getDemoWalletId()) return false;
+    const expiry = getDemoWalletExpiry();
+    if (!expiry) return false;
+    const now = typeof opts.now === 'number' ? opts.now : Date.now();
+    return now >= expiry.expiresAt;
+}
+
 export function clearDemoWalletId() {
     try {
         globalThis.localStorage?.removeItem(STORAGE_KEY);
+        globalThis.localStorage?.removeItem(TIMESTAMP_KEY);
+        globalThis.localStorage?.removeItem(TTL_KEY);
     } catch { /* best-effort */ }
 }
 

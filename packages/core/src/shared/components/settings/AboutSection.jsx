@@ -19,6 +19,7 @@ import {
     UPDATE_CHANNEL,
     WALLET_VERSION,
 } from '../../../buildInfo.js';
+import { LICENSE_TEXT } from '../../../license.js';
 
 const ROW = {
     display: 'flex',
@@ -48,6 +49,7 @@ export function AboutSection() {
     const [preview, setPreview] = useState(/** @type {string | null} */ (null));
     const [previewOpen, setPreviewOpen] = useState(false);
     const [previewBusy, setPreviewBusy] = useState(false);
+    const [licenseOpen, setLicenseOpen] = useState(false);
 
     async function fetchDump() {
         if (typeof messaging?.getDiagnosticDump !== 'function') {
@@ -105,8 +107,43 @@ export function AboutSection() {
                 <span style={ROW_VALUE}>{UPDATE_CHANNEL}</span>
             </Row>
             <Row label="License">
-                <DocLink path={LICENSE_FILE} label={LICENSE_NAME} />
+                <div style={{ display: 'flex', gap: 'var(--xc-space-2)', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                    <DocLink path={LICENSE_FILE} label={LICENSE_NAME} />
+                    {/* Cluster J FOLLOWUP 5 — surface the full LICENSE.md
+                        text inline so users don't have to navigate to a
+                        repo on GitHub to read what they're agreeing to. */}
+                    <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setLicenseOpen((open) => !open)}
+                        aria-expanded={licenseOpen}
+                        aria-controls="full-license-text"
+                    >
+                        {licenseOpen ? 'Hide full text' : 'Show full text'}
+                    </Button>
+                </div>
             </Row>
+            {licenseOpen ? (
+                <pre
+                    id="full-license-text"
+                    style={{
+                        margin: 0,
+                        padding: 'var(--xc-space-3)',
+                        background: 'var(--xc-surface-sunken, var(--xc-surface-raised))',
+                        border: '1px solid var(--xc-border)',
+                        borderRadius: 'var(--xc-radius-md)',
+                        fontSize: 'var(--xc-text-xs)',
+                        fontFamily: 'var(--xc-font-mono, monospace)',
+                        color: 'var(--xc-text)',
+                        whiteSpace: 'pre-wrap',
+                        wordBreak: 'break-word',
+                        maxHeight: '32rem',
+                        overflow: 'auto',
+                    }}
+                >
+                    {LICENSE_TEXT}
+                </pre>
+            ) : null}
             <Row label="Notice">
                 <DocLink path={NOTICE_FILE} label={NOTICE_FILE} />
             </Row>

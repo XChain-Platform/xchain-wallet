@@ -179,9 +179,24 @@ export function History({ walletId, accountId, onBack, onReceive, initialSearchQ
         let cancelled = false;
         setLoadingChains(new Set(chainsToLoad));
 
+        // Cluster J FOLLOWUP 1 — for the demo wallet, replace the SDK
+        // fetch with synthesized fixture data so the History view
+        // isn't an empty wasteland during the demo. Real history rows
+        // arrive once the user exits demo mode + funds the wallet.
+        const isDemo = flowsLib.isDemoWallet(walletId);
+
         const tasks = [];
         for (const cid of chainsToLoad) {
             for (const a of addressesByChain[cid]) {
+                if (isDemo) {
+                    tasks.push(Promise.resolve({
+                        chainId: cid,
+                        address: a.address,
+                        history: flowsLib.synthesizeDemoHistory(cid, a.address),
+                        links: flowsLib.synthesizeDemoLinks(),
+                    }));
+                    continue;
+                }
                 tasks.push(
                     Promise.all([
                         messaging.getAddressHistory({ chainId: cid, address: a.address })

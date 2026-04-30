@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, Button, Icon, Skeleton } from '@xchain-wallet/core/ui';
-import { registry as registryLib } from '@xchain-wallet/core';
+import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useAutoLock } from '../hooks/useAutoLock.js';
@@ -282,7 +282,18 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onBuy, onCreateToken
 
         (async () => {
             try {
-                const b = await messaging.getWalletBalances(walletId, accountId);
+                let b;
+                // Cluster J FOLLOWUP 1 — synthesize fabricated balances
+                // for the demo wallet so Home / Send / Receive feel
+                // populated. Uses the wallet's real address records so
+                // the rest of the app sees the same address-rooted
+                // shape it would for a funded wallet.
+                if (flowsLib.isDemoWallet(walletId) && typeof messaging.getAddressesByChain === 'function') {
+                    const byChain = await messaging.getAddressesByChain(walletId, accountId);
+                    b = flowsLib.synthesizeDemoBalances(byChain);
+                } else {
+                    b = await messaging.getWalletBalances(walletId, accountId);
+                }
                 if (!cancelled) {
                     setBalances(b);
                     setBalancesFetchedAt(Date.now());
@@ -531,7 +542,11 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onBuy, onCreateToken
                     {loadError ? (
                         <div role="alert" className={styles.error}>{loadError}</div>
                     ) : null}
-                    {activeWalletId ? (
+                    {/* §25.2 / Cluster J FOLLOWUP 2 — banner gated to popup
+                        shells. Web + desktop mount the same banner inside
+                        FullLayoutWithNav.header so it persists across
+                        every unlocked view, not just Home. */}
+                    {activeWalletId && shell === 'popup' ? (
                         <DemoBanner
                             activeWalletId={activeWalletId}
                             onExited={onLocked}

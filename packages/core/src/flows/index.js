@@ -286,9 +286,17 @@ export {
 export {
     markDemoWallet,
     getDemoWalletId,
+    getDemoWalletExpiry,
     clearDemoWalletId,
     isDemoWallet,
+    isDemoWalletExpired,
+    DEMO_DEFAULT_TTL_MS,
 } from './demoMode.js';
+export {
+    synthesizeDemoBalances,
+    synthesizeDemoHistory,
+    synthesizeDemoLinks,
+} from './demoFixtures.js';
 export {
     discoverUsedAddresses,
     DEFAULT_GAP_LIMIT,

@@ -37,6 +37,7 @@ import { TokenDetail } from '@xchain-wallet/core/shared/routes/TokenDetail.jsx';
 import { ToastHost } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
 import { ReachabilityBanner } from '@xchain-wallet/core/shared/components/ReachabilityBanner.jsx';
 import { QueuedBroadcastBanner } from '@xchain-wallet/core/shared/components/QueuedBroadcastBanner.jsx';
+import { DemoBanner } from '@xchain-wallet/core/shared/components/DemoBanner.jsx';
 import { LeftNav, FullLayoutWithNav } from '@xchain-wallet/core/shared/components/LeftNav.jsx';
 import { BottomTabBar } from '@xchain-wallet/core/shared/components/BottomTabBar.jsx';
 import { uri as coreUri } from '@xchain-wallet/core';
@@ -1228,7 +1229,15 @@ function AppInner() {
                         />
                     }
                     header={
-                        activeWalletId ? <QueuedBroadcastBanner walletId={activeWalletId} /> : null
+                        activeWalletId ? (
+                            <>
+                                {/* Cluster J FOLLOWUP 2 — DemoBanner persists across every
+                                    unlocked view via the shared layout header slot, not
+                                    just Home. */}
+                                <DemoBanner activeWalletId={activeWalletId} onExited={refresh} />
+                                <QueuedBroadcastBanner walletId={activeWalletId} />
+                            </>
+                        ) : null
                     }
                 >
                     {routeNode}

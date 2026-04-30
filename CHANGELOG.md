@@ -7,6 +7,70 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.310.0] - 2026-04-29
+
+§25.2 / Cluster J FOLLOWUP 1 — synthesized fabricated balances + history for the demo wallet. Demo wallets are real BIP39 wallets — they have real addresses on real chains; only on-chain balances are zero. Until v0.310.0 a user exploring the demo saw empty Home / History / TokenDetail surfaces, which makes the demo feel broken. This ships overlaid SDK-shaped fixture data so Send / Receive / History flows feel populated without requiring the user to fund the wallet.
+
+`packages/core/src/flows/demoFixtures.js` (new) exports `synthesizeDemoBalances(addressesByChain)`, `synthesizeDemoHistory(chainId, address)`, and `synthesizeDemoLinks()`. `synthesizeDemoBalances` mirrors the `getWalletBalances` shape: first address per chain gets a non-zero native balance + token assets; additional addresses get zero so the row still renders. `synthesizeDemoHistory` returns 2 entries per known chain — an incoming SEND (pending, exercises the timeline pending state) and a confirmed ISSUE that mints a fictional `DEMOCOIN`. `synthesizeDemoLinks` returns `[]` (cross-chain LINK fabrication is deferred).
+
+`packages/core/src/shared/routes/Home.jsx` checks `flowsLib.isDemoWallet(walletId)` before calling `messaging.getWalletBalances`; when true it fetches the address list and routes through `synthesizeDemoBalances`. `History.jsx` does the same with `synthesizeDemoHistory` + `synthesizeDemoLinks`. The rest of the wallet code (`balancesFromSdk`, simulator, history grouping, TxStatusTimeline) accepts the synthesized shape unchanged.
+
+### Added
+
+- **`packages/core/src/flows/demoFixtures.js`** (new) — three fixture builders.
+- **`packages/core/src/flows/index.js`** — re-exports the new symbols.
+- **`packages/core/src/shared/routes/Home.jsx`** — demo-aware balance fetch.
+- **`packages/core/src/shared/routes/History.jsx`** — demo-aware history fetch.
+- **`test/smoke/ui/demo-wallet-fixtures.smoke.js`** (new) — pins flow exports, behavioral output, and Home + History wiring.
+
+Closes Cluster J FOLLOWUP 1.
+
+## [0.309.0] - 2026-04-29
+
+§25.2 / Cluster J FOLLOWUP 5 — full LICENSE.md text rendered inline in Settings → About. The panel previously linked to a repo path; users had to navigate to GitHub to read what they'd agreed to. v0.309.0 ships the full Dankest Community License text directly in the panel via a Show full text / Hide full text toggle.
+
+`packages/core/src/license.js` (new) exports `LICENSE_TEXT` — a `const` template literal carrying the canonical license body. The new licence-full-text smoke pins byte-for-byte equality with `LICENSE.md` (modulo trailing whitespace) so future edits to the canonical file flag a sync drift instead of silently desyncing.
+
+`packages/core/src/shared/components/settings/AboutSection.jsx` adds a `licenseOpen` state, a Show/Hide toggle button next to the existing License DocLink (with `aria-expanded` + `aria-controls`), and a `<pre id="full-license-text">` that renders the text when expanded.
+
+### Added
+
+- **`packages/core/src/license.js`** (new) — `LICENSE_TEXT` export.
+- **`packages/core/src/shared/components/settings/AboutSection.jsx`** — toggle + inline reveal.
+- **`test/smoke/ui/license-full-text.smoke.js`** (new) — pins the export, the sync invariant, and the section wiring.
+
+Closes Cluster J FOLLOWUP 5.
+
+## [0.308.0] - 2026-04-29
+
+§25.2 / Cluster J FOLLOWUP 6 — demo wallet auto-expire after a configurable TTL (default 24 hours). Without this, an abandoned demo wallet sat in localStorage indefinitely; v0.308.0 self-cleans so the user lands back on Welcome instead of seeing a stale "throwaway wallet" banner indefinitely.
+
+`packages/core/src/flows/demoMode.js` extends `markDemoWallet(walletId, opts)` to record both a created-at timestamp and a TTL in localStorage (keys `xc:demoWalletCreatedAt` + `xc:demoWalletTtlMs`). New `getDemoWalletExpiry()`, `isDemoWalletExpired(opts)`, and `DEMO_DEFAULT_TTL_MS` exports. `clearDemoWalletId` wipes all three keys. The existing `markDemoWallet(walletId)` call site (Onboarding.jsx) keeps working — `opts` is fully optional.
+
+`packages/core/src/shared/components/DemoBanner.jsx` adds an interval-based auto-exit (60-second cadence): when `isDemoWalletExpired()` flips true, the banner fires the same `removeWallet` + `clearDemoWalletId` + `onExited` chain it does on the manual Exit button. Banner copy gains an "Auto-wipes in Xh Ym" countdown hint so the user sees the deadline approaching.
+
+### Added
+
+- **`packages/core/src/flows/demoMode.js`** — TTL persistence + new exports.
+- **`packages/core/src/flows/index.js`** — re-exports the new symbols.
+- **`packages/core/src/shared/components/DemoBanner.jsx`** — auto-exit hook + countdown copy.
+- **`test/smoke/ui/demo-wallet-expire.smoke.js`** (new) — pins the storage round-trip, expiry semantics, and banner wiring.
+
+Closes Cluster J FOLLOWUP 6.
+
+## [0.307.0] - 2026-04-29
+
+§25.2 / Cluster J FOLLOWUP 2 — `<DemoBanner>` mounts in the shared full-layout header slot for web + desktop so the indicator persists across every unlocked view, not just Home. Popup keeps the existing Home-only mount since the popup is always compact and constrained.
+
+`packages/web/src/App.jsx` and `packages/desktop/renderer/App.jsx` import `DemoBanner` and add it inside `FullLayoutWithNav.header` next to `QueuedBroadcastBanner`. `packages/core/src/shared/routes/Home.jsx` gates the existing inline `<DemoBanner>` mount on `shell === 'popup'` so web/desktop don't double-render the banner on Home.
+
+### Added
+
+- **`packages/web/src/App.jsx`**, **`packages/desktop/renderer/App.jsx`** — DemoBanner import + mount in `FullLayoutWithNav.header`.
+- **`packages/core/src/shared/routes/Home.jsx`** — popup-shell gating on the inline DemoBanner mount.
+
+Closes Cluster J FOLLOWUP 2.
+
 ## [0.306.0] - 2026-04-29
 
 §12 / Cluster S FOLLOWUP 4 — blocklist mutation audit log. Adding or removing an entry in `settings.blockedOrigins` now records a `{ at, action, entry, evictedSiteIds? }` row in `settings.blocklistAuditLog`. Capped at 50 entries (oldest fall off). Idempotent re-adds and no-op removes are skipped — only real state changes are logged.
