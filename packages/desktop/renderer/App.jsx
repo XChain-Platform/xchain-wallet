@@ -17,7 +17,7 @@
 // handlers onto `session.defaultSession` — without them, Electron
 // returns an empty device list under `contextIsolation: true`.
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLastView } from '@xchain-wallet/core/shared/hooks/useLastView.js';
 import { MessagingProvider } from '@xchain-wallet/core/shared/MessagingProvider.jsx';
 import { Loading } from '@xchain-wallet/core/shared/routes/Loading.jsx';
@@ -151,6 +151,24 @@ function AppInner() {
     const [activeMarket, setActiveMarket] = useState(
         /** @type {{ chainId: string, tick1: string, tick2: string } | null} */ (null),
     );
+    // §24.6 / Cluster Y FOLLOWUP 4 — when the renderer is launched
+    // with an `xc-init-route` search-string entry (set by main on
+    // detach-window IPC), parse it once at mount, route the new
+    // window's initial view + context, and strip the search so a
+    // refresh doesn't re-trigger. Skip useLastView's resume in that
+    // case so the detached window opens on its pinned target rather
+    // than the previously-resumed view.
+    const [initialRoute, setInitialRoute] = useState(
+        /** @type {{ initialView?: string, initialContext?: any } | null} */ (() => parseInitialRoute()),
+    );
+    const [historyInitialFocus, setHistoryInitialFocus] = useState(
+        /** @type {{ chainId?: string, actionIndex?: string, txHash?: string } | null} */ (null),
+    );
+    // Lock in "this window was detached" at mount; the resume-skip
+    // gate stays on for the lifetime of the window even after we
+    // clear initialRoute (which we do to keep the state slot from
+    // re-firing on subsequent re-renders).
+    const isDetachedWindow = useRef(initialRoute !== null);
 
     const refresh = useCallback(() => {
         setStatus({ state: 'loading' });
@@ -178,13 +196,42 @@ function AppInner() {
                 if (cancelled) return;
                 const arr = Array.isArray(list) ? list : [];
                 setWalletList(arr);
-                if (arr.length > 0) {
+                if (arr.length === 0) return;
+                // §24.6 / Cluster Y FU 4 — when an initial route names a
+                // walletId that's actually in the vault, prefer it over
+                // the first-wallet default. Otherwise fall through to
+                // the first wallet as before.
+                const ctxWalletId = initialRoute?.initialContext?.walletId;
+                if (ctxWalletId && arr.some((w) => w.id === ctxWalletId)) {
+                    setActiveWalletId(ctxWalletId);
+                } else {
                     setActiveWalletId(arr[0].id);
                 }
             })
             .catch(() => { /* Home surfaces load errors */ });
         return () => { cancelled = true; };
     }, [status.state]);
+
+    // §24.6 / Cluster Y FOLLOWUP 4 — apply the initialView once
+    // unlock settles. Route + context-state both flip in lockstep
+    // here. Runs once per route then clears the slot so subsequent
+    // re-renders + later navigations don't re-trigger.
+    useEffect(() => {
+        if (!initialRoute || status.state !== 'unlocked') return;
+        const view = initialRoute.initialView;
+        const ctx = initialRoute.initialContext || {};
+        if (view === 'history') {
+            setHistoryInitialFocus({
+                chainId: ctx.chainId,
+                actionIndex: ctx.actionIndex != null ? String(ctx.actionIndex) : undefined,
+                txHash: ctx.txHash,
+            });
+            setUnlockedView('history');
+        } else if (typeof view === 'string' && view) {
+            setUnlockedView(view);
+        }
+        setInitialRoute(null);
+    }, [initialRoute, status.state]);
 
     useEffect(() => {
         if (!activeWalletId) {
@@ -212,10 +259,16 @@ function AppInner() {
     // per-wallet in localStorage). Restricted to context-free views;
     // anything that needs a prefilled state object falls through to
     // Home. See `lastViewMemory.RESUMABLE_VIEWS` for the set.
+    //
+    // §24.6 / Cluster Y FU 4 — detached windows skip the resume so
+    // they land on their pinned target (the initialView effect above
+    // sets unlockedView). The resume effect's onResume still drives
+    // the user's primary window.
     useLastView({
         walletId: activeWalletId,
         currentView: unlockedView,
         onResume: setUnlockedView,
+        skip: isDetachedWindow.current,
     });
 
     switch (status.state) {
@@ -801,6 +854,7 @@ function AppInner() {
                         walletId={activeWalletId}
                         accountId={activeAccountId || undefined}
                         onBack={() => setUnlockedView('home')}
+                        initialFocus={historyInitialFocus}
                     />
                 );
             }
@@ -1061,6 +1115,35 @@ function AppInner() {
         }
         default:
             return <Loading error={`unknown state "${status.state}"`} />;
+    }
+}
+
+/**
+ * §24.6 / Cluster Y FOLLOWUP 4 — parse the `xc-init-route` search-string
+ * entry main appended to the BrowserWindow's loadFile when the window
+ * was spawned via `xchain:open-window` IPC. Returns the decoded
+ * { initialView?, initialContext? } payload, or null when the slot is
+ * absent / malformed. Strips the search string from the URL after
+ * parsing so a renderer reload doesn't re-trigger the route.
+ */
+function parseInitialRoute() {
+    if (typeof window === 'undefined') return null;
+    try {
+        const params = new URLSearchParams(window.location.search || '');
+        const raw = params.get('xc-init-route');
+        if (!raw) return null;
+        const json = atob(decodeURIComponent(raw));
+        const parsed = JSON.parse(json);
+        // Strip the search so a refresh doesn't re-route. Keep pathname
+        // + hash; everything we need is now in component state.
+        try {
+            const stripped = window.location.pathname + window.location.hash;
+            window.history.replaceState({}, '', stripped);
+        } catch { /* same-origin call must succeed; swallow on prudish jsdom */ }
+        if (!parsed || typeof parsed !== 'object') return null;
+        return /** @type {{ initialView?: string, initialContext?: any }} */ (parsed);
+    } catch {
+        return null;
     }
 }
 

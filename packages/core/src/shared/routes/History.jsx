@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Screen, Button, ChainBadge, Icon, Skeleton } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import {
@@ -72,8 +72,12 @@ const COIN_TICKER_TO_NAME = {
  * @param {() => void} props.onBack
  * @param {() => void} [props.onReceive]   surfaces a Receive CTA in the empty-state nudges (G077)
  * @param {string} [props.initialSearchQuery]   pre-populates the search box on mount; lets TokenDetail open History scoped to one tick (G071)
+ * @param {{ chainId?: string, actionIndex?: string, txHash?: string } | null} [props.initialFocus]
+ *        when set, the matching entry is auto-selected and scrolled into
+ *        view as soon as it loads. §24.6 / Cluster Y FOLLOWUP 4 — used
+ *        by the desktop detach-pending-tx path.
  */
-export function History({ walletId, accountId, onBack, onReceive, initialSearchQuery = '' }) {
+export function History({ walletId, accountId, onBack, onReceive, initialSearchQuery = '', initialFocus = null }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -119,6 +123,10 @@ export function History({ walletId, accountId, onBack, onReceive, initialSearchQ
     const [peerCache, setPeerCache] = useState(
         /** @type {Record<string, { loading: boolean, action: any | null, error: string | null }>} */ ({}),
     );
+    // §24.6 / Cluster Y FOLLOWUP 4 — once a detached-window's initial
+    // route resolves, ref-flag this so we don't re-select on every
+    // re-render or after the user manually navigates away from the row.
+    const initialFocusFiredRef = useRef(false);
 
     // Step 1 — resolve the wallet's addresses grouped by chainId.
     useEffect(() => {
@@ -404,6 +412,39 @@ export function History({ walletId, accountId, onBack, onReceive, initialSearchQ
         () => groupHistoryEntries(visibleEntries, groupingMode),
         [visibleEntries, groupingMode],
     );
+
+    // §24.6 / Cluster Y FOLLOWUP 4 — auto-select the entry matching
+    // `initialFocus` once entries have loaded, then scroll it into
+    // view. Fires at most once per History mount so a user who
+    // explicitly de-selects the row doesn't get the row re-selected
+    // on every re-render.
+    useEffect(() => {
+        if (initialFocusFiredRef.current) return;
+        if (!initialFocus) return;
+        if (entries.length === 0) return;
+        const match = entries.find((e) => {
+            if (initialFocus.chainId && e.chainId !== initialFocus.chainId) return false;
+            if (initialFocus.actionIndex && String(e.actionIndex) !== String(initialFocus.actionIndex)) return false;
+            if (initialFocus.txHash && e.txHash !== initialFocus.txHash) return false;
+            return true;
+        });
+        if (!match) return;
+        initialFocusFiredRef.current = true;
+        setSelectedKey(match.key);
+        // Defer scrollIntoView until after the row's <li> has rendered;
+        // looking up the DOM node by `data-history-key` keeps the
+        // selector decoupled from React's internals.
+        if (typeof window !== 'undefined') {
+            setTimeout(() => {
+                const node = document.querySelector(
+                    `[data-history-key="${cssEscape(match.key)}"]`,
+                );
+                if (node && typeof node.scrollIntoView === 'function') {
+                    node.scrollIntoView({ block: 'center', behavior: 'auto' });
+                }
+            }, 0);
+        }
+    }, [entries, initialFocus]);
 
     const toggleGroupExpanded = (groupKey) => {
         setExpandedGroups((prev) => {
@@ -780,6 +821,7 @@ export function History({ walletId, accountId, onBack, onReceive, initialSearchQ
                                                 peerCache={peerCache}
                                                 isFull={isFull}
                                                 chainTip={chainTipByChainId[entry.chainId]}
+                                                walletId={walletId}
                                             />
                                         ))}
                                     </ul>
@@ -798,6 +840,7 @@ export function History({ walletId, accountId, onBack, onReceive, initialSearchQ
                             peerCache={peerCache}
                             isFull={isFull}
                             chainTip={chainTipByChainId[entry.chainId]}
+                            walletId={walletId}
                         />
                     );
                 })}
@@ -810,13 +853,25 @@ export function History({ walletId, accountId, onBack, onReceive, initialSearchQ
  * Inline detail card. For LINK-threaded entries we render two
  * `detailSide` blocks side-by-side; for everything else, one block.
  */
-function DetailCard({ entry, peerCache, chainTip }) {
+function DetailCard({ entry, peerCache, chainTip, walletId }) {
+    const { shell } = useMessaging();
     const isLinked = Boolean(entry.link);
     const peerKey = entry.link?.peerChainId && entry.link?.peerActionIndex
         ? peerCacheKey(entry.link.peerChainId, entry.link.peerActionIndex)
         : null;
     const peer = peerKey ? peerCache[peerKey] : null;
     const replaceable = isEntryReplaceable(entry);
+    // §24.6 / Cluster Y FOLLOWUP 4 — desktop-only "Open in new window"
+    // affordance for pending (mempool-only) entries. The detached
+    // window opens directly on this row via the History `initialFocus`
+    // prop and keeps its own auto-lock + last-view memory because the
+    // shared MessageHost stays singleton across windows. Surfaces on
+    // desktop only — extension popup + web SPA have no equivalent
+    // multi-window primitive.
+    const isPending = !entry.blockIndex;
+    const detachAvailable = shell === 'desktop'
+        && isPending
+        && typeof globalThis.xchainWalletWindow?.openDetached === 'function';
 
     return (
         <div className={`${styles.detail} ${isLinked ? styles.detailDual : ''}`} role="region" aria-label="Action detail">
@@ -830,6 +885,26 @@ function DetailCard({ entry, peerCache, chainTip }) {
                 </pre>
                 <SaveContactPrompt entry={entry} />
                 {replaceable.ok ? <RbfActions entry={entry} /> : null}
+                {detachAvailable ? (
+                    <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => {
+                            globalThis.xchainWalletWindow.openDetached({
+                                initialView: 'history',
+                                initialContext: {
+                                    walletId,
+                                    chainId: entry.chainId,
+                                    actionIndex: entry.actionIndex,
+                                    txHash: entry.txHash,
+                                },
+                            }).catch(() => { /* main returns ok:false on failure */ });
+                        }}
+                    >
+                        Open in new window
+                    </Button>
+                ) : null}
             </div>
             {isLinked ? (
                 <div className={styles.detailSide}>
@@ -1130,10 +1205,10 @@ function RbfActions({ entry }) {
  * One history row. Used both for top-level entries and for member rows
  * inside an expanded group card.
  */
-function EntryRow({ entry, selected, showConnector, onClick, peerCache, isFull, chainTip }) {
+function EntryRow({ entry, selected, showConnector, onClick, peerCache, isFull, chainTip, walletId }) {
     const d = chainRegistry.get(entry.chainId);
     return (
-        <li>
+        <li data-history-key={entry.key}>
             <button
                 type="button"
                 onClick={onClick}
@@ -1166,7 +1241,7 @@ function EntryRow({ entry, selected, showConnector, onClick, peerCache, isFull, 
                 </span>
             </button>
             {selected ? (
-                <DetailCard entry={entry} peerCache={peerCache} isFull={isFull} chainTip={chainTip} />
+                <DetailCard entry={entry} peerCache={peerCache} isFull={isFull} chainTip={chainTip} walletId={walletId} />
             ) : null}
         </li>
     );
@@ -1301,6 +1376,15 @@ function sidesFromLink(link, localChainId) {
 
 function keyFor(chainId, actionIndex) {
     return `${chainId}:${actionIndex}`;
+}
+
+// Bare-bones CSS.escape replacement — we control the input shape (a
+// chainId + ':' + actionIndex + ':' + address triple), so the only
+// reliably-problematic chars are `:` and quotes; escape every non-
+// alphanumeric to a backslash form rather than depending on
+// `CSS.escape` (jsdom 25+ has it, but older renderers might not).
+function cssEscape(s) {
+    return String(s).replace(/[^a-zA-Z0-9_-]/g, (ch) => `\\${ch}`);
 }
 
 function peerCacheKey(chainId, actionIndex) {

@@ -27,8 +27,13 @@ import { readLastView, writeLastView } from '../utils/lastViewMemory.js';
  * @param {string | null | undefined} args.walletId   Active wallet id.
  * @param {string} args.currentView                   The shell's current `unlockedView`.
  * @param {(view: string) => void} args.onResume      Called once per walletId change with the persisted view (or 'home' on miss).
+ * @param {boolean} [args.skip]   §24.6 / Cluster Y FU 4 — when true, the resume effect is
+ *                                suppressed; a freshly-detached desktop window opens on its
+ *                                pinned target rather than the user's last resumed view.
+ *                                The persist effect still runs so navigation inside the
+ *                                detached window survives a refresh.
  */
-export function useLastView({ walletId, currentView, onResume }) {
+export function useLastView({ walletId, currentView, onResume, skip = false }) {
     const lastResumedFor = useRef(/** @type {string | null} */ (null));
     const lastPersistedFor = useRef(/** @type {string | null} */ (null));
 
@@ -59,7 +64,10 @@ export function useLastView({ walletId, currentView, onResume }) {
 
     // Resume on wallet activation / change. Skips re-running for the
     // same walletId so user navigation after the resume is not
-    // overwritten by a stale read.
+    // overwritten by a stale read. `skip` short-circuits the resume
+    // entirely (detached-window case) but still bumps `lastResumedFor`
+    // so the persist gate can advance — otherwise the persist effect
+    // would refuse to write any nav state from the detached window.
     useEffect(() => {
         if (typeof walletId !== 'string' || !walletId) {
             lastResumedFor.current = null;
@@ -68,16 +76,16 @@ export function useLastView({ walletId, currentView, onResume }) {
         }
         if (lastResumedFor.current === walletId) return;
         lastResumedFor.current = walletId;
-        // Clear the persist gate — the next persist effect run for
-        // this walletId is the post-switch grace tick.
         lastPersistedFor.current = null;
+        if (skip) return;
         const persisted = readLastView(walletId);
         if (persisted && persisted !== currentView) {
             onResume(persisted);
         }
-    // currentView intentionally omitted — we only resume on walletId
-    // change, not every nav. onResume must be stable (useCallback in
-    // the caller).
+    // currentView + skip intentionally omitted — we only resume on
+    // walletId change. skip is captured at the moment the resume would
+    // fire; flipping skip later does not retroactively trigger the
+    // resume.
     /* eslint-disable-next-line react-hooks/exhaustive-deps */
     }, [walletId]);
 }

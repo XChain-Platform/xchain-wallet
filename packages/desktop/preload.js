@@ -1,7 +1,7 @@
 // Electron preload — the single bridge between renderer and main.
 //
 // §9.3.2: "keys never cross the contextBridge IPC boundary into the
-// renderer." This preload upholds that by exposing exactly two narrow
+// renderer." This preload upholds that by exposing exactly three narrow
 // APIs via contextBridge. Nothing about Node, the filesystem, Electron
 // internals, or native modules is exposed to the renderer.
 //
@@ -16,11 +16,17 @@
 //     {postMessage, onMessage} adapter so the desktop renderer +
 //     main reuse the same `signerPortProtocol` helpers the extension
 //     uses over `chrome.runtime.connect` ports.
+//
+//   - `xchainWalletWindow.openDetached({ initialView, initialContext })`
+//     — §24.6 / Cluster Y FOLLOWUP 4 detach-pending-tx. The renderer
+//     asks main to spawn a fresh BrowserWindow pre-routed to the
+//     specified view + context (e.g. a pending tx detail).
 
 import { contextBridge, ipcRenderer } from 'electron';
 
 const MESSAGE_CHANNEL = 'xchain-wallet:message';
 const SIGNER_BRIDGE_CHANNEL = 'xchain-wallet:signer-bridge';
+const OPEN_WINDOW_CHANNEL = 'xchain:open-window';
 
 contextBridge.exposeInMainWorld('xchainWalletBridge', {
     /**
@@ -29,6 +35,19 @@ contextBridge.exposeInMainWorld('xchainWalletBridge', {
      */
     sendMessage(message) {
         return ipcRenderer.invoke(MESSAGE_CHANNEL, message);
+    },
+});
+
+contextBridge.exposeInMainWorld('xchainWalletWindow', {
+    /**
+     * Ask main to open a fresh BrowserWindow pre-routed to the given
+     * view + context. Used by §24.6 detach-pending-tx and any future
+     * "Open in new window" affordance.
+     * @param {{ initialView?: string, initialContext?: any }} args
+     * @returns {Promise<{ ok: true, windowId: number } | { ok: false, error: string }>}
+     */
+    openDetached(args) {
+        return ipcRenderer.invoke(OPEN_WINDOW_CHANNEL, args);
     },
 });
 

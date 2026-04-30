@@ -137,10 +137,17 @@ function buildRuntime() {
  * (vault + signers stay singleton). Each window registers itself with
  * the `windows` set and unregisters on `closed`.
  *
- * §24.6 / G057 — File → New Window invokes this for additional
- * windows; the first call from `app.whenReady` opens the primary one.
+ * §24.6 / G057 — File → New Window invokes this with no args.
+ * §24.6 / Cluster Y FOLLOWUP 4 — `xchain:open-window` IPC invokes this
+ * with `{ initialView, initialContext }` to detach a pending tx detail
+ * (or any other view) into its own window. The route prefill rides
+ * through the URL search string so the renderer can pick it up on
+ * mount via `window.location.search` and clear it via
+ * `history.replaceState`.
+ *
+ * @param {{ initialView?: string, initialContext?: any }} [opts]
  */
-function createWindow() {
+function createWindow(opts = {}) {
     const win = new BrowserWindow({
         width: 420,
         height: 720,
@@ -159,7 +166,8 @@ function createWindow() {
     // packaging pipeline (vite build). In packaged mode that's what
     // `loadFile` points at; in dev the same path works because
     // `pnpm run start` runs vite first.
-    win.loadFile(join(here, '..', 'renderer', 'dist', 'index.html'));
+    const loadOpts = buildLoadOptions(opts);
+    win.loadFile(join(here, '..', 'renderer', 'dist', 'index.html'), loadOpts);
     win.once('ready-to-show', () => {
         if (!win.isDestroyed()) win.show();
         // Replay any deep link that arrived before the first window
@@ -176,6 +184,31 @@ function createWindow() {
 
     windows.add(win);
     return win;
+}
+
+/**
+ * Build the loadFile options carrying the optional initialView /
+ * initialContext route prefill. Encoded as a single
+ * `xc-init-route=<base64-json>` search-string entry so the renderer
+ * can pick it up via `window.location.search`. Base64 keeps the URL
+ * tidy when the context object has nested fields (chainId / actionIndex
+ * / txid for a detached pending tx).
+ *
+ * @param {{ initialView?: string, initialContext?: any }} opts
+ * @returns {{ search?: string }}
+ */
+function buildLoadOptions(opts) {
+    if (!opts || (!opts.initialView && !opts.initialContext)) return {};
+    const payload = {};
+    if (opts.initialView) payload.initialView = String(opts.initialView);
+    if (opts.initialContext != null) payload.initialContext = opts.initialContext;
+    try {
+        const json = JSON.stringify(payload);
+        const b64 = Buffer.from(json, 'utf8').toString('base64');
+        return { search: `xc-init-route=${encodeURIComponent(b64)}` };
+    } catch {
+        return {};
+    }
 }
 
 /**
@@ -317,6 +350,28 @@ app.whenReady().then(async () => {
             };
         }
         return handleIpcMessage(runtime, message);
+    });
+
+    // §24.6 / Cluster Y FOLLOWUP 4 — detach a pending tx (or any
+    // other view) into a fresh BrowserWindow. The renderer dispatches
+    // through `xchainWalletWindow.openDetached` (preload), which
+    // invokes this channel; main creates a window pre-routed via
+    // search-string prefill. Validates shape so a misbehaving
+    // renderer can't pass non-serializable junk.
+    ipcMain.handle('xchain:open-window', async (_event, args) => {
+        const initialView = typeof args?.initialView === 'string' ? args.initialView : '';
+        const initialContext = args?.initialContext && typeof args.initialContext === 'object'
+            ? args.initialContext
+            : null;
+        if (!initialView && !initialContext) {
+            return { ok: false, error: 'open-window: initialView or initialContext required' };
+        }
+        try {
+            const win = createWindow({ initialView, initialContext });
+            return { ok: true, windowId: win.id };
+        } catch (err) {
+            return { ok: false, error: String(err?.message ?? err) };
+        }
     });
 
     // Wire the signer-bridge ipc listener so renderer-hosted HW

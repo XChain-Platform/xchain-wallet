@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.327.0] - 2026-04-29
+
+Cluster Y FOLLOWUP 4 — desktop detach-pending-tx into a new window. A pending transaction's detail card now surfaces an "Open in new window" button on the desktop shell; clicking it spawns a fresh BrowserWindow pre-routed to that exact tx via History's new `initialFocus` prop. The detached window keeps its own auto-lock + nav state because every window in the desktop shell already shares the same main-process MessageHost (vault + signers stay singleton).
+
+§24.6 / Cluster Y FOLLOWUP 4 — `packages/desktop/main/index.js` `createWindow` accepts an opts arg `{ initialView, initialContext }`; a new `buildLoadOptions` helper base64-encodes the payload and threads it through Electron's `loadFile({ search })` so the renderer can pick it up via `window.location.search`. New `xchain:open-window` IPC handler validates the shape and delegates to `createWindow`. `packages/desktop/preload.js` exposes a third contextBridge namespace `xchainWalletWindow` with a single `openDetached({ initialView, initialContext })` method that invokes the IPC channel.
+
+`packages/desktop/renderer/App.jsx` ships a top-level `parseInitialRoute()` helper that reads + decodes `xc-init-route` from `window.location.search` once at mount and strips the search via `history.replaceState` so a refresh doesn't re-route. The parsed payload seeds `initialRoute` state; an effect chained on `(initialRoute, status.state)` flips `unlockedView` and `historyInitialFocus` once the wallet list resolves. The wallet-load effect prefers the `initialContext.walletId` over the first-wallet default when the named wallet is in the vault. A `useRef` (`isDetachedWindow`) locks in "this window was detached" at mount so `useLastView` keeps `skip=true` for the lifetime of the window even after `initialRoute` clears.
+
+`packages/core/src/shared/hooks/useLastView.js` accepts a new `skip` flag — when true, the resume effect short-circuits but still bumps `lastResumedFor` so the persist gate can advance and the detached window's own navigation persists normally.
+
+`packages/core/src/shared/routes/History.jsx` accepts an `initialFocus={chainId?, actionIndex?, txHash?}` prop. A fired-once-per-mount effect finds the first matching entry, sets `selectedKey`, and scrolls the row into view via a `data-history-key` attribute on `<EntryRow>`'s `<li>`. `<DetailCard>` derives `detachAvailable = shell === 'desktop' && !entry.blockIndex && typeof globalThis.xchainWalletWindow?.openDetached === 'function'` and renders an "Open in new window" Button when true. Web + extension shells degrade silently (the global isn't there, the button doesn't render).
+
+### Added
+
+- **`packages/desktop/main/index.js`** — `createWindow(opts)` opts arg + `buildLoadOptions` helper + `xchain:open-window` ipcMain handler.
+- **`packages/desktop/preload.js`** — `xchainWalletWindow.openDetached` contextBridge API.
+- **`packages/desktop/renderer/App.jsx`** — `parseInitialRoute` helper, `initialRoute` / `historyInitialFocus` state slots, route effect, walletId-from-context preference, `isDetachedWindow` ref, `historyInitialFocus` threaded into the History route.
+- **`packages/core/src/shared/hooks/useLastView.js`** — `skip` flag.
+- **`packages/core/src/shared/routes/History.jsx`** — `initialFocus` prop, `initialFocusFiredRef`, `data-history-key` attr on `<EntryRow>`, "Open in new window" Button on `<DetailCard>` for desktop pending entries, `walletId` threaded through both EntryRow / DetailCard call sites, `cssEscape` helper.
+- **`test/smoke/desktop/detach-pending-tx.smoke.js`** (new) — pins main / preload / App / History / useLastView wiring + a base64+URLSearchParams round-trip on the prefill payload.
+
+Closes Cluster Y FOLLOWUP 4.
+
 ## [0.326.0] - 2026-04-29
 
 Cluster H FOLLOWUP 3 — `add` mode for encrypted backup restore. Users with an open vault can now restore an encrypted backup as a new wallet alongside their existing one(s) without colliding on ids; the wallet record gets a fresh id at decode time and every cross-reference (account.walletId, address.accountId, importedKeys[].addressId, pendingTx.id) is rewired in lockstep.
