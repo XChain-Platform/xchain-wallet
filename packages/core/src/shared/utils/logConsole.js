@@ -135,6 +135,38 @@ function entries() {
     return buffer.slice();
 }
 
+/**
+ * Cluster Q FOLLOWUP 5 — bounded snapshot for diagnostic dumps.
+ * Returns a copy of the most-recent entries (oldest → newest) with
+ * each `message` truncated to `messageLimit` chars so a runaway log
+ * line doesn't bloat a pasted bug report. The pure-array shape is
+ * JSON-serialisable so the host can route it through any
+ * `messaging.*` shim without bespoke marshalling.
+ *
+ * @param {{ limit?: number, messageLimit?: number }} [opts]
+ * @returns {Array<LogEntry>}
+ */
+function snapshot(opts = {}) {
+    const limit = Number.isInteger(opts.limit) && opts.limit > 0
+        ? opts.limit
+        : buffer.length;
+    const messageLimit = Number.isInteger(opts.messageLimit) && opts.messageLimit > 0
+        ? opts.messageLimit
+        : 500;
+    const slice = buffer.length > limit
+        ? buffer.slice(buffer.length - limit)
+        : buffer.slice();
+    return slice.map((e) => ({
+        id: e.id,
+        timestamp: e.timestamp,
+        level: e.level,
+        source: e.source,
+        message: typeof e.message === 'string' && e.message.length > messageLimit
+            ? e.message.slice(0, messageLimit)
+            : e.message,
+    }));
+}
+
 function subscribe(listener) {
     if (typeof listener !== 'function') return () => {};
     listeners.add(listener);
@@ -159,6 +191,7 @@ export const logConsole = {
     detach,
     record,
     entries,
+    snapshot,
     subscribe,
     clear,
     setCapacity,

@@ -512,7 +512,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                     <span>Add a BIP39 passphrase (advanced)</span>
                     <InfoTip
                         aria="BIP39 passphrase help"
-                        label="An optional 25th word that mixes with your seed to derive a different wallet. Anyone who learns your recovery phrase but not the passphrase sees an empty decoy. Forget the passphrase and the funds are gone — it cannot be reset."
+                        label="An optional 25th word that mixes with your seed to derive a different wallet. Anyone who learns your recovery phrase but not the passphrase sees an empty decoy. Forget the passphrase and the funds are gone — it cannot be reset. Hardware wallets handle passphrases on the device itself (Trezor Suite / Ledger Live); this option only applies to software wallets created here."
                     />
                 </label>
                 {showPassphrase ? (

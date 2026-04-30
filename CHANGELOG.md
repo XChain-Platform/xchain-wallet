@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.321.0] - 2026-04-29
+
+Cluster H FOLLOWUP 1 + Cluster Q FOLLOWUP 5 — BIP39 passphrase toggle in CreateWallet + ImportWallet now carries a hardware-wallet caveat in its InfoTip; `logConsole.snapshot()` joins the §50 diagnostic dump under a `recent_logs` slot.
+
+§15.6 / Cluster H FOLLOWUP 1 — `<CreateWallet>` and `<ImportWallet>` BIP39 passphrase toggles surface explanatory copy that hardware wallets handle passphrases on the device itself (Trezor Suite / Ledger Live), not via this UI. The Create / Import lanes are software-only by construction (HW signers pair through `<PairSignerForm>` + `<AddAccountForm>`), so the FOLLOWUP closes by surfacing the distinction in copy rather than adding a code-level branch that would never fire. `<ImportWallet>` now imports `<InfoTip>` from `core/ui` and ships its own help bubble alongside the existing "This wallet uses a BIP39 passphrase" toggle; `<CreateWallet>`'s existing InfoTip extends its label to mention the on-device case.
+
+§50 / §48.5 / Cluster Q FOLLOWUP 5 — `logConsole.snapshot({ limit, messageLimit })` lands in `packages/core/src/shared/utils/logConsole.js` as a bounded, pre-truncated copy of the ring-buffer suitable for crossing process boundaries. `flows/diagnosticDump` accepts an optional `recentLogs` arg, surfaces it under `recent_logs` in the dump output, and runs it through a new `sanitizeLogs` defensive filter (200-entry cap, 500-char per-message cap, level-union check, source/id/timestamp coercion) so a stale shell or custom messaging shim can't bloat the dump. `createBackgroundHost`'s `diagnostic.dump` handler imports `logConsole` and threads `snapshot({ limit: 100, messageLimit: 500 })` into the dump call. Failure modes around the singleton load are caught — an unreachable logConsole yields an empty `recent_logs` array rather than breaking the dump. Cluster Q FOLLOWUP 4's typed-source emissions (vault / signer / encoder / bridge) now reach support reports without users having to copy the Developer Mode log panel manually.
+
+### Added
+
+- **`packages/core/src/shared/utils/logConsole.js`** — `snapshot({ limit, messageLimit })` export and `snapshot,` entry in the public singleton.
+- **`packages/core/src/flows/diagnosticDump.js`** — `recentLogs` opt + `recent_logs` output slot + `DiagnosticLogEntry` typedef + `sanitizeLogs` defensive filter.
+- **`packages/extension/src/background/createBackgroundHost.js`** — imports `logConsole`; `diagnostic.dump` handler captures + threads `snapshot({ limit: 100, messageLimit: 500 })` into the dump.
+- **`packages/core/src/shared/routes/CreateWallet.jsx`** — extended BIP39 InfoTip label to mention HW-on-device passphrase handling.
+- **`packages/core/src/shared/routes/ImportWallet.jsx`** — imports `<InfoTip>` from core/ui; new BIP39 passphrase help bubble alongside the toggle.
+- **`test/smoke/ui/bip39-passphrase-hw-hint.smoke.js`** (new) — pins both InfoTip integrations and the HW-on-device copy.
+- **`test/smoke/ui/diagnostic-dump-logs.smoke.js`** (new) — pins `snapshot()` shape, `recent_logs` slot + caps, sanitizeLogs coercion, host-side wiring.
+
+Closes Cluster H FOLLOWUP 1, Cluster Q FOLLOWUP 5.
+
 ## [0.320.0] - 2026-04-29
 
 Cluster O FOLLOWUP 2 + Cluster P FOLLOWUP 3 + Cluster H FOLLOWUP 2 — peer-extractor handles MESSAGE incoming + ORDER fill counterparty rows, InfoTip re-anchors when its bubble would clip the viewport, and the ImportWallet drop-zone accepts PNG / JPEG QR-image drops.

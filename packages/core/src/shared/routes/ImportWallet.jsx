@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Screen, Button, Input, Icon, QrScanner, StatusMessage } from '@xchain-wallet/core/ui';
+import { Screen, Button, Input, Icon, QrScanner, StatusMessage, InfoTip } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDropZone } from '../hooks/useDropZone.js';
 import styles from './ImportWallet.module.css';
@@ -495,6 +495,10 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                             disabled={busy}
                         />
                         <span>This wallet uses a BIP39 passphrase</span>
+                        <InfoTip
+                            aria="BIP39 passphrase help"
+                            label="The optional 25th word that derives a different wallet from the same recovery phrase. Required to land on the same addresses as the original software wallet. Hardware wallets (Trezor / Ledger) handle passphrases on the device itself — this lane is for software-wallet imports only; pair a hardware wallet via Add Account → Hardware Signer instead."
+                        />
                     </label>
                     {showPassphrase ? (
                         <Input

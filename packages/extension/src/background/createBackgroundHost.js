@@ -14,6 +14,7 @@
 
 import { flows } from '@xchain-wallet/core';
 import { WALLET_VERSION } from '@xchain-wallet/core/buildInfo.js';
+import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
 import { MessageHost } from './MessageHost.js';
 import { registerBridgeHandlers } from '../bridge/handlers.js';
 import * as signerBridge from './signerBridge.js';
@@ -713,6 +714,20 @@ export function createBackgroundHost(deps) {
         } catch {
             signers = [];
         }
+        // Cluster Q FOLLOWUP 5 — surface the background process's
+        // logConsole entries in the dump. The SW process records vault
+        // / signer / encoder / bridge events under typed `source` tags
+        // (Cluster Q FOLLOWUP 4) — no key material, no addresses, just
+        // operational events. Capped at 100 entries; per-line copy
+        // capped at 500 chars. logConsole is its own ESM singleton, so
+        // a load failure here just yields an empty log array and never
+        // breaks the dump itself.
+        let recentLogs = [];
+        try {
+            recentLogs = logConsole.snapshot({ limit: 100, messageLimit: 500 });
+        } catch {
+            recentLogs = [];
+        }
         return diagnosticDump({
             vault,
             chainRegistry,
@@ -720,6 +735,7 @@ export function createBackgroundHost(deps) {
             env: ctx.env,
             build: ctx.build,
             signers,
+            recentLogs,
         });
     });
 

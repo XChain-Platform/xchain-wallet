@@ -66,6 +66,15 @@ const REDACTED_HASH_PREFIX_LEN = 8;
  */
 
 /**
+ * @typedef {Object} DiagnosticLogEntry
+ * @property {number} id
+ * @property {number} timestamp
+ * @property {'log'|'info'|'warn'|'error'} level
+ * @property {string} source
+ * @property {string} message              expected to be pre-truncated by the caller (logConsole.snapshot defaults to 500 chars)
+ */
+
+/**
  * @typedef {Object} DiagnosticDumpOpts
  * @property {import('../storage/Vault.js').Vault} [vault]                  optional; when supplied, counts are populated
  * @property {import('../registry/index.js').ChainRegistry} [chainRegistry]
@@ -75,6 +84,7 @@ const REDACTED_HASH_PREFIX_LEN = 8;
  * @property {DiagnosticBuild} [build]
  * @property {DiagnosticSignerSummary[]} [signers]
  * @property {DiagnosticError[]} [recentErrors]
+ * @property {DiagnosticLogEntry[]} [recentLogs]   Cluster Q FOLLOWUP 5 — pre-snapshotted from `logConsole.snapshot({ limit, messageLimit })` by the host so the flow doesn't reach into a process-specific buffer. Truncated + bounded by the caller.
  */
 
 /**
@@ -86,6 +96,7 @@ const REDACTED_HASH_PREFIX_LEN = 8;
  * @property {DiagnosticSignerSummary[]} signers
  * @property {Record<string, unknown>} settings
  * @property {DiagnosticError[]} recent_errors
+ * @property {DiagnosticLogEntry[]} recent_logs
  * @property {{ wallets: number, accounts: number, addresses: number, contacts: number, connected_sites: number, pending_txs: number }} counts
  * @property {DiagnosticBuild | null} build
  * @property {string} generatedAt
@@ -105,6 +116,7 @@ export async function diagnosticDump(opts = {}) {
         build = null,
         signers = [],
         recentErrors = [],
+        recentLogs = [],
     } = opts;
 
     const chains = chainRegistry
@@ -187,6 +199,7 @@ export async function diagnosticDump(opts = {}) {
         signers: signers.map(sanitizeSigner),
         settings: sanitizeSettings(settingsSnapshot),
         recent_errors: sanitizeErrors(recentErrors),
+        recent_logs: sanitizeLogs(recentLogs),
         counts,
         build: build ?? null,
         generatedAt: new Date().toISOString(),
@@ -286,6 +299,28 @@ function sanitizeSettings(settings) {
         notifications: settings.notifications ?? null,
         grace: settings.grace ?? null,
     };
+}
+
+// Cluster Q FOLLOWUP 5 — defensive bound + truncation on logConsole
+// snapshots that crossed a process boundary. The caller is expected
+// to have already truncated each `message` via
+// `logConsole.snapshot({ messageLimit })`, but a stale shell or a
+// custom messaging shim could feed in untrimmed entries. The flow
+// caps the array length and re-truncates each message so a single
+// runaway log line never bloats a pasted bug report.
+const RECENT_LOGS_LIMIT = 200;
+const LOG_MESSAGE_LIMIT = 500;
+function sanitizeLogs(arr) {
+    if (!Array.isArray(arr)) return [];
+    return arr.slice(-RECENT_LOGS_LIMIT).map((e) => ({
+        id: Number.isFinite(e?.id) ? Number(e.id) : 0,
+        timestamp: Number.isFinite(e?.timestamp) ? Number(e.timestamp) : 0,
+        level: ['log', 'info', 'warn', 'error'].includes(e?.level) ? e.level : 'log',
+        source: typeof e?.source === 'string' ? e.source : 'console',
+        message: typeof e?.message === 'string'
+            ? e.message.slice(0, LOG_MESSAGE_LIMIT)
+            : '',
+    }));
 }
 
 function sanitizeErrors(arr) {
