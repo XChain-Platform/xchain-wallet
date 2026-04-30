@@ -18,9 +18,16 @@ assert.match(src, /update\(\{\s*language:\s*next\s*\}\)/, 'language write throug
 assert.match(src, /update\(\{\s*fiatCurrency:\s*next\s*\}\)/, 'currency picker write through update({ fiatCurrency })');
 assert.match(src, /update\(\{\s*fiatCurrency:\s*code\s*\}\)/, 'custom currency input write through update');
 
-// Language picker present
-assert.match(src, /value:\s*'en'/, 'English language option');
-assert.match(src, /label:\s*'English'/, 'English label');
+// Language picker — Cluster R FOLLOWUP 4: dynamic from availableLocales()
+assert.match(src, /import \{ availableLocales, setLocale as setI18nLocale \} from '\.\.\/\.\.\/\.\.\/i18n\/index\.js'/,
+    'imports availableLocales + setLocale from the core i18n module');
+assert.match(src, /buildLanguageOptions\(\)/, 'derives language options dynamically');
+assert.match(src, /const codes = availableLocales\(\);[\s\S]*?codes\.map/,
+    'buildLanguageOptions reads availableLocales() then maps each code');
+assert.match(src, /en:\s*'English'/, 'LANGUAGE_LABELS map carries the English display name');
+assert.match(src, /availableLocales\(\)\.includes\(next\)/,
+    'onLanguageChange guards setLocale against unknown locale codes');
+assert.match(src, /setI18nLocale\(next\)/, 'onLanguageChange flips the live i18n locale');
 
 // Currency picker covers a sensible breadth of common codes
 for (const code of ['USD', 'EUR', 'GBP', 'JPY']) {

@@ -1,18 +1,32 @@
 // LanguageRegionSection — §35.1 Language & Region panel.
 //
 // Surfaces:
-//   - Language picker (currently just `en` — see §54 i18n; additional
-//     locales land as they're added under packages/core/src/i18n/).
+//   - Language picker driven by `availableLocales()` so a registered
+//     pseudo / additional locale shows up automatically (Cluster R
+//     FOLLOWUP 4). On change, persists `settings.language` and calls
+//     `i18n.setLocale(next)` so the live UI flips immediately.
 //   - Fiat currency picker for fiat-denominated balance / quote
 //     surfaces. Persisted to `settings.fiatCurrency`.
 //
 // Both fields exist on the v1 Settings schema; no migration needed.
 
 import { useSettings } from '../../hooks/useSettings.js';
+import { availableLocales, setLocale as setI18nLocale } from '../../../i18n/index.js';
 
-const LANGUAGES = /** @type {const} */ ([
-    { value: 'en', label: 'English' },
-]);
+// Friendly display names for known locales — we extend this map as
+// translations land. Unknown registered locales fall back to their
+// bcp47 code so a developer-registered pseudo locale still shows up.
+const LANGUAGE_LABELS = /** @type {Record<string, string>} */ ({
+    en: 'English',
+});
+
+function buildLanguageOptions() {
+    const codes = availableLocales();
+    return codes.map((code) => ({
+        value: code,
+        label: LANGUAGE_LABELS[code] || code,
+    }));
+}
 
 // Curated short list of widely-used quote currencies. The schema
 // stores any non-empty string, so a "Custom" entry is wired below for
@@ -87,8 +101,19 @@ export function LanguageRegionSection() {
 
     const knownCurrency = FIAT_CURRENCIES.some((c) => c.value === settings.fiatCurrency);
     const selectorValue = knownCurrency ? settings.fiatCurrency : CUSTOM_CURRENCY_VALUE;
+    const LANGUAGES = buildLanguageOptions();
 
     const onLanguageChange = async (next) => {
+        // Flip the live i18n locale first so the UI updates immediately;
+        // the settings.update is the durable persistence that survives
+        // a restart. setLocale throws on unknown code — guard with the
+        // current `availableLocales()` set so a stale settings record
+        // can't crash the panel.
+        try {
+            if (availableLocales().includes(next)) {
+                setI18nLocale(next);
+            }
+        } catch (_err) { /* never bubble */ }
         try { await update({ language: next }); } catch (err) {
             // eslint-disable-next-line no-console
             console.error('language.update failed:', err);

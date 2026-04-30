@@ -108,6 +108,25 @@ assert.ok(/assetInfo\.imageUrl/.test(td),
 assert.ok(/Locked/.test(td) && /Mutable/.test(td),
     'TokenDetail renders both Locked + Mutable status copy');
 
+// --- 7b. CollectibleCard wiring (Cluster I FOLLOWUP 3 close) ------------
+
+const cv = readFileSync(
+    join(core, 'src', 'shared', 'components', 'CollectiblesView.jsx'),
+    'utf8',
+);
+assert.ok(/from '\.\.\/hooks\/useAssetInfo\.js'/.test(cv),
+    'CollectiblesView imports useAssetInfo for per-card metadata fetch');
+assert.ok(/useAssetInfo\(\s*\{[\s\S]*?chainId:\s*row\.chainId[\s\S]*?asset:\s*row\.asset/m.test(cv),
+    'CollectibleCard invokes useAssetInfo with row.chainId + row.asset');
+assert.ok(/skip:\s*row\.kind === 'native' \|\| hidden/.test(cv),
+    'CollectibleCard skips useAssetInfo for native rows + hidden cards');
+assert.ok(/effectiveImageUrl/.test(cv),
+    'CollectibleCard derives an effectiveImageUrl from row.imageUrl ?? assetInfo.imageUrl');
+assert.ok(/assetInfo[\s\S]*?\.imageUrl/.test(cv),
+    'CollectibleCard reads assetInfo.imageUrl as the fetched fallback');
+assert.ok(/src=\{effectiveImageUrl\}/.test(cv),
+    'CollectibleCard renders the <img> against effectiveImageUrl');
+
 // --- 8. extractImageUrl behavior pin (round-trip) -----------------------
 
 (async () => {

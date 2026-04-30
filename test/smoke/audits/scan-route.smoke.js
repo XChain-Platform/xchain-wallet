@@ -39,14 +39,51 @@ assert.ok(/QrScanner onFrame=\{handleFrame\}/.test(scanRouteSrc),
     'ScanRoute mounts <QrScanner> with a frame handler');
 assert.ok(/<textarea/.test(scanRouteSrc),
     'ScanRoute provides a paste-fallback textarea (BarcodeDetector not always available)');
-assert.ok(/Classify pasted payload/.test(scanRouteSrc),
-    'ScanRoute exposes a Classify-pasted-payload action for the textarea path');
+assert.ok(/t\('scan\.classifyPaste'\)/.test(scanRouteSrc),
+    'ScanRoute exposes a Classify-pasted-payload action for the textarea path (i18n: scan.classifyPaste)');
 assert.ok(/claimedRef\.current/.test(scanRouteSrc),
     'ScanRoute uses a claimedRef latch so a stream of QR frames only routes once');
-assert.ok(/Use Import Wallet/.test(scanRouteSrc),
-    'ScanRoute refuses to auto-route WIF / mnemonic — directs the user to Import Wallet instead');
-assert.ok(/Multi-frame PSBT chunk/.test(scanRouteSrc),
-    'ScanRoute punts XCW chunks back to PsbtSignForm (full collector lives there)');
+assert.ok(/t\('scan\.error\.wif'\)/.test(scanRouteSrc) && /t\('scan\.error\.mnemonic'\)/.test(scanRouteSrc),
+    'ScanRoute refuses to auto-route WIF / mnemonic — directs the user to Import Wallet instead (i18n: scan.error.wif/mnemonic)');
+assert.ok(/t\('scan\.error\.xcwChunk',\s*\{\s*n:\s*detected\.n,\s*total:\s*detected\.total\s*\}\)/.test(scanRouteSrc),
+    'ScanRoute punts XCW chunks back to PsbtSignForm (i18n: scan.error.xcwChunk with n/total vars)');
+
+// --- 1b. ScanRoute uses t() and dictionary covers every key ----------
+
+assert.ok(/import \{ t \} from '\.\.\/\.\.\/i18n\/index\.js'/.test(scanRouteSrc),
+    'ScanRoute imports t() from the core i18n module (Cluster R FOLLOWUP 2 beachhead)');
+
+const SCAN_KEYS = [
+    'common.back',
+    'scan.title',
+    'scan.scannerAlt',
+    'scan.routing',
+    'scan.pasteLabel',
+    'scan.pastePlaceholder',
+    'scan.classifyPaste',
+    'scan.error.pasteEmpty',
+    'scan.error.unknownXchainIntent',
+    'scan.error.wif',
+    'scan.error.mnemonic',
+    'scan.error.xcwChunk',
+    'scan.error.unknown',
+];
+const { en } = await import('../../../packages/core/src/i18n/locales/en/index.js');
+for (const key of SCAN_KEYS) {
+    assert.ok(typeof en[key] === 'string' && en[key].length > 0,
+        `en dictionary defines "${key}" for ScanRoute`);
+}
+// Each key (except common.back, which is shared with the rest of the app)
+// is referenced in ScanRoute via t('key').
+for (const key of SCAN_KEYS) {
+    assert.ok(scanRouteSrc.includes(`t('${key}')`)
+        || scanRouteSrc.includes(`t('${key}',`),
+        `ScanRoute calls t('${key}')`);
+}
+assert.ok(/\{n\}\/\{total\}/.test(en['scan.error.xcwChunk']),
+    'scan.error.xcwChunk uses {n}/{total} placeholders');
+assert.ok(/\{type\}/.test(en['scan.error.unknown']),
+    'scan.error.unknown uses {type} placeholder');
 
 // --- 2. BottomTabBar PRIMARY_TABS swap --------------------------------
 

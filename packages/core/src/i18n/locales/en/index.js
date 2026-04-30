@@ -112,6 +112,25 @@ export const en = {
     'uri.intent.receiveAmountAt': 'Receive {amount} {asset} at {address}',
     'uri.intent.unknown': 'Unrecognized link',
 
+    // --- scan route (Cluster R FOLLOWUP 2 — i18n migration beachhead) -
+    'scan.title': 'Scan',
+    'scan.scannerAlt': 'Scan a QR code',
+    'scan.routing': 'Scanned — routing…',
+    'scan.pasteLabel': 'Or paste a payload',
+    'scan.pastePlaceholder': 'xchain:… / bitcoin:… / address / PSBT hex',
+    'scan.classifyPaste': 'Classify pasted payload',
+    'scan.error.pasteEmpty': 'Paste a payload first.',
+    'scan.error.unknownXchainIntent':
+        'xchain: URI was scanned but the intent was not recognized. Try a clearer code.',
+    'scan.error.wif':
+        'A private key (WIF) was scanned. Use Import Wallet → Import WIF to add it deliberately.',
+    'scan.error.mnemonic':
+        'A recovery phrase was scanned. Use Import Wallet → Recovery phrase to add it deliberately.',
+    'scan.error.xcwChunk':
+        'Multi-frame PSBT chunk {n}/{total} — open the Sign panel to capture every frame.',
+    'scan.error.unknown':
+        'Scanned content was not recognized ({type}). Try a clearer code.',
+
     // --- errors ---------------------------------------------------
     'error.vaultClosed': 'Wallet is locked — unlock to continue.',
     'error.genericLoad': 'Failed to load.',

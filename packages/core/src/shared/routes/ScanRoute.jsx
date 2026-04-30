@@ -16,6 +16,7 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import { Screen, Button, Icon, QrScanner, StatusMessage } from '@xchain-wallet/core/ui';
 import { detectQrContent } from '../../uri/detectQrContent.js';
 import { parseXchainUri } from '../../uri/xchainUri.js';
+import { t } from '../../i18n/index.js';
 
 const HEADER = {
     display: 'flex',
@@ -101,7 +102,7 @@ export function ScanRoute({ onClassified, onBack, chainRegistry }) {
                 onClassified({ kind: 'receive' });
                 return;
             }
-            setStatus('xchain: URI was scanned but the intent was not recognized. Try a clearer code.');
+            setStatus(t('scan.error.unknownXchainIntent'));
             return;
         }
 
@@ -138,8 +139,8 @@ export function ScanRoute({ onClassified, onBack, chainRegistry }) {
             // Import lane themselves.
             setStatus(
                 detected.type === 'wif'
-                    ? 'A private key (WIF) was scanned. Use Import Wallet → Import WIF to add it deliberately.'
-                    : 'A recovery phrase was scanned. Use Import Wallet → Recovery phrase to add it deliberately.',
+                    ? t('scan.error.wif')
+                    : t('scan.error.mnemonic'),
             );
             return;
         }
@@ -148,13 +149,11 @@ export function ScanRoute({ onClassified, onBack, chainRegistry }) {
             // Multi-frame PSBT-over-QR — the scan route only handles
             // single-shot recognition. Direct the user to the Sign panel
             // which mounts the full XCW collector + animated source pane.
-            setStatus(
-                `Multi-frame PSBT chunk ${detected.n}/${detected.total} — open the Sign panel to capture every frame.`,
-            );
+            setStatus(t('scan.error.xcwChunk', { n: detected.n, total: detected.total }));
             return;
         }
 
-        setStatus(`Scanned content was not recognized (${detected.type}). Try a clearer code.`);
+        setStatus(t('scan.error.unknown', { type: detected.type }));
     }, [chainRegistry, onClassified]);
 
     const handleFrame = useCallback((text) => { classify(text); }, [classify]);
@@ -162,7 +161,7 @@ export function ScanRoute({ onClassified, onBack, chainRegistry }) {
     const handlePaste = useCallback(() => {
         const text = paste.trim();
         if (!text) {
-            setStatus('Paste a payload first.');
+            setStatus(t('scan.error.pasteEmpty'));
             return;
         }
         classify(text);
@@ -175,12 +174,12 @@ export function ScanRoute({ onClassified, onBack, chainRegistry }) {
                     size="sm"
                     variant="ghost"
                     onClick={onBack}
-                    aria-label="Back"
+                    aria-label={t('common.back')}
                 >
                     <Icon.BackIcon />
                 </Button>
             ) : null}
-            <span style={TITLE}>Scan</span>
+            <span style={TITLE}>{t('scan.title')}</span>
         </div>
     ), [onBack]);
 
@@ -188,19 +187,19 @@ export function ScanRoute({ onClassified, onBack, chainRegistry }) {
         <Screen variant="small" header={header}>
             <div style={BODY} data-testid="scan-route">
                 {!stopped ? (
-                    <QrScanner onFrame={handleFrame} alt="Scan a QR code" />
+                    <QrScanner onFrame={handleFrame} alt={t('scan.scannerAlt')} />
                 ) : (
-                    <StatusMessage variant="success">Scanned — routing…</StatusMessage>
+                    <StatusMessage variant="success">{t('scan.routing')}</StatusMessage>
                 )}
                 {status ? (
                     <StatusMessage variant="error">{status}</StatusMessage>
                 ) : null}
                 <label style={PASTE_LABEL}>
-                    Or paste a payload
+                    {t('scan.pasteLabel')}
                     <textarea
                         value={paste}
                         onChange={(e) => setPaste(e.target.value)}
-                        placeholder="xchain:… / bitcoin:… / address / PSBT hex"
+                        placeholder={t('scan.pastePlaceholder')}
                         style={PASTE_BOX}
                         spellCheck={false}
                         autoComplete="off"
@@ -213,7 +212,7 @@ export function ScanRoute({ onClassified, onBack, chainRegistry }) {
                     onClick={handlePaste}
                     disabled={!paste.trim() || stopped}
                 >
-                    Classify pasted payload
+                    {t('scan.classifyPaste')}
                 </Button>
             </div>
         </Screen>

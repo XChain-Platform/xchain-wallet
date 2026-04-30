@@ -2,6 +2,7 @@ import { useState } from 'react';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { Icon } from '@xchain-wallet/core/ui';
 import { EmptyStateNudge } from './EmptyStateNudge.jsx';
+import { useAssetInfo } from '../hooks/useAssetInfo.js';
 import styles from './CollectiblesView.module.css';
 
 /**
@@ -12,10 +13,13 @@ import styles from './CollectiblesView.module.css';
  * surfaces the §27.6 token detail page via `onSelectToken` (the same
  * payload `<BalanceList>` emits, so the consuming router doesn't change).
  *
- * Image URLs aren't available yet — they live behind a future
- * `messaging.getAssetInfo` call (Cluster C FOLLOWUP 3). When the row
- * payload starts carrying `imageUrl`, the card will show it without
- * any further wiring; until then every card is a placeholder.
+ * Image URLs come from two paths: row-payload `imageUrl` (when the
+ * caller already has one) takes precedence, and `<CollectibleCard>`
+ * falls back to fetching `messaging.getAssetInfo` per-card via the
+ * shared `useAssetInfo` hook (Cluster I FOLLOWUP 3 / Cluster C
+ * FOLLOWUP 3). The hook's module-level cache means revisits don't
+ * re-fetch, and a missing / failing image leaves the ticker-letter
+ * placeholder in place.
  *
  * @param {object} props
  * @param {Array<{chainId: string, asset: string, displayName: string, divisibility: number, fiatRate: number | null, quantity: string, imageUrl?: string | null}>} props.rows
@@ -115,7 +119,25 @@ export function CollectiblesView({
 function CollectibleCard({ row, pinned, hidden, onSelect, onTogglePin, onToggleHide }) {
     const [imgFailed, setImgFailed] = useState(false);
     const chainIconUrl = branding.chainIconSmallUrl(row.chainId);
-    const showImage = typeof row.imageUrl === 'string' && row.imageUrl.length > 0 && !imgFailed;
+    // Cluster I FOLLOWUP 3 — fetch asset metadata to surface a real image
+    // when the row payload doesn't already carry one. `useAssetInfo`'s
+    // module-level cache means revisits don't re-fetch, and silent
+    // failure leaves the ticker-letter placeholder in place.
+    const assetInfo = useAssetInfo({
+        chainId: row.chainId,
+        asset: row.asset,
+        skip: row.kind === 'native' || hidden,
+    });
+    const fallbackImageUrl = assetInfo && typeof assetInfo.imageUrl === 'string'
+        && assetInfo.imageUrl.length > 0
+        ? assetInfo.imageUrl
+        : null;
+    const effectiveImageUrl = (typeof row.imageUrl === 'string' && row.imageUrl.length > 0)
+        ? row.imageUrl
+        : fallbackImageUrl;
+    const showImage = typeof effectiveImageUrl === 'string'
+        && effectiveImageUrl.length > 0
+        && !imgFailed;
     const clickable = typeof onSelect === 'function';
     const handleClick = clickable
         ? () => onSelect({
@@ -143,7 +165,7 @@ function CollectibleCard({ row, pinned, hidden, onSelect, onTogglePin, onToggleH
             <div className={styles.thumb}>
                 {showImage ? (
                     <img
-                        src={row.imageUrl}
+                        src={effectiveImageUrl}
                         alt=""
                         aria-hidden="true"
                         className={styles.thumbImg}

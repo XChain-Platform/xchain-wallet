@@ -7,6 +7,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.329.0] - 2026-04-30
+
+Bundled session — three FOLLOWUPs close together around the i18n + asset
+metadata surfaces.
+
+### Cluster R FOLLOWUP 2 — i18n t() migration beachhead (ScanRoute)
+
+§54 / Cluster R FOLLOWUP 2 — first route migrated to `t()`. ScanRoute
+imports `t` from `core/src/i18n/index.js` and replaces every inline
+user-facing string (header title + back aria-label, scanner alt-text,
+"Scanned — routing…" banner, paste label / placeholder / button copy,
+all five status messages) with dictionary lookups. New keys live under
+the `scan.*` namespace in `i18n/locales/en/index.js`: `scan.title`,
+`scan.scannerAlt`, `scan.routing`, `scan.pasteLabel`,
+`scan.pastePlaceholder`, `scan.classifyPaste`, `scan.error.pasteEmpty`,
+`scan.error.unknownXchainIntent`, `scan.error.wif`, `scan.error.mnemonic`,
+`scan.error.xcwChunk` (carries `{n}/{total}` placeholders),
+`scan.error.unknown` (carries `{type}`). The existing `common.back` key
+is reused for the back-button aria-label. Smoke
+`audits/scan-route.smoke.js` gains an i18n section that pins the
+dictionary contents, the t() callsites, and the placeholder shape.
+Per-route migrations (Send / Receive / Settings panels / …) remain
+deferred — this beachhead validates the pattern.
+
+### Cluster I FOLLOWUP 3 — useAssetInfo for Collectibles imageUrl
+
+§27.5 / Cluster I FOLLOWUP 3 — `<CollectibleCard>` now mounts
+`useAssetInfo` per-card so the NFT grid surfaces real images even when
+the row payload doesn't carry an `imageUrl`. The hook's module-level
+cache means revisits don't re-fetch, and the existing `onError` path
+keeps the ticker-letter placeholder as a visible fallback when the
+fetched URL fails to load. Native rows + hidden cards skip the fetch.
+`row.imageUrl` (when present) wins over the fetched fallback so a
+caller-provided URL still takes precedence. TokenDetail's wiring shipped
+at v0.322.0 (Cluster C FOLLOWUP 3); this closes the Collectibles half.
+Smoke `ui/asset-info.smoke.js` extends to pin the CollectibleCard wiring
++ the `effectiveImageUrl` derivation.
+
+### Cluster R FOLLOWUP 4 — Locale picker + LocaleSync bootstrap
+
+§35.1 / §54 / Cluster R FOLLOWUP 4 — `<LanguageRegionSection>` now
+populates the language `<select>` from `availableLocales()` (any
+registered locale shows up automatically; unknown codes fall back to
+their bcp47 string via the new `LANGUAGE_LABELS` display-name map).
+`onLanguageChange` flips the live i18n locale immediately via
+`setLocale(next)` (guarded by `availableLocales().includes(next)` so a
+stale settings record can't crash the panel) before persisting through
+`update({ language: next })`. Cold-start rehydration lives in a new
+`<LocaleSync>` component mounted under `MessagingProvider` next to
+`PrivacyBlurGate` — it reads `useSettings`, watches `settings.language`,
+and calls `setLocale` whenever the persisted code differs from the live
+locale (ignores unknown / unregistered codes). New
+`ui/locale-sync.smoke.js` pins the component shape, the
+MessagingProvider mount, the LanguageRegionSection wiring, and a
+runtime registerLocale → setLocale → t() round-trip.
+
 ## [0.328.0] - 2026-04-29
 
 Bundled session — three FOLLOWUPs close together because the shared
