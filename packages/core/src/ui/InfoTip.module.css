@@ -34,8 +34,6 @@
 .bubble {
     position: absolute;
     z-index: 50;
-    inset-inline-start: 50%;
-    transform: translateX(-50%);
     min-width: 180px;
     max-width: 260px;
     padding: var(--xc-space-2) var(--xc-space-3);
@@ -56,6 +54,28 @@
 
 .placementBottom {
     top: calc(100% + 6px);
+}
+
+/* Cluster P FOLLOWUP 3 — measurement-driven alignment. The default
+ * `alignCenter` matches the v0.210.0 layout (bubble centered on the
+ * trigger). When the JS measurement detects a viewport overflow, the
+ * component swaps in `alignStart` (bubble left edge anchored to the
+ * trigger's left) or `alignEnd` (bubble right edge anchored to the
+ * trigger's right) so a tooltip near the popup edge stays readable. */
+.alignCenter {
+    inset-inline-start: 50%;
+    transform: translateX(-50%);
+}
+
+.alignStart {
+    inset-inline-start: 0;
+    transform: none;
+}
+
+.alignEnd {
+    inset-inline-end: 0;
+    inset-inline-start: auto;
+    transform: none;
 }
 
 @media (prefers-contrast: more) {

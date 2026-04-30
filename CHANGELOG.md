@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.320.0] - 2026-04-29
+
+Cluster O FOLLOWUP 2 + Cluster P FOLLOWUP 3 + Cluster H FOLLOWUP 2 — peer-extractor handles MESSAGE incoming + ORDER fill counterparty rows, InfoTip re-anchors when its bubble would clip the viewport, and the ImportWallet drop-zone accepts PNG / JPEG QR-image drops.
+
+§31 / §28.3 / Cluster O FOLLOWUP 2 — `peerAddressOfEntry` in History.jsx now does action-kind-aware extraction. Pre-fix the function returned the wallet's own address for any row whose `destination` equalled `entry.address` (RECEIVE / MESSAGE-incoming), making the `<SaveContactPrompt>` suppress the affordance. The extended extractor checks each candidate against the wallet self-address and falls through to the right field. ORDER_MATCH / fill rows pick the counterparty from a candidate list (`tx0_address`, `tx1_address`, `give_address`, `get_address`, `destination`, `source`). DIVIDEND + AIRDROP recipient lists remain deferred — those need a new `messaging.getDividendRecipients({ chainId, actionIndex })` host method that walks holders or per-recipient dispense rows.
+
+§37 / G122 / Cluster P FOLLOWUP 3 — `<InfoTip>` re-anchors when the bubble's center-anchored extent would clip the viewport. v0.210.0's bubble was always centered on the trigger; in narrow contexts (extension popup is 360 px wide) tooltips near the right edge could clip. The component now measures the trigger's `getBoundingClientRect` against `document.documentElement.clientWidth` on every open transition (and on resize while open) and swaps in `.alignStart` (left edge anchored to trigger) or `.alignEnd` (right edge anchored to trigger) when the centered layout would overflow. Default `.alignCenter` matches the v0.210.0 layout. Measurement uses `useLayoutEffect` so the user never sees a flash of clipped layout before the re-anchor.
+
+§15.4 / G022 / Cluster H FOLLOWUP 2 — ImportWallet's recovery-phrase drop-zone now accepts printed-paper-wallet QR images. Previously the dropzone rejected anything that wasn't `text/*` / `.txt` / `.asc`; now PNG / JPEG drops render to an off-screen canvas, run `globalThis.BarcodeDetector` for `qr_code` format, and feed the rawValue through the existing `handleQrFrame` so the textarea fills the same way a live `<QrScanner>` capture would. Browsers without `BarcodeDetector` (Safari / Firefox today) get a friendly hint pointing to the Scan QR button instead of failing silently. PDFs remain out of scope — they need a third-party PDF render layer. The plain-text rejection copy now mentions the new image case so the user knows what's accepted.
+
+### Added
+
+- **`packages/core/src/shared/routes/History.jsx`** — `peerAddressOfEntry` extended with ORDER_MATCH branch + self-address filtering on the SEND/RECEIVE/MESSAGE branch. Header docstring tags the FOLLOWUP id and notes the deferred DIVIDEND / AIRDROP branch.
+- **`packages/core/src/ui/InfoTip.jsx`** — alignment state + `useLayoutEffect`-driven measurement + resize listener.
+- **`packages/core/src/ui/InfoTip.module.css`** — three alignment classes (`.alignCenter` / `.alignStart` / `.alignEnd`) replacing the unconditional centered anchor on `.bubble`.
+- **`packages/core/src/shared/routes/ImportWallet.jsx`** — image-QR drop branch + `decodeImageQrFile` + `loadImageFromUrl` helpers; updated rejection copy.
+- **`test/smoke/ui/save-contact-extractor.smoke.js`** (new) — pins the FOLLOWUP id, ORDER_MATCH branch, isSelf helper, and self-filtering on dest/src.
+- **`test/smoke/ui/info-tip-overflow.smoke.js`** (new) — pins useLayoutEffect import, alignment state, getBoundingClientRect measurement, the three CSS alignment classes, the resize listener, and the bubble-class composition.
+- **`test/smoke/ui/import-wallet-image-qr.smoke.js`** (new) — pins the FOLLOWUP id, MIME + extension detection, BarcodeDetector feature-check, `decodeImageQrFile` shape, and the updated rejection copy.
+
+Closes Cluster O FOLLOWUP 2, Cluster P FOLLOWUP 3, Cluster H FOLLOWUP 2.
+
 ## [0.319.0] - 2026-04-29
 
 Cluster I FOLLOWUP 6 + Cluster P FOLLOWUPs 4 + 5 + Cluster J FOLLOWUP 7 — confirmation badge on the History tx-status timeline, form-draft sweep across IssueTokenForm + DispenserForm, error-recovery sweep across the same two forms plus AddAccountForm, and demo-wallet activation defaulting to regtest networks.

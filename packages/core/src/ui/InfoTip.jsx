@@ -16,8 +16,15 @@
 // (type="button") so it doesn't accidentally submit forms, and so it
 // inherits the host's focus styling.
 
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import styles from './InfoTip.module.css';
+
+// Default bubble width assumptions, kept in sync with the CSS clamp
+// (`.bubble { min-width: 180px; max-width: 260px }`). A measurement-
+// driven layout would be more precise, but the bubble is opt-in and
+// reads as a band of width somewhere in this range; the half-width
+// constant just decides which side overflows for re-anchoring.
+const BUBBLE_HALF_WIDTH = 130; // ≈ max-width / 2
 
 /**
  * @param {object} props
@@ -28,6 +35,11 @@ import styles from './InfoTip.module.css';
  */
 export function InfoTip({ label, aria = 'More info', placement = 'top', className }) {
     const [open, setOpen] = useState(false);
+    // Cluster P FOLLOWUP 3 — alignment is measured at open time so the
+    // bubble re-anchors to the start / end of the trigger when its
+    // center-anchored extent would clip the viewport. Default 'center'
+    // matches the v0.210.0 layout for triggers that comfortably fit.
+    const [align, setAlign] = useState(/** @type {'start' | 'center' | 'end'} */ ('center'));
     const id = useId();
     const wrapRef = useRef(/** @type {HTMLSpanElement | null} */ (null));
 
@@ -48,7 +60,47 @@ export function InfoTip({ label, aria = 'More info', placement = 'top', classNam
         };
     }, [open]);
 
+    // Re-anchor on every open transition (and on viewport resize while
+    // open). useLayoutEffect runs before the browser paints the bubble
+    // so the user never sees a flash of clipped layout, then re-paint
+    // with the corrected alignment class.
+    useLayoutEffect(() => {
+        if (!open) return undefined;
+        const recompute = () => {
+            const node = wrapRef.current;
+            if (!node) return;
+            const rect = node.getBoundingClientRect();
+            const center = rect.left + rect.width / 2;
+            const viewportWidth =
+                (typeof document !== 'undefined' && document.documentElement?.clientWidth) ||
+                (typeof window !== 'undefined' && window.innerWidth) ||
+                0;
+            if (viewportWidth <= 0) {
+                setAlign('center');
+                return;
+            }
+            if (center - BUBBLE_HALF_WIDTH < 0) {
+                setAlign('start');
+            } else if (center + BUBBLE_HALF_WIDTH > viewportWidth) {
+                setAlign('end');
+            } else {
+                setAlign('center');
+            }
+        };
+        recompute();
+        const onResize = () => recompute();
+        if (typeof window !== 'undefined') window.addEventListener('resize', onResize);
+        return () => {
+            if (typeof window !== 'undefined') window.removeEventListener('resize', onResize);
+        };
+    }, [open]);
+
     const cls = [styles.wrap, className].filter(Boolean).join(' ');
+    const alignClass = align === 'start'
+        ? styles.alignStart
+        : align === 'end'
+            ? styles.alignEnd
+            : styles.alignCenter;
 
     return (
         <span ref={wrapRef} className={cls}>
@@ -79,7 +131,7 @@ export function InfoTip({ label, aria = 'More info', placement = 'top', classNam
                 <span
                     id={id}
                     role="tooltip"
-                    className={`${styles.bubble} ${placement === 'bottom' ? styles.placementBottom : styles.placementTop}`}
+                    className={`${styles.bubble} ${placement === 'bottom' ? styles.placementBottom : styles.placementTop} ${alignClass}`}
                 >
                     {label}
                 </span>

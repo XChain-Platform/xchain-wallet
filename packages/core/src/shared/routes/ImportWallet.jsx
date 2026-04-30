@@ -135,15 +135,48 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
         }
     }
 
+    // Cluster H FOLLOWUP 2 — image-QR drop branch. The mnemonic
+    // dropzone keeps its plain-text fast path for `.txt` / `.asc` /
+    // `text/*` MIME types, but now also accepts a printed-paper-wallet
+    // photo: PNG / JPEG renders into a canvas, the global
+    // `BarcodeDetector` (Chrome / Edge / Android Chrome) extracts a
+    // `qr_code` rawValue, and the result feeds `handleQrFrame` so the
+    // mnemonic textarea fills exactly the way a live `<QrScanner>`
+    // capture would. Browsers without `BarcodeDetector` (Safari /
+    // Firefox today) surface a friendly hint instead of silently
+    // failing. PDFs are still out of scope — they need a third-party
+    // PDF render layer.
     function handleFileDrop(event) {
         event.preventDefault();
         setDragOver(false);
         const file = event.dataTransfer?.files?.[0];
         if (!file) return;
-        // Only accept text-like files. PDFs / images would need extra
-        // decoding paths (image → BarcodeDetector); out of scope for G022.
+
+        const isImage = (file.type && file.type.startsWith('image/'))
+            || /\.(png|jpe?g)$/i.test(file.name);
+        if (isImage) {
+            if (typeof globalThis.BarcodeDetector !== 'function') {
+                setError('Image-QR decoding requires a browser with BarcodeDetector support — try Chrome or Edge, or use the Scan QR button instead.');
+                return;
+            }
+            decodeImageQrFile(file)
+                .then((text) => {
+                    if (typeof text === 'string' && text.length > 0) {
+                        handleQrFrame(text);
+                    } else {
+                        setError('No QR code found in the dropped image.');
+                    }
+                })
+                .catch((err) => {
+                    setError(err?.message || 'Could not decode QR from the dropped image.');
+                });
+            return;
+        }
+
+        // Plain-text path. PDFs and unknown MIME types fall through here
+        // and surface an explicit rejection rather than a silent miss.
         if (file.type && !file.type.startsWith('text/') && !/\.(txt|asc)$/i.test(file.name)) {
-            setError('Only plain-text files (.txt) can be dropped here.');
+            setError('Only plain-text files (.txt / .asc) or QR images (.png / .jpg) can be dropped here.');
             return;
         }
         const reader = new FileReader();
@@ -522,4 +555,53 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
             {isFull ? <div className={styles.card}>{form}</div> : form}
         </Screen>
     );
+}
+
+// Cluster H FOLLOWUP 2 — image-QR decode helper. Loads a dropped
+// image into an <img>, paints it onto a same-sized off-screen
+// canvas, runs the global BarcodeDetector for `qr_code` formats,
+// and returns the first match's rawValue (or null when no match
+// exists). All resources are released in a finally so a failure
+// midway doesn't leak object URLs. The caller has already verified
+// `globalThis.BarcodeDetector` is present.
+//
+// @param {File} file
+// @returns {Promise<string | null>}
+async function decodeImageQrFile(file) {
+    const url = URL.createObjectURL(file);
+    let img = null;
+    try {
+        img = await loadImageFromUrl(url);
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth || img.width;
+        canvas.height = img.naturalHeight || img.height;
+        if (canvas.width === 0 || canvas.height === 0) {
+            throw new Error('Dropped image has no decodable dimensions.');
+        }
+        const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error('Could not allocate a 2D drawing context.');
+        ctx.drawImage(img, 0, 0);
+        const detector = new globalThis.BarcodeDetector({ formats: ['qr_code'] });
+        const codes = await detector.detect(canvas);
+        if (Array.isArray(codes) && codes.length > 0) {
+            const raw = codes[0]?.rawValue;
+            return typeof raw === 'string' ? raw : null;
+        }
+        return null;
+    } finally {
+        URL.revokeObjectURL(url);
+        if (img) img.src = '';
+    }
+}
+
+// Promise wrapper for HTMLImageElement.onload. Rejects on the next
+// tick if the image fails to decode (corrupt PNG / unsupported
+// format / etc).
+function loadImageFromUrl(url) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error('Could not load the dropped image.'));
+        img.src = url;
+    });
 }

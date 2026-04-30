@@ -980,20 +980,61 @@ function SaveContactPrompt({ entry }) {
 }
 
 /**
- * Pull the peer-side address out of a history entry. SEND uses
- * destination/DESTINATION, RECEIVE uses source/SOURCE; other action
- * kinds may not have a single salient peer address (returns null and
- * the caller suppresses the prompt).
+ * Pull the peer-side address out of a history entry. Cluster O
+ * FOLLOWUP 2 — extended to action-kind-aware extractors so MESSAGE
+ * incoming rows and ORDER_MATCH fill rows surface a usable counterparty
+ * (the v0.207.0 implementation only handled the SEND case cleanly —
+ * RECEIVE / MESSAGE-incoming / fill rows fell through to either a
+ * self-address or null).
+ *
+ * Returns null when no salient peer address is on the row payload —
+ * the caller suppresses the prompt.
+ *
+ * Unsupported on-row today, deferred to a future FOLLOWUP that fetches
+ * derived data:
+ *   - DIVIDEND recipients are computed at runtime from holders of the
+ *     dividend's TICK at the snapshot block. The row itself does not
+ *     carry the recipient list. Surfacing "Save N recipients" here
+ *     needs a `messaging.getDividendRecipients({ chainId, actionIndex })`
+ *     host method that walks the holders table or the per-recipient
+ *     dispense rows, which doesn't exist yet.
+ *   - AIRDROP is similar — the row carries TICK + AMOUNT but the
+ *     recipients are derived from a LIST action's contents.
  *
  * @param {any} entry
  * @returns {string | null}
  */
 function peerAddressOfEntry(entry) {
     const raw = entry?.raw || {};
+    const self = entry?.address;
+    const isSelf = (a) => typeof self === 'string' && self.length > 0 && a === self;
+    const action = String(entry?.action || '').toUpperCase();
+
+    // ORDER_MATCH / fill rows carry both sides of the trade. The peer
+    // is whichever address isn't the wallet's own. Different explorer
+    // shapes use different field names — try them in priority order.
+    if (action === 'ORDER_MATCH' || action === 'ORDER_FILL' || action === 'ORDERFILL') {
+        const candidates = [
+            raw.tx0_address, raw.TX0_ADDRESS,
+            raw.tx1_address, raw.TX1_ADDRESS,
+            raw.give_address, raw.GIVE_ADDRESS,
+            raw.get_address, raw.GET_ADDRESS,
+            raw.destination, raw.DESTINATION,
+            raw.source, raw.SOURCE,
+        ];
+        for (const a of candidates) {
+            if (typeof a === 'string' && a.length > 0 && !isSelf(a)) return a;
+        }
+        return null;
+    }
+
+    // SEND / RECEIVE / MESSAGE / generic — destination if it isn't
+    // the wallet's own address (we received), otherwise source if
+    // that isn't ours either (we sent).
     const dest = raw.destination ?? raw.DESTINATION ?? raw.recipient ?? raw.RECIPIENT;
-    if (typeof dest === 'string' && dest.length > 0) return dest;
+    if (typeof dest === 'string' && dest.length > 0 && !isSelf(dest)) return dest;
     const src = raw.source ?? raw.SOURCE;
-    if (typeof src === 'string' && src.length > 0 && src !== entry.address) return src;
+    if (typeof src === 'string' && src.length > 0 && !isSelf(src)) return src;
     return null;
 }
 
