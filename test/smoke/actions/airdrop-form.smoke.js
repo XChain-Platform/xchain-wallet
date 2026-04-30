@@ -112,6 +112,19 @@ assert.ok(/messaging\.listPendingAirdropsForWallet\s*\(/.test(src), 'AirdropForm
 assert.ok(/messaging\.clearPendingAirdrop\s*\(/.test(src), 'AirdropForm calls messaging.clearPendingAirdrop on cancel / done');
 assert.ok(src.includes("'InvalidPasswordError'"), 'AirdropForm handles wrong-password');
 
+// --- 4b. CSV / TXT drop-zone wiring (Cluster P FOLLOWUP 2) ------------
+
+assert.ok(/import \{ useDropZone \} from '\.\.\/hooks\/useDropZone\.js'/.test(src),
+    'AirdropForm imports useDropZone for additive drag-and-drop');
+assert.ok(/const recipientsDrop = useDropZone\(\{[\s\S]*?accept:\s*\[[^\]]*'\.csv'[^\]]*'\.txt'[^\]]*\][\s\S]*?onFile:/m.test(src),
+    'recipientsDrop accepts .csv/.txt and wires onFile to airdropLib.parseCsv');
+assert.ok(/airdropLib\.parseCsv\(text\)/.test(src),
+    'recipientsDrop reuses airdropLib.parseCsv to fill the recipients textarea');
+assert.ok(/\{\.\.\.recipientsDrop\.rootProps\}/.test(src),
+    'recipientsDrop.rootProps spreads onto the recipients label so the drop target is visible');
+assert.ok(/recipientsDrop\.isDragOver\s*\?\s*'Drop the CSV \/ TXT file here'/.test(src),
+    'placeholder copy flips while a drag is in flight');
+
 // --- 5. Polling loop visibility gate + interval -----------------------
 
 assert.ok(

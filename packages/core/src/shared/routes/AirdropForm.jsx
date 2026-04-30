@@ -15,6 +15,7 @@ import {
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
+import { useDropZone } from '../hooks/useDropZone.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -289,6 +290,20 @@ export function AirdropForm({ walletId, resumeId = null, onBack }) {
         };
         reader.readAsText(file);
     }, []);
+
+    // Cluster P FOLLOWUP 2 — drag-and-drop a CSV / TXT recipient list
+    // onto the textarea. Additive; the click-to-pick lane via the
+    // `<input type="file">` below stays the primary affordance.
+    const recipientsDrop = useDropZone({
+        accept: ['.csv', '.txt', 'text/csv', 'text/plain'],
+        readAs: 'text',
+        onError: (msg) => setFormError(msg),
+        onFile: ({ content }) => {
+            const text = typeof content === 'string' ? content : '';
+            const parts = airdropLib.parseCsv(text);
+            setPasteText(parts.join('\n'));
+        },
+    });
 
     function handleReviewList(event) {
         event.preventDefault();
@@ -749,13 +764,19 @@ export function AirdropForm({ walletId, resumeId = null, onBack }) {
                 autoComplete="off"
             />
 
-            <label className={styles.pickerLabel}>
+            <label
+                className={styles.pickerLabel}
+                {...recipientsDrop.rootProps}
+                data-drop-active={recipientsDrop.isDragOver ? 'true' : 'false'}
+            >
                 Recipients
                 <textarea
                     className={styles.picker}
                     value={pasteText}
                     onChange={(e) => setPasteText(e.target.value)}
-                    placeholder={'Paste addresses, one per line or comma-separated.'}
+                    placeholder={recipientsDrop.isDragOver
+                        ? 'Drop the CSV / TXT file here'
+                        : 'Paste addresses, one per line or comma-separated.'}
                     rows={8}
                     spellCheck={false}
                     autoCapitalize="none"

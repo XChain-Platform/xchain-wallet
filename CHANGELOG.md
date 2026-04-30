@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.330.0] - 2026-04-30
+
+### Cluster P FOLLOWUP 2 — Drop-zone wiring on remaining file-input forms
+
+§37 / Cluster P FOLLOWUP 2 — `<AirdropForm>` is the last surface with an
+`<input type="file">` to gain `useDropZone` plumbing. The hook is wired
+against the recipients label so the textarea + its hidden-input picker
+share a single drop target; on drop the same `airdropLib.parseCsv` runs
+that the click-to-pick lane uses, and `pasteText` is filled with the
+extracted addresses. Placeholder copy flips to "Drop the CSV / TXT file
+here" while a drag is in flight. The existing click-to-pick path (the
+native `<input>` underneath) keeps working as the primary affordance —
+drop is purely additive. `actions/airdrop-form.smoke.js` extends to
+pin the import, the accept list, the airdropLib.parseCsv hand-off, the
+rootProps spread, and the dragover placeholder. Every `<input type="file">`
+site in `core/shared/{routes,components}` now ships drop-zone wiring;
+diagnosticDump import + ConnectedSites bulk-import remain non-existent
+surfaces and will pick up `useDropZone` if/when they're added.
+
 ## [0.329.0] - 2026-04-30
 
 Bundled session — three FOLLOWUPs close together around the i18n + asset
