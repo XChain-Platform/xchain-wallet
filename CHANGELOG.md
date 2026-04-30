@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.326.0] - 2026-04-29
+
+Cluster H FOLLOWUP 3 — `add` mode for encrypted backup restore. Users with an open vault can now restore an encrypted backup as a new wallet alongside their existing one(s) without colliding on ids; the wallet record gets a fresh id at decode time and every cross-reference (account.walletId, address.accountId, importedKeys[].addressId, pendingTx.id) is rewired in lockstep.
+
+§19.4 / Cluster H FOLLOWUP 3 — `importBackupFile` accepts a `mode: 'fresh' | 'add'` parameter (default 'fresh' preserves existing behavior). In add mode, a new `remintIdentifiers` helper mutates the decoded payload in place: wallet.id, every account.id (and account.walletId rewired to the new wallet), every address.id (and address.accountId rewired when it referenced a re-minted account), every wallet.importedKeys[].addressId (rewired through the address-id remap), and every pendingTx.id (re-minted independently — pending txs are address-scoped via fromAddress, not id-scoped). Contacts / connectedSites / settings ids stay untouched (they're global across wallets and there's nothing to disambiguate). `collectConflicts` accepts a `skipWalletScoped` opt that the add-mode path uses to skip the wallet/account/address/pendingTx conflict pre-checks since those have already been re-minted to fresh ids.
+
+The host route (`createBackgroundHost.js` `wallet.importBackup`) forwards `req.mode` into the flow. ImportWallet's existing `mode` prop ('fresh' / 'add') already drove the mnemonic lane's host channel selection; the encrypted-backup lane now also forwards it, and the lane's subtitle copy switches when in add mode to "Restore as a new wallet — won't replace your existing one." (compact) / "Restore an encrypted backup as a new wallet alongside your existing one(s)…" (full).
+
+### Added
+
+- **`packages/core/src/flows/backupFile.js`** — `mode` parameter on `importBackupFile`; new `remintIdentifiers` exported helper; `collectConflicts` `skipWalletScoped` opt; randomUUID import; `mode` validation.
+- **`packages/extension/src/background/createBackgroundHost.js`** — `wallet.importBackup` handler forwards `req.mode`.
+- **`packages/core/src/shared/routes/ImportWallet.jsx`** — backup lane forwards `mode` to `importBackupRequest`; add-mode subtitle copy on both compact and full variants.
+- **`test/smoke/wallet/backup-add-mode.smoke.js`** (new) — pins the flow surface (mode default + validation + remintIdentifiers export), runtime re-mint behavior (wallet/account/address ids change + cross-references rewired + global ids untouched + pendingTx fromAddress preserved), host wiring, and ImportWallet copy.
+- **`test/integration/flows/backup-add-mode.test.js`** (new) — full encode → decode round-trip (4 cases): add-mode lands fresh wallet alongside existing; double-import of the same backup produces two distinct wallets; fresh mode keeps the original id; unknown mode value rejected.
+
+Closes Cluster H FOLLOWUP 3.
+
 ## [0.325.0] - 2026-04-29
 
 Cluster T FOLLOWUP 3 — Glossary auto-appendix. `BridgeErrorCode` union members and `ConnectedSite.SitePermissions` keys auto-derive into a fenced appendix at the bottom of `docs/GLOSSARY.md` so the doc never drifts from the canonical sources.

@@ -795,6 +795,7 @@ export function createBackgroundHost(deps) {
             fileContent: req?.fileContent,
             password: req?.password,
             onConflict: req?.onConflict,
+            mode: req?.mode,
         });
         return {
             walletId: r.walletId,

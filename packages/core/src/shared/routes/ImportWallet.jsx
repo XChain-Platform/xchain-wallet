@@ -127,6 +127,12 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                 fileContent: backupContent,
                 password: backupPassword,
                 onConflict: backupOverwrite ? 'overwrite' : 'error',
+                // §19.4 / Cluster H FOLLOWUP 3 — 'add' mode tells the
+                // host to re-mint wallet / account / address ids so
+                // the restored wallet coexists with what's in the
+                // vault already (vs the default 'fresh' import that
+                // keeps the original ids).
+                mode,
             });
             onImported();
         } catch (err) {
@@ -296,8 +302,12 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                             : 'Paste your 12-word FreeWallet recovery phrase.')
                         : lane === 'backup'
                             ? (isFull
-                                ? 'Pick a `.xchain-wallet` file you exported from this app and enter the password you set when you created the backup.'
-                                : 'Pick a backup file and enter its password.')
+                                ? (mode === 'add'
+                                    ? 'Restore an encrypted backup as a new wallet alongside your existing one(s). The wallet record gets a fresh id at decode time so the two wallets don\'t collide.'
+                                    : 'Pick a `.xchain-wallet` file you exported from this app and enter the password you set when you created the backup.')
+                                : (mode === 'add'
+                                    ? 'Restore as a new wallet — won\'t replace your existing one.'
+                                    : 'Pick a backup file and enter its password.'))
                             : (isFull
                                 ? 'Enter a BIP39 recovery phrase (12, 15, 18, 21, or 24 words) or a Counterwallet 12-word mnemonic. The format is detected automatically.'
                                 : 'Paste a 12-, 15-, 18-, 21-, or 24-word recovery phrase.')}

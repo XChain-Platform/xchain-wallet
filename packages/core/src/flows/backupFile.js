@@ -29,6 +29,7 @@ import {
     parseBackupEnvelope,
     stringifyBackupEnvelope,
 } from '../crypto/index.js';
+import { randomUUID } from '../util/uuid.js';
 import { WalletNotFoundError } from './unlockWallet.js';
 
 export const BACKUP_PAYLOAD_VERSION = 1;
@@ -148,6 +149,12 @@ export async function exportBackupFile({
  * @property {string | object} fileContent                 raw JSON string or parsed envelope
  * @property {string} password
  * @property {'overwrite' | 'preserve' | 'error'} [onConflict]  default 'error'
+ * @property {'fresh' | 'add'} [mode]                       'fresh' (default) imports the
+ *                                                          wallet under its original ids;
+ *                                                          'add' re-mints wallet / account /
+ *                                                          address ids so the restored wallet
+ *                                                          coexists with what's already in
+ *                                                          the vault. Cluster H FOLLOWUP 3.
  */
 
 /**
@@ -167,6 +174,7 @@ export async function importBackupFile({
     fileContent,
     password,
     onConflict = 'error',
+    mode = 'fresh',
 }) {
     if (!vault) throw new Error('importBackupFile: vault is required');
     if (typeof password !== 'string' || password.length === 0) {
@@ -176,6 +184,9 @@ export async function importBackupFile({
         throw new Error(
             `importBackupFile: onConflict must be 'overwrite' | 'preserve' | 'error' (got "${onConflict}")`,
         );
+    }
+    if (mode !== 'fresh' && mode !== 'add') {
+        throw new Error(`importBackupFile: mode must be 'fresh' or 'add' (got "${mode}")`);
     }
 
     const envelope = parseBackupEnvelope(fileContent);
@@ -195,8 +206,25 @@ export async function importBackupFile({
         throw new Error('importBackupFile: payload missing wallet record');
     }
 
-    // Collect conflicts up-front; onConflict='error' fails fast.
-    const conflicts = await collectConflicts(vault, decoded);
+    // §19.4 / Cluster H FOLLOWUP 3 — 'add' mode re-mints wallet /
+    // account / address ids so the restored wallet coexists with what
+    // the vault already has, even if the source vault and target vault
+    // happened to share an id (a from-seed restore on the same device,
+    // for example, would deterministically produce some equal ids).
+    // Contacts / connectedSites / settings stay shared (their ids are
+    // already global) — collisions there fall through to the existing
+    // onConflict policy.
+    if (mode === 'add') {
+        remintIdentifiers(decoded);
+    }
+
+    // Collect conflicts up-front; onConflict='error' fails fast. Add
+    // mode skips the wallet / account / address collisions because we
+    // just re-minted those ids — only contacts / connectedSites /
+    // settings can still conflict.
+    const conflicts = await collectConflicts(
+        vault, decoded, { skipWalletScoped: mode === 'add' },
+    );
     if (conflicts.length > 0 && onConflict === 'error') {
         throw new BackupConflictError(conflicts);
     }
@@ -250,9 +278,15 @@ export async function importBackupFile({
 /**
  * @param {import('../storage/Vault.js').Vault} vault
  * @param {BackupPayload} payload
+ * @param {{ skipWalletScoped?: boolean }} [opts]   when true, skip
+ *                                                  wallets / accounts /
+ *                                                  addresses / pendingTxs
+ *                                                  (the four collections
+ *                                                  whose ids `add`-mode
+ *                                                  has already re-minted)
  * @returns {Promise<string[]>}          conflict labels ("wallets/<id>", etc.)
  */
-async function collectConflicts(vault, payload) {
+async function collectConflicts(vault, payload, opts = {}) {
     const out = [];
     async function check(collection, incoming, name) {
         for (const rec of incoming) {
@@ -261,14 +295,89 @@ async function collectConflicts(vault, payload) {
             if (existing) out.push(`${name}/${rec.id}`);
         }
     }
-    await check(vault.wallets, [payload.wallet], 'wallets');
-    await check(vault.accounts, payload.accounts ?? [], 'accounts');
-    await check(vault.addresses, payload.addresses ?? [], 'addresses');
+    if (!opts.skipWalletScoped) {
+        await check(vault.wallets, [payload.wallet], 'wallets');
+        await check(vault.accounts, payload.accounts ?? [], 'accounts');
+        await check(vault.addresses, payload.addresses ?? [], 'addresses');
+        await check(vault.pendingTxs, payload.pendingTxs ?? [], 'pendingTxs');
+    }
     await check(vault.contacts, payload.contacts ?? [], 'contacts');
     await check(vault.connectedSites, payload.connectedSites ?? [], 'connectedSites');
-    await check(vault.pendingTxs, payload.pendingTxs ?? [], 'pendingTxs');
     if (payload.settings && (await vault.settings.get())) out.push('settings');
     return out;
+}
+
+/**
+ * Re-mint wallet / account / address ids on the decoded payload so
+ * an `add`-mode import can land alongside what the vault already
+ * has. Mutates `decoded` in place. Updates every field that
+ * references one of the re-minted ids:
+ *
+ *   - wallet.id
+ *   - wallet.importedKeys[].addressId
+ *   - account.id, account.walletId
+ *   - address.id, address.accountId
+ *   - pendingTx.id    (kept independent — pending txs are address-scoped
+ *                     via `fromAddress`, not id-scoped)
+ *
+ * Contacts / connectedSites / settings ids stay as-is (they're global
+ * across wallets and there's nothing to disambiguate). Exported for
+ * test access; production callers go through `importBackupFile({mode:
+ * 'add'})`.
+ *
+ * @param {BackupPayload} decoded
+ */
+export function remintIdentifiers(decoded) {
+    const walletIdMap = new Map();
+    const accountIdMap = new Map();
+    const addressIdMap = new Map();
+
+    const oldWalletId = decoded.wallet.id;
+    const newWalletId = randomUUID();
+    walletIdMap.set(oldWalletId, newWalletId);
+    decoded.wallet.id = newWalletId;
+
+    for (const acc of decoded.accounts ?? []) {
+        if (!acc || typeof acc.id !== 'string') continue;
+        const oldId = acc.id;
+        const newId = randomUUID();
+        accountIdMap.set(oldId, newId);
+        acc.id = newId;
+        if (typeof acc.walletId === 'string' && walletIdMap.has(acc.walletId)) {
+            acc.walletId = walletIdMap.get(acc.walletId);
+        }
+    }
+
+    for (const addr of decoded.addresses ?? []) {
+        if (!addr || typeof addr.id !== 'string') continue;
+        const oldId = addr.id;
+        const newId = randomUUID();
+        addressIdMap.set(oldId, newId);
+        addr.id = newId;
+        if (typeof addr.accountId === 'string' && accountIdMap.has(addr.accountId)) {
+            addr.accountId = accountIdMap.get(addr.accountId);
+        }
+    }
+
+    // Wallet's importedKeys point at the re-minted address ids by
+    // value; rewire so a wif-imported wallet lands intact.
+    if (Array.isArray(decoded.wallet.importedKeys)) {
+        for (const ik of decoded.wallet.importedKeys) {
+            if (ik && typeof ik.addressId === 'string' && addressIdMap.has(ik.addressId)) {
+                ik.addressId = addressIdMap.get(ik.addressId);
+            }
+        }
+    }
+
+    // PendingTxs — re-mint id so a re-import of the same backup doesn't
+    // collide; keep the rest of the row (fromAddress / txid / status)
+    // untouched. fromAddress is the canonical address string, not an
+    // id, so it survives the address-id re-mint.
+    for (const ptx of decoded.pendingTxs ?? []) {
+        if (ptx && typeof ptx.id === 'string') {
+            ptx.id = randomUUID();
+        }
+    }
 }
 
 async function applyCollection(collection, records, onConflict, writes, skipped, name) {
