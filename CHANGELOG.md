@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.324.0] - 2026-04-29
+
+Cluster U FOLLOWUP 1 — BBQr-Z (zlib + base32) decoding support. Coldcard / SeedSigner emit Z by default for large PSBTs because Z compresses ~30%+ vs H/B; users with those wallets can now scan signed-PSBT replies straight into PsbtSignForm without manually flipping their device to H or B.
+
+§20.4 / G043 / Cluster U FOLLOWUP 1 — `packages/core/src/uri/bbqrPsbt.js` adds a Z encoding branch that re-uses `decodeBase32NoPad` for the base32 layer and inflates the resulting bytes via pako. The standard zlib container (2-byte header + adler32 trailer) is the spec'd wire shape; the inflater falls back to raw-deflate on header-mismatch as a defensive branch for signers that have shipped raw-deflate frames in the wild. Inflate failures wrap into a typed `BbqrError` with the underlying message preserved; pako exceptions never surface raw to callers. The `decodeBbqrFrames` return type union extends to `'H' | 'B' | 'Z'`. The previous "encoding Z (zlib) not yet supported" throw is gone — a malformed frame still surfaces a clear, named error via the `unsupported encoding "<E>"` fallback.
+
+`pako` is the runtime dependency (CommonJS 1.x, ~12KB minified — destructured from the default import so the Node ESM loader is happy and bundlers tree-shake unused exports). Static import was chosen over the FOLLOWUP's dynamic-import shape because making `decodeBbqrFrames` async would cascade through `normalizePsbtInput`'s `useMemo` in PsbtSignForm — a much larger refactor than the bundle savings would justify.
+
+`PsbtSignForm`'s `unsupportedFormatHint` no longer special-cases BBQr-Z (since it's supported); it still falls back through `decodeBbqrPsbt` to surface BBQr-specific errors for malformed / incomplete / future-encoding frames. `qrPsbtFormat.js`'s header doc updated to list only UR as remaining-unsupported.
+
+### Added
+
+- **`packages/core/src/uri/bbqrPsbt.js`** — `'Z'` branch in `decodeBbqrFrames`; new `inflateZlib` helper (pako.inflate with raw-deflate fallback); type union extended to `'H' | 'B' | 'Z'`.
+- **`packages/core/package.json`** — `pako: ^1.0.11` added to `dependencies`.
+- **`packages/core/src/shared/routes/PsbtSignForm.jsx`** — header docstring + `unsupportedFormatHint` comments updated to drop the BBQr-Z carve-out.
+- **`packages/core/src/uri/qrPsbtFormat.js`** — header doc lists UR as the remaining-unsupported format; BBQr-Z dropped from the carve-out.
+- **`test/smoke/bridge/bbqr-psbt.smoke.js`** — Z round-trip pinned (single-frame, multi-frame, out-of-order, larger-PSBT, garbage-payload BbqrError).
+
+Closes Cluster U FOLLOWUP 1.
+
 ## [0.323.0] - 2026-04-29
 
 Cluster C FOLLOWUP 2 — cross-chain LINK pair rendering. Both sides of a LINK now collapse into a single dual-chain card with both `<ChainBadge>`s side-by-side, a `CROSS-CHAIN` action badge, and a `${peerAction} ↔ ${leaderAction}` summary; the connector between the two sides is suppressed in grouped mode (kept in flat mode).

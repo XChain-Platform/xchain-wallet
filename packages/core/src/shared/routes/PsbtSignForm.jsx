@@ -83,11 +83,11 @@ const BASE64_PSBT_PREFIX = 'cHNid';
  * Recognized input forms:
  *   • hex          — 0-9a-f, even-length
  *   • base64       — starts with the standard PSBT magic ("cHNidP")
- *   • BBQr (H / B) — single or multi-frame, line-separated
- *                    (§20.4 / G043). Z (zlib) encoding throws via
- *                    decodeBbqrPsbt; UR is recognized but not yet
- *                    supported and surfaces null here so the caller's
- *                    detector can branch on `detectQrFrameFormat`.
+ *   • BBQr (H / B / Z) — single or multi-frame, line-separated
+ *                    (§20.4 / G043). All three encodings decode now;
+ *                    UR is recognized but not yet supported and
+ *                    surfaces null here so the caller's detector can
+ *                    branch on `detectQrFrameFormat`.
  *
  * @param {string} raw
  * @returns {string | null}
@@ -171,10 +171,12 @@ export function PsbtSignForm({ walletId, onBack }) {
     const psbtHex = useMemo(() => normalizePsbtInput(pasted), [pasted]);
 
     // §20.4 / G043 — when a paste fails to normalize, check whether it
-    // matched a known-but-unsupported QR format (UR, or BBQr-Z) so the
-    // error message tells the user *why* instead of saying "not hex or
+    // matched a known-but-unsupported QR format (UR) so the error
+    // message tells the user *why* instead of saying "not hex or
     // base64". The first non-empty token is enough for UR; BBQr-Z
-    // surfaces via `decodeBbqrPsbt`'s thrown error which we catch.
+    // (Cluster U FOLLOWUP 1) and BBQr-H/B all decode now, but
+    // malformed BBQr frames still surface via `decodeBbqrPsbt`'s
+    // thrown error which we catch.
     const unsupportedFormatHint = useMemo(() => {
         if (!pasted || psbtHex) return null;
         const firstToken = pasted.trim().split(/\s+/)[0];
@@ -183,8 +185,10 @@ export function PsbtSignForm({ walletId, onBack }) {
         if (generic) return generic;
         if (fmt === 'bbqr') {
             // Format detected as BBQr but normalize returned null —
-            // most likely a Z (zlib) frame. Try a one-frame decode to
-            // surface the BBQr-specific error message.
+            // most likely a malformed frame, an incomplete multi-frame
+            // capture, or a future encoding the wallet doesn't yet
+            // support. Try a one-frame decode to surface the
+            // BBQr-specific error message.
             try { decodeBbqrPsbt([firstToken]); } catch (e) {
                 return e?.message ?? 'BBQr decode failed';
             }

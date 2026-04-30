@@ -21,15 +21,23 @@
 // Coverage today:
 //   ✅ H (hex) — single + multi-frame, encode + decode
 //   ✅ B (base32, RFC 4648 no padding) — single + multi-frame decode
-//   ⏸ Z (zlib + base32) — needs a zlib inflater (no project dep yet)
+//   ✅ Z (zlib + base32) — single + multi-frame decode (Cluster U FOLLOWUP 1)
 //   ⏸ Multi-encoder fallback — N/A, user picks the encoder upstream
 //
 // Encode (Cluster W FOLLOWUP 4) emits H frames so a watcher-mode
 // wallet's unsigned PSBT can be imported by Sparrow / Coldcard /
 // SeedSigner. Hex is the simplest and least surprising choice — no
 // dep on a base32 encoder, every BBQr-aware reader supports it.
+// Coldcard / SeedSigner default to Z when sending PSBTs back to a
+// host because Z compresses ~30%+ for typical PSBTs; the Z branch
+// here lets users scan those replies straight into PsbtSignForm.
 
 import { base32 } from '@scure/base';
+// pako is CommonJS — destructure off the default import so the Node
+// ESM loader is happy. Bundlers (Vite + Rollup) preserve the named
+// references through tree-shaking.
+import pako from 'pako';
+const { inflate: pakoInflate, inflateRaw: pakoInflateRaw } = pako;
 
 export const BBQR_PREFIX = 'B$';
 const BBQR_HEADER_LEN = 8;  // "B$EFNNXX"
@@ -145,7 +153,7 @@ export function parseBbqrFrame(frame) {
  * encoding). Returns the decoded payload as Uint8Array.
  *
  * @param {string[]} frames
- * @returns {{ bytes: Uint8Array, fileType: string, encoding: 'H' | 'B' }}
+ * @returns {{ bytes: Uint8Array, fileType: string, encoding: 'H' | 'B' | 'Z' }}
  */
 export function decodeBbqrFrames(frames) {
     if (!Array.isArray(frames) || frames.length === 0) {
@@ -191,10 +199,19 @@ export function decodeBbqrFrames(frames) {
         bytes = decodeHexUpper(joined);
     } else if (encoding === 'B') {
         bytes = decodeBase32NoPad(joined);
+    } else if (encoding === 'Z') {
+        // Z = zlib(deflate) over base32. The base32 decode is the same
+        // alphabet as 'B', so re-use the helper; pako.inflate then
+        // unwraps the zlib container (2-byte header + adler32 trailer).
+        // BBQr-Z producers (Coldcard, SeedSigner) emit a standard
+        // zlib stream — no raw-deflate fallback needed for spec'd
+        // content. We do try inflateRaw on the standard-decode failure
+        // path to be defensive, since some signers have shipped
+        // raw-deflate-by-mistake frames in the wild.
+        const compressed = decodeBase32NoPad(joined);
+        bytes = inflateZlib(compressed);
     } else {
-        // Z = zlib + base32. Tracked as FOLLOWUP — pulling in a zlib
-        // implementation is out of scope for this step.
-        throw new BbqrError(`encoding "Z" (zlib) not yet supported — open a frame in another wallet using "H" or "B"`);
+        throw new BbqrError(`unsupported encoding "${encoding}"`);
     }
     return { bytes, fileType, encoding };
 }
@@ -243,6 +260,26 @@ function decodeHexUpper(s) {
         out[i] = Number.parseInt(clean.substr(i * 2, 2), 16);
     }
     return out;
+}
+
+/**
+ * Inflate a zlib-wrapped DEFLATE stream. Tries the standard zlib path
+ * first (the spec'd shape); falls back to raw-deflate if the header
+ * is missing — a defensive branch for signers that ship raw-deflate
+ * by mistake.
+ * @param {Uint8Array} compressed
+ * @returns {Uint8Array}
+ */
+function inflateZlib(compressed) {
+    try {
+        return pakoInflate(compressed);
+    } catch (e) {
+        try {
+            return pakoInflateRaw(compressed);
+        } catch (_e2) {
+            throw new BbqrError(`zlib inflate failed: ${e?.message ?? e}`);
+        }
+    }
 }
 
 function decodeBase32NoPad(s) {

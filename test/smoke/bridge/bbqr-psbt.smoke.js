@@ -1,6 +1,6 @@
-// Smoke for §20.4 / G043 — BBQr / UR PSBT QR (partial: BBQr H + B
-// land now; BBQr Z (zlib) and UR are recognized but throw a clear
-// "not yet supported" error).
+// Smoke for §20.4 / G043 — BBQr / UR PSBT QR. BBQr H + B + Z all
+// decode now (Cluster U FOLLOWUP 1 wired Z via pako); UR is still
+// recognized but throws "not yet supported" pending Cluster U FU 2.
 
 import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
@@ -96,10 +96,62 @@ assert.throws(() => decodeBbqrPsbt([`B$HP0200${half1}`, `B$HP0301${half2}`]),
 assert.throws(() => decodeBbqrPsbt([`B$HP0200${half1}`, `B$BP0201ABCDEFGH`]),
     /encoding mismatch/);
 
-// Z encoding throws a clear, named error rather than silently failing.
-const zFrame = `B$ZP0100AAAAAAAA`;
-assert.throws(() => decodeBbqrPsbt([zFrame]),
-    /encoding "Z" \(zlib\) not yet supported/);
+// Z encoding round-trip — generate a zlib-compressed PSBT, base32 it
+// (no padding), wrap in a BBQr Z frame, and decode back. This is the
+// shape Coldcard / SeedSigner emit when sending a signed PSBT back
+// to a host. Pako is the runtime dep.
+const pako = (await import('pako')).default;
+const { base32 } = await import('@scure/base');
+
+function makeZFrames(hexPsbt, payloadBytes) {
+    const psbtBytes = Uint8Array.from(
+        hexPsbt.match(/.{2}/g).map((h) => parseInt(h, 16)),
+    );
+    const compressed = pako.deflate(psbtBytes);
+    const b32 = base32.encode(compressed).replace(/=+$/, '');
+    const frames = [];
+    const chunks = Math.ceil(b32.length / payloadBytes);
+    const fmt36 = (n) => {
+        const A = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+        return A[Math.floor(n / 36)] + A[n % 36];
+    };
+    for (let i = 0; i < chunks; i++) {
+        frames.push(`B$ZP${fmt36(chunks)}${fmt36(i)}${b32.slice(i * payloadBytes, (i + 1) * payloadBytes)}`);
+    }
+    return frames;
+}
+
+const zFramesSingle = makeZFrames(samplePsbtHex, 4096);
+assert.equal(zFramesSingle.length, 1, 'small PSBT fits in one Z frame');
+const decodedZ = decodeBbqrPsbt(zFramesSingle);
+assert.equal(decodedZ.psbtHex, samplePsbtHex,
+    'BBQr Z single-frame round-trip preserves PSBT hex');
+
+const zFramesMulti = makeZFrames(samplePsbtHex, 4);
+assert.ok(zFramesMulti.length >= 2, 'multi-frame Z splits across chunks');
+const decodedZMulti = decodeBbqrPsbt(zFramesMulti);
+assert.equal(decodedZMulti.psbtHex, samplePsbtHex,
+    'BBQr Z multi-frame round-trip preserves PSBT hex');
+
+// Out-of-order Z frames also reassemble correctly.
+const decodedZOoo = decodeBbqrPsbt([...zFramesMulti].reverse());
+assert.equal(decodedZOoo.psbtHex, samplePsbtHex,
+    'BBQr Z out-of-order round-trip works');
+
+// Bigger PSBT to exercise the size-win that motivates Z in production.
+const biggerSampleHex = '70736274ff' + '0102030405'.repeat(80);  // ~405 bytes
+const biggerZ = makeZFrames(biggerSampleHex, 200);
+const biggerZDecoded = decodeBbqrPsbt(biggerZ);
+assert.equal(biggerZDecoded.psbtHex, biggerSampleHex,
+    'BBQr Z round-trip preserves a larger PSBT');
+
+// Corrupted Z payload surfaces a wrapped BbqrError, not a raw pako exception.
+// Use base32 chars that decode to bytes that are neither a valid zlib header
+// nor a valid raw-deflate stream. Zero-byte runs are the most reliable
+// way to force both inflate paths to reject.
+const garbageZ = 'B$ZP0100AAAAAAAA';
+assert.throws(() => decodeBbqrPsbt([garbageZ]),
+    BbqrError, 'corrupted Z payload throws a typed BbqrError');
 
 // File type other than P is rejected at decodeBbqrPsbt.
 const txFrame = `B$HT0100DEADBEEF`;

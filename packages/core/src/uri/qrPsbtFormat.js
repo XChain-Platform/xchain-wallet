@@ -13,8 +13,8 @@
 // the frame matches none of the known prefixes). Callers dispatch on
 // the answer, route the frame to the right collector, and surface a
 // clear "format X is not yet supported by this wallet" error for
-// formats with no decoder yet (currently UR and BBQr-Z encoding —
-// both tracked as Cluster U FOLLOWUPs).
+// formats with no decoder yet (currently UR — BBQr H/B/Z all decode
+// as of Cluster U FOLLOWUP 1; UR remains tracked as Cluster U FU 2).
 
 export const QR_PSBT_FORMATS = /** @type {const} */ (['xcw', 'bbqr', 'ur']);
 
