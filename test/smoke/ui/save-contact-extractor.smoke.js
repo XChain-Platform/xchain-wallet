@@ -17,15 +17,16 @@ const read = (p) => readFileSync(join(root, p), 'utf8');
 
 const historySrc = read('packages/core/src/shared/routes/History.jsx');
 
-// 1. Header tags the FOLLOWUP id and explicitly notes both the
-//    closing scope (MESSAGE / ORDER_MATCH) and the deferred branch
-//    (DIVIDEND / AIRDROP need a derived-data fetch).
+// 1. Header tags the FOLLOWUP id and notes the DIVIDEND / AIRDROP
+//    derived-recipient branch — the v0.328.0 close mounts these via
+//    a sibling <RecipientsBlock> that fetches via SDK rather than
+//    extending peerAddressOfEntry to a per-recipient set.
 assert.ok(/Cluster O\s*\n\s*\* FOLLOWUP 2/.test(historySrc),
     'peerAddressOfEntry header tags Cluster O FOLLOWUP 2');
-assert.ok(/DIVIDEND recipients are computed at runtime from holders/.test(historySrc),
-    'peerAddressOfEntry header documents the DIVIDEND deferred branch');
-assert.ok(/AIRDROP/.test(historySrc),
-    'peerAddressOfEntry header documents the AIRDROP deferred branch');
+assert.ok(/DIVIDEND \/ AIRDROP rows have their \*derived\* recipient lists handled\s*\n\s*\* by `<RecipientsBlock>`/.test(historySrc),
+    'peerAddressOfEntry header documents that DIVIDEND / AIRDROP route through RecipientsBlock');
+assert.ok(/holdersFor \/ listByActionIndex/.test(historySrc),
+    'peerAddressOfEntry header notes the SDK round-trip path');
 
 // 2. ORDER_MATCH branch picks the counterparty from a candidate list
 //    that includes tx0_address / tx1_address / give_address / get_address.

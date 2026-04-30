@@ -326,6 +326,15 @@ export {
     createChainRegistryStatus,
 } from './refreshChainRegistry.js';
 export {
+    listCustomChains,
+    addCustomChain,
+    removeCustomChain,
+} from './customChains.js';
+export {
+    getDividendRecipients,
+    getAirdropRecipients,
+} from './recipientsByAction.js';
+export {
     refreshFirmwareManifest,
     resolveActiveFirmwareManifest,
     createInMemoryFirmwareManifestCache,

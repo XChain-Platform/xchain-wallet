@@ -29,6 +29,32 @@
 //                                                    additions; returns
 //                                                    an unsubscribe fn.
 //   logConsole.clear()                             — empty the buffer.
+//   logConsole.restore(entries)                    — Cluster Q FOLLOWUP 5.
+//                                                    Splice persisted
+//                                                    entries into the
+//                                                    front of the buffer
+//                                                    (chronologically).
+//                                                    Skips listener
+//                                                    notifications so a
+//                                                    boot-time hydrate
+//                                                    doesn't spam the
+//                                                    Developer Mode panel
+//                                                    with stale rows.
+//   logConsole.attachMirror({save,sourceAllow?,
+//                            debounceMs?})         — Cluster Q FOLLOWUP 5.
+//                                                    Subscribe a debounced
+//                                                    persistence sink.
+//                                                    Default sourceAllow
+//                                                    is the strict
+//                                                    vault/signer/encoder/
+//                                                    bridge prefix list —
+//                                                    'console' entries are
+//                                                    NEVER mirrored
+//                                                    because they can
+//                                                    carry arbitrary
+//                                                    stringified args from
+//                                                    third-party code.
+//   logConsole.detachMirror()                      — remove the mirror.
 //
 // Capacity defaults to 500 — enough to spot most session-level issues
 // without keeping a megabyte of stringified payloads in memory.
@@ -186,6 +212,160 @@ function setCapacity(n) {
     }
 }
 
+// ─── Cluster Q FOLLOWUP 5 — persistent mirror ──────────────────────────
+//
+// Default source allow-list. The "vault / signer / encoder / bridge —
+// never console" rule from the FOLLOWUP guards the mirror against
+// leaking arbitrary console.* args (third-party code calling console.log
+// from a content-script context can include partial keys, addresses,
+// JSON-RPC payloads, etc.). Synthetic record() emissions opt-in by
+// using one of the prefixed sources.
+const DEFAULT_MIRROR_SOURCE_ALLOW = (source) => {
+    if (typeof source !== 'string') return false;
+    if (source === 'vault' || source === 'encoder') return true;
+    if (source.startsWith('signer:')) return true;
+    if (source.startsWith('bridge:')) return true;
+    return false;
+};
+
+const MIRROR_DEFAULT_LIMIT = 200;
+const MIRROR_DEFAULT_MESSAGE_LIMIT = 500;
+const MIRROR_DEFAULT_DEBOUNCE_MS = 1000;
+
+/** @type {{ unsubscribe: () => void, cancelTimer: () => void, flush: () => Promise<void>, save: (entries: LogEntry[]) => any, sourceAllow: (source: string) => boolean, limit: number, messageLimit: number } | null} */
+let mirror = null;
+
+/**
+ * Splice persisted entries into the front of the live buffer in
+ * chronological order without firing listeners. Idempotent — a duplicate
+ * id from a previous restore (or an in-memory entry pushed while the
+ * load was in flight) is dropped. Caller is expected to pass entries
+ * sorted oldest → newest, but the merge tolerates an unsorted input.
+ *
+ * @param {LogEntry[]} persisted
+ */
+function restore(persisted) {
+    if (!Array.isArray(persisted) || persisted.length === 0) return;
+    const seenIds = new Set();
+    for (const e of buffer) {
+        if (Number.isFinite(e?.id)) seenIds.add(e.id);
+    }
+    /** @type {LogEntry[]} */
+    const additions = [];
+    for (const raw of persisted) {
+        if (!raw || typeof raw !== 'object') continue;
+        const id = Number.isFinite(raw.id) ? raw.id : nextId++;
+        if (seenIds.has(id)) continue;
+        seenIds.add(id);
+        const entry = {
+            id,
+            timestamp: Number.isFinite(raw.timestamp) ? raw.timestamp : Date.now(),
+            level: ['log', 'info', 'warn', 'error'].includes(raw.level) ? raw.level : 'log',
+            source: typeof raw.source === 'string' ? raw.source : 'restore',
+            message: typeof raw.message === 'string' ? raw.message : String(raw.message ?? ''),
+        };
+        additions.push(entry);
+        if (entry.id >= nextId) nextId = entry.id + 1;
+    }
+    if (additions.length === 0) return;
+    additions.sort((a, b) => a.timestamp - b.timestamp);
+    buffer = [...additions, ...buffer];
+    if (buffer.length > capacity) {
+        buffer.splice(0, buffer.length - capacity);
+    }
+}
+
+/**
+ * Install a debounced persistence sink. Idempotent — a second call
+ * detaches the previous mirror first. The sink only sees entries whose
+ * source matches `sourceAllow`; the default whitelist excludes plain
+ * console.* output for safety.
+ *
+ * @param {{
+ *   save: (entries: LogEntry[]) => any,
+ *   sourceAllow?: (source: string) => boolean,
+ *   limit?: number,
+ *   messageLimit?: number,
+ *   debounceMs?: number,
+ * }} opts
+ */
+function attachMirror(opts) {
+    if (!opts || typeof opts.save !== 'function') return;
+    detachMirror();
+    const sourceAllow = typeof opts.sourceAllow === 'function'
+        ? opts.sourceAllow
+        : DEFAULT_MIRROR_SOURCE_ALLOW;
+    const limit = Number.isInteger(opts.limit) && opts.limit > 0 ? opts.limit : MIRROR_DEFAULT_LIMIT;
+    const messageLimit = Number.isInteger(opts.messageLimit) && opts.messageLimit > 0
+        ? opts.messageLimit
+        : MIRROR_DEFAULT_MESSAGE_LIMIT;
+    const debounceMs = Number.isInteger(opts.debounceMs) && opts.debounceMs >= 0
+        ? opts.debounceMs
+        : MIRROR_DEFAULT_DEBOUNCE_MS;
+
+    let pending = false;
+    let flushTimer = null;
+
+    const buildSnapshot = () => {
+        const filtered = buffer.filter((e) => sourceAllow(e.source));
+        const sliced = filtered.length > limit
+            ? filtered.slice(filtered.length - limit)
+            : filtered;
+        return sliced.map((e) => ({
+            id: e.id,
+            timestamp: e.timestamp,
+            level: e.level,
+            source: e.source,
+            message: typeof e.message === 'string' && e.message.length > messageLimit
+                ? e.message.slice(0, messageLimit)
+                : e.message,
+        }));
+    };
+
+    const flush = async () => {
+        pending = false;
+        flushTimer = null;
+        const snapshotEntries = buildSnapshot();
+        try {
+            await mirror?.save(snapshotEntries);
+        } catch {
+            // Storage failed — tolerate; the buffer stays in memory.
+        }
+    };
+
+    const schedule = () => {
+        if (pending) return;
+        pending = true;
+        flushTimer = setTimeout(() => { void flush(); }, debounceMs);
+    };
+
+    const unsubscribe = subscribe((entry) => {
+        if (!sourceAllow(entry.source)) return;
+        schedule();
+    });
+
+    mirror = {
+        unsubscribe,
+        cancelTimer: () => { if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; pending = false; } },
+        flush,
+        save: opts.save,
+        sourceAllow,
+        limit,
+        messageLimit,
+    };
+
+    // Defer the kickoff write so callers that immediately push() right
+    // after attachMirror still batch into one save.
+    schedule();
+}
+
+function detachMirror() {
+    if (!mirror) return;
+    mirror.unsubscribe();
+    mirror.cancelTimer();
+    mirror = null;
+}
+
 export const logConsole = {
     attach,
     detach,
@@ -195,5 +375,19 @@ export const logConsole = {
     subscribe,
     clear,
     setCapacity,
+    restore,
+    attachMirror,
+    detachMirror,
     isAttached() { return attached; },
+    isMirrorAttached() { return mirror !== null; },
+};
+
+// Exposed for tests; not part of the public surface.
+export const __mirrorTestUtils = {
+    defaultSourceAllow: DEFAULT_MIRROR_SOURCE_ALLOW,
+    DEFAULTS: {
+        limit: MIRROR_DEFAULT_LIMIT,
+        messageLimit: MIRROR_DEFAULT_MESSAGE_LIMIT,
+        debounceMs: MIRROR_DEFAULT_DEBOUNCE_MS,
+    },
 };

@@ -91,6 +91,7 @@ export const CLIPBOARD_AUTO_CLEAR_DEFAULT = 60;
  * @property {Array<{ at: number, action: 'add' | 'remove', entry: string, evictedSiteIds?: string[] }>} [blocklistAuditLog]   v2-tolerant — ring-buffer of recent blocklist mutations (Cluster S FOLLOWUP 4). Capped at 50 entries.
  * @property {{ burst?: number, windowMs?: number }} [signThrottle]                                          v2-tolerant — per-origin sign-request token-bucket limits (§12 / G012 / Cluster S FOLLOWUP 1). `burst` is positive integer max requests per window; `windowMs` is window length in ms (positive integer). Either field may be omitted to fall back to SIGN_THROTTLE_DEFAULT_BURST / SIGN_THROTTLE_DEFAULT_WINDOW_MS.
  * @property {typeof WALLET_MODES[number]} [walletMode]                                                      v2-tolerant — `full` (default) signs + broadcasts here; `watcher` builds unsigned PSBTs for an air-gapped signer; `signer` accepts pasted PSBTs from a watcher and returns signed PSBTs (§20 / G039). Send / Home branch on this field in subsequent steps.
+ * @property {object[]} [customChains]                                                                       v2-tolerant — user-added ChainDescriptor records (§9.7 / Cluster Q FOLLOWUP 2). Persisted across SW restarts so `chainRegistry.addCustom` re-seeds on boot. Per-descriptor validation runs in the `wallet.addCustomChain` host route via `validateChainDescriptor`; the schema check here only enforces that the field is an array of plain objects so a corrupt persisted blob can't crash the settings read.
  */
 
 // Form-draft retention — surfaced in Settings → Privacy (Cluster P FU 6).
@@ -368,6 +369,21 @@ export function validateSettings(record) {
             'walletMode',
             isOneOf(r.walletMode, WALLET_MODES),
             `must be one of ${WALLET_MODES.join(', ')}`,
+        );
+    }
+    if (r.customChains !== undefined) {
+        // Only enforces "array of plain objects" here. Per-descriptor
+        // validation runs in `wallet.addCustomChain` via
+        // `validateChainDescriptor` before the descriptor is appended.
+        // A corrupt persisted blob (the field somehow ended up with a
+        // malformed descriptor) is filtered at boot in createBackground-
+        // Host's re-seed loop, never raised to the user.
+        check(
+            errors,
+            'customChains',
+            Array.isArray(r.customChains)
+                && r.customChains.every((entry) => isPlainObject(entry)),
+            'must be an array of ChainDescriptor objects',
         );
     }
 

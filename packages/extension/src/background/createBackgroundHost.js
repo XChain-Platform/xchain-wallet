@@ -20,6 +20,7 @@ import { registerBridgeHandlers } from '../bridge/handlers.js';
 import * as signerBridge from './signerBridge.js';
 import { createBroadcastQueueStorage } from './broadcastQueueStorage.js';
 import { createSignThrottleStorage } from './signThrottleStorage.js';
+import { createLogConsoleStorage } from './logConsoleStorage.js';
 import { DEFAULT_ACTIVE_CHAIN_IDS } from './walletCreate.js';
 
 const {
@@ -151,6 +152,11 @@ const {
     clearBlocklistAuditLog,
     refreshChainRegistry,
     createChainRegistryStatus,
+    listCustomChains,
+    addCustomChain,
+    removeCustomChain,
+    getDividendRecipients,
+    getAirdropRecipients,
     createSignThrottle,
 } = flows;
 
@@ -412,9 +418,41 @@ export function createBackgroundHost(deps) {
         // Same shape as the broadcast-queue adapter; pass null to opt
         // out (in-memory only, the v0.219.0 behavior).
         signThrottleStorage = createSignThrottleStorage(),
+        // Cluster Q FOLLOWUP 5 — pluggable logConsole mirror. Default
+        // adapter picks chrome.storage.local (extension SW) or
+        // localStorage (web/desktop renderers); pass `null` explicitly
+        // to opt out (in-memory only, the v0.321.0 behavior). The mirror
+        // honors a strict source whitelist (vault / signer / encoder /
+        // bridge — never `console`) so arbitrary console.* args from
+        // third-party content-script code can't reach disk.
+        logConsoleStorage = createLogConsoleStorage(),
         ...hostDeps
     } = deps ?? {};
     const host = new MessageHost(hostDeps);
+
+    // Cluster Q FOLLOWUP 5 — hydrate + start mirroring as early as
+    // possible so a worker crash mid-boot still leaves the next session
+    // with whatever was buffered before the crash. Order matters:
+    // restore() runs before attachMirror() so the first save() writes
+    // the merged buffer (persisted + any synthetic record() calls that
+    // landed during boot). The persisted load itself is async; if a
+    // record() fires before it resolves, the live buffer keeps that
+    // entry and the next debounced flush picks it up.
+    if (logConsoleStorage) {
+        void (async () => {
+            try {
+                const persisted = await logConsoleStorage.load();
+                if (Array.isArray(persisted) && persisted.length > 0) {
+                    logConsole.restore(persisted);
+                }
+            } catch {
+                // Hydration failed — start fresh.
+            }
+            logConsole.attachMirror({
+                save: (entries) => logConsoleStorage.save(entries),
+            });
+        })();
+    }
 
     // Cluster S FOLLOWUP 1 — sign-throttle limits read from settings.
     // The throttle's `getLimits` returns from a closure cache so reads
@@ -426,6 +464,37 @@ export function createBackgroundHost(deps) {
     let cachedThrottleLimits = /** @type {{ burst?: number, windowMs?: number } | null} */ (null);
     /** @type {import('@xchain-wallet/core').storage.Vault | null} */
     let throttleVault = null;
+    // Cluster Q FOLLOWUP 2 — track whether we've already seeded the
+    // chainRegistry instance with the persisted custom chains. The
+    // registry is module-scoped in the shell entry (extension/web/
+    // desktop) and survives host teardown across lock/unlock cycles,
+    // so we only seed once per registry instance — re-installing a
+    // descriptor would throw on the duplicate id.
+    let customChainsSeeded = false;
+    async function seedCustomChainsFromVault(vault, chainRegistry) {
+        if (customChainsSeeded) return;
+        customChainsSeeded = true;
+        if (!vault || !chainRegistry) return;
+        try {
+            const settings = await vault.settings.get();
+            const list = Array.isArray(settings?.customChains) ? settings.customChains : [];
+            for (const descriptor of list) {
+                try {
+                    if (!descriptor || typeof descriptor !== 'object') continue;
+                    if (typeof descriptor.id !== 'string') continue;
+                    if (chainRegistry.has(descriptor.id)) continue;
+                    chainRegistry.addCustom(descriptor);
+                } catch {
+                    // Per-descriptor failures (corrupt persisted record,
+                    // descriptor invalid against the current validator)
+                    // are skipped silently — the boot path must not crash
+                    // on a single bad row.
+                }
+            }
+        } catch {
+            // Vault not open / read failed — boot continues.
+        }
+    }
     async function refreshThrottleLimitsFromVault() {
         if (!throttleVault) return;
         try {
@@ -611,7 +680,7 @@ export function createBackgroundHost(deps) {
 
     // --- Settings ------------------------------------------------------------
 
-    host.register('settings.get', async (_req, { vault }) => {
+    host.register('settings.get', async (_req, { vault, chainRegistry }) => {
         // Cluster S FOLLOWUP 1 — opportunistic throttle-limits cache
         // hydration. The bridge handlers don't await this, so the very
         // first sign request after SW restart may run on stale defaults
@@ -621,6 +690,12 @@ export function createBackgroundHost(deps) {
             throttleVault = vault;
             void refreshThrottleLimitsFromVault();
         }
+        // Cluster Q FOLLOWUP 2 — opportunistic custom-chain re-seed.
+        // Single-flight per host instance via the customChainsSeeded
+        // guard. Settings.get is the natural trigger because the popup
+        // calls it shortly after unlock, before any chain-aware UI
+        // mounts.
+        void seedCustomChainsFromVault(vault, chainRegistry);
         return getSettings(vault);
     });
 
@@ -924,6 +999,51 @@ export function createBackgroundHost(deps) {
             } catch { /* swallow — never crash boot on a refresh */ }
         }, 3_000);
     }
+
+    // §9.7 / Cluster Q FOLLOWUP 2 — custom (user-added) chain registry.
+    // Persisted under settings.customChains; re-seeded into the running
+    // ChainRegistry at boot via seedCustomChainsFromVault(). The three
+    // routes below are the runtime mutation surface — Developer Mode UI
+    // calls them.
+    host.register('chainRegistry.listCustomChains', async (_req, { vault }) => {
+        const descriptors = await listCustomChains({ vault });
+        return { descriptors };
+    });
+    host.register('chainRegistry.addCustomChain', async (req, { vault, chainRegistry }) => {
+        if (!req || typeof req !== 'object' || !req.descriptor) {
+            throw new Error('chainRegistry.addCustomChain: descriptor required');
+        }
+        return addCustomChain({ vault, chainRegistry, descriptor: req.descriptor });
+    });
+    host.register('chainRegistry.removeCustomChain', async (req, { vault, chainRegistry }) => {
+        if (!req || typeof req !== 'object' || typeof req.chainId !== 'string') {
+            throw new Error('chainRegistry.removeCustomChain: chainId required');
+        }
+        return removeCustomChain({ vault, chainRegistry, chainId: req.chainId });
+    });
+
+    // §31.4 / Cluster O FOLLOWUP 2 — recipient resolution for DIVIDEND
+    // and AIRDROP history rows. Both action kinds carry a *derived*
+    // recipient set that History needs to surface for the §31.4
+    // save-as-contact affordance. DIVIDEND walks holders of TICK at
+    // the snapshot block; AIRDROP walks the referenced LIST's ITEM
+    // array.
+    host.register('history.getDividendRecipients', async (req, { sdkRegistry }) => {
+        return getDividendRecipients({
+            sdkRegistry,
+            chainId: req?.chainId,
+            actionIndex: req?.actionIndex,
+            tick: req?.tick,
+        });
+    });
+    host.register('history.getAirdropRecipients', async (req, { sdkRegistry }) => {
+        return getAirdropRecipients({
+            sdkRegistry,
+            chainId: req?.chainId,
+            actionIndex: req?.actionIndex,
+            listActionIndex: req?.listActionIndex,
+        });
+    });
 
     // --- Receive -------------------------------------------------------------
 

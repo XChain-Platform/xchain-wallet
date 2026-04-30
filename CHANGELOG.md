@@ -7,6 +7,148 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.328.0] - 2026-04-29
+
+Bundled session — three FOLLOWUPs close together because the shared
+files (createBackgroundHost, flows/index, three messaging shells) each
+carry hunks for all three.
+
+### Cluster Q FOLLOWUP 5 — logConsole persistent mirror
+
+§48.5 / Cluster Q FOLLOWUP 5 — `logConsole` exposes `restore(entries)`
+(chronological prepend with id-dedupe; doesn't fire listeners so a
+boot-time hydrate doesn't spam the Developer Mode panel) +
+`attachMirror({save, sourceAllow?, debounceMs?})` (debounced subscriber
+that batches writes; default `sourceAllow` strict-whitelists `vault` /
+`signer:*` / `encoder` / `bridge:*` — `console` is NEVER mirrored
+because it can carry arbitrary stringified args from third-party
+content-script code) + `detachMirror()` + `isMirrorAttached()`. New
+`packages/extension/src/background/logConsoleStorage.js` mirrors the
+broadcastQueueStorage / signThrottleStorage shape: `chrome.storage.local`
+for the SW, `localStorage` for web + desktop renderers, null fallback
+for tests. `coerceEntries` defensive parse drops anything missing the
+canonical id/timestamp/level/source/message tuple so a corrupt
+persisted blob can't crash the SW at boot. `createBackgroundHost`
+accepts a `logConsoleStorage` dep (default = adapter picker), hydrates
+via `logConsole.restore(persisted)`, then calls
+`logConsole.attachMirror({save: storage.save})`. Order matters: restore
+runs before attach so the first save() writes the merged buffer
+(persisted + any record() calls that landed during boot).
+
+### Cluster Q FOLLOWUP 2 — Custom non-bundled chain registry
+
+§9.7 / Cluster Q FOLLOWUP 2 —
+`packages/core/src/flows/customChains.js` (new) ships
+`listCustomChains` / `addCustomChain` / `removeCustomChain`.
+`addCustomChain` validates via the existing `validateChainDescriptor`
+(per-descriptor strictness lives in the registry validator — single
+source of truth for "is this descriptor usable?"), checks for
+collisions against bundled + already-persisted ids, persists to
+`settings.customChains`, then mutates the running ChainRegistry. If
+the registry mutation throws after persistence, the persisted record
+is rolled back so the next boot doesn't try to seed an
+already-rejected descriptor. `removeCustomChain` removes from
+settings + the registry; bundled chains throw with a friendly "is a
+bundled chain and cannot be removed" message rather than the
+registry's lower-level error. `settings.customChains?: object[]` is
+v2-tolerant (array-of-plain-objects); strict per-descriptor validation
+runs at write time, not at settings-read time, so a future
+ChainDescriptor schema bump can't retroactively invalidate
+already-persisted records. `createBackgroundHost` registers the three
+host routes and ships a `seedCustomChainsFromVault(vault, chainRegistry)`
+helper fired single-flight on the first `settings.get` after host
+init (re-seeds the module-scoped registry on every unlock cycle, with
+a `chainRegistry.has(id)` guard against duplicate adds). All three
+messaging shells (popup / web / desktop) gain matching shims.
+`<DeveloperModeSection>` mounts a new `<CustomChainsRow>` between the
+Regtest networks subsection and the Raw PSBT inspector toggle: lists
+registered custom chains with Remove buttons; "Add custom chain…"
+opens a JSON-paste textarea (a guided form would be 16+ fields and
+quickly drift from the validator). Validation errors from the host
+route surface verbatim so the user sees exactly which field failed.
+
+### Cluster O FOLLOWUP 2 — DIVIDEND / AIRDROP recipient lists
+
+§31.4 / Cluster O FOLLOWUP 2 —
+`packages/core/src/flows/recipientsByAction.js` (new) ships
+`getDividendRecipients({sdkRegistry, chainId, actionIndex?, tick?})`
+(SDK round-trip via `sdk.getHolders(tick)`; normalizes various holder
+envelope shapes — `[]` / `{holders}` / `{rows}` — and uppercase field
+aliases; dedupes addresses; excludes the action's SOURCE so the
+dividend issuer doesn't show up as a recipient; returns a
+`snapshotNote` honest-disclosing that the holders set is *current*
+state, not the indexed snapshot, so the UI can show the caveat for
+older DIVIDENDs) + `getAirdropRecipients({sdkRegistry, chainId,
+actionIndex?, listActionIndex?})` (resolves `LIST_ACTION_INDEX` from
+the AIRDROP action when not pre-resolved; fetches the LIST via
+`sdk.getAction`; reads `params.ITEM` accepting both string and
+`{address}`-object member shapes; dedupes; returns the listType so
+callers can warn on TYPE=1 mismatches). Both flows accept pre-resolved
+fields so callers with `entry.raw.TICK` / `entry.raw.LIST_ACTION_INDEX`
+on the History row skip the extra round-trip.
+`createBackgroundHost` registers `history.getDividendRecipients` /
+`history.getAirdropRecipients` host routes; three messaging shells
+gain matching shims. `<RecipientsBlock>` mounts in History's DetailCard
+between SaveContactPrompt and RbfActions for DIVIDEND / AIRDROP rows:
+idle Show holders / Show recipients button → loading → loaded list
+(capped display at 200, with "+N more" tail) + a per-row inline
+display of address + balance for DIVIDEND. The "Save N as one contact"
+affordance bulk-saves into a single Contact record carrying every
+address as an `entries[]` member — matches the data model (one
+DIVIDEND/AIRDROP = one address book) better than N independent
+contacts. Default name pattern `DIVIDEND #<idx> (<TICK>) holders` /
+`AIRDROP #<idx> (list #<idx>) recipients`; the user can override
+before save. `peerAddressOfEntry`'s deferred-DIVIDEND/AIRDROP
+docstring updated to point at the new `<RecipientsBlock>` carrier.
+
+### Added
+
+- **`packages/core/src/shared/utils/logConsole.js`** — `restore`,
+  `attachMirror`, `detachMirror`, `isMirrorAttached`, default
+  `sourceAllow` predicate (vault / signer:* / encoder / bridge:* —
+  never console), `__mirrorTestUtils` test export.
+- **`packages/extension/src/background/logConsoleStorage.js`** (new)
+  — `createLogConsoleStorage` adapter picker.
+- **`packages/extension/src/background/createBackgroundHost.js`** —
+  `logConsoleStorage` dep + boot-time hydrate-then-attach;
+  `logConsoleStorage` import.
+- **`packages/core/src/flows/customChains.js`** (new) —
+  `listCustomChains` / `addCustomChain` / `removeCustomChain`.
+- **`packages/core/src/flows/recipientsByAction.js`** (new) —
+  `getDividendRecipients` / `getAirdropRecipients`.
+- **`packages/core/src/flows/index.js`** — re-exports of the five new
+  flows.
+- **`packages/core/src/schemas/settings.js`** — v2-tolerant
+  `customChains?: object[]` field + validator branch.
+- **`packages/core/src/shared/components/settings/DeveloperModeSection.jsx`**
+  — `CustomChainsRow` component + paste-JSON form + Remove affordance.
+- **`packages/core/src/shared/routes/History.jsx`** —
+  `<RecipientsBlock entry={entry}>` mounted in DetailCard for DIVIDEND
+  / AIRDROP rows; peerAddressOfEntry docstring updated.
+- **`packages/extension/src/background/createBackgroundHost.js`** —
+  five new host routes (chainRegistry.{listCustomChains,
+  addCustomChain, removeCustomChain} + history.{getDividendRecipients,
+  getAirdropRecipients}); `seedCustomChainsFromVault` helper +
+  `customChainsSeeded` single-flight guard.
+- **`packages/extension/src/popup/messaging.js`**,
+  **`packages/web/src/messaging.js`**,
+  **`packages/desktop/renderer/messaging.js`** — five new shims each.
+- **`test/smoke/ui/log-console-mirror.smoke.js`** (new) — surface,
+  default-allow predicate, restore behaviour, dedupe, debounce, source
+  filtering, adapter file shape, host wiring.
+- **`test/smoke/ui/custom-chains.smoke.js`** (new) — flow round-trip
+  (validate / persist / register / remove / collide), schema, host
+  wiring, three shell shims, DevMode-section mount.
+- **`test/smoke/ui/dividend-airdrop-recipients.smoke.js`** (new) —
+  flow round-trip across pre-resolved / action-lookup paths, holder
+  envelope shapes, host wiring, three shell shims, History UI mount.
+- **`test/smoke/ui/save-contact-extractor.smoke.js`** — header-pin
+  updated to point at the new RecipientsBlock carrier (Cluster O FU 2
+  closed).
+
+Closes Cluster Q FOLLOWUP 5, Cluster Q FOLLOWUP 2, Cluster O FOLLOWUP
+2.
+
 ## [0.327.0] - 2026-04-29
 
 Cluster Y FOLLOWUP 4 — desktop detach-pending-tx into a new window. A pending transaction's detail card now surfaces an "Open in new window" button on the desktop shell; clicking it spawns a fresh BrowserWindow pre-routed to that exact tx via History's new `initialFocus` prop. The detached window keeps its own auto-lock + nav state because every window in the desktop shell already shares the same main-process MessageHost (vault + signers stay singleton).

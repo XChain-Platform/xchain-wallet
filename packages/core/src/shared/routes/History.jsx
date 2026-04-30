@@ -884,6 +884,7 @@ function DetailCard({ entry, peerCache, chainTip, walletId }) {
                     {decodeActionToText(entry.raw)}
                 </pre>
                 <SaveContactPrompt entry={entry} />
+                <RecipientsBlock entry={entry} />
                 {replaceable.ok ? <RbfActions entry={entry} /> : null}
                 {detachAvailable ? (
                     <Button
@@ -1059,6 +1060,204 @@ function SaveContactPrompt({ entry }) {
 }
 
 /**
+ * §31.4 / Cluster O FOLLOWUP 2 — recipient list for DIVIDEND / AIRDROP
+ * rows. The recipient set is derived (holders of TICK for DIVIDEND, the
+ * referenced LIST's ITEM array for AIRDROP), so the user has to opt in
+ * to the fetch by clicking Show recipients. Once loaded, a "Save N as
+ * one contact" affordance bulk-saves the addresses into a single
+ * Contact record with N entries — the address-book grouping that
+ * matches the data model best (one DIVIDEND / AIRDROP = one address
+ * book).
+ *
+ * @param {{ entry: any }} props
+ */
+function RecipientsBlock({ entry }) {
+    const { messaging } = useMessaging();
+    const action = String(entry?.action || '').toUpperCase();
+    const isDividend = action === 'DIVIDEND';
+    const isAirdrop = action === 'AIRDROP';
+    const supported = isDividend || isAirdrop;
+
+    const [stage, setStage] = useState(/** @type {'idle' | 'loading' | 'loaded' | 'saving' | 'saved'} */ ('idle'));
+    const [error, setError] = useState(/** @type {string | null} */ (null));
+    const [recipients, setRecipients] = useState(/** @type {object[]} */ ([]));
+    const [snapshotNote, setSnapshotNote] = useState(/** @type {string | null} */ (null));
+    const [name, setName] = useState('');
+
+    if (!supported) return null;
+    if (typeof messaging?.getDividendRecipients !== 'function'
+        && typeof messaging?.getAirdropRecipients !== 'function') {
+        // No host wiring — degrade silently.
+        return null;
+    }
+
+    const coin = coinOfChainId(entry?.chainId);
+    if (!coin) return null;
+
+    const tick = String(entry?.raw?.TICK || entry?.raw?.tick || '').trim();
+    const listIdx = String(entry?.raw?.LIST_ACTION_INDEX || entry?.raw?.list_action_index || '').trim();
+    const defaultName = isDividend
+        ? `DIVIDEND #${entry?.actionIndex || '?'}${tick ? ` (${tick})` : ''} holders`
+        : `AIRDROP #${entry?.actionIndex || '?'}${listIdx ? ` (list #${listIdx})` : ''} recipients`;
+
+    async function load() {
+        setStage('loading');
+        setError(null);
+        try {
+            const r = isDividend
+                ? await messaging.getDividendRecipients({
+                    chainId: entry.chainId,
+                    actionIndex: String(entry.actionIndex),
+                    tick: tick || undefined,
+                })
+                : await messaging.getAirdropRecipients({
+                    chainId: entry.chainId,
+                    actionIndex: String(entry.actionIndex),
+                    listActionIndex: listIdx || undefined,
+                });
+            setRecipients(Array.isArray(r?.recipients) ? r.recipients : []);
+            setSnapshotNote(typeof r?.snapshotNote === 'string' ? r.snapshotNote : null);
+            setName(defaultName);
+            setStage('loaded');
+        } catch (err) {
+            setError(err?.message || 'Failed to load recipients.');
+            setStage('idle');
+        }
+    }
+
+    async function handleSaveAll() {
+        if (recipients.length === 0) return;
+        if (!name.trim()) {
+            setError('Name is required.');
+            return;
+        }
+        setStage('saving');
+        setError(null);
+        try {
+            await messaging.saveContact({
+                input: {
+                    name: name.trim(),
+                    notes: '',
+                    entries: recipients
+                        .map((r) => r?.address)
+                        .filter((a) => typeof a === 'string' && a.length > 0)
+                        .map((address) => ({ chain: coin, address, label: '' })),
+                },
+            });
+            setStage('saved');
+        } catch (err) {
+            setError(err?.message || 'Save failed.');
+            setStage('loaded');
+        }
+    }
+
+    const blockStyle = {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 'var(--xc-space-1)',
+        marginTop: 'var(--xc-space-2)',
+    };
+    const headingStyle = { color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-xs)' };
+
+    if (stage === 'idle') {
+        return (
+            <div style={blockStyle}>
+                <Button type="button" variant="secondary" size="sm" onClick={load}>
+                    {isDividend ? 'Show holders' : 'Show recipients'}
+                </Button>
+                {error ? <span style={{ color: 'var(--xc-error, #c33)', fontSize: 'var(--xc-text-xs)' }} role="alert">{error}</span> : null}
+            </div>
+        );
+    }
+    if (stage === 'loading') {
+        return (
+            <div style={blockStyle}>
+                <span style={headingStyle}>{isDividend ? 'Loading holders…' : 'Loading recipients…'}</span>
+            </div>
+        );
+    }
+    if (stage === 'saved') {
+        return (
+            <div style={blockStyle}>
+                <span style={headingStyle} role="status">
+                    Saved {recipients.length} address{recipients.length === 1 ? '' : 'es'} as a single contact "{name.trim()}".
+                </span>
+            </div>
+        );
+    }
+
+    // stage === 'loaded' or 'saving'
+    return (
+        <div style={blockStyle}>
+            <span style={headingStyle}>
+                {recipients.length} {isDividend ? 'holder' : 'recipient'}{recipients.length === 1 ? '' : 's'}
+            </span>
+            {snapshotNote ? <span style={headingStyle}>{snapshotNote}</span> : null}
+            {recipients.length > 0 ? (
+                <div style={{
+                    maxHeight: 160,
+                    overflowY: 'auto',
+                    border: '1px solid var(--xc-border)',
+                    borderRadius: 'var(--xc-radius-sm)',
+                    padding: 'var(--xc-space-1)',
+                    fontFamily: 'monospace',
+                    fontSize: 'var(--xc-text-xs)',
+                    color: 'var(--xc-text)',
+                }}>
+                    {recipients.slice(0, 200).map((r, i) => (
+                        <div key={`${r.address}-${i}`} style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--xc-space-1)' }}>
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.address}</span>
+                            {r.balance !== undefined ? <span style={{ color: 'var(--xc-text-muted)' }}>{r.balance}</span> : null}
+                        </div>
+                    ))}
+                    {recipients.length > 200 ? (
+                        <div style={{ color: 'var(--xc-text-muted)', marginTop: 'var(--xc-space-1)' }}>
+                            … and {recipients.length - 200} more not shown
+                        </div>
+                    ) : null}
+                </div>
+            ) : (
+                <span style={headingStyle}>No {isDividend ? 'holders' : 'recipients'} found.</span>
+            )}
+            {recipients.length > 0 ? (
+                <div style={{ display: 'flex', gap: 'var(--xc-space-1)', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <input
+                        type="text"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        maxLength={120}
+                        aria-label="Contact name"
+                        disabled={stage === 'saving'}
+                        style={{
+                            flex: 1,
+                            minWidth: 200,
+                            background: 'var(--xc-bg)',
+                            color: 'var(--xc-text)',
+                            border: '1px solid var(--xc-border)',
+                            borderRadius: 'var(--xc-radius-sm)',
+                            padding: 'var(--xc-space-1) var(--xc-space-2)',
+                            fontSize: 'var(--xc-text-sm)',
+                        }}
+                    />
+                    <Button
+                        type="button"
+                        variant="primary"
+                        size="sm"
+                        loading={stage === 'saving'}
+                        onClick={handleSaveAll}
+                    >
+                        Save {recipients.length} as one contact
+                    </Button>
+                </div>
+            ) : null}
+            {error ? (
+                <span style={{ color: 'var(--xc-error, #c33)', fontSize: 'var(--xc-text-xs)' }} role="alert">{error}</span>
+            ) : null}
+        </div>
+    );
+}
+
+/**
  * Pull the peer-side address out of a history entry. Cluster O
  * FOLLOWUP 2 — extended to action-kind-aware extractors so MESSAGE
  * incoming rows and ORDER_MATCH fill rows surface a usable counterparty
@@ -1067,18 +1266,11 @@ function SaveContactPrompt({ entry }) {
  * self-address or null).
  *
  * Returns null when no salient peer address is on the row payload —
- * the caller suppresses the prompt.
+ * the caller suppresses the single-peer "Save as contact" prompt.
  *
- * Unsupported on-row today, deferred to a future FOLLOWUP that fetches
- * derived data:
- *   - DIVIDEND recipients are computed at runtime from holders of the
- *     dividend's TICK at the snapshot block. The row itself does not
- *     carry the recipient list. Surfacing "Save N recipients" here
- *     needs a `messaging.getDividendRecipients({ chainId, actionIndex })`
- *     host method that walks the holders table or the per-recipient
- *     dispense rows, which doesn't exist yet.
- *   - AIRDROP is similar — the row carries TICK + AMOUNT but the
- *     recipients are derived from a LIST action's contents.
+ * DIVIDEND / AIRDROP rows have their *derived* recipient lists handled
+ * by `<RecipientsBlock>` instead — those need an SDK round-trip
+ * (holdersFor / listByActionIndex) to materialize the peer set.
  *
  * @param {any} entry
  * @returns {string | null}

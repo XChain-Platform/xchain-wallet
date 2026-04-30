@@ -970,6 +970,29 @@ export function refreshChainRegistry() {
     return /** @type {any} */ (sendMessage('chainRegistry.refresh'));
 }
 
+// §9.7 / Cluster Q FOLLOWUP 2 — Developer Mode custom chain registry.
+export function listCustomChains() {
+    return /** @type {Promise<{ descriptors: object[] }>} */ (sendMessage('chainRegistry.listCustomChains'));
+}
+export function addCustomChain(req) {
+    return /** @type {Promise<{ descriptor: object }>} */ (sendMessage('chainRegistry.addCustomChain', req));
+}
+export function removeCustomChain(req) {
+    return /** @type {Promise<{ removed: boolean }>} */ (sendMessage('chainRegistry.removeCustomChain', req));
+}
+
+// §31.4 / Cluster O FOLLOWUP 2 — DIVIDEND / AIRDROP recipient resolution.
+export function getDividendRecipients(req) {
+    return /** @type {Promise<{ recipients: object[], tick: string, source?: string | null, snapshotNote: string }>} */ (
+        sendMessage('history.getDividendRecipients', req)
+    );
+}
+export function getAirdropRecipients(req) {
+    return /** @type {Promise<{ recipients: object[], listActionIndex: string, listType: string | null }>} */ (
+        sendMessage('history.getAirdropRecipients', req)
+    );
+}
+
 /**
  * Destructively remove a wallet and every record linked to it. Returns
  * a `removed` summary keyed by collection name.
