@@ -234,4 +234,98 @@ describe('shared/utils/historyGrouping', () => {
         expect(out[0].kind).toBe('group');
         expect(out[0].summary).toBe('Launched MYTOKEN (supply 50)');
     });
+
+    // §28.3 / Cluster C FOLLOWUP 2 — cross-chain LINK pair grouping.
+
+    it('collapses both sides of a cross-chain LINK into one card', () => {
+        // Two SEND rows on different chains paired by the same
+        // linkActionIndex; DESC so the BTC side (newer block) appears
+        // first.
+        const entries = [
+            entry({
+                chainId: BTC, actionIndex: 100, action: 'SEND',
+                blockIndex: 500,
+                link: {
+                    peerChainId: LTC, peerCoinTicker: 'LTC',
+                    peerActionIndex: '200', linkActionIndex: 'L42',
+                },
+            }),
+            entry({
+                chainId: LTC, actionIndex: 200, action: 'SEND',
+                blockIndex: 400,
+                link: {
+                    peerChainId: BTC, peerCoinTicker: 'BTC',
+                    peerActionIndex: '100', linkActionIndex: 'L42',
+                },
+            }),
+        ];
+        const out = groupHistoryEntries(entries, 'grouped');
+        expect(out).toHaveLength(1);
+        expect(out[0].kind).toBe('group');
+        expect(out[0].subkind).toBe('link-pair');
+        // Leader is the older side (LTC), peer/member is the newer (BTC).
+        expect(out[0].leader.chainId).toBe(LTC);
+        expect(out[0].members.map((m) => m.chainId)).toEqual([BTC, LTC]);
+        expect(out[0].summary).toBe('Cross-chain link — SEND ↔ SEND');
+    });
+
+    it('renders link-pair summary with asymmetric action names', () => {
+        const entries = [
+            entry({
+                chainId: BTC, actionIndex: 100, action: 'LINK',
+                link: {
+                    peerChainId: LTC, peerCoinTicker: 'LTC',
+                    peerActionIndex: '200', linkActionIndex: 'L43',
+                },
+            }),
+            entry({
+                chainId: LTC, actionIndex: 200, action: 'ISSUE',
+                raw: { tick: 'XYZ', source: 'src9' },
+                link: {
+                    peerChainId: BTC, peerCoinTicker: 'BTC',
+                    peerActionIndex: '100', linkActionIndex: 'L43',
+                },
+            }),
+        ];
+        const out = groupHistoryEntries(entries, 'grouped');
+        // ISSUE-with-no-MINT survives as a plain entry so it can pair
+        // up via link-pair without conflicting with issue-mint grouping.
+        const linkGroup = out.find((it) => it.kind === 'group' && it.subkind === 'link-pair');
+        expect(linkGroup).toBeTruthy();
+        expect(linkGroup.summary).toBe('Cross-chain link — LINK ↔ ISSUE');
+    });
+
+    it('does not collapse a LINK whose peer is not in the visible window', () => {
+        // Single side present (e.g. peer chain disabled in filter); no
+        // collapse, the row stays a normal entry so its 🔗 badge still
+        // surfaces.
+        const entries = [
+            entry({
+                chainId: BTC, actionIndex: 100, action: 'SEND',
+                link: {
+                    peerChainId: LTC, peerCoinTicker: 'LTC',
+                    peerActionIndex: '200', linkActionIndex: 'L99',
+                },
+            }),
+        ];
+        const out = groupHistoryEntries(entries, 'grouped');
+        expect(out).toHaveLength(1);
+        expect(out[0].kind).toBe('entry');
+    });
+
+    it('does not collapse link-pair in flat mode', () => {
+        const entries = [
+            entry({
+                chainId: BTC, actionIndex: 100, action: 'SEND',
+                link: { peerChainId: LTC, peerCoinTicker: 'LTC', peerActionIndex: '200', linkActionIndex: 'L42' },
+            }),
+            entry({
+                chainId: LTC, actionIndex: 200, action: 'SEND',
+                link: { peerChainId: BTC, peerCoinTicker: 'BTC', peerActionIndex: '100', linkActionIndex: 'L42' },
+            }),
+        ];
+        const out = groupHistoryEntries(entries, 'flat');
+        expect(out).toHaveLength(2);
+        expect(out.every((it) => it.kind === 'entry')).toBe(true);
+    });
 });

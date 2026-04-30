@@ -771,7 +771,11 @@ export function History({ walletId, accountId, onBack, onReceive, initialSearchQ
                                                 key={entry.key}
                                                 entry={entry}
                                                 selected={selectedKey === entry.key}
-                                                showConnector={connectorByKey.has(entry.key)}
+                                                showConnector={
+                                                    item.subkind === 'link-pair'
+                                                        ? false
+                                                        : connectorByKey.has(entry.key)
+                                                }
                                                 onClick={() => onRowClick(entry)}
                                                 peerCache={peerCache}
                                                 isFull={isFull}
@@ -1174,6 +1178,12 @@ function EntryRow({ entry, selected, showConnector, onClick, peerCache, isFull, 
  */
 function GroupCard({ item, expanded, onToggle }) {
     const d = chainRegistry.get(item.leader.chainId);
+    // §28.3 — link-pair groups span two chains; surface both badges so
+    // the user sees the cross-chain relationship without expanding.
+    // Other subkinds keep their single-chain header.
+    const isLinkPair = item.subkind === 'link-pair';
+    const peer = isLinkPair ? item.members[0] : null;
+    const peerDescriptor = peer ? chainRegistry.get(peer.chainId) : null;
     const newest = item.members[0];
     return (
         <button
@@ -1184,8 +1194,16 @@ function GroupCard({ item, expanded, onToggle }) {
         >
             <span className={styles.rowHeader}>
                 {d ? <ChainBadge descriptor={d} size="sm" /> : null}
+                {isLinkPair && peerDescriptor && peerDescriptor !== d ? (
+                    <>
+                        <span className={styles.linkPairConnector} aria-hidden="true">↔</span>
+                        <ChainBadge descriptor={peerDescriptor} size="sm" />
+                    </>
+                ) : null}
                 <span className={styles.actionBadge}>{groupBadgeLabel(item.subkind)}</span>
-                <span className={styles.groupCount}>{item.members.length}</span>
+                {!isLinkPair ? (
+                    <span className={styles.groupCount}>{item.members.length}</span>
+                ) : null}
             </span>
             <span className={styles.rowSummary}>{item.summary}</span>
             <span className={styles.rowMeta}>
@@ -1203,6 +1221,7 @@ function groupBadgeLabel(subkind) {
     if (subkind === 'issue-mint') return 'LAUNCH';
     if (subkind === 'dispenser-dispense') return 'DISPENSER';
     if (subkind === 'order-fills') return 'ORDER';
+    if (subkind === 'link-pair') return 'CROSS-CHAIN';
     return 'GROUP';
 }
 

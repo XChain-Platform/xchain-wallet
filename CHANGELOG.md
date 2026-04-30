@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.323.0] - 2026-04-29
+
+Cluster C FOLLOWUP 2 — cross-chain LINK pair rendering. Both sides of a LINK now collapse into a single dual-chain card with both `<ChainBadge>`s side-by-side, a `CROSS-CHAIN` action badge, and a `${peerAction} ↔ ${leaderAction}` summary; the connector between the two sides is suppressed in grouped mode (kept in flat mode).
+
+§28.3 / Cluster C FOLLOWUP 2 — `groupHistoryEntries` grew a fourth subkind, `link-pair`, alongside `issue-mint` / `dispenser-dispense` / `order-fills`. The grouper tracks a `linkPairLeaders` map keyed by `linkActionIndex`; iterating DESC keeps overwriting until the oldest entry is the final leader, mirroring the issue-mint convention so the group emits at the older row's slot and the expanded list reads newest-first. Members are the newer peer side(s); when only one side of a LINK is in the visible window (peer chain disabled in filter / single-address wallet) the row stays a plain entry with its existing 🔗 badge so the §23.5 cross-chain affordance still surfaces. Flat mode passes through unchanged. `summarizeGroup` returns `Cross-chain link — {peerAction} ↔ {leaderAction}`, falling back to a single-action form if the peer's action label is empty.
+
+`<GroupCard>` adopts an `isLinkPair` branch that surfaces both chain badges separated by a `↔` glyph (the `groupCount` pill is hidden for link-pair since it's always exactly two sides). `groupBadgeLabel` returns `CROSS-CHAIN`. The grouped-members render in History.jsx forces `showConnector={false}` for link-pair members — the dual-chain card already conveys the relationship; the vertical connector between rows is redundant inside the group but stays useful in flat mode where adjacent rows otherwise look unrelated.
+
+### Added
+
+- **`packages/core/src/shared/utils/historyGrouping.js`** — `link-pair` subkind in the `GroupedItem` typedef, `linkPairLeaders` map, `summarizeGroup` branch, header doc updated to list four subkinds.
+- **`packages/core/src/shared/routes/History.jsx`** — `groupBadgeLabel` returns `CROSS-CHAIN` for link-pair; `<GroupCard>` renders the dual `<ChainBadge>` + `↔` glyph + label; grouped-mode `<EntryRow>` forces `showConnector={false}` for link-pair members.
+- **`packages/core/src/shared/routes/History.module.css`** — `.linkPairConnector` rule.
+- **`test/unit/util/historyGrouping.test.js`** — four new cases (basic 2-side collapse, asymmetric LINK ↔ ISSUE, single-side passthrough, flat-mode passthrough). 17 cases total.
+- **`test/smoke/ui/link-pair-grouping.smoke.js`** (new) — pins subkind / leader / member / summary via dynamic import + History.jsx GroupCard + connector-suppress wiring + CSS hook.
+
+Closes Cluster C FOLLOWUP 2.
+
 ## [0.322.0] - 2026-04-29
 
 Cluster I FOLLOWUP 3 + Cluster C FOLLOWUP 3 — `messaging.getAssetInfo({chainId, asset})` host method backed by `sdk.getToken()`; TokenDetail surfaces description, creator address, total/max supply, market price, and lock status; image URLs are extracted from descriptions for collectibles.

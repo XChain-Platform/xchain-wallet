@@ -373,6 +373,18 @@
     color: var(--xc-text-muted);
 }
 
+/* §28.3 link-pair group cards span two chain badges connected by a ↔
+ * glyph; the `link-pair` subkind is the only group that surfaces both
+ * chains in the header so the cross-chain relationship is visible
+ * without expanding the card. */
+.linkPairConnector {
+    display: inline-flex;
+    align-items: center;
+    color: var(--xc-text-muted);
+    font-weight: 600;
+    padding: 0 0.125rem;
+}
+
 .groupMembers {
     display: flex;
     flex-direction: column;
