@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.319.0] - 2026-04-29
+
+Cluster I FOLLOWUP 6 + Cluster P FOLLOWUPs 4 + 5 + Cluster J FOLLOWUP 7 — confirmation badge on the History tx-status timeline, form-draft sweep across IssueTokenForm + DispenserForm, error-recovery sweep across the same two forms plus AddAccountForm, and demo-wallet activation defaulting to regtest networks.
+
+§28.3 / Cluster I FOLLOWUP 6 — `<TxStatusTimeline>` now accepts an optional `chainTip` prop. When the tip is at or above the entry's block, the Confirmed-stage sub-line carries `"<formatted timestamp> · N confirmations"` (or just `"N confirmations"` when no timestamp is available). Singular vs plural copy is tracked. `History.jsx` derives `chainTipByChainId` from the max `blockIndex` across loaded entries — a lower bound for the chain tip, since explorer's `/network` is still a placeholder and there's no dedicated tip endpoint yet — and threads it through both `<EntryRow>` call sites + `<DetailCard>` + `<TxStatusTimeline>`. The existing cross-chain-link smoke updated to match the `<DetailCard>` signature change.
+
+§37 / G125 / Cluster P FOLLOWUP 5 — form-draft persistence sweep. v0.212.0 wired Send + SignMessageForm; v0.319.0 extends the hook to `IssueTokenForm` (chain / source / ticker / supply / divisible / description / lockSupply / transferTo) and `DispenserForm` (chain / source / ticker / giveAmount / escrow / triggerPrice / oracleAddress / fiatCode / fiatAmount / showAdvanced). Both adopt the canonical pattern: read `settings.privacy.formDraftTtlMs` (Cluster P FOLLOWUP 6's Off / 1h / 24h / 7d), pass through to `useFormDraft`, save while `stage === 'form'`, surface a Restore / Discard banner when a draft exists, clear on submit success. Password fields stay in component state and never touch localStorage.
+
+§37 / G121 / Cluster P FOLLOWUP 4 — error-recovery sweep across the same forms + an audit note for AddAccountForm. `IssueTokenForm` and `DispenserForm` post-submit errors (encoder rejection / network unreachable / device unplugged) now wrap in `<StatusMessage variant="error">` with a `recovery: { label: 'Edit', onAction }` that returns the user to the form stage without retyping the password. Field-level `formError` rows also wrap in `<StatusMessage>` for consistency, with no recovery affordance — those are user-iterates-over-an-input by design. `AddAccountForm` carries a header note documenting the same auditable terminal-as-rendered classification (account name validation + signer-pool errors are recovered by re-typing + clicking Add account again).
+
+§25 / Cluster J FOLLOWUP 7 — demo wallets activate on the regtest networks rather than mainnet. `handleEnterDemo` in `Onboarding.jsx` passes `activeChainIds: ['bitcoin-regtest', 'litecoin-regtest', 'dogecoin-regtest']` through `messaging.importMnemonic`. The wallet does not actually fetch from chain endpoints under demo (FOLLOWUP 1's `synthesizeDemo*` flows short-circuit Home + History since v0.310.0), but signaling regtest in the wallet's stored chain set keeps any future "fan out a real fetch" code path off mainnet.
+
+### Added
+
+- **`packages/core/src/shared/components/TxStatusTimeline.jsx`** — `chainTip` prop + confirmation-count sub-line.
+- **`packages/core/src/shared/routes/History.jsx`** — `chainTipByChainId` memo + thread to `<EntryRow>` (both call sites) → `<DetailCard>` → `<TxStatusTimeline>`.
+- **`packages/core/src/shared/routes/IssueTokenForm.jsx`** — `useFormDraft` + `useSettings` wiring, draft banner, clear-on-success, `<StatusMessage>` migration of submit + form errors with `Edit` recovery on the post-submit branch.
+- **`packages/core/src/shared/routes/DispenserForm.jsx`** — same wiring as IssueTokenForm.
+- **`packages/core/src/shared/routes/AddAccountForm.jsx`** — header docstring documenting the error-recovery audit decision.
+- **`packages/core/src/shared/routes/Onboarding.jsx`** — `handleEnterDemo` passes regtest `activeChainIds`.
+- **`test/smoke/ui/tx-status-timeline-confirmations.smoke.js`** (new) — pins prop signature, plural copy, History wiring (including both EntryRow call sites).
+- **`test/smoke/ui/form-draft-sweep.smoke.js`** (new) — pins useFormDraft view names, persisted fields, password-exclusion, restore handlers, banner wiring, clear-on-done call site.
+- **`test/smoke/ui/error-recovery-sweep.smoke.js`** (new) — pins StatusMessage migration + Edit recovery wiring + AddAccountForm audit comment.
+- **`test/smoke/ui/demo-wallet-regtest-default.smoke.js`** (new) — pins regtest activeChainIds + chain-descriptor existence.
+
+### Changed
+
+- **`test/smoke/ui/history-cross-chain-link.smoke.js`** — `<DetailCard>` signature pin updated to include `chainTip`.
+
+Closes Cluster I FOLLOWUP 6, Cluster P FOLLOWUP 4, Cluster P FOLLOWUP 5, Cluster J FOLLOWUP 7.
+
 ## [0.318.0] - 2026-04-29
 
 §37 / Cluster P FOLLOWUP 6 — form-draft retention surfaced in Settings → Privacy. v0.212.0 hard-coded a 24h TTL for in-progress Send / sign-message draft persistence; v0.318.0 makes the retention window user-configurable (Off / 1h / 24h / 7d).

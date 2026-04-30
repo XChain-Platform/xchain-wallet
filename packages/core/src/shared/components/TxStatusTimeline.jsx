@@ -7,7 +7,11 @@ import styles from './TxStatusTimeline.module.css';
  *
  *   - **Broadcast**  — txHash is present (mempool or confirmed)
  *   - **In mempool** — blockIndex === 0 (waiting for inclusion)
- *   - **Confirmed**  — blockIndex > 0; cell labels the block + timestamp
+ *   - **Confirmed**  — blockIndex > 0; cell labels the block + timestamp.
+ *                     When `chainTip` is supplied and at or above the
+ *                     entry's block, the cell adds a confirmation count
+ *                     ("· N confirmations") so the user can read tx
+ *                     safety at a glance.
  *
  * Future work (cluster FOLLOWUP): a "Signed" stage when we start
  * tracking pendingTx records before broadcast, and an "Indexed" stage
@@ -15,13 +19,27 @@ import styles from './TxStatusTimeline.module.css';
  *
  * @param {object} props
  * @param {{ blockIndex: number, timestamp: number, txHash: string, action: string }} props.entry
+ * @param {number} [props.chainTip] highest block index seen for the
+ *        entry's chain. Used to render a confirmation count on
+ *        confirmed rows. When omitted or <= entry.blockIndex - 1, the
+ *        count is hidden.
  */
-export function TxStatusTimeline({ entry }) {
+export function TxStatusTimeline({ entry, chainTip }) {
     const txHash = typeof entry?.txHash === 'string' ? entry.txHash : '';
     const blockIndex = Number(entry?.blockIndex ?? 0);
     const timestamp = Number(entry?.timestamp ?? 0);
     const inMempool = blockIndex === 0 && txHash.length > 0;
     const confirmed = blockIndex > 0;
+    const tip = Number.isFinite(Number(chainTip)) ? Number(chainTip) : 0;
+    const confirmations = confirmed && tip >= blockIndex ? tip - blockIndex + 1 : 0;
+    const confirmedSubBase = confirmed && timestamp > 0
+        ? new Date(timestamp * 1000).toLocaleString()
+        : '—';
+    const confirmedSub = confirmations > 0
+        ? (confirmedSubBase === '—'
+            ? `${confirmations.toLocaleString()} confirmation${confirmations === 1 ? '' : 's'}`
+            : `${confirmedSubBase} · ${confirmations.toLocaleString()} confirmation${confirmations === 1 ? '' : 's'}`)
+        : confirmedSubBase;
 
     const stages = [
         {
@@ -44,9 +62,7 @@ export function TxStatusTimeline({ entry }) {
             key: 'confirmed',
             label: confirmed ? `Confirmed at block ${blockIndex.toLocaleString()}` : 'Confirmed',
             done: confirmed,
-            sub: confirmed && timestamp > 0
-                ? new Date(timestamp * 1000).toLocaleString()
-                : '—',
+            sub: confirmedSub,
         },
     ];
 

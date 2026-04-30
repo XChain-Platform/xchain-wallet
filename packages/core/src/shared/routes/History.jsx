@@ -282,6 +282,26 @@ export function History({ walletId, accountId, onBack, onReceive, initialSearchQ
         return s;
     }, [addressesByChain]);
 
+    // Cluster I FOLLOWUP 6 — Per-chain tip used to compute confirmation
+    // counts on confirmed rows. Derived from the highest blockIndex
+    // seen across loaded history rows (lower bound for the chain tip,
+    // since the wallet has no dedicated tip endpoint yet — explorer's
+    // /network is still a placeholder, see FOLLOWUPS.md). A user with
+    // any confirmed activity sees a meaningful count; a user with one
+    // freshly-confirmed row gets "1 confirmation" (the tip is at the
+    // row itself, which is correct).
+    const chainTipByChainId = useMemo(() => {
+        /** @type {Record<string, number>} */
+        const tips = {};
+        for (const e of entries) {
+            if (!e || !e.chainId) continue;
+            const b = Number(e.blockIndex || 0);
+            if (b <= 0) continue;
+            if (!(e.chainId in tips) || b > tips[e.chainId]) tips[e.chainId] = b;
+        }
+        return tips;
+    }, [entries]);
+
     const visibleEntries = useMemo(() => {
         let list = entries.filter((e) => enabledChains.has(e.chainId));
         if (crossChainOnly) list = list.filter((e) => Boolean(e.link));
@@ -755,6 +775,7 @@ export function History({ walletId, accountId, onBack, onReceive, initialSearchQ
                                                 onClick={() => onRowClick(entry)}
                                                 peerCache={peerCache}
                                                 isFull={isFull}
+                                                chainTip={chainTipByChainId[entry.chainId]}
                                             />
                                         ))}
                                     </ul>
@@ -772,6 +793,7 @@ export function History({ walletId, accountId, onBack, onReceive, initialSearchQ
                             onClick={() => onRowClick(entry)}
                             peerCache={peerCache}
                             isFull={isFull}
+                            chainTip={chainTipByChainId[entry.chainId]}
                         />
                     );
                 })}
@@ -784,7 +806,7 @@ export function History({ walletId, accountId, onBack, onReceive, initialSearchQ
  * Inline detail card. For LINK-threaded entries we render two
  * `detailSide` blocks side-by-side; for everything else, one block.
  */
-function DetailCard({ entry, peerCache }) {
+function DetailCard({ entry, peerCache, chainTip }) {
     const isLinked = Boolean(entry.link);
     const peerKey = entry.link?.peerChainId && entry.link?.peerActionIndex
         ? peerCacheKey(entry.link.peerChainId, entry.link.peerActionIndex)
@@ -798,7 +820,7 @@ function DetailCard({ entry, peerCache }) {
                 <span className={styles.detailSideTitle}>
                     This side · {entry.action} #{entry.actionIndex}
                 </span>
-                <TxStatusTimeline entry={entry} />
+                <TxStatusTimeline entry={entry} chainTip={chainTip} />
                 <pre className={styles.detailDecoded}>
                     {decodeActionToText(entry.raw)}
                 </pre>
@@ -1063,7 +1085,7 @@ function RbfActions({ entry }) {
  * One history row. Used both for top-level entries and for member rows
  * inside an expanded group card.
  */
-function EntryRow({ entry, selected, showConnector, onClick, peerCache, isFull }) {
+function EntryRow({ entry, selected, showConnector, onClick, peerCache, isFull, chainTip }) {
     const d = chainRegistry.get(entry.chainId);
     return (
         <li>
@@ -1099,7 +1121,7 @@ function EntryRow({ entry, selected, showConnector, onClick, peerCache, isFull }
                 </span>
             </button>
             {selected ? (
-                <DetailCard entry={entry} peerCache={peerCache} isFull={isFull} />
+                <DetailCard entry={entry} peerCache={peerCache} isFull={isFull} chainTip={chainTip} />
             ) : null}
         </li>
     );

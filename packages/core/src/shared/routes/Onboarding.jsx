@@ -121,10 +121,20 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onDemoE
             ).join('');
             passwordBytes.fill(0);
             const mnemonic = cryptoLib.generateBip39Mnemonic(128);
+            // Cluster J FOLLOWUP 7 — demo wallets activate on the
+            // regtest networks, never mainnet. The wallet does not
+            // call out to the chain anyway (Home / History both
+            // short-circuit through synthesizeDemoBalances /
+            // synthesizeDemoHistory when isDemoWallet returns true,
+            // landed at v0.310.0), but signaling regtest in
+            // activeChainIds + the wallet's stored chain set keeps
+            // any future "fan out a real fetch" code path from
+            // accidentally hitting mainnet endpoints under demo.
             const r = await messaging.importMnemonic({
                 password,
                 mnemonic,
                 name: 'Demo Wallet',
+                activeChainIds: ['bitcoin-regtest', 'litecoin-regtest', 'dogecoin-regtest'],
             });
             const walletId = r?.wallet?.id || r?.walletId;
             if (walletId) flowsLib.markDemoWallet(walletId);

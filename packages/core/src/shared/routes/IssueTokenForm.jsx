@@ -5,7 +5,7 @@ import {
     Input,
     ChainBadge,
     AddressText,
- ChainPicker,  Icon,} from '@xchain-wallet/core/ui';
+ ChainPicker,  Icon, StatusMessage,} from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -14,6 +14,8 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
+import { useFormDraft } from '../hooks/useFormDraft.js';
+import { useSettings } from '../hooks/useSettings.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -38,6 +40,7 @@ const chainRegistry = registryLib.defaultRegistry();
  */
 export function IssueTokenForm({ walletId, onBack }) {
     const { messaging, shell } = useMessaging();
+    const { settings } = useSettings();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
 
@@ -66,6 +69,44 @@ export function IssueTokenForm({ walletId, onBack }) {
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+
+    // Cluster P FOLLOWUP 5 — form-draft persistence sweep. Persists the
+    // user-visible composition fields; password stays in component
+    // state. Honors privacy.formDraftTtlMs (Off / 1h / 24h / 7d) the
+    // same way Send + SignMessageForm do.
+    const formDraftTtlMs = Number.isFinite(settings?.privacy?.formDraftTtlMs)
+        ? Number(settings.privacy.formDraftTtlMs)
+        : undefined;
+    const draft = useFormDraft({ view: 'issue-token', walletId, ttlMs: formDraftTtlMs });
+    const [draftPending, setDraftPending] = useState(() => draft.hasDraft());
+    useEffect(() => {
+        if (stage !== 'form' || !draftPending) return;
+        draft.save({
+            chainId, fromAddressId, ticker, supply, divisible,
+            description, lockSupply, transferTo,
+        });
+    }, [
+        stage, draftPending, draft,
+        chainId, fromAddressId, ticker, supply, divisible,
+        description, lockSupply, transferTo,
+    ]);
+    const restoreDraft = useCallback(() => {
+        const v = draft.load();
+        if (!v) { setDraftPending(false); return; }
+        if (typeof v.chainId === 'string') setChainId(v.chainId);
+        if (typeof v.fromAddressId === 'string') setFromAddressId(v.fromAddressId);
+        if (typeof v.ticker === 'string') setTicker(v.ticker);
+        if (typeof v.supply === 'string') setSupply(v.supply);
+        if (typeof v.divisible === 'boolean') setDivisible(v.divisible);
+        if (typeof v.description === 'string') setDescription(v.description);
+        if (typeof v.lockSupply === 'boolean') setLockSupply(v.lockSupply);
+        if (typeof v.transferTo === 'string') setTransferTo(v.transferTo);
+        setDraftPending(true);
+    }, [draft]);
+    const dismissDraft = useCallback(() => {
+        draft.clear();
+        setDraftPending(false);
+    }, [draft]);
 
     useEffect(() => {
         let cancelled = false;
@@ -218,6 +259,11 @@ export function IssueTokenForm({ walletId, onBack }) {
             setResult(res);
             setPassword('');
             setStage('done');
+            // Cluster P FOLLOWUP 5 — clear the draft once the action
+            // succeeds so a subsequent Issue starts fresh rather than
+            // restoring the just-broadcast draft.
+            draft.clear();
+            setDraftPending(false);
         } catch (err) {
             const isBadPassword = err?.name === 'InvalidPasswordError';
             setSubmitError(
@@ -351,7 +397,23 @@ export function IssueTokenForm({ walletId, onBack }) {
                     />
                 )}
                 {(isWatcherMode || isHwSource) && submitError ? (
-                    <div role="alert" className={styles.error}>{submitError}</div>
+                    <StatusMessage
+                        variant="error"
+                        recovery={
+                            // Cluster P FOLLOWUP 4 — the post-submit
+                            // error class is "encoder rejected /
+                            // network unreachable / device unplugged".
+                            // Returning to the form stage lets the
+                            // user adjust an input or re-stage the HW
+                            // device without retyping the password.
+                            // Wrong-password isn't reachable on this
+                            // branch (no password input in HW /
+                            // watcher modes).
+                            { label: 'Edit', onAction: () => { setSubmitError(null); setStage('form'); } }
+                        }
+                    >
+                        {submitError}
+                    </StatusMessage>
                 ) : null}
                 <div className={styles.actions}>
                     <Button
@@ -377,8 +439,35 @@ export function IssueTokenForm({ walletId, onBack }) {
         );
     }
 
+    const draftBanner = draft.hasDraft() && !draftPending ? (
+        <StatusMessage
+            variant="status"
+            recovery={{ label: 'Restore', onAction: restoreDraft }}
+        >
+            You have an unfinished issue draft.
+            <button
+                type="button"
+                onClick={dismissDraft}
+                aria-label="Discard saved draft"
+                style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'inherit',
+                    textDecoration: 'underline',
+                    cursor: 'pointer',
+                    padding: 0,
+                    marginInlineStart: 'var(--xc-space-2)',
+                    fontSize: 'var(--xc-text-xs)',
+                }}
+            >
+                Discard
+            </button>
+        </StatusMessage>
+    ) : null;
+
     return wrap(
         <form onSubmit={handleReview} noValidate>
+            {draftBanner}
             {chainsWithAddresses.length > 1 ? (
                 <ChainPicker label="Chain" value={chainId} onChange={setChainId} chainIds={chainsWithAddresses} chainRegistry={chainRegistry} />
             ) : descriptor ? (
@@ -449,7 +538,14 @@ export function IssueTokenForm({ walletId, onBack }) {
                 autoCorrect="off"
             />
             {formError ? (
-                <div role="alert" className={styles.error}>{formError}</div>
+                // Cluster P FOLLOWUP 4 — formError surfaces field-level
+                // validation ("Ticker is required", "Supply must be a
+                // positive number", "Pick a source address first").
+                // No one-click recovery affordance fits — the user
+                // edits the offending field and re-submits. Auditable
+                // per-form decision: terminal-as-rendered, recovery is
+                // user-iteration via the Inputs above.
+                <StatusMessage variant="error">{formError}</StatusMessage>
             ) : null}
             <div className={styles.actions}>
                 <Button

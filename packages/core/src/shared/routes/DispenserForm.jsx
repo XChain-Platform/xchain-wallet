@@ -5,7 +5,7 @@ import {
     Input,
     ChainBadge,
     AddressText,
- ChainPicker,  Icon,} from '@xchain-wallet/core/ui';
+ ChainPicker,  Icon, StatusMessage,} from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -14,6 +14,8 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
+import { useFormDraft } from '../hooks/useFormDraft.js';
+import { useSettings } from '../hooks/useSettings.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -60,6 +62,7 @@ const FIAT_CODES = ['USD', 'CAD', 'AUD', 'MXN', 'GBP', 'JPY', 'CNY', 'CHF', 'BRL
  */
 export function DispenserForm({ walletId, onBack }) {
     const { messaging, shell } = useMessaging();
+    const { settings } = useSettings();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
 
@@ -90,6 +93,47 @@ export function DispenserForm({ walletId, onBack }) {
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+
+    // Cluster P FOLLOWUP 5 — form-draft persistence. Persists every
+    // user-visible composition field (chain / source / give terms /
+    // advanced fields). Password stays in component state.
+    const formDraftTtlMs = Number.isFinite(settings?.privacy?.formDraftTtlMs)
+        ? Number(settings.privacy.formDraftTtlMs)
+        : undefined;
+    const draft = useFormDraft({ view: 'dispenser', walletId, ttlMs: formDraftTtlMs });
+    const [draftPending, setDraftPending] = useState(() => draft.hasDraft());
+    useEffect(() => {
+        if (stage !== 'form' || !draftPending) return;
+        draft.save({
+            chainId, fromAddressId, ticker, giveAmount, escrow,
+            triggerPrice, oracleAddress, fiatCode, fiatAmount,
+            showAdvanced,
+        });
+    }, [
+        stage, draftPending, draft,
+        chainId, fromAddressId, ticker, giveAmount, escrow,
+        triggerPrice, oracleAddress, fiatCode, fiatAmount,
+        showAdvanced,
+    ]);
+    const restoreDraft = useCallback(() => {
+        const v = draft.load();
+        if (!v) { setDraftPending(false); return; }
+        if (typeof v.chainId === 'string') setChainId(v.chainId);
+        if (typeof v.fromAddressId === 'string') setFromAddressId(v.fromAddressId);
+        if (typeof v.ticker === 'string') setTicker(v.ticker);
+        if (typeof v.giveAmount === 'string') setGiveAmount(v.giveAmount);
+        if (typeof v.escrow === 'string') setEscrow(v.escrow);
+        if (typeof v.triggerPrice === 'string') setTriggerPrice(v.triggerPrice);
+        if (typeof v.oracleAddress === 'string') setOracleAddress(v.oracleAddress);
+        if (typeof v.fiatCode === 'string') setFiatCode(v.fiatCode);
+        if (typeof v.fiatAmount === 'string') setFiatAmount(v.fiatAmount);
+        if (typeof v.showAdvanced === 'boolean') setShowAdvanced(v.showAdvanced);
+        setDraftPending(true);
+    }, [draft]);
+    const dismissDraft = useCallback(() => {
+        draft.clear();
+        setDraftPending(false);
+    }, [draft]);
 
     useEffect(() => {
         let cancelled = false;
@@ -312,6 +356,9 @@ export function DispenserForm({ walletId, onBack }) {
             setResult(res);
             setPassword('');
             setStage('done');
+            // Cluster P FOLLOWUP 5 — clear the draft on success.
+            draft.clear();
+            setDraftPending(false);
         } catch (err) {
             const isBadPassword = err?.name === 'InvalidPasswordError';
             setSubmitError(
@@ -443,7 +490,21 @@ export function DispenserForm({ walletId, onBack }) {
                     />
                 )}
                 {(isWatcherMode || hw) && submitError ? (
-                    <div role="alert" className={styles.error}>{submitError}</div>
+                    <StatusMessage
+                        variant="error"
+                        recovery={
+                            // Cluster P FOLLOWUP 4 — encoder /
+                            // network / device errors are recoverable
+                            // by returning to the form stage and
+                            // adjusting an input or re-staging the HW
+                            // device. Wrong-password isn't reachable
+                            // here (no password input in HW / watcher
+                            // modes).
+                            { label: 'Edit', onAction: () => { setSubmitError(null); setStage('form'); } }
+                        }
+                    >
+                        {submitError}
+                    </StatusMessage>
                 ) : null}
                 <div className={styles.actions}>
                     <Button
@@ -469,8 +530,35 @@ export function DispenserForm({ walletId, onBack }) {
         );
     }
 
+    const draftBanner = draft.hasDraft() && !draftPending ? (
+        <StatusMessage
+            variant="status"
+            recovery={{ label: 'Restore', onAction: restoreDraft }}
+        >
+            You have an unfinished dispenser draft.
+            <button
+                type="button"
+                onClick={dismissDraft}
+                aria-label="Discard saved draft"
+                style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'inherit',
+                    textDecoration: 'underline',
+                    cursor: 'pointer',
+                    padding: 0,
+                    marginInlineStart: 'var(--xc-space-2)',
+                    fontSize: 'var(--xc-text-xs)',
+                }}
+            >
+                Discard
+            </button>
+        </StatusMessage>
+    ) : null;
+
     return wrap(
         <form onSubmit={handleReview} noValidate>
+            {draftBanner}
             {chainsWithAddresses.length > 1 ? (
                 <ChainPicker label="Chain" value={chainId} onChange={setChainId} chainIds={chainsWithAddresses} chainRegistry={chainRegistry} />
             ) : descriptor ? (
@@ -571,7 +659,10 @@ export function DispenserForm({ walletId, onBack }) {
             ) : null}
 
             {formError ? (
-                <div role="alert" className={styles.error}>{formError}</div>
+                // Cluster P FOLLOWUP 4 — formError is field-level
+                // validation. Recovery is user-iteration over the
+                // Inputs above; no one-click affordance fits.
+                <StatusMessage variant="error">{formError}</StatusMessage>
             ) : null}
             <div className={styles.actions}>
                 <Button
