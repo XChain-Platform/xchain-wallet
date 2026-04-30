@@ -7,6 +7,70 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.315.0] - 2026-04-29
+
+§24 / Cluster U FOLLOWUP 6 — multi-wallet last-view threading. Switching wallets while sitting on a non-Home view (e.g. /history under wallet A → switch to wallet B) was incorrectly persisting wallet A's current view (`history`) under wallet B's localStorage key, stomping any saved state for B. The persist effect now waits for the resume effect to fire for the new walletId before persisting; the first persist tick after a switch is a grace tick that absorbs the resume's setUnlockedView before any write can happen.
+
+`packages/core/src/shared/hooks/useLastView.js` adds a `lastPersistedFor` useRef alongside the existing `lastResumedFor`. Persist effect now bails when the resume effect hasn't fired yet for this walletId; the first post-resume persist run for a given walletId is also skipped (grace tick) so the switching wallet's onResume → setUnlockedView propagates into currentView before any write. Resume effect clears both refs on a null walletId and clears the persist-gate when a new walletId arrives.
+
+### Added
+
+- **`packages/core/src/shared/hooks/useLastView.js`** — `lastPersistedFor` ref + persist guard.
+- **`test/smoke/ui/last-view-multi-wallet.smoke.js`** (new) — pins both the resume gate and the first-persist grace tick.
+
+Closes Cluster U FOLLOWUP 6.
+
+## [0.314.0] - 2026-04-29
+
+§24 / Cluster U FOLLOWUP 5 — clear last-view memory on remove-wallet. The lastViewMemory utility already exposes `clearLastView(walletId)`; v0.314.0 wires it into the two surfaces that actually delete a wallet record so a future wallet (vanishingly unlikely under cuids, but the hygiene cost is zero) can't inherit the previous wallet's saved route.
+
+`packages/core/src/shared/components/settings/ThisWalletSection.jsx` and `packages/core/src/shared/components/DemoBanner.jsx` both import `clearLastView` and call it after a successful `messaging.removeWallet`.
+
+### Added
+
+- **`packages/core/src/shared/components/settings/ThisWalletSection.jsx`**, **`packages/core/src/shared/components/DemoBanner.jsx`** — `clearLastView` import + call.
+
+Closes Cluster U FOLLOWUP 5. (Bundles into the Cluster U FU 6 smoke above.)
+
+## [0.313.0] - 2026-04-29
+
+§13 / Cluster T FOLLOWUP 5 — per-section documentation parity check in the QA-CHECKLIST. Before sign-off, the release manager now runs a pass through ARCHITECTURE / BRIDGE / REPRODUCIBLE_BUILDS / VERIFY-RELEASE / GLOSSARY / THREAT_MODEL / MAINTAINERS / SECURITY / CONTRIBUTING / CODE_OF_CONDUCT to confirm each doc still matches what the code actually does. A doc that lies is worse than one that's silent.
+
+`docs/QA-CHECKLIST.md` gains a "Documentation parity check" section above Sign-off with one bullet per major doc and concrete questions to verify (e.g., "every BRIDGE.md method is registered in handlers.js", "GPG fingerprint placeholder is up to date", "Last reviewed footer was bumped if process changed"). The new audit smoke pins both the bullet existence and that each named doc actually exists on disk so the checklist isn't pointing at thin air.
+
+### Added
+
+- **`docs/QA-CHECKLIST.md`** — Documentation parity check section + Last reviewed footer bumped.
+- **`test/smoke/audits/docs-governance-checklist.smoke.js`** (new) — pins the QA-CHECKLIST + CONTRIBUTING governance content + on-disk file existence.
+
+Closes Cluster T FOLLOWUP 5.
+
+## [0.312.0] - 2026-04-29
+
+§13 / Cluster T FOLLOWUP 4 — Governance section in CONTRIBUTING.md. Contributors landing on CONTRIBUTING.md now see how decisions are made (lazy consensus + lead-maintainer tiebreak), where to escalate (cross-link to MAINTAINERS.md), and when to open an issue first vs. PR first (anything that touches architecture / public bridge API / build pipeline / threat model / legal text / protocol gets a pre-PR issue).
+
+`CONTRIBUTING.md` adds the Governance section before Sign-off and bumps the Last reviewed footer. The doc smoke covers the cross-link to MAINTAINERS.md.
+
+### Added
+
+- **`CONTRIBUTING.md`** — Governance section + Last reviewed bump.
+
+Closes Cluster T FOLLOWUP 4. (Bundles into the Cluster T FU 5 smoke above.)
+
+## [0.311.0] - 2026-04-29
+
+§13 / Cluster T FOLLOWUP 2 — VERIFY-RELEASE.md surfaced from Settings → About. The verification recipe (key import → manifest download → GPG verify → artifact hash check → optional reproduce) lives at `docs/VERIFY-RELEASE.md`; the About panel previously only linked to `docs/REPRODUCIBLE_BUILDS.md`, leaving the user to discover the per-step recipe themselves.
+
+`packages/core/src/buildInfo.js` exports `VERIFY_RELEASE_DOC = 'docs/VERIFY-RELEASE.md'`. `AboutSection.jsx` imports it and renders a "Verify a release" row pointing at the doc via the existing DocLink primitive.
+
+### Added
+
+- **`packages/core/src/buildInfo.js`** — `VERIFY_RELEASE_DOC` constant.
+- **`packages/core/src/shared/components/settings/AboutSection.jsx`** — "Verify a release" row.
+- **`test/smoke/ui/about-verify-release.smoke.js`** (new) — pins the constant, the on-disk doc, and the section wiring.
+
+Closes Cluster T FOLLOWUP 2.
+
 ## [0.310.0] - 2026-04-29
 
 §25.2 / Cluster J FOLLOWUP 1 — synthesized fabricated balances + history for the demo wallet. Demo wallets are real BIP39 wallets — they have real addresses on real chains; only on-chain balances are zero. Until v0.310.0 a user exploring the demo saw empty Home / History / TokenDetail surfaces, which makes the demo feel broken. This ships overlaid SDK-shaped fixture data so Send / Receive / History flows feel populated without requiring the user to fund the wallet.

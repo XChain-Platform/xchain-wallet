@@ -192,6 +192,46 @@ Use `packages/test-dapp/` against the extension under test.
 
 ---
 
+## Documentation parity check
+
+Before sign-off, verify the docs that ship with this release still match
+what the code actually does (Cluster T FOLLOWUP 5). A doc that lies is
+worse than one that's silent.
+
+- ⬜ `docs/ARCHITECTURE.md` — the four-layer signal flow, signer
+  abstraction, storage substrate, and reachability sections still match
+  the current code. Look for renamed packages, deleted flows, or new
+  bridge surfaces.
+- ⬜ `docs/BRIDGE.md` — every method listed (connect, getAccounts,
+  getSupportedChains, getActiveChains, signMessage, signAction,
+  signPsbt, signIn, disconnect, parallel, on/off) is registered in
+  `packages/extension/src/bridge/handlers.js`. Error code table covers
+  every code the handlers throw (BLOCKED_BY_USER, THROTTLED, etc.).
+- ⬜ `docs/REPRODUCIBLE_BUILDS.md` — per-target status table reflects
+  the current build pipeline. Desktop `reproduce.sh` references the
+  hash file the script actually produces.
+- ⬜ `docs/VERIFY-RELEASE.md` — GPG key fingerprint placeholder is up
+  to date with the actual published key (or still flagged honestly as
+  "pending publication").
+- ⬜ `docs/GLOSSARY.md` — newly-added user-facing terms from this
+  release are present (e.g. when a feature ships a new on-screen word
+  the user might not know). Cross-link to `xchain-documentation/KEY_TERMS.md`
+  is current.
+- ⬜ `docs/THREAT_MODEL.md` — controls table and out-of-scope section
+  still hold. Anything new in the threat surface (a new bridge method,
+  a new signer kind, a new persistent surface) gets a row.
+- ⬜ `MAINTAINERS.md` — lead maintainer + escalation contacts are
+  current. If a maintainer added or removed since the last release,
+  this row blocks until the file is updated.
+- ⬜ `SECURITY.md` — disclosure contact is still active; supported
+  versions row reflects the current release window.
+- ⬜ `CONTRIBUTING.md` — Last reviewed footer bumped if any contributor-
+  facing process changed (test tiers, smoke baseline rule, version-bump
+  rule, governance section).
+- ⬜ `CODE_OF_CONDUCT.md` — reporting contact is still active.
+
+---
+
 ## Sign-off
 
 Release manager: ___________________________  
@@ -202,4 +242,4 @@ Notes / known waivers: ___________________________
 
 ---
 
-Last reviewed: 2026-04-27 at v0.199.0.
+Last reviewed: 2026-04-29 at v0.310.0.

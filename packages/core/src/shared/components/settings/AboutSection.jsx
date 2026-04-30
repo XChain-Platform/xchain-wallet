@@ -14,6 +14,7 @@ import {
     RELEASE_SIGNATURES_DOC,
     RELEASE_SIGNATURES_PUBLISHED,
     REPRODUCIBLE_BUILD_DOC,
+    VERIFY_RELEASE_DOC,
     SECURITY_FILE,
     SECURITY_PUBLISHED,
     UPDATE_CHANNEL,
@@ -149,6 +150,11 @@ export function AboutSection() {
             </Row>
             <Row label="Reproducible build">
                 <DocLink path={REPRODUCIBLE_BUILD_DOC} label="Verification procedure" />
+            </Row>
+            <Row label="Verify a release">
+                {/* Cluster T FOLLOWUP 2 — end-user verification recipe (key import →
+                    manifest download → GPG verify → artifact hash check). */}
+                <DocLink path={VERIFY_RELEASE_DOC} label="Verification recipe" />
             </Row>
             <Row label="Release signatures">
                 {RELEASE_SIGNATURES_PUBLISHED ? (

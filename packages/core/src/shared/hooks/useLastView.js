@@ -11,6 +11,13 @@
 // The shell's setView call site stays exactly as it was — no need to
 // thread the helper into every navigation. The hook listens to view
 // changes via the prop and persists in an effect.
+//
+// Cluster U FOLLOWUP 6 — multi-wallet last-view threading. The persist
+// effect now skips writes whenever the walletId has just changed but
+// the current view is still the previous wallet's nav state. Without
+// this guard, switching from wallet A (on /history) to wallet B
+// would persist B → 'history' before B's resume effect could fire,
+// stomping any saved state for B.
 
 import { useEffect, useRef } from 'react';
 import { readLastView, writeLastView } from '../utils/lastViewMemory.js';
@@ -23,10 +30,30 @@ import { readLastView, writeLastView } from '../utils/lastViewMemory.js';
  */
 export function useLastView({ walletId, currentView, onResume }) {
     const lastResumedFor = useRef(/** @type {string | null} */ (null));
+    const lastPersistedFor = useRef(/** @type {string | null} */ (null));
 
-    // Persist current view whenever it changes.
+    // Persist current view whenever it changes — but only after the
+    // resume effect has run for this walletId. Without that gate, a
+    // wallet switch (where `walletId` flips before `currentView`
+    // catches up) writes the stale view under the new wallet's key.
     useEffect(() => {
         if (typeof walletId !== 'string' || !walletId) return;
+        if (lastResumedFor.current !== walletId) {
+            // Resume effect hasn't fired for this walletId yet — wait.
+            // The resume effect runs in the next pass and bumps
+            // `lastResumedFor`; subsequent currentView changes then
+            // persist correctly.
+            return;
+        }
+        if (lastPersistedFor.current !== walletId) {
+            // First persist for this walletId after a switch — skip
+            // exactly one tick so the resume's setUnlockedView
+            // (called via onResume) propagates into currentView before
+            // we write anything. The very next render with
+            // currentView matching the resumed value persists normally.
+            lastPersistedFor.current = walletId;
+            return;
+        }
         writeLastView(walletId, currentView);
     }, [walletId, currentView]);
 
@@ -36,10 +63,14 @@ export function useLastView({ walletId, currentView, onResume }) {
     useEffect(() => {
         if (typeof walletId !== 'string' || !walletId) {
             lastResumedFor.current = null;
+            lastPersistedFor.current = null;
             return;
         }
         if (lastResumedFor.current === walletId) return;
         lastResumedFor.current = walletId;
+        // Clear the persist gate — the next persist effect run for
+        // this walletId is the post-switch grace tick.
+        lastPersistedFor.current = null;
         const persisted = readLastView(walletId);
         if (persisted && persisted !== currentView) {
             onResume(persisted);

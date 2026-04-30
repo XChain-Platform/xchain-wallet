@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { flows as flowsLib } from '@xchain-wallet/core';
 import { Button } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../useMessaging.js';
+import { clearLastView } from '../utils/lastViewMemory.js';
 import styles from './DemoBanner.module.css';
 
 /**
@@ -40,6 +41,9 @@ export function DemoBanner({ activeWalletId, onExited }) {
                 await messaging.sendMessage('wallet.remove', { walletId: activeWalletId });
             }
             flowsLib.clearDemoWalletId();
+            // Cluster U FOLLOWUP 5 — drop the resume-last-view memory
+            // alongside the demo wallet itself.
+            clearLastView(activeWalletId);
             if (typeof onExited === 'function') onExited();
         } catch (err) {
             setError(err?.message || 'Could not exit demo mode.');

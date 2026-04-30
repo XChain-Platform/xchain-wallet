@@ -217,4 +217,20 @@ We follow the [Contributor Covenant 2.1](./CODE_OF_CONDUCT.md). Be kind, assume 
 
 ---
 
-Last reviewed: 2026-04-27 at v0.194.0.
+## Governance
+
+The wallet is currently led by a single maintainer. See [`MAINTAINERS.md`](./MAINTAINERS.md) for the full picture, including:
+
+- Lead maintainer and their areas of responsibility
+- Who to escalate to for security / dependency / release / build issues
+- How to add (or remove) a maintainer
+- How decisions are made today (lazy consensus + lead-maintainer tiebreak) and how that's expected to evolve as the project grows
+- Cross-project relationships with `xchain-platform`, `xchain-sdk`, and `xchain-documentation`
+
+If you're proposing a change that's larger than a bug fix or a single-feature PR — anything that touches the architecture, the public bridge API, the build pipeline, the threat model, the legal text, or the protocol — please open an issue first to align on direction before opening the PR. The maintainers will weigh in within a few days.
+
+For everything smaller (a bug fix, a new test, a docs tweak, a single self-contained feature) feel free to open a PR directly.
+
+---
+
+Last reviewed: 2026-04-29 at v0.310.0.

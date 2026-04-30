@@ -12,6 +12,7 @@
 
 import { useState } from 'react';
 import { useMessaging } from '../../useMessaging.js';
+import { clearLastView } from '../../utils/lastViewMemory.js';
 import { ROW, ROW_HINT, STACK, Status } from './_settingsPrimitives.jsx';
 
 const ACTION_BTN = {
@@ -58,6 +59,11 @@ export function ThisWalletSection({
         setRemoveError(null);
         try {
             await messaging.removeWallet({ walletId: activeWallet.id });
+            // Cluster U FOLLOWUP 5 — drop the resume-last-view memory
+            // for this wallet so a future wallet that happens to reuse
+            // the same id (vanishingly unlikely with cuids, but the
+            // hygiene cost is zero) doesn't inherit a stale route.
+            clearLastView(activeWallet.id);
             setConfirmingRemove(false);
             if (typeof onWalletRemoved === 'function') onWalletRemoved();
         } catch (err) {

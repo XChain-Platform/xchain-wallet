@@ -5,7 +5,7 @@
 // package.json bump per the wallet's synchronized-versioning rule.
 // See CHANGELOG.md for the version's release context.
 
-export const WALLET_VERSION = '0.310.0';
+export const WALLET_VERSION = '0.315.0';
 
 // License identifiers matching repo metadata.
 export const LICENSE_NAME = 'Dankest Community License (Apache-2.0 + Additional Terms)';
@@ -33,6 +33,11 @@ export const REPRODUCIBLE_BUILD_DOC = 'docs/REPRODUCIBLE_BUILDS.md';
 export const REPRODUCIBLE_BUILD_DOC_DESKTOP = 'packages/desktop/REPRODUCIBLE_BUILDS.md';
 export const RELEASE_SIGNATURES_DOC = 'packages/extension/RELEASE_SIGNATURES.md';
 export const RELEASE_SIGNATURES_PUBLISHED = false;
+// Cluster T FOLLOWUP 2 — verification recipe for end users (key import
+// → manifest download → GPG verify → artifact hash check → optional
+// reproduce). Surfaced in the About panel next to the reproducible-
+// build doc so users land on the right doc with one click.
+export const VERIFY_RELEASE_DOC = 'docs/VERIFY-RELEASE.md';
 
 // Update channel — currently only "development". Production / beta
 // channels land at v1.0 GA per spec §51.
