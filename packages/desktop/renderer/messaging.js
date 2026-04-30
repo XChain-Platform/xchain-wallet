@@ -141,6 +141,30 @@ export function broadcastSignedTxRequest(opts) {
 }
 
 /**
+ * §30.4 / G088 — read-only PSBT decompose for the paste-in form.
+ * @param {{ chainId: string, psbtHex: string }} opts
+ */
+export function parsePsbtRequest(opts) {
+    return /** @type {any} */ (sendMessage('psbt.parse', opts));
+}
+
+/**
+ * §30.4 / G088 — user-initiated PSBT signing (software signers).
+ * @param {{ walletId: string, addressId: string, password: string, psbtHex: string, bip39Passphrase?: string }} opts
+ */
+export function signPsbtUserInitiated(opts) {
+    return /** @type {any} */ (sendMessage('auth.signPsbt', opts));
+}
+
+/**
+ * §30.4 / Cluster E FOLLOWUP 1 — HW variant of `signPsbtUserInitiated`.
+ * @param {{ walletId: string, addressId: string, psbtHex: string }} opts
+ */
+export function signPsbtUserInitiatedHw(opts) {
+    return /** @type {any} */ (sendMessage('auth.signPsbt.hw', opts));
+}
+
+/**
  * §49.5 / G154 — queued broadcast list / broadcast / discard / enqueue.
  *
  * @param {{ walletId: string }} opts

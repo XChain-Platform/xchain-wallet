@@ -747,6 +747,28 @@ export function createBackgroundHost(deps) {
         return { ok: true };
     });
 
+    // §37.2 / Cluster D FOLLOWUP 1 — restore a ConnectedSite from a
+    // snapshot. Used by the Disconnect-site Undo toast: the renderer
+    // hangs onto the full site record before calling sites.delete and
+    // posts it back here when the user taps Undo. The handler is
+    // intentionally permissive about shape — it accepts the schema
+    // record verbatim — so a future edit to the ConnectedSite schema
+    // won't silently break the undo round-trip.
+    host.register('sites.restore', async (req, { vault }) => {
+        const site = req?.site;
+        if (!site || typeof site !== 'object') {
+            throw new Error('sites.restore: site is required');
+        }
+        if (typeof site.id !== 'string' || !site.id) {
+            throw new Error('sites.restore: site.id is required');
+        }
+        if (typeof site.origin !== 'string' || !site.origin) {
+            throw new Error('sites.restore: site.origin is required');
+        }
+        await vault.connectedSites.put(site);
+        return { ok: true };
+    });
+
     // §12 / G009 — origin blocklist. listBlockedOrigins reads from
     // settings.blockedOrigins; addBlockedOrigin also evicts any
     // ConnectedSite record on the same origin so an in-flight session
@@ -1217,6 +1239,71 @@ export function createBackgroundHost(deps) {
             chainId,
             psbtHex,
             signingPaths,
+        });
+    });
+
+    // §30.4 / Cluster E FOLLOWUP 1 — HW variant of auth.signPsbt. Mirrors
+    // the registerHwHandler pattern but auth.signPsbt's request shape
+    // carries `addressId` at the top level (not under `from`), so we
+    // can't use the generic helper. Resolves the Address record, builds
+    // a RemoteSigner against the renderer-hosted Trezor / Ledger
+    // transport, decomposes the PSBT to derive signingPaths, then
+    // delegates to signPsbtFlow with the injected signer (no password).
+    host.register('auth.signPsbt.hw', async (req, deps) => {
+        const { vault, chainRegistry, sdkRegistry } = deps;
+        const walletId = req?.walletId;
+        const addressId = req?.addressId;
+        const psbtHex = req?.psbtHex;
+        if (typeof walletId !== 'string' || !walletId) {
+            throw new Error('auth.signPsbt.hw: walletId is required');
+        }
+        if (typeof addressId !== 'string' || !addressId) {
+            throw new Error('auth.signPsbt.hw: addressId is required');
+        }
+        if (typeof psbtHex !== 'string' || psbtHex.length === 0) {
+            throw new Error('auth.signPsbt.hw: psbtHex is required');
+        }
+        const address = await vault.addresses.get(addressId);
+        if (!address) {
+            throw new Error(`auth.signPsbt.hw: address "${addressId}" not found`);
+        }
+        const descriptor = await resolveSigner({ vault, address });
+        if (descriptor.kind !== 'trezor' && descriptor.kind !== 'ledger') {
+            throw new Error('auth.signPsbt.hw: source address is not a hardware wallet');
+        }
+        const transport = signerBridge.getTransport(descriptor.signerRecord.id);
+        if (!transport) {
+            throw new Error(
+                'Hardware signer is not connected. Open the wallet UI, re-pair if needed, and try again.',
+            );
+        }
+        const signer = buildRemoteSigner(descriptor, transport);
+        const chainId = address.chainId;
+        const sdk = sdkRegistry.get(chainId);
+        if (typeof sdk?.wallet?.decomposePsbt !== 'function') {
+            throw new Error(`auth.signPsbt.hw: SDK for "${chainId}" lacks wallet.decomposePsbt`);
+        }
+        const decomposed = sdk.wallet.decomposePsbt(psbtHex);
+        const signingPaths = [];
+        for (let i = 0; i < decomposed.inputs.length; i += 1) {
+            if (decomposed.inputs[i].address === address.address) {
+                signingPaths.push({ inputIndex: i, path: address.derivationPath });
+            }
+        }
+        if (signingPaths.length === 0) {
+            throw new Error(
+                `auth.signPsbt.hw: no PSBT inputs match address ${address.address}. The pasted PSBT may belong to a different wallet, or the chosen signer has no inputs to sign.`,
+            );
+        }
+        return signPsbtFlow({
+            vault,
+            walletId,
+            chainRegistry,
+            sdkRegistry,
+            chainId,
+            psbtHex,
+            signingPaths,
+            signer,
         });
     });
 

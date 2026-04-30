@@ -7,6 +7,98 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.302.0] - 2026-04-29
+
+§19.5 / Cluster H FOLLOWUP 7 — `Home.jsx` BackupReminderCard CTA now lands users directly on the Backup section instead of dropping them at the Settings root + forcing them to find the panel themselves.
+
+`packages/core/src/shared/routes/Home.jsx` adds a `settingsSubpage` state alongside `settingsOpen`. The `<BackupReminderCard onAction>` callback now sets both — `setSettingsSubpage('backup'); setSettingsOpen(true)` — and the `<Settings>` mount threads the subpage in via the existing `initialSubpageId` prop. `onBack` from Settings clears the subpage so a later menu→Settings navigation opens at the root, not Backup.
+
+Settings.jsx already accepted `initialSubpageId`; no change needed there. The `'backup'` id matches the existing `BackupSection` registration.
+
+### Added
+
+- **`packages/core/src/shared/routes/Home.jsx`** — `settingsSubpage` state; BackupReminderCard onAction sets it to `'backup'`; Settings.initialSubpageId threaded; onBack clears the subpage.
+- **`test/smoke/ui/home-backup-deeplink.smoke.js`** (new) — pins the state, the deep-link wiring, the existing `initialSubpageId` Settings contract, and the `'backup'` section id.
+
+Closes Cluster H FOLLOWUP 7.
+
+## [0.301.0] - 2026-04-29
+
+§37.2 / Cluster D FOLLOWUP 1 — Disconnect-site Undo toast. Tearing down a ConnectedSite is destructive — the dApp loses its granted permissions and has to re-prompt the user. v0.161.0 added an undo primitive for contact deletions; this extends the same affordance to the §35.5 Connected Sites panel.
+
+`packages/extension/src/background/createBackgroundHost.js` registers a new `sites.restore` host method that takes a full ConnectedSite snapshot and writes it back via `vault.connectedSites.put`. The handler intentionally accepts the schema record verbatim — no field-by-field rebuild — so a future ConnectedSite schema addition won't silently break the round-trip.
+
+`packages/core/src/shared/components/settings/ConnectedSitesSection.jsx` imports `useToast`, snapshots the full record before calling `messaging.deleteConnectedSite`, and (when `messaging.restoreConnectedSite` is wired) surfaces a `useToast.showToast` with `actionLabel: 'Undo'`. The onAction callback re-creates the record via the new shim. The toast is gated on shim availability so a host that hasn't adopted the new shim degrades cleanly to today's no-undo behavior.
+
+`packages/extension/src/popup/messaging.js` and `packages/web/src/messaging.js` add `restoreConnectedSite({ site })` shims routing to `sites.restore`. Desktop's renderer messaging doesn't expose `listConnectedSites` either; the section's pre-existing gating keeps it out of the desktop shell, so the desktop shim was intentionally skipped.
+
+### Added
+
+- **`packages/extension/src/background/createBackgroundHost.js`** — `sites.restore` host route.
+- **`packages/extension/src/popup/messaging.js`**, **`packages/web/src/messaging.js`** — `restoreConnectedSite({ site })` shims.
+- **`packages/core/src/shared/components/settings/ConnectedSitesSection.jsx`** — `useToast` import; `onDisconnect` snapshots the record and fires a `Disconnected … [Undo]` toast.
+- **`test/smoke/ui/connected-sites-undo.smoke.js`** (new) — pins the host validation, the messaging shims, and the section wiring.
+
+Closes Cluster D FOLLOWUP 1.
+
+## [0.300.0] - 2026-04-29
+
+§20.4 / Cluster E FOLLOWUP 4 — `PsbtSignForm` gains a "Scan PSBT" button that mounts the existing `<QrScanner>` against the form's paste pipeline. Each detected frame routes through `detectQrFrameFormat`:
+
+- **XCW** chunks accrue against an `XcwCollector`; once the SHA-256-verified payload reassembles, the hex emits into the textarea and the scanner closes.
+- **BBQr** frames append newline-separated to the existing textarea so the paste-pipeline's BBQr decoder picks them up via the same code path that handles a paste of a multi-frame export.
+- **Single hex / base64** payloads close the scanner immediately.
+- **UR** is recognized but ignored (Cluster U FOLLOWUP 2 tracks UR support).
+
+`packages/core/src/shared/routes/PsbtSignForm.jsx` adds `scannerOpen` + `xcwCollector` state, a `handleScannerFrame` callback, an open-scanner reset effect that fresh-seeds the collector, and a "Scan PSBT" toggle button next to "Browse for .psbt file". The XCW collector progress (`receivedCount` of `total`) surfaces while a multi-frame capture is in flight.
+
+### Added
+
+- **`packages/core/src/shared/routes/PsbtSignForm.jsx`** — `QrScanner` import; XCW collector primitives import; `scannerOpen` + `xcwCollector` state; `handleScannerFrame` with XCW / BBQr / hex / base64 branches; UI toggle + progress label.
+- **`test/smoke/ui/psbt-sign-scan.smoke.js`** (new) — pins the imports, state, handler branches, UI toggle, progress label, and the open-scanner reset.
+
+Closes Cluster E FOLLOWUP 4.
+
+## [0.299.0] - 2026-04-29
+
+§17.7 / Cluster E FOLLOWUP 5 — `<ViewPrivateKey>` finally renders its QR. The component has accepted a `renderQR({ value })` render-prop since v0.166.0 (Cluster E Step 4) but both shells passed nothing, so the QR slot never lit up.
+
+`packages/core/src/shared/components/KeyQR.jsx` (new) wraps the bundled `qrcode` library with a small `useEffect` that lazily encodes the value to a dataUrl, degrades silently to null on encode failure, and renders an `<img>` carrying the dataUrl. ECC level M and 200px width match the Receive-flow QRs.
+
+`packages/extension/src/popup/App.jsx` and `packages/web/src/App.jsx` import `KeyQR` and pass `renderQR={({ value }) => <KeyQR value={value} alt="Private key QR" />}` to the existing ViewPrivateKey mount. Desktop doesn't route ViewPrivateKey today; the wiring lands when Desktop adds the route.
+
+### Added
+
+- **`packages/core/src/shared/components/KeyQR.jsx`** (new) — lazy-encoded QR primitive.
+- **`packages/extension/src/popup/App.jsx`**, **`packages/web/src/App.jsx`** — `KeyQR` import + `renderQR={…}` prop on the ViewPrivateKey mount.
+- **`test/smoke/ui/view-private-key-qr.smoke.js`** (new) — pins the new component, its silent-degrade contract, and the two-shell wiring.
+
+Closes Cluster E FOLLOWUP 5.
+
+## [0.298.0] - 2026-04-29
+
+§30.4 / Cluster E FOLLOWUP 1 — `PsbtSignForm` gains a hardware-wallet signing path. The paste-in form has shipped since v0.164.0 but only against software signers — when the chosen address was sourced from a paired Trezor / Ledger, the user was forced into a password input that wouldn't actually unlock anything.
+
+`packages/core/src/flows/signFlows.js` extends `signPsbtFlow` to accept an optional `signer`. When supplied, the flow skips `unlockWallet` (no password KDF, no software-seed decryption) and does not call `.lock()` at the end — the caller owns the signer's lifecycle. Mirrors the same injected-signer pattern `submitAction` adopted for HW action signing.
+
+`packages/extension/src/background/createBackgroundHost.js` registers a new `auth.signPsbt.hw` route. Mirrors `registerHwHandler` shape but auth.signPsbt's request carries `addressId` at the top level (rather than under `from`), so the generic helper can't be reused. The handler resolves the Address record, builds a `RemoteSigner` against the renderer-hosted Trezor / Ledger transport via `signerBridge.getTransport`, decomposes the PSBT to derive `signingPaths`, and delegates to the extended `signPsbtFlow` with the injected signer.
+
+`packages/core/src/shared/routes/PsbtSignForm.jsx` derives `isHwSource` from the chosen address, threads the chosen signer into `useSignerInfo` for the firmware advisory banner, swaps the password input for `<HwSignBlock>` (cross-check + status banner), gates submit on `hwStatus === 'available'`, and branches the submit handler to `messaging.signPsbtUserInitiatedHw`. The submit button copy switches to `Sign on Trezor` / `Sign on Ledger`.
+
+The three messaging shims (`packages/extension/src/popup/messaging.js`, `packages/web/src/messaging.js`, `packages/desktop/renderer/messaging.js`) gain `signPsbtUserInitiatedHw({ walletId, addressId, psbtHex })`. Desktop's renderer was missing the prereq `parsePsbtRequest` + `signPsbtUserInitiated` shims entirely — PsbtSignForm was being routed in desktop App.jsx but couldn't actually parse or sign because the shims didn't exist; this commit ships those alongside.
+
+Bookkeeping — Cluster E FOLLOWUP 2 (.psbt file drop / picker) was de facto closed at v0.209.0 (Cluster P G123 drag-and-drop) and Cluster E FOLLOWUP 3 (in-wallet broadcast) at v0.237.0 (Cluster W FOLLOWUP 1); the FOLLOWUPS.md ledger is updated to reflect that.
+
+### Added
+
+- **`packages/core/src/flows/signFlows.js`** — `signPsbtFlow` accepts optional `signer`; skips unlockWallet + .lock() when supplied.
+- **`packages/extension/src/background/createBackgroundHost.js`** — `auth.signPsbt.hw` host route.
+- **`packages/extension/src/popup/messaging.js`**, **`packages/web/src/messaging.js`**, **`packages/desktop/renderer/messaging.js`** — `signPsbtUserInitiatedHw` shim. Desktop also gains the previously missing `parsePsbtRequest` + `signPsbtUserInitiated` shims.
+- **`packages/core/src/shared/routes/PsbtSignForm.jsx`** — `useSignerInfo` + `HwSignBlock` imports; `isHwSource` derivation; HW-aware submit branch; HW-gated status submit.
+- **`test/smoke/ui/psbt-sign-hw.smoke.js`** (new) — pins the flow change, host handler, three-shell shims, and form wiring.
+
+Closes Cluster E FOLLOWUP 1.
+
 ## [0.297.0] - 2026-04-29
 
 §23.5 / G052 / Cluster O FOLLOWUP 3 — chain-filter memory gets a user-visible reset. v0.207.0 introduced `xc:chainFilter:*` localStorage keys so each list (History's enabled chains, Home's coin-family filter) remembers the user's last selection. There was no surface to inspect or clear that state — a user who found a list filtered unexpectedly had to know the key prefix to fix it.

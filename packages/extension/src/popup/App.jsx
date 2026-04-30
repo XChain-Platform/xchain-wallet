@@ -74,6 +74,7 @@ import { SignMessageForm } from '@xchain-wallet/core/shared/routes/SignMessageFo
 import { VerifySignatureForm } from '@xchain-wallet/core/shared/routes/VerifySignatureForm.jsx';
 import { PsbtSignForm } from '@xchain-wallet/core/shared/routes/PsbtSignForm.jsx';
 import { ViewPrivateKey } from '@xchain-wallet/core/shared/routes/ViewPrivateKey.jsx';
+import { KeyQR } from '@xchain-wallet/core/shared/components/KeyQR.jsx';
 import { ParallelComposer } from '@xchain-wallet/core/shared/routes/ParallelComposer.jsx';
 import { CrossChainSwapForm } from '@xchain-wallet/core/shared/routes/CrossChainSwapForm.jsx';
 import { CrossChainTemplates } from '@xchain-wallet/core/shared/routes/CrossChainTemplates.jsx';
@@ -645,6 +646,7 @@ function AppInner() {
                     <ViewPrivateKey
                         walletId={activeWalletId}
                         address={privateKeyAddress}
+                        renderQR={({ value }) => <KeyQR value={value} alt="Private key QR" />}
                         onBack={() => {
                             setPrivateKeyAddress(null);
                             setUnlockedView('addresses');

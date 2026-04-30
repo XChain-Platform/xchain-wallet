@@ -108,6 +108,10 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onBuy, onCreateToken
     const [alertsOpen, setAlertsOpen] = useState(false);
     const [networkFilter, setNetworkFilter] = useState('all');
     const [settingsOpen, setSettingsOpen] = useState(false);
+    // Cluster H FOLLOWUP 7 — when "Back up now" lands the user in
+    // Settings, this captures which subpage to deep-link into so the
+    // user doesn't land on the Settings root + have to re-find Backup.
+    const [settingsSubpage, setSettingsSubpage] = useState(/** @type {string | null} */ (null));
     // §27.3 / G072 — pinned tokens. Loaded from Settings on unlock; toggled
     // optimistically in the UI then persisted via messaging.updateSettings.
     const [pinnedTokens, setPinnedTokens] = useState(/** @type {string[]} */ ([]));
@@ -505,11 +509,12 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onBuy, onCreateToken
     if (settingsOpen) {
         return (
             <Settings
-                onBack={() => setSettingsOpen(false)}
+                onBack={() => { setSettingsOpen(false); setSettingsSubpage(null); }}
                 activeWallet={activeWallet}
                 activeAccount={activeAccount}
                 onOpenWalletPicker={onOpenWalletPicker}
                 onOpenAccountPicker={onOpenAccountPicker}
+                initialSubpageId={settingsSubpage}
             />
         );
     }
@@ -615,7 +620,7 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onBuy, onCreateToken
                     <BackupReminderCard
                         walletId={activeWalletId}
                         walletCreatedAt={activeWallet?.createdAt}
-                        onAction={() => setSettingsOpen(true)}
+                        onAction={() => { setSettingsSubpage('backup'); setSettingsOpen(true); }}
                     />
                 ) : null}
 

@@ -18,6 +18,7 @@
 
 import { useEffect, useState } from 'react';
 import { useMessaging } from '../../useMessaging.js';
+import { useToast } from '../ToastHost.jsx';
 import { ROW_HINT, STACK, Status } from './_settingsPrimitives.jsx';
 
 const ACTION_BTN = {
@@ -42,6 +43,7 @@ const SITE_BLOCK = {
 
 export function ConnectedSitesSection() {
     const { messaging } = useMessaging();
+    const { showToast } = useToast();
     const [sites, setSites] = useState(/** @type {any[] | null} */ (null));
     const [blocked, setBlocked] = useState(/** @type {string[]} */ ([]));
     const [loading, setLoading] = useState(true);
@@ -78,9 +80,28 @@ export function ConnectedSitesSection() {
     useEffect(() => { reload(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
 
     const onDisconnect = async (id) => {
+        // §37.2 / Cluster D FOLLOWUP 1 — snapshot the full ConnectedSite
+        // record before tearing it down so the Undo toast can re-create
+        // it with the same permissions / lastUsedAt / appName instead
+        // of forcing the dApp to re-prompt.
+        const snapshot = sites ? sites.find((s) => s.id === id) : null;
         try {
             await messaging.deleteConnectedSite({ id });
             await reload();
+            if (snapshot && typeof messaging.restoreConnectedSite === 'function') {
+                showToast({
+                    message: `Disconnected ${snapshot.appName || snapshot.origin}`,
+                    actionLabel: 'Undo',
+                    onAction: async () => {
+                        try {
+                            await messaging.restoreConnectedSite({ site: snapshot });
+                            await reload();
+                        } catch (err) {
+                            setError(err instanceof Error ? err.message : String(err));
+                        }
+                    },
+                });
+            }
         } catch (err) {
             setError(err instanceof Error ? err.message : String(err));
         }

@@ -262,6 +262,16 @@ export function signPsbtUserInitiated(opts) {
 }
 
 /**
+ * §30.4 / Cluster E FOLLOWUP 1 — HW variant of `signPsbtUserInitiated`.
+ *
+ * @param {{ walletId: string, addressId: string, psbtHex: string }} opts
+ * @returns {Promise<{ signedPsbtHex: string, txHex: string, txid: string }>}
+ */
+export function signPsbtUserInitiatedHw(opts) {
+    return /** @type {any} */ (sendMessage('auth.signPsbt.hw', opts));
+}
+
+/**
  * §20 / G040 FOLLOWUP 1 — broadcast a signed transaction.
  *
  * @param {{ chainId: string, txHex: string }} opts
@@ -913,6 +923,15 @@ export function listConnectedSites() {
 /** @param {{ id: string }} req */
 export function deleteConnectedSite(req) {
     return /** @type {any} */ (sendMessage('sites.delete', req));
+}
+/**
+ * §37.2 / Cluster D FOLLOWUP 1 — restore a ConnectedSite from a
+ * full record snapshot. Used by the Disconnect-site Undo toast.
+ *
+ * @param {{ site: object }} req
+ */
+export function restoreConnectedSite(req) {
+    return /** @type {any} */ (sendMessage('sites.restore', req));
 }
 
 // §12 / G009 — origin blocklist.

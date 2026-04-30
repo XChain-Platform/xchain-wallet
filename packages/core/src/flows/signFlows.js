@@ -79,13 +79,14 @@ export async function signMessageFlow({
  * @typedef {Object} SignPsbtFlowOpts
  * @property {import('../storage/Vault.js').Vault} vault
  * @property {string} walletId
- * @property {string} password
+ * @property {string} [password]                    required for software-wallet signing; skipped when `signer` is supplied
  * @property {string} [bip39Passphrase]
  * @property {import('../registry/index.js').ChainRegistry} chainRegistry
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
  * @property {string} chainId
  * @property {string} psbtHex
  * @property {import('../signers/Signer.js').SigningPathEntry[]} signingPaths
+ * @property {import('../signers/Signer.js').Signer} [signer]   pre-built signer (RemoteSigner for HW). When supplied, the flow skips unlockWallet — no password KDF — and does not call `.lock()` at the end (signer lifecycle is the caller's responsibility).
  */
 
 /**
@@ -102,6 +103,7 @@ export async function signPsbtFlow({
     chainId,
     psbtHex,
     signingPaths,
+    signer: injectedSigner,
 }) {
     if (!vault) throw new Error('signPsbtFlow: vault is required');
     if (typeof chainId !== 'string' || chainId.length === 0) {
@@ -113,19 +115,25 @@ export async function signPsbtFlow({
     if (!Array.isArray(signingPaths) || signingPaths.length === 0) {
         throw new Error('signPsbtFlow: signingPaths must be a non-empty array');
     }
+    if (!injectedSigner && (typeof password !== 'string' || password.length === 0)) {
+        throw new Error('signPsbtFlow: either `password` or `signer` is required');
+    }
     // §26.5 panic-mode freeze.
     assertSigningAllowed();
-    const signer = await unlockWallet({
-        vault,
-        walletId,
-        password,
-        bip39Passphrase,
-        chainRegistry,
-        sdkRegistry,
-    });
+    const signer = injectedSigner
+        || await unlockWallet({
+            vault,
+            walletId,
+            password,
+            bip39Passphrase,
+            chainRegistry,
+            sdkRegistry,
+        });
     try {
         return await signer.signPsbt({ psbtHex, chainId, signingPaths });
     } finally {
-        signer.lock();
+        if (!injectedSigner && typeof signer.lock === 'function') {
+            signer.lock();
+        }
     }
 }
