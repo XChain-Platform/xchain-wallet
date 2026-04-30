@@ -1148,6 +1148,18 @@ export function getHoldersForToken(req) {
 }
 
 /**
+ * §27.6 token-detail richer metadata + §27.5 collectibles image URL.
+ * Cluster I FOLLOWUP 3 + Cluster C FOLLOWUP 3. Returns a normalized
+ * `AssetInfo` shape — description / creator / supply / locks / market
+ * price / extracted imageUrl.
+ *
+ * @param {{ chainId: string, asset: string }} req
+ */
+export function getAssetInfo(req) {
+    return /** @type {any} */ (sendMessage('asset.info', req));
+}
+
+/**
  * Build, sign, and broadcast a LIST action (§40.9 stage 3). The
  * §40.9 AIRDROP authoring flow signs LIST first, waits for it to be
  * indexed, then signs an AIRDROP referencing the assigned

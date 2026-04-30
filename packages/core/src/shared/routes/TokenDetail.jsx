@@ -3,6 +3,7 @@ import { Screen, Button, ChainBadge, Icon } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { StalenessLabel } from '../components/StalenessLabel.jsx';
+import { useAssetInfo } from '../hooks/useAssetInfo.js';
 import styles from './TokenDetail.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -17,11 +18,12 @@ const chainRegistry = registryLib.defaultRegistry();
  * existing History route as the "View activity" target (pre-filtered
  * by tick via History's `initialSearchQuery` prop).
  *
- * Phase-3 features named in the spec — Sell on DEX, Market view, supply
- * chart over time — and the richer asset metadata (description, creator
- * with identicon, issuance date, lock status, reputation) require host
- * messaging methods that don't exist yet (`getAssetInfo`,
- * `getSupplyHistory`); they're tracked in FOLLOWUPS.md under §27.
+ * Cluster I FOLLOWUP 3 + Cluster C FOLLOWUP 3 ship the richer metadata
+ * via `messaging.getAssetInfo`: description / creator / supply / lock
+ * status / market price / extracted image URL all surface inline below
+ * the existing fixed metadata block. Phase-3 features (Sell on DEX,
+ * Market view, supply chart over time) and reputation remain tracked
+ * in FOLLOWUPS.md under §27.
  *
  * @param {object} props
  * @param {string} props.walletId
@@ -56,6 +58,12 @@ export function TokenDetail({
 
     const descriptor = chainRegistry.get(chainId);
     const isNative = kind === 'native';
+
+    // §27.6 / Cluster I FOLLOWUP 3 + Cluster C FOLLOWUP 3 — pull
+    // description / creator / supply / locks / market / extracted
+    // imageUrl. Skipped for native coins (BTC / LTC / DOGE) since
+    // they're not XChain-issued tokens.
+    const assetInfo = useAssetInfo({ chainId, asset, skip: isNative });
 
     const [holdersOpen, setHoldersOpen] = useState(false);
     const [holders, setHolders] = useState(/** @type {any[] | null} */ (null));
@@ -151,6 +159,22 @@ export function TokenDetail({
                     </div>
                 </section>
 
+                {!isNative && assetInfo?.description ? (
+                    <section className={styles.descriptionCard}>
+                        <h3 className={styles.sectionTitle}>Description</h3>
+                        {assetInfo.imageUrl ? (
+                            <img
+                                src={assetInfo.imageUrl}
+                                alt=""
+                                aria-hidden="true"
+                                className={styles.descriptionImage}
+                                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                            />
+                        ) : null}
+                        <p className={styles.descriptionBody}>{assetInfo.description}</p>
+                    </section>
+                ) : null}
+
                 <section className={styles.metadataCard}>
                     <h3 className={styles.sectionTitle}>Metadata</h3>
                     <dl className={styles.metaList}>
@@ -174,11 +198,44 @@ export function TokenDetail({
                             <dt>Fiat rate</dt>
                             <dd>{fiatRate == null ? '—' : `$${fiatRate.toFixed(6)} / ${asset}`}</dd>
                         </div>
+                        {!isNative && assetInfo?.creator ? (
+                            <div className={styles.metaRow}>
+                                <dt>Creator</dt>
+                                <dd className={styles.creatorCell} title={assetInfo.creator}>
+                                    {shorten(assetInfo.creator)}
+                                </dd>
+                            </div>
+                        ) : null}
+                        {!isNative && assetInfo?.totalSupply != null ? (
+                            <div className={styles.metaRow}>
+                                <dt>Total supply</dt>
+                                <dd>{assetInfo.totalSupply}{assetInfo.maxSupply ? ` / ${assetInfo.maxSupply}` : ''}</dd>
+                            </div>
+                        ) : null}
+                        {!isNative && assetInfo?.marketPrice != null ? (
+                            <div className={styles.metaRow}>
+                                <dt>Market price</dt>
+                                <dd>{assetInfo.marketPrice} {nativeTickerOf(chainId)} / {asset}</dd>
+                            </div>
+                        ) : null}
+                        {!isNative && assetInfo ? (
+                            <div className={styles.metaRow}>
+                                <dt>Status</dt>
+                                <dd>
+                                    {assetInfo.locked ? (
+                                        <span className={styles.lockedFlag}>Locked</span>
+                                    ) : (
+                                        <span className={styles.unlockedFlag}>Mutable</span>
+                                    )}
+                                </dd>
+                            </div>
+                        ) : null}
                     </dl>
-                    <p className={styles.metadataHint}>
-                        Description, creator, issuance date, supply history, and lock
-                        status require additional explorer endpoints — coming next.
-                    </p>
+                    {!isNative && !assetInfo ? (
+                        <p className={styles.metadataHint}>
+                            Loading description, creator, and supply…
+                        </p>
+                    ) : null}
                 </section>
 
                 <section className={styles.actionsCard}>
@@ -271,6 +328,11 @@ function kindLabel(kind) {
     if (kind === 'native') return 'Native coin';
     if (kind === 'subtoken') return 'Sub-token';
     return 'Token';
+}
+
+function nativeTickerOf(chainId) {
+    const desc = chainRegistry.get(chainId);
+    return desc?.coin ? desc.coin.toUpperCase() : '';
 }
 
 function shorten(addr) {

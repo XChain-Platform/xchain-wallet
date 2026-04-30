@@ -531,6 +531,11 @@ export function getHoldersForToken(req) {
     return /** @type {any} */ (sendMessage('holders.forTick', req));
 }
 
+/** @param {{ chainId: string, asset: string }} req */
+export function getAssetInfo(req) {
+    return /** @type {any} */ (sendMessage('asset.info', req));
+}
+
 /** @param {object} opts */
 export function createList(opts) {
     return /** @type {any} */ (sendMessage('action.createList', opts));

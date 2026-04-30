@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.322.0] - 2026-04-29
+
+Cluster I FOLLOWUP 3 + Cluster C FOLLOWUP 3 — `messaging.getAssetInfo({chainId, asset})` host method backed by `sdk.getToken()`; TokenDetail surfaces description, creator address, total/max supply, market price, and lock status; image URLs are extracted from descriptions for collectibles.
+
+§27.6 / Cluster I FOLLOWUP 3 + Cluster C FOLLOWUP 3 — `packages/core/src/flows/assetInfo.js` (new) ships `assetInfoFor`, `normalizeAssetInfo`, and `extractImageUrl`. Normalizes xchain-explorer's `/api/token/{TICK}` response into the stable `AssetInfo` shape: `{description, creator, totalSupply, maxSupply, locked, locks, marketPrice, marketFloor, imageUrl}`. The headline `locked` flag is true when description / max-supply / mint / mint-supply is gated; per-field detail still surfaces through the `locks` map. `extractImageUrl` accepts JSON descriptions (`{"image": "..."}`), markdown image syntax (`![alt](url)`), bare URLs with image extensions, and `ipfs://` URLs (rewritten to a public gateway). Asset-not-found / explorer-offline / network glitch cases return a sentinel record rather than raising, so the caller renders "no metadata" copy gracefully.
+
+`createBackgroundHost` registers `asset.info` → `assetInfoFor`. All three messaging shells (extension popup / web / desktop renderer) export `getAssetInfo({chainId, asset})`. `useAssetInfo({chainId, asset, skip})` lives in `packages/core/src/shared/hooks/useAssetInfo.js` with a module-level `Map` cache keyed by `chainId:asset` so navigating Detail → back → Detail (or hovering the same row in Collectibles) doesn't re-fetch. `__clearAssetInfoCache()` test helper mirrors `useSignerInfo`'s pattern.
+
+`<TokenDetail>` adopts the hook (skipped for native coins). When the description is available, a new Description card renders above the Metadata card with an optional image (lazily loaded, `onError` self-hides). The Metadata card grows Creator (mono-font shortened address), Total supply (`current / max`), Market price (`{value} {NATIVE} / {ASSET}`), and Status (Locked vs Mutable) rows when the corresponding fields are present. While the lookup is in flight, "Loading description, creator, and supply…" replaces the v0.181.0 deferred-features hint. CollectiblesView image-URL extraction on row enrichment (the cluster's other natural pickup) remains future work — the row-level prefetch needs a fan-out at the Home/HomeTabs level rather than a per-card lookup, deferred to keep this commit focused.
+
+### Added
+
+- **`packages/core/src/flows/assetInfo.js`** (new) — `assetInfoFor`, `normalizeAssetInfo`, `extractImageUrl`, `AssetInfo` typedef.
+- **`packages/core/src/flows/index.js`** — re-exports the three.
+- **`packages/extension/src/background/createBackgroundHost.js`** — imports `assetInfoFor`; registers `asset.info` host route.
+- **`packages/extension/src/popup/messaging.js`**, **`packages/web/src/messaging.js`**, **`packages/desktop/renderer/messaging.js`** — `getAssetInfo({chainId, asset})` shim.
+- **`packages/core/src/shared/hooks/useAssetInfo.js`** (new) — module-cached `useAssetInfo` hook + `__clearAssetInfoCache` test helper.
+- **`packages/core/src/shared/routes/TokenDetail.jsx`** — imports `useAssetInfo`; renders Description card + Creator / Total supply / Market price / Status metadata rows; loading hint replaces stale "coming next" copy.
+- **`packages/core/src/shared/routes/TokenDetail.module.css`** — `.descriptionCard`, `.descriptionImage`, `.descriptionBody`, `.creatorCell`, `.lockedFlag`, `.unlockedFlag` rules.
+- **`test/smoke/ui/asset-info.smoke.js`** (new) — pins flow surface, host registration, three messaging shims, hook cache + test helper, TokenDetail wiring, and a round-trip on `extractImageUrl` + `normalizeAssetInfo`.
+
+Closes Cluster I FOLLOWUP 3, Cluster C FOLLOWUP 3.
+
 ## [0.321.0] - 2026-04-29
 
 Cluster H FOLLOWUP 1 + Cluster Q FOLLOWUP 5 — BIP39 passphrase toggle in CreateWallet + ImportWallet now carries a hardware-wallet caveat in its InfoTip; `logConsole.snapshot()` joins the §50 diagnostic dump under a `recent_logs` slot.

@@ -110,6 +110,7 @@ export { unstakeAction, claimRewardsAction } from './unstakeClaimActions.js';
 export { delegateAction, revokeDelegationAction } from './delegateRevokeActions.js';
 export { broadcastsForAddress } from './broadcastQueries.js';
 export { linksForAddress } from './linkQueries.js';
+export { assetInfoFor, extractImageUrl, normalizeAssetInfo } from './assetInfo.js';
 export { createMultisigConfig } from './createMultisigConfig.js';
 export { receiveMultisigAddress, listMultisigReceiveAddresses } from './multisigAddress.js';
 export {

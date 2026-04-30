@@ -83,6 +83,7 @@ const {
     revokeDelegationAction,
     broadcastsForAddress,
     linksForAddress,
+    assetInfoFor,
     createMultisigConfig,
     receiveMultisigAddress,
     listMultisigReceiveAddresses,
@@ -1703,6 +1704,10 @@ export function createBackgroundHost(deps) {
 
     host.register('links.address', async (req, { sdkRegistry }) => {
         return linksForAddress({ ...req, sdkRegistry });
+    });
+
+    host.register('asset.info', async (req, { sdkRegistry }) => {
+        return assetInfoFor({ ...req, sdkRegistry });
     });
 
     // §22 + §42.9 multisig wallet creation coordinator (Step 17). Writes
