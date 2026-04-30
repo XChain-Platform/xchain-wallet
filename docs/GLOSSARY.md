@@ -265,3 +265,51 @@ live in `core/src/i18n/locales/<bcp47>/`. The `t()` function is a
 React hook reading the active locale from context. CSS uses logical
 properties (`margin-inline-start`, `padding-inline-end`) so a future
 RTL locale lays out correctly without per-file edits.
+
+---
+
+<!-- BEGIN auto-generated glossary appendix -->
+
+## Appendix — Machine-derived terms
+
+The entries in this appendix are auto-generated from canonical
+source files. Do **not** edit by hand — run
+`node tools/glossary/generate-appendix.js` to refresh from source.
+Sources:
+
+- `packages/bridge-spec/src/index.ts` — `BridgeErrorCode` union
+- `packages/core/src/schemas/connectedSite.js` — `SitePermissions` keys
+
+### Bridge error codes
+
+Reasons a bridge call (connect / signMessage / signAction / signPsbt /
+signIn) can fail. dApps switch on `result.error` to choose the
+right user-facing copy.
+
+- `USER_REJECTED`
+- `NOT_CONNECTED`
+- `WALLET_LOCKED`
+- `CHAIN_NOT_SUPPORTED`
+- `ACCOUNT_NOT_AUTHORIZED`
+- `ADDRESS_NOT_AUTHORIZED`
+- `UNSUPPORTED_ACTION`
+- `INVALID_PARAMS`
+- `CHALLENGE_EXPIRED`
+- `BROADCAST_FAILED`
+- `PANIC_MODE`
+- `THROTTLED`
+- `BLOCKED_BY_USER`
+- `BRIDGE_VERSION_MISMATCH`
+- `INTERNAL_ERROR`
+
+### ConnectedSite permission keys
+
+Per-origin permissions surface; each key on a `ConnectedSite.permissions`
+record gates a bridge capability for that origin.
+
+- `chains`
+- `accounts`
+- `canSignMessage`
+- `canSignAction`
+
+<!-- END auto-generated glossary appendix -->

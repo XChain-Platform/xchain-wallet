@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.325.0] - 2026-04-29
+
+Cluster T FOLLOWUP 3 — Glossary auto-appendix. `BridgeErrorCode` union members and `ConnectedSite.SitePermissions` keys auto-derive into a fenced appendix at the bottom of `docs/GLOSSARY.md` so the doc never drifts from the canonical sources.
+
+§55 / Cluster T FOLLOWUP 3 — `tools/glossary/generate-appendix.js` (new) reads `packages/bridge-spec/src/index.ts` (`BridgeErrorCode` union via regex over the multi-line type alias) + `packages/core/src/schemas/connectedSite.js` (`SitePermissions` `@property` keys via the JSDoc typedef block), renders an appendix with both lists, and rewrites the section between `<!-- BEGIN auto-generated glossary appendix -->` / `<!-- END auto-generated glossary appendix -->` markers in `docs/GLOSSARY.md`. Default mode writes; `--check` exits non-zero when the appendix is stale, so a smoke / CI gate catches drift. The appendix added today carries 15 bridge error codes (USER_REJECTED through INTERNAL_ERROR) + 4 permission keys (chains / accounts / canSignMessage / canSignAction).
+
+### Added
+
+- **`tools/glossary/generate-appendix.js`** (new) — node script with `extractBridgeErrorCodes` + `extractSitePermissionKeys` parsers, `buildAppendix` renderer, marker-aware `rewriteGlossary` writer, `--check` dry-run mode.
+- **`docs/GLOSSARY.md`** — appendix with auto-generated marker pair appended at the bottom (after the existing prose Glossary).
+- **`test/smoke/docs/glossary-appendix.smoke.js`** (new) — runs the generator with `--check`, asserts exit 0, asserts marker pair + a sanity sample of codes / permission keys are present in the doc.
+
+Closes Cluster T FOLLOWUP 3.
+
 ## [0.324.0] - 2026-04-29
 
 Cluster U FOLLOWUP 1 — BBQr-Z (zlib + base32) decoding support. Coldcard / SeedSigner emit Z by default for large PSBTs because Z compresses ~30%+ vs H/B; users with those wallets can now scan signed-PSBT replies straight into PsbtSignForm without manually flipping their device to H or B.
