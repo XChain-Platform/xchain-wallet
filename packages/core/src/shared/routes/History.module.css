@@ -94,6 +94,12 @@
     margin: 0 var(--xc-space-1);
 }
 
+.stalenessRow {
+    display: flex;
+    justify-content: flex-end;
+    padding: 0 var(--xc-space-1) var(--xc-space-1);
+}
+
 .timeline {
     display: flex;
     flex-direction: column;

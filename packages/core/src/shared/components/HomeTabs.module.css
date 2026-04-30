@@ -79,6 +79,12 @@
     min-height: 0;
 }
 
+.staleness {
+    display: flex;
+    justify-content: flex-end;
+    padding: var(--xc-space-1) 0 var(--xc-space-2);
+}
+
 .placeholder {
     background: var(--xc-surface);
     border: 1px dashed var(--xc-border-strong);

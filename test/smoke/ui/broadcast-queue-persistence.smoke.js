@@ -1,0 +1,174 @@
+// Smoke for §49.5 / G154 / Cluster G FOLLOWUP 2 — broadcast-queue
+// persistence across reload. The queue lives in-memory inside
+// createBackgroundHost; v0.293.0 adds a pluggable storage adapter that
+// rehydrates the in-memory map at host construction and writes back on
+// every mutation, so a service-worker restart (extension), a tab refresh
+// (web), or an Electron app relaunch (desktop) doesn't lose the user's
+// signed-but-unbroadcast txs.
+//
+// Verifies:
+//   1. broadcastQueueStorage.js exports createBroadcastQueueStorage;
+//      the picker prefers chrome.storage.local when available, falls
+//      back to localStorage, and returns null when neither is present.
+//   2. createBackgroundHost imports the picker, accepts a
+//      `broadcastQueueStorage` dep (default = picker output), and
+//      tracks `queueLoaded`/`queueLoadPromise` so concurrent callers
+//      share one rehydrate.
+//   3. ensureQueueLoaded fires before every broadcast.queue.* route.
+//   4. persistQueue runs after every mutating route AND after
+//      pushQueueEntry (the auto-enqueue path).
+//   5. Auto-enqueue callbacks await ensureQueueLoaded so a fast Send
+//      after a worker restart can't race the rehydrate and orphan
+//      prior items.
+//   6. Eager `void ensureQueueLoaded()` fires at host construction so
+//      the queue is typically warm by the time the renderer mounts.
+
+import { strict as assert } from 'node:assert';
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const here = dirname(fileURLToPath(import.meta.url));
+const wsRoot = join(here, '..', '..', '..');
+const ext = join(wsRoot, 'packages', 'extension');
+
+// --- 1. broadcastQueueStorage adapter picker ----------------------------
+
+const storagePath = join(ext, 'src', 'background', 'broadcastQueueStorage.js');
+assert.ok(existsSync(storagePath), 'broadcastQueueStorage.js exists');
+const storage = readFileSync(storagePath, 'utf8');
+assert.ok(
+    /export function createBroadcastQueueStorage\(\)/.test(storage),
+    'createBroadcastQueueStorage is a named export',
+);
+assert.ok(
+    /typeof chrome !== 'undefined' && chrome\?\.storage\?\.local/.test(storage),
+    'picker checks for chrome.storage.local first',
+);
+assert.ok(
+    /typeof localStorage !== 'undefined'/.test(storage),
+    'picker falls back to localStorage when chrome.storage is unavailable',
+);
+assert.ok(
+    /return null/.test(storage),
+    'picker returns null when neither API is reachable (in-memory only)',
+);
+// Defensive parse drops anything that isn't a sane shape.
+assert.ok(
+    /function coerceSnapshot\(v\)/.test(storage),
+    'broadcastQueueStorage ships a defensive coerceSnapshot helper',
+);
+assert.ok(
+    /typeof e\.id === 'string'[\s\S]+?typeof e\.chainId === 'string'[\s\S]+?typeof e\.signedTxHex === 'string'/.test(storage),
+    'coerceSnapshot filters entries by id/chainId/signedTxHex shape',
+);
+
+// --- 2. createBackgroundHost wires the storage --------------------------
+
+const bgPath = join(ext, 'src', 'background', 'createBackgroundHost.js');
+const bg = readFileSync(bgPath, 'utf8');
+assert.ok(
+    /import \{ createBroadcastQueueStorage \} from '\.\/broadcastQueueStorage\.js'/.test(bg),
+    'createBackgroundHost imports the storage picker',
+);
+assert.ok(
+    /broadcastQueueStorage = createBroadcastQueueStorage\(\)/.test(bg),
+    'createBackgroundHost destructures broadcastQueueStorage with the picker as default',
+);
+assert.ok(
+    /let queueLoaded = false/.test(bg),
+    'createBackgroundHost tracks queueLoaded state',
+);
+assert.ok(
+    /async function ensureQueueLoaded\(\)/.test(bg),
+    'createBackgroundHost defines ensureQueueLoaded',
+);
+assert.ok(
+    /async function persistQueue\(\)/.test(bg),
+    'createBackgroundHost defines persistQueue',
+);
+// Single-flight load guard.
+assert.ok(
+    /let queueLoadPromise = /.test(bg) && /if \(!queueLoadPromise\)/.test(bg),
+    'ensureQueueLoaded uses a single-flight queueLoadPromise so concurrent callers share one rehydrate',
+);
+
+// --- 3. Every broadcast.queue.* route awaits ensureQueueLoaded ---------
+
+for (const route of ['broadcast.queue.list', 'broadcast.queue.enqueue', 'broadcast.queue.broadcast', 'broadcast.queue.discard']) {
+    const block = sliceRouteBody(bg, route);
+    assert.ok(
+        block && /await ensureQueueLoaded\(\)/.test(block),
+        `${route} awaits ensureQueueLoaded`,
+    );
+}
+
+// --- 4. Mutating routes persist after the change -----------------------
+
+const broadcastBlock = sliceRouteBody(bg, 'broadcast.queue.broadcast');
+assert.ok(
+    broadcastBlock && /q\.splice\(idx, 1\);\s*\n\s*await persistQueue\(\);/.test(broadcastBlock),
+    'broadcast.queue.broadcast persists after splicing the entry',
+);
+const discardBlock = sliceRouteBody(bg, 'broadcast.queue.discard');
+assert.ok(
+    discardBlock && /if \(idx >= 0\) q\.splice\(idx, 1\);\s*\n\s*await persistQueue\(\);/.test(discardBlock),
+    'broadcast.queue.discard persists after the splice',
+);
+// pushQueueEntry persists too (fire-and-forget so auto-enqueue paths
+// stay non-async).
+const pushBodyMatch = /function pushQueueEntry\([^)]*\)\s*\{([\s\S]+?)\n\s{4}\}\s*\n\s{4}host\.register/.exec(bg);
+assert.ok(pushBodyMatch, 'pushQueueEntry body parses');
+assert.ok(
+    /getQueue\(walletId\)\.push\(stored\);/.test(pushBodyMatch[1])
+        && /void persistQueue\(\)/.test(pushBodyMatch[1]),
+    'pushQueueEntry fires void persistQueue() after the in-memory push',
+);
+
+// --- 5. Auto-enqueue callbacks await ensureQueueLoaded -----------------
+
+assert.ok(
+    /onBroadcastFailure: walletId\s*\?\s*async \(entry\) => \{ await ensureQueueLoaded\(\); pushQueueEntry\(walletId, entry\); \}/.test(bg),
+    'action.send onBroadcastFailure awaits ensureQueueLoaded before pushing',
+);
+assert.ok(
+    /const onBroadcastFailure = walletId\s*\?\s*async \(entry\) => \{ await ensureQueueLoaded\(\); pushQueueEntry\(walletId, entry\); \}/.test(bg),
+    'registerHwHandler injects an ensureQueueLoaded-awaiting onBroadcastFailure',
+);
+
+// --- 6. Eager load at construction -------------------------------------
+
+assert.ok(
+    /void ensureQueueLoaded\(\)/.test(bg),
+    'createBackgroundHost kicks off ensureQueueLoaded eagerly',
+);
+
+console.log('broadcast-queue-persistence smoke OK');
+
+/**
+ * Pull out the body of a host.register('<route>', ...) call so we can
+ * assert against the route-specific code without false positives from
+ * unrelated awaits / persists elsewhere in the file. Walks past the
+ * `=>` token before counting braces so destructured params don't
+ * confuse the brace-depth tracker.
+ */
+function sliceRouteBody(src, route) {
+    const escaped = route.replace(/\./g, '\\.');
+    const m = new RegExp(`host\\.register\\(\\s*['"]${escaped}['"]`, 'g').exec(src);
+    if (!m) return null;
+    const arrowIdx = src.indexOf('=>', m.index);
+    if (arrowIdx < 0) return null;
+    const bodyOpen = src.indexOf('{', arrowIdx);
+    if (bodyOpen < 0) return null;
+    let i = bodyOpen;
+    let depth = 0;
+    for (; i < src.length; i++) {
+        const c = src[i];
+        if (c === '{') depth++;
+        else if (c === '}') {
+            depth--;
+            if (depth === 0) break;
+        }
+    }
+    return src.slice(m.index, i + 1);
+}

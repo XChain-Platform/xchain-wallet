@@ -84,6 +84,13 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onBuy, onCreateToken
     const [balances, setBalances] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
     );
+    // Cluster G FOLLOWUP 5 — Unix-ms timestamp of the most recent
+    // successful balance fetch; null until the first one completes.
+    // Threaded into HomeTabs → StalenessLabel so the user can tell
+    // when the balance view was last live.
+    const [balancesFetchedAt, setBalancesFetchedAt] = useState(
+        /** @type {number | null} */ (null),
+    );
     const [pendingAirdrops, setPendingAirdrops] = useState(
         /** @type {any[]} */ ([]),
     );
@@ -261,6 +268,7 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onBuy, onCreateToken
         if (!activeWalletId) return undefined;
         let cancelled = false;
         setBalances(null);
+        setBalancesFetchedAt(null);
         setMultisig(null);
         setPendingAirdrops([]);
         setPendingCoinpays([]);
@@ -271,7 +279,10 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onBuy, onCreateToken
         (async () => {
             try {
                 const b = await messaging.getWalletBalances(walletId, accountId);
-                if (!cancelled) setBalances(b);
+                if (!cancelled) {
+                    setBalances(b);
+                    setBalancesFetchedAt(Date.now());
+                }
             } catch (err) {
                 if (!cancelled) setLoadError(err?.message || 'Failed to load balances.');
             }
@@ -612,6 +623,7 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onBuy, onCreateToken
                     <HomeTabs
                         chainRegistry={chainRegistry}
                         balances={balances}
+                        balancesFetchedAt={balancesFetchedAt}
                         networkFilter={networkFilter}
                         multisig={multisig}
                         multisigChainId={chainRegistry.byCoin('bitcoin')[0]?.id}

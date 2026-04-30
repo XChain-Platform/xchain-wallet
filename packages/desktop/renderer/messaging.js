@@ -140,6 +140,33 @@ export function broadcastSignedTxRequest(opts) {
     return /** @type {any} */ (sendMessage('broadcast.signedTx', opts));
 }
 
+/**
+ * §49.5 / G154 — queued broadcast list / broadcast / discard / enqueue.
+ *
+ * @param {{ walletId: string }} opts
+ */
+export function listQueuedBroadcasts(opts) {
+    return /** @type {any} */ (sendMessage('broadcast.queue.list', opts));
+}
+/** @param {{ walletId: string, id: string }} opts */
+export function broadcastQueuedRequest(opts) {
+    return /** @type {any} */ (sendMessage('broadcast.queue.broadcast', opts));
+}
+/** @param {{ walletId: string, id: string }} opts */
+export function discardQueuedRequest(opts) {
+    return /** @type {any} */ (sendMessage('broadcast.queue.discard', opts));
+}
+/**
+ * Cluster G FOLLOWUP 1 — push a signed-but-unbroadcast tx onto the
+ * queue. Action handlers auto-enqueue on broadcast failure server-
+ * side; this shim is for explicit caller use.
+ *
+ * @param {{ walletId: string, chainId: string, signedTxHex: string, summary?: string, signedAt?: number, txid?: string }} opts
+ */
+export function enqueueBroadcastRequest(opts) {
+    return /** @type {any} */ (sendMessage('broadcast.queue.enqueue', opts));
+}
+
 /** @param {object} opts */
 export function sendAssetHw(opts) {
     return /** @type {any} */ (sendMessage('action.send.hw', opts));

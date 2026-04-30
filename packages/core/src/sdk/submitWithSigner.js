@@ -20,6 +20,43 @@
 import { assertSigningAllowed } from '../flows/panicMode.js';
 
 /**
+ * Thrown when a transaction was signed successfully but the broadcast
+ * leg failed (encoder unreachable, network timeout, etc.). Carries the
+ * signed hex so callers — typically `submitAction` and the bridge
+ * background handlers — can hand it off to the queued-broadcast surface
+ * (§49.5) instead of dropping the work.
+ *
+ * Cluster G FOLLOWUP 1.
+ */
+export class BroadcastFailedError extends Error {
+    /**
+     * @param {{
+     *   cause: unknown,
+     *   signedTxHex: string,
+     *   txid: string,
+     *   chainId: string,
+     *   signedAt: number,
+     *   encoding: string,
+     *   phase: 'phase1' | 'phase2',
+     * }} fields
+     */
+    constructor({ cause, signedTxHex, txid, chainId, signedAt, encoding, phase }) {
+        const inner = cause && typeof cause === 'object' && 'message' in cause
+            ? /** @type {{ message: string }} */ (cause).message
+            : String(cause);
+        super(`broadcast failed (${phase}): ${inner}`);
+        this.name = 'BroadcastFailedError';
+        this.cause = cause;
+        this.signedTxHex = signedTxHex;
+        this.txid = txid;
+        this.chainId = chainId;
+        this.signedAt = signedAt;
+        this.encoding = encoding;
+        this.phase = phase;
+    }
+}
+
+/**
  * @typedef {Object} SubmitEncoderOpts
  * @property {string} pubkey                 hex; caller-supplied — we do NOT derive from the signer
  * @property {string} [change]               change address
@@ -119,9 +156,23 @@ export async function submitWithSigner({
         signingPaths,
     });
 
-    // Step 4 — broadcast phase-1 tx.
+    // Step 4 — broadcast phase-1 tx. Wrap rejections so submitAction
+    // (and ultimately the §49.5 queued-broadcast surface) can recover
+    // the signed hex instead of losing it on a network blip.
     onProgress('broadcasting', { txid: signed.txid });
-    await encoder.broadcastTx(signed.txHex);
+    try {
+        await encoder.broadcastTx(signed.txHex);
+    } catch (err) {
+        throw new BroadcastFailedError({
+            cause: err,
+            signedTxHex: signed.txHex,
+            txid: signed.txid,
+            chainId,
+            signedAt: Date.now(),
+            encoding: encoded.encoding,
+            phase: 'phase1',
+        });
+    }
 
     // Step 4b — P2SH/P2WSH two-phase: encoder paid to a script, we now
     // spend that output with a second tx. Signer signs phase-2 too.
@@ -143,7 +194,19 @@ export async function submitWithSigner({
             chainId,
             signingPaths,
         });
-        await encoder.broadcastTx(phase2Signed.txHex);
+        try {
+            await encoder.broadcastTx(phase2Signed.txHex);
+        } catch (err) {
+            throw new BroadcastFailedError({
+                cause: err,
+                signedTxHex: phase2Signed.txHex,
+                txid: phase2Signed.txid,
+                chainId,
+                signedAt: Date.now(),
+                encoding: encoded.encoding,
+                phase: 'phase2',
+            });
+        }
         finalTxid = phase2Signed.txid;
         finalSigned = phase2Signed;
     }

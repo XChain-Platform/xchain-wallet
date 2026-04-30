@@ -7,6 +7,146 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.297.0] - 2026-04-29
+
+§23.5 / G052 / Cluster O FOLLOWUP 3 — chain-filter memory gets a user-visible reset. v0.207.0 introduced `xc:chainFilter:*` localStorage keys so each list (History's enabled chains, Home's coin-family filter) remembers the user's last selection. There was no surface to inspect or clear that state — a user who found a list filtered unexpectedly had to know the key prefix to fix it.
+
+`packages/core/src/shared/utils/chainFilterMemory.js` adds `clearAllChainFilters()`. The sweep walks `localStorage` via `length` + `key(i)` (rather than `Object.keys`, which sometimes lies in extension popup / service-worker contexts), filters by the `xc:chainFilter:` prefix, and calls `removeItem` for each match wrapped in try/catch so a single quota failure doesn't abort the rest of the sweep. Returns the count for UI confirmation; returns 0 when localStorage is unavailable.
+
+`packages/core/src/shared/components/settings/DisplaySection.jsx` (§27.3 / §27.4 panel from Cluster I FOLLOWUP 1) grows a "List preferences" sub-section at the bottom with a "Reset list preferences" button. The callback runs `clearAllChainFilters()` and surfaces a one-shot status line (`role="status"` + `aria-live="polite"`) — `"Reset N saved list filters. New filters apply on next visit."` or `"No saved list filters to reset."` — so the click doesn't feel inert. The reset takes effect on the next visit to a filtered list (the existing surfaces hydrate their state from localStorage on mount).
+
+### Added
+
+- **`packages/core/src/shared/utils/chainFilterMemory.js`** — `clearAllChainFilters()` named export.
+- **`packages/core/src/shared/components/settings/DisplaySection.jsx`** — `clearAllChainFilters` import; `resetMessage` state; "List preferences" sub-section with the Reset button + aria-live status line.
+- **`test/smoke/audits/chain-filter-reset.smoke.js`** (new) — pins the export, the SW-safe sweep mechanics, the round-trip via a localStorage stub (preserves unrelated keys), and the DisplaySection wiring.
+
+Closes Cluster O FOLLOWUP 3.
+
+## [0.296.0] - 2026-04-29
+
+§37.3 / G120 / Cluster P FOLLOWUP 1 — haptic feedback gets an in-wallet opt-out toggle. Until now `useHaptic` only honored the OS-level `prefers-reduced-motion` query; users who wanted haptics off without disabling motion globally — or whose laptop/Bluetooth device's vibration motor was sharp enough to be more annoying than informative — had no in-wallet escape hatch.
+
+`packages/core/src/schemas/settings.js` adds `settings.privacy.hapticsEnabled?: boolean` (v2-tolerant — undefined is fine and reads as default-true, so existing settings records keep their current behaviour). `createDefaultSettings` sets it to `true`; `validateSettings` accepts undefined or boolean. The schemaVersion stays at v2 since the field is optional.
+
+`packages/core/src/shared/hooks/useHaptic.js` imports `useSettings`, derives `settingsEnabled = settings?.privacy?.hapticsEnabled !== false`, and adds `if (!settingsEnabled) return;` to the existing `fire` callback alongside the reduced-motion guard. Both checks suppress vibration silently — no error, no crash, no signal to the caller. Hook return shape is unchanged so existing callers (`ToastHost`, `Send`, `Locked`) work without modification.
+
+`packages/core/src/shared/components/settings/PrivacySection.jsx` adds a "Haptic feedback" toggle row between the existing labels-survive-restore toggle and the clipboard auto-clear input. Toggle reads via the `!== false` default-true convention so a settings record migrated from a v1 vault renders as on without a write.
+
+### Added
+
+- **`packages/core/src/schemas/settings.js`** — `hapticsEnabled?: boolean` typedef + default-true seed + validator branch.
+- **`packages/core/src/shared/hooks/useHaptic.js`** — `useSettings` import; `settingsEnabled` derivation; suppress branch in `fire`.
+- **`packages/core/src/shared/components/settings/PrivacySection.jsx`** — "Haptic feedback" toggle row.
+- **`test/smoke/ui/haptics-settings-opt-out.smoke.js`** (new) — pins the hook wiring, the schema fields, and the Privacy panel toggle.
+
+Closes Cluster P FOLLOWUP 1.
+
+## [0.295.0] - 2026-04-29
+
+§19.2 / Cluster H FOLLOWUP 6 — backup-verification quiz scales with mnemonic length. The v0.176.0 quiz always asked for 3 positions regardless of phrase length, so 24-word users got the same coverage as 12-word users (statistically weaker). v0.295.0 scales the count proportionally: 12 → 3, 24 → 4 (formula `max(3, floor(totalWords / 6))`).
+
+`packages/core/src/shared/utils/pickQuizPositions.js` (new) lifts the picker out of `CreateWallet.jsx` so it's directly importable from a unit-style smoke. Algorithm is unchanged otherwise: skip position 1 (the user just read it as the first row of the recovery-phrase grid), Fisher-Yates shuffle the remaining positions, greedily pick non-adjacent ones up to `targetCount`. The minimum-3 floor keeps short fixture phrases from collapsing to a one-position quiz.
+
+`packages/core/src/shared/routes/CreateWallet.jsx` drops the inline definition and imports the shared util. Existing `handleStartVerify` call site is unchanged.
+
+### Added
+
+- **`packages/core/src/shared/utils/pickQuizPositions.js`** (new) — extracted util with the Cluster H FOLLOWUP 6 scaling formula.
+- **`packages/core/src/shared/routes/CreateWallet.jsx`** — `pickQuizPositions` import; inline definition removed; reference comment retained.
+- **`test/smoke/onboarding/quiz-positions.smoke.js`** (new) — pins 12-word→3 and 24-word→4 across 100 trials, position-1 skip, non-adjacency, sorted output, and the CreateWallet import wiring.
+
+Closes Cluster H FOLLOWUP 6.
+
+## [0.294.0] - 2026-04-29
+
+§49.5 / G154 / Cluster G FOLLOWUP 3 — reconnection prompt closes the auto-enqueue UX loop. The user signs while offline, the wallet auto-queues the signed hex (FOLLOWUP 1, v0.292.0), the queue survives reload (FOLLOWUP 2, v0.293.0) — but until now there was no nudge when the network came back: the user had to notice the banner themselves. v0.294.0 fires a one-shot toast on every offline|degraded → normal transition with a non-empty queue.
+
+`packages/core/src/shared/components/QueuedBroadcastBanner.jsx` subscribes to `useReachability()` for the `overall` value, tracks the previous value via `prevOverallRef`, and adds a `useEffect` that detects the recovery transition. When `prev === 'offline' || prev === 'degraded'` AND `next === 'normal'` AND `queue.length > 0`, the effect calls `showToast({ message, actionLabel: 'Open queue', onAction, durationMs: 12_000 })`. Toast copy honors plural — `"You have 1 queued transaction. Broadcast now?"` vs `"You have N queued transactions. Broadcast now?"`. The "Open queue" action focuses the banner (`bannerRef.current.focus()`) and scrolls it into view via `scrollIntoView({ block: 'center', behavior: 'smooth' })` so screen-reader + keyboard users land on the per-row Broadcast / Discard buttons.
+
+A 60s dedupe floor on `lastPromptedAtRef` prevents a flapping connection from spamming the toast — if the link bounces offline → normal → offline → normal in a 60-second window, the user only sees one prompt. The banner div grows `ref={bannerRef} tabIndex={-1}` so the focus call has a target without changing the visual layout (tabIndex=-1 keeps the element out of the natural tab order; programmatic focus still works).
+
+The reachability banner remains the user-visible source of truth for "you're offline" / "you're degraded"; the recovery toast only fires on the *positive* edge of the transition, leaving the negative-edge UX (going offline) handled exclusively by the existing ReachabilityBanner.
+
+### Added
+
+- **`packages/core/src/shared/components/QueuedBroadcastBanner.jsx`** — `useReachability` + `useToast` imports; `prevOverallRef` / `lastPromptedAtRef` / `bannerRef`; transition-detect useEffect; banner div gains ref + tabIndex.
+- **`test/smoke/ui/reconnection-prompt.smoke.js`** (new) — pins the imports, the prev/dedupe ref tracking, the transition guard chain (prev offline|degraded → next normal → non-empty queue → 60s dedupe), the singular/plural copy, the focus + scroll wiring, and the banner DOM ref + tabIndex.
+
+Closes Cluster G FOLLOWUP 3. With FOLLOWUPs 1 + 2 + 3 done, §49.5 queued-broadcast UX is complete end-to-end: auto-enqueue on broadcast failure, persistence across reload, recovery prompt on reconnection.
+
+## [0.293.0] - 2026-04-29
+
+§49.5 / G154 / Cluster G FOLLOWUP 2 — broadcast queue now survives reload. The v0.292.0 auto-enqueue change captured signed-but-unbroadcast txs into an in-memory map, but a service-worker restart, a tab refresh, or an Electron app relaunch wiped the queue and lost the user's work. v0.293.0 adds a pluggable storage adapter that rehydrates the in-memory map at host construction and writes back on every mutation.
+
+`packages/extension/src/background/broadcastQueueStorage.js` (new) ships a single `createBroadcastQueueStorage()` picker that returns the right adapter for the current process: `chrome.storage.local` when the namespace is reachable (extension SW — Manifest V3 doesn't expose `localStorage` to service workers), `localStorage` when only that's reachable (web renderer + desktop renderer both have it natively), or `null` when neither is — falling back to in-memory only is the safe default for the smoke harness and unit-test environments. Each adapter exposes the same `{ load, save, clear }` shape with `load()` returning `Record<walletId, entry[]>` and `save(snapshot)` accepting the same shape; `coerceSnapshot` filters anything that doesn't match the canonical entry triple (`id` + `chainId` + `signedTxHex`) so a corrupt storage payload can't crash the background process at boot.
+
+`packages/extension/src/background/createBackgroundHost.js` imports the picker, accepts a new `broadcastQueueStorage` dep (default = picker output; pass `null` explicitly to opt out), and adds two helpers around the existing `Map<walletId, entry[]>`: `ensureQueueLoaded()` (single-flight rehydrate guarded by `queueLoaded` + `queueLoadPromise` so concurrent callers share one storage read) and `persistQueue()` (serializes the map and writes back through the adapter, swallowing failures so a storage quota error never blocks a queue mutation). The four `broadcast.queue.*` host routes now `await ensureQueueLoaded()` before touching the map; `broadcast.queue.broadcast` and `broadcast.queue.discard` `await persistQueue()` after their splice; `pushQueueEntry` (the auto-enqueue path) fires `void persistQueue()` because the upstream `onBroadcastFailure` callers can't be made async retroactively. The auto-enqueue callbacks themselves got an `async (entry) => { await ensureQueueLoaded(); pushQueueEntry(walletId, entry); }` upgrade so a fast Send right after a worker restart can't race the rehydrate and orphan prior items. A `void ensureQueueLoaded()` at host construction kicks the storage read off eagerly so the queue is typically warm by the time the renderer mounts the QueuedBroadcastBanner.
+
+Storage volume is small (an ECMAScript-encoded JSON object keyed by walletId, each entry ~200 bytes between the txid + summary + base64-ish hex), so neither `chrome.storage.local` (10 MB quota in MV3) nor `localStorage` (5–10 MB across browsers) is at risk. A future migration to vault-backed persistence (per Cluster H FOLLOWUP 5's pattern) would be a clean upgrade path if a per-wallet collection grows large enough to matter.
+
+### Added
+
+- **`packages/extension/src/background/broadcastQueueStorage.js`** (new) — `createBroadcastQueueStorage()` picker + chrome / localStorage adapters + defensive `coerceSnapshot`.
+- **`packages/extension/src/background/createBackgroundHost.js`** — `broadcastQueueStorage` dep with picker default; `ensureQueueLoaded` + `persistQueue` helpers; await-load on all four `broadcast.queue.*` routes; await-persist on the two mutating routes; fire-and-forget persist in `pushQueueEntry`; ensureQueueLoaded-awaiting upgrade for both auto-enqueue callbacks; eager `void ensureQueueLoaded()` at construction.
+- **`test/smoke/ui/broadcast-queue-persistence.smoke.js`** (new) — pins the picker fall-throughs, the createBackgroundHost wiring, the per-route awaits, the post-mutation persists, the eager load, and the ensureQueueLoaded-awaiting auto-enqueue callbacks.
+
+Closes Cluster G FOLLOWUP 2.
+
+## [0.292.0] - 2026-04-29
+
+§49.5 / G154 / Cluster G FOLLOWUP 1 — auto-enqueue signed transactions when the broadcast leg fails. Until now a broadcast failure mid-Send dropped the signed bytes on the floor: the user saw "Broadcast failed" and had to start the whole sign over after the network came back. Now the signed hex is captured into the §49.5 queued-broadcast surface and surfaces in the QueuedBroadcastBanner for one-tap retry.
+
+`packages/core/src/sdk/submitWithSigner.js` exports a new `BroadcastFailedError` class. The phase-1 `encoder.broadcastTx(signed.txHex)` call (and the symmetric phase-2 call for P2SH/P2WSH two-phase sends) is wrapped in a try/catch that re-throws as `BroadcastFailedError` carrying `{ signedTxHex, txid, chainId, signedAt, encoding, phase }`. The error keeps the original cause in `err.cause` so callers that want to surface a network-specific message (timeout vs unreachable vs mempool-reject) can.
+
+`packages/core/src/flows/submitAction.js` imports the typed error and adds an optional `onBroadcastFailure` opt. When the inner submit throws `BroadcastFailedError`, the existing `pendingTxMeta`-driven PendingTx record stamps `status: 'queued'` (instead of the prior `'failed'`) and populates `txHex` from `err.signedTxHex` — so the §28.4 status timeline + §44.4 RBF/cancel UX both have the signed bytes to work with. Then `onBroadcastFailure` fires with a queue-shaped entry (`{ signedTxHex, txid, chainId, signedAt, summary, error }`); failures inside the callback are swallowed so a queue-write hiccup doesn't mask the broadcast failure itself. Non-broadcast errors keep the prior `'failed'` path untouched.
+
+`packages/core/src/flows/sendAsset.js` threads `opts.onBroadcastFailure` straight through to `submitAction`. Since `registerHwHandler('action.send.hw', sendAsset)` shares the same flow, both software-key and HW-signer Send lanes are covered by a single change.
+
+`packages/extension/src/background/createBackgroundHost.js` factors the queue-push into a `pushQueueEntry(walletId, entry)` helper that mints a stable `id`, defaults the summary if the caller didn't supply one, and timestamps with `Date.now()` if `signedAt` is omitted. The helper backs three sites: a new `broadcast.queue.enqueue` host route (for explicit caller use — e.g. a future PsbtSignForm broadcast button parking a watcher-signed PSBT), the `action.send` handler (passes `onBroadcastFailure: (entry) => pushQueueEntry(walletId, entry)` into `sendAsset`), and `registerHwHandler` (injects the same callback into every HW action — sendHw, issueHw, mintHw, …, all 26 HW lanes — without duplicating wiring).
+
+Three messaging shims grow `enqueueBroadcastRequest` (extension/popup, web, desktop) hitting the new route. Desktop also gains the prerequisite `listQueuedBroadcasts` / `broadcastQueuedRequest` / `discardQueuedRequest` shims it had been silently missing — the QueuedBroadcastBanner mounted via `FullLayoutWithNav.header` (Cluster G FOLLOWUP 4 / v0.272.0) was a no-op on desktop until now since `messaging.listQueuedBroadcasts` was undefined and the component returned early. Closing that gap as part of this work since both pieces are needed for the queue UX to work end-to-end on desktop.
+
+Reachability-gating ("only enqueue when the chain is degraded") is intentionally out of scope for this step — any broadcast failure is treated as queue-worthy. Refining the condition once we have data on real-world transient broadcast failures is tracked as a future follow-up; the conservative "always enqueue" path is the safer default since the user explicitly chose to send.
+
+### Added
+
+- **`packages/core/src/sdk/submitWithSigner.js`** — `BroadcastFailedError` class export; phase-1 + phase-2 broadcast wraps.
+- **`packages/core/src/flows/submitAction.js`** — `BroadcastFailedError` import; `onBroadcastFailure` opt; queued-vs-failed branching.
+- **`packages/core/src/flows/sendAsset.js`** — `onBroadcastFailure` opt threaded into submitAction.
+- **`packages/extension/src/background/createBackgroundHost.js`** — `pushQueueEntry` helper; `broadcast.queue.enqueue` route; `action.send` + `registerHwHandler` wiring.
+- **`packages/extension/src/popup/messaging.js`** — `enqueueBroadcastRequest` shim.
+- **`packages/web/src/messaging.js`** — `enqueueBroadcastRequest` shim.
+- **`packages/desktop/renderer/messaging.js`** — `listQueuedBroadcasts` / `broadcastQueuedRequest` / `discardQueuedRequest` / `enqueueBroadcastRequest` shims (desktop's first shipping queue surface).
+- **`test/smoke/ui/auto-enqueue-on-offline-broadcast.smoke.js`** (new) — pins the four-layer wiring (typed error / submitAction handling / host route + helper / 3-shell shims).
+
+Closes Cluster G FOLLOWUP 1; flips G154 from 🟡 partial to ✅ at v0.292.0.
+
+## [0.291.0] - 2026-04-29
+
+§49.3 / Cluster G FOLLOWUP 5 — `<StalenessLabel>` adopted across the three surfaces it was built for. Until now the component shipped (v0.170.0 / G155) but no caller mounted it; users had no way to tell whether the data they were looking at was live or cached behind a stalled fetch.
+
+`shared/routes/Home.jsx` tracks `balancesFetchedAt` (Unix ms, set after `messaging.getWalletBalances` resolves; reset to null on wallet/account switch alongside the existing `setBalances(null)`); threaded into `<HomeTabs balancesFetchedAt={…}>`. `shared/components/HomeTabs.jsx` renders `<StalenessLabel lastSyncedAt={balancesFetchedAt} warnAfterMs={5 * 60_000}>` between the tab strip and the panel — but only on Coins / Tokens / NFTs tabs, since Activity / DeFi placeholders aren't backed by the balance fetch.
+
+`shared/routes/History.jsx` tracks `historyFetchedAt`, stamped right after the per-(chain, address) fan-out lands (`setEntries(all); setLoadingChains(new Set()); setHistoryFetchedAt(Date.now())`) and reset to null when the active chain set is empty. The label renders above the timeline once `loadingChains.size === 0`, matching the same 5-minute warn threshold.
+
+`shared/routes/TokenDetail.jsx` tracks `holdersFetchedAt`, stamped on the holders fetch's success branch only (errors leave the timestamp at null so the label doesn't claim freshness against stale cached holders). Renders inside the holders panel header at a longer 10-minute warn threshold — holders churn slower than balances.
+
+§49.3 honored throughout: every site keeps the timestamp at null until a real fetch succeeds, so the component renders nothing rather than fabricating a fresh-looking label over no data.
+
+### Added
+
+- **`packages/core/src/shared/routes/Home.jsx`** — `balancesFetchedAt` state; stamped on `setBalances(b)` success; reset on wallet/account switch; threaded into `<HomeTabs>`.
+- **`packages/core/src/shared/components/HomeTabs.jsx`** — `StalenessLabel` import; `balancesFetchedAt` prop; gated render between tab strip and panel.
+- **`packages/core/src/shared/components/HomeTabs.module.css`** — `.staleness` row utility class (flex justify-end with bottom padding).
+- **`packages/core/src/shared/routes/History.jsx`** — `StalenessLabel` import; `historyFetchedAt` state; stamping at fan-out completion; reset when chain set empties; render above the timeline.
+- **`packages/core/src/shared/routes/History.module.css`** — `.stalenessRow` utility class.
+- **`packages/core/src/shared/routes/TokenDetail.jsx`** — `StalenessLabel` import; `holdersFetchedAt` state stamped on success only; render inside the holders panel.
+- **`packages/core/src/shared/routes/TokenDetail.module.css`** — `.holdersStaleness` utility class.
+- **`test/smoke/ui/staleness-label-adoption.smoke.js`** (new) — pins the per-surface wiring (state slot + stamping point + reset path + import + render-gate).
+
+Closes Cluster G FOLLOWUP 5.
+
 ## [0.290.0] - 2026-04-28
 
 §48.5 / Cluster Q FOLLOWUP 4 — `logConsole.record(...)` calls land at the highest-leverage emission points so the Developer Mode log viewer surfaces real wallet activity, not just `console.*` output.

@@ -11,12 +11,15 @@
 // is a motion affordance — users who turn motion off are signalling
 // they don't want involuntary feedback either.
 //
-// The hook deliberately does NOT add a Settings field. Spec §37.3
-// scopes haptics to "use the platform's haptic API where available";
-// honouring `prefers-reduced-motion` is the platform-level opt-out.
-// A dedicated wallet toggle can land later if real users ask.
+// Cluster P FOLLOWUP 1 — `settings.privacy.hapticsEnabled` (v2-tolerant,
+// default true) is now honored as an in-wallet opt-out alongside the
+// OS-level reduced-motion preference. Users who want haptics off
+// without disabling motion globally — or whose device's vibration motor
+// is harsh enough that the pulses are more annoying than informative —
+// can flip it in Settings → Privacy.
 
 import { useCallback, useEffect, useState } from 'react';
+import { useSettings } from './useSettings.js';
 
 const PATTERNS = Object.freeze({
     tap: 10,
@@ -60,6 +63,11 @@ function safeVibrate(pattern) {
  */
 export function useHaptic() {
     const [reducedMotion, setReducedMotion] = useState(readReducedMotion);
+    // Cluster P FOLLOWUP 1 — read the in-wallet opt-out. Default-true
+    // when the field is absent so existing settings records keep their
+    // current behaviour; `=== false` is the only suppress signal.
+    const { settings } = useSettings();
+    const settingsEnabled = settings?.privacy?.hapticsEnabled !== false;
 
     useEffect(() => {
         if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return undefined;
@@ -78,8 +86,9 @@ export function useHaptic() {
 
     const fire = useCallback((pattern) => {
         if (reducedMotion) return;
+        if (!settingsEnabled) return;
         safeVibrate(pattern);
-    }, [reducedMotion]);
+    }, [reducedMotion, settingsEnabled]);
 
     const tap = useCallback(() => fire(PATTERNS.tap), [fire]);
     const success = useCallback(() => fire(PATTERNS.success), [fire]);

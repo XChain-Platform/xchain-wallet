@@ -12,6 +12,7 @@ import { EmptyStateNudge } from '../components/EmptyStateNudge.jsx';
 import { useToast } from '../components/ToastHost.jsx';
 import { groupHistoryEntries } from '../utils/historyGrouping.js';
 import { TxStatusTimeline } from '../components/TxStatusTimeline.jsx';
+import { StalenessLabel } from '../components/StalenessLabel.jsx';
 import { flows as flowsLib } from '@xchain-wallet/core';
 import {
     applyHistoryFilters,
@@ -83,6 +84,12 @@ export function History({ walletId, accountId, onBack, onReceive, initialSearchQ
     );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [entries, setEntries] = useState(/** @type {HistoryEntry[]} */ ([]));
+    // Cluster G FOLLOWUP 5 — Unix ms of the last successful per-chain
+    // history+links fan-out completion. Surfaces as a "Last synced …"
+    // hint in the filter bar so the user can spot stale views.
+    const [historyFetchedAt, setHistoryFetchedAt] = useState(
+        /** @type {number | null} */ (null),
+    );
     const [loadingChains, setLoadingChains] = useState(/** @type {Set<string>} */ (new Set()));
     const [enabledChains, setEnabledChains] = useState(/** @type {Set<string>} */ (new Set()));
     const [crossChainOnly, setCrossChainOnly] = useState(false);
@@ -166,6 +173,7 @@ export function History({ walletId, accountId, onBack, onReceive, initialSearchQ
             .map(([cid]) => cid);
         if (chainsToLoad.length === 0) {
             setEntries([]);
+            setHistoryFetchedAt(null);
             return;
         }
         let cancelled = false;
@@ -240,6 +248,7 @@ export function History({ walletId, accountId, onBack, onReceive, initialSearchQ
             });
             setEntries(all);
             setLoadingChains(new Set());
+            setHistoryFetchedAt(Date.now());
         });
 
         return () => { cancelled = true; };
@@ -674,6 +683,15 @@ export function History({ walletId, accountId, onBack, onReceive, initialSearchQ
             {loadingChains.size > 0 ? (
                 <div role="status" aria-label="Loading history">
                     <Skeleton.List rows={Math.max(3, loadingChains.size)} />
+                </div>
+            ) : null}
+
+            {historyFetchedAt && loadingChains.size === 0 ? (
+                <div className={styles.stalenessRow}>
+                    <StalenessLabel
+                        lastSyncedAt={historyFetchedAt}
+                        warnAfterMs={5 * 60_000}
+                    />
                 </div>
             ) : null}
 

@@ -15,7 +15,7 @@
 // submitWithSigner directly — re-unlocking is expensive (Argon2id).
 
 import { unlockWallet } from './unlockWallet.js';
-import { submitWithSigner } from '../sdk/submitWithSigner.js';
+import { submitWithSigner, BroadcastFailedError } from '../sdk/submitWithSigner.js';
 import { createPendingTx } from '../schemas/pendingTx.js';
 import { commitAdsStep, resolveAdsPlanForNextTx } from './ads.js';
 
@@ -43,6 +43,7 @@ import { commitAdsStep, resolveAdsPlanForNextTx } from './ads.js';
  * @property {(txid: string, opts?: object) => Promise<unknown>} [waitForTxid]
  * @property {object} [waitOpts]
  * @property {(phase: string, data: object) => void} [onProgress]
+ * @property {(entry: { signedTxHex: string, txid: string, chainId: string, signedAt: number, summary: string, error: string }) => void | Promise<void>} [onBroadcastFailure]   Cluster G FOLLOWUP 1 — fires when the broadcast leg fails after a successful sign. Caller (typically the bridge background host) hands the entry off to §49.5's queued-broadcast surface so the signed tx isn't lost on a network blip.
  */
 
 /**
@@ -77,6 +78,7 @@ export async function submitAction({
     waitForTxid,
     waitOpts,
     onProgress,
+    onBroadcastFailure,
 }) {
     if (!injectedSigner && (typeof password !== 'string' || password.length === 0)) {
         throw new Error('submitAction: either `password` or `signer` is required');
@@ -209,7 +211,37 @@ export async function submitAction({
                 onProgress: composedOnProgress,
             });
         } catch (err) {
-            if (pending) {
+            // Cluster G FOLLOWUP 1 — broadcast leg failed after a clean
+            // sign. Stamp the PendingTx as `queued` (with the signed
+            // txHex) so the §49.5 queue can drain it later, then fire
+            // the optional onBroadcastFailure callback so the host can
+            // also push to its in-process queue surface.
+            if (err instanceof BroadcastFailedError) {
+                if (pending) {
+                    await writePending({
+                        status: 'queued',
+                        txid: err.txid,
+                        txHex: err.signedTxHex,
+                        error: err && err.message ? String(err.message) : String(err),
+                    });
+                }
+                if (typeof onBroadcastFailure === 'function') {
+                    try {
+                        await onBroadcastFailure({
+                            signedTxHex: err.signedTxHex,
+                            txid: err.txid,
+                            chainId: err.chainId,
+                            signedAt: err.signedAt,
+                            summary: pendingTxMeta?.actionSummary
+                                || `${actionData.action} on ${chainId}`,
+                            error: err.message,
+                        });
+                    } catch (_inner) {
+                        // Swallow callback errors — the broadcast
+                        // failure is the load-bearing signal.
+                    }
+                }
+            } else if (pending) {
                 await writePending({
                     status: 'failed',
                     error: err && err.message ? String(err.message) : String(err),

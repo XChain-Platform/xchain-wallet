@@ -4,6 +4,7 @@ import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { crypto as cryptoLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { MnemonicGrid } from '../components/MnemonicGrid.jsx';
+import { pickQuizPositions } from '../utils/pickQuizPositions.js';
 import styles from './CreateWallet.module.css';
 import pickerStyles from './WalletPicker.module.css';
 
@@ -115,30 +116,8 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
         setStage('mnemonic');
     }
 
-    function pickQuizPositions(totalWords) {
-        // §19.2 — quiz the user on three random non-adjacent positions.
-        // Picking three keeps friction low; non-adjacent so a partial-recall
-        // user can't slide along consecutive words. Skip position 1 — the
-        // user just read it as the first row of the grid.
-        const out = new Set();
-        const candidates = [];
-        for (let i = 2; i <= totalWords; i++) candidates.push(i);
-        // Fisher-Yates shuffle; pick from the end.
-        for (let i = candidates.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
-        }
-        for (const c of candidates) {
-            if (out.size >= 3) break;
-            // Reject if adjacent to anything already chosen.
-            let adjacent = false;
-            for (const p of out) {
-                if (Math.abs(p - c) <= 1) { adjacent = true; break; }
-            }
-            if (!adjacent) out.add(c);
-        }
-        return Array.from(out).sort((a, b) => a - b);
-    }
+    // pickQuizPositions lives in `shared/utils/pickQuizPositions.js`
+    // — see Cluster H FOLLOWUP 6 for the targetCount-scaling rationale.
 
     function handleStartVerify() {
         if (!mnemonic || !saved) return;

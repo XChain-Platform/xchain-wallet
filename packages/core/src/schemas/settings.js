@@ -76,7 +76,7 @@ export const CLIPBOARD_AUTO_CLEAR_DEFAULT = 60;
  * @property {string} language
  * @property {Record<string, SdkEndpoint>} sdkEndpoints
  * @property {Record<string, FeeSettings>} fees
- * @property {{ torRouting: boolean, changeAddressRotation: boolean, hideSmallBalances: boolean, blurOnBlur: boolean, labelsSurviveRestore: boolean, clipboardAutoClearSeconds?: number }} privacy   v2 — adds blurOnBlur (window-unfocus blur of sensitive data), labelsSurviveRestore (§19.5.2 on-chain label sync opt-in); clipboardAutoClearSeconds is optional v2-tolerant — 0–600 inclusive, 0 = never clear, default 60 (§17.7.1 / G028)
+ * @property {{ torRouting: boolean, changeAddressRotation: boolean, hideSmallBalances: boolean, blurOnBlur: boolean, labelsSurviveRestore: boolean, clipboardAutoClearSeconds?: number, hapticsEnabled?: boolean }} privacy   v2 — adds blurOnBlur (window-unfocus blur of sensitive data), labelsSurviveRestore (§19.5.2 on-chain label sync opt-in); clipboardAutoClearSeconds is optional v2-tolerant — 0–600 inclusive, 0 = never clear, default 60 (§17.7.1 / G028); hapticsEnabled is v2-tolerant — defaults true when absent, set false to suppress every `useHaptic` pulse alongside the OS-level reduced-motion preference (Cluster P FOLLOWUP 1)
  * @property {{ enabled: boolean, perChain: Record<string, AdsChainState> }} ads
  * @property {{ txConfirmations: boolean, incomingReceipts: boolean, dispenserFills: boolean, orderFills: boolean, priceAlerts: boolean }} notifications
  * @property {boolean} developerMode
@@ -109,6 +109,7 @@ export function createDefaultSettings() {
             blurOnBlur: false,
             labelsSurviveRestore: false,
             clipboardAutoClearSeconds: CLIPBOARD_AUTO_CLEAR_DEFAULT,
+            hapticsEnabled: true,
         },
         ads: {
             enabled: ADS_DEFAULT_ENABLED,
@@ -207,7 +208,11 @@ export function validateSettings(record) {
             (r.privacy.clipboardAutoClearSeconds === undefined
                 || (Number.isInteger(r.privacy.clipboardAutoClearSeconds)
                     && r.privacy.clipboardAutoClearSeconds >= CLIPBOARD_AUTO_CLEAR_MIN
-                    && r.privacy.clipboardAutoClearSeconds <= CLIPBOARD_AUTO_CLEAR_MAX)),
+                    && r.privacy.clipboardAutoClearSeconds <= CLIPBOARD_AUTO_CLEAR_MAX))
+            // hapticsEnabled is v2-tolerant: missing → default true at
+            // read time; when present, require boolean.
+            && (r.privacy.hapticsEnabled === undefined
+                || isBoolean(r.privacy.hapticsEnabled)),
         'malformed',
     );
 

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Screen, Button, ChainBadge, Icon } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { StalenessLabel } from '../components/StalenessLabel.jsx';
 import styles from './TokenDetail.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -60,6 +61,12 @@ export function TokenDetail({
     const [holders, setHolders] = useState(/** @type {any[] | null} */ (null));
     const [holdersError, setHoldersError] = useState(/** @type {string | null} */ (null));
     const [holdersLoading, setHoldersLoading] = useState(false);
+    // Cluster G FOLLOWUP 5 — Unix ms of the last holders fetch; drives a
+    // staleness label inside the holders panel so the user can tell at
+    // a glance whether the listing is live.
+    const [holdersFetchedAt, setHoldersFetchedAt] = useState(
+        /** @type {number | null} */ (null),
+    );
 
     useEffect(() => {
         if (!holdersOpen || holders !== null || isNative) return undefined;
@@ -78,6 +85,7 @@ export function TokenDetail({
                     : Array.isArray(resp?.rows) ? resp.rows
                     : [];
                 setHolders(list);
+                setHoldersFetchedAt(Date.now());
             })
             .catch((err) => {
                 if (cancelled) return;
@@ -219,6 +227,14 @@ export function TokenDetail({
                         </button>
                         {holdersOpen ? (
                             <div id="token-holders-panel" className={styles.holdersBody}>
+                                {holdersFetchedAt && !holdersLoading && !holdersError ? (
+                                    <div className={styles.holdersStaleness}>
+                                        <StalenessLabel
+                                            lastSyncedAt={holdersFetchedAt}
+                                            warnAfterMs={10 * 60_000}
+                                        />
+                                    </div>
+                                ) : null}
                                 {holdersLoading ? (
                                     <p className={styles.muted}>Loading holders…</p>
                                 ) : holdersError ? (

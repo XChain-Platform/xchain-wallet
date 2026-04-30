@@ -317,6 +317,18 @@ export function discardQueuedRequest(opts) {
 }
 
 /**
+ * Cluster G FOLLOWUP 1 — push a signed-but-unbroadcast tx onto the
+ * per-walletId queue. Action handlers auto-enqueue on broadcast
+ * failure server-side; this shim is for explicit caller use (e.g.
+ * PsbtSignForm broadcasting a watcher-signed PSBT).
+ *
+ * @param {{ walletId: string, chainId: string, signedTxHex: string, summary?: string, signedAt?: number, txid?: string }} opts
+ */
+export function enqueueBroadcastRequest(opts) {
+    return /** @type {any} */ (sendMessage('broadcast.queue.enqueue', opts));
+}
+
+/**
  * §49.1 / G153 — reachability probe across the supplied chains.
  * Returns `{ overall, perChain }`. Polled by the React `useReachability`
  * hook to drive the offline / degraded banner.

@@ -108,3 +108,36 @@ export function writeChainString(key, value) {
     }
     safeSet(key, value);
 }
+
+/**
+ * Cluster O FOLLOWUP 3 — wipe every persisted chain-filter entry. Used
+ * by Settings → Display's "Reset list preferences" button so a user
+ * who finds a list filtered unexpectedly can return every list to its
+ * "show all" baseline without hunting down per-list affordances.
+ *
+ * @returns {number}   how many keys were removed (best-effort count;
+ *                     localStorage failures are tolerated and counted as 0)
+ */
+export function clearAllChainFilters() {
+    try {
+        if (typeof localStorage === 'undefined') return 0;
+        // Walking via .length is the only API that survives the
+        // service-worker / extension-popup environments where
+        // Object.keys(localStorage) sometimes lies. Collect first then
+        // remove so we don't fight index shifts.
+        /** @type {string[]} */
+        const toRemove = [];
+        for (let i = 0; i < localStorage.length; i++) {
+            const k = localStorage.key(i);
+            if (typeof k === 'string' && k.startsWith(NS)) {
+                toRemove.push(k);
+            }
+        }
+        for (const k of toRemove) {
+            try { localStorage.removeItem(k); } catch { /* tolerate */ }
+        }
+        return toRemove.length;
+    } catch {
+        return 0;
+    }
+}

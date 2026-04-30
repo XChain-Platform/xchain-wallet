@@ -6,14 +6,18 @@
 // queue on action. Hidden when the queue is empty, so it costs nothing
 // in the normal case.
 //
-// v0.170.0 ships the UI + the messaging surface; the auto-enqueue piece
-// (Send / action paths detecting offline broadcast failures and pushing
-// signed hex into the queue instead of bubbling the error) is a Cluster
-// G FOLLOWUP, so the banner is reachable but typically empty until that
-// lands. Marking G154 🟡 partial in the ledger reflects that.
+// History: v0.170.0 shipped the UI + messaging surface; v0.292.0 wired
+// auto-enqueue from action.* broadcast failures (Cluster G FOLLOWUP 1);
+// v0.293.0 moved the queue into chrome.storage.local / localStorage so
+// it survives reload (Cluster G FOLLOWUP 2); v0.294.0 adds the §49.5
+// reconnection prompt — when reachability flips offline/degraded →
+// normal AND the queue is non-empty, surface a one-shot toast with an
+// "Open queue" action so the user knows to retry (Cluster G FOLLOWUP 3).
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMessaging } from '../useMessaging.js';
+import { useReachability } from '../hooks/useReachability.js';
+import { useToast } from './ToastHost.jsx';
 import styles from './QueuedBroadcastBanner.module.css';
 
 /**
@@ -26,6 +30,15 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
     const [queue, setQueue] = useState(/** @type {any[]} */ ([]));
     const [busyId, setBusyId] = useState(/** @type {string | null} */ (null));
     const [error, setError] = useState(/** @type {string | null} */ (null));
+    // Cluster G FOLLOWUP 3 — reconnection prompt. Track previous
+    // reachability `overall` so a transition `offline|degraded → normal`
+    // with a non-empty queue surfaces a one-shot toast nudging the user
+    // to broadcast.
+    const { overall: reachabilityOverall } = useReachability({});
+    const { showToast } = useToast();
+    const prevOverallRef = useRef(/** @type {string | null} */ (null));
+    const lastPromptedAtRef = useRef(/** @type {number} */ (0));
+    const bannerRef = useRef(/** @type {HTMLDivElement | null} */ (null));
 
     const refresh = useCallback(async () => {
         if (!walletId || typeof messaging?.listQueuedBroadcasts !== 'function') return;
@@ -46,6 +59,36 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
         }
         return undefined;
     }, [refresh, intervalMs]);
+
+    // Reconnection prompt: fire once per offline|degraded → normal
+    // transition when there's something to broadcast. Dedupe via a
+    // 60s floor on lastPromptedAtRef so a flapping connection doesn't
+    // spam the toast.
+    useEffect(() => {
+        const prev = prevOverallRef.current;
+        prevOverallRef.current = reachabilityOverall;
+        if (prev !== 'offline' && prev !== 'degraded') return;
+        if (reachabilityOverall !== 'normal') return;
+        if (queue.length === 0) return;
+        const now = Date.now();
+        if (now - lastPromptedAtRef.current < 60_000) return;
+        lastPromptedAtRef.current = now;
+        showToast({
+            message: queue.length === 1
+                ? 'You have 1 queued transaction. Broadcast now?'
+                : `You have ${queue.length} queued transactions. Broadcast now?`,
+            actionLabel: 'Open queue',
+            onAction: () => {
+                // Source of truth is the banner — focus it so screen
+                // readers + keyboard users land on the action buttons.
+                if (bannerRef.current && typeof bannerRef.current.focus === 'function') {
+                    bannerRef.current.focus();
+                    bannerRef.current.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                }
+            },
+            durationMs: 12_000,
+        });
+    }, [reachabilityOverall, queue.length, showToast]);
 
     if (queue.length === 0) return null;
 
@@ -76,7 +119,13 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
     }
 
     return (
-        <div role="status" aria-live="polite" className={styles.banner}>
+        <div
+            ref={bannerRef}
+            role="status"
+            aria-live="polite"
+            className={styles.banner}
+            tabIndex={-1}
+        >
             <div className={styles.title}>
                 Queued for broadcast ({queue.length})
             </div>

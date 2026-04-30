@@ -220,6 +220,16 @@ export function broadcastQueuedRequest(opts) {
 export function discardQueuedRequest(opts) {
     return /** @type {any} */ (sendMessage('broadcast.queue.discard', opts));
 }
+/**
+ * Cluster G FOLLOWUP 1 — push a signed-but-unbroadcast tx onto the
+ * queue. Action handlers auto-enqueue on broadcast failure server-side;
+ * this shim is for explicit caller use (e.g. PsbtSignForm).
+ *
+ * @param {{ walletId: string, chainId: string, signedTxHex: string, summary?: string, signedAt?: number, txid?: string }} opts
+ */
+export function enqueueBroadcastRequest(opts) {
+    return /** @type {any} */ (sendMessage('broadcast.queue.enqueue', opts));
+}
 
 /**
  * §49.1 / G153 — reachability probe across the supplied chains.

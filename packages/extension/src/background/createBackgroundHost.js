@@ -17,6 +17,7 @@ import { WALLET_VERSION } from '@xchain-wallet/core/buildInfo.js';
 import { MessageHost } from './MessageHost.js';
 import { registerBridgeHandlers } from '../bridge/handlers.js';
 import * as signerBridge from './signerBridge.js';
+import { createBroadcastQueueStorage } from './broadcastQueueStorage.js';
 import { DEFAULT_ACTIVE_CHAIN_IDS } from './walletCreate.js';
 
 const {
@@ -392,7 +393,17 @@ function toSafeWallet(w) {
  * @returns {MessageHost}
  */
 export function createBackgroundHost(deps) {
-    const { approvals, getDiagnosticContext, bridgeEvents, ...hostDeps } = deps ?? {};
+    const {
+        approvals,
+        getDiagnosticContext,
+        bridgeEvents,
+        // Cluster G FOLLOWUP 2 — pluggable broadcast-queue persistence.
+        // Default adapter picks chrome.storage.local (extension SW) or
+        // localStorage (web/desktop renderers); pass `null` explicitly
+        // to opt out (in-memory only, the v0.292.0 behaviour).
+        broadcastQueueStorage = createBroadcastQueueStorage(),
+        ...hostDeps
+    } = deps ?? {};
     const host = new MessageHost(hostDeps);
 
     // --- Wallet management ---------------------------------------------------
@@ -830,7 +841,23 @@ export function createBackgroundHost(deps) {
     // --- Actions -------------------------------------------------------------
 
     host.register('action.send', async (req, { vault, chainRegistry, sdkRegistry }) => {
-        return sendAsset({ ...req, vault, chainRegistry, sdkRegistry });
+        const walletId = req?.walletId;
+        return sendAsset({
+            ...req,
+            vault,
+            chainRegistry,
+            sdkRegistry,
+            // Cluster G FOLLOWUP 1 — auto-enqueue on broadcast failure.
+            // The signed hex would otherwise vanish; pushing it onto the
+            // queue lets the user retry from the QueuedBroadcastBanner
+            // once reachability returns. Await ensureQueueLoaded first
+            // so the persisted queue (FOLLOWUP 2) has been rehydrated
+            // before this push lands — otherwise a fast Send after a
+            // worker restart would race the load and orphan prior items.
+            onBroadcastFailure: walletId
+                ? async (entry) => { await ensureQueueLoaded(); pushQueueEntry(walletId, entry); }
+                : undefined,
+        });
     });
 
     // §20 / G040 — watcher-mode helper: encode-only path that returns
@@ -919,15 +946,54 @@ export function createBackgroundHost(deps) {
         });
     });
 
-    // §49.5 / G154 — queued broadcast surface. v0.170.0 ships only the
-    // UI plumbing + a per-walletId in-memory queue; auto-enqueue from
-    // offline broadcasts is tracked as a Cluster G FOLLOWUP. The store
-    // intentionally lives in the background process's memory rather
-    // than in the vault — the queue is ephemeral by design and the
-    // schema impact would be cross-cutting; persistence comes with the
-    // FOLLOWUP that actually wires Send / action paths to enqueue.
-    /** @type {Map<string, Array<{ id: string, chainId: string, signedTxHex: string, summary: string, signedAt: number }>>} */
+    // §49.5 / G154 — queued broadcast surface. v0.170.0 shipped the UI
+    // + messaging + in-memory queue; v0.292.0 auto-enqueue from broadcast
+    // failure (Cluster G FOLLOWUP 1); v0.293.0 persistence across reload
+    // (Cluster G FOLLOWUP 2). The in-memory map remains the live source
+    // of truth for the running process; storage rehydrates at first
+    // queue access and writes back on every mutation.
+    /** @type {Map<string, Array<{ id: string, chainId: string, signedTxHex: string, summary: string, signedAt: number, txid?: string }>>} */
     const queuedBroadcasts = new Map();
+    let queueLoaded = false;
+    let queueLoadPromise = /** @type {Promise<void> | null} */ (null);
+    async function ensureQueueLoaded() {
+        if (queueLoaded || !broadcastQueueStorage) {
+            queueLoaded = true;
+            return;
+        }
+        if (!queueLoadPromise) {
+            queueLoadPromise = (async () => {
+                try {
+                    const snapshot = await broadcastQueueStorage.load();
+                    for (const walletId of Object.keys(snapshot || {})) {
+                        const arr = snapshot[walletId];
+                        if (Array.isArray(arr) && arr.length > 0) {
+                            queuedBroadcasts.set(walletId, [...arr]);
+                        }
+                    }
+                } catch (_e) {
+                    // Tolerate storage failures — start fresh in-memory.
+                } finally {
+                    queueLoaded = true;
+                }
+            })();
+        }
+        await queueLoadPromise;
+    }
+    async function persistQueue() {
+        if (!broadcastQueueStorage) return;
+        /** @type {Record<string, any[]>} */
+        const snapshot = {};
+        for (const [walletId, entries] of queuedBroadcasts.entries()) {
+            if (entries.length > 0) snapshot[walletId] = [...entries];
+        }
+        try {
+            await broadcastQueueStorage.save(snapshot);
+        } catch (_e) {
+            // Same tolerance as load — never block a queue mutation on
+            // a storage failure.
+        }
+    }
     function getQueue(walletId) {
         if (typeof walletId !== 'string' || !walletId) {
             throw new Error('broadcast.queue: walletId is required');
@@ -939,10 +1005,73 @@ export function createBackgroundHost(deps) {
         }
         return q;
     }
+    // Kick off the storage rehydrate eagerly. The first
+    // `broadcast.queue.*` request will await `ensureQueueLoaded` anyway,
+    // but starting the load at host construction means the queue is
+    // typically warm by the time the renderer mounts the banner.
+    void ensureQueueLoaded();
+    /**
+     * Push a signed-but-unbroadcast tx onto the per-walletId queue.
+     * Cluster G FOLLOWUP 1 — used both by the action.* handlers' auto-
+     * enqueue path (when `submitAction` reports a `BroadcastFailedError`)
+     * and by the renderer's `enqueueBroadcastRequest` shim for callers
+     * that want to enqueue directly (e.g. PsbtSignForm's broadcast leg).
+     *
+     * @param {string} walletId
+     * @param {{ chainId: string, signedTxHex: string, summary?: string, signedAt?: number, txid?: string }} entry
+     * @returns {{ id: string, chainId: string, signedTxHex: string, summary: string, signedAt: number, txid?: string }}
+     */
+    function pushQueueEntry(walletId, entry) {
+        const id = `q-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const stored = {
+            id,
+            chainId: entry.chainId,
+            signedTxHex: entry.signedTxHex,
+            summary: typeof entry.summary === 'string' && entry.summary
+                ? entry.summary
+                : `Broadcast pending on ${entry.chainId}`,
+            signedAt: typeof entry.signedAt === 'number' ? entry.signedAt : Date.now(),
+            ...(entry.txid ? { txid: entry.txid } : {}),
+        };
+        getQueue(walletId).push(stored);
+        // Fire-and-forget — onBroadcastFailure callers (action.send /
+        // registerHwHandler) intentionally don't await pushQueueEntry,
+        // so we can't make it a Promise. The persist runs in the
+        // background; load + restart guarantees consistency on next boot.
+        void persistQueue();
+        return stored;
+    }
     host.register('broadcast.queue.list', async (req) => {
+        await ensureQueueLoaded();
         return [...getQueue(req?.walletId)];
     });
+    // Cluster G FOLLOWUP 1 — explicit enqueue endpoint. Renderer-side
+    // callers (e.g. PsbtSignForm, future RBF replace lanes) can park a
+    // signed hex on the queue without going through the action.* path.
+    host.register('broadcast.queue.enqueue', async (req) => {
+        await ensureQueueLoaded();
+        const walletId = req?.walletId;
+        const chainId = req?.chainId;
+        const signedTxHex = req?.signedTxHex;
+        if (typeof walletId !== 'string' || !walletId) {
+            throw new Error('broadcast.queue.enqueue: walletId is required');
+        }
+        if (typeof chainId !== 'string' || !chainId) {
+            throw new Error('broadcast.queue.enqueue: chainId is required');
+        }
+        if (typeof signedTxHex !== 'string' || !signedTxHex) {
+            throw new Error('broadcast.queue.enqueue: signedTxHex is required');
+        }
+        return pushQueueEntry(walletId, {
+            chainId,
+            signedTxHex,
+            summary: req?.summary,
+            signedAt: req?.signedAt,
+            txid: req?.txid,
+        });
+    });
     host.register('broadcast.queue.broadcast', async (req, { sdkRegistry }) => {
+        await ensureQueueLoaded();
         const q = getQueue(req?.walletId);
         const id = req?.id;
         const idx = q.findIndex((entry) => entry.id === id);
@@ -954,12 +1083,15 @@ export function createBackgroundHost(deps) {
         }
         const result = await sdk.wallet.broadcastTx(entry.signedTxHex);
         q.splice(idx, 1);
+        await persistQueue();
         return result;
     });
     host.register('broadcast.queue.discard', async (req) => {
+        await ensureQueueLoaded();
         const q = getQueue(req?.walletId);
         const idx = q.findIndex((entry) => entry.id === req?.id);
         if (idx >= 0) q.splice(idx, 1);
+        await persistQueue();
         return { discarded: idx >= 0 };
     });
 
@@ -1110,7 +1242,14 @@ export function createBackgroundHost(deps) {
             }
             const signer = buildRemoteSigner(descriptor, transport);
             const { password: _password, ...rest } = req;
-            return flow({ ...rest, ...deps, signer });
+            // Cluster G FOLLOWUP 1 — auto-enqueue on broadcast failure
+            // for HW lanes too. Same shape as the action.send path;
+            // ensureQueueLoaded keeps the persisted queue intact.
+            const walletId = req?.walletId;
+            const onBroadcastFailure = walletId
+                ? async (entry) => { await ensureQueueLoaded(); pushQueueEntry(walletId, entry); }
+                : undefined;
+            return flow({ ...rest, ...deps, signer, onBroadcastFailure });
         });
     }
 

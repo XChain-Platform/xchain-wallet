@@ -13,10 +13,11 @@
 // Token keys render as `chainId:asset` — sufficient to identify a row
 // without a separate `messaging.getAssetInfo` round-trip.
 
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { Button, Icon } from '@xchain-wallet/core/ui';
 import { useSettings } from '../../hooks/useSettings.js';
-import { ROW, ROW_LABEL, STACK, Status } from './_settingsPrimitives.jsx';
+import { clearAllChainFilters } from '../../utils/chainFilterMemory.js';
+import { ROW, ROW_HINT, ROW_LABEL, STACK, Status } from './_settingsPrimitives.jsx';
 
 const SECTION_HEADER = {
     fontSize: 'var(--xc-text-sm)',
@@ -50,6 +51,9 @@ const EMPTY_HINT = { ...ROW_LABEL, fontStyle: 'italic' };
 
 export function DisplaySection() {
     const { settings, loading, error, update } = useSettings();
+    // Cluster O FOLLOWUP 3 — show a brief confirmation after a
+    // filter-reset run so the click doesn't feel inert.
+    const [resetMessage, setResetMessage] = useState(/** @type {string | null} */ (null));
 
     const pinned = Array.isArray(settings?.pinnedTokens) ? settings.pinnedTokens : [];
     const hidden = Array.isArray(settings?.hiddenTokens) ? settings.hiddenTokens : [];
@@ -93,6 +97,20 @@ export function DisplaySection() {
         if (hidden.length === 0) return;
         writeHidden([]);
     }, [hidden, writeHidden]);
+
+    // Cluster O FOLLOWUP 3 — reset all per-list chain-filter memory
+    // entries. Affects History's enabledChains + the Home tab's coin-
+    // family filter. Lives outside `update()` because the persistence
+    // layer is localStorage, not vault settings (per memory rule —
+    // ephemeral UI prefs that shouldn't survive a from-seed restore).
+    const resetChainFilters = useCallback(() => {
+        const count = clearAllChainFilters();
+        setResetMessage(
+            count === 0
+                ? 'No saved list filters to reset.'
+                : `Reset ${count} saved list filter${count === 1 ? '' : 's'}. New filters apply on next visit.`,
+        );
+    }, []);
 
     if (loading) return <Status text="Loading…" />;
     if (error) return <Status text={`Settings unavailable: ${error.message}`} tone="error" />;
@@ -181,6 +199,22 @@ export function DisplaySection() {
                     </div>
                 </>
             )}
+
+            <h3 style={SECTION_HEADER}>List preferences</h3>
+            <p style={SECTION_HINT}>
+                Each balance and history list remembers the chain filter you last selected. Reset to start every list at "show all".
+            </p>
+            <div style={ROW}>
+                <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+                    <span style={ROW_LABEL}>Saved chain filters</span>
+                    {resetMessage ? (
+                        <span role="status" aria-live="polite" style={ROW_HINT}>{resetMessage}</span>
+                    ) : null}
+                </div>
+                <Button size="sm" variant="secondary" icon={null} onClick={resetChainFilters}>
+                    Reset list preferences
+                </Button>
+            </div>
         </div>
     );
 }

@@ -8,6 +8,7 @@ import {
 } from './BalanceList.jsx';
 import { CollectiblesView } from './CollectiblesView.jsx';
 import { TotalBalanceHero } from './TotalBalanceHero.jsx';
+import { StalenessLabel } from './StalenessLabel.jsx';
 import styles from './HomeTabs.module.css';
 
 /**
@@ -26,13 +27,14 @@ import styles from './HomeTabs.module.css';
  * @param {object} props
  * @param {import('../../registry/index.js').ChainRegistry} props.chainRegistry
  * @param {Record<string, Array<{ balances: any | null }>>} props.balances
+ * @param {number | null} [props.balancesFetchedAt]   Unix ms of the last successful balance fetch — drives the staleness label below the tab strip (Cluster G FOLLOWUP 5 / G155).
  * @param {string} props.networkFilter   'all' or a coin family
  * @param {{ threshold: number, cosignerCount: number, scheme: string } | null} [props.multisig]
  * @param {string} [props.multisigChainId]
  * @param {import('react').ReactNode} [props.actions]   slot rendered between the total-balance hero and the tab strip — used by Home for the Send / Receive / Swap / Buy quick-action row
  * @param {() => void} [props.onReceive]   forwarded to empty-state nudges so the "No balances yet" cards can render a one-tap Receive CTA (G077)
  */
-export function HomeTabs({ chainRegistry, balances, networkFilter, multisig, multisigChainId, actions, onReceive, onSelectToken, pinnedKeys, onTogglePin, hiddenKeys, onToggleHide }) {
+export function HomeTabs({ chainRegistry, balances, balancesFetchedAt, networkFilter, multisig, multisigChainId, actions, onReceive, onSelectToken, pinnedKeys, onTogglePin, hiddenKeys, onToggleHide }) {
     const [active, setActive] = useState('coins');
 
     const allRows = useMemo(
@@ -96,6 +98,15 @@ export function HomeTabs({ chainRegistry, balances, networkFilter, multisig, mul
                     </button>
                 ))}
             </div>
+
+            {(active === 'coins' || active === 'tokens' || active === 'nfts') && balancesFetchedAt ? (
+                <div className={styles.staleness}>
+                    <StalenessLabel
+                        lastSyncedAt={balancesFetchedAt}
+                        warnAfterMs={5 * 60_000}
+                    />
+                </div>
+            ) : null}
 
             <div className={styles.panel} role="tabpanel">
                 {active === 'coins' ? (

@@ -89,6 +89,12 @@ export function PrivacySection() {
                 checked={Boolean(settings.privacy.labelsSurviveRestore)}
                 onChange={(v) => onToggle('labelsSurviveRestore', v)}
             />
+            <ToggleRow
+                label="Haptic feedback"
+                hint="Vibration pulses on success / error / tap events when the device supports the Vibration API. Reduced-motion (OS-level) also suppresses haptics."
+                checked={settings.privacy.hapticsEnabled !== false}
+                onChange={(v) => onToggle('hapticsEnabled', v)}
+            />
             <div style={ROW}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
                     <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>
