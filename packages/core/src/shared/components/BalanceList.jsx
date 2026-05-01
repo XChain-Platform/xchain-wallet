@@ -118,9 +118,10 @@ export function BalanceList({
 function BalanceRowEl({ row, multisig, onSelect, pinned, onTogglePin, hidden, onToggleHide }) {
     const isNative = row.kind === 'native';
     const chainIconUrl = branding.chainIconSmallUrl(row.chainId);
-    const subtitle = row.networkKind !== 'mainnet'
-        ? `${row.asset} · ${row.networkKind}`
-        : row.asset;
+    // Network/env (mainnet/testnet/regtest) is already chosen globally
+    // in Settings — repeating it on every row adds noise. Show just the
+    // asset symbol; chain family is conveyed by the chain icon.
+    const subtitle = row.asset;
     const fiat = useMemo(
         () => fiatValue(row.quantity, row.divisibility, row.fiatRate),
         [row.quantity, row.divisibility, row.fiatRate],
@@ -321,6 +322,9 @@ export function buildBalanceRows(balances, chainRegistry) {
                             displayName: a.displayName || a.asset,
                             divisibility: Number(a.divisibility ?? 8),
                             fiatRate: a.fiatRate,
+                            imageUrl: typeof a.imageUrl === 'string' && a.imageUrl.length > 0
+                                ? a.imageUrl
+                                : null,
                         });
                         tokenAcc.set(a.asset, acc);
                     }
@@ -335,7 +339,7 @@ export function buildBalanceRows(balances, chainRegistry) {
     return out.map((r) => ({ ...r, quantity: r.quantity.toString() }));
 }
 
-function mkRow({ kind, chainId, descriptor, asset, displayName, divisibility, fiatRate }) {
+function mkRow({ kind, chainId, descriptor, asset, displayName, divisibility, fiatRate, imageUrl }) {
     return {
         kind,
         chainId,
@@ -348,6 +352,7 @@ function mkRow({ kind, chainId, descriptor, asset, displayName, divisibility, fi
         divisibility,
         fiatRate: typeof fiatRate === 'number' ? fiatRate : null,
         quantity: 0n,
+        imageUrl: typeof imageUrl === 'string' && imageUrl.length > 0 ? imageUrl : null,
     };
 }
 
@@ -390,9 +395,8 @@ function formatAmount(quantityStr, divisibility) {
     const abs = negative ? q.slice(1) : q;
     const padded = abs.padStart(divisibility + 1, '0');
     const whole = padded.slice(0, padded.length - divisibility);
-    let frac = padded.slice(padded.length - divisibility);
-    frac = frac.replace(/0+$/, '');
-    const out = frac ? `${groupThousands(whole)}.${frac}` : groupThousands(whole);
+    const frac = padded.slice(padded.length - divisibility);
+    const out = `${groupThousands(whole)}.${frac}`;
     return negative ? `-${out}` : out;
 }
 

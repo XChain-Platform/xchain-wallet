@@ -36,6 +36,7 @@ import { Settings } from '@xchain-wallet/core/shared/routes/Settings.jsx';
 import { TokenDetail } from '@xchain-wallet/core/shared/routes/TokenDetail.jsx';
 import { ToastHost } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
 import { ReachabilityBanner } from '@xchain-wallet/core/shared/components/ReachabilityBanner.jsx';
+import { isDemoWallet } from '@xchain-wallet/core/flows';
 import { QueuedBroadcastBanner } from '@xchain-wallet/core/shared/components/QueuedBroadcastBanner.jsx';
 import { DemoBanner } from '@xchain-wallet/core/shared/components/DemoBanner.jsx';
 import { LeftNav, FullLayoutWithNav } from '@xchain-wallet/core/shared/components/LeftNav.jsx';
@@ -106,22 +107,24 @@ export function App() {
     const variantState = useActiveVariant();
     const { variant, source } = variantState;
     const shell = shellForVariant(variant);
-    // Pick the page-level wrapper. Three cases:
-    //   sidebar          → simulate Chrome's side panel (right-edge column)
-    //   small + forced   → frame (375×600 phone-preview)
-    //   anything else    → transparent passthrough
+    // Pick the page-level wrapper. Four cases:
+    //   sidebar              → simulate Chrome's side panel (right-edge column)
+    //   extension            → simulate the Chrome extension toolbar popup (360×600 fixed)
+    //   small + forced       → frame (375×600 phone-preview)
+    //   anything else        → transparent passthrough (full / auto-small)
     const wrapper = variant === 'sidebar'
         ? { page: devShellStyles.sidebarPage, frame: devShellStyles.sidebarFrame }
-        : variant === 'small' && source !== 'auto'
-            ? { page: devShellStyles.smallPage, frame: devShellStyles.smallFrame }
-            : { page: devShellStyles.fullPage, frame: devShellStyles.fullFrame };
+        : variant === 'extension'
+            ? { page: devShellStyles.extensionPage, frame: devShellStyles.extensionFrame }
+            : variant === 'small' && source !== 'auto'
+                ? { page: devShellStyles.smallPage, frame: devShellStyles.smallFrame }
+                : { page: devShellStyles.fullPage, frame: devShellStyles.fullFrame };
     return (
         <div className={wrapper.page}>
             <div className={wrapper.frame}>
                 <MessagingProvider shell={shell} messaging={messaging}>
                     <ToastHost>
                         <ExtensionBanner />
-                        <ReachabilityBanner />
                         <AppInner />
                     </ToastHost>
                 </MessagingProvider>
@@ -132,6 +135,8 @@ export function App() {
 }
 
 function AppInner() {
+    const { variant } = useActiveVariant();
+    const isFull = variant === 'full';
     const [status, setStatus] = useState(/** @type {any} */ ({ state: 'loading' }));
     const [onboardingStep, setOnboardingStep] = useState(
         /** @type {'welcome' | 'create' | 'import' | 'import-freewallet'} */ ('welcome'),
@@ -1208,25 +1213,29 @@ function AppInner() {
             return (
                 <FullLayoutWithNav
                     nav={
-                        <LeftNav
-                            currentView={unlockedView}
-                            onSelect={(view) => setUnlockedView(view)}
-                            onLock={handleNavLock}
-                            onOpenWalletPicker={handleOpenWalletPicker}
-                            onOpenSettings={handleOpenSettings}
-                            walletName={activeWalletName}
-                            hasBtcAddress={hasBtcAddress}
-                        />
+                        isFull ? (
+                            <LeftNav
+                                currentView={unlockedView}
+                                onSelect={(view) => setUnlockedView(view)}
+                                onLock={handleNavLock}
+                                onOpenWalletPicker={handleOpenWalletPicker}
+                                onOpenSettings={handleOpenSettings}
+                                walletName={activeWalletName}
+                                hasBtcAddress={hasBtcAddress}
+                            />
+                        ) : null
                     }
                     bottomBar={
-                        <BottomTabBar
-                            currentView={unlockedView}
-                            onSelect={(view) => setUnlockedView(view)}
-                            onLock={handleNavLock}
-                            onOpenWalletPicker={handleOpenWalletPicker}
-                            onOpenSettings={handleOpenSettings}
-                            hasBtcAddress={hasBtcAddress}
-                        />
+                        variant === 'small' ? (
+                            <BottomTabBar
+                                currentView={unlockedView}
+                                onSelect={(view) => setUnlockedView(view)}
+                                onLock={handleNavLock}
+                                onOpenWalletPicker={handleOpenWalletPicker}
+                                onOpenSettings={handleOpenSettings}
+                                hasBtcAddress={hasBtcAddress}
+                            />
+                        ) : null
                     }
                     header={
                         activeWalletId ? (
@@ -1236,6 +1245,7 @@ function AppInner() {
                                     just Home. */}
                                 <DemoBanner activeWalletId={activeWalletId} onExited={refresh} />
                                 <QueuedBroadcastBanner walletId={activeWalletId} />
+                                {isDemoWallet(activeWalletId) ? null : <ReachabilityBanner />}
                             </>
                         ) : null
                     }

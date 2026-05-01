@@ -44,8 +44,8 @@
 .iconWrap {
     position: relative;
     flex: 0 0 auto;
-    width: 36px;
-    height: 36px;
+    width: 48px;
+    height: 48px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -54,8 +54,8 @@
 }
 
 .iconImg {
-    width: 28px;
-    height: 28px;
+    width: 48px;
+    height: 48px;
     display: block;
     border-radius: 50%;
 }
@@ -75,8 +75,8 @@
     position: absolute;
     bottom: -2px;
     inset-inline-end: -2px;
-    width: 16px;
-    height: 16px;
+    width: 20px;
+    height: 20px;
     border-radius: 50%;
     background: #FFFFFF;
     box-shadow: 0 0 0 1.5px var(--xc-surface);

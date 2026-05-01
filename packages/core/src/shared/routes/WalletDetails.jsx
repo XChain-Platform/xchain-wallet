@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Screen, Button, Icon } from '@xchain-wallet/core/ui';
+import { isDemoWallet, clearDemoWalletId, getDemoWalletExpiry } from '@xchain-wallet/core/flows';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { clearLastView } from '../utils/lastViewMemory.js';
 import styles from './ActionsMenu.module.css';
 import pickerStyles from './WalletPicker.module.css';
 
@@ -18,14 +20,40 @@ import pickerStyles from './WalletPicker.module.css';
  * @param {() => void} props.onBack
  * @param {() => void} [props.onRename]              navigates to RenameWalletForm scoped to this wallet
  * @param {() => void} [props.onMigrateToBip39]      shown only when format === 'counterwallet-legacy'; navigates to the §40.13 migration wizard scoped to this wallet
+ * @param {() => void} [props.onExited]              fires after a successful demo wipe so the host can refresh App state
  */
-export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39 }) {
+export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, onExited }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
 
     const [wallet, setWallet] = useState(/** @type {any | null} */ (null));
     const [accountCount, setAccountCount] = useState(/** @type {number | null} */ (null));
     const [error, setError] = useState(/** @type {string | null} */ (null));
+    const [exitBusy, setExitBusy] = useState(false);
+    const [exitError, setExitError] = useState(/** @type {string | null} */ (null));
+
+    const isDemo = isDemoWallet(walletId);
+    const demoExpiry = isDemo ? getDemoWalletExpiry() : null;
+
+    async function handleExitDemo() {
+        if (exitBusy) return;
+        setExitBusy(true);
+        setExitError(null);
+        try {
+            if (typeof messaging?.removeWallet === 'function') {
+                await messaging.removeWallet({ walletId });
+            } else if (typeof messaging?.sendMessage === 'function') {
+                await messaging.sendMessage('wallet.remove', { walletId });
+            }
+            clearDemoWalletId();
+            clearLastView(walletId);
+            if (typeof onExited === 'function') onExited();
+        } catch (err) {
+            setExitError(err?.message || 'Could not exit demo mode.');
+        } finally {
+            setExitBusy(false);
+        }
+    }
 
     useEffect(() => {
         let cancelled = false;
@@ -112,6 +140,17 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39 }) 
                 />
                 <Row label="Accounts" value={accountCount === null ? '…' : String(accountCount)} />
                 <Row label="Created" value={createdLabel} />
+                {isDemo ? (
+                    <Row
+                        label="Status"
+                        value={
+                            <span>
+                                Demo wallet (throwaway)
+                                {formatDemoExpiry(demoExpiry) ? ` · ${formatDemoExpiry(demoExpiry)}` : ''}
+                            </span>
+                        }
+                    />
+                ) : null}
                 <Row label="ID" value={<code className={pickerStyles.code}>{wallet.id}</code>} />
             </dl>
             {wallet.format === 'counterwallet-legacy' && onMigrateToBip39 ? (
@@ -140,8 +179,50 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39 }) 
                     </Button>
                 </div>
             ) : null}
+            {isDemo ? (
+                <div style={{ marginTop: 'var(--xc-space-3)' }}>
+                    <Button
+                        type="button"
+                        variant="danger"
+                        block
+                        onClick={handleExitDemo}
+                        loading={exitBusy}
+                        disabled={exitBusy}
+                    >
+                        Exit demo &amp; wipe
+                    </Button>
+                    {exitError ? (
+                        <p
+                            role="alert"
+                            style={{
+                                marginTop: 'var(--xc-space-2)',
+                                fontSize: 'var(--xc-text-xs)',
+                                color: 'var(--xc-danger)',
+                            }}
+                        >
+                            {exitError}
+                        </p>
+                    ) : null}
+                </div>
+            ) : null}
         </Screen>
     );
+}
+
+function formatDemoExpiry(expiry) {
+    if (!expiry || typeof expiry.expiresAt !== 'number') return null;
+    const remaining = expiry.expiresAt - Date.now();
+    if (remaining <= 0) return 'auto-wipe imminent';
+    const minutes = Math.floor(remaining / 60_000);
+    const hours = Math.floor(minutes / 60);
+    if (hours >= 1) {
+        const remMin = minutes % 60;
+        return remMin > 0
+            ? `auto-wipes in ${hours}h ${remMin}m`
+            : `auto-wipes in ${hours}h`;
+    }
+    if (minutes >= 1) return `auto-wipes in ${minutes}m`;
+    return 'auto-wipes in under a minute';
 }
 
 function Row({ label, value }) {

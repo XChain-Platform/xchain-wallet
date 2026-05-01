@@ -361,37 +361,6 @@ export function Send({ walletId, onBack, prefill = null }) {
         return Boolean(nativeTicker && asset.trim().toUpperCase() === nativeTicker);
     }, [chainId, asset]);
 
-    // Native-unit balance available for the selected asset on the
-    // source address, derived from the same SDK call the simulator
-    // already runs. Drives Max + the "Available: X" hint.
-    const sourceBalance = useMemo(() => {
-        if (!previewBalances.sdkShape) return null;
-        const tickUpper = asset.trim().toUpperCase();
-        if (!tickUpper) return null;
-        const native = previewBalances.sdkShape.native;
-        if (native && String(native.asset || '').toUpperCase() === tickUpper) {
-            return decoderLib.balancesFromSdk(previewBalances.sdkShape).find((b) => b.tick === tickUpper) || null;
-        }
-        return decoderLib.balancesFromSdk(previewBalances.sdkShape).find((b) => b.tick === tickUpper) || null;
-    }, [previewBalances.sdkShape, asset]);
-
-    const onMax = useCallback(() => {
-        if (!sourceBalance || !sourceBalance.amount) return;
-        const balanceNum = parseFloat(sourceBalance.amount);
-        if (!Number.isFinite(balanceNum) || balanceNum <= 0) return;
-        let maxAmount = balanceNum;
-        if (isNativeSend && feeEstimate) {
-            const feeNum = parseFloat(feeEstimate.coinAmount);
-            if (Number.isFinite(feeNum)) maxAmount = Math.max(0, balanceNum - feeNum);
-        }
-        const display = Number(maxAmount.toFixed(8)).toString();
-        setAmount(display);
-        if (amountMode === 'fiat' && fiatRate) {
-            const fiat = coinToFiat(display, fiatRate);
-            setFiatInput(fiat != null ? fiat.toFixed(2) : '');
-        }
-    }, [sourceBalance, isNativeSend, feeEstimate, amountMode, fiatRate]);
-
     const onToggleAmountMode = useCallback(() => {
         if (!fiatRate) return;
         setAmountMode((prev) => {
@@ -595,6 +564,40 @@ export function Send({ walletId, onBack, prefill = null }) {
         if (liveTier) return liveTier;
         return estimateNativeSendFee({ chainId, chainRegistry, speed: feePick.mode });
     }, [chainId, feePick, feeTiers]);
+
+    // Native-unit balance available for the selected asset on the
+    // source address, derived from the same SDK call the simulator
+    // already runs. Drives Max + the "Available: X" hint. Lives below
+    // the previewBalances + feeEstimate declarations because both are
+    // referenced in the factory bodies — the original placement above
+    // those `useState`/`useMemo` calls hit a TDZ during render.
+    const sourceBalance = useMemo(() => {
+        if (!previewBalances.sdkShape) return null;
+        const tickUpper = asset.trim().toUpperCase();
+        if (!tickUpper) return null;
+        const native = previewBalances.sdkShape.native;
+        if (native && String(native.asset || '').toUpperCase() === tickUpper) {
+            return decoderLib.balancesFromSdk(previewBalances.sdkShape).find((b) => b.tick === tickUpper) || null;
+        }
+        return decoderLib.balancesFromSdk(previewBalances.sdkShape).find((b) => b.tick === tickUpper) || null;
+    }, [previewBalances.sdkShape, asset]);
+
+    const onMax = useCallback(() => {
+        if (!sourceBalance || !sourceBalance.amount) return;
+        const balanceNum = parseFloat(sourceBalance.amount);
+        if (!Number.isFinite(balanceNum) || balanceNum <= 0) return;
+        let maxAmount = balanceNum;
+        if (isNativeSend && feeEstimate) {
+            const feeNum = parseFloat(feeEstimate.coinAmount);
+            if (Number.isFinite(feeNum)) maxAmount = Math.max(0, balanceNum - feeNum);
+        }
+        const display = Number(maxAmount.toFixed(8)).toString();
+        setAmount(display);
+        if (amountMode === 'fiat' && fiatRate) {
+            const fiat = coinToFiat(display, fiatRate);
+            setFiatInput(fiat != null ? fiat.toFixed(2) : '');
+        }
+    }, [sourceBalance, isNativeSend, feeEstimate, amountMode, fiatRate]);
 
     const previewResult = useMemo(() => {
         if (stage !== 'review' && stage !== 'submitting') return null;

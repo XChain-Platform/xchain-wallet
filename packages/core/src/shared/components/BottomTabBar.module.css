@@ -3,7 +3,15 @@
    the route content with a dimmed scrim. */
 
 .bar {
-    position: fixed;
+    /* Anchored to the wallet's layout container (FullLayoutWithNav `.layout`,
+       which is `position: relative` and constrained to --xc-screen-h). On a
+       real narrow viewport the layout fills the viewport, so the bar still
+       sits at the bottom edge; in framed dev preview the bar pins to the
+       frame bottom instead of the surrounding viewport. Switching from
+       `position: fixed` avoids the dev-preview mismatch where the bar is
+       rendered outside the frame but its 56px slot still steals layout
+       space inside the frame. */
+    position: absolute;
     inset-inline-start: 0;
     inset-inline-end: 0;
     bottom: 0;

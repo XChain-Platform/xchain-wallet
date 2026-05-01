@@ -193,7 +193,7 @@ export function LeftNav({
 export function FullLayoutWithNav({ nav, bottomBar, header, children }) {
     return (
         <div className={`${styles.layout} ${bottomBar ? styles.layoutWithBottomBar : ''}`}>
-            <aside className={styles.sidebar}>{nav}</aside>
+            {nav ? <aside className={styles.sidebar}>{nav}</aside> : null}
             <div className={styles.main}>
                 {header ? <div className={styles.header}>{header}</div> : null}
                 <div className={styles.mainBody}>{children}</div>

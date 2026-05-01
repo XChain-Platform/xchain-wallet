@@ -71,7 +71,22 @@
 }
 
 .note {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--xc-space-2);
     font-size: var(--xc-text-xs);
     color: rgba(255, 255, 255, 0.7);
     font-weight: 500;
+}
+
+.noteLeft {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.noteRight {
+    flex: 0 0 auto;
+    color: rgba(255, 255, 255, 0.7);
+    text-align: right;
 }

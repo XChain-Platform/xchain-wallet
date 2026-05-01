@@ -298,6 +298,7 @@ export {
     synthesizeDemoBalances,
     synthesizeDemoHistory,
     synthesizeDemoLinks,
+    synthesizeDemoDefiPositions,
 } from './demoFixtures.js';
 export {
     discoverUsedAddresses,

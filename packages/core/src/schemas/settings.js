@@ -86,6 +86,8 @@ export const CLIPBOARD_AUTO_CLEAR_DEFAULT = 60;
  * @property {typeof BACKUP_REMINDER_CADENCES[number]} backupReminders                                       v2 — backup-reminder cadence
  * @property {string[]} [pinnedTokens]                                                                       v2-tolerant — list of `chainId:asset` keys the user pinned to the top of the balance list (§27.3 / G072)
  * @property {string[]} [hiddenTokens]                                                                       v2-tolerant — list of `chainId:asset` keys the user hid (collapsed into the Hidden section at the bottom of each tab) (§27.4 / G073)
+ * @property {boolean} [showPinAffordance]                                                                   v2-tolerant — when true, balance rows render a per-row star button to pin/unpin the token. Default false to keep the row UI clean; users who want quick pin access flip it in Settings → Display.
+ * @property {boolean} [showHideAffordance]                                                                  v2-tolerant — when true, balance rows render a per-row hide affordance. Default false; the Settings → Display unhide list still works regardless.
  * @property {boolean} [autoApproveLocalhost]                                                                v2-tolerant — when developerMode is also on, bridge.connect from localhost / 127.0.0.1 / [::1] origins skips the approval prompt (§48.6 / G151). Sign requests still prompt.
  * @property {string[]} [blockedOrigins]                                                                     v2-tolerant — user-managed origin blocklist (§12 / G009). bridge.connect + the four sign methods reject with BLOCKED_BY_USER for matching origins. Stored as URL.origin strings or wildcard patterns (`*.example.com`, Cluster S FOLLOWUP 3).
  * @property {Array<{ at: number, action: 'add' | 'remove', entry: string, evictedSiteIds?: string[] }>} [blocklistAuditLog]   v2-tolerant — ring-buffer of recent blocklist mutations (Cluster S FOLLOWUP 4). Capped at 50 entries.
@@ -162,6 +164,8 @@ export function createDefaultSettings() {
         backupReminders: 'off',
         pinnedTokens: [],
         hiddenTokens: [],
+        showPinAffordance: false,
+        showHideAffordance: false,
         walletMode: WALLET_MODE_DEFAULT,
     };
 }
@@ -311,6 +315,22 @@ export function validateSettings(record) {
             'hiddenTokens',
             Array.isArray(r.hiddenTokens) && r.hiddenTokens.every(isString),
             'must be an array of strings (chainId:asset keys)',
+        );
+    }
+    if (r.showPinAffordance !== undefined) {
+        check(
+            errors,
+            'showPinAffordance',
+            isBoolean(r.showPinAffordance),
+            'must be a boolean when present',
+        );
+    }
+    if (r.showHideAffordance !== undefined) {
+        check(
+            errors,
+            'showHideAffordance',
+            isBoolean(r.showHideAffordance),
+            'must be a boolean when present',
         );
     }
     if (r.autoApproveLocalhost !== undefined) {

@@ -5,6 +5,7 @@
    takes over below 600px. */
 
 .layout {
+    position: relative;
     display: flex;
     flex-direction: row;
     height: var(--xc-screen-h, 100vh);
@@ -53,27 +54,19 @@
     .sidebar { display: none; }
 }
 
-/* §24.3 / G054 — when a bottom-tab bar is supplied, give the main pane
-   enough bottom-padding to clear the fixed 56px bar (+ iOS safe-area
-   inset). Above 600px the bar collapses (see .bottomBarSlot below) so
-   the padding becomes 0. */
+/* §24.3 / G054 — when a bottom-tab bar is supplied (small/sidebar
+   variants pass it; full variant passes null and the slot collapses),
+   give the main pane enough bottom-padding to clear the fixed 56px bar
+   (+ iOS safe-area inset). Visibility is JS-gated by the bottomBar prop;
+   no viewport-keyed media query because pinning small at a wide window
+   should still surface the bar. */
 
 .layoutWithBottomBar > .main {
-    padding-bottom: 0;
-}
-
-@media (max-width: 600px) {
-    .layoutWithBottomBar > .main {
-        padding-bottom: calc(56px + env(safe-area-inset-bottom, 0));
-    }
+    padding-bottom: calc(56px + env(safe-area-inset-bottom, 0));
 }
 
 .bottomBarSlot {
     display: contents;
-}
-
-@media (min-width: 601px) {
-    .bottomBarSlot { display: none; }
 }
 
 .nav {

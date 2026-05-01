@@ -118,6 +118,11 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onBuy, onCreateToken
     // §27.4 / G073 — hidden tokens. Same pattern as pinned. Hidden rows
     // collapse into the "Show N hidden tokens" footer of each tab.
     const [hiddenTokens, setHiddenTokens] = useState(/** @type {string[]} */ ([]));
+    // Per-row pin / hide buttons are gated on user opt-in. Default is off
+    // (keeps rows clean); enabling either is one toggle in Settings →
+    // Display. The pinned/hidden lists themselves still apply when off.
+    const [showPinAffordance, setShowPinAffordance] = useState(false);
+    const [showHideAffordance, setShowHideAffordance] = useState(false);
     const { showToast } = useToast();
     // Cluster I FOLLOWUP 2 — auto-hide-spam toast. We only ever nudge
     // once per (wallet, mount) tuple. Re-prompting on every balance
@@ -135,6 +140,8 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onBuy, onCreateToken
             const hides = Array.isArray(s?.hiddenTokens) ? s.hiddenTokens.filter((k) => typeof k === 'string') : [];
             setPinnedTokens(pins);
             setHiddenTokens(hides);
+            setShowPinAffordance(s?.showPinAffordance === true);
+            setShowHideAffordance(s?.showHideAffordance === true);
         }).catch(() => { /* tolerate — empty pin list is a fine default */ });
         return () => { cancelled = true; };
     }, [messaging]);
@@ -404,8 +411,18 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onBuy, onCreateToken
     // here. Future hardening could complement this with a
     // `powerMonitor.getSystemIdleTime()` driver in the desktop main
     // process so the wallet locks on OS-level lock / sleep too.
+    // Demo wallets use a randomly-generated 64-char hex password that
+    // lives only in the session-password cache — there's no human-typed
+    // password to fall back on. Auto-locking a demo wallet strands the
+    // user (no recoverable password, only the nuclear "wipe wallet
+    // data" escape on the Locked screen). Skip auto-lock when the
+    // active wallet is the demo wallet so a normal browse session
+    // doesn't accidentally lock them out.
+    const isDemoActive = flowsLib.isDemoWallet(activeWalletId);
     useAutoLock(handleLock, {
-        enabled: (shell === 'popup' || shell === 'web' || shell === 'desktop') && !locking,
+        enabled: (shell === 'popup' || shell === 'web' || shell === 'desktop')
+            && !locking
+            && !isDemoActive,
         idleMs: autolockMinutes * 60 * 1000,
     });
 
@@ -644,15 +661,16 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onBuy, onCreateToken
                         chainRegistry={chainRegistry}
                         balances={balances}
                         balancesFetchedAt={balancesFetchedAt}
+                        walletId={activeWalletId}
                         networkFilter={networkFilter}
                         multisig={multisig}
                         multisigChainId={chainRegistry.byCoin('bitcoin')[0]?.id}
                         onReceive={onReceive}
                         onSelectToken={onSelectToken}
                         pinnedKeys={new Set(pinnedTokens)}
-                        onTogglePin={handleTogglePin}
+                        onTogglePin={showPinAffordance ? handleTogglePin : undefined}
                         hiddenKeys={new Set(hiddenTokens)}
-                        onToggleHide={handleToggleHide}
+                        onToggleHide={showHideAffordance ? handleToggleHide : undefined}
                         actions={(
                             <div className={styles.quickActions} role="group" aria-label="Quick actions">
                                 <button

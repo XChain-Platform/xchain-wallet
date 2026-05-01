@@ -3,6 +3,7 @@
 /packages/*/dist
 /packages/*/build
 /packages/*/coverage
+/test/e2e/node_modules
 
 # electron-builder buildResources dir — tracked (entitlements + icon
 # metadata), not a build-output directory despite the name.

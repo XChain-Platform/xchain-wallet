@@ -55,7 +55,11 @@
     --xc-text-muted: #64748B;
     --xc-text-inverted: #FFFFFF;
     --xc-danger: #DC2626;
+    --xc-danger-bg: rgba(220, 38, 38, 0.10);
+    --xc-danger-text: #7F1D1D;
     --xc-warning: #D97706;
+    --xc-warning-bg: rgba(217, 119, 6, 0.10);
+    --xc-warning-text: #6E520A;
     --xc-success: #16A34A;
     --xc-focus-ring: rgba(30, 144, 199, 0.45);
     --xc-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
@@ -73,6 +77,10 @@
         --xc-text: #E5EAF2;
         --xc-text-muted: #94A3B8;
         --xc-text-inverted: #0B0F17;
+        --xc-danger-bg: rgba(252, 165, 165, 0.14);
+        --xc-danger-text: #FCA5A5;
+        --xc-warning-bg: rgba(252, 211, 77, 0.14);
+        --xc-warning-text: #FCD34D;
         --xc-focus-ring: rgba(30, 144, 199, 0.6);
         --xc-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
         --xc-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Icon } from '@xchain-wallet/core/ui';
 import { sumFiatValue } from './BalanceList.jsx';
+import { StalenessLabel } from './StalenessLabel.jsx';
 import styles from './TotalBalanceHero.module.css';
 
 /**
@@ -15,12 +16,15 @@ import styles from './TotalBalanceHero.module.css';
  * @param {object} props
  * @param {Array<any>} props.rows                rows from `buildBalanceRows`, already filtered
  * @param {'all' | string} props.networkFilter
+ * @param {number | null} [props.lastSyncedAt]   Unix ms of the last successful balance fetch — drives the staleness label rendered on the right of the note row.
  */
-export function TotalBalanceHero({ rows, networkFilter }) {
+export function TotalBalanceHero({ rows, networkFilter, lastSyncedAt }) {
     const { total, unpriced } = useMemo(() => sumFiatValue(rows), [rows]);
     const [hidden, setHidden] = useState(false);
 
     const filterLabel = networkFilter === 'all' ? 'All networks' : networkFilter.toUpperCase();
+    const hasUnpriced = unpriced > 0;
+    const hasSync = typeof lastSyncedAt === 'number' && lastSyncedAt > 0;
 
     return (
         <section className={styles.hero} aria-label="Total balance">
@@ -42,9 +46,20 @@ export function TotalBalanceHero({ rows, networkFilter }) {
             <div className={styles.amount}>
                 {hidden ? <span className={styles.hidden}>•••••</span> : formatBigFiat(total)}
             </div>
-            {unpriced > 0 ? (
+            {hasUnpriced || hasSync ? (
                 <div className={styles.note}>
-                    {unpriced} {unpriced === 1 ? 'asset' : 'assets'} not priced
+                    <span className={styles.noteLeft}>
+                        {hasUnpriced
+                            ? `${unpriced} ${unpriced === 1 ? 'asset' : 'assets'} not priced`
+                            : ''}
+                    </span>
+                    {hasSync ? (
+                        <StalenessLabel
+                            lastSyncedAt={lastSyncedAt}
+                            warnAfterMs={5 * 60_000}
+                            className={styles.noteRight}
+                        />
+                    ) : null}
                 </div>
             ) : null}
         </section>

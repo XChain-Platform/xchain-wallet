@@ -2,6 +2,18 @@
 // wallets so Home / History / TokenDetail surfaces feel populated
 // without requiring the user to fund the wallet.
 //
+// `nftImg` returns an inline SVG data URI used as a stand-in for an
+// asset's image. Real wallets get imageUrl from the indexer; the demo
+// path needs offline-safe placeholders so the NFTs tab (which filters
+// by imageUrl presence) actually shows tiles. Pure SVG keeps the
+// payload tiny and avoids any network fetch.
+
+function nftImg(label, bgFrom, bgTo, fg = '#FFFFFF') {
+    const t = String(label || '').slice(0, 5);
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="${bgFrom}"/><stop offset="100%" stop-color="${bgTo}"/></linearGradient></defs><rect width="200" height="200" fill="url(#g)"/><text x="100" y="118" font-family="system-ui,sans-serif" font-size="44" font-weight="800" fill="${fg}" text-anchor="middle">${t}</text></svg>`;
+    return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+//
 // Demo wallets are real BIP39 wallets — they have real addresses on
 // real chains; only the on-chain balances are zero. The fixtures
 // here overlay synthetic SDK-shaped responses on top of the real
@@ -32,16 +44,52 @@ const PER_CHAIN_DEFAULTS = /** @type {Record<string, BalanceFixture>} */ ({
         assets: [],
     },
     'bitcoin-regtest': {
-        native: { asset: 'BTC', divisibility: 8, quantity: '100000000' }, // 1 rBTC
-        assets: [],
+        native: { asset: 'BTC', divisibility: 8, quantity: '10000000000', fiatRate: 70000 }, // 100 rBTC @ $70k
+        assets: [
+            // Divisible tokens — appear in Tokens tab
+            { asset: 'XCP', displayName: 'Counterparty', divisibility: 8, quantity: '500000000', fiatRate: 30 },
+            // PEPECASH carries an image, so it appears in BOTH Tokens (row) and NFTs (tile)
+            { asset: 'PEPECASH', displayName: 'PEPECASH', divisibility: 8, quantity: '10000000000', fiatRate: 0.0008, imageUrl: nftImg('PEPE', '#1B5E20', '#388E3C') },
+            { asset: 'USDX', displayName: 'USD Stablecoin (demo)', divisibility: 8, quantity: '25000000000', fiatRate: 1 },
+            { asset: 'DEMOCOIN', displayName: 'Demo Coin', divisibility: 8, quantity: '100000000', fiatRate: 0.05 },
+            // Indivisible tokens — also appear in NFTs because they have an imageUrl
+            { asset: 'RAREPEPE', displayName: 'Rare Pepe', divisibility: 0, quantity: '1', fiatRate: 500, imageUrl: nftImg('PEPE', '#7B2C8F', '#C2185B') },
+            { asset: 'BITCRYSTAL', displayName: 'Bitcrystals', divisibility: 0, quantity: '1', fiatRate: 200, imageUrl: nftImg('BIT', '#1565C0', '#00838F') },
+            { asset: 'XCHAINLOGO', displayName: 'XChain Logo NFT', divisibility: 0, quantity: '1', fiatRate: 50, imageUrl: nftImg('XC', '#1E90C7', '#7B2C8F') },
+        ],
     },
     'litecoin-mainnet': {
         native: { asset: 'LTC', divisibility: 8, quantity: '250000000' }, // 2.5 LTC
         assets: [],
     },
+    'litecoin-regtest': {
+        native: { asset: 'LTC', divisibility: 8, quantity: '100000000000', fiatRate: 80 }, // 1000 rLTC @ $80
+        assets: [
+            // Divisible LTC-side tokens
+            { asset: 'LITECRED', displayName: 'LiteCred Stablecoin (demo)', divisibility: 8, quantity: '50000000000', fiatRate: 1 },
+            { asset: 'MWEB', displayName: 'MimbleWimble Token', divisibility: 8, quantity: '7500000000', fiatRate: 5 },
+            { asset: 'LTCDOGE', displayName: 'LTC × DOGE Pair', divisibility: 8, quantity: '12500000000', fiatRate: 2 },
+            // Indivisible — NFTs tab (have imageUrl)
+            { asset: 'LITEORD', displayName: 'Lite Ordinal #042', divisibility: 0, quantity: '1', fiatRate: 40, imageUrl: nftImg('LO42', '#0EA5E9', '#1E40AF') },
+            { asset: 'MIMBLEPUNK', displayName: 'MimblePunk #7', divisibility: 0, quantity: '1', fiatRate: 80, imageUrl: nftImg('MP7', '#06B6D4', '#0369A1') },
+        ],
+    },
     'dogecoin-mainnet': {
         native: { asset: 'DOGE', divisibility: 8, quantity: '5000000000' }, // 50 DOGE
         assets: [],
+    },
+    'dogecoin-regtest': {
+        native: { asset: 'DOGE', divisibility: 8, quantity: '1000000000000', fiatRate: 0.15 }, // 10000 rDOGE @ $0.15
+        assets: [
+            // Divisible DRC-20-style tokens
+            { asset: 'DOGI', displayName: 'Dogi Coin', divisibility: 8, quantity: '500000000000', fiatRate: 0.01 },
+            { asset: 'WOW', displayName: 'Wow Such Token', divisibility: 8, quantity: '12500000000', fiatRate: 0.5 },
+            { asset: 'DSHIB', displayName: 'Doge Shib', divisibility: 8, quantity: '7500000000000', fiatRate: 0.0001 },
+            { asset: 'BARK', displayName: 'Bark Stablecoin (demo)', divisibility: 8, quantity: '20000000000', fiatRate: 1 },
+            // Indivisible — NFTs tab (have imageUrl)
+            { asset: 'DOGINAL', displayName: 'Doginal #1337', divisibility: 0, quantity: '1', fiatRate: 15, imageUrl: nftImg('1337', '#F59E0B', '#B45309') },
+            { asset: 'MEMECARD', displayName: 'Meme Card: To The Moon', divisibility: 0, quantity: '1', fiatRate: 30, imageUrl: nftImg('MOON', '#EAB308', '#92400E') },
+        ],
     },
 });
 
@@ -92,11 +140,12 @@ export function synthesizeDemoHistory(chainId, address, opts = {}) {
     const fixture = PER_CHAIN_DEFAULTS[chainId];
     if (!fixture || !fixture.native) return [];
     const tick = fixture.native.asset;
+    const sec = (deltaSec) => Math.floor(now / 1000) - deltaSec;
     return [
         {
             txHash: `demo-${chainId}-incoming-1`,
             blockIndex: null, // pending — exercises the timeline pending state
-            timestamp: Math.floor(now / 1000) - 300,
+            timestamp: sec(180),
             action: 'SEND',
             params: {
                 source: 'demo-faucet-1xchainpubdemoxchain',
@@ -107,9 +156,22 @@ export function synthesizeDemoHistory(chainId, address, opts = {}) {
             },
         },
         {
+            txHash: `demo-${chainId}-outgoing-1`,
+            blockIndex: 12410,
+            timestamp: sec(3_600),
+            action: 'SEND',
+            params: {
+                source: address,
+                destination: 'demo-friend-1xchainpubrecipient',
+                asset: tick,
+                amount: '5000000', // 0.05 of the native coin
+                memo: 'thanks for lunch',
+            },
+        },
+        {
             txHash: `demo-${chainId}-issue-1`,
             blockIndex: 12345,
-            timestamp: Math.floor(now / 1000) - 86400,
+            timestamp: sec(86_400),
             action: 'ISSUE',
             params: {
                 source: address,
@@ -118,6 +180,150 @@ export function synthesizeDemoHistory(chainId, address, opts = {}) {
                 divisible: true,
                 description: 'Demo asset issued during the demo session.',
             },
+        },
+        {
+            txHash: `demo-${chainId}-dividend-1`,
+            blockIndex: 12380,
+            timestamp: sec(43_200),
+            action: 'DIVIDEND',
+            params: {
+                source: 'demo-issuer-1xchainpubdivissuer',
+                asset: 'PEPECASH',
+                dividend_asset: tick,
+                quantity_per_unit: '100',
+            },
+        },
+        {
+            txHash: `demo-${chainId}-order-1`,
+            blockIndex: 12390,
+            timestamp: sec(21_600),
+            action: 'ORDER',
+            params: {
+                source: address,
+                give_asset: tick,
+                give_quantity: '2000000',
+                get_asset: 'XCP',
+                get_quantity: '100000000',
+                status: 'filled',
+            },
+        },
+        {
+            txHash: `demo-${chainId}-execute-1`,
+            blockIndex: 12420,
+            timestamp: sec(1_800),
+            action: 'EXECUTE',
+            params: {
+                source: address,
+                contract: 'demo-contract-vault',
+                method: 'withdraw',
+                amount: '0.25',
+            },
+        },
+    ];
+}
+
+/**
+ * Synthesized DeFi positions for the demo wallet. Surfaces a single
+ * stake, a single dispenser, and a single contract balance — enough
+ * to demonstrate the DeFi tab's eventual structure without pretending
+ * to be a real LP.
+ *
+ * @returns {Array<{ id: string, kind: 'stake' | 'dispenser' | 'contract', title: string, primary: string, secondary: string, badge: string }>}
+ */
+export function synthesizeDemoDefiPositions() {
+    return [
+        // Bitcoin-side positions
+        {
+            id: 'demo-stake-btc',
+            kind: 'stake',
+            title: 'BTC validator stake',
+            primary: '5.00000000 BTC',
+            secondary: 'Earning · 0.012 BTC unclaimed rewards',
+            badge: 'Tier 3',
+            chain: 'BITCOIN',
+            chainId: 'bitcoin-regtest',
+        },
+        {
+            id: 'demo-stake-xcp',
+            kind: 'stake',
+            title: 'XCP delegation',
+            primary: '1,500.00000000 XCP',
+            secondary: 'Delegated to demo-validator-7 · 4.2% APY',
+            badge: 'Active',
+            chain: 'BITCOIN',
+            chainId: 'bitcoin-regtest',
+        },
+        {
+            id: 'demo-dispenser-democoin',
+            kind: 'dispenser',
+            title: 'DEMOCOIN dispenser',
+            primary: '500 DEMOCOIN remaining',
+            secondary: '0.001 BTC per dispense · 12 dispenses so far',
+            badge: 'Open',
+            chain: 'BITCOIN',
+            chainId: 'bitcoin-regtest',
+        },
+        {
+            id: 'demo-contract-vault',
+            kind: 'contract',
+            title: 'BTC vault contract',
+            primary: '0.25 BTC locked',
+            secondary: 'demo-contract-vault · withdraw window in 14h',
+            badge: 'Vault',
+            chain: 'BITCOIN',
+            chainId: 'bitcoin-regtest',
+        },
+        // Litecoin-side positions
+        {
+            id: 'demo-stake-ltc',
+            kind: 'stake',
+            title: 'LTC validator stake',
+            primary: '250.00000000 LTC',
+            secondary: 'Earning · 0.85 LTC unclaimed rewards',
+            badge: 'Tier 2',
+            chain: 'LITECOIN',
+            chainId: 'litecoin-regtest',
+        },
+        {
+            id: 'demo-dispenser-litecred',
+            kind: 'dispenser',
+            title: 'LITECRED dispenser',
+            primary: '2,000 LITECRED remaining',
+            secondary: '0.5 LTC per dispense · 6 dispenses so far',
+            badge: 'Open',
+            chain: 'LITECOIN',
+            chainId: 'litecoin-regtest',
+        },
+        // Dogecoin-side positions
+        {
+            id: 'demo-stake-doge',
+            kind: 'stake',
+            title: 'DOGE community stake',
+            primary: '50,000.00000000 DOGE',
+            secondary: 'Delegated to demo-validator-much-wow · 6.1% APY',
+            badge: 'Active',
+            chain: 'DOGECOIN',
+            chainId: 'dogecoin-regtest',
+        },
+        {
+            id: 'demo-dispenser-dogi',
+            kind: 'dispenser',
+            title: 'DOGI dispenser',
+            primary: '10,000 DOGI remaining',
+            secondary: '50 DOGE per dispense · 22 dispenses so far',
+            badge: 'Open',
+            chain: 'DOGECOIN',
+            chainId: 'dogecoin-regtest',
+        },
+        {
+            id: 'demo-contract-doge-vault',
+            kind: 'contract',
+            title: 'DOGE memepool vault',
+            primary: '5,000 DOGE locked',
+            secondary: 'demo-contract-memepool · withdraw window in 3d',
+            badge: 'Vault',
+            chain: 'DOGECOIN',
+            chainId: 'dogecoin-regtest',
         },
     ];
 }

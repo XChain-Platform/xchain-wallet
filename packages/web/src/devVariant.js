@@ -23,8 +23,8 @@ export const THRESHOLD_PX = 640;
 const STORAGE_KEY = 'xc.devVariant';
 
 function normalize(v) {
-    if (v === 'small' || v === 'full' || v === 'sidebar') return v;
-    if (v === 'popup') return 'small';   // legacy alias
+    if (v === 'small' || v === 'full' || v === 'sidebar' || v === 'extension') return v;
+    if (v === 'popup') return 'extension';   // legacy alias — popup now means the chrome-extension dropdown
     return null;
 }
 
@@ -49,7 +49,7 @@ function autoVariant() {
 }
 
 /**
- * @returns {{ variant: 'small' | 'full' | 'sidebar', source: 'url' | 'storage' | 'auto', viewportPx: number }}
+ * @returns {{ variant: 'small' | 'full' | 'sidebar' | 'extension', source: 'url' | 'storage' | 'auto', viewportPx: number }}
  */
 export function resolveVariant() {
     const url = readUrlOverride();

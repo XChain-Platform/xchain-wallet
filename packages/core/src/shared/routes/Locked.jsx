@@ -10,9 +10,12 @@ import {
     isBiometricRegistered,
     unlockWithBiometric,
     tripDuressIfMatch,
+    getDemoWalletId,
+    clearDemoWalletId,
 } from '@xchain-wallet/core/flows';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useHaptic } from '../hooks/useHaptic.js';
+import { clearLastView } from '../utils/lastViewMemory.js';
 import styles from './Locked.module.css';
 
 /**
@@ -42,8 +45,58 @@ export function Locked({ onUnlocked }) {
         getRemainingMs(getLockoutState()),
     );
     const [biometricAvailable, setBiometricAvailable] = useState(false);
+    const [demoWipeBusy, setDemoWipeBusy] = useState(false);
+    const [demoWipeError, setDemoWipeError] = useState(/** @type {string | null} */ (null));
     const inputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const haptic = useHaptic();
+
+    // Demo wallets use a randomly-generated 64-char hex password held in
+    // the session cache. If the cache evaporates (auto-lock, tab close
+    // followed by reopen, etc.) the user has no recoverable password.
+    // Surface a one-tap "Exit demo & start over" affordance so they can
+    // bail back to onboarding without being permanently stuck.
+    const demoWalletId = getDemoWalletId();
+
+    async function handleExitDemo() {
+        if (demoWipeBusy || !demoWalletId) return;
+        setDemoWipeBusy(true);
+        setDemoWipeError(null);
+        try {
+            // Try the surgical messaging path first — works when the
+            // wallet happens to still be unlocked, or on shells whose
+            // host accepts wallet.remove without an unlocked vault.
+            try {
+                if (typeof messaging?.removeWallet === 'function') {
+                    await messaging.removeWallet({ walletId: demoWalletId });
+                } else if (typeof messaging?.sendMessage === 'function') {
+                    await messaging.sendMessage('wallet.remove', { walletId: demoWalletId });
+                } else {
+                    throw new Error('messaging.removeWallet unavailable');
+                }
+                clearDemoWalletId();
+                clearLastView(demoWalletId);
+                onUnlocked?.();
+                return;
+            } catch (innerErr) {
+                // Demo wallets are unrecoverable once the session
+                // password cache is gone, and the vault blob is one
+                // encrypted unit — there's no way to surgically remove
+                // a single wallet record without the master key. Fall
+                // back to deleting the whole IndexedDB database so the
+                // App reboots into clean onboarding. The demo-exit
+                // affordance only renders when a demo wallet exists,
+                // so the destructive scope is acknowledged by the
+                // user clicking through it.
+                clearDemoWalletId();
+                clearLastView(demoWalletId);
+                await deleteWalletDatabase();
+                if (typeof window !== 'undefined') window.location.reload();
+            }
+        } catch (err) {
+            setDemoWipeError(err?.message || 'Could not exit demo mode.');
+            setDemoWipeBusy(false);
+        }
+    }
 
     useEffect(() => {
         inputRef.current?.focus();
@@ -204,6 +257,26 @@ export function Locked({ onUnlocked }) {
                     Use biometrics
                 </Button>
             ) : null}
+            {demoWalletId ? (
+                <div className={styles.demoExitBlock}>
+                    <p className={styles.demoExitNote}>
+                        This is a demo wallet — its password is randomly generated and not recoverable. Exiting will wipe all wallet data on this device and return you to onboarding.
+                    </p>
+                    <Button
+                        type="button"
+                        variant="danger"
+                        block
+                        onClick={handleExitDemo}
+                        loading={demoWipeBusy}
+                        disabled={demoWipeBusy}
+                    >
+                        Wipe wallet data &amp; start over
+                    </Button>
+                    {demoWipeError ? (
+                        <p role="alert" className={styles.demoExitError}>{demoWipeError}</p>
+                    ) : null}
+                </div>
+            ) : null}
         </form>
     );
 
@@ -222,6 +295,48 @@ export function Locked({ onUnlocked }) {
             )}
         </Screen>
     );
+}
+
+/**
+ * Nuke the wallet's IndexedDB database AND localStorage meta entry.
+ * Used as the last-resort escape from a locked demo wallet — the demo
+ * password is unrecoverable, so surgical deletion of just the demo
+ * record is impossible (the vault blob is one encrypted unit).
+ *
+ * Two stores to clear:
+ *   - IndexedDB `xchain-wallet` (matches DEFAULT_DB_NAME in
+ *     IndexedDBStorageBackend.js) — holds the encrypted vault blob.
+ *   - localStorage `xchain-wallet:vault-meta` (matches DEFAULT_META_KEY
+ *     in WebMetaBackend.js) — holds the kdfParams metadata that the
+ *     bridge's "a wallet already exists" check reads. Without this
+ *     clear, a fresh `wallet.import` call after the IDB wipe still
+ *     trips the existence check and the demo flow can't restart.
+ *
+ * Best-effort: we resolve as soon as the delete completes (or errors)
+ * because the caller is going to reload the page either way.
+ *
+ * @returns {Promise<void>}
+ */
+function deleteWalletDatabase() {
+    // Clear the localStorage meta entry first — synchronous, can't fail.
+    try {
+        globalThis.localStorage?.removeItem('xchain-wallet:vault-meta');
+    } catch { /* ignore */ }
+    return new Promise((resolve) => {
+        try {
+            const idb = typeof globalThis !== 'undefined' ? globalThis.indexedDB : null;
+            if (!idb || typeof idb.deleteDatabase !== 'function') {
+                resolve();
+                return;
+            }
+            const req = idb.deleteDatabase('xchain-wallet');
+            req.onsuccess = () => resolve();
+            req.onerror = () => resolve();
+            req.onblocked = () => resolve();
+        } catch {
+            resolve();
+        }
+    });
 }
 
 /**

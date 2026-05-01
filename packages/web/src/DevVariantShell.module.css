@@ -67,3 +67,31 @@
     box-shadow: -16px 0 40px rgba(0, 0, 0, 0.35);
     overflow: hidden;
 }
+
+/* ───── Extension preview — Chrome toolbar dropdown approximation ─────
+   Real Chrome extension popups are typically 320–400px wide × up to
+   600px tall. 360×600 is a common sweet spot. Slightly narrower than
+   the small/mobile frame so designers can visually distinguish them at
+   a glance. No bottom-tab-bar slot in this variant — the popup is too
+   constrained vertically; navigation lives in the hamburger drawer. */
+
+.extensionPage {
+    min-height: 100vh;
+    background: linear-gradient(180deg, #1F2937 0%, #0B0F17 100%);
+    padding: 24px 12px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+}
+
+.extensionFrame {
+    width: 360px;
+    height: 600px;
+    overflow: hidden;
+    background: var(--xc-bg, #FFFFFF);
+    border-radius: 8px;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55),
+                0 0 0 1px rgba(255, 255, 255, 0.06) inset;
+    /* Pin Screen height to the frame's height so internal scroll works. */
+    --xc-screen-h: 600px;
+}

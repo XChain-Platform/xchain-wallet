@@ -17,7 +17,7 @@ import { useCallback, useState } from 'react';
 import { Button, Icon } from '@xchain-wallet/core/ui';
 import { useSettings } from '../../hooks/useSettings.js';
 import { clearAllChainFilters } from '../../utils/chainFilterMemory.js';
-import { ROW, ROW_HINT, ROW_LABEL, STACK, Status } from './_settingsPrimitives.jsx';
+import { ROW, ROW_HINT, ROW_LABEL, STACK, Status, ToggleRow } from './_settingsPrimitives.jsx';
 
 const SECTION_HEADER = {
     fontSize: 'var(--xc-text-sm)',
@@ -116,8 +116,41 @@ export function DisplaySection() {
     if (error) return <Status text={`Settings unavailable: ${error.message}`} tone="error" />;
     if (!settings) return <Status text="Settings unavailable." tone="error" />;
 
+    const showPinAffordance = settings?.showPinAffordance === true;
+    const showHideAffordance = settings?.showHideAffordance === true;
+
+    const setPinAffordance = (next) => {
+        update({ showPinAffordance: !!next }).catch((err) => {
+            // eslint-disable-next-line no-console
+            console.error('display.showPinAffordance update failed:', err);
+        });
+    };
+    const setHideAffordance = (next) => {
+        update({ showHideAffordance: !!next }).catch((err) => {
+            // eslint-disable-next-line no-console
+            console.error('display.showHideAffordance update failed:', err);
+        });
+    };
+
     return (
         <div style={STACK}>
+            <h3 style={SECTION_HEADER}>Row affordances</h3>
+            <p style={SECTION_HINT}>
+                Whether each balance row shows a quick pin / hide button. Off by default to keep rows clean — your existing pinned and hidden tokens still apply either way and can be managed below.
+            </p>
+            <ToggleRow
+                label="Show pin button on rows"
+                hint="Display a star on each balance row to pin / unpin the token from Home."
+                checked={showPinAffordance}
+                onChange={setPinAffordance}
+            />
+            <ToggleRow
+                label="Show hide button on rows"
+                hint="Display a hide affordance on each balance row to collapse the token into the Hidden section."
+                checked={showHideAffordance}
+                onChange={setHideAffordance}
+            />
+
             <h3 style={SECTION_HEADER}>Pinned tokens ({pinned.length})</h3>
             <p style={SECTION_HINT}>
                 Pinned tokens float to the top of every balance tab in this order. Use ↑ / ↓ to reorder, ✕ to unpin.

@@ -73,34 +73,11 @@ export function DemoBanner({ activeWalletId, onExited }) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isDemo, activeWalletId, autoWiped, busy]);
 
-    if (!isDemo) return null;
-
-    const expiryHint = formatExpiryHint(expiry);
-    return (
-        <div className={styles.banner} role="region" aria-label="Demo wallet">
-            <div className={styles.body}>
-                <strong className={styles.headline}>Demo wallet</strong>
-                <span className={styles.copy}>
-                    Throwaway wallet — explore freely, then exit to wipe and start a real one.
-                    {expiryHint ? ` ${expiryHint}` : ''}
-                </span>
-            </div>
-            <div className={styles.actions}>
-                <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={handleExit}
-                    loading={busy}
-                    disabled={busy}
-                >
-                    Exit demo &amp; wipe
-                </Button>
-            </div>
-            {error ? (
-                <p role="alert" className={styles.error}>{error}</p>
-            ) : null}
-        </div>
-    );
+    // Visible banner suppressed — Exit-demo affordance is moving to the
+    // Demo Wallet picker / detail surface. The component still mounts so
+    // the 24h auto-expire useEffect above keeps wiping stale demo wallets.
+    void expiry; void handleExit; void error;
+    return null;
 }
 
 function formatExpiryHint(expiry) {

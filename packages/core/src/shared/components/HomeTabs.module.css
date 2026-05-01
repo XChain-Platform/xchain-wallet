@@ -107,3 +107,183 @@
     margin: 0;
     text-align: justify;
 }
+
+/* Demo activity / defi list rows. Plain stack of cards used only in
+   demo mode — non-demo wallets get the dashed Placeholder box. */
+.demoList {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+}
+
+.demoRow {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: var(--xc-space-3);
+    padding: var(--xc-space-3);
+    background: var(--xc-surface);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-md);
+}
+
+.demoRowBody {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.demoIconWrap {
+    position: relative;
+    flex: 0 0 auto;
+    width: 48px;
+    height: 48px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.demoIconInner {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--xc-bg-muted);
+    color: var(--xc-text-muted);
+}
+
+.demoIconInner svg {
+    width: 24px;
+    height: 24px;
+}
+
+.demoIconChainOverlay {
+    position: absolute;
+    bottom: -2px;
+    inset-inline-end: -2px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #FFFFFF;
+    box-shadow: 0 0 0 1.5px var(--xc-surface);
+    object-fit: cover;
+    display: block;
+}
+
+.demoRowMain {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    flex-wrap: wrap;
+}
+
+.demoActionTag {
+    font-size: var(--xc-text-xs);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 2px 8px;
+    background: var(--xc-bg-muted);
+    border-radius: 999px;
+    color: var(--xc-text-muted);
+}
+
+.tag_stake {
+    background: rgba(16, 185, 129, 0.15);
+    color: #10B981;
+}
+
+.tag_dispenser {
+    background: rgba(245, 158, 11, 0.15);
+    color: #F59E0B;
+}
+
+.tag_contract {
+    background: rgba(99, 102, 241, 0.18);
+    color: #818CF8;
+}
+
+.demoRowTitle {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-weight: 600;
+    color: var(--xc-text);
+    overflow-wrap: anywhere;
+}
+
+.demoRowBadge {
+    flex: 0 0 auto;
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    border: 1px solid var(--xc-border-strong);
+    border-radius: 6px;
+    padding: 1px 6px;
+}
+
+.demoRowPrimary {
+    font-size: var(--xc-text-md);
+    font-weight: 700;
+    color: var(--xc-text);
+}
+
+.demoRowMeta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+}
+
+.demoActivityIcon {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--xc-bg-muted);
+    color: var(--xc-text-muted);
+}
+
+.demoActivityIcon svg {
+    width: 16px;
+    height: 16px;
+}
+
+.activity_receive {
+    background: rgba(16, 185, 129, 0.18);
+    color: #10B981;
+}
+
+.activity_send {
+    background: rgba(220, 38, 38, 0.18);
+    color: #EF4444;
+}
+
+.activity_issue {
+    background: rgba(99, 102, 241, 0.18);
+    color: #818CF8;
+}
+
+.activity_dividend {
+    background: rgba(245, 158, 11, 0.18);
+    color: #F59E0B;
+}
+
+.activity_order {
+    background: rgba(56, 189, 248, 0.18);
+    color: #38BDF8;
+}
+
+.activity_execute {
+    background: rgba(168, 85, 247, 0.18);
+    color: #A855F7;
+}

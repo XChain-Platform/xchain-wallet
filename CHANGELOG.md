@@ -7,6 +7,161 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.331.0] - 2026-05-01
+
+Demo-mode + small-variant chrome polish session. Bundles theme-token
+fixes, the Tokens-vs-NFTs split, a richer demo fixture set across all
+three regtest chains, and a handful of variant-system fixes that were
+hiding under viewport-keyed media queries.
+
+### Theme + chrome
+
+- `tokens.css` defines `--xc-danger-bg` / `--xc-danger-text` /
+  `--xc-warning-bg` / `--xc-warning-text` for both light and dark.
+  Reachability/critical banners were rendering near-black-on-black on
+  the dark theme because the bare-fallback values only worked on a
+  light surface.
+- `ReachabilityBanner` mounts inside `FullLayoutWithNav.header`
+  (gated to non-demo wallets) instead of at the App root, so it's
+  suppressed in onboarding / locked / demo states. CSS uses physical
+  `left:` not `inset-inline-start:` to avoid logical-property
+  cascade conflicts with inline overrides.
+- `DemoBanner` now returns `null` everywhere; the visible banner moves
+  to a per-wallet "Status" row + danger-styled "Exit demo & wipe"
+  button on `WalletDetails` (gated by `isDemoWallet`). Auto-expire
+  effect still ticks since the component still mounts.
+
+### Onboarding license gate
+
+- Logo added to the gate, headline + tagline removed, license box
+  flex-grows inside a column-flex `.licenseGate` so checkbox + Accept
+  CTA stay pinned at the bottom regardless of viewport.
+- Two paragraphs flagged as "critical" render with a danger-tinted
+  callout: irreversibility + the seed-phrase responsibility (rewritten
+  to lead with "never leaves this device, not uploaded, not stored on
+  any server").
+- Body text justified with `hyphens: manual` (no auto-hyphenation),
+  checkbox left-aligned in the column, `--xc-space-3` margin gap
+  between the ack row and the CTA collapsed to a single space-2.
+
+### Variant system
+
+- Fourth variant `extension` (Chrome popup, 360×600 fixed frame, no
+  bottom tab bar — drawer-only navigation) added alongside small /
+  full / sidebar. Bottom tab bar gates on `variant === 'small'`.
+- `DevVariantBadge` swaps the cycle button for a `<select>` picker
+  (auto / small / full / sidebar / extension) and gains a draggable
+  grip whose position persists in `localStorage` (eager-write per
+  pointermove so the saved value never trails the actual position).
+- `LeftNav` and `BottomTabBar` visibility gated on the JS variant
+  prop instead of `@media` viewport queries — pinning small at a
+  wide window now correctly hides the sidebar and shows the bottom
+  tab bar.
+- `BottomTabBar.bar` switched from `position: fixed` (anchored to the
+  viewport, rendered outside the framed dev preview) to
+  `position: absolute` (anchored to `FullLayoutWithNav.layout`, which
+  is now `position: relative`). The bar now sits inside the framed
+  preview at the frame's bottom edge, and the existing 56 px
+  `padding-bottom` on `.main` correctly clears it instead of stealing
+  layout space for an off-screen bar.
+
+### Tokens / NFTs split
+
+- Tokens tab filter dropped the `divisibility > 0` clause; it now
+  shows every non-native asset as the canonical "what do I hold?"
+  surface.
+- NFTs tab filters by non-empty `imageUrl` instead of `divisibility
+  === 0`. An asset can appear in both tabs (e.g. an imaged divisible
+  token like PEPECASH).
+- `BalanceList.buildBalanceRows` + `mkRow` thread `imageUrl` from the
+  asset record onto the row so the filter has something to read.
+- NFT grid switched to `repeat(auto-fill, minmax(100px, 1fr))` —
+  three cards fit in the small frame, more in wider frames, no
+  viewport-keyed media queries. Cards stretch to uniform height,
+  chain overlay moved bottom-left → bottom-right to match other
+  surfaces.
+
+### Demo fixtures
+
+- LTC and DOGE regtest chains gain token + NFT entries (LITECRED,
+  MWEB, LTCDOGE, LITEORD, MIMBLEPUNK on LTC; DOGI, WOW, DSHIB, BARK,
+  DOGINAL, MEMECARD on DOGE). BTC regtest tokens fleshed out (USDX,
+  DEMOCOIN added).
+- Native and asset balances bumped to demo-friendly amounts
+  (BTC 100, LTC 1000, DOGE 10000) and seeded with `fiatRate` so the
+  Total Balance hero rolls up a non-zero amount and per-row fiat
+  populates.
+- Indivisible NFTs (and PEPECASH) carry inline SVG `imageUrl`
+  data-URIs so the new `imageUrl`-based NFTs filter actually has
+  tiles to show in demo mode.
+- `DemoActivityList` and `DemoDefiList` render in HomeTabs when
+  `isDemoWallet(walletId)` returns true, replacing the static
+  `<Placeholder>` for those tabs. Both use a 48 × 48 colored disc
+  with a kind-coded icon (RECEIVE / SEND / ISSUE / DIVIDEND / ORDER /
+  EXECUTE for activity; STAKE / DISPENSER / CONTRACT for DeFi) plus
+  a chain icon overlay in the bottom-right corner — same visual
+  contract as `BalanceList`.
+- `synthesizeDemoDefiPositions` returns 9 positions across all
+  three chains.
+- `synthesizeDemoHistory` expanded from 2 entries to 6 per chain.
+- `Onboarding.handleEnterDemo` falls back to `messaging.listWallets`
+  when `importMnemonic` doesn't return a recognizable walletId, so
+  the demo marker writes reliably across shells.
+- `Home` skips `useAutoLock` when the active wallet is the demo
+  wallet — the random demo password is not human-recoverable, so
+  auto-locking strands the user behind the nuclear "wipe wallet
+  data" escape on Locked.
+
+### Locked-screen demo escape
+
+- `Locked` renders a "demo wallet, password is randomly generated
+  and not recoverable" notice + danger-styled "Wipe wallet data &
+  start over" button when `getDemoWalletId()` is non-null.
+- The escape path tries `messaging.removeWallet` first, then falls
+  back to `indexedDB.deleteDatabase('xchain-wallet')` AND
+  `localStorage.removeItem('xchain-wallet:vault-meta')` (both stores
+  hold "a wallet exists" state) so the bridge-level
+  `wallet.import: a wallet already exists` check passes after reload.
+  Page reloads after the wipe.
+
+### Display / row polish
+
+- `BalanceList` row icons bumped 36 → 48 px; chain overlay 16 → 20 px.
+- `HomeTabs` activity / defi disc icons bumped to match (48 px disc,
+  24 px inner SVG, 20 px chain overlay).
+- `formatAmount` no longer strips trailing zeros — full divisibility
+  (e.g. `100.00000000`) renders for column alignment with token /
+  NFT rows.
+- Network env suffix (regtest / testnet) dropped from `BalanceList`
+  row subtitle and the activity row meta line — env is chosen
+  globally in Settings, repeating it per-row was noise.
+- `StalenessLabel` moved into `TotalBalanceHero`'s footer row,
+  right-aligned with the "X assets not priced" hint. Standalone
+  mount under the tab strip is gone.
+
+### Pin / Hide affordances opt-in
+
+- New `showPinAffordance` and `showHideAffordance` boolean settings,
+  v2-tolerant, default `false`.
+- Settings → Display gains two `ToggleRow`s at the top to flip them.
+- `Home` only passes `onTogglePin` / `onToggleHide` to `HomeTabs`
+  when the corresponding setting is on — `BalanceList` already
+  treats undefined callbacks as "hide the affordance," so rows are
+  clean by default. Existing pinned/hidden lists still apply
+  regardless of the affordance toggles.
+
+### Bug fixes
+
+- `Send` mounted with `ReferenceError: Cannot access 'previewBalances'
+  before initialization` because `sourceBalance` and `onMax` were
+  declared above their dependencies. Both moved below the
+  `previewBalances` `useState` and `feeEstimate` `useMemo`.
+- `@xchain-wallet/core` package `exports` map now declares `./flows`
+  and `./flows/*`. Vite's dep-pre-scan failed on a `Locked.jsx`
+  import without it.
+- `.gitignore` adds `/test/e2e/node_modules` so Playwright's local
+  install stays untracked.
+
 ## [0.330.0] - 2026-04-30
 
 ### Cluster P FOLLOWUP 2 — Drop-zone wiring on remaining file-input forms

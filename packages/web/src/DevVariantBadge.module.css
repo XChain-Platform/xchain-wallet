@@ -1,7 +1,7 @@
 .badge {
     position: fixed;
     bottom: 12px;
-    inset-inline-start: 12px;
+    left: 12px;
     z-index: 9999;
     display: inline-flex;
     align-items: center;
@@ -15,6 +15,21 @@
     box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
     backdrop-filter: blur(6px);
     user-select: none;
+}
+
+.grip {
+    cursor: grab;
+    color: rgba(203, 213, 225, 0.7);
+    user-select: none;
+    padding: 0 4px;
+    line-height: 1;
+    font-size: 14px;
+    touch-action: none;
+}
+
+.grip:active {
+    cursor: grabbing;
+    color: #FFFFFF;
 }
 
 .label {
@@ -43,6 +58,11 @@
 .value.sidebar {
     background: #10B981;
     color: #FFFFFF;
+}
+
+.value.extension {
+    background: #F59E0B;
+    color: #1F2937;
 }
 
 .clear {
@@ -118,4 +138,36 @@
 .flip:hover {
     background: rgba(255, 255, 255, 0.08);
     border-color: rgba(255, 255, 255, 0.4);
+}
+
+.picker {
+    appearance: none;
+    background: rgba(15, 23, 42, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 6px;
+    color: #FFFFFF;
+    font-family: inherit;
+    font-size: 11px;
+    padding: 2px 22px 2px 8px;
+    cursor: pointer;
+    text-transform: lowercase;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'><path fill='%23ffffff' d='M6 8L0 0h12z'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 6px center;
+    background-size: 8px 6px;
+}
+
+.picker:hover {
+    background-color: rgba(30, 41, 59, 0.95);
+    border-color: rgba(255, 255, 255, 0.4);
+}
+
+.picker:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.6);
+    outline-offset: 2px;
+}
+
+.picker option {
+    background: #0F172A;
+    color: #FFFFFF;
 }
