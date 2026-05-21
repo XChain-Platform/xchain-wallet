@@ -27,6 +27,7 @@ import { unlockWalletRecord } from './unlockWallet.js';
  * @property {import('../registry/index.js').ChainRegistry} chainRegistry
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
  * @property {string[]} activeChainIds
+ * @property {'mainnet' | 'testnet' | 'regtest'} [activeNetwork]   optional — passed to `ensureSettings` so a fresh wallet's settings record is created with this network selected. Existing settings (e.g. second wallet created in an already-configured vault) preserve their stored value. Defaults: caller should pass an inferred value (typically the networkKind of activeChainIds[0]) so the wallet lands on the network its chains are on.
  */
 
 /**
@@ -47,6 +48,7 @@ export async function persistHdWallet({
     chainRegistry,
     sdkRegistry,
     activeChainIds,
+    activeNetwork,
 }) {
     // 1. Pick KDF params; shells/tests override to skip calibration.
     const effectiveKdfParams = kdfParams ?? calibrateKdfParams();
@@ -131,7 +133,7 @@ export async function persistHdWallet({
         //    active chain not already configured. Idempotent — a user's
         //    customized fee strategy on an earlier wallet is preserved
         //    if they create a second wallet in the same vault.
-        await ensureSettings(vault, chainRegistry, activeChainIds);
+        await ensureSettings(vault, chainRegistry, activeChainIds, { activeNetwork });
 
         return { wallet: walletRecord, account, addresses };
     } finally {

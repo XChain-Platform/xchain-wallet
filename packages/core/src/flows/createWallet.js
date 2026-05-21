@@ -45,6 +45,7 @@ export async function createWallet({
     strengthBits = BIP39_DEFAULT_STRENGTH_BITS,
     bip39Passphrase = '',
     kdfParams,
+    activeNetwork,
 }) {
     if (typeof password !== 'string' || password.length === 0) {
         throw new Error('createWallet: password is required');
@@ -60,6 +61,12 @@ export async function createWallet({
             throw new Error(`createWallet: unknown chain "${id}"`);
         }
     }
+
+    // Infer activeNetwork from the first chain when the caller didn't
+    // pass one. A wallet created with regtest chains lands on regtest;
+    // mainnet chains lands on mainnet. Explicit override wins.
+    const effectiveActiveNetwork = activeNetwork
+        ?? chainRegistry.descriptorFor(activeChainIds[0])?.networkKind;
 
     const mnemonic = generateBip39Mnemonic(strengthBits);
     const passphraseEnabled = bip39Passphrase.length > 0;
@@ -78,6 +85,7 @@ export async function createWallet({
         chainRegistry,
         sdkRegistry,
         activeChainIds,
+        activeNetwork: effectiveActiveNetwork,
     });
 
     return { mnemonic, ...persisted };

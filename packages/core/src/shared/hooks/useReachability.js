@@ -13,8 +13,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMessaging } from '../useMessaging.js';
 import { useSettings } from './useSettings.js';
+import { registry as registryLib, flows as flowsLib } from '../../index.js';
 
 const DEFAULT_INTERVAL_MS = 30_000;
+const chainRegistry = registryLib.defaultRegistry();
 
 /**
  * @param {object} [opts]
@@ -37,11 +39,17 @@ export function useReachability(opts = {}) {
     const { settings } = useSettings();
 
     const chainIds = useMemo(() => {
-        if (Array.isArray(opts.chainIds)) return opts.chainIds.filter(Boolean);
-        const fees = settings?.fees;
-        if (!fees || typeof fees !== 'object') return [];
-        return Object.keys(fees).sort();
-    }, [opts.chainIds, settings?.fees]);
+        const raw = Array.isArray(opts.chainIds)
+            ? opts.chainIds.filter(Boolean)
+            : (settings?.fees && typeof settings.fees === 'object'
+                ? Object.keys(settings.fees).sort()
+                : []);
+        // Drop chains that aren't on the user's active network — no
+        // point probing testnet endpoints when the user only sees
+        // mainnet. The filter helper tolerates an undefined settings
+        // record (returns []).
+        return flowsLib.filterChainIdsByActiveNetwork(raw, settings, chainRegistry);
+    }, [opts.chainIds, settings?.fees, settings?.activeNetwork, settings]);
 
     const [overall, setOverall] = useState(/** @type {'normal' | 'degraded' | 'offline' | 'unknown'} */ ('unknown'));
     const [perChain, setPerChain] = useState(/** @type {any[]} */ ([]));

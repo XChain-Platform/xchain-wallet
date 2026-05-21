@@ -101,6 +101,12 @@ export function PrivacySection() {
                 onChange={(v) => onToggle('hapticsEnabled', v)}
             />
             <ToggleRow
+                label="Native coin price data"
+                hint="Sends a request to api.coingecko.com to display USD price, market cap, 24-hour change, and a 7-day chart for Bitcoin, Litecoin, and Dogecoin on the coin detail page. Reveals to that third party that you’re using this wallet. Disable to hide the stats strip and chart with zero network calls."
+                checked={settings.privacy.priceDataEnabled !== false}
+                onChange={(v) => onToggle('priceDataEnabled', v)}
+            />
+            <ToggleRow
                 label="Always require hardware cross-check confirm"
                 hint="Forces the explicit “I’ve verified path + address” checkbox on every hardware-wallet sign, regardless of amount or recipient. The wallet already requires it for risky signs (large amounts, first-time recipients, multisig). Turn this on to require it on every HW sign."
                 checked={settings.privacy.alwaysRequireHwExplicitConfirm === true}

@@ -66,14 +66,27 @@ export function seedSettingsForChains(settings, chainRegistry, activeChainIds) {
  * Vault-aware variant: read current settings (or default if absent),
  * seed for the active chains, write back. Returns the seeded record.
  *
+ * `activeNetwork` only takes effect when settings are being CREATED on
+ * this call (no existing record in the vault). For an already-configured
+ * wallet, an existing `activeNetwork` is preserved — activating an
+ * additional chain via Settings must not silently switch the user's
+ * network mode. Pass `activeNetwork` from wallet-creation entry points
+ * so a demo wallet (regtest chains) lands with `activeNetwork:'regtest'`
+ * and a mainnet wallet lands with `'mainnet'` (the default).
+ *
  * @param {import('../storage/Vault.js').Vault} vault
  * @param {import('../registry/index.js').ChainRegistry} chainRegistry
  * @param {string[]} activeChainIds
+ * @param {{ activeNetwork?: 'mainnet' | 'testnet' | 'regtest' }} [opts]
  * @returns {Promise<import('../schemas/settings.js').Settings>}
  */
-export async function ensureSettings(vault, chainRegistry, activeChainIds) {
+export async function ensureSettings(vault, chainRegistry, activeChainIds, opts = {}) {
     if (!vault) throw new Error('ensureSettings: vault is required');
-    const current = (await vault.settings.get()) ?? createDefaultSettings();
+    const existing = await vault.settings.get();
+    let current = existing ?? createDefaultSettings();
+    if (!existing && opts.activeNetwork) {
+        current = { ...current, activeNetwork: opts.activeNetwork };
+    }
     const seeded = seedSettingsForChains(current, chainRegistry, activeChainIds);
     await vault.settings.put(seeded);
     return seeded;

@@ -29,6 +29,19 @@ export const BACKUP_REMINDER_CADENCES = /** @type {const} */ (['off', 'monthly',
 export const WALLET_MODES = /** @type {const} */ (['full', 'watcher', 'signer']);
 export const WALLET_MODE_DEFAULT = 'full';
 
+// Active network filter — only chains on this network are visible AND
+// queried. A user with `activeChainIds` carrying both mainnet and
+// testnet chains who has `activeNetwork: 'mainnet'` set will see only
+// mainnet balances / history, and the wallet will not fan out any
+// network requests to the testnet chains. Switching networks is a
+// dev-oriented operation buried in Settings; everyday users stay on
+// mainnet. Cross-network operations (LINK / SWAP spanning networks)
+// are structurally impossible while the filter is on — that's a
+// clarification, not a regression, since cross-mainnet-testnet bridges
+// don't exist anyway.
+export const NETWORKS = /** @type {const} */ (['mainnet', 'testnet', 'regtest']);
+export const NETWORK_DEFAULT = 'mainnet';
+
 // ADS default — single source of truth per §36. Flip this to false to
 // make ADS opt-in without touching call sites.
 export const ADS_DEFAULT_ENABLED = true;
@@ -76,7 +89,7 @@ export const CLIPBOARD_AUTO_CLEAR_DEFAULT = 60;
  * @property {string} language
  * @property {Record<string, SdkEndpoint>} sdkEndpoints
  * @property {Record<string, FeeSettings>} fees
- * @property {{ torRouting: boolean, changeAddressRotation: boolean, hideSmallBalances: boolean, blurOnBlur: boolean, labelsSurviveRestore: boolean, clipboardAutoClearSeconds?: number, hapticsEnabled?: boolean, alwaysRequireHwExplicitConfirm?: boolean }} privacy   v2 — adds blurOnBlur (window-unfocus blur of sensitive data), labelsSurviveRestore (§19.5.2 on-chain label sync opt-in); clipboardAutoClearSeconds is optional v2-tolerant — 0–600 inclusive, 0 = never clear, default 60 (§17.7.1 / G028); hapticsEnabled is v2-tolerant — defaults true when absent, set false to suppress every `useHaptic` pulse alongside the OS-level reduced-motion preference (Cluster P FOLLOWUP 1); alwaysRequireHwExplicitConfirm is v2-tolerant — defaults false; when true the HW sign-screen cross-check confirm is required on every sign regardless of the risk classifier (Cluster N FOLLOWUP 3); formDraftTtlMs is v2-tolerant — defaults to 24h, allowed values are FORM_DRAFT_TTL_OPTIONS (Cluster P FOLLOWUP 6).
+ * @property {{ torRouting: boolean, changeAddressRotation: boolean, hideSmallBalances: boolean, blurOnBlur: boolean, labelsSurviveRestore: boolean, clipboardAutoClearSeconds?: number, hapticsEnabled?: boolean, alwaysRequireHwExplicitConfirm?: boolean, priceDataEnabled?: boolean }} privacy   v2 — adds blurOnBlur (window-unfocus blur of sensitive data), labelsSurviveRestore (§19.5.2 on-chain label sync opt-in); clipboardAutoClearSeconds is optional v2-tolerant — 0–600 inclusive, 0 = never clear, default 60 (§17.7.1 / G028); hapticsEnabled is v2-tolerant — defaults true when absent, set false to suppress every `useHaptic` pulse alongside the OS-level reduced-motion preference (Cluster P FOLLOWUP 1); alwaysRequireHwExplicitConfirm is v2-tolerant — defaults false; when true the HW sign-screen cross-check confirm is required on every sign regardless of the risk classifier (Cluster N FOLLOWUP 3); formDraftTtlMs is v2-tolerant — defaults to 24h, allowed values are FORM_DRAFT_TTL_OPTIONS (Cluster P FOLLOWUP 6); priceDataEnabled is v2-tolerant — defaults true; when false the price oracle is disabled and the TokenDetail stats strip / chart hide for native coins (sends a request to a third-party API revealing wallet activity, hence the opt-out).
  * @property {{ enabled: boolean, perChain: Record<string, AdsChainState> }} ads
  * @property {{ txConfirmations: boolean, incomingReceipts: boolean, dispenserFills: boolean, orderFills: boolean, priceAlerts: boolean }} notifications
  * @property {boolean} developerMode
@@ -93,6 +106,7 @@ export const CLIPBOARD_AUTO_CLEAR_DEFAULT = 60;
  * @property {Array<{ at: number, action: 'add' | 'remove', entry: string, evictedSiteIds?: string[] }>} [blocklistAuditLog]   v2-tolerant — ring-buffer of recent blocklist mutations (Cluster S FOLLOWUP 4). Capped at 50 entries.
  * @property {{ burst?: number, windowMs?: number }} [signThrottle]                                          v2-tolerant — per-origin sign-request token-bucket limits (§12 / G012 / Cluster S FOLLOWUP 1). `burst` is positive integer max requests per window; `windowMs` is window length in ms (positive integer). Either field may be omitted to fall back to SIGN_THROTTLE_DEFAULT_BURST / SIGN_THROTTLE_DEFAULT_WINDOW_MS.
  * @property {typeof WALLET_MODES[number]} [walletMode]                                                      v2-tolerant — `full` (default) signs + broadcasts here; `watcher` builds unsigned PSBTs for an air-gapped signer; `signer` accepts pasted PSBTs from a watcher and returns signed PSBTs (§20 / G039). Send / Home branch on this field in subsequent steps.
+ * @property {typeof NETWORKS[number]} [activeNetwork]                                                       v2-tolerant — `mainnet` (default) / `testnet` / `regtest`. Filters every visible chain AND every data fetch to chains on this network; a wallet with mainnet + testnet chains active under the hood shows only the mainnet ones while `activeNetwork === 'mainnet'`. Switching is a Settings → Network operation. Cross-network features are disabled while the filter is on.
  * @property {object[]} [customChains]                                                                       v2-tolerant — user-added ChainDescriptor records (§9.7 / Cluster Q FOLLOWUP 2). Persisted across SW restarts so `chainRegistry.addCustom` re-seeds on boot. Per-descriptor validation runs in the `wallet.addCustomChain` host route via `validateChainDescriptor`; the schema check here only enforces that the field is an array of plain objects so a corrupt persisted blob can't crash the settings read.
  */
 
@@ -140,6 +154,7 @@ export function createDefaultSettings() {
             labelsSurviveRestore: false,
             clipboardAutoClearSeconds: CLIPBOARD_AUTO_CLEAR_DEFAULT,
             hapticsEnabled: true,
+            priceDataEnabled: true,
         },
         ads: {
             enabled: ADS_DEFAULT_ENABLED,
@@ -167,6 +182,7 @@ export function createDefaultSettings() {
         showPinAffordance: false,
         showHideAffordance: false,
         walletMode: WALLET_MODE_DEFAULT,
+        activeNetwork: NETWORK_DEFAULT,
     };
 }
 
@@ -249,6 +265,10 @@ export function validateSettings(record) {
             // default false; when present, require boolean.
             && (r.privacy.alwaysRequireHwExplicitConfirm === undefined
                 || isBoolean(r.privacy.alwaysRequireHwExplicitConfirm))
+            // priceDataEnabled is v2-tolerant: missing → default true;
+            // when present, require boolean.
+            && (r.privacy.priceDataEnabled === undefined
+                || isBoolean(r.privacy.priceDataEnabled))
             // formDraftTtlMs is v2-tolerant: missing → default 24h;
             // when present, must be one of the allowed values (Off /
             // 1h / 24h / 7d).
@@ -389,6 +409,14 @@ export function validateSettings(record) {
             'walletMode',
             isOneOf(r.walletMode, WALLET_MODES),
             `must be one of ${WALLET_MODES.join(', ')}`,
+        );
+    }
+    if (r.activeNetwork !== undefined) {
+        check(
+            errors,
+            'activeNetwork',
+            isOneOf(r.activeNetwork, NETWORKS),
+            `must be one of ${NETWORKS.join(', ')}`,
         );
     }
     if (r.customChains !== undefined) {

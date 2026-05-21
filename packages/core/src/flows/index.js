@@ -341,3 +341,12 @@ export {
     createInMemoryFirmwareManifestCache,
     FIRMWARE_MANIFEST_CACHE_KEY,
 } from './firmwareManifestRefresh.js';
+export {
+    getActiveNetwork,
+    isChainOnActiveNetwork,
+    filterChainIdsByActiveNetwork,
+} from './effectiveNetwork.js';
+export {
+    createPriceOracle,
+    COINGECKO_SUPPORTED_CHAINS,
+} from './priceOracle.js';

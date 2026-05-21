@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Screen, Button, ChainBadge, Icon } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
+import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { StalenessLabel } from '../components/StalenessLabel.jsx';
 import { useAssetInfo } from '../hooks/useAssetInfo.js';
@@ -128,22 +129,28 @@ export function TokenDetail({
             <div className={styles.body}>
                 <section className={styles.heroCard}>
                     <div className={styles.iconRow}>
-                        <span
-                            className={styles.iconLetter}
-                            style={{ background: tickerColor(asset) }}
-                            aria-hidden="true"
-                        >
-                            {asset.slice(0, 1)}
-                        </span>
+                        {isNative && branding.chainIconLargeUrl(chainId) ? (
+                            <img
+                                src={branding.chainIconLargeUrl(chainId)}
+                                alt=""
+                                aria-hidden="true"
+                                className={styles.iconImg}
+                            />
+                        ) : (
+                            <span
+                                className={styles.iconLetter}
+                                style={{ background: tickerColor(asset) }}
+                                aria-hidden="true"
+                            >
+                                {asset.slice(0, 1)}
+                            </span>
+                        )}
                         <div className={styles.heroText}>
                             <div className={styles.heroName}>{displayName || asset}</div>
                             <div className={styles.heroSub}>
                                 <span className={styles.ticker}>{asset}</span>
-                                {descriptor ? (
-                                    <ChainBadge descriptor={descriptor} size="sm" />
-                                ) : null}
-                                {descriptor?.networkKind && descriptor.networkKind !== 'mainnet' ? (
-                                    <span className={styles.network}>{descriptor.networkKind}</span>
+                                {descriptor && !isNative ? (
+                                    <ChainBadge descriptor={descriptor} size="sm" showNetworkKind={false} />
                                 ) : null}
                             </div>
                         </div>
@@ -177,60 +184,62 @@ export function TokenDetail({
 
                 <section className={styles.metadataCard}>
                     <h3 className={styles.sectionTitle}>Metadata</h3>
-                    <dl className={styles.metaList}>
-                        <div className={styles.metaRow}>
-                            <dt>Type</dt>
-                            <dd>{kindLabel(kind)}</dd>
-                        </div>
-                        <div className={styles.metaRow}>
-                            <dt>Ticker</dt>
-                            <dd>{asset}</dd>
-                        </div>
-                        <div className={styles.metaRow}>
-                            <dt>Divisibility</dt>
-                            <dd>{divisibility}</dd>
-                        </div>
-                        <div className={styles.metaRow}>
-                            <dt>Chain</dt>
-                            <dd>{descriptor?.displayName || chainId}</dd>
-                        </div>
-                        <div className={styles.metaRow}>
-                            <dt>Fiat rate</dt>
-                            <dd>{fiatRate == null ? '—' : `$${fiatRate.toFixed(6)} / ${asset}`}</dd>
-                        </div>
-                        {!isNative && assetInfo?.creator ? (
-                            <div className={styles.metaRow}>
-                                <dt>Creator</dt>
-                                <dd className={styles.creatorCell} title={assetInfo.creator}>
-                                    {shorten(assetInfo.creator)}
-                                </dd>
-                            </div>
-                        ) : null}
-                        {!isNative && assetInfo?.totalSupply != null ? (
-                            <div className={styles.metaRow}>
-                                <dt>Total supply</dt>
-                                <dd>{assetInfo.totalSupply}{assetInfo.maxSupply ? ` / ${assetInfo.maxSupply}` : ''}</dd>
-                            </div>
-                        ) : null}
-                        {!isNative && assetInfo?.marketPrice != null ? (
-                            <div className={styles.metaRow}>
-                                <dt>Market price</dt>
-                                <dd>{assetInfo.marketPrice} {nativeTickerOf(chainId)} / {asset}</dd>
-                            </div>
-                        ) : null}
-                        {!isNative && assetInfo ? (
-                            <div className={styles.metaRow}>
-                                <dt>Status</dt>
-                                <dd>
-                                    {assetInfo.locked ? (
-                                        <span className={styles.lockedFlag}>Locked</span>
-                                    ) : (
-                                        <span className={styles.unlockedFlag}>Mutable</span>
-                                    )}
-                                </dd>
-                            </div>
-                        ) : null}
-                    </dl>
+                    <table className={styles.metaTable}>
+                        <tbody>
+                            <tr className={styles.metaRow}>
+                                <th scope="row">Type</th>
+                                <td>{kindLabel(kind)}</td>
+                            </tr>
+                            <tr className={styles.metaRow}>
+                                <th scope="row">Ticker</th>
+                                <td>{asset}</td>
+                            </tr>
+                            <tr className={styles.metaRow}>
+                                <th scope="row">Divisibility</th>
+                                <td>{divisibility}</td>
+                            </tr>
+                            <tr className={styles.metaRow}>
+                                <th scope="row">Chain</th>
+                                <td>{descriptor?.displayName || chainId}</td>
+                            </tr>
+                            <tr className={styles.metaRow}>
+                                <th scope="row">Fiat rate</th>
+                                <td>{fiatRate == null ? '—' : `$${fiatRate.toFixed(6)} / ${asset}`}</td>
+                            </tr>
+                            {!isNative && assetInfo?.creator ? (
+                                <tr className={styles.metaRow}>
+                                    <th scope="row">Creator</th>
+                                    <td className={styles.creatorCell} title={assetInfo.creator}>
+                                        {shorten(assetInfo.creator)}
+                                    </td>
+                                </tr>
+                            ) : null}
+                            {!isNative && assetInfo?.totalSupply != null ? (
+                                <tr className={styles.metaRow}>
+                                    <th scope="row">Total supply</th>
+                                    <td>{assetInfo.totalSupply}{assetInfo.maxSupply ? ` / ${assetInfo.maxSupply}` : ''}</td>
+                                </tr>
+                            ) : null}
+                            {!isNative && assetInfo?.marketPrice != null ? (
+                                <tr className={styles.metaRow}>
+                                    <th scope="row">Market price</th>
+                                    <td>{assetInfo.marketPrice} {nativeTickerOf(chainId)} / {asset}</td>
+                                </tr>
+                            ) : null}
+                            {!isNative && assetInfo ? (
+                                <tr className={styles.metaRow}>
+                                    <th scope="row">Status</th>
+                                    <td>
+                                        {assetInfo.locked ? (
+                                            <span className={styles.lockedFlag}>Locked</span>
+                                        ) : (
+                                            <span className={styles.unlockedFlag}>Mutable</span>
+                                        )}
+                                    </td>
+                                </tr>
+                            ) : null}
+                        </tbody>
+                    </table>
                     {!isNative && !assetInfo ? (
                         <p className={styles.metadataHint}>
                             Loading description, creator, and supply…

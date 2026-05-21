@@ -1625,3 +1625,14 @@ export function getAirdropRecipients(req) {
 export function removeWallet(req) {
     return /** @type {any} */ (sendMessage('wallet.remove', req));
 }
+
+/**
+ * Native-coin price oracle — see web shell for shape. Gated on
+ * settings.privacy.priceDataEnabled; returns `{ disabled: true }` when
+ * the user has opted out.
+ *
+ * @param {{ chainIds: string[], includeSparkline?: boolean }} opts
+ */
+export function getNativePricesRequest(opts) {
+    return /** @type {any} */ (sendMessage('prices.native', opts));
+}

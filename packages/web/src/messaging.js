@@ -1023,3 +1023,16 @@ export function removeWallet(req) {
 export function generateReceiveAddress(opts) {
     return /** @type {any} */ (sendMessage('receive.getAddress', opts));
 }
+
+/**
+ * Native-coin price oracle — third-party fetch for BTC/LTC/DOGE
+ * mainnet price + market cap + 24h change (+ optional 7-day sparkline).
+ * Gated by `settings.privacy.priceDataEnabled`; returns `{ disabled: true }`
+ * when the user has opted out, in which case no network call fires.
+ *
+ * @param {{ chainIds: string[], includeSparkline?: boolean }} opts
+ * @returns {Promise<{ disabled?: boolean, prices?: Record<string, { priceFiat: number | null, marketCapFiat: number | null, change24hPct: number | null, sparkline: number[] | null, fetchedAt: number } | null>, error?: string }>}
+ */
+export function getNativePricesRequest(opts) {
+    return /** @type {any} */ (sendMessage('prices.native', opts));
+}

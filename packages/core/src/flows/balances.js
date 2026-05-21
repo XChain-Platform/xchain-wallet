@@ -71,6 +71,7 @@ export async function addressHistory({ sdkRegistry, chainId, address, opts }) {
  * @property {import('../registry/index.js').ChainRegistry} chainRegistry
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
  * @property {string} [chainId]               optional filter — only fetch for this chain
+ * @property {'mainnet' | 'testnet' | 'regtest'} [activeNetwork]  optional filter — skip chains whose `networkKind` doesn't match; the host wrapper threads this from `settings.activeNetwork` so a user on mainnet generates zero requests against testnet / regtest chains
  * @property {object} [opts]                  passed through to each `sdk.getBalances`
  */
 
@@ -91,6 +92,7 @@ export async function walletBalances({
     chainRegistry,
     sdkRegistry,
     chainId,
+    activeNetwork,
     opts,
 }) {
     if (!vault) throw new Error('walletBalances: vault is required');
@@ -122,7 +124,11 @@ export async function walletBalances({
     }
 
     // 2. Group this wallet's addresses by chainId (coin + networkKind
-    //    → descriptor id). Unknown chains are skipped.
+    //    → descriptor id). Unknown chains are skipped. When `activeNetwork`
+    //    is supplied, chains on a different network are skipped at the
+    //    grouping site so no SDK fan-out fires for them — this is the
+    //    chokepoint that enforces "switch to mainnet, stop querying
+    //    testnet entirely."
     /** @type {Record<string, import('../schemas/address.js').Address[]>} */
     const byChain = {};
     const allAddrs = await vault.addresses.list();
@@ -131,6 +137,10 @@ export async function walletBalances({
         const cid = chainRegistry.chainIdFor(a.chain, a.network);
         if (!cid) continue;
         if (chainId && cid !== chainId) continue;
+        if (activeNetwork) {
+            const descriptor = chainRegistry.descriptorFor(cid);
+            if (!descriptor || descriptor.networkKind !== activeNetwork) continue;
+        }
         if (!byChain[cid]) byChain[cid] = [];
         byChain[cid].push(a);
     }

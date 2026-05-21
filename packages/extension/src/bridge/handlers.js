@@ -251,7 +251,14 @@ export function registerBridgeHandlers(host, opts = {}) {
         if (!settings) return [];
         // "Active" = any chain that has seeded per-chain state (feeStrategy,
         // ADS, etc). Matches what seedSettings populates at createWallet.
-        return Object.keys(settings.fees ?? {});
+        // Filtered down to the user's active network — chains on inactive
+        // networks aren't being queried by the wallet, so dApps must not
+        // see them either (otherwise a dApp would attempt to sign against
+        // a chain we can't reach). The filter helper falls through with
+        // an empty result on missing registry / no chains; that's fine
+        // since the dApp will get an empty list and refuse to connect.
+        const raw = Object.keys(settings.fees ?? {});
+        return flows.filterChainIdsByActiveNetwork(raw, settings, deps.chainRegistry);
     });
 
     register('bridge.signMessage', async (req, deps) => {

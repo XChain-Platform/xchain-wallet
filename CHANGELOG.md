@@ -7,6 +7,108 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.333.0] - 2026-05-21
+
+Active-network mode + native-coin price oracle + TokenDetail visual
+fixes + IndexedDB-delete hotfix. The marquee shift is the §2-principle
+update from "chain-explicit by default" to a single active-network
+filter: pick Mainnet / Testnet / Regtest in Settings, and the wallet
+shows + queries only that network's chains across every surface.
+
+### Active network (§2 / §26 principle update)
+
+- `settings.activeNetwork` (v2-tolerant, default `'mainnet'`) governs
+  which chains are visible AND queried. Chains on inactive networks
+  stay configured under the hood — switching back is instant; nothing
+  is wiped. Cross-network features (LINK / SWAP spanning networks)
+  become structurally impossible while the filter is on, which is a
+  clarification rather than a regression since cross-network bridges
+  don't exist anyway.
+- `flows/effectiveNetwork.js` ships `getActiveNetwork(settings)`,
+  `isChainOnActiveNetwork(chainId, settings, registry)`, and
+  `filterChainIdsByActiveNetwork(chainIds, settings, registry)`.
+  `ChainRegistry.descriptorFor(chainId)` lands as the public accessor
+  the helpers need.
+- Server-side chokepoints enforce the filter so the UI doesn't have
+  to re-implement it 14 times: `balances.wallet` host handler reads
+  `settings.activeNetwork` and threads it into `walletBalances` (skips
+  the per-chain SDK fan-out for non-matching chains); `addresses.byChain`
+  host handler filters the returned map, which covers Home / History /
+  AddressList / Send / every action form's chain picker without any
+  client edit.
+- `useReachability` filters `chainIds` before probing — the 30-second
+  poll no longer hits testnet endpoints when the user is on mainnet.
+- `bridge.getActiveChains` filters its result so dApps only see chains
+  the wallet will actually sign on.
+- `createWallet` / `importMnemonic` infer `activeNetwork` from the
+  first chain in `activeChainIds` (explicit override wins). Demo
+  onboarding lands on `'regtest'` automatically.
+- `ensureSettings({ activeNetwork })` honors the hint only when no
+  settings record exists yet, so activating an additional chain via
+  Developer Mode on an already-configured wallet doesn't silently
+  switch network mode.
+
+### Settings → Network
+
+- New `NetworkSection.jsx` under Settings → Network — radio picker
+  between Mainnet / Testnet / Regtest with per-option hint copy. On
+  flip the page reloads so every component's cached chain-scoped
+  state (addressesByChain, balances, history) re-fetches against the
+  new filter without per-component refresh wiring.
+- `networkSummary(settings)` returned in the Settings list row so
+  the current network is visible without drilling in.
+
+### Native-coin price oracle (§45 / privacy-cost opt-in)
+
+- `flows/priceOracle.js` ships `createPriceOracle({fetch})` →
+  `getNativePrices({chainIds, fiatCurrency, includeSparkline})`. Maps
+  bitcoin/litecoin/dogecoin mainnet to CoinGecko ids; testnet/regtest
+  return `null` entries (no price source). Single batched call to
+  `api.coingecko.com/v3/simple/price` for spot + market cap + 24h
+  change, per-coin `/coins/{id}/market_chart?days=7` for sparklines.
+- In-memory cache only — 5 min for spot, 1 hour for sparkline. Cache
+  is per-host-instance; restart/reload empties it. No disk persistence
+  on purpose: yesterday's "what coin did the user check?" should not
+  sit in storage.
+- Host registers `prices.native` route that gates on
+  `settings.privacy.priceDataEnabled` (v2-tolerant, default `true`).
+  When disabled the handler returns `{disabled:true}` and never invokes
+  fetch — zero network calls go out.
+- New `useNativePrice(chainId, {includeSparkline})` hook for the UI
+  layer; surfaces `{entry, loading, disabled, error}`.
+- Settings → Privacy gains a "Native coin price data" toggle with
+  copy that explicitly names `api.coingecko.com` and what the request
+  reveals.
+- Three shells (extension popup, web, desktop) gain
+  `getNativePricesRequest(opts)` messaging shim.
+
+### TokenDetail visual fixes
+
+- Native coin (BTC/LTC/DOGE) detail page swaps the colored-letter
+  iconLetter disc for the actual chain logo (`branding.chainIconLargeUrl(chainId)`),
+  matching what the Home BalanceList row uses. The redundant ChainBadge
+  next to the ticker is hidden for native coins — the asset IS the
+  chain, so the second orange ₿ circle was noise. XCP tokens keep both
+  (asset color + chain badge convey different info).
+- Metadata block converted from a stacked `<dl>` grid to a proper
+  two-column `<table>` — label left in muted small-caps, value right-
+  aligned, hairline divider per row. Reads cleanly at popup width
+  (360px) and at full-page width.
+- `ChainBadge` gains a `showNetworkKind` prop (was already being
+  passed by TokenDetail; this commit honors it).
+
+### IndexedDB delete race (v0.332.0 hotfix)
+
+- `IndexedDBStorageBackend` now sets `db.onversionchange = () => db.close()`
+  on the open IDB. Without this, the Locked-screen forgot-password
+  wipe (`indexedDB.deleteDatabase('xchain-wallet')` in Locked.jsx)
+  fired `onblocked` because the backend's long-lived connection was
+  open, the page reloaded before the queued delete could finish, and
+  the new tab reopened the database — net effect, the wallet survived
+  the "wipe" with no UX indication. The versionchange handler lets the
+  backend close itself in response, the delete fires `onsuccess`, and
+  the reload lands on clean Onboarding as intended.
+
 ## [0.332.0] - 2026-05-21
 
 Locked-screen rescue path extended from demo-only to real wallets

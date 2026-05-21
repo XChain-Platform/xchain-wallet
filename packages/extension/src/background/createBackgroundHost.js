@@ -124,6 +124,8 @@ const {
     walletBalances,
     addressBalances,
     addressHistory,
+    getActiveNetwork,
+    createPriceOracle,
     getMarkets,
     getMarket,
     getMarketHistory,
@@ -187,6 +189,19 @@ async function addressesByChain(req, { vault, chainRegistry }) {
         accountIds = new Set(accounts.map((a) => a.id));
     }
     if (accountIds.size === 0) return {};
+    // Read activeNetwork once per call so every UI surface that consumes
+    // this map (Home, History, AddressList, Send, every action form's
+    // chain picker) sees the same filtered set without each having to
+    // re-implement the filter. A failure to read settings (vault not
+    // open, corrupted record) falls through to the unfiltered behavior
+    // so this code path never blocks the wallet from booting.
+    let activeNetwork = null;
+    try {
+        const settings = await vault.settings.get();
+        activeNetwork = getActiveNetwork(settings);
+    } catch {
+        // pass through unfiltered
+    }
     const all = await vault.addresses.list();
     /** @type {Record<string, any[]>} */
     const byChain = {};
@@ -194,6 +209,10 @@ async function addressesByChain(req, { vault, chainRegistry }) {
         if (!a.accountId || !accountIds.has(a.accountId)) continue;
         const chainId = chainRegistry.chainIdFor(a.chain, a.network);
         if (!chainId) continue;
+        if (activeNetwork) {
+            const descriptor = chainRegistry.descriptorFor(chainId);
+            if (!descriptor || descriptor.networkKind !== activeNetwork) continue;
+        }
         if (!byChain[chainId]) byChain[chainId] = [];
         byChain[chainId].push(a);
     }
@@ -986,10 +1005,13 @@ export function createBackgroundHost(deps) {
         chainRegistryStatus.update(result);
         return result;
     });
-    // Kick off the boot-time refresh ~3s after host construction so
-    // the rest of init isn't blocked. Failures are silently captured
-    // in the status holder; the Settings UI surfaces them.
-    if (typeof setTimeout === 'function') {
+    // Boot-time refresh is disabled until the hub-side
+    // `/api/v1/chain-registry` endpoint ships (Cluster U FOLLOWUP).
+    // The Settings → Network manual refresh path still works for
+    // testing against a hub that does serve the endpoint. Flip this
+    // back on once hub.xchain.io is live.
+    const BOOT_REFRESH_ENABLED = false;
+    if (BOOT_REFRESH_ENABLED && typeof setTimeout === 'function') {
         setTimeout(async () => {
             try {
                 const hubUrl = pickHubUrlFromRegistry(deps.chainRegistry);
@@ -2051,7 +2073,21 @@ export function createBackgroundHost(deps) {
     // --- Reads ---------------------------------------------------------------
 
     host.register('balances.wallet', async (req, { vault, chainRegistry, sdkRegistry }) => {
-        return walletBalances({ ...req, vault, chainRegistry, sdkRegistry });
+        // Thread the user's active network into the aggregator so chains
+        // on the inactive networks don't get fanned-out SDK calls. The
+        // client doesn't pass `activeNetwork`; it's a server-side filter
+        // derived from settings — the source of truth for "which network
+        // is live" lives in one place.
+        let activeNetwork;
+        try {
+            const settings = await vault.settings.get();
+            activeNetwork = getActiveNetwork(settings);
+        } catch {
+            // Vault unavailable / settings unreadable — fall through
+            // without the filter; walletBalances() then defaults to its
+            // pre-filter behavior (every chain with addresses).
+        }
+        return walletBalances({ ...req, vault, chainRegistry, sdkRegistry, activeNetwork });
     });
 
     host.register('balances.address', async (req, { sdkRegistry }) => {
@@ -2060,6 +2096,36 @@ export function createBackgroundHost(deps) {
 
     host.register('history.address', async (req, { sdkRegistry }) => {
         return addressHistory({ ...req, sdkRegistry });
+    });
+
+    // Native-coin price oracle. Single shared instance per host so the
+    // in-memory cache survives across calls within a session. Gated on
+    // settings.privacy.priceDataEnabled — if the user has disabled it,
+    // the handler returns `{ disabled: true }` without invoking fetch,
+    // so the third party never sees a request. globalThis.fetch is the
+    // browser / SW fetch in production; tests pass a mock via
+    // host-construction deps (not yet wired, but the seam is here for
+    // when smoke coverage lands).
+    const priceOracle = (typeof globalThis !== 'undefined' && typeof globalThis.fetch === 'function')
+        ? createPriceOracle({ fetch: globalThis.fetch.bind(globalThis) })
+        : null;
+    host.register('prices.native', async (req, { vault }) => {
+        try {
+            const settings = await vault.settings.get();
+            const enabled = settings?.privacy?.priceDataEnabled !== false;
+            if (!enabled) return { disabled: true };
+            if (!priceOracle) return { disabled: true, error: 'fetch unavailable' };
+            const fiatCurrency = typeof settings?.fiatCurrency === 'string'
+                ? settings.fiatCurrency
+                : 'USD';
+            return await priceOracle.getNativePrices({
+                chainIds: Array.isArray(req?.chainIds) ? req.chainIds : [],
+                fiatCurrency,
+                includeSparkline: Boolean(req?.includeSparkline),
+            });
+        } catch (err) {
+            return { error: err?.message ? String(err.message) : String(err) };
+        }
     });
 
     // --- Approval broker IPC -------------------------------------------------

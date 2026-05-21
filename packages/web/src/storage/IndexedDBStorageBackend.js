@@ -119,7 +119,24 @@ function openIdbDatabase(idb, dbName, storeName) {
                 db.createObjectStore(storeName);
             }
         };
-        req.onsuccess = () => resolve(req.result);
+        req.onsuccess = () => {
+            const db = req.result;
+            // Close in response to deleteDatabase / openDatabase(higher
+            // version) from elsewhere in this origin. Without this, the
+            // Locked-screen forgot-password wipe (deleteWalletDatabase
+            // in Locked.jsx) races: the delete fires onblocked because
+            // our long-lived backend connection is open, the page
+            // reloads before the delete completes, and the new tab
+            // reopens before the queued delete fires — net effect, the
+            // wallet survives the wipe. Closing here lets the queued
+            // delete proceed cleanly so the wipe → reload → fresh
+            // Onboarding path works. In-flight transactions on this
+            // connection will error out, which is acceptable: the only
+            // caller that triggers versionchange is intentionally about
+            // to destroy this database.
+            db.onversionchange = () => db.close();
+            resolve(db);
+        };
         req.onerror = () => reject(req.error);
         req.onblocked = () =>
             reject(new Error(`IndexedDBStorageBackend: open("${dbName}") blocked`));

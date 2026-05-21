@@ -104,6 +104,7 @@ export async function importMnemonic({
     bip39Passphrase = '',
     origin,
     kdfParams,
+    activeNetwork,
 }) {
     if (typeof password !== 'string' || password.length === 0) {
         throw new Error('importMnemonic: password is required');
@@ -155,6 +156,11 @@ export async function importMnemonic({
     const passphraseEnabled = resolvedFormat === 'bip39' && bip39Passphrase.length > 0;
     const resolvedOrigin = origin ?? DEFAULT_ORIGIN_BY_FORMAT[resolvedFormat];
 
+    // Infer activeNetwork from the first chain when caller didn't supply
+    // one. Mirrors createWallet — see effectiveNetwork rationale there.
+    const effectiveActiveNetwork = activeNetwork
+        ?? chainRegistry.descriptorFor(activeChainIds[0])?.networkKind;
+
     const persisted = await persistHdWallet({
         mnemonic: normalized,
         format: resolvedFormat,
@@ -169,6 +175,7 @@ export async function importMnemonic({
         chainRegistry,
         sdkRegistry,
         activeChainIds,
+        activeNetwork: effectiveActiveNetwork,
     });
 
     return { format: resolvedFormat, ...persisted };

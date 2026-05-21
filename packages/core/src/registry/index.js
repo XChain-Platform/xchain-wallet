@@ -66,6 +66,16 @@ export class ChainRegistry {
     }
 
     /**
+     * Forward lookup: given a chainId, return the descriptor or `null`.
+     *
+     * @param {string} chainId
+     * @returns {import('./validate.js').ChainDescriptor | null}
+     */
+    descriptorFor(chainId) {
+        return this._entries.get(chainId) ?? null;
+    }
+
+    /**
      * Reverse lookup: given (coin, networkKind) from an Address record,
      * return the matching chainId — or `null` if no descriptor matches.
      *

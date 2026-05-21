@@ -14,12 +14,13 @@ import { DisplaySection } from '../components/settings/DisplaySection.jsx';
 import { FeesSection } from '../components/settings/FeesSection.jsx';
 import { LanguageRegionSection } from '../components/settings/LanguageRegionSection.jsx';
 import { NetworkEndpointsSection } from '../components/settings/NetworkEndpointsSection.jsx';
+import { NetworkSection } from '../components/settings/NetworkSection.jsx';
 import { NotificationsSection } from '../components/settings/NotificationsSection.jsx';
 import { PrivacySection } from '../components/settings/PrivacySection.jsx';
 import { SafetySection } from '../components/settings/SafetySection.jsx';
 import { ThisWalletSection } from '../components/settings/ThisWalletSection.jsx';
 import { WalletModeSection } from '../components/settings/WalletModeSection.jsx';
-import { WALLET_MODE_DEFAULT } from '../../schemas/settings.js';
+import { WALLET_MODE_DEFAULT, NETWORK_DEFAULT, NETWORKS } from '../../schemas/settings.js';
 import styles from './ActionsMenu.module.css';
 import pickerStyles from './WalletPicker.module.css';
 
@@ -169,6 +170,15 @@ export function Settings({
             kind: 'internal-drill',
             Component: FeesSection,
             summary: feesSummary(settings),
+        },
+        {
+            id: 'network',
+            title: 'Network',
+            description: 'Choose Mainnet, Testnet, or Regtest. Filters every visible chain and stops queries to the inactive networks.',
+            keywords: 'network mainnet testnet regtest active filter chain switch mode dev',
+            kind: 'internal-drill',
+            Component: NetworkSection,
+            summary: networkSummary(settings),
         },
         {
             id: 'network-endpoints',
@@ -512,6 +522,17 @@ function walletModeSummary(settings) {
     if (mode === 'watcher') return 'Watcher (watch-only)';
     if (mode === 'signer') return 'Signer (air-gapped)';
     return mode;
+}
+
+function networkSummary(settings) {
+    if (!settings) return '—';
+    const net = NETWORKS.includes(settings.activeNetwork)
+        ? settings.activeNetwork
+        : NETWORK_DEFAULT;
+    if (net === 'mainnet') return 'Mainnet';
+    if (net === 'testnet') return 'Testnet';
+    if (net === 'regtest') return 'Regtest';
+    return net;
 }
 
 function feesSummary(settings) {
