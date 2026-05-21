@@ -47,6 +47,10 @@ export function Locked({ onUnlocked }) {
     const [biometricAvailable, setBiometricAvailable] = useState(false);
     const [demoWipeBusy, setDemoWipeBusy] = useState(false);
     const [demoWipeError, setDemoWipeError] = useState(/** @type {string | null} */ (null));
+    const [forgotOpen, setForgotOpen] = useState(false);
+    const [wipeConfirmText, setWipeConfirmText] = useState('');
+    const [wipeBusy, setWipeBusy] = useState(false);
+    const [wipeError, setWipeError] = useState(/** @type {string | null} */ (null));
     const inputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const haptic = useHaptic();
 
@@ -96,6 +100,33 @@ export function Locked({ onUnlocked }) {
             setDemoWipeError(err?.message || 'Could not exit demo mode.');
             setDemoWipeBusy(false);
         }
+    }
+
+    // §26.4 — last-resort escape for a real wallet whose owner has lost
+    // the password. The vault blob is encrypted under the master key, so
+    // there's no surgical "reset password" path; the only option is to
+    // wipe the device-side wallet and re-import from seed or encrypted
+    // backup elsewhere. Gated behind a type-WIPE confirmation so a
+    // misclick can't destroy a real wallet.
+    async function handleForgotPasswordWipe() {
+        if (wipeBusy) return;
+        if (wipeConfirmText.trim().toUpperCase() !== 'WIPE') return;
+        setWipeBusy(true);
+        setWipeError(null);
+        try {
+            await deleteWalletDatabase();
+            if (typeof window !== 'undefined') window.location.reload();
+        } catch (err) {
+            setWipeError(err?.message || 'Could not wipe wallet data.');
+            setWipeBusy(false);
+        }
+    }
+
+    function handleForgotPasswordCancel() {
+        if (wipeBusy) return;
+        setForgotOpen(false);
+        setWipeConfirmText('');
+        setWipeError(null);
     }
 
     useEffect(() => {
@@ -276,7 +307,66 @@ export function Locked({ onUnlocked }) {
                         <p role="alert" className={styles.demoExitError}>{demoWipeError}</p>
                     ) : null}
                 </div>
-            ) : null}
+            ) : (
+                <div className={styles.forgotBlock}>
+                    {!forgotOpen ? (
+                        <button
+                            type="button"
+                            className={styles.forgotLink}
+                            onClick={() => setForgotOpen(true)}
+                            aria-expanded="false"
+                            aria-controls="locked-forgot-password-panel"
+                        >
+                            Forgot password?
+                        </button>
+                    ) : (
+                        <div
+                            id="locked-forgot-password-panel"
+                            className={styles.wipeConfirm}
+                            role="region"
+                            aria-label="Wipe wallet data"
+                        >
+                            <p className={styles.wipeWarning}>
+                                <strong>Without your recovery phrase or encrypted backup file, wiping this wallet will permanently lose access to any funds it holds.</strong>
+                            </p>
+                            <p className={styles.wipeNote}>
+                                Wiping only removes the wallet from this device — the wallet on the blockchain itself is unaffected. Use this only if you have a backup, or if this wallet is empty.
+                            </p>
+                            <Input
+                                type="text"
+                                label="Type WIPE to confirm"
+                                value={wipeConfirmText}
+                                onChange={(e) => setWipeConfirmText(e.target.value)}
+                                autoComplete="off"
+                                autoCapitalize="characters"
+                                disabled={wipeBusy}
+                            />
+                            <Button
+                                type="button"
+                                variant="danger"
+                                block
+                                onClick={handleForgotPasswordWipe}
+                                loading={wipeBusy}
+                                disabled={wipeBusy || wipeConfirmText.trim().toUpperCase() !== 'WIPE'}
+                            >
+                                Wipe wallet data
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="secondary"
+                                block
+                                onClick={handleForgotPasswordCancel}
+                                disabled={wipeBusy}
+                            >
+                                Cancel
+                            </Button>
+                            {wipeError ? (
+                                <p role="alert" className={styles.wipeError}>{wipeError}</p>
+                            ) : null}
+                        </div>
+                    )}
+                </div>
+            )}
         </form>
     );
 

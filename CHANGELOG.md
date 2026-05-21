@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.332.0] - 2026-05-21
+
+Locked-screen rescue path extended from demo-only to real wallets
+(Cluster O FU 4). Closes the §26 forgot-password gap: a user who's
+lost their password and doesn't have a seed phrase or encrypted
+backup handy now has an in-app escape instead of being stuck on the
+"Incorrect password" screen with no exit short of opening DevTools.
+
+### Locked screen
+
+- `Locked.jsx` renders a subtle "Forgot password?" text button below
+  the unlock + biometric buttons when no demo wallet exists (the
+  demo path's existing "Wipe wallet data & start over" affordance
+  takes precedence when applicable — the two are mutually exclusive
+  branches of one ternary).
+- Click expands an inline confirmation panel: danger-tinted warning
+  copy leading with "Without your recovery phrase or encrypted backup
+  file, wiping this wallet will permanently lose access to any funds
+  it holds", a clarifying line that wiping only affects this device
+  (the wallet on the blockchain is untouched), a type-WIPE-to-confirm
+  text input as a deliberate-action gate, a danger-variant Wipe
+  button (disabled until the confirmation text matches), and a
+  Cancel button that resets the panel.
+- Wipe reuses the existing `deleteWalletDatabase()` helper — same
+  IDB `xchain-wallet` + localStorage `xchain-wallet:vault-meta`
+  cleanup the demo-exit path uses. Page reload after wipe boots the
+  App into clean Onboarding.
+- Available during lockout: being locked out for 15 minutes is
+  exactly when this escape matters most, so the affordance is not
+  gated on `isLockedOut`.
+- A11y: disclosure button carries `aria-expanded` / `aria-controls`;
+  expanded panel is a `role="region"` with `aria-label`; wipe-error
+  surfaces via `role="alert"`.
+
 ## [0.331.0] - 2026-05-01
 
 Demo-mode + small-variant chrome polish session. Bundles theme-token
