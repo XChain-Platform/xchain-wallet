@@ -86,12 +86,12 @@ assert.ok(
     'submitAction still flips PendingTx to failed for non-broadcast errors',
 );
 
-// --- 3. sendAsset passes onBroadcastFailure through ----------------------
+// --- 3. sendToken passes onBroadcastFailure through ----------------------
 
-const sendAssetSrc = readFileSync(join(core, 'src', 'flows', 'sendAsset.js'), 'utf8');
+const sendAssetSrc = readFileSync(join(core, 'src', 'flows', 'sendToken.js'), 'utf8');
 assert.ok(
     /onBroadcastFailure: opts\.onBroadcastFailure/.test(sendAssetSrc),
-    'sendAsset threads onBroadcastFailure into submitAction',
+    'sendToken threads onBroadcastFailure into submitAction',
 );
 
 // --- 4. createBackgroundHost wires the queue + auto-enqueue --------------

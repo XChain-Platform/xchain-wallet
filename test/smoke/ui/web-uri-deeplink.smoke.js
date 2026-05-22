@@ -8,7 +8,7 @@
 //
 // Asserts:
 //   1. Send.jsx accepts a `prefill` prop and seeds initial form state
-//      from it (address, amount, asset, chainId, memo).
+//      from it (address, amount, tick, chainId, memo).
 //   2. Send's first-chain auto-select preserves a prefilled chainId.
 //   3. Web App.jsx imports the core uri namespace, declares a
 //      `sendPrefill` state slot, and runs a one-shot effect that reads
@@ -34,7 +34,7 @@ const sendSrc = readFileSync(
 );
 assert.ok(/export function Send\(\{ walletId, onBack, prefill = null \}\)/.test(sendSrc),
     'Send accepts a prefill prop (default null)');
-for (const field of ['address', 'amount', 'asset', 'chainId', 'memo']) {
+for (const field of ['address', 'amount', 'tick', 'chainId', 'memo']) {
     assert.ok(
         new RegExp(`prefill\\?\\.${field}`).test(sendSrc),
         `Send seeds initial state from prefill.${field}`,
@@ -92,5 +92,5 @@ assert.ok(
 );
 
 console.log(
-    "OK — web-uri-deeplink smoke (§47 Cluster L FOLLOWUP 1 — Send.prefill prop seeds address/amount/asset/chainId/memo; first-chain auto-select preserves prefill; web App.jsx reads ?uri= → parseXchainUri → setSendPrefill + setUnlockedView; history.replaceState strips the param; back-navigation clears the prefill)",
+    "OK — web-uri-deeplink smoke (§47 Cluster L FOLLOWUP 1 — Send.prefill prop seeds address/amount/tick/chainId/memo; first-chain auto-select preserves prefill; web App.jsx reads ?uri= → parseXchainUri → setSendPrefill + setUnlockedView; history.replaceState strips the param; back-navigation clears the prefill)",
 );

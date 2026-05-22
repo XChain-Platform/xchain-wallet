@@ -152,7 +152,7 @@ export default defineConfig({
         copyManifestPlugin(),
         iconResizePlugin({
             source: new URL(
-                '../core/src/branding/assets/favicon.png',
+                '../core/src/branding/images/favicon.png',
                 import.meta.url,
             ),
             outDir: new URL('./dist/icons/', import.meta.url),

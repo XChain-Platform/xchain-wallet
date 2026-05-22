@@ -154,7 +154,7 @@ export function TokenAdminForm({ walletId, mode, onBack }) {
             return;
         }
         if (!/^[A-Za-z0-9.]+$/.test(ticker.trim())) {
-            setFormError('Ticker must be A–Z, 0–9 (subassets may include a period).');
+            setFormError('Ticker must be A–Z, 0–9 (subtokens may include a period).');
             return;
         }
         if (mode === 'description' && !description.trim()) {

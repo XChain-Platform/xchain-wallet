@@ -1,4 +1,4 @@
-// sweepAsset — convenience wrapper for the SWEEP action (xchain-
+// sweepToken — convenience wrapper for the SWEEP action (xchain-
 // documentation/protocol/actions/SWEEP.md). Transfers all TICK
 // balances, ownerships, and/or escrows from the source address to a
 // destination. Protocol defaults per the docs: balances=1, ownerships=1,
@@ -8,10 +8,10 @@
 // in a future version, callers can drop to submitAction directly.
 
 import { submitAction } from './submitAction.js';
-import { normalizeSource } from './sendAsset.js';
+import { normalizeSource } from './sendToken.js';
 
 /**
- * @typedef {Object} SweepAssetOpts
+ * @typedef {Object} SweepTokenOpts
  * @property {import('../storage/Vault.js').Vault} vault
  * @property {string} walletId
  * @property {string} password
@@ -19,7 +19,7 @@ import { normalizeSource } from './sendAsset.js';
  * @property {import('../registry/index.js').ChainRegistry} chainRegistry
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
  * @property {string} chainId
- * @property {import('./sendAsset.js').SourceRef | import('../schemas/address.js').Address} from
+ * @property {import('./sendToken.js').SourceRef | import('../schemas/address.js').Address} from
  * @property {string} to                                DESTINATION
  * @property {boolean} [balances]                       default true
  * @property {boolean} [ownerships]                     default true
@@ -34,20 +34,20 @@ import { normalizeSource } from './sendAsset.js';
  */
 
 /**
- * @param {SweepAssetOpts} opts
+ * @param {SweepTokenOpts} opts
  * @returns {Promise<import('../sdk/submitWithSigner.js').SubmitResult>}
  */
-export async function sweepAsset(opts) {
-    if (!opts) throw new Error('sweepAsset: opts is required');
-    if (!opts.to) throw new Error('sweepAsset: to is required');
-    const source = normalizeSource(opts.from, 'sweepAsset');
+export async function sweepToken(opts) {
+    if (!opts) throw new Error('sweepToken: opts is required');
+    if (!opts.to) throw new Error('sweepToken: to is required');
+    const source = normalizeSource(opts.from, 'sweepToken');
 
     const balances = opts.balances ?? true;
     const ownerships = opts.ownerships ?? true;
     const escrows = opts.escrows ?? false;
     if (!balances && !ownerships && !escrows) {
         throw new Error(
-            'sweepAsset: at least one of balances / ownerships / escrows must be true — SWEEP with all three disabled is a no-op',
+            'sweepToken: at least one of balances / ownerships / escrows must be true — SWEEP with all three disabled is a no-op',
         );
     }
 

@@ -3,8 +3,8 @@
 // p2wpkh / p2tr; p2wpkh is the default. URLs are placeholders per §5.5
 // — real endpoints resolve before launch.
 //
-// `icon` carries an asset filename resolved by `branding.assetUrl()`;
-// per-network icons live in packages/core/src/branding/assets/.
+// `icon` carries an tick filename resolved by `branding.brandingUrl()`;
+// per-network icons live in packages/core/src/branding/images/.
 
 import { BITCOIN_ACTIONS } from '../actions.js';
 import { ADS_DONATION_ADDRESS_PLACEHOLDER } from '../validate.js';

@@ -5,7 +5,7 @@
 // minimal (no attacker access to the in-memory ciphertext).
 //
 // Returns `{ vault, password, ... }` so the caller can drive subsequent
-// flows (receiveAddress, sendAsset, etc.) against this demo wallet by
+// flows (receiveAddress, sendToken, etc.) against this demo wallet by
 // passing the same `vault` + `walletId` + `password` back through the
 // standard flow API — same surface, same code path, just backed by an
 // in-memory backend instead of IndexedDB / chrome.storage / file.

@@ -147,7 +147,7 @@ export function getWalletBalances(walletId, accountId) {
 
 /**
  * Single-address balance read — the §21.2 simulator's input source.
- * Returns the SDK's raw `{ native, assets }` shape; callers convert
+ * Returns the SDK's raw `{ native, tokens }` shape; callers convert
  * with `decoder.balancesFromSdk(...)` before feeding `simulateAction`.
  *
  * @param {string} chainId
@@ -205,7 +205,7 @@ export function generateReceiveAddress(opts) {
 
 /**
  * Build, sign, and broadcast a SEND action via the host's `action.send`
- * handler. Pass-through to core's `sendAsset` flow — fails loudly
+ * handler. Pass-through to core's `sendToken` flow — fails loudly
  * against the dev-SDK stub until real xchain-sdk is bundled.
  *
  * @param {object} opts
@@ -214,7 +214,7 @@ export function generateReceiveAddress(opts) {
  * @param {string} opts.chainId
  * @param {{ address: string, publicKey: string, derivationPath?: string | null, addressId?: string }} opts.from
  * @param {string} opts.to
- * @param {string} opts.asset
+ * @param {string} opts.tick
  * @param {string | number} opts.amount
  * @param {string} [opts.memo]
  * @param {number} [opts.fee]
@@ -223,7 +223,7 @@ export function generateReceiveAddress(opts) {
  * @param {string} [opts.bip39Passphrase]
  * @returns {Promise<any>}
  */
-export function sendAsset(opts) {
+export function sendToken(opts) {
     return /** @type {any} */ (sendMessage('action.send', opts));
 }
 
@@ -236,7 +236,7 @@ export function sendAsset(opts) {
  * @param {string} opts.chainId
  * @param {{ address: string, publicKey: string, derivationPath?: string | null, addressId?: string }} opts.from
  * @param {string} opts.to
- * @param {string} opts.asset
+ * @param {string} opts.tick
  * @param {string | number} opts.amount
  * @param {string} [opts.memo]
  * @param {number} [opts.fee]
@@ -470,12 +470,12 @@ export function getDiagnosticDump() {
 }
 
 /**
- * HW-wallet variant of sendAsset. No password (HW keys live on the
+ * HW-wallet variant of sendToken. No password (HW keys live on the
  * device). The background handler resolves the `signerId` to a
  * SignerRecord, builds a RemoteSigner wrapping a transport that
  * routes `signer.sign.request` messages to the renderer-hosted
  * Trezor/Ledger signer instance (registered at pair time via
- * `signerBridge.connect`), and calls sendAsset with the injected
+ * `signerBridge.connect`), and calls sendToken with the injected
  * signer — bypassing the software-wallet password-unlock path.
  *
  * Until the renderer↔background port RPC ships, the background
@@ -489,7 +489,7 @@ export function getDiagnosticDump() {
  * @param {string} opts.signerId
  * @param {{ address: string, publicKey: string, derivationPath: string, addressId: string, source: 'trezor'|'ledger' }} opts.from
  * @param {string} opts.to
- * @param {string} opts.asset
+ * @param {string} opts.tick
  * @param {string | number} opts.amount
  * @param {string} [opts.memo]
  * @param {number} [opts.fee]
@@ -580,7 +580,7 @@ export function issueToken(opts) {
  * @param {string} [opts.bip39Passphrase]
  * @returns {Promise<any>}
  */
-export function mintAsset(opts) {
+export function mintToken(opts) {
     return /** @type {any} */ (sendMessage('action.mint', opts));
 }
 
@@ -600,7 +600,7 @@ export function mintAsset(opts) {
  * @param {string} [opts.bip39Passphrase]
  * @returns {Promise<any>}
  */
-export function destroyAsset(opts) {
+export function destroyToken(opts) {
     return /** @type {any} */ (sendMessage('action.destroy', opts));
 }
 
@@ -1150,13 +1150,13 @@ export function getHoldersForToken(req) {
 /**
  * §27.6 token-detail richer metadata + §27.5 collectibles image URL.
  * Cluster I FOLLOWUP 3 + Cluster C FOLLOWUP 3. Returns a normalized
- * `AssetInfo` shape — description / creator / supply / locks / market
+ * `TokenInfo` shape — description / creator / supply / locks / market
  * price / extracted imageUrl.
  *
- * @param {{ chainId: string, asset: string }} req
+ * @param {{ chainId: string, tick: string }} req
  */
-export function getAssetInfo(req) {
-    return /** @type {any} */ (sendMessage('asset.info', req));
+export function getTokenInfo(req) {
+    return /** @type {any} */ (sendMessage('token.info', req));
 }
 
 /**

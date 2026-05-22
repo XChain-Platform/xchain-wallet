@@ -75,7 +75,7 @@ export function groupHistoryEntries(entries, mode = 'grouped') {
     for (const e of entries) {
         const a = upper(e.action);
         if (a === 'ISSUE' || a === 'ISSUANCE') {
-            const tick = upper(pickField(e.raw, ['tick', 'TICK', 'asset', 'ASSET']));
+            const tick = upper(pickField(e.raw, ['tick', 'TICK', 'tick', 'ASSET']));
             if (!tick) continue;
             const src = pickField(e.raw, ['source', 'SOURCE']) || e.source || '';
             issueLeaders.set(`${e.chainId}|${tick}|${src}`, e);
@@ -112,7 +112,7 @@ export function groupHistoryEntries(entries, mode = 'grouped') {
     for (const e of entries) {
         const a = upper(e.action);
         if (a === 'MINT') {
-            const tick = upper(pickField(e.raw, ['tick', 'TICK', 'asset', 'ASSET']));
+            const tick = upper(pickField(e.raw, ['tick', 'TICK', 'tick', 'ASSET']));
             if (!tick) continue;
             const src = pickField(e.raw, ['source', 'SOURCE']) || e.source || '';
             const k = `${e.chainId}|${tick}|${src}`;
@@ -225,7 +225,7 @@ function upper(v) {
 
 function summarizeGroup(subkind, leader, members) {
     if (subkind === 'issue-mint') {
-        const tick = pickField(leader.raw, ['tick', 'TICK', 'asset', 'ASSET']) || '';
+        const tick = pickField(leader.raw, ['tick', 'TICK', 'tick', 'ASSET']) || '';
         const supply = totalAmount(members);
         return supply == null
             ? `Launched ${tick}`

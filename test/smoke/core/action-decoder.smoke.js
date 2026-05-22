@@ -87,7 +87,7 @@ const chainRegistry = registryLib.defaultRegistry();
         chainId: 'dogecoin-mainnet',
         chainRegistry,
     });
-    assert.equal(d.summary, 'Sweep all assets on Dogecoin to bc1qrecip');
+    assert.equal(d.summary, 'Sweep all tokens on Dogecoin to bc1qrecip');
     assert.ok(
         d.warnings.some((w) => /sweep moves every balance/i.test(w)),
         'SWEEP has the blanket-balance warning',

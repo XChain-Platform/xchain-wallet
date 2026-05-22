@@ -1,4 +1,4 @@
-// sendAsset — convenience wrapper for the SEND action (§Phase 1
+// sendToken — convenience wrapper for the SEND action (§Phase 1
 // authoring surface; protocol docs: xchain-documentation/protocol/
 // actions/SEND.md). Maps JS-friendly params to the protocol's
 // uppercase field names and forwards to submitAction.
@@ -17,7 +17,7 @@ import { submitAction } from './submitAction.js';
  */
 
 /**
- * @typedef {Object} SendAssetOpts
+ * @typedef {Object} SendTokenOpts
  * @property {import('../storage/Vault.js').Vault} vault
  * @property {string} walletId
  * @property {string} [password]                     required for software wallets; omit when `signer` is supplied
@@ -27,7 +27,7 @@ import { submitAction } from './submitAction.js';
  * @property {string} chainId
  * @property {SourceRef | import('../schemas/address.js').Address} from   source address — Address record or explicit triple
  * @property {string} to                              DESTINATION
- * @property {string} asset                           TICK (or `^<id>` for TICK_ID)
+ * @property {string} tick                           TICK (or `^<id>` for TICK_ID)
  * @property {string | number} amount                 AMOUNT
  * @property {string} [memo]                          MEMO (protocol rejects `|` or `;`)
  * @property {number} [fee]                           absolute sats
@@ -41,21 +41,21 @@ import { submitAction } from './submitAction.js';
  */
 
 /**
- * @param {SendAssetOpts} opts
+ * @param {SendTokenOpts} opts
  * @returns {Promise<import('../sdk/submitWithSigner.js').SubmitResult>}
  */
-export async function sendAsset(opts) {
-    if (!opts) throw new Error('sendAsset: opts is required');
-    if (!opts.to) throw new Error('sendAsset: to is required');
-    if (!opts.asset) throw new Error('sendAsset: asset is required');
+export async function sendToken(opts) {
+    if (!opts) throw new Error('sendToken: opts is required');
+    if (!opts.to) throw new Error('sendToken: to is required');
+    if (!opts.tick) throw new Error('sendToken: tick is required');
     if (opts.amount === undefined || opts.amount === null || opts.amount === '') {
-        throw new Error('sendAsset: amount is required');
+        throw new Error('sendToken: amount is required');
     }
-    const source = normalizeSource(opts.from, 'sendAsset');
+    const source = normalizeSource(opts.from, 'sendToken');
 
     /** @type {Record<string, string>} */
     const params = {
-        TICK: opts.asset,
+        TICK: opts.tick,
         AMOUNT: String(opts.amount),
         DESTINATION: opts.to,
     };
@@ -65,7 +65,7 @@ export async function sendAsset(opts) {
     const pendingTxMeta = opts.trackPendingTx === false ? undefined : {
         fromAddress: source.address,
         toAddress: opts.to,
-        actionSummary: `Send ${opts.amount} ${opts.asset} to ${opts.to}${memoTail}`,
+        actionSummary: `Send ${opts.amount} ${opts.tick} to ${opts.to}${memoTail}`,
     };
 
     return submitAction({
@@ -99,7 +99,7 @@ export async function sendAsset(opts) {
  * Normalize the `from` argument to a SourceRef. Accepts either an
  * Address schema record (including imported-WIF addresses from a
  * wif-only wallet or HD+imported) or a plain object with the same
- * fields. Shared by sendAsset and sweepAsset.
+ * fields. Shared by sendToken and sweepToken.
  *
  * HD source: needs `address`, `publicKey`, `derivationPath`.
  * Imported-WIF source: needs `address`, `publicKey`, plus `addressId`

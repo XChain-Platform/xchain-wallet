@@ -172,7 +172,7 @@ function entryTimestampMs(entry) {
 
 const SEARCH_RAW_KEYS = [
     'memo', 'MEMO',
-    'tick', 'TICK', 'asset', 'ASSET',
+    'tick', 'TICK', 'tick', 'ASSET',
     'destination', 'DESTINATION', 'recipient', 'RECIPIENT',
     'source', 'SOURCE',
     'token', 'TOKEN',

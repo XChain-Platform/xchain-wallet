@@ -76,7 +76,7 @@ const balances = [
     assert.equal(feeRow.after, '');
 }
 
-// 1c. SWEEP — every non-coin asset → 0; coin → 0; "Sweep moves..." note.
+// 1c. SWEEP — every non-coin tick → 0; coin → 0; "Sweep moves..." note.
 {
     const r = decoderLib.simulateAction({
         action: 'SWEEP',

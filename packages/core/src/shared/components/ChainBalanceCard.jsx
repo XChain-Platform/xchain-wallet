@@ -5,7 +5,7 @@ import styles from './ChainBalanceCard.module.css';
  * One chain's balance summary on the Home screen.
  *
  * Renders the chain badge + per-address aggregate. For each address
- * with a `balances` payload (shape: `{ native, assets[] }`), the card
+ * with a `balances` payload (shape: `{ native, tokens[] }`), the card
  * sums the native quantity and lists every token across every address.
  * Per-address `error` strings surface in the fallback line so a
  * partial fetch failure doesn't hide the entire chain.
@@ -54,12 +54,12 @@ export function ChainBalanceCard({ descriptor, entries, multisig }) {
                 </div>
             ) : null}
 
-            {totals.assets.length > 0 ? (
+            {totals.tokens.length > 0 ? (
                 <ul className={styles.assetList} aria-label="Tokens">
-                    {totals.assets.map((a) => (
-                        <li key={a.asset} className={styles.assetRow}>
+                    {totals.tokens.map((a) => (
+                        <li key={a.tick} className={styles.assetRow}>
                             <span className={styles.assetTicker} title={a.displayName}>
-                                {a.asset}
+                                {a.tick}
                             </span>
                             <span className={styles.assetQty}>
                                 {formatAmount(a.quantity, a.divisibility)}
@@ -73,7 +73,7 @@ export function ChainBalanceCard({ descriptor, entries, multisig }) {
                 <p className={styles.fallback}>
                     Balance unavailable — {errors[0].error}
                 </p>
-            ) : !native && totals.assets.length === 0 ? (
+            ) : !native && totals.tokens.length === 0 ? (
                 <p className={styles.fallback}>No balances on this chain.</p>
             ) : null}
         </section>
@@ -83,8 +83,8 @@ export function ChainBalanceCard({ descriptor, entries, multisig }) {
 function aggregate(entries) {
     /** @type {{ symbol: string, divisibility: number, quantity: bigint } | null} */
     let nativeAcc = null;
-    /** @type {Map<string, { asset: string, displayName: string, divisibility: number, quantity: bigint }>} */
-    const assets = new Map();
+    /** @type {Map<string, { tick: string, displayName: string, divisibility: number, quantity: bigint }>} */
+    const tokens = new Map();
     for (const entry of entries) {
         const b = entry.balances;
         if (!b || typeof b !== 'object') continue;
@@ -92,7 +92,7 @@ function aggregate(entries) {
             const q = safeBigInt(b.native.quantity);
             if (nativeAcc === null) {
                 nativeAcc = {
-                    symbol: b.native.asset || '',
+                    symbol: b.native.tick || '',
                     divisibility: Number(b.native.divisibility ?? 8),
                     quantity: q,
                 };
@@ -100,17 +100,17 @@ function aggregate(entries) {
                 nativeAcc.quantity += q;
             }
         }
-        if (Array.isArray(b.assets)) {
-            for (const a of b.assets) {
-                if (!a || typeof a.asset !== 'string') continue;
+        if (Array.isArray(b.tokens)) {
+            for (const a of b.tokens) {
+                if (!a || typeof a.tick !== 'string') continue;
                 const q = safeBigInt(a.quantity);
-                const existing = assets.get(a.asset);
+                const existing = tokens.get(a.tick);
                 if (existing) {
                     existing.quantity += q;
                 } else {
-                    assets.set(a.asset, {
-                        asset: a.asset,
-                        displayName: a.displayName || a.asset,
+                    tokens.set(a.tick, {
+                        tick: a.tick,
+                        displayName: a.displayName || a.tick,
                         divisibility: Number(a.divisibility ?? 8),
                         quantity: q,
                     });
@@ -126,9 +126,9 @@ function aggregate(entries) {
                 quantity: nativeAcc.quantity.toString(),
             }
             : null,
-        assets: Array.from(assets.values())
+        tokens: Array.from(tokens.values())
             .map((a) => ({ ...a, quantity: a.quantity.toString() }))
-            .sort((a, b) => a.asset.localeCompare(b.asset)),
+            .sort((a, b) => a.tick.localeCompare(b.tick)),
     };
 }
 
@@ -147,7 +147,7 @@ function safeBigInt(v) {
  * Format an atomic-unit string with the configured divisibility.
  * Trailing zeros are preserved so 0.04210000 BTC reads as 0.04210000
  * — matches the BalanceList convention and BTC-native accounting
- * expectations. Non-divisible (divisibility=0) assets render as
+ * expectations. Non-divisible (divisibility=0) tokens render as
  * plain integers.
  */
 function formatAmount(quantityStr, divisibility) {

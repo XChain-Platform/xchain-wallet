@@ -152,7 +152,7 @@ function AppInner() {
         /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'swap' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'staking-dashboard' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'addresses' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'scan'} */ ('home'),
     );
     const [tokenDetailRef, setTokenDetailRef] = useState(
-        /** @type {{ chainId: string, asset: string, kind: string, displayName: string, divisibility: number, fiatRate: number | null, quantity: string } | null} */ (null),
+        /** @type {{ chainId: string, tick: string, kind: string, displayName: string, divisibility: number, fiatRate: number | null, quantity: string } | null} */ (null),
     );
     const [historyInitialQuery, setHistoryInitialQuery] = useState('');
     // Coin family to scope History's chain filter to on entry (mirror
@@ -231,7 +231,7 @@ function AppInner() {
     // once on mount from `?uri=` in `location.search`; consumed by the
     // 'send' route below and cleared after the user submits or backs out.
     const [sendPrefill, setSendPrefill] = useState(
-        /** @type {{ address?: string, amount?: string, asset?: string, chainId?: string, memo?: string } | null} */ (null),
+        /** @type {{ address?: string, amount?: string, tick?: string, chainId?: string, memo?: string } | null} */ (null),
     );
 
     const refresh = useCallback(() => {
@@ -265,7 +265,7 @@ function AppInner() {
                 setSendPrefill({
                     address: intent.address,
                     amount: intent.amount,
-                    asset: intent.asset,
+                    tick: intent.tick,
                     chainId: intent.chainId,
                     memo: intent.memo,
                 });
@@ -431,7 +431,7 @@ function AppInner() {
                                 setSendPrefill({
                                     address: outcome.address,
                                     amount: outcome.amount,
-                                    asset: outcome.asset,
+                                    tick: outcome.tick,
                                     chainId: outcome.chainId,
                                     memo: outcome.memo,
                                 });
@@ -978,7 +978,7 @@ function AppInner() {
                     <TokenDetail
                         walletId={activeWalletId}
                         chainId={tokenDetailRef.chainId}
-                        asset={tokenDetailRef.asset}
+                        tick={tokenDetailRef.tick}
                         kind={tokenDetailRef.kind}
                         displayName={tokenDetailRef.displayName}
                         divisibility={tokenDetailRef.divisibility}
@@ -1446,7 +1446,7 @@ function buildActionEntries({
         {
             id: 'dividend',
             label: 'Pay dividend',
-            description: 'Distribute a dividend asset to holders of a token pro rata (§40.8).',
+            description: 'Distribute a dividend tick to holders of a token pro rata (§40.8).',
             onSelect: onPayDividend,
         },
         {

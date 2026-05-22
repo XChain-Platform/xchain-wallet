@@ -1,7 +1,7 @@
 // WatchlistEntry record — §41.2. One row per market the user pinned to
 // their DEX watchlist. Per-wallet (walletId), per-chain (chainId —
 // XChain markets never cross chains; each listing lives on a specific
-// native chain). tick1 is conventionally the asset, tick2 the quote
+// native chain). tick1 is conventionally the tick, tick2 the quote
 // (e.g. `{tick1: 'MYTOKEN', tick2: 'BTC'}` for MYTOKEN/BTC).
 //
 // The record is tiny by design: the wallet re-queries explorer for

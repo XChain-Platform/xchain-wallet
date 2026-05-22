@@ -9,8 +9,8 @@
 //   3. Token searches route through messaging.getDispensersForToken;
 //      address searches through messaging.getDispensersForAddress.
 //   4. DispenserDetail gains a buyer surface for non-owners:
-//        - token-paid lane → Buy Fills stage calling messaging.sendAsset
-//          with asset = get_tick, amount = get_amount * fills,
+//        - token-paid lane → Buy Fills stage calling messaging.sendToken
+//          with tick = get_tick, amount = get_amount * fills,
 //          to = dispenser address. Password re-prompt + wrong-password
 //          handling + danger-aware hint about UTXO-chain buy race.
 //        - coin-paid lane → Pay Here panel with copy-address + copy-
@@ -103,11 +103,11 @@ assert.ok(
     'detail tracks buyStage state for the buy flow',
 );
 assert.ok(
-    /messaging\.sendAsset/.test(detailSrc),
-    'token-paid buy invokes messaging.sendAsset',
+    /messaging\.sendToken/.test(detailSrc),
+    'token-paid buy invokes messaging.sendToken',
 );
 assert.ok(
-    /asset:\s*getTick/.test(detailSrc),
+    /tick:\s*getTick/.test(detailSrc),
     'token-paid buy sends GET_TICK',
 );
 assert.ok(
@@ -180,5 +180,5 @@ for (const [shell, appPath] of [
 }
 
 console.log(
-    'OK — dispenser explorer smoke (DispenserExplorer §40.7.2 browse — token + address search modes + per-chain fan-out; DispenserDetail buyer surfaces: token-paid sendAsset buy with fills multiplier + password re-prompt + UTXO-race warning, coin-paid pay-here panel with copy-to-clipboard + native-send roadmap note; ActionsMenu "Browse dispensers" entry + explorer sub-route + origin-tagged list vs explorer nav in popup/web/desktop)',
+    'OK — dispenser explorer smoke (DispenserExplorer §40.7.2 browse — token + address search modes + per-chain fan-out; DispenserDetail buyer surfaces: token-paid sendToken buy with fills multiplier + password re-prompt + UTXO-race warning, coin-paid pay-here panel with copy-to-clipboard + native-send roadmap note; ActionsMenu "Browse dispensers" entry + explorer sub-route + origin-tagged list vs explorer nav in popup/web/desktop)',
 );

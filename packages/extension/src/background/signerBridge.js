@@ -25,7 +25,7 @@
 //                                          → resolveSigner(address)
 //                                          → buildRemoteSigner(desc,
 //                                               signerBridge.get(id))
-//                                          → sendAsset({ signer })
+//                                          → sendToken({ signer })
 //
 //                                             RemoteSigner.signPsbt
 //                                          → transport({ op, payload })

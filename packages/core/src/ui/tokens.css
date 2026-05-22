@@ -39,7 +39,7 @@
     /* Motion — §5.4 transitions ≤ 200ms, no bouncy springs */
     --xc-transition: 160ms cubic-bezier(0.2, 0, 0.2, 1);
 
-    /* Brand accent (sampled from branding/assets/xchain-color-750.png) */
+    /* Brand accent (sampled from branding/images/xchain-color-750.png) */
     --xc-accent-primary: #1E90C7;
     --xc-accent-primary-hover: #1A7BAC;
     --xc-accent-secondary: #7B2C8F;

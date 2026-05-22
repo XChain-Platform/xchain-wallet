@@ -2,8 +2,8 @@
 //
 // Single-page React app served out of `packages/web/dist/`. The entry
 // HTML (`index.html`) points at `src/main.jsx`; Vite resolves
-// @xchain-wallet/core (+ its branding assets via
-// `new URL('./assets/…', import.meta.url)`) and the extension package
+// @xchain-wallet/core (+ its branding tokens via
+// `new URL('./images/…', import.meta.url)`) and the extension package
 // for the shared `createBackgroundHost` factory.
 //
 // Scope note (web vs extension): the web SPA builds its own in-page

@@ -70,12 +70,12 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {object} props
  * @param {string} props.walletId
  * @param {() => void} props.onBack
- * @param {{ address?: string, amount?: string, asset?: string, chainId?: string, memo?: string }} [props.prefill]
+ * @param {{ address?: string, amount?: string, tick?: string, chainId?: string, memo?: string }} [props.prefill]
  *        §47 Cluster L FOLLOWUP 1 — initial form values from a deep-link
  *        intent (parseXchainUri). Each field is applied once on mount;
  *        the user can override before submitting. Address comes from
  *        the URI path / `to=` param; chainId from the URI path or the
- *        BIP21 `chain=` param; asset from the URI path or `tick=`.
+ *        BIP21 `chain=` param; tick from the URI path or `tick=`.
  */
 export function Send({ walletId, onBack, prefill = null }) {
     const { messaging, shell } = useMessaging();
@@ -98,7 +98,7 @@ export function Send({ walletId, onBack, prefill = null }) {
         /** @type {string | null} */ (null),
     );
     const [toAddress, setToAddress] = useState(prefill?.address || '');
-    const [asset, setAsset] = useState(prefill?.asset || '');
+    const [tick, setTick] = useState(prefill?.tick || '');
     const [amount, setAmount] = useState(prefill?.amount || '');
     const [memo, setMemo] = useState(prefill?.memo || '');
     const [password, setPassword] = useState('');
@@ -126,14 +126,14 @@ export function Send({ walletId, onBack, prefill = null }) {
     const [draftPending, setDraftPending] = useState(() => draft.hasDraft());
     useEffect(() => {
         if (stage !== 'form' || !draftPending) return;
-        draft.save({ chainId, toAddress, asset, amount, memo });
-    }, [stage, draftPending, draft, chainId, toAddress, asset, amount, memo]);
+        draft.save({ chainId, toAddress, tick, amount, memo });
+    }, [stage, draftPending, draft, chainId, toAddress, tick, amount, memo]);
     const restoreDraft = useCallback(() => {
         const v = draft.load();
         if (!v) { setDraftPending(false); return; }
         if (typeof v.chainId === 'string') setChainId(v.chainId);
         if (typeof v.toAddress === 'string') setToAddress(v.toAddress);
-        if (typeof v.asset === 'string') setAsset(v.asset);
+        if (typeof v.tick === 'string') setTick(v.tick);
         if (typeof v.amount === 'string') setAmount(v.amount);
         if (typeof v.memo === 'string') setMemo(v.memo);
         setDraftPending(true);
@@ -236,7 +236,7 @@ export function Send({ walletId, onBack, prefill = null }) {
             if (parts.amount) setAmount(parts.amount);
             const tickParam = parts.params?.tick;
             if (typeof tickParam === 'string' && tickParam.length > 0) {
-                setAsset(tickParam.toUpperCase());
+                setTick(tickParam.toUpperCase());
             }
             if (parts.message) setMemo(parts.message);
             setPasteHint(`Filled from ${detected.scheme}: URI`);
@@ -245,7 +245,7 @@ export function Send({ walletId, onBack, prefill = null }) {
             setToAddress(detected.parts.address);
             const tickParam = detected.parts.params?.tick;
             if (typeof tickParam === 'string' && tickParam.length > 0) {
-                setAsset(tickParam.toUpperCase());
+                setTick(tickParam.toUpperCase());
             }
             if (detected.parts.amount) setAmount(detected.parts.amount);
             if (detected.parts.message) setMemo(detected.parts.message);
@@ -303,9 +303,9 @@ export function Send({ walletId, onBack, prefill = null }) {
 
     // §21.4 test-send gate. Active when:
     //   - threshold > 0 (Settings → Safety → Test-send warning)
-    //   - the send is a native-coin send (asset matches descriptor.coin
+    //   - the send is a native-coin send (tick matches descriptor.coin
     //     uppercased — the threshold is denominated in sats and only
-    //     translates cleanly for native sends; asset/token threshold is
+    //     translates cleanly for native sends; tick/token threshold is
     //     a future fiat-aware affordance)
     //   - amountSats exceeds the threshold
     //   - recipient is novel (not in contacts on this chain, no past SEND
@@ -318,7 +318,7 @@ export function Send({ walletId, onBack, prefill = null }) {
         if (!dest) return null;
         const desc = chainId ? chainRegistry.get(chainId) : null;
         const nativeTicker = desc?.coin?.toUpperCase();
-        if (!nativeTicker || asset.trim().toUpperCase() !== nativeTicker) return null;
+        if (!nativeTicker || tick.trim().toUpperCase() !== nativeTicker) return null;
         const amt = parseFloat(String(amount).trim());
         if (!Number.isFinite(amt) || amt <= 0) return null;
         const amountSats = Math.floor(amt * 1e8);
@@ -336,7 +336,7 @@ export function Send({ walletId, onBack, prefill = null }) {
             threshold,
             ticker: nativeTicker,
         };
-    }, [settings, toAddress, asset, amount, chainId, contacts, historyRows, testedThisSession]);
+    }, [settings, toAddress, tick, amount, chainId, contacts, historyRows, testedThisSession]);
 
     // §29.2 Max + §29.3 fiat toggle.
     // Fiat rate for "≈ $X.XX" preview + the optional fiat-entry mode.
@@ -358,8 +358,8 @@ export function Send({ walletId, onBack, prefill = null }) {
     const isNativeSend = useMemo(() => {
         const desc = chainId ? chainRegistry.get(chainId) : null;
         const nativeTicker = desc?.coin?.toUpperCase();
-        return Boolean(nativeTicker && asset.trim().toUpperCase() === nativeTicker);
-    }, [chainId, asset]);
+        return Boolean(nativeTicker && tick.trim().toUpperCase() === nativeTicker);
+    }, [chainId, tick]);
 
     const onToggleAmountMode = useCallback(() => {
         if (!fiatRate) return;
@@ -417,7 +417,7 @@ export function Send({ walletId, onBack, prefill = null }) {
             setFromAddressId(null);
         }
         const descriptor = chainRegistry.get(chainId);
-        if (descriptor) setAsset(descriptor.coin.toUpperCase());
+        if (descriptor) setTick(descriptor.coin.toUpperCase());
     }, [chainId, addressesByChain]);
 
     useEffect(() => {
@@ -439,7 +439,7 @@ export function Send({ walletId, onBack, prefill = null }) {
         return decoderLib.decodeAction({
             action: 'SEND',
             params: {
-                TICK: asset.trim(),
+                TICK: tick.trim(),
                 AMOUNT: String(amount).trim(),
                 DESTINATION: toAddress.trim(),
                 MEMO: memo.trim() || undefined,
@@ -447,7 +447,7 @@ export function Send({ walletId, onBack, prefill = null }) {
             chainId: chainId || undefined,
             chainRegistry,
         });
-    }, [stage, asset, amount, toAddress, memo, chainId]);
+    }, [stage, tick, amount, toAddress, memo, chainId]);
 
     // §21.2 balance-change preview. Fetched on entering review against
     // the source address; the result feeds `decoder.simulateAction` and
@@ -565,7 +565,7 @@ export function Send({ walletId, onBack, prefill = null }) {
         return estimateNativeSendFee({ chainId, chainRegistry, speed: feePick.mode });
     }, [chainId, feePick, feeTiers]);
 
-    // Native-unit balance available for the selected asset on the
+    // Native-unit balance available for the selected tick on the
     // source address, derived from the same SDK call the simulator
     // already runs. Drives Max + the "Available: X" hint. Lives below
     // the previewBalances + feeEstimate declarations because both are
@@ -573,14 +573,14 @@ export function Send({ walletId, onBack, prefill = null }) {
     // those `useState`/`useMemo` calls hit a TDZ during render.
     const sourceBalance = useMemo(() => {
         if (!previewBalances.sdkShape) return null;
-        const tickUpper = asset.trim().toUpperCase();
+        const tickUpper = tick.trim().toUpperCase();
         if (!tickUpper) return null;
         const native = previewBalances.sdkShape.native;
-        if (native && String(native.asset || '').toUpperCase() === tickUpper) {
+        if (native && String(native.tick || '').toUpperCase() === tickUpper) {
             return decoderLib.balancesFromSdk(previewBalances.sdkShape).find((b) => b.tick === tickUpper) || null;
         }
         return decoderLib.balancesFromSdk(previewBalances.sdkShape).find((b) => b.tick === tickUpper) || null;
-    }, [previewBalances.sdkShape, asset]);
+    }, [previewBalances.sdkShape, tick]);
 
     const onMax = useCallback(() => {
         if (!sourceBalance || !sourceBalance.amount) return;
@@ -608,7 +608,7 @@ export function Send({ walletId, onBack, prefill = null }) {
         return decoderLib.simulateAction({
             action: 'SEND',
             params: {
-                TICK: asset.trim(),
+                TICK: tick.trim(),
                 AMOUNT: String(amount).trim(),
                 DESTINATION: toAddress.trim(),
                 MEMO: memo.trim() || undefined,
@@ -623,7 +623,7 @@ export function Send({ walletId, onBack, prefill = null }) {
             chainId: chainId || undefined,
             chainRegistry,
         });
-    }, [stage, asset, amount, toAddress, memo, chainId, previewBalances, feeEstimate]);
+    }, [stage, tick, amount, toAddress, memo, chainId, previewBalances, feeEstimate]);
 
     function handleReview(event) {
         event.preventDefault();
@@ -635,8 +635,8 @@ export function Send({ walletId, onBack, prefill = null }) {
             setFormError('Destination address is required.');
             return;
         }
-        if (!asset.trim()) {
-            setFormError('Asset ticker is required.');
+        if (!tick.trim()) {
+            setFormError('Token tick is required.');
             return;
         }
         const amt = String(amount).trim();
@@ -678,7 +678,7 @@ export function Send({ walletId, onBack, prefill = null }) {
         const nativeTicker = desc?.coin?.toUpperCase();
         const amt = parseFloat(String(amount).trim());
         const isNativeSend = !!nativeTicker
-            && asset.trim().toUpperCase() === nativeTicker
+            && tick.trim().toUpperCase() === nativeTicker
             && Number.isFinite(amt) && amt > 0;
         const amountSats = isNativeSend ? Math.floor(amt * 1e8) : 0;
         let recipientNovel = false;
@@ -701,7 +701,7 @@ export function Send({ walletId, onBack, prefill = null }) {
                 alwaysRequireHwExplicitConfirm: settings?.privacy?.alwaysRequireHwExplicitConfirm === true,
             },
         });
-    }, [isHwSource, fromAddress?.source, chainId, asset, amount, toAddress, contacts, historyRows, settings]);
+    }, [isHwSource, fromAddress?.source, chainId, tick, amount, toAddress, contacts, historyRows, settings]);
     // Reset the confirm state whenever the requirement flips on, so a
     // user can't carry a stale "yes" through a recipient/amount change.
     useEffect(() => {
@@ -734,7 +734,7 @@ export function Send({ walletId, onBack, prefill = null }) {
                     signerId: fromAddress.signerId,
                 },
                 to: toAddress.trim(),
-                asset: asset.trim(),
+                tick: tick.trim(),
                 amount: String(amount).trim(),
                 memo: memo.trim() || undefined,
                 rbf: rbfEnabled,
@@ -753,7 +753,7 @@ export function Send({ walletId, onBack, prefill = null }) {
             } else if (isHwSource) {
                 res = await messaging.sendAssetHw({ ...base, signerId: fromAddress.signerId });
             } else {
-                res = await messaging.sendAsset({ ...base, password });
+                res = await messaging.sendToken({ ...base, password });
             }
             setResult(res);
             setPassword('');
@@ -826,7 +826,7 @@ export function Send({ walletId, onBack, prefill = null }) {
         const explorerUrl = txid && explorerBase
             ? `${explorerBase.replace(/\/$/, '')}/tx/${txid}`
             : null;
-        const sentAmount = amount && asset ? `${amount} ${asset}` : null;
+        const sentAmount = amount && tick ? `${amount} ${tick}` : null;
         const recipient = toAddress
             ? `${toAddress.slice(0, 8)}…${toAddress.slice(-6)}`
             : null;
@@ -991,7 +991,7 @@ export function Send({ walletId, onBack, prefill = null }) {
                     developerMode={developerMode}
                     actionFields={{
                         action: 'SEND',
-                        TICK: asset.trim(),
+                        TICK: tick.trim(),
                         AMOUNT: String(amount).trim(),
                         DESTINATION: toAddress.trim(),
                         ...(memo.trim() ? { MEMO: memo.trim() } : {}),
@@ -1157,10 +1157,10 @@ export function Send({ walletId, onBack, prefill = null }) {
                 </div>
             ) : null}
             <Input
-                label="Asset"
-                hint="Ticker. Native coin by default."
-                value={asset}
-                onChange={(e) => setAsset(e.target.value)}
+                label="Token"
+                hint="Tick. Native coin by default."
+                value={tick}
+                onChange={(e) => setTick(e.target.value)}
                 autoComplete="off"
                 autoCapitalize="characters"
             />
@@ -1168,7 +1168,7 @@ export function Send({ walletId, onBack, prefill = null }) {
                 <div className={styles.amountField}>
                     {amountMode === 'native' ? (
                         <Input
-                            label={`Amount${asset.trim() ? ` (${asset.trim()})` : ''}`}
+                            label={`Amount${tick.trim() ? ` (${tick.trim()})` : ''}`}
                             inputMode="decimal"
                             value={amount}
                             onChange={(e) => setAmount(e.target.value)}
@@ -1183,7 +1183,7 @@ export function Send({ walletId, onBack, prefill = null }) {
                             onChange={(e) => onFiatInputChange(e.target.value)}
                             hint={
                                 amount
-                                    ? `≈ ${amount} ${asset.trim() || ''} (placeholder rate)`
+                                    ? `≈ ${amount} ${tick.trim() || ''} (placeholder rate)`
                                     : undefined
                             }
                             autoComplete="off"
@@ -1213,7 +1213,7 @@ export function Send({ walletId, onBack, prefill = null }) {
                     >
                         {amountMode === 'native'
                             ? (fiatRate?.fiatCurrency || 'USD')
-                            : (asset.trim() || 'coin')}
+                            : (tick.trim() || 'coin')}
                     </button>
                 </div>
             </div>

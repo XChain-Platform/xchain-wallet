@@ -16,7 +16,7 @@
 // chain registry rather than user input.
 
 import { submitAction } from './submitAction.js';
-import { normalizeSource } from './sendAsset.js';
+import { normalizeSource } from './sendToken.js';
 
 /**
  * @typedef {Object} SwapActionOpts
@@ -27,7 +27,7 @@ import { normalizeSource } from './sendAsset.js';
  * @property {import('../registry/index.js').ChainRegistry} chainRegistry
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
  * @property {string} chainId
- * @property {import('./sendAsset.js').SourceRef | import('../schemas/address.js').Address} from
+ * @property {import('./sendToken.js').SourceRef | import('../schemas/address.js').Address} from
  * @property {Record<string, string>} params   SWAP field map (v0 create / v1 cancel / v2 edit)
  * @property {number} [fee]
  * @property {number} [feePerKb]

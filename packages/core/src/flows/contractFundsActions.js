@@ -5,7 +5,7 @@
 // the action-name string stays visible at the call site.
 
 import { submitAction } from './submitAction.js';
-import { normalizeSource } from './sendAsset.js';
+import { normalizeSource } from './sendToken.js';
 
 /**
  * @typedef {Object} ContractFundsOpts
@@ -16,7 +16,7 @@ import { normalizeSource } from './sendAsset.js';
  * @property {import('../registry/index.js').ChainRegistry} chainRegistry
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
  * @property {string} chainId
- * @property {import('./sendAsset.js').SourceRef | import('../schemas/address.js').Address} from
+ * @property {import('./sendToken.js').SourceRef | import('../schemas/address.js').Address} from
  * @property {{ VERSION: string, CONTRACT_ACTION_INDEX: string, TICK: string, QUANTITY: string }} params
  * @property {number} [fee]
  * @property {number} [feePerKb]

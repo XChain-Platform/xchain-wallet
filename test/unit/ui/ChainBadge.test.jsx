@@ -20,7 +20,7 @@ describe('<ChainBadge>', () => {
         expect(screen.getByText(/regtest/i)).toBeInTheDocument();
     });
 
-    it('renders the chain icon image with the asset URL from branding', () => {
+    it('renders the chain icon image with the tick URL from branding', () => {
         const d = reg.get('dogecoin-mainnet');
         const { container } = render(<ChainBadge descriptor={d} />);
         const img = container.querySelector('img');

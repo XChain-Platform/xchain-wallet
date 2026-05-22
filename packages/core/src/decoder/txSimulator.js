@@ -4,7 +4,7 @@
 // of the source address*. Given the decoded ACTION + the source
 // address's current balances + a fee estimate, returns:
 //
-//   - `deltas`: per-asset balance changes the source address will
+//   - `deltas`: per-tick balance changes the source address will
 //     experience ({ tick, before, after, isCoin, isFee }). Coin debit
 //     for the network fee is a separate row so the sign screen can
 //     render it as a fee line.
@@ -325,7 +325,7 @@ function simulateDispenser(p, balMap, coinTick, feeEstimate) {
     }
 
     // Version 0 — open. GIVE_ESCROW is locked from the source's
-    // balance; GIVE_TICK is the locked asset.
+    // balance; GIVE_TICK is the locked tick.
     const giveEscrow = str(p.GIVE_ESCROW);
     const giveTick = upper(p.GIVE_TICK);
     const giveAmount = str(p.GIVE_AMOUNT);

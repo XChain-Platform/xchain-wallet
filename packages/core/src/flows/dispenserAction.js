@@ -14,7 +14,7 @@
 // signer — SDK validation is the authoritative rule set.
 
 import { submitAction } from './submitAction.js';
-import { normalizeSource } from './sendAsset.js';
+import { normalizeSource } from './sendToken.js';
 
 /**
  * @typedef {Object} DispenserActionOpts
@@ -25,7 +25,7 @@ import { normalizeSource } from './sendAsset.js';
  * @property {import('../registry/index.js').ChainRegistry} chainRegistry
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
  * @property {string} chainId
- * @property {import('./sendAsset.js').SourceRef | import('../schemas/address.js').Address} from
+ * @property {import('./sendToken.js').SourceRef | import('../schemas/address.js').Address} from
  * @property {Record<string, string>} params    DISPENSER field map (VERSION + create / cancel / edit fields)
  * @property {number} [fee]
  * @property {number} [feePerKb]

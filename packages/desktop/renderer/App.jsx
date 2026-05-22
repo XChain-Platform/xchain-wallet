@@ -124,7 +124,7 @@ function AppInner() {
     // the existing 'send' view via this prefill slot. Cleared after
     // submit / back to avoid leaking a stale prefill into a future Send.
     const [sendPrefill, setSendPrefill] = useState(
-        /** @type {{ address?: string, amount?: string, asset?: string, chainId?: string, memo?: string } | null} */ (null),
+        /** @type {{ address?: string, amount?: string, tick?: string, chainId?: string, memo?: string } | null} */ (null),
     );
     const [activeWalletId, setActiveWalletId] = useState(
         /** @type {string | null} */ (null),
@@ -348,7 +348,7 @@ function AppInner() {
                                 setSendPrefill({
                                     address: outcome.address,
                                     amount: outcome.amount,
-                                    asset: outcome.asset,
+                                    tick: outcome.tick,
                                     chainId: outcome.chainId,
                                     memo: outcome.memo,
                                 });
@@ -1232,7 +1232,7 @@ function buildActionEntries({
         {
             id: 'dividend',
             label: 'Pay dividend',
-            description: 'Distribute a dividend asset to holders of a token pro rata (§40.8).',
+            description: 'Distribute a dividend tick to holders of a token pro rata (§40.8).',
             onSelect: onPayDividend,
         },
         {

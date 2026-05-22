@@ -13,7 +13,7 @@
 // airdrop variants (v1/v2/v3) are decoded but have no authoring path.
 
 import { submitAction } from './submitAction.js';
-import { normalizeSource } from './sendAsset.js';
+import { normalizeSource } from './sendToken.js';
 
 /**
  * @typedef {Object} AirdropActionOpts
@@ -24,7 +24,7 @@ import { normalizeSource } from './sendAsset.js';
  * @property {import('../registry/index.js').ChainRegistry} chainRegistry
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
  * @property {string} chainId
- * @property {import('./sendAsset.js').SourceRef | import('../schemas/address.js').Address} from
+ * @property {import('./sendToken.js').SourceRef | import('../schemas/address.js').Address} from
  * @property {Record<string, string>} params   AIRDROP field map (VERSION, TICK, AMOUNT, LIST_ACTION_INDEX, optional MEMO)
  * @property {number} [fee]
  * @property {number} [feePerKb]

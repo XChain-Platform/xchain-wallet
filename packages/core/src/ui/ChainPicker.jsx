@@ -11,7 +11,7 @@ import styles from './ChainPicker.module.css';
  * Each row carries the chain's icon + display name + network-kind
  * suffix (mainnet implicit; testnet / regtest shown). Reads the icon
  * URL from `branding.chainIconSmallUrl(chainId)` so the component
- * stays decoupled from the chain registry's image asset wiring.
+ * stays decoupled from the chain registry's image tick wiring.
  *
  * Searchable when the option count exceeds 6.
  *

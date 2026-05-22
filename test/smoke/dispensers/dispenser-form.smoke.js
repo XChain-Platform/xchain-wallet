@@ -190,7 +190,7 @@ assert.ok(
 );
 assert.ok(
     /normalizeSource/.test(flowSrc),
-    'dispenserAction flow reuses normalizeSource from sendAsset',
+    'dispenserAction flow reuses normalizeSource from sendToken',
 );
 
 // --- 8. Decoder coverage ----------------------------------------------

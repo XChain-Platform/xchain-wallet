@@ -3,8 +3,8 @@
 // Run with `node packages/core/test/branding.smoke.js` from the repo root.
 // Verifies:
 //   - Module loads and exposes the expected API surface.
-//   - All asset files referenced by the branding module + chain descriptors
-//     exist on disk (`assetUrl` returns file:// URLs in Node; we strip the
+//   - All tick files referenced by the branding module + chain descriptors
+//     exist on disk (`brandingUrl` returns file:// URLs in Node; we strip the
 //     scheme and stat each one).
 //   - Accent colours are valid hex.
 //   - No §5.5 sentinel strings leaked into the constants.
@@ -31,7 +31,7 @@ for (const name of [
     'FAVICON_FILE',
     'CHAIN_ICON_SMALL',
     'CHAIN_ICON_LARGE',
-    'assetUrl',
+    'brandingUrl',
     'logoUrl',
     'faviconUrl',
     'chainIconSmallUrl',
@@ -61,7 +61,7 @@ assert.ok(!/PLACEHOLDER_/.test(PROBE), 'no PLACEHOLDER_ sentinel in branding str
 
 // 5. Files referenced by branding exist on disk
 const statFromUrl = (url) => {
-    // Strip file:// for Node stat; assetUrl returns a string URL in Node.
+    // Strip file:// for Node stat; brandingUrl returns a string URL in Node.
     const p = url.startsWith('file://') ? fileURLToPath(url) : url;
     return statSync(p);
 };
@@ -91,7 +91,7 @@ for (const id of EXPECTED_CHAINS) {
     const d = reg.get(id);
     assert.ok(d, `registry has ${id}`);
     assert.ok(typeof d.icon === 'string' && d.icon.length > 0, `${id} icon filename set`);
-    statFromUrl(branding.assetUrl(d.icon));
+    statFromUrl(branding.brandingUrl(d.icon));
 }
 
-console.log('OK — branding smoke test (21 assets, 17 exports, 9 descriptors)');
+console.log('OK — branding smoke test (21 tokens, 17 exports, 9 descriptors)');

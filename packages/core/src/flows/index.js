@@ -17,13 +17,13 @@ export {
     UnknownMnemonicFormatError,
 } from './importMnemonic.js';
 export { submitAction } from './submitAction.js';
-export { sendAsset, normalizeSource } from './sendAsset.js';
+export { sendToken, normalizeSource } from './sendToken.js';
 export { buildSendPsbt } from './buildSendPsbt.js';
 export { buildActionPsbt } from './buildActionPsbt.js';
-export { sweepAsset } from './sweepAsset.js';
+export { sweepToken } from './sweepToken.js';
 export { issueToken } from './issueToken.js';
-export { mintAsset } from './mintAsset.js';
-export { destroyAsset } from './destroyAsset.js';
+export { mintToken } from './mintToken.js';
+export { destroyToken } from './destroyToken.js';
 export { broadcastAction } from './broadcastAction.js';
 export { dispenserAction } from './dispenserAction.js';
 export { orderAction, cancelOrder } from './orderAction.js';
@@ -110,7 +110,15 @@ export { unstakeAction, claimRewardsAction } from './unstakeClaimActions.js';
 export { delegateAction, revokeDelegationAction } from './delegateRevokeActions.js';
 export { broadcastsForAddress } from './broadcastQueries.js';
 export { linksForAddress } from './linkQueries.js';
-export { assetInfoFor, extractImageUrl, normalizeAssetInfo } from './assetInfo.js';
+export {
+    tokenInfoFor,
+    extractImageUrl,
+    normalizeTokenInfo,
+    descriptionJsonUrl,
+    legacyJsonToTis,
+    tisToMediaBundle,
+    fetchTisBundle,
+} from './tokenInfo.js';
 export { createMultisigConfig } from './createMultisigConfig.js';
 export { receiveMultisigAddress, listMultisigReceiveAddresses } from './multisigAddress.js';
 export {

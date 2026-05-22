@@ -61,7 +61,7 @@ export function TotalBalanceHero({ rows, networkFilter, lastSyncedAt }) {
                 <div className={styles.note}>
                     <span className={styles.noteLeft}>
                         {hasUnpriced
-                            ? `${unpriced} ${unpriced === 1 ? 'asset' : 'assets'} not priced`
+                            ? `${unpriced} ${unpriced === 1 ? 'tick' : 'tokens'} not priced`
                             : ''}
                     </span>
                     {hasSync ? (

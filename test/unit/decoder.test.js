@@ -72,7 +72,7 @@ describe('decodeAction', () => {
                 chainId: 'dogecoin-mainnet',
                 chainRegistry,
             });
-            expect(d.summary).toBe('Sweep all assets on Dogecoin to bc1qrecip');
+            expect(d.summary).toBe('Sweep all tokens on Dogecoin to bc1qrecip');
             expect(d.warnings.some((w) => /sweep moves every balance/i.test(w))).toBe(true);
         });
 

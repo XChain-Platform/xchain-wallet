@@ -22,7 +22,7 @@ import { createContext } from 'react';
  * @property {(opts: any) => Promise<any>} [addImportedWallet]
  * @property {(walletId: string) => Promise<any>} [listAccounts]
  * @property {(opts: any) => Promise<any>} [createAccount]
- * @property {(opts: any) => Promise<any>} [sendAsset]
+ * @property {(opts: any) => Promise<any>} [sendToken]
  * @property {(opts: any) => Promise<any>} [generateReceiveAddress]
  *
  * @typedef {object} MessagingContextValue

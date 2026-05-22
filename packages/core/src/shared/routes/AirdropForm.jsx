@@ -682,7 +682,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack }) {
                     recipients (§AIRDROP.md). The indexer computes the exact
                     fee at execute time; make sure the source address holds
                     enough of {token.trim().toUpperCase() || 'the token'} +
-                    fee asset to cover the full distribution.
+                    fee tick to cover the full distribution.
                 </p>
                 <SignCredentials
                     fromAddress={fromAddress}

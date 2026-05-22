@@ -19,7 +19,7 @@
 // but does not enforce any specific ticker set.
 
 import { submitAction } from './submitAction.js';
-import { normalizeSource } from './sendAsset.js';
+import { normalizeSource } from './sendToken.js';
 
 /**
  * @typedef {Object} LinkActionOpts
@@ -30,7 +30,7 @@ import { normalizeSource } from './sendAsset.js';
  * @property {import('../registry/index.js').ChainRegistry} chainRegistry
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
  * @property {string} chainId                  chain hosting the LINK action (`submitOn`)
- * @property {import('./sendAsset.js').SourceRef | import('../schemas/address.js').Address} from
+ * @property {import('./sendToken.js').SourceRef | import('../schemas/address.js').Address} from
  * @property {string} coin1                    ticker (e.g. 'BTC')
  * @property {string | number} coin1ActionIndex
  * @property {string} coin2                    ticker (e.g. 'DOGE')

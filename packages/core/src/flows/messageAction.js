@@ -21,7 +21,7 @@
 // v1 are ECDH session-setup and out of Phase 3 scope.
 
 import { submitAction } from './submitAction.js';
-import { normalizeSource } from './sendAsset.js';
+import { normalizeSource } from './sendToken.js';
 
 const PROTOCOL_COIN_TICKER = {
     bitcoin: 'BTC',
@@ -47,7 +47,7 @@ export class PubkeyNotFoundError extends Error {
  * @property {import('../registry/index.js').ChainRegistry} chainRegistry
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
  * @property {string} chainId
- * @property {import('./sendAsset.js').SourceRef | import('../schemas/address.js').Address} from
+ * @property {import('./sendToken.js').SourceRef | import('../schemas/address.js').Address} from
  * @property {string} destination     recipient address
  * @property {string} message         plaintext message body
  * @property {1 | null} [method]      1=ECIES (default), null=plaintext fallback

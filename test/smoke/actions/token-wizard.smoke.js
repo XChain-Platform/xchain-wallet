@@ -69,7 +69,7 @@ for (const transition of [
 
 // --- 3. Six templates; all interactive as of Step 6 ------------------
 
-for (const id of ['meme', 'utility', 'collectible', 'community', 'subasset', 'custom']) {
+for (const id of ['meme', 'utility', 'collectible', 'community', 'subtoken', 'custom']) {
     assert.ok(
         new RegExp(`id: '${id}'`).test(src),
         `TEMPLATES includes "${id}"`,
@@ -79,7 +79,7 @@ const templateBlocks = [...src.matchAll(/\{\s*id:\s*'(\w+)',[^}]*interactive:\s*
 const interactiveMap = Object.fromEntries(
     templateBlocks.map((m) => [m[1], m[2] === 'true']),
 );
-for (const id of ['meme', 'utility', 'community', 'collectible', 'subasset', 'custom']) {
+for (const id of ['meme', 'utility', 'community', 'collectible', 'subtoken', 'custom']) {
     assert.equal(
         interactiveMap[id],
         true,
@@ -89,7 +89,7 @@ for (const id of ['meme', 'utility', 'community', 'collectible', 'subasset', 'cu
 
 // --- 3b. Per-template composers present -----------------------------
 
-for (const key of ['meme', 'utility', 'community', 'collectible', 'subasset', 'custom']) {
+for (const key of ['meme', 'utility', 'community', 'collectible', 'subtoken', 'custom']) {
     assert.ok(
         new RegExp(`\\b${key}\\s*\\(form\\)\\s*\\{`).test(src),
         `TEMPLATE_COMPOSERS includes a ${key}(form) composer`,
@@ -117,12 +117,12 @@ assert.ok(
     /MAX_SUPPLY\s*=\s*'1'/.test(collBlock[0]),
     'collectible composer pins MAX_SUPPLY=1',
 );
-// Subasset joins parent.child.
-const subBlock = src.match(/subasset\(form\)\s*\{[\s\S]*?\n\s*\},/);
-assert.ok(subBlock, 'subasset composer block found');
+// Subtoken joins parent.child.
+const subBlock = src.match(/subtoken\(form\)\s*\{[\s\S]*?\n\s*\},/);
+assert.ok(subBlock, 'subtoken composer block found');
 assert.ok(
     /parent\}\.\$\{child/.test(subBlock[0]) || /parent.*\.\$\{child/.test(subBlock[0]),
-    'subasset composer joins parent.child for TICK',
+    'subtoken composer joins parent.child for TICK',
 );
 
 // --- 3c. Per-template field visibility map --------------------------
@@ -140,11 +140,11 @@ assert.ok(
     !/\bsupply:\s*true/.test(collFields[0]),
     'collectible does NOT show the supply field',
 );
-const subFields = fieldsBlock[0].match(/subasset:\s*\{[^}]*\}/);
-assert.ok(subFields, 'subasset field map exists');
+const subFields = fieldsBlock[0].match(/subtoken:\s*\{[^}]*\}/);
+assert.ok(subFields, 'subtoken field map exists');
 assert.ok(
-    /parentAsset:\s*true/.test(subFields[0]),
-    'subasset shows the parentAsset field',
+    /parentToken:\s*true/.test(subFields[0]),
+    'subtoken shows the parentToken field',
 );
 
 // --- 4. Preview wires through decoder ---------------------------------
@@ -190,7 +190,7 @@ assert.ok(
 );
 // MINT_SUPPLY defaults to MAX_SUPPLY on create so the initial supply
 // lands in the creator's wallet. Shared across Meme/Utility/Community/
-// Subasset/Custom composers via the seedSupply helper.
+// Subtoken/Custom composers via the seedSupply helper.
 assert.ok(
     /p\.MAX_SUPPLY\s*=\s*supply/.test(src)
         && /p\.MINT_SUPPLY\s*=\s*supply/.test(src),

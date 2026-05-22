@@ -136,7 +136,7 @@
     height: 16px;
 }
 
-/* Square token icon — used for any non-native asset (XCHAIN, XCP, NFTs,
+/* Square token icon — used for any non-native token (XCHAIN, XCP, NFTs,
    etc.) so the visual cleanly separates "this row is about a token"
    from "this row is about a native coin" (which uses the circular
    chain icon via balanceStyles.iconImg). Sized 48px to fill the same

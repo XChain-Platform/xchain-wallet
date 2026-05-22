@@ -20,7 +20,7 @@
 //   - No ADS commit: the broadcast happens on a different wallet, so
 //     the donation cannot atomically tie to "this user's broadcast".
 
-import { normalizeSource } from './sendAsset.js';
+import { normalizeSource } from './sendToken.js';
 import { logConsole } from '../shared/utils/logConsole.js';
 
 /**
@@ -28,7 +28,7 @@ import { logConsole } from '../shared/utils/logConsole.js';
  * @property {import('../registry/index.js').ChainRegistry} chainRegistry
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
  * @property {string} chainId
- * @property {import('./sendAsset.js').SourceRef | import('../schemas/address.js').Address} from
+ * @property {import('./sendToken.js').SourceRef | import('../schemas/address.js').Address} from
  * @property {{ action: string, params: object }} actionData
  * @property {import('../sdk/submitWithSigner.js').SubmitEncoderOpts} [encoderOpts]
  */

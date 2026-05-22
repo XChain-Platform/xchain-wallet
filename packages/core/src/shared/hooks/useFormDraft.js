@@ -13,7 +13,7 @@
 //      a freshly imported wallet.
 //   2. localStorage (not vault) so the draft survives a wallet lock
 //      / unlock cycle without needing the password. Drafts contain
-//      no signing material — Send keeps {amount, address, memo, asset}
+//      no signing material — Send keeps {amount, address, memo, tick}
 //      out of the draft and password / mnemonic / passphrase fields
 //      stay in component state only.
 //   3. TTL — draft is discarded on read if it's older than `ttlMs`

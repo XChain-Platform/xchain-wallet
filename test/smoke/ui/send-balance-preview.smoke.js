@@ -33,10 +33,10 @@ assert.equal(typeof adapter.balancesFromSdk, 'function');
 // 5,000,000 sats with divisibility 8 → '0.05'
 {
     const out = adapter.balancesFromSdk({
-        native: { asset: 'BTC', divisibility: 8, quantity: '5000000' },
-        assets: [
-            { asset: 'MYTOKEN', divisibility: 0, quantity: '500' },
-            { asset: 'XCP', divisibility: 8, quantity: '1200000000' },
+        native: { tick: 'BTC', divisibility: 8, quantity: '5000000' },
+        tokens: [
+            { tick: 'MYTOKEN', divisibility: 0, quantity: '500' },
+            { tick: 'XCP', divisibility: 8, quantity: '1200000000' },
         ],
     });
     const btc = out.find((r) => r.tick === 'BTC');
@@ -59,7 +59,7 @@ assert.equal(typeof adapter.balancesFromSdk, 'function');
 // Negative quantities preserved.
 {
     const out = adapter.balancesFromSdk({
-        native: { asset: 'BTC', divisibility: 8, quantity: '-1' },
+        native: { tick: 'BTC', divisibility: 8, quantity: '-1' },
     });
     assert.equal(out[0].amount, '-0.00000001');
 }

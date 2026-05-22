@@ -142,7 +142,7 @@ export function DestroyForm({ walletId, onBack }) {
             return;
         }
         if (!/^[A-Za-z0-9.]+$/.test(ticker.trim())) {
-            setFormError('Ticker must be A–Z, 0–9 (subassets may include a period).');
+            setFormError('Ticker must be A–Z, 0–9 (subtokens may include a period).');
             return;
         }
         const amt = String(amount).trim();
@@ -196,7 +196,7 @@ export function DestroyForm({ walletId, onBack }) {
             } else if (isHwSource) {
                 res = await messaging.destroyAssetHw({ ...base, signerId: fromAddress.signerId });
             } else {
-                res = await messaging.destroyAsset({ ...base, password });
+                res = await messaging.destroyToken({ ...base, password });
             }
             setResult(res);
             setPassword('');

@@ -103,7 +103,7 @@ export function getWalletBalances(walletId, accountId) {
 /**
  * Single-address balance read — feeds the §21.2 simulator preview on
  * Send.jsx review and SignApproval. Returns the SDK's raw
- * `{ native, assets }` shape; callers convert via
+ * `{ native, tokens }` shape; callers convert via
  * `decoder.balancesFromSdk(...)` before feeding `simulateAction`.
  *
  * @param {string} chainId
@@ -126,7 +126,7 @@ export function getNewestAddress(walletId, chainId, accountId) {
 
 /**
  * Build, sign, and broadcast a SEND action via the host's `action.send`
- * handler. Pass-through to core's `sendAsset` flow — fails loudly
+ * handler. Pass-through to core's `sendToken` flow — fails loudly
  * against the dev-SDK stub until real xchain-sdk is bundled.
  *
  * @param {object} opts
@@ -135,7 +135,7 @@ export function getNewestAddress(walletId, chainId, accountId) {
  * @param {string} opts.chainId
  * @param {{ address: string, publicKey: string, derivationPath?: string | null, addressId?: string }} opts.from
  * @param {string} opts.to
- * @param {string} opts.asset
+ * @param {string} opts.tick
  * @param {string | number} opts.amount
  * @param {string} [opts.memo]
  * @param {number} [opts.fee]
@@ -144,7 +144,7 @@ export function getNewestAddress(walletId, chainId, accountId) {
  * @param {string} [opts.bip39Passphrase]
  * @returns {Promise<any>}
  */
-export function sendAsset(opts) {
+export function sendToken(opts) {
     return /** @type {any} */ (sendMessage('action.send', opts));
 }
 
@@ -156,7 +156,7 @@ export function sendAsset(opts) {
  * @param {string} opts.chainId
  * @param {{ address: string, publicKey: string, derivationPath?: string | null, addressId?: string }} opts.from
  * @param {string} opts.to
- * @param {string} opts.asset
+ * @param {string} opts.tick
  * @param {string | number} opts.amount
  * @param {string} [opts.memo]
  * @param {number} [opts.fee]
@@ -349,7 +349,7 @@ export function getDiagnosticDump() {
 }
 
 /**
- * HW-wallet variant of sendAsset. No password. Background resolves
+ * HW-wallet variant of sendToken. No password. Background resolves
  * the `signerId` + routes the sign request through the renderer-side
  * signer bridge. See popup/messaging.js for the full shape.
  *
@@ -402,7 +402,7 @@ export function issueToken(opts) {
  * @param {object} opts
  * @returns {Promise<any>}
  */
-export function mintAsset(opts) {
+export function mintToken(opts) {
     return /** @type {any} */ (sendMessage('action.mint', opts));
 }
 
@@ -413,7 +413,7 @@ export function mintAsset(opts) {
  * @param {object} opts
  * @returns {Promise<any>}
  */
-export function destroyAsset(opts) {
+export function destroyToken(opts) {
     return /** @type {any} */ (sendMessage('action.destroy', opts));
 }
 
@@ -725,9 +725,9 @@ export function getHoldersForToken(req) {
     return /** @type {any} */ (sendMessage('holders.forTick', req));
 }
 
-/** @param {{ chainId: string, asset: string }} req */
-export function getAssetInfo(req) {
-    return /** @type {any} */ (sendMessage('asset.info', req));
+/** @param {{ chainId: string, tick: string }} req */
+export function getTokenInfo(req) {
+    return /** @type {any} */ (sendMessage('token.info', req));
 }
 
 /** @param {object} opts */

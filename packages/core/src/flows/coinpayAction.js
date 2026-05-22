@@ -20,7 +20,7 @@
 // the address the user has keys for.
 
 import { submitAction } from './submitAction.js';
-import { normalizeSource } from './sendAsset.js';
+import { normalizeSource } from './sendToken.js';
 
 /**
  * @typedef {Object} CoinpayActionOpts
@@ -31,7 +31,7 @@ import { normalizeSource } from './sendAsset.js';
  * @property {import('../registry/index.js').ChainRegistry} chainRegistry
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
  * @property {string} chainId
- * @property {import('./sendAsset.js').SourceRef | import('../schemas/address.js').Address} from
+ * @property {import('./sendToken.js').SourceRef | import('../schemas/address.js').Address} from
  * @property {string} orderMatchActionIndex   ACTION_INDEX of the ORDER_MATCH being paid
  * @property {string} payeeAddress            Address that receives the native-coin output
  * @property {string | number} coinAmount     Native-coin amount in base units (satoshis / litoshis / ...); >= obligation's coin_amount

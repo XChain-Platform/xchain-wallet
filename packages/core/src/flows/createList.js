@@ -13,7 +13,7 @@
 // format serializer expands the array into repeating `|ITEM` slots.
 
 import { submitAction } from './submitAction.js';
-import { normalizeSource } from './sendAsset.js';
+import { normalizeSource } from './sendToken.js';
 
 /**
  * @typedef {Object} CreateListOpts
@@ -24,7 +24,7 @@ import { normalizeSource } from './sendAsset.js';
  * @property {import('../registry/index.js').ChainRegistry} chainRegistry
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
  * @property {string} chainId
- * @property {import('./sendAsset.js').SourceRef | import('../schemas/address.js').Address} from
+ * @property {import('./sendToken.js').SourceRef | import('../schemas/address.js').Address} from
  * @property {Record<string, string | string[]>} params   LIST field map (VERSION, TYPE, ITEM[], and v1's EDIT + LIST_ACTION_INDEX)
  * @property {number} [fee]
  * @property {number} [feePerKb]

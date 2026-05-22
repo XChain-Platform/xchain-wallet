@@ -111,7 +111,7 @@ export function generateReceiveAddress(opts) {
 }
 
 /** @param {object} opts */
-export function sendAsset(opts) {
+export function sendToken(opts) {
     return /** @type {any} */ (sendMessage('action.send', opts));
 }
 
@@ -226,12 +226,12 @@ export function issueToken(opts) {
 }
 
 /** @param {object} opts */
-export function mintAsset(opts) {
+export function mintToken(opts) {
     return /** @type {any} */ (sendMessage('action.mint', opts));
 }
 
 /** @param {object} opts */
-export function destroyAsset(opts) {
+export function destroyToken(opts) {
     return /** @type {any} */ (sendMessage('action.destroy', opts));
 }
 
@@ -531,9 +531,9 @@ export function getHoldersForToken(req) {
     return /** @type {any} */ (sendMessage('holders.forTick', req));
 }
 
-/** @param {{ chainId: string, asset: string }} req */
-export function getAssetInfo(req) {
-    return /** @type {any} */ (sendMessage('asset.info', req));
+/** @param {{ chainId: string, tick: string }} req */
+export function getTokenInfo(req) {
+    return /** @type {any} */ (sendMessage('token.info', req));
 }
 
 /** @param {object} opts */

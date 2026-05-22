@@ -23,7 +23,7 @@ assert.ok(existsSync(tdCss), 'TokenDetail.module.css exists');
 
 const td = readFileSync(tdPath, 'utf8');
 assert.ok(/export function TokenDetail\b/.test(td), 'TokenDetail is a named export');
-for (const prop of ['walletId', 'chainId', 'asset', 'kind', 'displayName', 'divisibility', 'fiatRate', 'quantity', 'onBack', 'onSend', 'onReceive', 'onViewActivity']) {
+for (const prop of ['walletId', 'chainId', 'tick', 'kind', 'displayName', 'divisibility', 'fiatRate', 'quantity', 'onBack', 'onSend', 'onReceive', 'onViewActivity']) {
     assert.ok(
         new RegExp(`\\b${prop}\\b`).test(td),
         `TokenDetail accepts ${prop} prop`,

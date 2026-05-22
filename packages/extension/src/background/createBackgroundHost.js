@@ -31,13 +31,13 @@ const {
     importMnemonic,
     unlockWallet,
     receiveAddress,
-    sendAsset,
+    sendToken,
     buildSendPsbt,
     buildActionPsbt,
-    sweepAsset,
+    sweepToken,
     issueToken,
-    mintAsset,
-    destroyAsset,
+    mintToken,
+    destroyToken,
     broadcastAction,
     dispenserAction,
     orderAction,
@@ -84,7 +84,7 @@ const {
     revokeDelegationAction,
     broadcastsForAddress,
     linksForAddress,
-    assetInfoFor,
+    tokenInfoFor,
     createMultisigConfig,
     receiveMultisigAddress,
     listMultisigReceiveAddresses,
@@ -1102,7 +1102,7 @@ export function createBackgroundHost(deps) {
 
     host.register('action.send', async (req, { vault, chainRegistry, sdkRegistry }) => {
         const walletId = req?.walletId;
-        return sendAsset({
+        return sendToken({
             ...req,
             vault,
             chainRegistry,
@@ -1578,10 +1578,10 @@ export function createBackgroundHost(deps) {
         });
     }
 
-    registerHwHandler('action.send.hw', sendAsset);
+    registerHwHandler('action.send.hw', sendToken);
     registerHwHandler('action.issue.hw', issueToken);
-    registerHwHandler('action.mint.hw', mintAsset);
-    registerHwHandler('action.destroy.hw', destroyAsset);
+    registerHwHandler('action.mint.hw', mintToken);
+    registerHwHandler('action.destroy.hw', destroyToken);
     registerHwHandler('action.broadcast.hw', broadcastAction);
     registerHwHandler('action.dispenser.hw', dispenserAction);
     registerHwHandler('action.dividend.hw', dividendAction);
@@ -1631,7 +1631,7 @@ export function createBackgroundHost(deps) {
     });
 
     host.register('action.sweep', async (req, { vault, chainRegistry, sdkRegistry }) => {
-        return sweepAsset({ ...req, vault, chainRegistry, sdkRegistry });
+        return sweepToken({ ...req, vault, chainRegistry, sdkRegistry });
     });
 
     host.register('action.issue', async (req, { vault, chainRegistry, sdkRegistry }) => {
@@ -1639,11 +1639,11 @@ export function createBackgroundHost(deps) {
     });
 
     host.register('action.mint', async (req, { vault, chainRegistry, sdkRegistry }) => {
-        return mintAsset({ ...req, vault, chainRegistry, sdkRegistry });
+        return mintToken({ ...req, vault, chainRegistry, sdkRegistry });
     });
 
     host.register('action.destroy', async (req, { vault, chainRegistry, sdkRegistry }) => {
-        return destroyAsset({ ...req, vault, chainRegistry, sdkRegistry });
+        return destroyToken({ ...req, vault, chainRegistry, sdkRegistry });
     });
 
     host.register('action.broadcast', async (req, { vault, chainRegistry, sdkRegistry }) => {
@@ -1849,8 +1849,28 @@ export function createBackgroundHost(deps) {
         return linksForAddress({ ...req, sdkRegistry });
     });
 
-    host.register('asset.info', async (req, { sdkRegistry }) => {
-        return assetInfoFor({ ...req, sdkRegistry });
+    host.register('token.info', async (req, { sdkRegistry, vault }) => {
+        // settings.privacy.metadataFetchEnabled (default true) gates the
+        // description-as-URL TIS fetch. When false the handler still
+        // returns indexer-supplied fields (description / supply / locks)
+        // but the gallery comes back empty, so the renderer can stay
+        // structurally identical without firing a single extra request.
+        let metadataFetchEnabled = true;
+        try {
+            const settings = await vault.settings.get();
+            metadataFetchEnabled = settings?.privacy?.metadataFetchEnabled !== false;
+        } catch {
+            metadataFetchEnabled = true;
+        }
+        const resolvedFetch = (typeof globalThis !== 'undefined' && typeof globalThis.fetch === 'function')
+            ? globalThis.fetch.bind(globalThis)
+            : undefined;
+        return tokenInfoFor({
+            ...req,
+            sdkRegistry,
+            metadataFetchEnabled,
+            fetch: resolvedFetch,
+        });
     });
 
     // §22 + §42.9 multisig wallet creation coordinator (Step 17). Writes

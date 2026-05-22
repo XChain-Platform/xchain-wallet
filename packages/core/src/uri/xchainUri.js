@@ -8,12 +8,12 @@
 //      based on the address format. Most QR-generated payment requests
 //      land here.
 //
-//   2. Path-style:   xchain://<chainId>/<asset>?amount=&to=&memo=&label=
+//   2. Path-style:   xchain://<chainId>/<tick>?amount=&to=&memo=&label=
 //      Used when the URI needs to nail a specific chain explicitly (e.g.
-//      a regtest endpoint) or when the asset isn't the native coin (e.g.
+//      a regtest endpoint) or when the tick isn't the native coin (e.g.
 //      a Counterparty token transfer). The host part is the chainId
 //      (`bitcoin-mainnet` / `litecoin-regtest` / etc.) and the path
-//      segment is the asset (`XCP` / `BTC` / `^TICK_ID`).
+//      segment is the tick (`XCP` / `BTC` / `^TICK_ID`).
 //
 // Output is a normalized navigation intent that Send / Receive routes
 // consume directly. Returns `{ kind: 'unknown' }` for malformed input
@@ -29,7 +29,7 @@ const BIP21_PREFIX = 'xchain:';
  * @typedef {Object} XchainUriIntent
  * @property {'send' | 'receive' | 'unknown'} kind
  * @property {string} [chainId]                     for path-style URIs only
- * @property {string} [asset]                       'BTC' / 'XCP' / '^TICK_ID' / etc.
+ * @property {string} [tick]                       'BTC' / 'XCP' / '^TICK_ID' / etc.
  * @property {string} [address]                     destination (send) or wallet address (receive)
  * @property {string} [amount]                      decimal string in display units
  * @property {string} [memo]
@@ -59,7 +59,7 @@ export function parseXchainUri(uri) {
 }
 
 function parsePathStyle(raw) {
-    // raw === 'xchain://<chainId>/<asset>?...' (case-sensitive after the scheme)
+    // raw === 'xchain://<chainId>/<tick>?...' (case-sensitive after the scheme)
     const after = raw.slice(PATH_PREFIX.length);
     const queryIdx = after.indexOf('?');
     const pathPart = queryIdx === -1 ? after : after.slice(0, queryIdx);
@@ -72,7 +72,7 @@ function parsePathStyle(raw) {
     const intent = {
         kind: 'send',
         chainId: segments[0],
-        asset: segments.length > 1 ? segments[1] : undefined,
+        tick: segments.length > 1 ? segments[1] : undefined,
     };
 
     const { params, required, errors } = parseQuery(queryPart);
@@ -107,7 +107,7 @@ function parseBip21Style(raw) {
     if (parts.label) intent.label = parts.label;
     if (parts.message) intent.message = parts.message;
     if (parts.params?.memo) intent.memo = parts.params.memo;
-    if (parts.params?.tick) intent.asset = parts.params.tick;
+    if (parts.params?.tick) intent.tick = parts.params.tick;
     if (parts.params?.chain) intent.chainId = parts.params.chain;
     if (parts.required?.length > 0) intent.required = parts.required;
     return intent;
@@ -171,15 +171,15 @@ export function describeXchainIntent(intent, deps) {
         return t('uri.intent.unknown');
     }
     const isReceive = intent.kind === 'receive';
-    const hasAmount = Boolean(intent.amount && intent.asset);
-    const hasAsset = Boolean(intent.asset && !intent.amount);
+    const hasAmount = Boolean(intent.amount && intent.tick);
+    const hasAsset = Boolean(intent.tick && !intent.amount);
     const hasAddress = typeof intent.address === 'string' && intent.address.length > 0;
     const vars = {};
     if (hasAmount) {
         vars.amount = intent.amount;
-        vars.asset = intent.asset;
+        vars.tick = intent.tick;
     } else if (hasAsset) {
-        vars.asset = intent.asset;
+        vars.tick = intent.tick;
     }
     if (hasAddress) vars.address = shortenAddress(intent.address);
 
@@ -194,7 +194,7 @@ export function describeXchainIntent(intent, deps) {
     if (hasAmount && hasAddress) return t('uri.intent.sendAmountTo', vars);
     if (hasAmount) return t('uri.intent.sendAmount', vars);
     if (hasAsset && hasAddress) return t('uri.intent.sendAssetTo', vars);
-    if (hasAsset) return t('uri.intent.sendAsset', vars);
+    if (hasAsset) return t('uri.intent.sendToken', vars);
     if (hasAddress) return t('uri.intent.sendTo', vars);
     return t('uri.intent.send');
 }
@@ -216,8 +216,8 @@ export function buildXchainUri(intent) {
     if (!intent || !intent.chainId) {
         throw new Error('buildXchainUri: chainId is required');
     }
-    const path = intent.asset
-        ? `${encodeURIComponent(intent.chainId)}/${encodeURIComponent(intent.asset)}`
+    const path = intent.tick
+        ? `${encodeURIComponent(intent.chainId)}/${encodeURIComponent(intent.tick)}`
         : encodeURIComponent(intent.chainId);
     const params = [];
     if (intent.amount) params.push(`amount=${encodeURIComponent(intent.amount)}`);

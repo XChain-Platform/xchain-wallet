@@ -1653,7 +1653,7 @@ function explorerLinksFor(entry) {
             links.push({
                 id: 'blockcypher',
                 label: 'BlockCypher',
-                iconImg: 'https://www.blockcypher.com/assets/favicon/favicon.ico',
+                iconImg: 'https://www.blockcypher.com/tokens/favicon/favicon.ico',
                 url: `https://live.blockcypher.com/doge/tx/${txHash}`,
             });
         }

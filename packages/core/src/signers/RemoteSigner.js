@@ -39,7 +39,7 @@
 //
 // Why not just call the signer from the renderer?
 // -----------------------------------------------
-// Every existing action flow (sendAsset, issueToken, mintAsset, ...)
+// Every existing action flow (sendToken, issueToken, mintToken, ...)
 // runs in the background: it reads the vault, resolves chain state,
 // assembles the PSBT via xchain-sdk, and broadcasts. Moving all of
 // that to the renderer for HW-signed transactions would fork the code

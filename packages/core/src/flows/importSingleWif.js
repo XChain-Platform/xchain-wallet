@@ -6,7 +6,7 @@
 // existing HD wallet. Here the whole wallet is WIF-only — no mnemonic,
 // no HD derivation.
 //
-// Signing-from-imported-WIF (sendAsset / sweepAsset on a wif-only
+// Signing-from-imported-WIF (sendToken / sweepToken on a wif-only
 // wallet) is NOT wired by this flow. The current SoftwareSigner.signPsbt
 // resolves keys via HD paths only; routing to an importedKey entry is
 // a separate gap that affects HD+imported wallets too. For now, a

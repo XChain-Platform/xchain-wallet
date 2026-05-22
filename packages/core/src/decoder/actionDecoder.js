@@ -39,14 +39,14 @@ export function decodeAction({ action, params, chainId, chainRegistry }) {
     const chainSuffix = chainName ? ` on ${chainName}` : '';
 
     if (action === 'SEND') {
-        const asset = str(p.TICK);
+        const tick = str(p.TICK);
         const amount = str(p.AMOUNT);
         const dest = str(p.DESTINATION);
         const memo = str(p.MEMO);
         return {
-            summary: `Send ${amount || '?'} ${asset || '?'}${chainSuffix} to ${dest || '?'}`,
+            summary: `Send ${amount || '?'} ${tick || '?'}${chainSuffix} to ${dest || '?'}`,
             details: [
-                { label: 'Asset', value: asset },
+                { label: 'Token', value: tick },
                 { label: 'Amount', value: amount },
                 { label: 'Destination', value: dest },
                 ...(memo ? [{ label: 'Memo', value: memo }] : []),
@@ -68,7 +68,7 @@ export function decodeAction({ action, params, chainId, chainRegistry }) {
         const flags = p.FLAGS !== undefined && p.FLAGS !== null ? str(p.FLAGS) : '';
         const memo = str(p.MEMO);
         return {
-            summary: `Sweep all assets${chainSuffix} to ${dest || '?'}`,
+            summary: `Sweep all tokens${chainSuffix} to ${dest || '?'}`,
             details: [
                 { label: 'Destination', value: dest },
                 ...(flags ? [{ label: 'Flags', value: flags }] : []),

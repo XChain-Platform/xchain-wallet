@@ -6,7 +6,7 @@
 // internals, or native modules is exposed to the renderer.
 //
 //   - `xchainWalletBridge.sendMessage(message)` — request/response for
-//     every MessageHost call (unlock, sendAsset, etc.). Mirrors the
+//     every MessageHost call (unlock, sendToken, etc.). Mirrors the
 //     extension popup + web shell wire format.
 //
 //   - `xchainWalletSignerBridge.{postMessage,onMessage,onDisconnect}`

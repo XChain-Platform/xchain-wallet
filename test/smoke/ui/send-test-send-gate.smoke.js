@@ -51,7 +51,7 @@ assert.match(
 );
 assert.match(
     sendSrc,
-    /asset\.trim\(\)\.toUpperCase\(\) !== nativeTicker/,
+    /tick\.trim\(\)\.toUpperCase\(\) !== nativeTicker/,
     'gate skips non-native sends',
 );
 assert.match(

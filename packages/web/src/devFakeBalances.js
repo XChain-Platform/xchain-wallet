@@ -14,13 +14,13 @@
 // total. Numbers picked to look plausible in 2026 — not real prices.
 
 /**
- * @typedef {Object} FakeAsset
- * @property {string} asset         ticker — uppercase, no whitespace
+ * @typedef {Object} FakeToken
+ * @property {string} tick         ticker — uppercase, no whitespace
  * @property {string} displayName   user-friendly name
  * @property {string} description   one-line subtitle
  * @property {string} quantity      atomic-unit string
  * @property {number} divisibility  decimals to apply for display
- * @property {'native' | 'token' | 'subasset'} kind
+ * @property {'native' | 'token' | 'subtoken'} kind
  * @property {number} fiatRate      USD per whole unit
  */
 
@@ -34,7 +34,7 @@ function coinForChain(chainId) {
 
 const NATIVE_BY_COIN = {
     bitcoin: {
-        asset: 'BTC',
+        tick: 'BTC',
         displayName: 'Bitcoin',
         description: 'The native coin of the Bitcoin network.',
         quantity: '5000000000',          // 50 BTC
@@ -43,7 +43,7 @@ const NATIVE_BY_COIN = {
         fiatRate: 65000,
     },
     litecoin: {
-        asset: 'LTC',
+        tick: 'LTC',
         displayName: 'Litecoin',
         description: 'The native coin of the Litecoin network.',
         quantity: '3000000000',          // 30 LTC
@@ -52,7 +52,7 @@ const NATIVE_BY_COIN = {
         fiatRate: 80,
     },
     dogecoin: {
-        asset: 'DOGE',
+        tick: 'DOGE',
         displayName: 'Dogecoin',
         description: 'The native coin of the Dogecoin network.',
         quantity: '10000000000000',      // 100,000 DOGE (8 decimals)
@@ -64,12 +64,12 @@ const NATIVE_BY_COIN = {
 
 // 40 fake tokens. Tuple shape:
 //   [ ticker, display name, description, quantity, divisibility, kind, fiat-rate ]
-/** @type {Record<string, FakeAsset[]>} */
+/** @type {Record<string, FakeToken[]>} */
 const TOKENS_BY_COIN = {
     bitcoin: [
         ['PEPECASH',   'Pepe Cash',          'The original meme cash on Counterparty.', '125000000000000', 8, 'token',    0.0001],
         ['RAREPEPE',   'Rare Pepe',          'Iconic 2016 collectible card series.',    '17',              0, 'token',    250],
-        ['XCP',        'Counterparty',       'Native asset of the Counterparty layer.', '4250000000',      8, 'token',    1.5],
+        ['XCP',        'Counterparty',       'Native tick of the Counterparty layer.', '4250000000',      8, 'token',    1.5],
         ['DANKEST',    'Dankest Token',      'XChain Platform governance token.',       '50000000000000',  8, 'token',    0.05],
         ['XCHAINGOV',  'XChain Governance',  'Vote on XChain Platform proposals.',      '125000000000',    8, 'token',    2],
         ['SATOSHIS',   'Satoshis',           'Sats on Bitcoin, tokenised.',             '8888800000000',   8, 'token',    0.000001],
@@ -116,23 +116,23 @@ const TOKENS_BY_COIN = {
 
 /**
  * Stable per-address balance generator. Always returns the FULL chain
- * balance (50 BTC, 40+ assets, etc.) on every address so the dev UI
+ * balance (50 BTC, 40+ tokens, etc.) on every address so the dev UI
  * has something to render regardless of which address is queried.
  *
  * @param {string} address
  * @param {string} chainId
- * @returns {{ address: string, chain: string, native: FakeAsset, assets: FakeAsset[] }}
+ * @returns {{ address: string, chain: string, native: FakeToken, tokens: FakeToken[] }}
  */
 export function fakeBalanceFor(address, chainId) {
     const coin = coinForChain(chainId);
     const native = NATIVE_BY_COIN[coin] || NATIVE_BY_COIN.bitcoin;
-    const tokens = (TOKENS_BY_COIN[coin] || []).map(([asset, displayName, description, quantity, divisibility, kind, fiatRate]) => ({
-        asset, displayName, description, quantity, divisibility, kind, fiatRate,
+    const tokens = (TOKENS_BY_COIN[coin] || []).map(([tick, displayName, description, quantity, divisibility, kind, fiatRate]) => ({
+        tick, displayName, description, quantity, divisibility, kind, fiatRate,
     }));
     return {
         address,
         chain: chainId,
         native,
-        assets: tokens,
+        tokens: tokens,
     };
 }

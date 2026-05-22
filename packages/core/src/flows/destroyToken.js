@@ -1,6 +1,6 @@
-// destroyAsset — convenience wrapper for the DESTROY action (§Phase 2
+// destroyToken — convenience wrapper for the DESTROY action (§Phase 2
 // authoring surface; protocol docs: xchain-documentation/protocol/
-// actions/DESTROY.md). Mirrors issueToken / mintAsset: takes vault +
+// actions/DESTROY.md). Mirrors issueToken / mintToken: takes vault +
 // registries + chain + source address + DESTROY params, forwards to
 // submitAction.
 //
@@ -10,10 +10,10 @@
 // the signer.
 
 import { submitAction } from './submitAction.js';
-import { normalizeSource } from './sendAsset.js';
+import { normalizeSource } from './sendToken.js';
 
 /**
- * @typedef {Object} DestroyAssetOpts
+ * @typedef {Object} DestroyTokenOpts
  * @property {import('../storage/Vault.js').Vault} vault
  * @property {string} walletId
  * @property {string} password
@@ -21,7 +21,7 @@ import { normalizeSource } from './sendAsset.js';
  * @property {import('../registry/index.js').ChainRegistry} chainRegistry
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
  * @property {string} chainId
- * @property {import('./sendAsset.js').SourceRef | import('../schemas/address.js').Address} from
+ * @property {import('./sendToken.js').SourceRef | import('../schemas/address.js').Address} from
  * @property {Record<string, string>} params            DESTROY field map (TICK, AMOUNT)
  * @property {number} [fee]
  * @property {number} [feePerKb]
@@ -33,21 +33,21 @@ import { normalizeSource } from './sendAsset.js';
  */
 
 /**
- * @param {DestroyAssetOpts} opts
+ * @param {DestroyTokenOpts} opts
  * @returns {Promise<import('../sdk/submitWithSigner.js').SubmitResult>}
  */
-export async function destroyAsset(opts) {
-    if (!opts) throw new Error('destroyAsset: opts is required');
+export async function destroyToken(opts) {
+    if (!opts) throw new Error('destroyToken: opts is required');
     if (!opts.params || typeof opts.params !== 'object') {
-        throw new Error('destroyAsset: params is required');
+        throw new Error('destroyToken: params is required');
     }
     if (typeof opts.params.TICK !== 'string' || opts.params.TICK.length === 0) {
-        throw new Error('destroyAsset: params.TICK is required');
+        throw new Error('destroyToken: params.TICK is required');
     }
     if (typeof opts.params.AMOUNT !== 'string' || opts.params.AMOUNT.length === 0) {
-        throw new Error('destroyAsset: params.AMOUNT is required');
+        throw new Error('destroyToken: params.AMOUNT is required');
     }
-    const source = normalizeSource(opts.from, 'destroyAsset');
+    const source = normalizeSource(opts.from, 'destroyToken');
 
     const tick = opts.params.TICK;
     const amount = opts.params.AMOUNT;

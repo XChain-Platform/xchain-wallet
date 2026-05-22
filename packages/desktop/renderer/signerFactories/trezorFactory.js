@@ -5,7 +5,7 @@
 // XChain manifest, bind core's `makeTrezorFactory` to the resulting
 // connect instance. The only desktop-specific hook is the future
 // `connectSrc` override — Step 19 will bundle the Connect iframe
-// assets alongside the app so signing never reaches out to
+// tokens alongside the app so signing never reaches out to
 // connect.trezor.io. Until then we use the default (network-bound)
 // connectSrc; real-device verification in Electron will exercise this
 // path once Step 19 ships.

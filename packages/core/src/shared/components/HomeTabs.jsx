@@ -58,7 +58,7 @@ export function HomeTabs({ chainRegistry, balances, balancesFetchedAt, walletId,
         () => sortByChainThenAsset(filteredRows.filter((r) => r.kind === 'native')),
         [filteredRows],
     );
-    // Tokens = every non-native asset, regardless of divisibility or
+    // Tokens = every non-native tick, regardless of divisibility or
     // imagery. The single canonical "what do I hold?" surface.
     const tokens = useMemo(
         () => sortByChainThenAsset(filteredRows.filter(
@@ -67,9 +67,9 @@ export function HomeTabs({ chainRegistry, balances, balancesFetchedAt, walletId,
         [filteredRows],
     );
     // NFTs = subset of Tokens that has a non-empty imageUrl. Purely a
-    // visual gallery view — an asset can appear in BOTH Tokens (as a
+    // visual gallery view — an tick can appear in BOTH Tokens (as a
     // row with balance) and NFTs (as a tile with the image), e.g. a
-    // divisible token like PEPECASH that has an asset image.
+    // divisible token like PEPECASH that has an tick image.
     const nfts = useMemo(
         () => sortByChainThenAsset(filteredRows.filter(
             (r) => r.kind !== 'native'
@@ -212,12 +212,12 @@ function Placeholder({ title, body }) {
     );
 }
 
-// Builds an asset lookup keyed by `${chainId}|${tick}` so ActivityRow
+// Builds an tick lookup keyed by `${chainId}|${tick}` so ActivityRow
 // can resolve a token's imageUrl + divisibility when rendering a
 // non-native row. Falls back gracefully to null when the token doesn't
-// appear in the wallet's balances (e.g. a SEND of an asset the user
+// appear in the wallet's balances (e.g. a SEND of an tick the user
 // no longer holds).
-function buildAssetLookup(balances) {
+function buildTokenLookup(balances) {
     /** @type {Map<string, { divisibility?: number, imageUrl?: string | null, displayName?: string }>} */
     const m = new Map();
     if (!balances || typeof balances !== 'object') return m;
@@ -225,20 +225,20 @@ function buildAssetLookup(balances) {
         if (!Array.isArray(entries)) continue;
         for (const e of entries) {
             const native = e?.balances?.native;
-            if (native?.asset) {
-                m.set(`${chainId}|${native.asset}`, {
+            if (native?.tick) {
+                m.set(`${chainId}|${native.tick}`, {
                     divisibility: native.divisibility,
                     imageUrl: null,
-                    displayName: native.asset,
+                    displayName: native.tick,
                 });
             }
-            const assets = e?.balances?.assets || [];
-            for (const a of assets) {
-                if (!a?.asset) continue;
-                m.set(`${chainId}|${a.asset}`, {
+            const tokens = e?.balances?.tokens || [];
+            for (const a of tokens) {
+                if (!a?.tick) continue;
+                m.set(`${chainId}|${a.tick}`, {
                     divisibility: a.divisibility,
                     imageUrl: typeof a.imageUrl === 'string' && a.imageUrl.length > 0 ? a.imageUrl : null,
-                    displayName: a.displayName || a.asset,
+                    displayName: a.displayName || a.tick,
                 });
             }
         }
@@ -261,7 +261,7 @@ function relativeTime(epochSec) {
     return `${Math.floor(d / 86_400)}d ago`;
 }
 
-// Format a satoshi-string amount using the asset's divisibility. Plain
+// Format a satoshi-string amount using the tick's divisibility. Plain
 // string math, no BigInt — these are demo values and stay small.
 function formatAmount(raw, divisibility) {
     const s = String(raw ?? '').trim();
@@ -397,7 +397,7 @@ function ActivityRow({ entry, walletAddresses, assetLookup, chainTip, onClick })
 function DemoActivityList({ chainIds, balances, networkFilter, walletId, onSelectEntry }) {
     void walletId;
     const walletAddresses = useMemo(() => new Set(['demo-address']), []);
-    const assetLookup = useMemo(() => buildAssetLookup(balances), [balances]);
+    const assetLookup = useMemo(() => buildTokenLookup(balances), [balances]);
     const entries = useMemo(() => {
         /** @type {Array<any>} */
         const all = [];
@@ -497,7 +497,7 @@ function DemoDefiList({ networkFilter, balances, onSelectEntry }) {
             : all.filter((p) => coinFromChainId(p.chainId) === networkFilter);
         return [...filtered].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
     }, [networkFilter]);
-    const assetLookup = useMemo(() => buildAssetLookup(balances), [balances]);
+    const assetLookup = useMemo(() => buildTokenLookup(balances), [balances]);
 
     if (positions.length === 0) {
         return <Placeholder title="No DeFi positions" body="No demo positions on the selected network." />;

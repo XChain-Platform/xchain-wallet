@@ -179,7 +179,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     // Buyer lanes:
     //   - Token-paid (dispenser.get_tick non-empty): triggered by an
     //     XChain SEND of GET_TICK to the dispenser address. Uses the
-    //     existing messaging.sendAsset flow, so the wallet signs +
+    //     existing messaging.sendToken flow, so the wallet signs +
     //     broadcasts through the standard pipeline.
     //   - Coin-paid (dispenser.get_coin set, dispenser.get_tick empty):
     //     triggered by a bare native-coin payment to the dispenser
@@ -265,12 +265,12 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     signerId: buyerAddress.signerId,
                 },
                 to: dispAddr,
-                asset: getTick,
+                tick: getTick,
                 amount: totalPayAmount,
             };
             const res = buyHw
                 ? await messaging.sendAssetHw({ ...base, signerId: buyerAddress.signerId })
-                : await messaging.sendAsset({ ...base, password: buyPassword });
+                : await messaging.sendToken({ ...base, password: buyPassword });
             setBuyResult(res);
             setBuyPassword('');
             setBuyStage('done');

@@ -6,15 +6,15 @@
 //   2. Two-stage state machine (form → review/submitting → done)
 //      matches the Send.jsx / IssueTokenForm pattern.
 //   3. Review runs the composed MINT params through decoder.decodeAction.
-//   4. Sign wires through messaging.mintAsset — the new Step-9 helper.
+//   4. Sign wires through messaging.mintToken — the new Step-9 helper.
 //   5. Validation rejects empty ticker / non-A-Z-0-9-dot ticker / empty
 //      or zero amount.
 //   6. Params composer: VERSION='0', TICK uppercased, AMOUNT set,
 //      DESTINATION only when non-empty.
-//   7. Core flow mintAsset exists and is re-exported from
+//   7. Core flow mintToken exists and is re-exported from
 //      @xchain-wallet/core flows. Guards required inputs.
 //   8. Background host registers action.mint; both messaging helpers
-//      export mintAsset(opts) returning sendMessage('action.mint', …).
+//      export mintToken(opts) returning sendMessage('action.mint', …).
 //   9. ActionsMenu entries include a 'mint' item; popup + web App.jsx
 //      track the 'mint' sub-route and pass onMint to buildActionEntries.
 
@@ -68,11 +68,11 @@ assert.ok(
 );
 assert.ok(src.includes('decoded.warnings'), 'MintForm renders decoder warnings');
 
-// --- 4. Sign wires through messaging.mintAsset ------------------------
+// --- 4. Sign wires through messaging.mintToken ------------------------
 
 assert.ok(
-    /messaging\.mintAsset\s*\(/.test(src),
-    'MintForm calls messaging.mintAsset from the sign stage',
+    /messaging\.mintToken\s*\(/.test(src),
+    'MintForm calls messaging.mintToken from the sign stage',
 );
 assert.ok(
     src.includes("'InvalidPasswordError'"),
@@ -84,7 +84,7 @@ assert.ok(
 assert.ok(/Ticker is required/.test(src), 'MintForm rejects empty ticker');
 assert.ok(
     /\[A-Za-z0-9\.\]\+|A-Za-z0-9\./.test(src),
-    'MintForm validates ticker character set (subassets allowed)',
+    'MintForm validates ticker character set (subtokens allowed)',
 );
 assert.ok(
     /Amount must be a positive number/.test(src),
@@ -104,44 +104,44 @@ assert.ok(
 // --- 7. Core flow -----------------------------------------------------
 
 assert.equal(
-    typeof flows.mintAsset,
+    typeof flows.mintToken,
     'function',
-    'flows.mintAsset is re-exported from core',
+    'flows.mintToken is re-exported from core',
 );
 await assert.rejects(
-    async () => flows.mintAsset(),
-    /mintAsset: opts is required/,
-    'mintAsset rejects missing opts',
+    async () => flows.mintToken(),
+    /mintToken: opts is required/,
+    'mintToken rejects missing opts',
 );
 await assert.rejects(
-    async () => flows.mintAsset({}),
-    /mintAsset: params is required/,
-    'mintAsset rejects missing params',
+    async () => flows.mintToken({}),
+    /mintToken: params is required/,
+    'mintToken rejects missing params',
 );
 await assert.rejects(
-    async () => flows.mintAsset({ params: {} }),
-    /mintAsset: params\.TICK is required/,
-    'mintAsset rejects empty TICK',
+    async () => flows.mintToken({ params: {} }),
+    /mintToken: params\.TICK is required/,
+    'mintToken rejects empty TICK',
 );
 await assert.rejects(
-    async () => flows.mintAsset({ params: { TICK: 'MYTOKEN' } }),
-    /mintAsset: params\.AMOUNT is required/,
-    'mintAsset rejects missing AMOUNT',
+    async () => flows.mintToken({ params: { TICK: 'MYTOKEN' } }),
+    /mintToken: params\.AMOUNT is required/,
+    'mintToken rejects missing AMOUNT',
 );
 await assert.rejects(
-    async () => flows.mintAsset({ params: { TICK: 'MYTOKEN', AMOUNT: '10' } }),
-    /mintAsset: from is required/,
-    'mintAsset rejects missing source',
+    async () => flows.mintToken({ params: { TICK: 'MYTOKEN', AMOUNT: '10' } }),
+    /mintToken: from is required/,
+    'mintToken rejects missing source',
 );
 
-const flowSrc = readFileSync(join(core, 'src', 'flows', 'mintAsset.js'), 'utf8');
+const flowSrc = readFileSync(join(core, 'src', 'flows', 'mintToken.js'), 'utf8');
 assert.ok(
     /action:\s*'MINT'/.test(flowSrc),
-    'mintAsset flow forwards action: "MINT" to submitAction',
+    'mintToken flow forwards action: "MINT" to submitAction',
 );
 assert.ok(
     /normalizeSource/.test(flowSrc),
-    'mintAsset flow reuses normalizeSource from sendAsset',
+    'mintToken flow reuses normalizeSource from sendToken',
 );
 
 // --- 8. Background handler + messaging helpers -------------------------
@@ -154,8 +154,8 @@ assert.ok(
     'background host registers action.mint',
 );
 assert.ok(
-    /mintAsset\(\{\s*\.\.\.req,\s*vault,\s*chainRegistry,\s*sdkRegistry\s*\}\)/.test(bg),
-    'action.mint handler forwards deps to mintAsset',
+    /mintToken\(\{\s*\.\.\.req,\s*vault,\s*chainRegistry,\s*sdkRegistry\s*\}\)/.test(bg),
+    'action.mint handler forwards deps to mintToken',
 );
 
 for (const [shell, msgPath] of [
@@ -164,12 +164,12 @@ for (const [shell, msgPath] of [
 ]) {
     const m = readFileSync(msgPath, 'utf8');
     assert.ok(
-        /export function mintAsset\b/.test(m),
-        `${shell} messaging.js exports mintAsset`,
+        /export function mintToken\b/.test(m),
+        `${shell} messaging.js exports mintToken`,
     );
     assert.ok(
         /sendMessage\('action\.mint'/.test(m),
-        `${shell} messaging.js routes mintAsset via action.mint`,
+        `${shell} messaging.js routes mintToken via action.mint`,
     );
 }
 
@@ -199,5 +199,5 @@ for (const [shell, appPath] of [
 }
 
 console.log(
-    'OK — mint form smoke (MintForm §40.3 + mintAsset core flow + action.mint handler + both messaging helpers + ActionsMenu entry + popup/web wiring)',
+    'OK — mint form smoke (MintForm §40.3 + mintToken core flow + action.mint handler + both messaging helpers + ActionsMenu entry + popup/web wiring)',
 );

@@ -33,8 +33,8 @@ import { emitPermissionDiff, noopBridgeEvents } from './bridgeEvents.js';
 const {
     walletBalances,
     addressBalances,
-    sendAsset,
-    sweepAsset,
+    sendToken,
+    sweepToken,
     signMessageFlow,
     signPsbtFlow,
     submitAction,
@@ -235,7 +235,7 @@ export function registerBridgeHandlers(host, opts = {}) {
             // Exposing the raw filename to a dApp would be unresolvable
             // cross-origin. A later shell-layer piece wires this into a
             // `chrome.runtime.getURL(...)` call against a web-accessible
-            // asset path; until then omit the field rather than send a
+            // tick path; until then omit the field rather than send a
             // bare filename.
             icon: '',
             addressTypes: d.addressTypes,
@@ -342,7 +342,7 @@ export function registerBridgeHandlers(host, opts = {}) {
 
         const params = req.params ?? {};
         if (actionName === 'SEND') {
-            return sendAsset({
+            return sendToken({
                 vault: deps.vault,
                 walletId: decision.walletId ?? (await walletIdForAddress(deps.vault, params.from)),
                 password: decision.password,
@@ -354,7 +354,7 @@ export function registerBridgeHandlers(host, opts = {}) {
             });
         }
         if (actionName === 'SWEEP') {
-            return sweepAsset({
+            return sweepToken({
                 vault: deps.vault,
                 walletId: decision.walletId ?? (await walletIdForAddress(deps.vault, params.from)),
                 password: decision.password,

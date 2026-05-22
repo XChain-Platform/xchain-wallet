@@ -4,7 +4,7 @@ import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { StalenessLabel } from '../components/StalenessLabel.jsx';
-import { useAssetInfo } from '../hooks/useAssetInfo.js';
+import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { useNativePrice } from '../hooks/useNativePrice.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
@@ -16,14 +16,14 @@ const chainRegistry = registryLib.defaultRegistry();
  * §27.6 token detail page (G071).
  *
  * Single-token view that aggregates everything we know about one
- * (chainId, asset) pair from the data surfaces the wallet already
+ * (chainId, tick) pair from the data surfaces the wallet already
  * exposes: the row metadata threaded in from the unified balance list,
  * `messaging.getHoldersForToken` for the distribution panel, and the
  * existing History route as the "View activity" target (pre-filtered
  * by tick via History's `initialSearchQuery` prop).
  *
  * Cluster I FOLLOWUP 3 + Cluster C FOLLOWUP 3 ship the richer metadata
- * via `messaging.getAssetInfo`: description / creator / supply / lock
+ * via `messaging.getTokenInfo`: description / creator / supply / lock
  * status / market price / extracted image URL all surface inline below
  * the existing fixed metadata block. Phase-3 features (Sell on DEX,
  * Market view, supply chart over time) and reputation remain tracked
@@ -32,7 +32,7 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {object} props
  * @param {string} props.walletId
  * @param {string} props.chainId
- * @param {string} props.asset                       ticker (uppercase canonical)
+ * @param {string} props.tick                       ticker (uppercase canonical)
  * @param {'native' | 'token' | 'subtoken' | string} [props.kind]
  * @param {string} [props.displayName]               human-readable name (defaults to ticker)
  * @param {number} [props.divisibility]
@@ -41,12 +41,12 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {() => void} props.onBack
  * @param {() => void} [props.onSend]                navigate to Send route
  * @param {() => void} [props.onReceive]             navigate to Receive route
- * @param {() => void} [props.onViewActivity]        navigate to History pre-filtered to this asset
+ * @param {() => void} [props.onViewActivity]        navigate to History pre-filtered to this tick
  */
 export function TokenDetail({
     walletId,
     chainId,
-    asset,
+    tick,
     kind = 'token',
     displayName,
     divisibility = 8,
@@ -71,7 +71,7 @@ export function TokenDetail({
     // description / creator / supply / locks / market / extracted
     // imageUrl. Skipped for native coins (BTC / LTC / DOGE) since
     // they're not XChain-issued tokens.
-    const assetInfo = useAssetInfo({ chainId, asset, skip: isNative });
+    const assetInfo = useTokenInfo({ chainId, tick, skip: isNative });
 
     // Native-coin price oracle (BTC / LTC / DOGE mainnet). Gated by
     // settings.privacy.priceDataEnabled; the hook surfaces a `disabled`
@@ -100,7 +100,7 @@ export function TokenDetail({
         let cancelled = false;
         setHoldersLoading(true);
         setHoldersError(null);
-        messaging.getHoldersForToken({ chainId, tick: asset })
+        messaging.getHoldersForToken({ chainId, tick: tick })
             .then((resp) => {
                 if (cancelled) return;
                 const list = Array.isArray(resp) ? resp
@@ -116,7 +116,7 @@ export function TokenDetail({
             })
             .finally(() => { if (!cancelled) setHoldersLoading(false); });
         return () => { cancelled = true; };
-    }, [holdersOpen, holders, isNative, asset, chainId, messaging]);
+    }, [holdersOpen, holders, isNative, tick, chainId, messaging]);
 
     const fiat = useMemo(() => {
         if (typeof fiatRate !== 'number' || !isFinite(fiatRate)) return null;
@@ -133,7 +133,7 @@ export function TokenDetail({
             >
                 <Icon.BackIcon />
             </button>
-            <span className={styles.title}>{displayName || asset}</span>
+            <span className={styles.title}>{displayName || tick}</span>
             <span className={styles.spacer} />
         </div>
     );
@@ -166,11 +166,11 @@ export function TokenDetail({
     }, [activeTab]);
 
     const [balanceHidden, toggleBalanceHidden] = useBalancesHidden();
-    // Tap the amount to swap primary / secondary. Default: asset units
+    // Tap the amount to swap primary / secondary. Default: tick units
     // (matches the BalanceList convention; users opening Bitcoin expect
     // to see how much BTC they hold first, USD second). Fiat-as-primary
     // is one tap away for users who think in USD.
-    const [primaryUnit, setPrimaryUnit] = useState('asset');
+    const [primaryUnit, setPrimaryUnit] = useState('tick');
 
     // 4th quick-action button is now a "More" dropdown (matches the
     // pattern from the ActionDetail page). Buy lives inside the menu so
@@ -204,32 +204,32 @@ export function TokenDetail({
     const fiatAvailable = fiat != null && isFinite(fiat);
     // Amount + unit code are kept separate so the unit can render as a
     // smaller styled span next to the digits (matches the Home total-
-    // balance hero treatment). For BTC the code is the asset ticker;
+    // balance hero treatment). For BTC the code is the tick ticker;
     // for fiat the code is the wallet's preferred currency.
     const assetAmount = formatAmount(quantity, divisibility);
     const fiatAmount = fiatAvailable ? formatFiatNumber(fiat, fiatCurrency) : '—';
     const showFiatPrimary = primaryUnit === 'fiat' && fiatAvailable;
     const primaryAmount = showFiatPrimary ? fiatAmount : assetAmount;
-    const primaryCode = showFiatPrimary ? fiatCurrency : asset;
+    const primaryCode = showFiatPrimary ? fiatCurrency : tick;
     const secondaryAmount = showFiatPrimary ? assetAmount : fiatAmount;
-    const secondaryCode = showFiatPrimary ? asset : (fiatAvailable ? fiatCurrency : '');
+    const secondaryCode = showFiatPrimary ? tick : (fiatAvailable ? fiatCurrency : '');
 
     return (
         <Screen variant={variant} header={header}>
             <div className={isFull ? styles.bodyFull : styles.bodyPopup}>
-                {/* Asset balance hero — gradient block, same style as
+                {/* Token balance hero — gradient block, same style as
                     Home's TotalBalanceHero. Top row carries the label,
-                    a swap button for flipping asset ↔ fiat as primary,
+                    a swap button for flipping tick ↔ fiat as primary,
                     and the hide-balance eye. Big number = primary,
                     small number underneath = secondary. */}
-                <section className={styles.balanceHero} aria-label={`${displayName || asset} balance`}>
+                <section className={styles.balanceHero} aria-label={`${displayName || tick} balance`}>
                     <div className={styles.balanceHeroRow}>
                         <span className={styles.balanceHeroLabel}>Total balance</span>
                         <div className={styles.balanceHeroControls}>
                             <button
                                 type="button"
                                 className={styles.balanceHeroSwap}
-                                onClick={() => setPrimaryUnit((p) => (p === 'asset' ? 'fiat' : 'asset'))}
+                                onClick={() => setPrimaryUnit((p) => (p === 'tick' ? 'fiat' : 'tick'))}
                                 disabled={!fiatAvailable}
                                 aria-label="Swap primary unit"
                                 title="Swap primary unit"
@@ -320,10 +320,10 @@ export function TokenDetail({
                 </div>
 
                 {/* Market section — stats strip + sparkline chart at the
-                    top of the page for every asset, so users see price /
+                    top of the page for every tick, so users see price /
                     24h / chart immediately the same way the Coins detail
                     surface does. Tokens synthesize a sparkline keyed on
-                    asset+chain when no real history feed exists yet. */}
+                    tick+chain when no real history feed exists yet. */}
                 <div className={styles.infoCard}>
                     <MarketPanel
                         isNative={isNative}
@@ -331,7 +331,7 @@ export function TokenDetail({
                         showNativeStats={showNativeStats}
                         showSparkline={showSparkline}
                         assetInfo={assetInfo}
-                        asset={asset}
+                        tick={tick}
                         chainId={chainId}
                         hasMarketData={hasMarketData}
                         fiatRate={fiatRate}
@@ -344,7 +344,7 @@ export function TokenDetail({
                         {/* Tabs — matches HomeTabs visual rhythm. Tokens
                             keep Info + Holders here below the Market
                             section above. */}
-                        <div className={styles.tabs} role="tablist" aria-label="Asset detail view">
+                        <div className={styles.tabs} role="tablist" aria-label="Token detail view">
                             {tabs.map((t) => (
                                 <button
                                     key={t.id}
@@ -362,7 +362,7 @@ export function TokenDetail({
                         <div className={styles.tabPanel} role="tabpanel">
                             {activeTab === 'info' ? (
                                 <InfoPanel
-                                    asset={asset}
+                                    tick={tick}
                                     displayName={displayName}
                                     descriptor={descriptor}
                                     chainId={chainId}
@@ -393,7 +393,7 @@ export function TokenDetail({
                        Market section that already rendered above. */
                     <div className={styles.infoCard}>
                         <InfoPanel
-                            asset={asset}
+                            tick={tick}
                             displayName={displayName}
                             descriptor={descriptor}
                             chainId={chainId}
@@ -415,7 +415,7 @@ export function TokenDetail({
 }
 
 // Deterministic FNV-ish string hash so synthesized chart data stays
-// stable across re-renders for the same asset/chain pair.
+// stable across re-renders for the same tick/chain pair.
 function hashStringFor(s) {
     let h = 2166136261;
     for (let i = 0; i < s.length; i += 1) {
@@ -427,7 +427,7 @@ function hashStringFor(s) {
 
 // Synthesize a 168-point (1/hr × 7d) random-walk price series for a
 // non-native token that doesn't have a real history feed wired up yet.
-// The walk is seeded by the asset key so the line is stable across
+// The walk is seeded by the tick key so the line is stable across
 // re-renders and ends exactly at `currentPrice` — a follow-up will swap
 // this for real data once the indexer exposes a price-history endpoint.
 function synthesizeTokenChart(assetKey, currentPrice) {
@@ -457,11 +457,11 @@ function synthesizeTokenChart(assetKey, currentPrice) {
     return { sparkline: series, change24hPct };
 }
 
-function MarketPanel({ isNative, nativePrice, showSparkline, assetInfo, asset, chainId, fiatRate, fiatCurrency }) {
+function MarketPanel({ isNative, nativePrice, showSparkline, assetInfo, tick, chainId, fiatRate, fiatCurrency }) {
     // Always render the KPI strip with the same shape — placeholders
     // ("—") fill in for missing data so the structure stays consistent
     // whether the price oracle is disabled, still loading, or simply
-    // doesn't have data for this asset (e.g. testnet, regtest).
+    // doesn't have data for this tick (e.g. testnet, regtest).
 
     let priceCell = '—';
     let marketCapCell = '—';
@@ -509,7 +509,7 @@ function MarketPanel({ isNative, nativePrice, showSparkline, assetInfo, asset, c
     // price from the indexer); if unavailable, fall back to fiatRate
     // passed in from the balance fixture so the demo wallet still
     // gets a populated chart + 24h cell. Both paths feed into the
-    // same synthesized sparkline keyed on asset+chain.
+    // same synthesized sparkline keyed on tick+chain.
     void floorCell;
     const nativeTick = nativeTickerOf(chainId);
     const marketPriceNum = assetInfo?.marketPrice != null ? Number(assetInfo.marketPrice) : null;
@@ -521,7 +521,7 @@ function MarketPanel({ isNative, nativePrice, showSparkline, assetInfo, asset, c
                 marketCapCell = `${(marketPriceNum * supply).toLocaleString('en-US', { maximumFractionDigits: 4 })} ${nativeTick}`;
             }
         }
-        const synth = synthesizeTokenChart(`${chainId}|${asset}|native`, marketPriceNum);
+        const synth = synthesizeTokenChart(`${chainId}|${tick}|native`, marketPriceNum);
         if (synth.change24hPct != null) {
             pct24h = formatPct(synth.change24hPct);
             pctTone24h = pctTone(synth.change24hPct);
@@ -530,7 +530,7 @@ function MarketPanel({ isNative, nativePrice, showSparkline, assetInfo, asset, c
     } else if (typeof fiatRate === 'number' && isFinite(fiatRate) && fiatRate > 0) {
         priceCell = formatFiat(fiatRate);
         void fiatCurrency;
-        const synth = synthesizeTokenChart(`${chainId}|${asset}|fiat`, fiatRate);
+        const synth = synthesizeTokenChart(`${chainId}|${tick}|fiat`, fiatRate);
         if (synth.change24hPct != null) {
             pct24h = formatPct(synth.change24hPct);
             pctTone24h = pctTone(synth.change24hPct);
@@ -558,7 +558,7 @@ function MarketPanel({ isNative, nativePrice, showSparkline, assetInfo, asset, c
 }
 
 function InfoPanel({
-    asset,
+    tick,
     displayName,
     descriptor,
     chainId,
@@ -578,11 +578,11 @@ function InfoPanel({
                 <tbody>
                     <tr className={styles.metaRow}>
                         <th scope="row">Name</th>
-                        <td>{displayName || asset}</td>
+                        <td>{displayName || tick}</td>
                     </tr>
                     <tr className={styles.metaRow}>
                         <th scope="row">Ticker</th>
-                        <td>{asset}</td>
+                        <td>{tick}</td>
                     </tr>
                     <tr className={styles.metaRow}>
                         <th scope="row">Type</th>
@@ -604,7 +604,7 @@ function InfoPanel({
                     </tr>
                     <tr className={styles.metaRow}>
                         <th scope="row">Current balance</th>
-                        <td>{balanceHidden ? '•••••' : `${formatAmount(quantity, divisibility)} ${asset}`}</td>
+                        <td>{balanceHidden ? '•••••' : `${formatAmount(quantity, divisibility)} ${tick}`}</td>
                     </tr>
                     <tr className={styles.metaRow}>
                         <th scope="row">Estimated value</th>
@@ -639,23 +639,194 @@ function InfoPanel({
                 </tbody>
             </table>
 
+            {!isNative && assetInfo ? (
+                <MediaGallery assetInfo={assetInfo} />
+            ) : null}
+
             {hasDescription ? (
-                <div className={styles.infoStack}>
-                    {assetInfo.imageUrl ? (
-                        <img
-                            src={assetInfo.imageUrl}
-                            alt=""
-                            aria-hidden="true"
-                            className={styles.descriptionImage}
-                            onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                        />
-                    ) : null}
-                    <p className={styles.descriptionBody}>{assetInfo.description}</p>
-                </div>
+                <p className={styles.descriptionBody}>{assetInfo.description}</p>
+            ) : null}
+
+            {!isNative && assetInfo ? (
+                <LinksAndFiles assetInfo={assetInfo} />
             ) : null}
 
             {!isNative && !assetInfo ? (
                 <p className={styles.metadataHint}>Loading description, creator, and supply…</p>
+            ) : null}
+        </div>
+    );
+}
+
+/**
+ * Renders the §27.6 TIS gallery — images / audio / video — derived from
+ * the token's TIS document (or the legacy CoinDaddy JSON converted to
+ * the same shape). When no TIS document is available, falls back to the
+ * single hero `imageUrl` regex-extracted from the on-chain description
+ * so older tokens still show their artwork.
+ */
+function MediaGallery({ assetInfo }) {
+    const images = Array.isArray(assetInfo?.images) ? assetInfo.images : [];
+    const audio = Array.isArray(assetInfo?.audio) ? assetInfo.audio : [];
+    const video = Array.isArray(assetInfo?.video) ? assetInfo.video : [];
+    const fallbackImage = images.length === 0 && assetInfo?.imageUrl
+        ? [{ url: assetInfo.imageUrl, type: null, name: null }]
+        : [];
+    const allImages = images.length > 0 ? images : fallbackImage;
+    if (allImages.length === 0 && audio.length === 0 && video.length === 0) {
+        return null;
+    }
+    return (
+        <div className={styles.gallery} aria-label="Token media">
+            {allImages.length > 0 ? (
+                <div
+                    className={
+                        allImages.length === 1
+                            ? styles.galleryImagesSingle
+                            : styles.galleryImagesGrid
+                    }
+                >
+                    {allImages.map((img, i) => (
+                        <a
+                            key={`${img.url}:${i}`}
+                            href={img.url}
+                            target="_blank"
+                            rel="noreferrer noopener"
+                            className={styles.galleryImageLink}
+                            title={img.name || img.type || ''}
+                        >
+                            <img
+                                src={img.url}
+                                alt={img.name || ''}
+                                className={styles.galleryImage}
+                                onError={(e) => {
+                                    const a = e.currentTarget.closest('a');
+                                    if (a) a.style.display = 'none';
+                                }}
+                            />
+                        </a>
+                    ))}
+                </div>
+            ) : null}
+            {video.length > 0 ? (
+                <div className={styles.galleryMediaStack}>
+                    {video.map((v, i) => (
+                        <div key={`${v.url}:${i}`} className={styles.galleryMediaCard}>
+                            {v.name ? (
+                                <div className={styles.galleryMediaCaption}>{v.name}</div>
+                            ) : null}
+                            <video
+                                className={styles.galleryVideo}
+                                src={v.url}
+                                controls
+                                preload="metadata"
+                                playsInline
+                            />
+                        </div>
+                    ))}
+                </div>
+            ) : null}
+            {audio.length > 0 ? (
+                <div className={styles.galleryMediaStack}>
+                    {audio.map((a, i) => (
+                        <div key={`${a.url}:${i}`} className={styles.galleryMediaCard}>
+                            {a.name ? (
+                                <div className={styles.galleryMediaCaption}>{a.name}</div>
+                            ) : null}
+                            <audio
+                                className={styles.galleryAudio}
+                                src={a.url}
+                                controls
+                                preload="metadata"
+                            />
+                        </div>
+                    ))}
+                </div>
+            ) : null}
+        </div>
+    );
+}
+
+const SOCIAL_LABELS = {
+    twitter: 'Twitter',
+    github: 'GitHub',
+    reddit: 'Reddit',
+    facebook: 'Facebook',
+    linkedin: 'LinkedIn',
+    discord: 'Discord',
+    telegram: 'Telegram',
+    medium: 'Medium',
+    youtube: 'YouTube',
+    instagram: 'Instagram',
+    url: 'Link',
+};
+
+function socialLabel(platform) {
+    const key = String(platform || '').toLowerCase();
+    return SOCIAL_LABELS[key] || (key ? key.charAt(0).toUpperCase() + key.slice(1) : 'Link');
+}
+
+/**
+ * §27.6 — links + files block. Renders the token's website, primary
+ * social links, and file attachments below the media gallery. Returns
+ * null when the TIS document carries none of these so the section
+ * disappears entirely for tokens without rich metadata.
+ */
+function LinksAndFiles({ assetInfo }) {
+    const website = assetInfo?.website || null;
+    const socials = Array.isArray(assetInfo?.socials) ? assetInfo.socials : [];
+    const files = Array.isArray(assetInfo?.files) ? assetInfo.files : [];
+    const hasAnything = website || socials.length > 0 || files.length > 0;
+    if (!hasAnything) return null;
+    return (
+        <div className={styles.linksBlock}>
+            {website ? (
+                <a
+                    href={website}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className={styles.linkRow}
+                >
+                    <span className={styles.linkRowLabel}>Website</span>
+                    <span className={styles.linkRowValue} title={website}>{website}</span>
+                </a>
+            ) : null}
+            {socials.length > 0 ? (
+                <div className={styles.socialsRow}>
+                    {socials.map((s, i) => (
+                        <a
+                            key={`${s.url}:${i}`}
+                            href={s.url}
+                            target="_blank"
+                            rel="noreferrer noopener"
+                            className={styles.socialChip}
+                            title={s.url}
+                        >
+                            {socialLabel(s.platform)}
+                        </a>
+                    ))}
+                </div>
+            ) : null}
+            {files.length > 0 ? (
+                <ul className={styles.filesList}>
+                    {files.map((f, i) => (
+                        <li key={`${f.url}:${i}`}>
+                            <a
+                                href={f.url}
+                                target="_blank"
+                                rel="noreferrer noopener"
+                                className={styles.fileLink}
+                            >
+                                <span className={styles.fileLinkName}>
+                                    {f.name || f.url}
+                                </span>
+                                {f.type ? (
+                                    <span className={styles.fileLinkType}>{f.type}</span>
+                                ) : null}
+                            </a>
+                        </li>
+                    ))}
+                </ul>
             ) : null}
         </div>
     );
@@ -940,10 +1111,10 @@ const PALETTE = [
     '#EF4444', '#8B5CF6', '#EC4899', '#14B8A6', '#F97316',
     '#6366F1', '#84CC16', '#06B6D4', '#A855F7', '#F43F5E',
 ];
-function tickerColor(asset) {
+function tickerColor(tick) {
     let h = 0;
-    for (let i = 0; i < asset.length; i += 1) {
-        h = (h * 31 + asset.charCodeAt(i)) >>> 0;
+    for (let i = 0; i < tick.length; i += 1) {
+        h = (h * 31 + tick.charCodeAt(i)) >>> 0;
     }
     return PALETTE[h % PALETTE.length];
 }

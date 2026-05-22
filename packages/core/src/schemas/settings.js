@@ -89,7 +89,7 @@ export const CLIPBOARD_AUTO_CLEAR_DEFAULT = 60;
  * @property {string} language
  * @property {Record<string, SdkEndpoint>} sdkEndpoints
  * @property {Record<string, FeeSettings>} fees
- * @property {{ torRouting: boolean, changeAddressRotation: boolean, hideSmallBalances: boolean, blurOnBlur: boolean, labelsSurviveRestore: boolean, clipboardAutoClearSeconds?: number, hapticsEnabled?: boolean, alwaysRequireHwExplicitConfirm?: boolean, priceDataEnabled?: boolean }} privacy   v2 — adds blurOnBlur (window-unfocus blur of sensitive data), labelsSurviveRestore (§19.5.2 on-chain label sync opt-in); clipboardAutoClearSeconds is optional v2-tolerant — 0–600 inclusive, 0 = never clear, default 60 (§17.7.1 / G028); hapticsEnabled is v2-tolerant — defaults true when absent, set false to suppress every `useHaptic` pulse alongside the OS-level reduced-motion preference (Cluster P FOLLOWUP 1); alwaysRequireHwExplicitConfirm is v2-tolerant — defaults false; when true the HW sign-screen cross-check confirm is required on every sign regardless of the risk classifier (Cluster N FOLLOWUP 3); formDraftTtlMs is v2-tolerant — defaults to 24h, allowed values are FORM_DRAFT_TTL_OPTIONS (Cluster P FOLLOWUP 6); priceDataEnabled is v2-tolerant — defaults true; when false the price oracle is disabled and the TokenDetail stats strip / chart hide for native coins (sends a request to a third-party API revealing wallet activity, hence the opt-out).
+ * @property {{ torRouting: boolean, changeAddressRotation: boolean, hideSmallBalances: boolean, blurOnBlur: boolean, labelsSurviveRestore: boolean, clipboardAutoClearSeconds?: number, hapticsEnabled?: boolean, alwaysRequireHwExplicitConfirm?: boolean, priceDataEnabled?: boolean, metadataFetchEnabled?: boolean }} privacy   v2 — adds blurOnBlur (window-unfocus blur of sensitive data), labelsSurviveRestore (§19.5.2 on-chain label sync opt-in); clipboardAutoClearSeconds is optional v2-tolerant — 0–600 inclusive, 0 = never clear, default 60 (§17.7.1 / G028); hapticsEnabled is v2-tolerant — defaults true when absent, set false to suppress every `useHaptic` pulse alongside the OS-level reduced-motion preference (Cluster P FOLLOWUP 1); alwaysRequireHwExplicitConfirm is v2-tolerant — defaults false; when true the HW sign-screen cross-check confirm is required on every sign regardless of the risk classifier (Cluster N FOLLOWUP 3); formDraftTtlMs is v2-tolerant — defaults to 24h, allowed values are FORM_DRAFT_TTL_OPTIONS (Cluster P FOLLOWUP 6); priceDataEnabled is v2-tolerant — defaults true; when false the price oracle is disabled and the TokenDetail stats strip / chart hide for native coins (sends a request to a third-party API revealing wallet activity, hence the opt-out).
  * @property {{ enabled: boolean, perChain: Record<string, AdsChainState> }} ads
  * @property {{ txConfirmations: boolean, incomingReceipts: boolean, dispenserFills: boolean, orderFills: boolean, priceAlerts: boolean }} notifications
  * @property {boolean} developerMode
@@ -97,8 +97,8 @@ export const CLIPBOARD_AUTO_CLEAR_DEFAULT = 60;
  * @property {{ undoSendSeconds: number, testSendThresholdSats: number }} grace                              v2 — adds testSendThresholdSats (large-amount confirmation gate; 0 = disabled)
  * @property {{ enabled: boolean }} panicMode                                                                v2 — duress-mode toggle; full §26.5 wiring lands later, the schema slot ships now so the Safety panel can flip it
  * @property {typeof BACKUP_REMINDER_CADENCES[number]} backupReminders                                       v2 — backup-reminder cadence
- * @property {string[]} [pinnedTokens]                                                                       v2-tolerant — list of `chainId:asset` keys the user pinned to the top of the balance list (§27.3 / G072)
- * @property {string[]} [hiddenTokens]                                                                       v2-tolerant — list of `chainId:asset` keys the user hid (collapsed into the Hidden section at the bottom of each tab) (§27.4 / G073)
+ * @property {string[]} [pinnedTokens]                                                                       v2-tolerant — list of `chainId:tick` keys the user pinned to the top of the balance list (§27.3 / G072)
+ * @property {string[]} [hiddenTokens]                                                                       v2-tolerant — list of `chainId:tick` keys the user hid (collapsed into the Hidden section at the bottom of each tab) (§27.4 / G073)
  * @property {boolean} [showPinAffordance]                                                                   v2-tolerant — when true, balance rows render a per-row star button to pin/unpin the token. Default false to keep the row UI clean; users who want quick pin access flip it in Settings → Display.
  * @property {boolean} [showHideAffordance]                                                                  v2-tolerant — when true, balance rows render a per-row hide affordance. Default false; the Settings → Display unhide list still works regardless.
  * @property {boolean} [autoApproveLocalhost]                                                                v2-tolerant — when developerMode is also on, bridge.connect from localhost / 127.0.0.1 / [::1] origins skips the approval prompt (§48.6 / G151). Sign requests still prompt.
@@ -155,6 +155,7 @@ export function createDefaultSettings() {
             clipboardAutoClearSeconds: CLIPBOARD_AUTO_CLEAR_DEFAULT,
             hapticsEnabled: true,
             priceDataEnabled: true,
+            metadataFetchEnabled: true,
         },
         ads: {
             enabled: ADS_DEFAULT_ENABLED,
@@ -269,6 +270,11 @@ export function validateSettings(record) {
             // when present, require boolean.
             && (r.privacy.priceDataEnabled === undefined
                 || isBoolean(r.privacy.priceDataEnabled))
+            // metadataFetchEnabled is v2-tolerant: missing → default true;
+            // when present, require boolean. Gates the §27.6 TIS fetch
+            // path in `tokenInfoFor`.
+            && (r.privacy.metadataFetchEnabled === undefined
+                || isBoolean(r.privacy.metadataFetchEnabled))
             // formDraftTtlMs is v2-tolerant: missing → default 24h;
             // when present, must be one of the allowed values (Off /
             // 1h / 24h / 7d).
@@ -326,7 +332,7 @@ export function validateSettings(record) {
             errors,
             'pinnedTokens',
             Array.isArray(r.pinnedTokens) && r.pinnedTokens.every(isString),
-            'must be an array of strings (chainId:asset keys)',
+            'must be an array of strings (chainId:tick keys)',
         );
     }
     if (r.hiddenTokens !== undefined) {
@@ -334,7 +340,7 @@ export function validateSettings(record) {
             errors,
             'hiddenTokens',
             Array.isArray(r.hiddenTokens) && r.hiddenTokens.every(isString),
-            'must be an array of strings (chainId:asset keys)',
+            'must be an array of strings (chainId:tick keys)',
         );
     }
     if (r.showPinAffordance !== undefined) {

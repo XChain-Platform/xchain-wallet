@@ -5,7 +5,7 @@
 //   - flows/demoFixtures.js exports synthesizeDemoBalances,
 //     synthesizeDemoHistory, synthesizeDemoLinks.
 //   - synthesizeDemoBalances mirrors getWalletBalances' shape — first
-//     address per chain gets a non-zero native + assets, additional
+//     address per chain gets a non-zero native + tokens, additional
 //     addresses get zero balances so the row still renders.
 //   - synthesizeDemoHistory returns 2 entries for known chains, [] for
 //     unknown chains.
@@ -74,20 +74,20 @@ assert.match(
     assert.equal(btcEntries[0].address, 'bc1q...0', 'first entry preserves address');
     assert.equal(btcEntries[0].error, null, 'no error');
     assert.ok(btcEntries[0].balances?.native, 'first BTC entry has native balance');
-    assert.equal(btcEntries[0].balances.native.asset, 'BTC');
+    assert.equal(btcEntries[0].balances.native.tick, 'BTC');
     assert.ok(Number(btcEntries[0].balances.native.quantity) > 0,
         'first BTC entry has non-zero native quantity');
-    assert.ok(Array.isArray(btcEntries[0].balances.assets));
-    assert.ok(btcEntries[0].balances.assets.length > 0, 'first BTC entry has token assets');
+    assert.ok(Array.isArray(btcEntries[0].balances.tokens));
+    assert.ok(btcEntries[0].balances.tokens.length > 0, 'first BTC entry has token tokens');
 
     // Second address gets zero balances so the row still renders.
     assert.equal(btcEntries[1].balances?.native?.quantity, '0',
         'second BTC entry has zero native quantity');
-    assert.equal(btcEntries[1].balances?.assets?.length ?? 0, 0,
-        'second BTC entry has no token assets');
+    assert.equal(btcEntries[1].balances?.tokens?.length ?? 0, 0,
+        'second BTC entry has no token tokens');
 
     const ltcEntries = out['litecoin-mainnet'];
-    assert.equal(ltcEntries[0].balances.native.asset, 'LTC');
+    assert.equal(ltcEntries[0].balances.native.tick, 'LTC');
     assert.ok(Number(ltcEntries[0].balances.native.quantity) > 0,
         'LTC native balance is non-zero');
 }

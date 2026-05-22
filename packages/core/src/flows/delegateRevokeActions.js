@@ -9,7 +9,7 @@
 // the SDK encoder. UI is in DelegationActionForm.jsx.
 
 import { submitAction } from './submitAction.js';
-import { normalizeSource } from './sendAsset.js';
+import { normalizeSource } from './sendToken.js';
 
 /**
  * @typedef {Object} DelegateActionOpts
@@ -20,7 +20,7 @@ import { normalizeSource } from './sendAsset.js';
  * @property {import('../registry/index.js').ChainRegistry} chainRegistry
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
  * @property {string} chainId
- * @property {import('./sendAsset.js').SourceRef | import('../schemas/address.js').Address} from
+ * @property {import('./sendToken.js').SourceRef | import('../schemas/address.js').Address} from
  * @property {{ VERSION: string, NEW_SIGNING_PUBKEY: string }} params
  * @property {number} [fee]
  * @property {number} [feePerKb]
@@ -83,7 +83,7 @@ export async function delegateAction(opts) {
  * @property {import('../registry/index.js').ChainRegistry} chainRegistry
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
  * @property {string} chainId
- * @property {import('./sendAsset.js').SourceRef | import('../schemas/address.js').Address} from
+ * @property {import('./sendToken.js').SourceRef | import('../schemas/address.js').Address} from
  * @property {{ VERSION: string, SIGNING_PUBKEY: string }} params
  * @property {number} [fee]
  * @property {number} [feePerKb]

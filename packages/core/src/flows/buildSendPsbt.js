@@ -5,7 +5,7 @@
 // signed, and brings the signed PSBT back to a Full-mode wallet to
 // broadcast.
 //
-// Differences from sendAsset:
+// Differences from sendToken:
 //   - No password / no signer: a watcher-mode wallet has pubkeys but no
 //     keys to sign with. We stop after encoding.
 //   - No ADS donation: the watcher path does not commit ADS counters
@@ -19,16 +19,16 @@
 // Output is the same envelope shape PsbtSignForm consumes, so a watcher
 // → signer → watcher round-trip is symmetrical at the wire format.
 
-import { normalizeSource } from './sendAsset.js';
+import { normalizeSource } from './sendToken.js';
 
 /**
  * @typedef {Object} BuildSendPsbtOpts
  * @property {import('../registry/index.js').ChainRegistry} chainRegistry
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
  * @property {string} chainId
- * @property {import('./sendAsset.js').SourceRef | import('../schemas/address.js').Address} from
+ * @property {import('./sendToken.js').SourceRef | import('../schemas/address.js').Address} from
  * @property {string} to
- * @property {string} asset
+ * @property {string} tick
  * @property {string | number} amount
  * @property {string} [memo]
  * @property {number} [fee]
@@ -59,7 +59,7 @@ export async function buildSendPsbt(opts) {
         throw new Error('buildSendPsbt: chainId is required');
     }
     if (!opts.to) throw new Error('buildSendPsbt: to is required');
-    if (!opts.asset) throw new Error('buildSendPsbt: asset is required');
+    if (!opts.tick) throw new Error('buildSendPsbt: tick is required');
     if (opts.amount === undefined || opts.amount === null || opts.amount === '') {
         throw new Error('buildSendPsbt: amount is required');
     }
@@ -78,7 +78,7 @@ export async function buildSendPsbt(opts) {
 
     /** @type {Record<string, string>} */
     const params = {
-        TICK: opts.asset,
+        TICK: opts.tick,
         AMOUNT: String(opts.amount),
         DESTINATION: opts.to,
     };

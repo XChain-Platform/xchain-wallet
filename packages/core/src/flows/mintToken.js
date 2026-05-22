@@ -1,19 +1,19 @@
-// mintAsset — convenience wrapper for the MINT action (§Phase 2
+// mintToken — convenience wrapper for the MINT action (§Phase 2
 // authoring surface; protocol docs: xchain-documentation/protocol/
 // actions/MINT.md). Mirrors issueToken's shape: takes vault +
 // registries + chain + source address + MINT params, forwards to
 // submitAction, returns the standard SubmitResult.
 //
-// Callers on the UI side (MintForm, messaging.mintAsset) build the
+// Callers on the UI side (MintForm, messaging.mintToken) build the
 // params themselves — the SDK's Actions.createAction runs the
 // authoritative validator. The flow only guards required inputs so
 // bad callers get a loud error before we hit the signer.
 
 import { submitAction } from './submitAction.js';
-import { normalizeSource } from './sendAsset.js';
+import { normalizeSource } from './sendToken.js';
 
 /**
- * @typedef {Object} MintAssetOpts
+ * @typedef {Object} MintTokenOpts
  * @property {import('../storage/Vault.js').Vault} vault
  * @property {string} walletId
  * @property {string} password
@@ -21,7 +21,7 @@ import { normalizeSource } from './sendAsset.js';
  * @property {import('../registry/index.js').ChainRegistry} chainRegistry
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
  * @property {string} chainId
- * @property {import('./sendAsset.js').SourceRef | import('../schemas/address.js').Address} from
+ * @property {import('./sendToken.js').SourceRef | import('../schemas/address.js').Address} from
  * @property {Record<string, string>} params            MINT field map (TICK, AMOUNT, optional DESTINATION)
  * @property {number} [fee]
  * @property {number} [feePerKb]
@@ -33,21 +33,21 @@ import { normalizeSource } from './sendAsset.js';
  */
 
 /**
- * @param {MintAssetOpts} opts
+ * @param {MintTokenOpts} opts
  * @returns {Promise<import('../sdk/submitWithSigner.js').SubmitResult>}
  */
-export async function mintAsset(opts) {
-    if (!opts) throw new Error('mintAsset: opts is required');
+export async function mintToken(opts) {
+    if (!opts) throw new Error('mintToken: opts is required');
     if (!opts.params || typeof opts.params !== 'object') {
-        throw new Error('mintAsset: params is required');
+        throw new Error('mintToken: params is required');
     }
     if (typeof opts.params.TICK !== 'string' || opts.params.TICK.length === 0) {
-        throw new Error('mintAsset: params.TICK is required');
+        throw new Error('mintToken: params.TICK is required');
     }
     if (typeof opts.params.AMOUNT !== 'string' || opts.params.AMOUNT.length === 0) {
-        throw new Error('mintAsset: params.AMOUNT is required');
+        throw new Error('mintToken: params.AMOUNT is required');
     }
-    const source = normalizeSource(opts.from, 'mintAsset');
+    const source = normalizeSource(opts.from, 'mintToken');
 
     const tick = opts.params.TICK;
     const amount = opts.params.AMOUNT;

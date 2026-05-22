@@ -36,7 +36,7 @@ export default defineConfig({
             include: ['packages/core/src/**/*.{js,jsx}'],
             exclude: [
                 'packages/core/src/**/index.js',
-                'packages/core/src/branding/assets/**',
+                'packages/core/src/branding/images/**',
                 'packages/core/src/ui/tokens.css',
             ],
         },

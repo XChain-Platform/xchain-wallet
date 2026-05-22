@@ -1,7 +1,7 @@
 // Product identity constants — spec §5.
 //
 // This module is the single source of truth for user-facing brand
-// strings and asset pointers. §5.5 placeholders (tagline candidates,
+// strings and tick pointers. §5.5 placeholders (tagline candidates,
 // marketing-owned copy) are kept inline so a `grep PLACEHOLDER_` can
 // verify nothing stale ships to mainnet.
 //
@@ -10,10 +10,10 @@
 //     `faviconUrl()`, `logoUrl()` for headers + HTML entries.
 //   - Web SPA shell reads the same for its index.html and app shell.
 //   - Chain descriptors (registry/descriptors/*.js) point `icon` at a
-//     filename in ./assets/; UI code resolves URLs via `assetUrl()`.
+//     filename in ./images/; UI code resolves URLs via `brandingUrl()`.
 //
 // Build-time behaviour:
-//   `assetUrl(filename)` uses `new URL('./assets/...', import.meta.url)`
+//   `brandingUrl(filename)` uses `new URL('./images/...', import.meta.url)`
 //   which Vite rewrites at build time to a hashed static-asset URL. In
 //   Node (tests), it returns a file:// URL that still resolves on disk.
 
@@ -23,7 +23,7 @@ export const TAGLINE = 'The self-custodial wallet for the XChain Platform.';
 export const CANONICAL_DOMAIN = 'wallet.xchain.io';
 export const HOMEPAGE_URL = `https://${CANONICAL_DOMAIN}`;
 
-// Accent colours sampled from the XChain logo (see ./assets/xchain-color-750.png).
+// Accent colours sampled from the XChain logo (see ./images/xchain-color-750.png).
 // Blue is the primary interactive accent. Purple is a secondary accent for
 // highlighting cross-chain elements. Chain-specific colours live on the
 // chain descriptors themselves (§5.4 Chain color language).
@@ -36,7 +36,7 @@ export const ACCENT_SECONDARY = '#7B2C8F';
 export const DEFAULT_EXPLORER_BASE = 'https://explorer.xchain.io';
 export const DEFAULT_HUB_BASE = 'https://hub.xchain.io';
 
-// Filenames (not URLs) — UI code calls `assetUrl(filename)` to get a
+// Filenames (not URLs) — UI code calls `brandingUrl(filename)` to get a
 // bundler-friendly URL. Keep these as strings so chain descriptors can
 // carry them without importing Vite-specific syntax.
 export const LOGO_FILE = 'xchain-color-750.png';
@@ -69,24 +69,24 @@ export const CHAIN_ICON_LARGE = {
 };
 
 /**
- * Resolve an asset filename to a runtime URL.
- * Vite rewrites this at build time to a hashed static-asset URL.
+ * Resolve a branding image filename to a runtime URL.
+ * Vite rewrites this at build time to a hashed static-image URL.
  * Node / test environments get a file:// URL that still resolves on disk.
- * @param {string} filename  Filename inside ./assets/
+ * @param {string} filename  Filename inside ./images/
  * @returns {string}
  */
-export function assetUrl(filename) {
-    return new URL(`./assets/${filename}`, import.meta.url).href;
+export function brandingUrl(filename) {
+    return new URL(`./images/${filename}`, import.meta.url).href;
 }
 
 /** @returns {string} Product logo URL. */
 export function logoUrl() {
-    return assetUrl(LOGO_FILE);
+    return brandingUrl(LOGO_FILE);
 }
 
 /** @returns {string} Favicon URL. */
 export function faviconUrl() {
-    return assetUrl(FAVICON_FILE);
+    return brandingUrl(FAVICON_FILE);
 }
 
 /**
@@ -95,7 +95,7 @@ export function faviconUrl() {
  */
 export function chainIconSmallUrl(chainId) {
     const f = CHAIN_ICON_SMALL[chainId];
-    return f ? assetUrl(f) : null;
+    return f ? brandingUrl(f) : null;
 }
 
 /**
@@ -104,5 +104,5 @@ export function chainIconSmallUrl(chainId) {
  */
 export function chainIconLargeUrl(chainId) {
     const f = CHAIN_ICON_LARGE[chainId];
-    return f ? assetUrl(f) : null;
+    return f ? brandingUrl(f) : null;
 }

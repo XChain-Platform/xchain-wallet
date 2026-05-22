@@ -3,7 +3,7 @@
 // without requiring the user to fund the wallet.
 //
 // `nftImg` returns an inline SVG data URI used as a stand-in for an
-// asset's image. Real wallets get imageUrl from the indexer; the demo
+// tick's image. Real wallets get imageUrl from the indexer; the demo
 // path needs offline-safe placeholders so the NFTs tab (which filters
 // by imageUrl presence) actually shows tiles. Pure SVG keeps the
 // payload tiny and avoids any network fetch.
@@ -26,92 +26,92 @@ function nftImg(label, bgFrom, bgTo, fg = '#FFFFFF') {
 // demo doesn't pretend to be a heavyweight active wallet.
 
 /**
- * @typedef {{ asset: string, divisibility: number, quantity: string }} NativeFixture
- * @typedef {{ asset: string, displayName: string, divisibility: number, quantity: string }} AssetFixture
- * @typedef {{ native: NativeFixture | null, assets: AssetFixture[] }} BalanceFixture
+ * @typedef {{ tick: string, divisibility: number, quantity: string }} NativeFixture
+ * @typedef {{ tick: string, displayName: string, divisibility: number, quantity: string }} TokenFixture
+ * @typedef {{ native: NativeFixture | null, tokens: TokenFixture[] }} BalanceFixture
  */
 
 const PER_CHAIN_DEFAULTS = /** @type {Record<string, BalanceFixture>} */ ({
     'bitcoin-mainnet': {
-        native: { asset: 'BTC', divisibility: 8, quantity: '12345678', fiatRate: 95000 }, // 0.12345678 BTC ≈ $11.7k
-        assets: [
+        native: { tick: 'BTC', divisibility: 8, quantity: '12345678', fiatRate: 95000 }, // 0.12345678 BTC ≈ $11.7k
+        tokens: [
             // Divisible mainnet tokens
-            { asset: 'XCP', displayName: 'Counterparty', divisibility: 8, quantity: '500000000', fiatRate: 35 }, // 5 XCP
-            { asset: 'PEPECASH', displayName: 'PepeCash', divisibility: 8, quantity: '10000000000', fiatRate: 0.0012, imageUrl: nftImg('PEPE', '#1B5E20', '#388E3C') }, // 100 PEPECASH
-            { asset: 'BANANE', displayName: 'Banane', divisibility: 8, quantity: '20000000000', fiatRate: 0.04 }, // 200 BANANE
-            { asset: 'RUSTBITS', displayName: 'Rustbits', divisibility: 8, quantity: '750000000', fiatRate: 2.50 }, // 7.5 RUSTBITS
+            { tick: 'XCP', displayName: 'Counterparty', divisibility: 8, quantity: '500000000', fiatRate: 35 }, // 5 XCP
+            { tick: 'PEPECASH', displayName: 'PepeCash', divisibility: 8, quantity: '10000000000', fiatRate: 0.0012, imageUrl: nftImg('PEPE', '#1B5E20', '#388E3C') }, // 100 PEPECASH
+            { tick: 'BANANE', displayName: 'Banane', divisibility: 8, quantity: '20000000000', fiatRate: 0.04 }, // 200 BANANE
+            { tick: 'RUSTBITS', displayName: 'Rustbits', divisibility: 8, quantity: '750000000', fiatRate: 2.50 }, // 7.5 RUSTBITS
             // Indivisible — surfaced in NFTs because they carry imageUrl
-            { asset: 'RAREPEPE', displayName: 'Rare Pepe', divisibility: 0, quantity: '1', fiatRate: 650, imageUrl: nftImg('PEPE', '#7B2C8F', '#C2185B') },
-            { asset: 'BITCRYSTAL', displayName: 'Bitcrystals', divisibility: 0, quantity: '1', fiatRate: 220, imageUrl: nftImg('BIT', '#1565C0', '#00838F') },
-            { asset: 'XCPCARD', displayName: 'XCP Founders Card', divisibility: 0, quantity: '1', fiatRate: 120, imageUrl: nftImg('XCP', '#1E90C7', '#7B2C8F') },
+            { tick: 'RAREPEPE', displayName: 'Rare Pepe', divisibility: 0, quantity: '1', fiatRate: 650, imageUrl: nftImg('PEPE', '#7B2C8F', '#C2185B') },
+            { tick: 'BITCRYSTAL', displayName: 'Bitcrystals', divisibility: 0, quantity: '1', fiatRate: 220, imageUrl: nftImg('BIT', '#1565C0', '#00838F') },
+            { tick: 'XCPCARD', displayName: 'XCP Founders Card', divisibility: 0, quantity: '1', fiatRate: 120, imageUrl: nftImg('XCP', '#1E90C7', '#7B2C8F') },
         ],
     },
     'bitcoin-testnet': {
-        native: { asset: 'BTC', divisibility: 8, quantity: '5000000' }, // 0.05 tBTC
-        assets: [],
+        native: { tick: 'BTC', divisibility: 8, quantity: '5000000' }, // 0.05 tBTC
+        tokens: [],
     },
     'bitcoin-regtest': {
-        native: { asset: 'BTC', divisibility: 8, quantity: '10000000000', fiatRate: 70000 }, // 100 rBTC @ $70k
-        assets: [
+        native: { tick: 'BTC', divisibility: 8, quantity: '10000000000', fiatRate: 70000 }, // 100 rBTC @ $70k
+        tokens: [
             // Divisible tokens — appear in Tokens tab
-            { asset: 'XCP', displayName: 'Counterparty', divisibility: 8, quantity: '500000000', fiatRate: 30 },
+            { tick: 'XCP', displayName: 'Counterparty', divisibility: 8, quantity: '500000000', fiatRate: 30 },
             // PEPECASH carries an image, so it appears in BOTH Tokens (row) and NFTs (tile)
-            { asset: 'PEPECASH', displayName: 'PEPECASH', divisibility: 8, quantity: '10000000000', fiatRate: 0.0008, imageUrl: nftImg('PEPE', '#1B5E20', '#388E3C') },
-            { asset: 'USDX', displayName: 'USD Stablecoin (demo)', divisibility: 8, quantity: '25000000000', fiatRate: 1 },
-            { asset: 'DEMOCOIN', displayName: 'Demo Coin', divisibility: 8, quantity: '100000000', fiatRate: 0.05 },
+            { tick: 'PEPECASH', displayName: 'PEPECASH', divisibility: 8, quantity: '10000000000', fiatRate: 0.0008, imageUrl: nftImg('PEPE', '#1B5E20', '#388E3C') },
+            { tick: 'USDX', displayName: 'USD Stablecoin (demo)', divisibility: 8, quantity: '25000000000', fiatRate: 1 },
+            { tick: 'DEMOCOIN', displayName: 'Demo Coin', divisibility: 8, quantity: '100000000', fiatRate: 0.05 },
             // Indivisible tokens — also appear in NFTs because they have an imageUrl
-            { asset: 'RAREPEPE', displayName: 'Rare Pepe', divisibility: 0, quantity: '1', fiatRate: 500, imageUrl: nftImg('PEPE', '#7B2C8F', '#C2185B') },
-            { asset: 'BITCRYSTAL', displayName: 'Bitcrystals', divisibility: 0, quantity: '1', fiatRate: 200, imageUrl: nftImg('BIT', '#1565C0', '#00838F') },
-            { asset: 'XCHAINLOGO', displayName: 'XChain Logo NFT', divisibility: 0, quantity: '1', fiatRate: 50, imageUrl: nftImg('XC', '#1E90C7', '#7B2C8F') },
+            { tick: 'RAREPEPE', displayName: 'Rare Pepe', divisibility: 0, quantity: '1', fiatRate: 500, imageUrl: nftImg('PEPE', '#7B2C8F', '#C2185B') },
+            { tick: 'BITCRYSTAL', displayName: 'Bitcrystals', divisibility: 0, quantity: '1', fiatRate: 200, imageUrl: nftImg('BIT', '#1565C0', '#00838F') },
+            { tick: 'XCHAINLOGO', displayName: 'XChain Logo NFT', divisibility: 0, quantity: '1', fiatRate: 50, imageUrl: nftImg('XC', '#1E90C7', '#7B2C8F') },
         ],
     },
     'litecoin-mainnet': {
-        native: { asset: 'LTC', divisibility: 8, quantity: '500000000', fiatRate: 90 }, // 5 LTC ≈ $450
-        assets: [
+        native: { tick: 'LTC', divisibility: 8, quantity: '500000000', fiatRate: 90 }, // 5 LTC ≈ $450
+        tokens: [
             // Divisible LTC-side tokens
-            { asset: 'LITECRED', displayName: 'LiteCred Stablecoin', divisibility: 8, quantity: '15000000000', fiatRate: 1 }, // 150 LITECRED
-            { asset: 'OMNILITE', displayName: 'OmniLite Token', divisibility: 8, quantity: '4200000000', fiatRate: 3.10 }, // 42 OMNILITE
-            { asset: 'MWEB', displayName: 'MimbleWimble Token', divisibility: 8, quantity: '2500000000', fiatRate: 6 }, // 25 MWEB
+            { tick: 'LITECRED', displayName: 'LiteCred Stablecoin', divisibility: 8, quantity: '15000000000', fiatRate: 1 }, // 150 LITECRED
+            { tick: 'OMNILITE', displayName: 'OmniLite Token', divisibility: 8, quantity: '4200000000', fiatRate: 3.10 }, // 42 OMNILITE
+            { tick: 'MWEB', displayName: 'MimbleWimble Token', divisibility: 8, quantity: '2500000000', fiatRate: 6 }, // 25 MWEB
             // Indivisible — NFTs tab
-            { asset: 'LITEORD', displayName: 'Lite Ordinal #042', divisibility: 0, quantity: '1', fiatRate: 45, imageUrl: nftImg('LO42', '#0EA5E9', '#1E40AF') },
-            { asset: 'MIMBLEPUNK', displayName: 'MimblePunk #7', divisibility: 0, quantity: '1', fiatRate: 95, imageUrl: nftImg('MP7', '#06B6D4', '#0369A1') },
+            { tick: 'LITEORD', displayName: 'Lite Ordinal #042', divisibility: 0, quantity: '1', fiatRate: 45, imageUrl: nftImg('LO42', '#0EA5E9', '#1E40AF') },
+            { tick: 'MIMBLEPUNK', displayName: 'MimblePunk #7', divisibility: 0, quantity: '1', fiatRate: 95, imageUrl: nftImg('MP7', '#06B6D4', '#0369A1') },
         ],
     },
     'litecoin-regtest': {
-        native: { asset: 'LTC', divisibility: 8, quantity: '100000000000', fiatRate: 80 }, // 1000 rLTC @ $80
-        assets: [
+        native: { tick: 'LTC', divisibility: 8, quantity: '100000000000', fiatRate: 80 }, // 1000 rLTC @ $80
+        tokens: [
             // Divisible LTC-side tokens
-            { asset: 'LITECRED', displayName: 'LiteCred Stablecoin (demo)', divisibility: 8, quantity: '50000000000', fiatRate: 1 },
-            { asset: 'MWEB', displayName: 'MimbleWimble Token', divisibility: 8, quantity: '7500000000', fiatRate: 5 },
-            { asset: 'LTCDOGE', displayName: 'LTC × DOGE Pair', divisibility: 8, quantity: '12500000000', fiatRate: 2 },
+            { tick: 'LITECRED', displayName: 'LiteCred Stablecoin (demo)', divisibility: 8, quantity: '50000000000', fiatRate: 1 },
+            { tick: 'MWEB', displayName: 'MimbleWimble Token', divisibility: 8, quantity: '7500000000', fiatRate: 5 },
+            { tick: 'LTCDOGE', displayName: 'LTC × DOGE Pair', divisibility: 8, quantity: '12500000000', fiatRate: 2 },
             // Indivisible — NFTs tab (have imageUrl)
-            { asset: 'LITEORD', displayName: 'Lite Ordinal #042', divisibility: 0, quantity: '1', fiatRate: 40, imageUrl: nftImg('LO42', '#0EA5E9', '#1E40AF') },
-            { asset: 'MIMBLEPUNK', displayName: 'MimblePunk #7', divisibility: 0, quantity: '1', fiatRate: 80, imageUrl: nftImg('MP7', '#06B6D4', '#0369A1') },
+            { tick: 'LITEORD', displayName: 'Lite Ordinal #042', divisibility: 0, quantity: '1', fiatRate: 40, imageUrl: nftImg('LO42', '#0EA5E9', '#1E40AF') },
+            { tick: 'MIMBLEPUNK', displayName: 'MimblePunk #7', divisibility: 0, quantity: '1', fiatRate: 80, imageUrl: nftImg('MP7', '#06B6D4', '#0369A1') },
         ],
     },
     'dogecoin-mainnet': {
-        native: { asset: 'DOGE', divisibility: 8, quantity: '500000000000', fiatRate: 0.18 }, // 5000 DOGE ≈ $900
-        assets: [
+        native: { tick: 'DOGE', divisibility: 8, quantity: '500000000000', fiatRate: 0.18 }, // 5000 DOGE ≈ $900
+        tokens: [
             // Divisible DRC-20-style tokens
-            { asset: 'DOGI', displayName: 'Dogi Coin', divisibility: 8, quantity: '250000000000', fiatRate: 0.012 }, // 2500 DOGI
-            { asset: 'WOW', displayName: 'Wow Such Token', divisibility: 8, quantity: '7500000000', fiatRate: 0.45 }, // 75 WOW
-            { asset: 'DSHIB', displayName: 'Doge Shib', divisibility: 8, quantity: '5000000000000', fiatRate: 0.00009 }, // 50,000 DSHIB
+            { tick: 'DOGI', displayName: 'Dogi Coin', divisibility: 8, quantity: '250000000000', fiatRate: 0.012 }, // 2500 DOGI
+            { tick: 'WOW', displayName: 'Wow Such Token', divisibility: 8, quantity: '7500000000', fiatRate: 0.45 }, // 75 WOW
+            { tick: 'DSHIB', displayName: 'Doge Shib', divisibility: 8, quantity: '5000000000000', fiatRate: 0.00009 }, // 50,000 DSHIB
             // Indivisible — NFTs tab
-            { asset: 'DOGINAL', displayName: 'Doginal #1337', divisibility: 0, quantity: '1', fiatRate: 18, imageUrl: nftImg('1337', '#F59E0B', '#B45309') },
-            { asset: 'MEMECARD', displayName: 'Meme Card: To The Moon', divisibility: 0, quantity: '1', fiatRate: 32, imageUrl: nftImg('MOON', '#EAB308', '#92400E') },
+            { tick: 'DOGINAL', displayName: 'Doginal #1337', divisibility: 0, quantity: '1', fiatRate: 18, imageUrl: nftImg('1337', '#F59E0B', '#B45309') },
+            { tick: 'MEMECARD', displayName: 'Meme Card: To The Moon', divisibility: 0, quantity: '1', fiatRate: 32, imageUrl: nftImg('MOON', '#EAB308', '#92400E') },
         ],
     },
     'dogecoin-regtest': {
-        native: { asset: 'DOGE', divisibility: 8, quantity: '1000000000000', fiatRate: 0.15 }, // 10000 rDOGE @ $0.15
-        assets: [
+        native: { tick: 'DOGE', divisibility: 8, quantity: '1000000000000', fiatRate: 0.15 }, // 10000 rDOGE @ $0.15
+        tokens: [
             // Divisible DRC-20-style tokens
-            { asset: 'DOGI', displayName: 'Dogi Coin', divisibility: 8, quantity: '500000000000', fiatRate: 0.01 },
-            { asset: 'WOW', displayName: 'Wow Such Token', divisibility: 8, quantity: '12500000000', fiatRate: 0.5 },
-            { asset: 'DSHIB', displayName: 'Doge Shib', divisibility: 8, quantity: '7500000000000', fiatRate: 0.0001 },
-            { asset: 'BARK', displayName: 'Bark Stablecoin (demo)', divisibility: 8, quantity: '20000000000', fiatRate: 1 },
+            { tick: 'DOGI', displayName: 'Dogi Coin', divisibility: 8, quantity: '500000000000', fiatRate: 0.01 },
+            { tick: 'WOW', displayName: 'Wow Such Token', divisibility: 8, quantity: '12500000000', fiatRate: 0.5 },
+            { tick: 'DSHIB', displayName: 'Doge Shib', divisibility: 8, quantity: '7500000000000', fiatRate: 0.0001 },
+            { tick: 'BARK', displayName: 'Bark Stablecoin (demo)', divisibility: 8, quantity: '20000000000', fiatRate: 1 },
             // Indivisible — NFTs tab (have imageUrl)
-            { asset: 'DOGINAL', displayName: 'Doginal #1337', divisibility: 0, quantity: '1', fiatRate: 15, imageUrl: nftImg('1337', '#F59E0B', '#B45309') },
-            { asset: 'MEMECARD', displayName: 'Meme Card: To The Moon', divisibility: 0, quantity: '1', fiatRate: 30, imageUrl: nftImg('MOON', '#EAB308', '#92400E') },
+            { tick: 'DOGINAL', displayName: 'Doginal #1337', divisibility: 0, quantity: '1', fiatRate: 15, imageUrl: nftImg('1337', '#F59E0B', '#B45309') },
+            { tick: 'MEMECARD', displayName: 'Meme Card: To The Moon', divisibility: 0, quantity: '1', fiatRate: 30, imageUrl: nftImg('MOON', '#EAB308', '#92400E') },
         ],
     },
 });
@@ -138,8 +138,8 @@ export function synthesizeDemoBalances(addressesByChain) {
             addressType: a.addressType,
             derivationPath: a.derivationPath ?? null,
             balances: idx === 0 && fixture
-                ? { native: fixture.native, assets: fixture.assets }
-                : { native: fixture?.native ? { ...fixture.native, quantity: '0' } : null, assets: [] },
+                ? { native: fixture.native, tokens: fixture.tokens }
+                : { native: fixture?.native ? { ...fixture.native, quantity: '0' } : null, tokens: [] },
             error: null,
         }));
     }
@@ -162,22 +162,22 @@ export function synthesizeDemoHistory(chainId, address, opts = {}) {
     const now = typeof opts.now === 'number' ? opts.now : Date.now();
     const fixture = PER_CHAIN_DEFAULTS[chainId];
     if (!fixture || !fixture.native) return [];
-    const tick = fixture.native.asset;
+    const tick = fixture.native.tick;
     const sec = (deltaSec) => Math.floor(now / 1000) - deltaSec;
 
     // Pick a representative divisible token and a representative
-    // indivisible (NFT-ish) token from this chain's asset list to drive
-    // the token-receive synth rows. Prefer assets that carry an
+    // indivisible (NFT-ish) token from this chain's tick list to drive
+    // the token-receive synth rows. Prefer tokens that carry an
     // imageUrl so the Activity row exercises the token-image path
     // instead of falling back to the tinted-letter placeholder.
-    const divisibleToken = (fixture.assets || []).find((a) => a.divisibility > 0 && a.imageUrl)
-        || (fixture.assets || []).find((a) => a.divisibility > 0);
-    const indivisibleToken = (fixture.assets || []).find((a) => a.divisibility === 0 && a.imageUrl)
-        || (fixture.assets || []).find((a) => a.divisibility === 0);
+    const divisibleToken = (fixture.tokens || []).find((a) => a.divisibility > 0 && a.imageUrl)
+        || (fixture.tokens || []).find((a) => a.divisibility > 0);
+    const indivisibleToken = (fixture.tokens || []).find((a) => a.divisibility === 0 && a.imageUrl)
+        || (fixture.tokens || []).find((a) => a.divisibility === 0);
 
     // Rows mirror the real `getAddressHistory` shape — top-level
     // action_index / tx_hash / block_index / source / destination /
-    // tick / asset / amount — so History.jsx accepts them as entries
+    // tick / tick / amount — so History.jsx accepts them as entries
     // (it skips rows without action_index, and summarizeRow / search
     // read flat top-level fields). The `params` nest is preserved so
     // HomeTabs' demo activity list (which reads `r.params.*`) keeps
@@ -223,15 +223,15 @@ export function synthesizeDemoHistory(chainId, address, opts = {}) {
             action: 'SEND',
             source: 'demo-friend-1xchainpubsendertoken',
             destination: address,
-            tick: divisibleToken.asset,
+            tick: divisibleToken.tick,
             amount: tokenAmount,
             quantity: tokenAmount,
-            memo: `gift: ${divisibleToken.asset}`,
+            memo: `gift: ${divisibleToken.tick}`,
             params: {
                 source: 'demo-friend-1xchainpubsendertoken',
                 destination: address,
                 amount: tokenAmount,
-                tick: divisibleToken.asset,
+                tick: divisibleToken.tick,
             },
         });
     }
@@ -248,14 +248,14 @@ export function synthesizeDemoHistory(chainId, address, opts = {}) {
             action: 'SEND',
             source: 'demo-collector-1xchainpubnftsender',
             destination: address,
-            tick: indivisibleToken.asset,
+            tick: indivisibleToken.tick,
             amount: '1',
             quantity: '1',
             params: {
                 source: 'demo-collector-1xchainpubnftsender',
                 destination: address,
                 amount: '1',
-                tick: indivisibleToken.asset,
+                tick: indivisibleToken.tick,
             },
         });
     }
@@ -331,9 +331,9 @@ export function synthesizeDemoHistory(chainId, address, opts = {}) {
             action: 'ORDER',
             source: address,
             // ORDER's "currency" is the give-side ticker. Surface it at
-            // the top-level tick/asset so this row is searchable by the
+            // the top-level tick/tick so this row is searchable by the
             // native ticker (the TokenDetail → View activity flow opens
-            // History pre-filtered to the asset).
+            // History pre-filtered to the tick).
             tick,
             give_asset: tick,
             give_quantity: '2000000',

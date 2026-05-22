@@ -183,7 +183,7 @@ function makeFakeWindows() {
         kind: 'signAction',
         chainId: 'bitcoin-mainnet',
         action: 'SEND',
-        payload: { asset: 'MYTOKEN', quantity: '100' },
+        payload: { tick: 'MYTOKEN', quantity: '100' },
     });
     await Promise.resolve();
     await Promise.resolve();

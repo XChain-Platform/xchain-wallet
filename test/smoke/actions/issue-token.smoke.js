@@ -44,7 +44,7 @@ assert.ok(
 );
 assert.ok(
     /normalizeSource\(opts\.from/.test(flowSrc),
-    'issueToken normalizes the source address (reused from sendAsset)',
+    'issueToken normalizes the source address (reused from sendToken)',
 );
 
 // Guard rails: the flow rejects obvious misuse before sending the

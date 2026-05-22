@@ -2,27 +2,27 @@ import { useState } from 'react';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { Icon } from '@xchain-wallet/core/ui';
 import { EmptyStateNudge } from './EmptyStateNudge.jsx';
-import { useAssetInfo } from '../hooks/useAssetInfo.js';
+import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import styles from './CollectiblesView.module.css';
 
 /**
  * §27.5 / G074 — Collectibles view. Renders an NFT-shaped grid (large
  * square thumbnails) instead of the row layout used for fungible
- * balances. Each card shows the asset image when one is available and
+ * balances. Each card shows the tick image when one is available and
  * falls back to a colored ticker-letter placeholder; tapping a card
  * surfaces the §27.6 token detail page via `onSelectToken` (the same
  * payload `<BalanceList>` emits, so the consuming router doesn't change).
  *
  * Image URLs come from two paths: row-payload `imageUrl` (when the
  * caller already has one) takes precedence, and `<CollectibleCard>`
- * falls back to fetching `messaging.getAssetInfo` per-card via the
- * shared `useAssetInfo` hook (Cluster I FOLLOWUP 3 / Cluster C
+ * falls back to fetching `messaging.getTokenInfo` per-card via the
+ * shared `useTokenInfo` hook (Cluster I FOLLOWUP 3 / Cluster C
  * FOLLOWUP 3). The hook's module-level cache means revisits don't
  * re-fetch, and a missing / failing image leaves the ticker-letter
  * placeholder in place.
  *
  * @param {object} props
- * @param {Array<{chainId: string, asset: string, displayName: string, divisibility: number, fiatRate: number | null, quantity: string, imageUrl?: string | null}>} props.rows
+ * @param {Array<{chainId: string, tick: string, displayName: string, divisibility: number, fiatRate: number | null, quantity: string, imageUrl?: string | null}>} props.rows
  * @param {string} [props.emptyTitle]
  * @param {string} [props.emptyBody]
  * @param {() => void} [props.onReceive]
@@ -58,15 +58,15 @@ export function CollectiblesView({
     }
 
     const visible = hiddenKeys
-        ? rows.filter((r) => !hiddenKeys.has(`${r.chainId}:${r.asset}`))
+        ? rows.filter((r) => !hiddenKeys.has(`${r.chainId}:${r.tick}`))
         : rows;
     const hidden = hiddenKeys
-        ? rows.filter((r) => hiddenKeys.has(`${r.chainId}:${r.asset}`))
+        ? rows.filter((r) => hiddenKeys.has(`${r.chainId}:${r.tick}`))
         : [];
     const sortedRows = pinnedKeys && pinnedKeys.size > 0
         ? [
-            ...visible.filter((r) => pinnedKeys.has(`${r.chainId}:${r.asset}`)),
-            ...visible.filter((r) => !pinnedKeys.has(`${r.chainId}:${r.asset}`)),
+            ...visible.filter((r) => pinnedKeys.has(`${r.chainId}:${r.tick}`)),
+            ...visible.filter((r) => !pinnedKeys.has(`${r.chainId}:${r.tick}`)),
         ]
         : visible;
 
@@ -75,9 +75,9 @@ export function CollectiblesView({
             <div className={styles.grid} role="list" aria-label="Collectibles">
                 {sortedRows.map((r) => (
                     <CollectibleCard
-                        key={`${r.chainId}:${r.asset}`}
+                        key={`${r.chainId}:${r.tick}`}
                         row={r}
-                        pinned={pinnedKeys ? pinnedKeys.has(`${r.chainId}:${r.asset}`) : false}
+                        pinned={pinnedKeys ? pinnedKeys.has(`${r.chainId}:${r.tick}`) : false}
                         hidden={false}
                         onSelect={onSelectToken}
                         onTogglePin={onTogglePin}
@@ -101,7 +101,7 @@ export function CollectiblesView({
                 <div className={styles.grid}>
                     {hidden.map((r) => (
                         <CollectibleCard
-                            key={`hidden:${r.chainId}:${r.asset}`}
+                            key={`hidden:${r.chainId}:${r.tick}`}
                             row={r}
                             pinned={false}
                             hidden
@@ -119,13 +119,13 @@ export function CollectiblesView({
 function CollectibleCard({ row, pinned, hidden, onSelect, onTogglePin, onToggleHide }) {
     const [imgFailed, setImgFailed] = useState(false);
     const chainIconUrl = branding.chainIconSmallUrl(row.chainId);
-    // Cluster I FOLLOWUP 3 — fetch asset metadata to surface a real image
-    // when the row payload doesn't already carry one. `useAssetInfo`'s
+    // Cluster I FOLLOWUP 3 — fetch tick metadata to surface a real image
+    // when the row payload doesn't already carry one. `useTokenInfo`'s
     // module-level cache means revisits don't re-fetch, and silent
     // failure leaves the ticker-letter placeholder in place.
-    const assetInfo = useAssetInfo({
+    const assetInfo = useTokenInfo({
         chainId: row.chainId,
-        asset: row.asset,
+        tick: row.tick,
         skip: row.kind === 'native' || hidden,
     });
     const fallbackImageUrl = assetInfo && typeof assetInfo.imageUrl === 'string'
@@ -142,7 +142,7 @@ function CollectibleCard({ row, pinned, hidden, onSelect, onTogglePin, onToggleH
     const handleClick = clickable
         ? () => onSelect({
             chainId: row.chainId,
-            asset: row.asset,
+            tick: row.tick,
             kind: row.kind,
             displayName: row.displayName,
             divisibility: row.divisibility,
@@ -151,7 +151,7 @@ function CollectibleCard({ row, pinned, hidden, onSelect, onTogglePin, onToggleH
         })
         : undefined;
     const Tag = clickable ? 'button' : 'div';
-    const key = `${row.chainId}:${row.asset}`;
+    const key = `${row.chainId}:${row.tick}`;
     return (
         <Tag
             className={`${styles.card} ${clickable ? styles.cardClickable : ''} ${pinned ? styles.cardPinned : ''} ${hidden ? styles.cardHidden : ''}`}
@@ -159,7 +159,7 @@ function CollectibleCard({ row, pinned, hidden, onSelect, onTogglePin, onToggleH
             role="listitem"
             onClick={handleClick}
             aria-label={clickable
-                ? `Open ${row.displayName || row.asset} details`
+                ? `Open ${row.displayName || row.tick} details`
                 : undefined}
         >
             <div className={styles.thumb}>
@@ -174,10 +174,10 @@ function CollectibleCard({ row, pinned, hidden, onSelect, onTogglePin, onToggleH
                 ) : (
                     <span
                         className={styles.thumbLetter}
-                        style={{ background: tickerColor(row.asset) }}
+                        style={{ background: tickerColor(row.tick) }}
                         aria-hidden="true"
                     >
-                        {row.asset.slice(0, 2)}
+                        {row.tick.slice(0, 2)}
                     </span>
                 )}
                 {chainIconUrl ? (
@@ -195,7 +195,7 @@ function CollectibleCard({ row, pinned, hidden, onSelect, onTogglePin, onToggleH
                         tabIndex={0}
                         className={`${styles.pinBtn} ${pinned ? styles.pinBtnActive : ''}`}
                         aria-pressed={pinned}
-                        aria-label={pinned ? `Unpin ${row.asset}` : `Pin ${row.asset}`}
+                        aria-label={pinned ? `Unpin ${row.tick}` : `Pin ${row.tick}`}
                         onClick={(e) => {
                             e.stopPropagation();
                             e.preventDefault();
@@ -211,7 +211,7 @@ function CollectibleCard({ row, pinned, hidden, onSelect, onTogglePin, onToggleH
                         tabIndex={0}
                         className={`${styles.hideBtn} ${hidden ? styles.hideBtnActive : ''}`}
                         aria-pressed={hidden}
-                        aria-label={hidden ? `Unhide ${row.asset}` : `Hide ${row.asset}`}
+                        aria-label={hidden ? `Unhide ${row.tick}` : `Hide ${row.tick}`}
                         onClick={(e) => {
                             e.stopPropagation();
                             e.preventDefault();
@@ -224,7 +224,7 @@ function CollectibleCard({ row, pinned, hidden, onSelect, onTogglePin, onToggleH
             </div>
             <div className={styles.meta}>
                 <div className={styles.name} title={row.displayName}>{row.displayName}</div>
-                <div className={styles.subtitle}>{row.asset}</div>
+                <div className={styles.subtitle}>{row.tick}</div>
             </div>
         </Tag>
     );
@@ -235,10 +235,10 @@ const PALETTE = [
     '#EF4444', '#8B5CF6', '#EC4899', '#14B8A6', '#F97316',
     '#6366F1', '#84CC16', '#06B6D4', '#A855F7', '#F43F5E',
 ];
-function tickerColor(asset) {
+function tickerColor(tick) {
     let h = 0;
-    for (let i = 0; i < asset.length; i += 1) {
-        h = (h * 31 + asset.charCodeAt(i)) >>> 0;
+    for (let i = 0; i < tick.length; i += 1) {
+        h = (h * 31 + tick.charCodeAt(i)) >>> 0;
     }
     return PALETTE[h % PALETTE.length];
 }

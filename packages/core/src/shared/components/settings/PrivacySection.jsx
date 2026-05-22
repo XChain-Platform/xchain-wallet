@@ -107,6 +107,12 @@ export function PrivacySection() {
                 onChange={(v) => onToggle('priceDataEnabled', v)}
             />
             <ToggleRow
+                label="Fetch token metadata"
+                hint="When a token's description points at a Token Information Standard (TIS) JSON document, the wallet downloads it and renders the embedded artwork, audio, video, website, and social links on the token detail page. Reveals to the host of that document (and any embedded media URLs — IPFS gateways, third-party CDNs) that you're looking at this token. Disable to render only the indexer-supplied fields with zero extra network calls."
+                checked={settings.privacy.metadataFetchEnabled !== false}
+                onChange={(v) => onToggle('metadataFetchEnabled', v)}
+            />
+            <ToggleRow
                 label="Always require hardware cross-check confirm"
                 hint="Forces the explicit “I’ve verified path + address” checkbox on every hardware-wallet sign, regardless of amount or recipient. The wallet already requires it for risky signs (large amounts, first-time recipients, multisig). Turn this on to require it on every HW sign."
                 checked={settings.privacy.alwaysRequireHwExplicitConfirm === true}

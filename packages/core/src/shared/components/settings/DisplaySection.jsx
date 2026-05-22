@@ -10,8 +10,8 @@
 // MVP scope (per FOLLOWUPS.md note "drag-reorder is non-trivial; an
 // MVP without reorder still closes the gap"): up / down buttons rather
 // than drag handles. Bulk "Unhide all" + per-row Unpin / Unhide.
-// Token keys render as `chainId:asset` — sufficient to identify a row
-// without a separate `messaging.getAssetInfo` round-trip.
+// Token keys render as `chainId:tick` — sufficient to identify a row
+// without a separate `messaging.getTokenInfo` round-trip.
 
 import { useCallback, useState } from 'react';
 import { Button, Icon } from '@xchain-wallet/core/ui';

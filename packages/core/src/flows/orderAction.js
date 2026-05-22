@@ -12,7 +12,7 @@
 // through unchanged. Phase 3 Step 6 uses EXPIRATION in blocks.
 
 import { submitAction } from './submitAction.js';
-import { normalizeSource } from './sendAsset.js';
+import { normalizeSource } from './sendToken.js';
 
 /**
  * @typedef {Object} OrderActionOpts
@@ -23,7 +23,7 @@ import { normalizeSource } from './sendAsset.js';
  * @property {import('../registry/index.js').ChainRegistry} chainRegistry
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
  * @property {string} chainId
- * @property {import('./sendAsset.js').SourceRef | import('../schemas/address.js').Address} from
+ * @property {import('./sendToken.js').SourceRef | import('../schemas/address.js').Address} from
  * @property {Record<string, string>} params   ORDER field map (GIVE_TICK, GIVE_AMOUNT, GET_TICK, GET_AMOUNT, EXPIRATION, …)
  * @property {number} [fee]
  * @property {number} [feePerKb]

@@ -13,7 +13,7 @@
 //      correctly (load null-on-missing, save+load returns same bytes,
 //      clear removes, re-load returns null).
 //   5. Renderer messaging exports the popup/web parity surface
-//      (unlockWallet, sendAsset, issueToken, registerSigner, etc.).
+//      (unlockWallet, sendToken, issueToken, registerSigner, etc.).
 //   6. Renderer App.jsx is `shell="desktop"`, imports every shared
 //      route the popup + web shells do, and routes `'pair-signer'`
 //      with real pairTrezorSigner + pairLedgerSigner factories (wired Step 18).
@@ -164,8 +164,8 @@ const rendererMsg = readFileSync(join(desktop, 'renderer', 'messaging.js'), 'utf
 for (const fn of [
     'unlockWallet', 'lockWallet', 'listWallets', 'getWalletBalances',
     'getAddressesByChain', 'getNewestAddress', 'generateReceiveAddress',
-    'createWallet', 'importMnemonic', 'sendAsset', 'issueToken',
-    'mintAsset', 'destroyAsset', 'registerSigner', 'listSigners',
+    'createWallet', 'importMnemonic', 'sendToken', 'issueToken',
+    'mintToken', 'destroyToken', 'registerSigner', 'listSigners',
     'unregisterSigner', 'exportPrivateKey', 'getSessionStatus',
 ]) {
     assert.ok(

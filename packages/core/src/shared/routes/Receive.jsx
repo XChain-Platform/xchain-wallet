@@ -429,7 +429,7 @@ export function Receive({ walletId, accountId, onBack }) {
                                 autoComplete="off"
                             />
                             <Input
-                                label="Asset ticker"
+                                label="Token tick"
                                 hint={`Defaults to ${descriptor?.coin?.toUpperCase() || 'native coin'}.`}
                                 value={reqTick}
                                 onChange={(e) => setReqTick(e.target.value)}

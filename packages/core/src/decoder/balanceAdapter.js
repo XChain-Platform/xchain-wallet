@@ -1,7 +1,7 @@
 // Adapter — SDK `getBalances(address)` shape → simulator `BalanceLookup[]`.
 //
-// The explorer / SDK returns `{ native: { asset, divisibility, quantity },
-// assets: [{ asset, displayName, divisibility, quantity }] }` where every
+// The explorer / SDK returns `{ native: { tick, divisibility, quantity },
+// tokens: [{ tick, displayName, divisibility, quantity }] }` where every
 // `quantity` is a string-encoded base-units integer (sats for BTC/LTC/DOGE,
 // raw units for tokens). The §21.2 simulator wants decimal-string
 // balances at human scale (`'0.05'` for 5,000,000 sats with divisibility
@@ -12,8 +12,8 @@
 
 /**
  * @typedef {Object} SdkBalances
- * @property {{ asset?: string, divisibility?: number | string, quantity?: string | number } | null} [native]
- * @property {Array<{ asset?: string, divisibility?: number | string, quantity?: string | number }>} [assets]
+ * @property {{ tick?: string, divisibility?: number | string, quantity?: string | number } | null} [native]
+ * @property {Array<{ tick?: string, divisibility?: number | string, quantity?: string | number }>} [tokens]
  */
 
 /**
@@ -27,7 +27,7 @@ export function balancesFromSdk(sdkBalances) {
 
     const native = sdkBalances.native;
     if (native && typeof native === 'object') {
-        const tick = String(native.asset || '').toUpperCase();
+        const tick = String(native.tick || '').toUpperCase();
         if (tick) {
             out.push({
                 tick,
@@ -37,10 +37,10 @@ export function balancesFromSdk(sdkBalances) {
         }
     }
 
-    const assets = Array.isArray(sdkBalances.assets) ? sdkBalances.assets : [];
-    for (const a of assets) {
+    const tokens = Array.isArray(sdkBalances.tokens) ? sdkBalances.tokens : [];
+    for (const a of tokens) {
         if (!a || typeof a !== 'object') continue;
-        const tick = String(a.asset || '').toUpperCase();
+        const tick = String(a.tick || '').toUpperCase();
         if (!tick) continue;
         out.push({
             tick,

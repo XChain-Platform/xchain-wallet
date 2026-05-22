@@ -67,7 +67,7 @@ export const FEE_STRATEGY_NAMES = /** @type {const} */ ([
  * @property {string} displayName
  * @property {typeof NETWORKS[number]} networkKind
  * @property {string} color                       CSS hex like '#F7931A'
- * @property {string} icon                        Asset filename in packages/core/src/branding/assets/ (resolve with branding.assetUrl); empty string for developer-mode chains without an icon
+ * @property {string} icon                        Asset filename in packages/core/src/branding/images/ (resolve with branding.brandingUrl); empty string for developer-mode chains without an icon
  * @property {Record<string, string>} derivationPaths  addressType -> BIP-style path template (A/C/I placeholders)
  * @property {string[]} addressTypes
  * @property {string} defaultAddressType

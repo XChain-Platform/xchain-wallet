@@ -7,7 +7,7 @@
 //
 // Asserts:
 //   1. Send variants pick the right template based on which fields are set
-//      (amount+asset+address, amount+asset, asset+address, asset, address,
+//      (amount+tick+address, amount+tick, tick+address, tick, address,
 //      bare).
 //   2. Receive variants do the same, keyed on intent.kind === 'receive'.
 //   3. Unknown / null intent returns the unknown-link label.
@@ -52,18 +52,18 @@ assert.equal(
     'Send to bc1qxy…0wlh',
 );
 assert.equal(
-    describeXchainIntent({ kind: 'send', asset: 'XCP' }, { i18n }),
+    describeXchainIntent({ kind: 'send', tick: 'XCP' }, { i18n }),
     'Send XCP',
 );
 assert.equal(
     describeXchainIntent(
-        { kind: 'send', asset: 'XCP', address: 'bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh' },
+        { kind: 'send', tick: 'XCP', address: 'bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh' },
         { i18n },
     ),
     'Send XCP to bc1qxy…0wlh',
 );
 assert.equal(
-    describeXchainIntent({ kind: 'send', amount: '0.5', asset: 'BTC' }, { i18n }),
+    describeXchainIntent({ kind: 'send', amount: '0.5', tick: 'BTC' }, { i18n }),
     'Send 0.5 BTC',
 );
 assert.equal(
@@ -71,7 +71,7 @@ assert.equal(
         {
             kind: 'send',
             amount: '0.5',
-            asset: 'BTC',
+            tick: 'BTC',
             address: 'bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh',
         },
         { i18n },
@@ -93,18 +93,18 @@ assert.equal(
     'Receive at bc1qxy…0wlh',
 );
 assert.equal(
-    describeXchainIntent({ kind: 'receive', asset: 'XCP' }, { i18n }),
+    describeXchainIntent({ kind: 'receive', tick: 'XCP' }, { i18n }),
     'Receive XCP',
 );
 assert.equal(
     describeXchainIntent(
-        { kind: 'receive', asset: 'XCP', address: 'bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh' },
+        { kind: 'receive', tick: 'XCP', address: 'bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh' },
         { i18n },
     ),
     'Receive XCP at bc1qxy…0wlh',
 );
 assert.equal(
-    describeXchainIntent({ kind: 'receive', amount: '100', asset: 'XCP' }, { i18n }),
+    describeXchainIntent({ kind: 'receive', amount: '100', tick: 'XCP' }, { i18n }),
     'Receive 100 XCP',
 );
 assert.equal(
@@ -112,7 +112,7 @@ assert.equal(
         {
             kind: 'receive',
             amount: '100',
-            asset: 'XCP',
+            tick: 'XCP',
             address: 'bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh',
         },
         { i18n },
@@ -143,7 +143,7 @@ assert.equal(
 // --- 5. Locale switch picks up translated copy --------------------------
 
 registerLocale('xx', {
-    'uri.intent.sendAmountTo': 'Yolla {amount} {asset} → {address}',
+    'uri.intent.sendAmountTo': 'Yolla {amount} {tick} → {address}',
 });
 setLocale('xx');
 assert.equal(
@@ -151,7 +151,7 @@ assert.equal(
         {
             kind: 'send',
             amount: '0.5',
-            asset: 'BTC',
+            tick: 'BTC',
             address: 'bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh',
         },
         { i18n },
@@ -196,7 +196,7 @@ assert.equal(
     'Send 0.5 BTC to bc1qxy…0wlh',
 );
 
-// BIP21 amount without asset (asset resolved from chain registry by the
+// BIP21 amount without tick (tick resolved from chain registry by the
 // caller, not here) degrades to the sendTo template — the caller's
 // confirmation surface still shows the raw amount field separately.
 const bip21Uri = 'xchain:bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh?amount=0.5';
@@ -220,7 +220,7 @@ const en = readFileSync(
 const requiredKeys = [
     'uri.intent.send',
     'uri.intent.sendTo',
-    'uri.intent.sendAsset',
+    'uri.intent.sendToken',
     'uri.intent.sendAssetTo',
     'uri.intent.sendAmount',
     'uri.intent.sendAmountTo',

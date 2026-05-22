@@ -53,7 +53,7 @@ const PASTE_BOX = {
 
 /**
  * @typedef {(
- *   | { kind: 'send', address?: string, amount?: string, asset?: string, chainId?: string, memo?: string }
+ *   | { kind: 'send', address?: string, amount?: string, tick?: string, chainId?: string, memo?: string }
  *   | { kind: 'receive' }
  *   | { kind: 'psbt', psbtHex: string }
  *   | { kind: 'unrecognized', detected: import('../../uri/detectQrContent.js').QrContent['type'] }
@@ -79,7 +79,7 @@ export function ScanRoute({ onClassified, onBack, chainRegistry }) {
         const detected = detectQrContent(text, { chainRegistry });
 
         // xchain: URIs use the richer parser so we get the send/receive
-        // intent split + chainId/asset breakdown that detectQrContent
+        // intent split + chainId/tick breakdown that detectQrContent
         // surfaces only as a generic 'xchain-uri' wrapper.
         if (detected.type === 'xchain-uri') {
             const intent = parseXchainUri(text);
@@ -90,7 +90,7 @@ export function ScanRoute({ onClassified, onBack, chainRegistry }) {
                     kind: 'send',
                     address: intent.address,
                     amount: intent.amount,
-                    asset: intent.asset,
+                    tick: intent.tick,
                     chainId: intent.chainId,
                     memo: intent.memo,
                 });

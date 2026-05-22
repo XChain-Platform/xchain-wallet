@@ -108,7 +108,7 @@ const routeMessagingCalls = {
         'messaging.lockWallet',
     ],
     Send: [
-        'messaging.sendAsset',
+        'messaging.sendToken',
         'messaging.getAddressesByChain',
     ],
     Receive: [
@@ -231,7 +231,7 @@ const requiredExports = [
     'generateReceiveAddress',
     'createWallet',
     'importMnemonic',
-    'sendAsset',
+    'sendToken',
 ];
 for (const fn of requiredExports) {
     assert.ok(

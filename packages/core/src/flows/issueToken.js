@@ -1,6 +1,6 @@
 // issueToken — convenience wrapper for the ISSUE action (§Phase 2
 // authoring surface; protocol docs: xchain-documentation/protocol/
-// actions/ISSUE.md). Mirrors sendAsset's shape: takes the vault +
+// actions/ISSUE.md). Mirrors sendToken's shape: takes the vault +
 // registries + chain + source address + params, forwards to
 // submitAction, returns the standard SubmitResult with the PendingTx
 // record written by the flow.
@@ -12,7 +12,7 @@
 // sdk.Actions.validateAction directly before submitting.
 
 import { submitAction } from './submitAction.js';
-import { normalizeSource } from './sendAsset.js';
+import { normalizeSource } from './sendToken.js';
 
 /**
  * @typedef {Object} IssueTokenOpts
@@ -23,7 +23,7 @@ import { normalizeSource } from './sendAsset.js';
  * @property {import('../registry/index.js').ChainRegistry} chainRegistry
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
  * @property {string} chainId
- * @property {import('./sendAsset.js').SourceRef | import('../schemas/address.js').Address} from
+ * @property {import('./sendToken.js').SourceRef | import('../schemas/address.js').Address} from
  * @property {Record<string, string>} params            ISSUE field map (TICK, MAX_SUPPLY, ...)
  * @property {number} [fee]
  * @property {number} [feePerKb]

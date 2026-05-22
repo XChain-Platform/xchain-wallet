@@ -264,7 +264,7 @@ async function autoApprove(host, fakeWindows, result) {
         origin: 'https://dapp.example',
         chainId: 'bitcoin-regtest',
         action: 'ISSUE',
-        params: { asset: 'NEWCOIN', quantity: '1000000' },
+        params: { tick: 'NEWCOIN', quantity: '1000000' },
     });
     assert.deepEqual(issueResp, {
         error: 'UNSUPPORTED_ACTION',

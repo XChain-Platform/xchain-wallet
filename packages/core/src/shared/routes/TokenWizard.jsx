@@ -55,7 +55,7 @@ export function TokenWizard({ walletId, onBack }) {
         /** @type {'template' | 'chain' | 'details' | 'preview' | 'sign' | 'done' | 'error'} */ ('template'),
     );
     const [template, setTemplate] = useState(
-        /** @type {null | 'meme' | 'utility' | 'collectible' | 'community' | 'subasset' | 'custom'} */ (null),
+        /** @type {null | 'meme' | 'utility' | 'collectible' | 'community' | 'subtoken' | 'custom'} */ (null),
     );
     const [chainId, setChainId] = useState(/** @type {string | null} */ (null));
     const [fromAddressId, setFromAddressId] = useState(
@@ -74,7 +74,7 @@ export function TokenWizard({ walletId, onBack }) {
     const [lockOnCreate, setLockOnCreate] = useState(false);
     const [transferTo, setTransferTo] = useState('');
     const [imageUrl, setImageUrl] = useState('');         // collectible only
-    const [parentAsset, setParentAsset] = useState('');   // subasset only
+    const [parentToken, setParentToken] = useState('');   // subtoken only
 
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
     const [password, setPassword] = useState('');
@@ -149,10 +149,10 @@ export function TokenWizard({ walletId, onBack }) {
             lockOnCreate,
             transferTo,
             imageUrl,
-            parentAsset,
+            parentToken,
         }),
         [template, name, supply, maxMint, divisible, description,
-         lockOnCreate, transferTo, imageUrl, parentAsset],
+         lockOnCreate, transferTo, imageUrl, parentToken],
     );
 
     const decoded = useMemo(() => {
@@ -175,13 +175,13 @@ export function TokenWizard({ walletId, onBack }) {
             setFormError('Token name must be A–Z, 0–9.');
             return;
         }
-        if (template === 'subasset') {
-            if (!parentAsset.trim()) {
-                setFormError('Parent asset is required for subassets.');
+        if (template === 'subtoken') {
+            if (!parentToken.trim()) {
+                setFormError('Parent tick is required for subtokens.');
                 return;
             }
-            if (!/^[A-Za-z0-9]+$/.test(parentAsset)) {
-                setFormError('Parent asset must be A–Z, 0–9.');
+            if (!/^[A-Za-z0-9]+$/.test(parentToken)) {
+                setFormError('Parent tick must be A–Z, 0–9.');
                 return;
             }
         }
@@ -293,7 +293,7 @@ export function TokenWizard({ walletId, onBack }) {
             lockOnCreate, setLockOnCreate,
             transferTo, setTransferTo,
             imageUrl, setImageUrl,
-            parentAsset, setParentAsset,
+            parentToken, setParentToken,
             formError,
             onBack: () => setStage('chain'),
             onSubmit: handleDetailsSubmit,
@@ -400,7 +400,7 @@ export function TokenWizard({ walletId, onBack }) {
  *               FILE + BATCH path is deferred past Phase 2 (BATCH bans
  *               FILE per protocol §BATCH; the FILE-action pipeline is
  *               its own feature).
- * - **subasset** — TICK = "PARENT.CHILD"; supply + decimals + optional
+ * - **subtoken** — TICK = "PARENT.CHILD"; supply + decimals + optional
  *               description. Parent-ownership check is runtime at the
  *               protocol layer; the wizard doesn't verify pre-flight.
  * - **custom**  — every ISSUE v0 field exposed. Superset of the other
@@ -453,14 +453,14 @@ const TEMPLATE_COMPOSERS = {
         return p;
     },
 
-    subasset(form) {
+    subtoken(form) {
         const p = baseParams(form);
         // TICK already came in uppercased; compose parent.child if both
-        // are present. `parentAsset` is the existing asset the user
-        // owns; the wizard's Subasset form prompts for it separately
+        // are present. `parentToken` is the existing tick the user
+        // owns; the wizard's Subtoken form prompts for it separately
         // and joins here.
-        if (form.parentAsset) {
-            const parent = String(form.parentAsset).trim().toUpperCase();
+        if (form.parentToken) {
+            const parent = String(form.parentToken).trim().toUpperCase();
             const child = String(form.name).trim().toUpperCase();
             p.TICK = `${parent}.${child}`;
         }
@@ -529,9 +529,9 @@ const TEMPLATES = [
         interactive: true,
     },
     {
-        id: 'subasset',
-        name: 'Subasset',
-        tagline: 'Named sub-token under an asset you own.',
+        id: 'subtoken',
+        name: 'Subtoken',
+        tagline: 'Named sub-token under an tick you own.',
         interactive: true,
     },
     {
@@ -635,8 +635,8 @@ const TEMPLATE_FIELDS = {
     collectible: {
         name: true, displayName: true, imageUrl: true,
     },
-    subasset: {
-        parentAsset: true, name: true, displayName: true, supply: true,
+    subtoken: {
+        parentToken: true, name: true, displayName: true, supply: true,
         divisible: true, description: true,
     },
     custom: {
@@ -656,7 +656,7 @@ function renderDetailsStage({
     lockOnCreate, setLockOnCreate,
     transferTo, setTransferTo,
     imageUrl, setImageUrl,
-    parentAsset, setParentAsset,
+    parentToken, setParentToken,
     formError, onBack, onSubmit,
 }) {
     const show = TEMPLATE_FIELDS[template] || TEMPLATE_FIELDS.custom;
@@ -665,12 +665,12 @@ function renderDetailsStage({
             <p className={styles.stageHint}>
                 Template: <strong>{template}</strong>
             </p>
-            {show.parentAsset ? (
+            {show.parentToken ? (
                 <Input
-                    label="Parent asset"
-                    hint="An existing token you own. The subasset's full ticker will be PARENT.CHILD."
-                    value={parentAsset}
-                    onChange={(e) => setParentAsset(e.target.value.toUpperCase())}
+                    label="Parent tick"
+                    hint="An existing token you own. The subtoken's full ticker will be PARENT.CHILD."
+                    value={parentToken}
+                    onChange={(e) => setParentToken(e.target.value.toUpperCase())}
                     autoCapitalize="characters"
                     autoComplete="off"
                     autoCorrect="off"
@@ -679,7 +679,7 @@ function renderDetailsStage({
             ) : null}
             {show.name ? (
                 <Input
-                    label={template === 'subasset' ? 'Subasset name' : 'Token name (ticker)'}
+                    label={template === 'subtoken' ? 'Subtoken name' : 'Token name (ticker)'}
                     hint="A–Z, 0–9. Uppercase."
                     value={name}
                     onChange={(e) => setName(e.target.value.toUpperCase())}

@@ -1,6 +1,6 @@
 // broadcastAction — convenience wrapper for the BROADCAST action
 // (§40.6; protocol docs: xchain-documentation/protocol/actions/
-// BROADCAST.md). Mirrors issueToken / mintAsset / destroyAsset: takes
+// BROADCAST.md). Mirrors issueToken / mintToken / destroyToken: takes
 // vault + registries + chain + source address + BROADCAST params,
 // forwards to submitAction.
 //
@@ -11,7 +11,7 @@
 // present so bad callers get a loud error before we hit the signer.
 
 import { submitAction } from './submitAction.js';
-import { normalizeSource } from './sendAsset.js';
+import { normalizeSource } from './sendToken.js';
 
 /**
  * @typedef {Object} BroadcastActionOpts
@@ -22,7 +22,7 @@ import { normalizeSource } from './sendAsset.js';
  * @property {import('../registry/index.js').ChainRegistry} chainRegistry
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
  * @property {string} chainId
- * @property {import('./sendAsset.js').SourceRef | import('../schemas/address.js').Address} from
+ * @property {import('./sendToken.js').SourceRef | import('../schemas/address.js').Address} from
  * @property {Record<string, string>} params      BROADCAST field map (VERSION, MESSAGE or BROADCAST_ACTION_INDEX, optional VALUE, FEE, MEMO)
  * @property {number} [fee]
  * @property {number} [feePerKb]

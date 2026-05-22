@@ -7,12 +7,12 @@
 //   3. Form stage renders an explicit irreversibility prose block so
 //      the user sees the warning before composing, not just on review.
 //   4. Review runs DESTROY params through decoder.decodeAction.
-//   5. Sign wires through messaging.destroyAsset.
+//   5. Sign wires through messaging.destroyToken.
 //   6. Sign button uses the danger variant (visual signal).
-//   7. Core flow destroyAsset exists + is re-exported + guards required
+//   7. Core flow destroyToken exists + is re-exported + guards required
 //      inputs.
 //   8. Background host registers action.destroy; popup + web messaging
-//      helpers export destroyAsset.
+//      helpers export destroyToken.
 //   9. ActionsMenu + App.jsx wire the 'destroy' sub-route and pass
 //      onDestroy to buildActionEntries.
 
@@ -66,11 +66,11 @@ assert.ok(
 assert.ok(/decoderLib\.decodeAction/.test(src), 'DestroyForm invokes decoder.decodeAction');
 assert.ok(src.includes('decoded.warnings'), 'DestroyForm renders decoder warnings');
 
-// --- 5. Sign wires through messaging.destroyAsset ---------------------
+// --- 5. Sign wires through messaging.destroyToken ---------------------
 
 assert.ok(
-    /messaging\.destroyAsset\s*\(/.test(src),
-    'DestroyForm calls messaging.destroyAsset from the sign stage',
+    /messaging\.destroyToken\s*\(/.test(src),
+    'DestroyForm calls messaging.destroyToken from the sign stage',
 );
 assert.ok(
     src.includes("'InvalidPasswordError'"),
@@ -97,40 +97,40 @@ assert.ok(
 // --- 7. Core flow -----------------------------------------------------
 
 assert.equal(
-    typeof flows.destroyAsset,
+    typeof flows.destroyToken,
     'function',
-    'flows.destroyAsset is re-exported from core',
+    'flows.destroyToken is re-exported from core',
 );
 await assert.rejects(
-    async () => flows.destroyAsset(),
-    /destroyAsset: opts is required/,
-    'destroyAsset rejects missing opts',
+    async () => flows.destroyToken(),
+    /destroyToken: opts is required/,
+    'destroyToken rejects missing opts',
 );
 await assert.rejects(
-    async () => flows.destroyAsset({}),
-    /destroyAsset: params is required/,
-    'destroyAsset rejects missing params',
+    async () => flows.destroyToken({}),
+    /destroyToken: params is required/,
+    'destroyToken rejects missing params',
 );
 await assert.rejects(
-    async () => flows.destroyAsset({ params: {} }),
-    /destroyAsset: params\.TICK is required/,
-    'destroyAsset rejects empty TICK',
+    async () => flows.destroyToken({ params: {} }),
+    /destroyToken: params\.TICK is required/,
+    'destroyToken rejects empty TICK',
 );
 await assert.rejects(
-    async () => flows.destroyAsset({ params: { TICK: 'MYTOKEN' } }),
-    /destroyAsset: params\.AMOUNT is required/,
-    'destroyAsset rejects missing AMOUNT',
+    async () => flows.destroyToken({ params: { TICK: 'MYTOKEN' } }),
+    /destroyToken: params\.AMOUNT is required/,
+    'destroyToken rejects missing AMOUNT',
 );
 await assert.rejects(
-    async () => flows.destroyAsset({ params: { TICK: 'MYTOKEN', AMOUNT: '10' } }),
-    /destroyAsset: from is required/,
-    'destroyAsset rejects missing source',
+    async () => flows.destroyToken({ params: { TICK: 'MYTOKEN', AMOUNT: '10' } }),
+    /destroyToken: from is required/,
+    'destroyToken rejects missing source',
 );
 
-const flowSrc = readFileSync(join(core, 'src', 'flows', 'destroyAsset.js'), 'utf8');
+const flowSrc = readFileSync(join(core, 'src', 'flows', 'destroyToken.js'), 'utf8');
 assert.ok(
     /action:\s*'DESTROY'/.test(flowSrc),
-    'destroyAsset flow forwards action: "DESTROY" to submitAction',
+    'destroyToken flow forwards action: "DESTROY" to submitAction',
 );
 
 // --- 8. Background handler + messaging helpers ------------------------
@@ -143,8 +143,8 @@ assert.ok(
     'background host registers action.destroy',
 );
 assert.ok(
-    /destroyAsset\(\{\s*\.\.\.req,\s*vault,\s*chainRegistry,\s*sdkRegistry\s*\}\)/.test(bg),
-    'action.destroy handler forwards deps to destroyAsset',
+    /destroyToken\(\{\s*\.\.\.req,\s*vault,\s*chainRegistry,\s*sdkRegistry\s*\}\)/.test(bg),
+    'action.destroy handler forwards deps to destroyToken',
 );
 
 for (const [shell, msgPath] of [
@@ -153,12 +153,12 @@ for (const [shell, msgPath] of [
 ]) {
     const m = readFileSync(msgPath, 'utf8');
     assert.ok(
-        /export function destroyAsset\b/.test(m),
-        `${shell} messaging.js exports destroyAsset`,
+        /export function destroyToken\b/.test(m),
+        `${shell} messaging.js exports destroyToken`,
     );
     assert.ok(
         /sendMessage\('action\.destroy'/.test(m),
-        `${shell} messaging.js routes destroyAsset via action.destroy`,
+        `${shell} messaging.js routes destroyToken via action.destroy`,
     );
 }
 
@@ -185,5 +185,5 @@ for (const [shell, appPath] of [
 }
 
 console.log(
-    'OK — destroy form smoke (DestroyForm §40.4 + destroyAsset core flow + action.destroy handler + both messaging helpers + ActionsMenu entry + danger-variant sign button + popup/web wiring)',
+    'OK — destroy form smoke (DestroyForm §40.4 + destroyToken core flow + action.destroy handler + both messaging helpers + ActionsMenu entry + danger-variant sign button + popup/web wiring)',
 );

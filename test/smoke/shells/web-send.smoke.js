@@ -6,9 +6,9 @@
 //
 //   1. Static wiring — Send.jsx exists with the expected stages
 //      (form / review / submitting / done), validation rules (memo,
-//      amount, word counts), messaging.sendAsset helper present, App
+//      amount, word counts), messaging.sendToken helper present, App
 //      sub-route + Home onSend prop activated.
-//   2. Messaging round-trip — `sendAsset` goes through `action.send`
+//   2. Messaging round-trip — `sendToken` goes through `action.send`
 //      which reaches the core flow, which blows up on the dev-SDK
 //      stub at the encoder step. The flow still wraps the error in
 //      the host's response envelope, so the popup side gets a
@@ -43,8 +43,8 @@ for (const stage of ['form', 'review', 'submitting', 'done']) {
     assert.ok(send.includes(`'${stage}'`), `shared Send.jsx handles stage "${stage}"`);
 }
 assert.ok(
-    /messaging\.sendAsset\(\{/.test(send),
-    'shared Send.jsx calls messaging.sendAsset',
+    /messaging\.sendToken\(\{/.test(send),
+    'shared Send.jsx calls messaging.sendToken',
 );
 assert.ok(
     /decoder\s*as\s*decoderLib|decoderLib\.decodeAction/.test(send),
@@ -86,15 +86,15 @@ assert.ok(
 
 const msg = readFileSync(join(webPkg, 'src', 'messaging.js'), 'utf8');
 assert.ok(
-    /export function sendAsset\b/.test(msg),
-    'messaging.js exports sendAsset',
+    /export function sendToken\b/.test(msg),
+    'messaging.js exports sendToken',
 );
 assert.ok(
     msg.includes("'action.send'"),
-    'sendAsset helper targets action.send',
+    'sendToken helper targets action.send',
 );
 
-// --- 2. End-to-end: sendAsset through the host lands on the SDK stub
+// --- 2. End-to-end: sendToken through the host lands on the SDK stub
 //        and surfaces the error cleanly (not a crash / not a hang) -----
 
 function makeFakeLocalStorage() {
@@ -155,7 +155,7 @@ try {
             addressId: src.id,
         },
         to: src.address, // reuse self-address; encoder will reject on the stub SDK
-        asset: 'BTC',
+        tick: 'BTC',
         amount: '100',
     });
 } catch (err) {
@@ -173,5 +173,5 @@ assert.match(
 IndexedDBStorageBackend.prototype._openStore = originalOpen;
 
 console.log(
-    'OK — web send smoke (static wiring + sendAsset error surface against dev-SDK stub)',
+    'OK — web send smoke (static wiring + sendToken error surface against dev-SDK stub)',
 );
