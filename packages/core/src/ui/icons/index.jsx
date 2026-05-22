@@ -101,6 +101,24 @@ export function ScanIcon() {
     );
 }
 
+export function CameraIcon() {
+    return (
+        <svg {...STROKE_PROPS}>
+            <path d="M3 8a2 2 0 0 1 2-2h2l2-2h6l2 2h2a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8Z" />
+            <circle cx="12" cy="13" r="3" />
+        </svg>
+    );
+}
+
+export function BookIcon() {
+    return (
+        <svg {...STROKE_PROPS}>
+            <path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2V5Z" />
+            <path d="M4 19a2 2 0 0 0 2 2h13" />
+        </svg>
+    );
+}
+
 export function SignIcon() {
     return (
         <svg {...STROKE_PROPS}>

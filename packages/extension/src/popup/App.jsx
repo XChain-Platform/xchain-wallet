@@ -35,6 +35,7 @@ import { ReachabilityBanner } from '@xchain-wallet/core/shared/components/Reacha
 import { QueuedBroadcastBanner } from '@xchain-wallet/core/shared/components/QueuedBroadcastBanner.jsx';
 import { Receive } from '@xchain-wallet/core/shared/routes/Receive.jsx';
 import { Send } from '@xchain-wallet/core/shared/routes/Send.jsx';
+import { SendPicker } from '@xchain-wallet/core/shared/routes/SendPicker.jsx';
 import { ScanRoute } from '@xchain-wallet/core/shared/routes/ScanRoute.jsx';
 import { TokenWizard } from '@xchain-wallet/core/shared/routes/TokenWizard.jsx';
 import { ActionsMenu } from '@xchain-wallet/core/shared/routes/ActionsMenu.jsx';
@@ -159,6 +160,12 @@ function AppInner() {
     // is stripped via history.replaceState.
     const [sendPrefill, setSendPrefill] = useState(
         /** @type {{ address?: string, amount?: string, tick?: string, chainId?: string, memo?: string } | null} */ (null),
+    );
+    // Which view Send should return to when the user hits Back. Defaults
+    // to 'home'; SendPicker → Send sets it to 'send-picker' so backing
+    // out lands on the token list the user was just browsing.
+    const [sendBackTo, setSendBackTo] = useState(
+        /** @type {'home' | 'send-picker' | 'token-detail'} */ ('home'),
     );
     const [activeWalletId, setActiveWalletId] = useState(
         /** @type {string | null} */ (null),
@@ -333,7 +340,28 @@ function AppInner() {
                         prefill={sendPrefill}
                         onBack={() => {
                             setSendPrefill(null);
-                            setUnlockedView('home');
+                            setUnlockedView(sendBackTo);
+                            setSendBackTo('home');
+                        }}
+                    />
+                );
+            }
+            if (unlockedView === 'send-picker' && activeWalletId) {
+                return (
+                    <SendPicker
+                        walletId={activeWalletId}
+                        accountId={activeAccountId || undefined}
+                        onBack={() => setUnlockedView('home')}
+                        onSelect={(sel) => {
+                            setSendPrefill({
+                                chainId: sel.chainId,
+                                tick: sel.tick,
+                                kind: sel.kind,
+                                displayName: sel.displayName,
+                                imageUrl: sel.imageUrl,
+                            });
+                            setSendBackTo('send-picker');
+                            setUnlockedView('send');
                         }}
                     />
                 );
@@ -911,7 +939,17 @@ function AppInner() {
                         quantity={tokenDetailRef.quantity}
                         imageUrl={tokenDetailRef.imageUrl}
                         onBack={() => setUnlockedView('home')}
-                        onSend={() => setUnlockedView('send')}
+                        onSend={() => {
+                            setSendPrefill({
+                                chainId: tokenDetailRef.chainId,
+                                tick: tokenDetailRef.tick,
+                                kind: tokenDetailRef.kind,
+                                displayName: tokenDetailRef.displayName,
+                                imageUrl: tokenDetailRef.imageUrl,
+                            });
+                            setSendBackTo('token-detail');
+                            setUnlockedView('send');
+                        }}
                         onReceive={() => setUnlockedView('receive')}
                         onViewActivity={() => {
                             // Scope History by coin family (e.g. 'bitcoin')
@@ -1085,7 +1123,10 @@ function AppInner() {
                     {activeWalletId ? <QueuedBroadcastBanner walletId={activeWalletId} /> : null}
                     <Home
                         onLocked={refresh}
-                        onSend={activeWalletId ? () => setUnlockedView('send') : undefined}
+                        onSend={activeWalletId ? () => {
+                            setSendPrefill(null);
+                            setUnlockedView('send-picker');
+                        } : undefined}
                         onReceive={activeWalletId ? () => setUnlockedView('receive') : undefined}
                         onSwap={activeWalletId ? () => setUnlockedView('swap') : undefined}
                         onBuy={activeWalletId ? () => setUnlockedView('dispenser-explorer') : undefined}

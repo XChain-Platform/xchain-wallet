@@ -49,6 +49,7 @@ const APP_COIN_FAMILIES = ['bitcoin', 'litecoin', 'dogecoin'];
 import { BottomTabBar } from '@xchain-wallet/core/shared/components/BottomTabBar.jsx';
 import { uri as coreUri } from '@xchain-wallet/core';
 import { Send } from '@xchain-wallet/core/shared/routes/Send.jsx';
+import { SendPicker } from '@xchain-wallet/core/shared/routes/SendPicker.jsx';
 import { Receive } from '@xchain-wallet/core/shared/routes/Receive.jsx';
 import { ScanRoute } from '@xchain-wallet/core/shared/routes/ScanRoute.jsx';
 import { TokenWizard } from '@xchain-wallet/core/shared/routes/TokenWizard.jsx';
@@ -189,7 +190,18 @@ function AppInner() {
     // Free-text token filter — lifted alongside the network filter so the
     // AppHeader popover and Home's HomeTabs share one source of truth.
     const [globalTokenQuery, setGlobalTokenQuery] = useState('');
+    // Asset-kind filter — surfaced via the global filter popover on the
+    // send-picker route so the user can narrow the spendable list to
+    // all / coins / tokens. Lifted here so the popover and SendPicker
+    // share one source of truth.
+    const [globalKindFilter, setGlobalKindFilter] = useState(/** @type {'all' | 'coins' | 'tokens'} */ ('all'));
     const [globalMenuOpen, setGlobalMenuOpen] = useState(false);
+    // QR scanner overlay — available from any unlocked view via the
+    // AppHeader scan button. On a `send` outcome we populate the
+    // sendPrefill and navigate into Send; receive jumps to the Receive
+    // route; psbt opens the PSBT-sign route. Mirrors the existing
+    // dedicated 'scan' route handler.
+    const [globalScannerOpen, setGlobalScannerOpen] = useState(false);
     const [resumeAirdropId, setResumeAirdropId] = useState(
         /** @type {string | null} */ (null),
     );
@@ -235,6 +247,12 @@ function AppInner() {
     // 'send' route below and cleared after the user submits or backs out.
     const [sendPrefill, setSendPrefill] = useState(
         /** @type {{ address?: string, amount?: string, tick?: string, chainId?: string, memo?: string } | null} */ (null),
+    );
+    // Which view Send should return to when the user hits Back. Defaults
+    // to 'home'; SendPicker → Send sets it to 'send-picker' so backing
+    // out lands on the token list the user was just browsing.
+    const [sendBackTo, setSendBackTo] = useState(
+        /** @type {'home' | 'send-picker' | 'token-detail'} */ ('home'),
     );
 
     const refresh = useCallback(() => {
@@ -410,9 +428,37 @@ function AppInner() {
                         walletId={activeWalletId}
                         onBack={() => {
                             setSendPrefill(null);
-                            setUnlockedView('home');
+                            setUnlockedView(sendBackTo);
+                            setSendBackTo('home');
                         }}
                         prefill={sendPrefill}
+                    />
+                );
+            }
+            if (unlockedView === 'send-picker' && activeWalletId) {
+                return (
+                    <SendPicker
+                        walletId={activeWalletId}
+                        accountId={activeAccountId || undefined}
+                        networkFilter={globalNetworkFilter}
+                        onNetworkFilterChange={setGlobalNetworkFilter}
+                        tokenQuery={globalTokenQuery}
+                        onTokenQueryChange={setGlobalTokenQuery}
+                        kindFilter={globalKindFilter}
+                        onKindFilterChange={setGlobalKindFilter}
+                        hideOwnFilter
+                        onBack={() => setUnlockedView('home')}
+                        onSelect={(sel) => {
+                            setSendPrefill({
+                                chainId: sel.chainId,
+                                tick: sel.tick,
+                                kind: sel.kind,
+                                displayName: sel.displayName,
+                                imageUrl: sel.imageUrl,
+                            });
+                            setSendBackTo('send-picker');
+                            setUnlockedView('send');
+                        }}
                     />
                 );
             }
@@ -989,7 +1035,17 @@ function AppInner() {
                         quantity={tokenDetailRef.quantity}
                         imageUrl={tokenDetailRef.imageUrl}
                         onBack={() => setUnlockedView('home')}
-                        onSend={() => setUnlockedView('send')}
+                        onSend={() => {
+                            setSendPrefill({
+                                chainId: tokenDetailRef.chainId,
+                                tick: tokenDetailRef.tick,
+                                kind: tokenDetailRef.kind,
+                                displayName: tokenDetailRef.displayName,
+                                imageUrl: tokenDetailRef.imageUrl,
+                            });
+                            setSendBackTo('token-detail');
+                            setUnlockedView('send');
+                        }}
                         onReceive={() => setUnlockedView('receive')}
                         onViewActivity={() => {
                             const coin = String(tokenDetailRef.chainId || '').split('-')[0] || '';
@@ -1188,7 +1244,10 @@ function AppInner() {
                         tokenQuery={globalTokenQuery}
                         onTokenQueryChange={setGlobalTokenQuery}
                         onLocked={refresh}
-                        onSend={activeWalletId ? () => setUnlockedView('send') : undefined}
+                        onSend={activeWalletId ? () => {
+                            setSendPrefill(null);
+                            setUnlockedView('send-picker');
+                        } : undefined}
                         onReceive={activeWalletId ? () => setUnlockedView('receive') : undefined}
                         onSwap={activeWalletId ? () => setUnlockedView('swap') : undefined}
                         onBuy={activeWalletId ? () => setUnlockedView('dispenser-explorer') : undefined}
@@ -1323,8 +1382,11 @@ function AppInner() {
                                     onNetworkFilterChange={setGlobalNetworkFilter}
                                     tokenQuery={globalTokenQuery}
                                     onTokenQueryChange={setGlobalTokenQuery}
+                                    kindFilter={unlockedView === 'send-picker' ? globalKindFilter : undefined}
+                                    onKindFilterChange={unlockedView === 'send-picker' ? setGlobalKindFilter : undefined}
                                     onMenuOpen={() => setGlobalMenuOpen(true)}
-                                    showNetworkFilter={unlockedView === 'home'}
+                                    onScan={() => setGlobalScannerOpen(true)}
+                                    showNetworkFilter={unlockedView === 'home' || unlockedView === 'send-picker'}
                                 />
                                 {/* Cluster J FOLLOWUP 2 — DemoBanner persists across every
                                     unlocked view via the shared layout header slot, not
@@ -1352,6 +1414,42 @@ function AppInner() {
                             onLock={() => { setGlobalMenuOpen(false); handleNavLock(); }}
                             onSettings={() => { setGlobalMenuOpen(false); handleOpenSettings(); }}
                         />
+                    ) : null}
+                    {globalScannerOpen ? (
+                        <div
+                            role="dialog"
+                            aria-modal="true"
+                            aria-label="Scan a QR code"
+                            style={{
+                                position: 'absolute',
+                                inset: 0,
+                                zIndex: 50,
+                                background: 'var(--xc-bg)',
+                                display: 'flex',
+                                flexDirection: 'column',
+                            }}
+                        >
+                            <ScanRoute
+                                onBack={() => setGlobalScannerOpen(false)}
+                                onClassified={(outcome) => {
+                                    setGlobalScannerOpen(false);
+                                    if (outcome.kind === 'send') {
+                                        setSendPrefill({
+                                            address: outcome.address,
+                                            amount: outcome.amount,
+                                            tick: outcome.tick,
+                                            chainId: outcome.chainId,
+                                            memo: outcome.memo,
+                                        });
+                                        setUnlockedView('send');
+                                    } else if (outcome.kind === 'receive') {
+                                        setUnlockedView('receive');
+                                    } else if (outcome.kind === 'psbt') {
+                                        setUnlockedView('sign-psbt');
+                                    }
+                                }}
+                            />
+                        </div>
                     ) : null}
                 </FullLayoutWithNav>
             );

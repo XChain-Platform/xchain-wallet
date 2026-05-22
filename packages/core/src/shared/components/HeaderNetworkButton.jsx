@@ -20,6 +20,8 @@ import localStyles from './HeaderNetworkButton.module.css';
  * @param {(coin: string) => void} props.onNetworkFilterChange
  * @param {string} [props.tokenQuery]                       free-text query applied to the Tokens tab; when omitted, the text input is not shown
  * @param {(query: string) => void} [props.onTokenQueryChange]
+ * @param {'all' | 'coins' | 'tokens'} [props.kindFilter]    optional asset-kind segmented control (All / Coins / Tokens); only shown when `onKindFilterChange` is provided
+ * @param {(kind: 'all' | 'coins' | 'tokens') => void} [props.onKindFilterChange]
  */
 export function HeaderNetworkButton({
     chainRegistry,
@@ -28,6 +30,8 @@ export function HeaderNetworkButton({
     onNetworkFilterChange,
     tokenQuery,
     onTokenQueryChange,
+    kindFilter,
+    onKindFilterChange,
 }) {
     const [open, setOpen] = useState(false);
     const [networksOpen, setNetworksOpen] = useState(false);
@@ -54,7 +58,9 @@ export function HeaderNetworkButton({
     }, [open]);
 
     const networkActive = networkFilter && networkFilter !== 'all';
-    const filterActive = networkActive || tokenQueryActive;
+    const showKind = typeof onKindFilterChange === 'function';
+    const kindActive = showKind && kindFilter && kindFilter !== 'all';
+    const filterActive = networkActive || tokenQueryActive || kindActive;
 
     const entries = useMemo(() => {
         return coinFamilies.map((coin) => {
@@ -170,6 +176,29 @@ export function HeaderNetworkButton({
                             </ul>
                         ) : null}
                     </div>
+                    {showKind ? (
+                        <div className={localStyles.kindToggle} role="radiogroup" aria-label="Asset kind">
+                            {[
+                                { id: 'all', label: 'All' },
+                                { id: 'coins', label: 'Coins' },
+                                { id: 'tokens', label: 'Tokens' },
+                            ].map((opt) => {
+                                const active = (kindFilter || 'all') === opt.id;
+                                return (
+                                    <button
+                                        key={opt.id}
+                                        type="button"
+                                        role="radio"
+                                        aria-checked={active}
+                                        className={`${localStyles.kindToggleBtn} ${active ? localStyles.kindToggleBtnActive : ''}`.trim()}
+                                        onClick={() => onKindFilterChange(opt.id)}
+                                    >
+                                        {opt.label}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    ) : null}
                 </div>
             ) : null}
         </div>

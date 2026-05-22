@@ -13,6 +13,8 @@ import {
     decoder as decoderLib,
     uri as uriLib,
 } from '@xchain-wallet/core';
+import * as branding from '@xchain-wallet/core/branding/branding.js';
+import { tickerColor } from '../components/BalanceList.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { buildRecentDestinations } from '../../flows/recentDestinations.js';
@@ -30,7 +32,7 @@ import {
     customFeeEstimate,
     settingsCustomToDisplayRate,
 } from '../../flows/feeEstimate.js';
-import { getFiatRate, coinToFiat, fiatToCoin } from '../../flows/priceLookup.js';
+import { getFiatRate, coinToFiat } from '../../flows/priceLookup.js';
 import { HwSignBlock } from '../components/HwSignBlock.jsx';
 import { BalanceChanges } from '../components/BalanceChanges.jsx';
 import { RawPsbtViewer } from '../components/RawPsbtViewer.jsx';
@@ -177,6 +179,14 @@ export function Send({ walletId, onBack, prefill = null }) {
     // vault and load once; history is per-chain × per-address and
     // refetches when the chain changes.
     const [contacts, setContacts] = useState(/** @type {any[]} */ ([]));
+    const refreshContacts = useCallback(async () => {
+        try {
+            const rows = await messaging.listContacts();
+            setContacts(Array.isArray(rows) ? rows : []);
+        } catch {
+            /* silent — autocomplete just shows fewer hits */
+        }
+    }, [messaging]);
     useEffect(() => {
         let cancelled = false;
         messaging.listContacts()
@@ -184,6 +194,18 @@ export function Send({ walletId, onBack, prefill = null }) {
             .catch(() => { /* silent — autocomplete just shows fewer hits */ });
         return () => { cancelled = true; };
     }, [messaging]);
+
+    // Contacts UX state: picker open/close, search query, and the
+    // "save as contact" inline form (idle → naming → saving).
+    const [contactsPickerOpen, setContactsPickerOpen] = useState(false);
+    const [contactsPickerQuery, setContactsPickerQuery] = useState('');
+    const [saveContactStage, setSaveContactStage] = useState(
+        /** @type {'idle' | 'naming' | 'saving'} */ ('idle'),
+    );
+    const [saveContactName, setSaveContactName] = useState('');
+    const [saveContactError, setSaveContactError] = useState(
+        /** @type {string | null} */ (null),
+    );
 
     const [historyRows, setHistoryRows] = useState(/** @type {any[]} */ ([]));
     useEffect(() => {
@@ -215,6 +237,83 @@ export function Send({ walletId, onBack, prefill = null }) {
             historyRows,
         });
     }, [contacts, chainId, historyRows]);
+
+    // Contact rows that have an entry on the current chain — the
+    // picker and resolved-name chip both filter against this set.
+    const chainCoinFor = useCallback((cid) => {
+        const d = cid ? chainRegistry.get(cid) : null;
+        return d?.coin || null;
+    }, []);
+
+    const chainContacts = useMemo(() => {
+        const coin = chainCoinFor(chainId);
+        if (!coin) return [];
+        const out = [];
+        for (const c of contacts) {
+            for (const e of c?.entries || []) {
+                if (e?.chain === coin && e?.address) {
+                    out.push({ contact: c, entry: e });
+                }
+            }
+        }
+        return out;
+    }, [contacts, chainId, chainCoinFor]);
+
+    const filteredPickerContacts = useMemo(() => {
+        const q = contactsPickerQuery.trim().toLowerCase();
+        if (!q) return chainContacts;
+        return chainContacts.filter(({ contact, entry }) => {
+            return contact.name.toLowerCase().includes(q)
+                || entry.address.toLowerCase().includes(q)
+                || (entry.label || '').toLowerCase().includes(q);
+        });
+    }, [chainContacts, contactsPickerQuery]);
+
+    // If the typed address exactly matches a contact entry on this
+    // chain, show the chip + skip the save-as-contact affordance.
+    const matchedContact = useMemo(() => {
+        const trimmed = toAddress.trim();
+        if (!trimmed) return null;
+        return chainContacts.find(({ entry }) => entry.address === trimmed) || null;
+    }, [toAddress, chainContacts]);
+
+    const canSaveAsContact = useMemo(() => {
+        const t = toAddress.trim();
+        if (!t || matchedContact) return false;
+        if (t.length < 20 || /\s/.test(t)) return false;
+        return !!chainCoinFor(chainId);
+    }, [toAddress, matchedContact, chainId, chainCoinFor]);
+
+    const handlePickContact = useCallback((entry) => {
+        setToAddress(entry.address);
+        setContactsPickerOpen(false);
+        setContactsPickerQuery('');
+    }, []);
+
+    const handleSubmitSaveContact = useCallback(async (e) => {
+        e?.preventDefault?.();
+        const name = saveContactName.trim();
+        const addr = toAddress.trim();
+        const coin = chainCoinFor(chainId);
+        if (!name || !addr || !coin) return;
+        setSaveContactStage('saving');
+        setSaveContactError(null);
+        try {
+            await messaging.saveContact({
+                input: {
+                    name,
+                    notes: '',
+                    entries: [{ chain: coin, address: addr, label: '' }],
+                },
+            });
+            await refreshContacts();
+            setSaveContactStage('idle');
+            setSaveContactName('');
+        } catch (err) {
+            setSaveContactError(err?.message || 'Failed to save contact.');
+            setSaveContactStage('naming');
+        }
+    }, [messaging, refreshContacts, saveContactName, toAddress, chainId, chainCoinFor]);
 
     // §29.5 smart paste — BIP21 URI pre-fills amount/token/memo;
     // pasting a WIF surfaces "import this private key instead?" rather
@@ -349,44 +448,15 @@ export function Send({ walletId, onBack, prefill = null }) {
         return getFiatRate({ chainCoin: coin, fiatCurrency });
     }, [chainId, fiatCurrency]);
 
-    // Amount-entry mode toggle. 'native' = user types coin units;
-    // 'fiat' = user types fiat (when a rate is available). The form's
-    // canonical `amount` state always holds the native-unit value.
-    const [amountMode, setAmountMode] = useState(/** @type {'native' | 'fiat'} */ ('native'));
-    const [fiatInput, setFiatInput] = useState('');
-
     const isNativeSend = useMemo(() => {
         const desc = chainId ? chainRegistry.get(chainId) : null;
         const nativeTicker = desc?.coin?.toUpperCase();
         return Boolean(nativeTicker && tick.trim().toUpperCase() === nativeTicker);
     }, [chainId, tick]);
 
-    const onToggleAmountMode = useCallback(() => {
-        if (!fiatRate) return;
-        setAmountMode((prev) => {
-            if (prev === 'native') {
-                const fiat = coinToFiat(amount, fiatRate);
-                setFiatInput(fiat != null ? fiat.toFixed(2) : '');
-                return 'fiat';
-            }
-            return 'native';
-        });
-    }, [amount, fiatRate]);
-
-    const onFiatInputChange = useCallback((value) => {
-        setFiatInput(value);
-        if (!fiatRate) return;
-        const coin = fiatToCoin(value, fiatRate);
-        if (coin != null) setAmount(coin);
-    }, [fiatRate]);
-
-    const fiatPreview = useMemo(() => {
-        if (!fiatRate) return null;
-        if (!isNativeSend) return null;
-        const f = coinToFiat(amount, fiatRate);
-        if (f == null) return null;
-        return `≈ $${f.toFixed(2)} (placeholder rate)`;
-    }, [amount, fiatRate, isNativeSend]);
+    const onCoinInputChange = useCallback((value) => {
+        setAmount(value);
+    }, []);
 
     const onSendSmallTest = useCallback(() => {
         const amt = parseFloat(String(amount).trim());
@@ -593,11 +663,7 @@ export function Send({ walletId, onBack, prefill = null }) {
         }
         const display = Number(maxAmount.toFixed(8)).toString();
         setAmount(display);
-        if (amountMode === 'fiat' && fiatRate) {
-            const fiat = coinToFiat(display, fiatRate);
-            setFiatInput(fiat != null ? fiat.toFixed(2) : '');
-        }
-    }, [sourceBalance, isNativeSend, feeEstimate, amountMode, fiatRate]);
+    }, [sourceBalance, isNativeSend, feeEstimate]);
 
     const previewResult = useMemo(() => {
         if (stage !== 'review' && stage !== 'submitting') return null;
@@ -799,8 +865,13 @@ export function Send({ walletId, onBack, prefill = null }) {
             >
                 <Icon.BackIcon />
             </button>
-            <span className={styles.title}>
-                {stage === 'review' || stage === 'submitting' ? 'Review & Send' : 'Send'}
+            <span className={styles.titleGroup}>
+                <span className={styles.headerActionIcon} aria-hidden="true">
+                    <Icon.SendIcon />
+                </span>
+                <span className={styles.title}>
+                    {stage === 'review' || stage === 'submitting' ? 'Review & Send' : 'Send'}
+                </span>
             </span>
             <span className={styles.spacer} />
         </div>
@@ -808,7 +879,9 @@ export function Send({ walletId, onBack, prefill = null }) {
 
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+            <div className={`${styles.card} ${isFull ? styles.cardFull : styles.cardSmall}`}>
+                {children}
+            </div>
         </Screen>
     );
 
@@ -1112,40 +1185,98 @@ export function Send({ walletId, onBack, prefill = null }) {
             </button>
         </StatusMessage>
     ) : null;
+    const hasTokenSelected = !!chainId && !!tick.trim();
     return wrap(
         <form onSubmit={handleReview} noValidate>
             {draftBanner}
-            {chainsWithAddresses.length > 1 ? (
-                <ChainPicker label="Chain" value={chainId} onChange={setChainId} chainIds={chainsWithAddresses} chainRegistry={chainRegistry} />
-            ) : descriptor ? (
-                <div className={styles.chainLine}>
-                    <ChainBadge descriptor={descriptor} size="sm" />
-                </div>
-            ) : null}
-
-            {fromAddress ? (
-                <div className={styles.fromLine}>
-                    <span className={styles.fromLabel}>From</span>
-                    <AddressText address={fromAddress.address} />
-                </div>
-            ) : null}
-
-            <AddressCombobox
-                label="To"
-                value={toAddress}
-                onChange={(e) => {
-                    setToAddress(e.target.value);
-                    if (pasteHint) setPasteHint(null);
-                    if (pasteWarning) setPasteWarning(null);
-                }}
-                onPaste={onAddressPaste}
-                suggestions={suggestions}
-                placeholder={descriptor ? `${descriptor.displayName} address` : 'address'}
-                hint={pasteHint || undefined}
-                autoComplete="off"
-                autoCapitalize="none"
-                autoCorrect="off"
+            <SelectedTokenHero
+                chainId={chainId}
+                tick={tick}
+                descriptor={descriptor}
+                prefill={prefill}
             />
+            {matchedContact ? (
+                <div className={styles.contactChip}>
+                    <Icon.UsersIcon />
+                    <span>
+                        Sending to{' '}
+                        <span className={styles.contactChipName}>
+                            {matchedContact.contact.name}
+                        </span>
+                    </span>
+                </div>
+            ) : null}
+            <div className={`${styles.toFieldWrap} ${styles.bigField}`}>
+                <AddressCombobox
+                    label="To"
+                    value={toAddress}
+                    onChange={(e) => {
+                        setToAddress(e.target.value);
+                        if (pasteHint) setPasteHint(null);
+                        if (pasteWarning) setPasteWarning(null);
+                    }}
+                    onPaste={onAddressPaste}
+                    suggestions={suggestions}
+                    placeholder="Enter or paste an address or name..."
+                    hint={pasteHint || undefined}
+                    autoComplete="off"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    style={{
+                        fontSize: 'var(--xc-text-lg)',
+                        paddingTop: 'var(--xc-space-3)',
+                        paddingBottom: 'var(--xc-space-3)',
+                        paddingLeft: 'var(--xc-space-4)',
+                        paddingRight: '52px',
+                        minHeight: '48px',
+                    }}
+                />
+                <button
+                    type="button"
+                    className={styles.inlineContactsButton}
+                    onClick={() => setContactsPickerOpen((o) => !o)}
+                    aria-label={contactsPickerOpen ? 'Close contacts list' : 'Browse contacts'}
+                    aria-expanded={contactsPickerOpen}
+                    title="Browse contacts"
+                >
+                    <Icon.BookIcon />
+                </button>
+            </div>
+            {contactsPickerOpen ? (
+                <div className={styles.contactsPopover}>
+                    <Input
+                        label="Search contacts"
+                        value={contactsPickerQuery}
+                        onChange={(e) => setContactsPickerQuery(e.target.value)}
+                        placeholder="Filter by name or address"
+                        autoComplete="off"
+                    />
+                    {filteredPickerContacts.length === 0 ? (
+                        <p className={styles.contactsPopoverEmpty}>
+                            {chainContacts.length === 0
+                                ? 'No saved contacts on this chain yet.'
+                                : 'No contacts match.'}
+                        </p>
+                    ) : (
+                        <ul className={styles.contactsPopoverList}>
+                            {filteredPickerContacts.map(({ contact, entry }) => (
+                                <li key={`${contact.id}:${entry.address}`}>
+                                    <button
+                                        type="button"
+                                        className={styles.contactsPopoverItem}
+                                        onClick={() => handlePickContact(entry)}
+                                    >
+                                        <span style={{ fontWeight: 600 }}>{contact.name}</span>
+                                        <span style={{ fontSize: 'var(--xc-text-xs)', color: 'var(--xc-text-muted)' }}>
+                                            {entry.address}
+                                        </span>
+                                    </button>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </div>
+            ) : null}
             {pasteWarning ? (
                 <div role="alert" className={styles.warnings}>
                     <p className={styles.warning}>{pasteWarning}</p>
@@ -1156,75 +1287,113 @@ export function Send({ walletId, onBack, prefill = null }) {
                     <p className={styles.warning}>{lookalikeWarning}</p>
                 </div>
             ) : null}
-            <Input
-                label="Token"
-                hint="Tick. Native coin by default."
-                value={tick}
-                onChange={(e) => setTick(e.target.value)}
-                autoComplete="off"
-                autoCapitalize="characters"
-            />
-            <div className={styles.amountRow}>
-                <div className={styles.amountField}>
-                    {amountMode === 'native' ? (
-                        <Input
-                            label={`Amount${tick.trim() ? ` (${tick.trim()})` : ''}`}
-                            inputMode="decimal"
-                            value={amount}
-                            onChange={(e) => setAmount(e.target.value)}
-                            hint={fiatPreview || undefined}
-                            autoComplete="off"
-                        />
-                    ) : (
-                        <Input
-                            label={`Amount (${fiatRate?.fiatCurrency || 'USD'})`}
-                            inputMode="decimal"
-                            value={fiatInput}
-                            onChange={(e) => onFiatInputChange(e.target.value)}
-                            hint={
-                                amount
-                                    ? `≈ ${amount} ${tick.trim() || ''} (placeholder rate)`
-                                    : undefined
-                            }
-                            autoComplete="off"
-                        />
-                    )}
+            {canSaveAsContact && saveContactStage === 'idle' ? (
+                <div className={styles.saveContactRow}>
+                    <button
+                        type="button"
+                        className={styles.saveContactLink}
+                        onClick={() => {
+                            setSaveContactStage('naming');
+                            setSaveContactError(null);
+                        }}
+                    >
+                        + Save as contact
+                    </button>
                 </div>
-                <div className={styles.amountActions}>
-                    <button
-                        type="button"
-                        className={styles.amountButton}
-                        onClick={onMax}
-                        disabled={!sourceBalance}
-                        aria-label="Set max amount"
+            ) : null}
+            {saveContactStage === 'naming' || saveContactStage === 'saving' ? (
+                <form
+                    onSubmit={handleSubmitSaveContact}
+                    noValidate
+                    className={styles.saveContactForm}
+                >
+                    <div className={styles.saveContactInput}>
+                        <Input
+                            label="Contact name"
+                            value={saveContactName}
+                            onChange={(e) => {
+                                setSaveContactName(e.target.value);
+                                if (saveContactError) setSaveContactError(null);
+                            }}
+                            placeholder="e.g. Alice"
+                            autoFocus
+                            aria-invalid={saveContactError ? true : undefined}
+                        />
+                        {saveContactError ? (
+                            <p role="alert" className={styles.error} style={{ marginTop: 'var(--xc-space-1)' }}>
+                                {saveContactError}
+                            </p>
+                        ) : null}
+                    </div>
+                    <Button
+                        type="submit"
+                        variant="primary"
+                        loading={saveContactStage === 'saving'}
+                        disabled={saveContactName.trim().length === 0}
                     >
-                        Max
-                    </button>
-                    <button
+                        Save
+                    </Button>
+                    <Button
                         type="button"
-                        className={styles.amountButton}
-                        onClick={onToggleAmountMode}
-                        disabled={!fiatRate}
-                        aria-label={
-                            amountMode === 'native'
-                                ? 'Enter amount in fiat'
-                                : 'Enter amount in coin units'
-                        }
+                        variant="ghost"
+                        onClick={() => {
+                            setSaveContactStage('idle');
+                            setSaveContactName('');
+                            setSaveContactError(null);
+                        }}
+                        disabled={saveContactStage === 'saving'}
                     >
-                        {amountMode === 'native'
-                            ? (fiatRate?.fiatCurrency || 'USD')
-                            : (tick.trim() || 'coin')}
-                    </button>
+                        Cancel
+                    </Button>
+                </form>
+            ) : null}
+            {!hasTokenSelected ? (
+                <Input
+                    label="Token"
+                    hint="Tick. Native coin by default."
+                    value={tick}
+                    onChange={(e) => setTick(e.target.value)}
+                    autoComplete="off"
+                    autoCapitalize="characters"
+                />
+            ) : null}
+            <div className={`${styles.amountBlock} ${styles.bigField}`}>
+                <Input
+                    label="Amount"
+                    inputMode="decimal"
+                    value={amount}
+                    onChange={(e) => onCoinInputChange(e.target.value)}
+                    autoComplete="off"
+                    style={{
+                        fontSize: 'var(--xc-text-lg)',
+                        padding: 'var(--xc-space-3) var(--xc-space-4)',
+                        minHeight: '48px',
+                    }}
+                />
+                <div className={styles.amountFooter}>
+                    <span>
+                        {fiatRate && amount && coinToFiat(amount, fiatRate) != null
+                            ? `≈ ${coinToFiat(amount, fiatRate).toFixed(2)} ${fiatRate.fiatCurrency || fiatCurrency}`
+                            : fiatRate
+                                ? `≈ 0.00 ${fiatRate.fiatCurrency || fiatCurrency}`
+                                : ''}
+                    </span>
+                    <span className={styles.amountFooterRight}>
+                        {sourceBalance
+                            ? `${sourceBalance.amount} ${sourceBalance.tick} available`
+                            : 'Loading…'}
+                        <button
+                            type="button"
+                            className={styles.amountMaxButton}
+                            onClick={onMax}
+                            disabled={!sourceBalance}
+                            aria-label="Use max available amount"
+                        >
+                            Max
+                        </button>
+                    </span>
                 </div>
             </div>
-            {sourceBalance ? (
-                <p className={styles.balanceHint}>
-                    Available: {sourceBalance.amount} {sourceBalance.tick}
-                    {feeEstimate && isNativeSend
-                        ? ` (fee ≈ ${feeEstimate.coinAmount} ${sourceBalance.tick}, placeholder)`
-                        : ''}
-                </p>
-            ) : null}
             <Input
                 label="Memo"
                 hint="Optional. Cannot contain | or ; characters."
@@ -1238,28 +1407,13 @@ export function Send({ walletId, onBack, prefill = null }) {
                     value={feePick}
                     onChange={setFeePick}
                     placeholderBadge={feeEstimate?.source === 'static-placeholder'}
+                    formatFiat={(coinAmount) => {
+                        if (!fiatRate || !coinAmount) return null;
+                        const v = coinToFiat(String(coinAmount), fiatRate);
+                        if (v == null || !Number.isFinite(v)) return null;
+                        return `≈ ${v.toFixed(2)} ${fiatRate.fiatCurrency || ''}`.trim();
+                    }}
                 />
-            ) : null}
-            {feeTiers ? (
-                <label className={styles.rbfRow}>
-                    <input
-                        type="checkbox"
-                        role="switch"
-                        checked={rbfEnabled}
-                        onChange={(e) => setRbfEnabled(e.target.checked)}
-                        aria-label="Replace-by-fee enabled"
-                    />
-                    <span className={styles.rbfLabel}>
-                        Replace-by-fee
-                        <InfoTip
-                            aria="Replace-by-fee help"
-                            label="Marks the transaction as replaceable (BIP125). While it sits in the mempool you can broadcast a new version with a higher fee to speed it up — or send a self-transfer at a higher fee to cancel it."
-                        />
-                        <span className={styles.rbfHint}>
-                            Allows speeding up or cancelling this transaction while it's in the mempool.
-                        </span>
-                    </span>
-                </label>
             ) : null}
             {formError ? (
                 <StatusMessage
@@ -1292,6 +1446,69 @@ function DetailRow({ label, value }) {
             <dt className={styles.detailsLabel}>{label}</dt>
             <dd className={styles.detailsValue}>{value}</dd>
         </>
+    );
+}
+
+// Hero badge for the asset being sent. Native = large chain icon.
+// Token with imageUrl = square image + chain-icon overlay. Token without
+// imageUrl = letter badge tinted by `tickerColor` + chain-icon overlay.
+// The prefill's imageUrl only applies when the form's current
+// (chainId, tick) still matches what the user picked — if they retype
+// the tick to something else, fall back to the letter-badge style.
+function SelectedTokenHero({ chainId, tick, descriptor, prefill }) {
+    const tickTrim = (tick || '').trim();
+    if (!chainId || !tickTrim) return null;
+    const nativeTicker = descriptor?.coin?.toUpperCase();
+    const isNative = !!nativeTicker && tickTrim.toUpperCase() === nativeTicker;
+    const chainIconUrl = branding.chainIconSmallUrl(chainId);
+    const chainIconLarge = branding.chainIconLargeUrl(chainId);
+    const prefillMatches = prefill
+        && prefill.chainId === chainId
+        && (prefill.tick || '').trim().toUpperCase() === tickTrim.toUpperCase();
+    const imageUrl = prefillMatches && typeof prefill?.imageUrl === 'string' && prefill.imageUrl
+        ? prefill.imageUrl
+        : null;
+    const heroName = prefillMatches && typeof prefill?.displayName === 'string' && prefill.displayName
+        ? prefill.displayName
+        : (isNative ? (descriptor?.displayName || tickTrim) : tickTrim);
+    return (
+        <div className={styles.heroWrap}>
+            <div className={styles.heroIconWrap} aria-hidden="true">
+                {isNative && chainIconLarge ? (
+                    <img
+                        src={chainIconLarge}
+                        alt=""
+                        className={styles.heroIconImg}
+                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    />
+                ) : imageUrl ? (
+                    <img
+                        src={imageUrl}
+                        alt=""
+                        className={styles.heroIconImg}
+                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    />
+                ) : (
+                    <span
+                        className={styles.heroIconLetter}
+                        style={{ background: tickerColor(tickTrim), color: '#FFFFFF' }}
+                    >
+                        {tickTrim.slice(0, 1).toUpperCase()}
+                    </span>
+                )}
+                {!isNative && chainIconUrl ? (
+                    <img
+                        src={chainIconUrl}
+                        alt=""
+                        className={styles.heroChainOverlay}
+                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    />
+                ) : null}
+            </div>
+            {heroName ? (
+                <div className={styles.heroName} title={heroName}>{heroName}</div>
+            ) : null}
+        </div>
     );
 }
 

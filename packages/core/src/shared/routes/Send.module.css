@@ -15,7 +15,13 @@
     color: var(--xc-accent-primary);
     font-size: var(--xc-text-sm);
     cursor: pointer;
-    padding: var(--xc-space-1) var(--xc-space-2);
+    /* Zero left padding + negative inline-start margin so the chevron's
+       left edge aligns with the AppHeader logo above. AppHeader pads the
+       outer bar by space-3; Screen.header pads by space-4. The delta
+       (space-3 − space-4) pulls this button leftward enough that the
+       icon glyph lines up with the logo's left edge. */
+    padding: var(--xc-space-1) var(--xc-space-2) var(--xc-space-1) 0;
+    margin-inline-start: calc(var(--xc-space-3) - var(--xc-space-4));
     border-radius: var(--xc-radius-sm);
 }
 /* Hover state highlights the chevron itself (color shift) instead of
@@ -38,16 +44,42 @@
     text-align: center;
 }
 
+.titleGroup {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.headerActionIcon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.25rem;
+    height: 1.25rem;
+    color: var(--xc-accent-primary);
+    flex: 0 0 auto;
+}
+
 .spacer { display: block; }
 
 .card {
-    max-width: 560px;
-    margin: var(--xc-space-6) auto 0;
-    padding: var(--xc-space-6);
     background: var(--xc-surface-raised);
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-lg);
+}
+
+.cardFull {
+    max-width: 560px;
+    margin: 0 auto;
+    padding: var(--xc-space-3) var(--xc-space-6) var(--xc-space-6);
     box-shadow: var(--xc-shadow-md);
+}
+
+.cardSmall {
+    margin: 0;
+    padding: var(--xc-space-2) var(--xc-space-3) var(--xc-space-3);
 }
 
 .pickerLabel {
@@ -256,6 +288,182 @@
     cursor: not-allowed;
 }
 
+.amountBlock {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+}
+
+.toFieldWrap {
+    position: relative;
+}
+
+/* Bumps font-size/padding on the underlying <input> and label inside
+   Input — used for the To and Amount fields so they read as the
+   primary entry surfaces of the form. */
+.bigField :global(input) {
+    font-size: var(--xc-text-lg);
+    padding: var(--xc-space-3) var(--xc-space-4);
+    min-height: 48px;
+}
+
+.bigField :global(label) {
+    font-size: var(--xc-text-md);
+    font-weight: 600;
+}
+
+.inlineContactsButton {
+    position: absolute;
+    right: 4px;
+    bottom: var(--xc-space-3);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 48px;
+    padding: 0;
+    border: none;
+    border-radius: var(--xc-radius-sm);
+    background: transparent;
+    color: var(--xc-text-muted);
+    cursor: pointer;
+}
+
+.inlineContactsButton:hover:not(:disabled) {
+    color: var(--xc-text);
+}
+
+.inlineContactsButton:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.contactChip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+    padding: 2px var(--xc-space-2);
+    background: color-mix(in srgb, var(--xc-accent-primary, #2563eb) 12%, transparent);
+    color: var(--xc-text);
+    border-radius: 999px;
+    font-size: var(--xc-text-xs);
+    font-weight: 500;
+    margin-bottom: var(--xc-space-1);
+    align-self: flex-start;
+}
+
+.contactChipName {
+    font-weight: 700;
+}
+
+.contactsPopover {
+    border: 1px solid var(--xc-border);
+    background: var(--xc-surface, var(--xc-bg));
+    border-radius: var(--xc-radius-sm);
+    padding: var(--xc-space-2);
+    margin-block: var(--xc-space-1);
+    max-height: 16rem;
+    overflow: auto;
+}
+
+.contactsPopoverList {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.contactsPopoverItem {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: var(--xc-space-2);
+    border-radius: var(--xc-radius-sm);
+    cursor: pointer;
+    background: transparent;
+    border: none;
+    width: 100%;
+    text-align: left;
+    color: var(--xc-text);
+}
+
+.contactsPopoverItem:hover {
+    background: var(--xc-bg-muted);
+}
+
+.contactsPopoverEmpty {
+    padding: var(--xc-space-2);
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text-muted);
+}
+
+.saveContactRow {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    margin-bottom: var(--xc-space-2);
+}
+
+.saveContactLink {
+    background: transparent;
+    border: none;
+    color: var(--xc-accent-primary);
+    cursor: pointer;
+    font: inherit;
+    padding: 0;
+    text-decoration: underline;
+}
+
+.saveContactForm {
+    display: flex;
+    align-items: flex-end;
+    gap: var(--xc-space-2);
+    margin-bottom: var(--xc-space-2);
+}
+
+.saveContactInput {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.amountFooter {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--xc-space-2);
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    margin-top: 4px;
+}
+
+.amountFooterRight {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+}
+
+.amountMaxButton {
+    padding: 2px var(--xc-space-2);
+    border: 1px solid var(--xc-accent-primary);
+    border-radius: var(--xc-radius-sm);
+    background: var(--xc-accent-primary);
+    color: #FFFFFF;
+    font-size: var(--xc-text-xs);
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.amountMaxButton:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--xc-accent-primary) 85%, white 15%);
+    border-color: color-mix(in srgb, var(--xc-accent-primary) 85%, white 15%);
+}
+
+.amountMaxButton:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
 .balanceHint {
     margin: calc(-1 * var(--xc-space-2)) 0 var(--xc-space-3);
     font-size: var(--xc-text-xs);
@@ -413,4 +621,66 @@
     outline: 2px solid var(--xc-focus-ring);
     outline-offset: 2px;
     border-radius: var(--xc-radius-sm);
+}
+
+.heroWrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--xc-space-1);
+    margin: 0 0 var(--xc-space-3);
+}
+
+.heroName {
+    font-size: var(--xc-text-xl);
+    font-weight: 700;
+    color: var(--xc-text);
+    text-align: center;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: var(--xc-space-1);
+}
+
+.heroIconWrap {
+    position: relative;
+    width: 88px;
+    height: 88px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.heroIconImg {
+    width: 88px;
+    height: 88px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: var(--xc-surface);
+    border: 1px solid var(--xc-border);
+}
+
+.heroIconLetter {
+    width: 88px;
+    height: 88px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 36px;
+    line-height: 1;
+}
+
+.heroChainOverlay {
+    position: absolute;
+    right: -2px;
+    bottom: -2px;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--xc-surface-raised);
+    border: 2px solid var(--xc-surface-raised);
+    box-shadow: 0 0 0 1px var(--xc-border);
 }

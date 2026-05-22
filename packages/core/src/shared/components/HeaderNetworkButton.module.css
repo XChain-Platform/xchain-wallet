@@ -155,3 +155,48 @@
     background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
     font-weight: 600;
 }
+
+/* ───── Kind toggle — segmented control for All / Coins / Tokens. ───── */
+.kindToggle {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0;
+    border: 1px solid var(--xc-border-strong);
+    border-radius: var(--xc-radius-sm);
+    overflow: hidden;
+    background: var(--xc-bg);
+}
+
+.kindToggleBtn {
+    appearance: none;
+    background: transparent;
+    border: none;
+    padding: 8px 10px;
+    color: var(--xc-text);
+    font-family: inherit;
+    font-size: var(--xc-text-sm);
+    cursor: pointer;
+}
+
+.kindToggleBtn + .kindToggleBtn {
+    border-inline-start: 1px solid var(--xc-border-strong);
+}
+
+.kindToggleBtn:hover {
+    background: var(--xc-bg-muted);
+}
+
+.kindToggleBtn:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: -2px;
+}
+
+.kindToggleBtnActive {
+    background: var(--xc-accent-primary);
+    color: #FFFFFF;
+    font-weight: 700;
+}
+
+.kindToggleBtnActive:hover {
+    background: var(--xc-accent-primary);
+}

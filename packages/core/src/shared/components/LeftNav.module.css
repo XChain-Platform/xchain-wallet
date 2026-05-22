@@ -48,6 +48,11 @@
     --xc-screen-h: 100%;
     display: flex;
     flex-direction: column;
+    /* Anchors absolutely-positioned children (e.g. the global QR
+       scanner overlay) to the route content area instead of the
+       browser viewport — so the popup-extension UI doesn't have the
+       overlay punching past its own bounds. */
+    position: relative;
 }
 
 @media (max-width: 899px) {

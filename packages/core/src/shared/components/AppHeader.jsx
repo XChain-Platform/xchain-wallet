@@ -25,6 +25,9 @@ import styles from './AppHeader.module.css';
  * @param {(q: string) => void} [props.onTokenQueryChange]
  * @param {() => void} [props.onMenuOpen]                            pancake-tap handler
  * @param {boolean} [props.showNetworkFilter]                        when false, the network-filter button is hidden — used to scope the filter to the home view only
+ * @param {'all' | 'coins' | 'tokens'} [props.kindFilter]            optional asset-kind segmented control; only shown when `onKindFilterChange` is provided
+ * @param {(kind: 'all' | 'coins' | 'tokens') => void} [props.onKindFilterChange]
+ * @param {() => void} [props.onScan]                                when provided, renders a QR-scan icon button between the filter and the pancake menu
  */
 export function AppHeader({
     chainRegistry,
@@ -35,6 +38,9 @@ export function AppHeader({
     onTokenQueryChange,
     onMenuOpen,
     showNetworkFilter = true,
+    kindFilter,
+    onKindFilterChange,
+    onScan,
 }) {
     return (
         <header className={styles.bar} role="banner">
@@ -54,7 +60,20 @@ export function AppHeader({
                         onNetworkFilterChange={onNetworkFilterChange}
                         tokenQuery={tokenQuery}
                         onTokenQueryChange={onTokenQueryChange}
+                        kindFilter={kindFilter}
+                        onKindFilterChange={onKindFilterChange}
                     />
+                ) : null}
+                {onScan ? (
+                    <button
+                        type="button"
+                        className={styles.menuBtn}
+                        onClick={onScan}
+                        aria-label="Scan a QR code"
+                        title="Scan a QR code"
+                    >
+                        <Icon.ScanIcon />
+                    </button>
                 ) : null}
                 {onMenuOpen ? (
                     <button

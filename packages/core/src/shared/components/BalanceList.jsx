@@ -142,6 +142,7 @@ function BalanceRowEl({ row, multisig, onSelect, pinned, onTogglePin, hidden, on
             divisibility: row.divisibility,
             fiatRate: row.fiatRate,
             quantity: row.quantity,
+            imageUrl: row.imageUrl,
         })
         : undefined;
     const showPin = typeof onTogglePin === 'function';

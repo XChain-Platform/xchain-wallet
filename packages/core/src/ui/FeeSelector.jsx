@@ -2,16 +2,24 @@ import { useId, useMemo } from 'react';
 import { InfoTip } from './InfoTip.jsx';
 import styles from './FeeSelector.module.css';
 
+const SPEEDS = ['low', 'normal', 'fast'];
+const SPEED_LABELS = { low: 'Low', normal: 'Normal', fast: 'Fast' };
+
 /**
- * FeeSelector — §44.2 Low / Normal / Fast preset buttons + Custom
- * rate input. Rendering is driven by `tiers` from
+ * FeeSelector — §44.2 Low / Normal / Fast slider + separate Custom
+ * toggle. Rendering is driven by `tiers` from
  * `flows/feeEstimate.estimateNativeSendFeeTiers`; selection writes
  * back via `onChange`.
+ *
+ * The slider has three discrete stops (low / normal / fast); the
+ * active stop's rate + ETA + fee amount are shown below the track. A
+ * checkbox underneath flips the picker into Custom mode, hiding the
+ * slider and revealing a sat/vB (or equivalent) input.
  *
  * The component is presentation-only — it does NOT compute fees
  * itself. Callers fetch tiers via `estimateNativeSendFeeTiers` and
  * pass them in; the selected tier (or custom rate) flows back via
- * `onChange({ speed | 'custom', rate?, estimate? })`.
+ * `onChange({ mode, customRate? })`.
  *
  * Props
  *   - tiers      `{ low, normal, fast, unit }` from estimateNativeSendFeeTiers
@@ -30,17 +38,17 @@ export function FeeSelector({
     onChange,
     disabled = false,
     placeholderBadge = false,
+    formatFiat,
 }) {
     const labelId = useId();
-    const customId = useId();
+    const customInputId = useId();
+    const customToggleId = useId();
 
     const tierList = useMemo(() => {
         if (!tiers) return [];
-        return [
-            { speed: 'low', estimate: tiers.low },
-            { speed: 'normal', estimate: tiers.normal },
-            { speed: 'fast', estimate: tiers.fast },
-        ].filter((t) => t.estimate);
+        return SPEEDS
+            .map((speed) => ({ speed, estimate: tiers[speed] }))
+            .filter((t) => t.estimate);
     }, [tiers]);
 
     if (!tiers || tierList.length === 0) {
@@ -53,13 +61,26 @@ export function FeeSelector({
     }
 
     const mode = value?.mode || 'normal';
+    const isCustom = mode === 'custom';
+    const sliderSpeed = isCustom ? 'normal' : (SPEEDS.includes(mode) ? mode : 'normal');
+    const sliderIndex = SPEEDS.indexOf(sliderSpeed);
+    const activeEstimate = tiers[sliderSpeed];
 
-    const onTierClick = (speed) => {
-        onChange({ mode: speed });
+    const onSliderChange = (raw) => {
+        const i = Number(raw);
+        const nextSpeed = SPEEDS[Math.max(0, Math.min(2, i))] || 'normal';
+        onChange({ mode: nextSpeed });
     };
 
-    const onCustomToggle = () => {
-        onChange({ mode: 'custom', customRate: value?.customRate ?? tiers.normal?.rateValue });
+    const onCustomToggle = (checked) => {
+        if (checked) {
+            onChange({
+                mode: 'custom',
+                customRate: value?.customRate ?? tiers.normal?.rateValue,
+            });
+        } else {
+            onChange({ mode: 'normal' });
+        }
     };
 
     const onCustomRateChange = (raw) => {
@@ -76,44 +97,73 @@ export function FeeSelector({
                     label="Higher fees confirm sooner. Low can take an hour or more under busy mempool conditions; Fast usually lands in the next 1–2 blocks. Custom lets you set a specific sat/vB rate."
                 />
             </span>
-            <div role="radiogroup" aria-labelledby={labelId} className={styles.tiers}>
-                {tierList.map(({ speed, estimate }) => {
-                    const active = mode === speed;
-                    return (
-                        <button
-                            key={speed}
-                            type="button"
-                            role="radio"
-                            aria-checked={active}
-                            disabled={disabled}
-                            className={`${styles.tier} ${active ? styles.tierActive : ''}`.trim()}
-                            onClick={() => onTierClick(speed)}
-                        >
-                            <span className={styles.tierName}>{estimate.speed === 'low' ? 'Low' : estimate.speed === 'fast' ? 'Fast' : 'Normal'}</span>
-                            <span className={styles.tierRate}>{estimate.rate}</span>
-                            <span className={styles.tierFee}>{estimate.coinAmount}</span>
-                            {estimate.etaMinutes ? (
-                                <span className={styles.tierEta}>~{estimate.etaMinutes} min</span>
-                            ) : null}
-                        </button>
-                    );
-                })}
-                <button
-                    type="button"
-                    role="radio"
-                    aria-checked={mode === 'custom'}
+
+            {!isCustom ? (
+                <div className={styles.sliderBlock} data-active-speed={sliderSpeed}>
+                    <input
+                        type="range"
+                        min={0}
+                        max={2}
+                        step={1}
+                        value={sliderIndex}
+                        onChange={(e) => onSliderChange(e.target.value)}
+                        disabled={disabled}
+                        aria-labelledby={labelId}
+                        aria-valuetext={`${SPEED_LABELS[sliderSpeed]} — ${activeEstimate?.coinAmount ?? ''}${activeEstimate?.etaMinutes ? ` · ~${activeEstimate.etaMinutes} min` : ''}`}
+                        className={styles.slider}
+                    />
+                    <div className={styles.sliderTicks} aria-hidden="true">
+                        {SPEEDS.map((s) => (
+                            <button
+                                key={s}
+                                type="button"
+                                className={`${styles.sliderTick} ${sliderSpeed === s ? styles.sliderTickActive : ''}`.trim()}
+                                onClick={() => onChange({ mode: s })}
+                                disabled={disabled}
+                                tabIndex={-1}
+                            >
+                                {SPEED_LABELS[s]}
+                            </button>
+                        ))}
+                    </div>
+                    {activeEstimate ? (() => {
+                        const fiatStr = typeof formatFiat === 'function'
+                            ? formatFiat(activeEstimate.coinAmount)
+                            : null;
+                        return (
+                            <div className={styles.sliderReadout} role="status" aria-live="polite">
+                                <span className={styles.sliderReadoutPrimary}>
+                                    {activeEstimate.coinAmount}
+                                    {fiatStr ? (
+                                        <span className={styles.sliderReadoutFiat}> ({fiatStr})</span>
+                                    ) : null}
+                                    {activeEstimate.etaMinutes ? (
+                                        <span className={styles.sliderReadoutEta}> · ~{activeEstimate.etaMinutes} min</span>
+                                    ) : null}
+                                </span>
+                                <span className={styles.sliderReadoutRate}>{activeEstimate.rate}</span>
+                            </div>
+                        );
+                    })() : null}
+                </div>
+            ) : null}
+
+            <label className={styles.customToggle} htmlFor={customToggleId}>
+                <input
+                    id={customToggleId}
+                    type="checkbox"
+                    role="switch"
+                    checked={isCustom}
+                    onChange={(e) => onCustomToggle(e.target.checked)}
                     disabled={disabled}
-                    className={`${styles.tier} ${mode === 'custom' ? styles.tierActive : ''}`.trim()}
-                    onClick={onCustomToggle}
-                >
-                    <span className={styles.tierName}>Custom</span>
-                    <span className={styles.tierRate}>{tiers.unit}</span>
-                </button>
-            </div>
-            {mode === 'custom' ? (
+                />
+                <span className={styles.customToggleLabel}>Custom rate</span>
+            </label>
+
+            {isCustom ? (
                 <div className={styles.customRow}>
                     <input
-                        id={customId}
+                        id={customInputId}
                         type="number"
                         inputMode="decimal"
                         min={0}
@@ -127,6 +177,7 @@ export function FeeSelector({
                     <span className={styles.customUnit}>{tiers.unit}</span>
                 </div>
             ) : null}
+
             {placeholderBadge ? (
                 <p className={styles.placeholder}>
                     Placeholder rates — real SDK fee estimation lands in a later step.

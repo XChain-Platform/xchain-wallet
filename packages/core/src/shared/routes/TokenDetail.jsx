@@ -1,5 +1,5 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Screen, ChainBadge, Icon } from '@xchain-wallet/core/ui';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Screen, ChainBadge, Icon, Button, Input } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -471,11 +471,14 @@ export function TokenDetail({
                             {activeTab === 'holders' && !isNative ? (
                                 <>
                                     <GatedContentPanel
+                                        walletId={walletId}
+                                        chainId={chainId}
                                         tick={tick}
                                         groups={gatedGroups}
                                         loading={gatedLoading}
                                         error={gatedError}
                                         packsMeta={assetInfo?.packs || {}}
+                                        messaging={messaging}
                                     />
                                     <HoldersPanel
                                         holders={holders}
@@ -1286,22 +1289,51 @@ function formatTotalSupply(isNative, chainId, assetInfo) {
 
 // Token-gated content panel — renders the list of gated FILEs published
 // for this token, grouped by KEY_HASH so packs (multi-file shares-one-key
-// drops) appear as a single header with member files underneath. The
-// actual unlock click flow (password prompt → ECIES decrypt → AES-256-GCM
-// decrypt → in-browser viewer) is a follow-up; this panel surfaces the
-// structure and the cryptographic identifiers so testers can verify the
-// protocol path renders end-to-end.
-// See xchain-documentation/protocol/TOKEN_GATED_CONTENT.md.
-function GatedContentPanel({ tick, groups, loading, error, packsMeta }) {
+// drops) appear as a single header with member files underneath. Each
+// group has an Unlock button that pops an inline form (pick address,
+// enter password) and decrypts every file in the group; viewers render
+// inline for text / JSON / images and as a download link for everything
+// else. See xchain-documentation/protocol/TOKEN_GATED_CONTENT.md.
+function GatedContentPanel({ walletId, chainId, tick, groups, loading, error, packsMeta, messaging }) {
+    const [addresses, setAddresses] = useState(/** @type {any[] | null} */ (null));
+    const [addressesError, setAddressesError] = useState(/** @type {string | null} */ (null));
+    const [addressesLoading, setAddressesLoading] = useState(false);
+
+    // Load the user's addresses for this chain on demand — only fired
+    // when the first Unlock button is clicked so panels for tokens with
+    // no gated content (or that the user never tries to unlock) skip
+    // the round-trip entirely.
+    const ensureAddresses = useCallback(() => {
+        if (addresses || addressesLoading) return;
+        if (typeof messaging.getAddressesByChain !== 'function') {
+            setAddressesError('Address lookup is not available in this build.');
+            return;
+        }
+        setAddressesLoading(true);
+        messaging.getAddressesByChain(walletId)
+            .then((byChain) => {
+                const list = (byChain && byChain[chainId]) ? byChain[chainId] : [];
+                const usable = list.filter((a) => a.source === 'hd' || a.source === 'imported-wif');
+                setAddresses(usable);
+                if (usable.length === 0) {
+                    setAddressesError('No unlockable addresses for this chain. Holders need an HD or imported-WIF address that holds the token.');
+                }
+            })
+            .catch((err) => setAddressesError(err?.message || 'Failed to load addresses.'))
+            .finally(() => setAddressesLoading(false));
+    }, [addresses, addressesLoading, messaging, walletId, chainId]);
+
     if (loading) return <p className={styles.muted}>Loading gated content…</p>;
     if (error) return <p role="alert" className={styles.error}>{error}</p>;
     if (!groups || groups.length === 0) {
         return (
-            <p className={styles.muted}>
-                No token-gated content published for {tick}. Holders unlock
-                creator drops, packs, and sealed bundles here when the issuer
-                publishes encrypted FILE actions gated by this ticker.
-            </p>
+            <div className={styles.infoCard}>
+                <p className={styles.muted}>
+                    No token-gated content published for {tick}. Holders unlock
+                    creator drops, packs, and sealed bundles here when the issuer
+                    publishes encrypted FILE actions gated by this ticker.
+                </p>
+            </div>
         );
     }
     return (
@@ -1311,42 +1343,322 @@ function GatedContentPanel({ tick, groups, loading, error, packsMeta }) {
                 const meta = packsMeta && g.files[0]?.packId ? packsMeta[g.files[0].packId] : null;
                 const heading = meta?.name || (isPack ? `Pack (${g.files.length} files)` : g.files[0]?.name) || 'Gated file';
                 return (
-                    <div key={g.keyHash} className={styles.metaBlock}>
-                        <h4 className={styles.metaBlockTitle}>{heading}</h4>
-                        {meta?.description ? (
-                            <p className={styles.descriptionBody}>{meta.description}</p>
-                        ) : null}
-                        <ul className={styles.filesList}>
-                            {g.files.map((f) => (
-                                <li key={f.actionIndex}>
-                                    <span className={styles.fileLink}>
-                                        <span className={styles.fileLinkIcon} aria-hidden="true">
-                                            <Icon.FileTypeIcon type={f.type} />
-                                        </span>
-                                        <span className={styles.fileLinkName}>{f.name || `Action #${f.actionIndex}`}</span>
-                                        {f.type ? (
-                                            <span className={styles.fileLinkType}>{f.type}</span>
-                                        ) : null}
-                                    </span>
-                                </li>
-                            ))}
-                        </ul>
-                        <p className={styles.metadataHint}>
-                            KEY_HASH: <code>{g.keyHash.slice(0, 12)}…{g.keyHash.slice(-6)}</code>
-                            {' · '}
-                            {g.encryptionMethod === 1 ? 'AES-256-GCM' : `method ${g.encryptionMethod}`}
-                        </p>
-                    </div>
+                    <GatedGroupCard
+                        key={g.keyHash}
+                        group={g}
+                        heading={heading}
+                        description={meta?.description}
+                        walletId={walletId}
+                        messaging={messaging}
+                        addresses={addresses}
+                        addressesError={addressesError}
+                        addressesLoading={addressesLoading}
+                        onRequestAddresses={ensureAddresses}
+                    />
                 );
             })}
         </div>
     );
 }
 
+function GatedGroupCard({
+    group,
+    heading,
+    description,
+    walletId,
+    messaging,
+    addresses,
+    addressesError,
+    addressesLoading,
+    onRequestAddresses,
+}) {
+    const [expanded, setExpanded] = useState(false);
+    const [selectedAddrId, setSelectedAddrId] = useState(/** @type {string | null} */ (null));
+    const [password, setPassword] = useState('');
+    const [unlockError, setUnlockError] = useState(/** @type {string | null} */ (null));
+    const [submitting, setSubmitting] = useState(false);
+    /** @type {[Map<string, { plaintextBase64: string, byteLength: number }>, Function]} */
+    const [unlocked, setUnlocked] = useState(() => new Map());
+    const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+
+    const handleToggle = () => {
+        if (!expanded) onRequestAddresses();
+        setExpanded((v) => !v);
+        setUnlockError(null);
+    };
+
+    useEffect(() => {
+        if (!expanded || selectedAddrId) return;
+        if (Array.isArray(addresses) && addresses.length > 0) {
+            setSelectedAddrId(addresses[0].id);
+        }
+    }, [expanded, addresses, selectedAddrId]);
+
+    useEffect(() => {
+        if (expanded && !submitting) {
+            setTimeout(() => passwordRef.current?.focus(), 0);
+        }
+    }, [expanded, submitting]);
+
+    async function handleUnlock(event) {
+        event.preventDefault();
+        if (submitting || !selectedAddrId || password.length === 0) return;
+        setSubmitting(true);
+        setUnlockError(null);
+        try {
+            const results = new Map(unlocked);
+            for (const file of group.files) {
+                if (results.has(String(file.actionIndex))) continue;
+                const resp = await messaging.unlockGatedContent({
+                    walletId,
+                    password,
+                    addressId: selectedAddrId,
+                    actionIndex: file.actionIndex,
+                    keyHash: group.keyHash,
+                });
+                results.set(String(file.actionIndex), {
+                    plaintextBase64: resp.plaintextBase64,
+                    byteLength: resp.byteLength,
+                });
+            }
+            setUnlocked(results);
+            setPassword('');
+        } catch (err) {
+            const name = err?.name;
+            const code = err?.code;
+            if (name === 'WrongPasswordError' || name === 'InvalidPasswordError') {
+                setUnlockError('Incorrect password.');
+            } else if (name === 'NoKeyForAddressError') {
+                setUnlockError('This address has no decryption key in the wallet.');
+            } else if (code === 'GATED_FILE_KEY_MISSING') {
+                setUnlockError('No key handoff found in this address’s messages. Ask the seller to re-send.');
+            } else if (code === 'GATED_FILE_NOT_FOUND') {
+                setUnlockError('Ciphertext not available from the explorer yet — try again in a moment.');
+            } else {
+                setUnlockError(err?.message || 'Failed to unlock.');
+            }
+            passwordRef.current?.focus();
+            passwordRef.current?.select();
+        } finally {
+            setSubmitting(false);
+        }
+    }
+
+    const allUnlocked = group.files.every((f) => unlocked.has(String(f.actionIndex)));
+
+    return (
+        <div className={styles.metaBlock}>
+            <h4 className={styles.metaBlockTitle}>{heading}</h4>
+            {description ? (
+                <p className={styles.descriptionBody}>{description}</p>
+            ) : null}
+            <ul className={styles.filesList}>
+                {group.files.map((f) => {
+                    const plain = unlocked.get(String(f.actionIndex));
+                    return (
+                        <li key={f.actionIndex}>
+                            <span className={styles.fileLink}>
+                                <span className={styles.fileLinkIcon} aria-hidden="true">
+                                    <Icon.FileTypeIcon type={f.type} />
+                                </span>
+                                <span className={styles.fileLinkName}>{f.name || `Action #${f.actionIndex}`}</span>
+                                {f.type ? (
+                                    <span className={styles.fileLinkType}>{f.type}</span>
+                                ) : null}
+                            </span>
+                            {plain ? (
+                                <UnlockedViewer
+                                    name={f.name}
+                                    type={f.type}
+                                    plaintextBase64={plain.plaintextBase64}
+                                    byteLength={plain.byteLength}
+                                />
+                            ) : null}
+                        </li>
+                    );
+                })}
+            </ul>
+            <p className={styles.metadataHint}>
+                KEY_HASH: <code>{group.keyHash.slice(0, 12)}…{group.keyHash.slice(-6)}</code>
+                {' · '}
+                {group.encryptionMethod === 1 ? 'AES-256-GCM' : `method ${group.encryptionMethod}`}
+            </p>
+            <div style={{ marginTop: 'var(--xc-space-2)' }}>
+                <Button variant="primary" onClick={handleToggle} disabled={allUnlocked}>
+                    {allUnlocked ? 'Unlocked' : expanded ? 'Cancel' : (group.files.length > 1 ? 'Unlock pack' : 'Unlock')}
+                </Button>
+            </div>
+            {expanded && !allUnlocked ? (
+                <form onSubmit={handleUnlock} noValidate style={{ marginTop: 'var(--xc-space-2)' }}>
+                    {addressesLoading ? (
+                        <p className={styles.muted}>Loading addresses…</p>
+                    ) : addressesError ? (
+                        <p role="alert" className={styles.error}>{addressesError}</p>
+                    ) : Array.isArray(addresses) && addresses.length > 0 ? (
+                        <label style={{ display: 'block', marginBottom: 'var(--xc-space-2)' }}>
+                            <span style={{ display: 'block', fontSize: 'var(--xc-text-sm)', marginBottom: 'var(--xc-space-1)' }}>
+                                Holding address
+                            </span>
+                            <select
+                                value={selectedAddrId || ''}
+                                onChange={(e) => setSelectedAddrId(e.target.value)}
+                                style={{
+                                    width: '100%',
+                                    padding: 'var(--xc-space-2)',
+                                    border: '1px solid var(--xc-border)',
+                                    borderRadius: 'var(--xc-radius-sm)',
+                                    background: 'var(--xc-bg)',
+                                    color: 'var(--xc-text)',
+                                }}
+                            >
+                                {addresses.map((a) => (
+                                    <option key={a.id} value={a.id}>{a.address}</option>
+                                ))}
+                            </select>
+                        </label>
+                    ) : null}
+                    <Input
+                        ref={passwordRef}
+                        type="password"
+                        label="Wallet password"
+                        value={password}
+                        onChange={(e) => {
+                            setPassword(e.target.value);
+                            if (unlockError) setUnlockError(null);
+                        }}
+                        autoComplete="current-password"
+                        aria-invalid={unlockError ? true : undefined}
+                    />
+                    {unlockError ? (
+                        <p role="alert" className={styles.error} style={{ marginTop: 'var(--xc-space-1)' }}>
+                            {unlockError}
+                        </p>
+                    ) : null}
+                    <div style={{ marginTop: 'var(--xc-space-2)' }}>
+                        <Button
+                            type="submit"
+                            variant="primary"
+                            loading={submitting}
+                            disabled={
+                                submitting
+                                || password.length === 0
+                                || !selectedAddrId
+                                || !Array.isArray(addresses)
+                                || addresses.length === 0
+                            }
+                        >
+                            Decrypt
+                        </Button>
+                    </div>
+                </form>
+            ) : null}
+        </div>
+    );
+}
+
+function UnlockedViewer({ name, type, plaintextBase64, byteLength }) {
+    const mime = String(type || '').toLowerCase();
+    const isImage = mime.startsWith('image/');
+    const isJson = mime === 'application/json' || mime.endsWith('+json');
+    const isText = mime.startsWith('text/') || isJson;
+
+    const decodedText = useMemo(() => {
+        if (!isText) return null;
+        try {
+            const bin = typeof atob === 'function'
+                ? atob(plaintextBase64)
+                : Buffer.from(plaintextBase64, 'base64').toString('binary');
+            const bytes = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
+            return new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+        } catch (_e) {
+            return null;
+        }
+    }, [isText, plaintextBase64]);
+
+    const blobUrl = useMemo(() => {
+        if (isText) return null;
+        try {
+            const bin = typeof atob === 'function'
+                ? atob(plaintextBase64)
+                : Buffer.from(plaintextBase64, 'base64').toString('binary');
+            const bytes = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
+            const blob = new Blob([bytes], { type: mime || 'application/octet-stream' });
+            return URL.createObjectURL(blob);
+        } catch (_e) {
+            return null;
+        }
+    }, [isText, mime, plaintextBase64]);
+
+    useEffect(() => {
+        if (!blobUrl) return undefined;
+        return () => URL.revokeObjectURL(blobUrl);
+    }, [blobUrl]);
+
+    if (isImage && blobUrl) {
+        return (
+            <div style={{ marginTop: 'var(--xc-space-1)' }}>
+                <img
+                    src={blobUrl}
+                    alt={name || ''}
+                    style={{ maxWidth: '100%', borderRadius: 'var(--xc-radius-sm)' }}
+                />
+            </div>
+        );
+    }
+    if (isText && decodedText !== null) {
+        const pretty = isJson
+            ? (() => { try { return JSON.stringify(JSON.parse(decodedText), null, 2); } catch { return decodedText; } })()
+            : decodedText;
+        return (
+            <pre
+                style={{
+                    marginTop: 'var(--xc-space-1)',
+                    padding: 'var(--xc-space-2)',
+                    background: 'var(--xc-bg-muted)',
+                    borderRadius: 'var(--xc-radius-sm)',
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                    fontFamily: 'var(--xc-font-mono, monospace)',
+                    fontSize: 'var(--xc-text-xs)',
+                    maxHeight: '20rem',
+                    overflow: 'auto',
+                }}
+            >{pretty}</pre>
+        );
+    }
+    if (blobUrl) {
+        return (
+            <div style={{ marginTop: 'var(--xc-space-1)' }}>
+                <a
+                    href={blobUrl}
+                    download={name || `gated-${Date.now()}`}
+                    className={styles.fileLink}
+                >
+                    <span className={styles.fileLinkIcon} aria-hidden="true">
+                        <Icon.FileTypeIcon type={type} />
+                    </span>
+                    <span className={styles.fileLinkName}>Download ({formatBytes(byteLength)})</span>
+                </a>
+            </div>
+        );
+    }
+    return null;
+}
+
+function formatBytes(n) {
+    if (typeof n !== 'number' || !isFinite(n)) return '—';
+    if (n < 1024) return `${n} B`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+    if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+    return `${(n / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+}
+
 function HoldersPanel({ holders, holdersLoading, holdersError, holdersFetchedAt, divisibility }) {
     if (holdersLoading) return <p className={styles.muted}>Loading holders…</p>;
     if (holdersError) return <p role="alert" className={styles.error}>{holdersError}</p>;
-    if (!holders || holders.length === 0) return <p className={styles.muted}>No holders reported.</p>;
+    if (!holders || holders.length === 0) return null;
     return (
         <>
             {holdersFetchedAt ? (
