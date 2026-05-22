@@ -37,11 +37,33 @@
     outline-offset: 2px;
 }
 
+.titleGroup {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.headerIcon {
+    display: block;
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 6px;
+    object-fit: cover;
+    background: var(--xc-bg-muted);
+    flex: 0 0 auto;
+}
+
 .title {
     font-weight: 700;
     font-size: var(--xc-text-lg);
     color: var(--xc-text);
     text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
 }
 
 .spacer { display: block; }
@@ -94,11 +116,20 @@
     background: linear-gradient(180deg, var(--xc-accent-primary) 0%, color-mix(in srgb, var(--xc-accent-primary) 80%, #000) 100%);
     color: #FFFFFF;
     border-radius: var(--xc-radius-md);
-    padding: var(--xc-space-4) var(--xc-space-4);
+    padding: var(--xc-space-2) var(--xc-space-3);
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--xc-space-2);
+    box-shadow: 0 6px 18px rgba(30, 144, 199, 0.25);
+}
+
+.balanceHeroMain {
+    flex: 1 1 auto;
+    min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    box-shadow: 0 6px 18px rgba(30, 144, 199, 0.25);
+    gap: 4px;
 }
 
 .balanceHeroRow {
@@ -146,6 +177,20 @@
 .balanceHeroEye:focus-visible {
     outline: 2px solid #FFFFFF;
     outline-offset: 2px;
+}
+
+.balanceHeroIcon {
+    display: block;
+    /* Sized to match the height of the right-side content stack (label
+       + amount + fiat ≈ 4.5rem) so the icon dominates the left side
+       and visually fills the hero without forcing it taller. */
+    width: 4.5rem;
+    height: 4.5rem;
+    flex: 0 0 auto;
+    border-radius: 10px;
+    object-fit: cover;
+    background: rgba(255, 255, 255, 0.12);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
 }
 
 .balanceHeroAmount {
@@ -381,7 +426,6 @@
     flex-direction: column;
     gap: var(--xc-space-3);
     min-height: 0;
-    padding-top: var(--xc-space-3);
 }
 
 /* Native-coin layout — no tabs, just stacked sections. Each section
@@ -519,10 +563,235 @@
     word-break: break-word;
 }
 
+.artworkTitle {
+    margin: 0;
+    font-size: var(--xc-text-lg);
+    font-weight: 700;
+    color: var(--xc-text);
+    line-height: 1.2;
+}
+
+.metaBlock {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+}
+
+/* About card stacks several sub-blocks (description, owner, categories,
+   contacts, links, pgp signature). Visual breathing room between them
+   keeps each subsection legible on the mobile-width popup. */
+.aboutCard {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-3);
+}
+
+.aboutCard > .metaBlock + .metaBlock {
+    padding-top: var(--xc-space-2);
+    border-top: 1px solid var(--xc-border);
+}
+
+.metaBlockTitle {
+    margin: 0;
+    font-size: var(--xc-text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--xc-text-muted);
+    font-weight: 700;
+}
+
+.pgpsigToggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--xc-space-2);
+    padding: var(--xc-space-2);
+    border-radius: var(--xc-radius-sm);
+    background: var(--xc-bg-muted);
+    color: var(--xc-text);
+    border: 0;
+    cursor: pointer;
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    text-align: start;
+}
+
+.pgpsigToggle:hover,
+.pgpsigToggle:focus-visible {
+    color: var(--xc-accent-primary);
+}
+
+.pgpsigBlock {
+    margin: 0;
+    padding: var(--xc-space-2);
+    background: var(--xc-bg-muted);
+    border-radius: var(--xc-radius-sm);
+    font-family: var(--xc-font-mono, monospace);
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    overflow-x: auto;
+    white-space: pre;
+}
+
+/* Links inside the structured meta tables (Contact rows for
+   email/phone/url) inherit the browser's default link color, which
+   reads as dark blue on dark backgrounds. Force the accent color so
+   they stay legible in both themes. */
+.metaTable a {
+    color: var(--xc-accent-primary);
+    text-decoration: none;
+    word-break: break-word;
+}
+
+.metaTable a:hover,
+.metaTable a:focus-visible {
+    text-decoration: underline;
+}
+
+.dnsValueCell {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+.dnsHost {
+    font-family: var(--xc-font-mono, monospace);
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text);
+    word-break: break-all;
+}
+
+.dnsValue {
+    font-family: var(--xc-font-mono, monospace);
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    word-break: break-all;
+}
+
 .gallery {
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-3);
+}
+
+/* Media tab — vertical stack: subtab strip then the active sub-panel. */
+.mediaPanel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-3);
+}
+
+/* Pill-style strip that sits inside the Media tab to switch between
+   Image / Video / Audio. Distinct from the page-level `.tabs` so
+   nested tabs read as a secondary level. Bordered + the active pill
+   gets a solid accent fill so it's unmistakable which media type
+   the user is currently viewing. */
+.subtabs {
+    display: flex;
+    width: 100%;
+    gap: 2px;
+    background: var(--xc-bg-muted);
+    border: 1px solid var(--xc-border-strong);
+    border-radius: 999px;
+    padding: 2px;
+}
+
+.subtab {
+    appearance: none;
+    background: transparent;
+    border: none;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+    padding: var(--xc-space-1) var(--xc-space-3);
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background-color var(--xc-transition), color var(--xc-transition);
+    font-family: inherit;
+    flex: 1 1 0;
+    text-align: center;
+}
+
+.subtab:hover { color: var(--xc-text); }
+.subtab:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
+.subtabActive,
+.subtabActive:hover {
+    background: var(--xc-accent-primary);
+    color: #FFFFFF;
+}
+
+/* Each TIS image type (large / hires / standard / icon) renders in its
+   own labeled section so the user can tell what they're looking at at
+   a glance — instead of a generic image dump. */
+.mediaGroup {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+}
+
+.mediaGroupTitle {
+    margin: 0;
+    font-size: var(--xc-text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--xc-text-muted);
+    font-weight: 700;
+}
+
+.heroImageLink {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+    border-radius: var(--xc-radius-sm);
+    overflow: hidden;
+    background: var(--xc-bg-muted);
+    text-decoration: none;
+    color: inherit;
+}
+
+.heroImage {
+    display: block;
+    width: 100%;
+    max-height: 28rem;
+    object-fit: contain;
+    background: var(--xc-bg-muted);
+    transition: transform var(--xc-transition);
+}
+
+.heroImageLink:hover .heroImage,
+.heroImageLink:focus-visible .heroImage {
+    transform: scale(1.01);
+}
+
+.heroImageCaption {
+    padding: 0 var(--xc-space-2) var(--xc-space-2);
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+}
+
+.iconRow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--xc-space-2);
+}
+
+.iconLink {
+    display: block;
+    border-radius: var(--xc-radius-sm);
+    overflow: hidden;
+    background: var(--xc-bg-muted);
+}
+
+.iconImage {
+    display: block;
+    width: 4rem;
+    height: 4rem;
+    object-fit: cover;
+    background: var(--xc-bg-muted);
 }
 
 .galleryImagesSingle {
@@ -604,39 +873,6 @@
     gap: var(--xc-space-2);
 }
 
-.linkRow {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: var(--xc-space-3);
-    padding: var(--xc-space-2);
-    border-radius: var(--xc-radius-sm);
-    background: var(--xc-bg-muted);
-    color: var(--xc-text);
-    text-decoration: none;
-    font-size: var(--xc-text-sm);
-}
-
-.linkRow:hover,
-.linkRow:focus-visible {
-    color: var(--xc-accent-primary);
-}
-
-.linkRowLabel {
-    font-weight: 600;
-    color: var(--xc-text-muted);
-    flex: 0 0 auto;
-}
-
-.linkRowValue {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    min-width: 0;
-    flex: 1 1 auto;
-    text-align: end;
-    direction: ltr;
-}
 
 .socialsRow {
     display: flex;
@@ -647,6 +883,7 @@
 .socialChip {
     display: inline-flex;
     align-items: center;
+    gap: 6px;
     padding: var(--xc-space-1) var(--xc-space-2);
     border-radius: 999px;
     border: 1px solid var(--xc-border);
@@ -655,6 +892,22 @@
     text-decoration: none;
     font-size: var(--xc-text-xs);
     font-weight: 600;
+}
+
+.socialChipIcon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    flex: 0 0 auto;
+    color: inherit;
+}
+
+.socialChipIcon svg {
+    width: 100%;
+    height: 100%;
+    display: block;
 }
 
 .socialChip:hover,

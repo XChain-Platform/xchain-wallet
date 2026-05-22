@@ -41,9 +41,37 @@
  */
 
 /**
+ * @typedef {Object} TisOwner
+ * @property {string | null} name                        owner's display name
+ * @property {string | null} title                       owner's title within the organization
+ * @property {string | null} organization                organization name
+ */
+
+/**
+ * @typedef {Object} TisContact
+ * @property {string} type                               "email" / "phone" / "fax" / "url" / "address"
+ * @property {string} value                              raw value (already trimmed; not URL-normalized)
+ */
+
+/**
+ * @typedef {Object} TisCategory
+ * @property {string} type                               "main" / "sub" / "other"
+ * @property {string} value
+ */
+
+/**
+ * @typedef {Object} TisDnsRecord
+ * @property {string} type                               "A" / "AAAA" / "CNAME" / "TXT" / "MX" / "URL" / …
+ * @property {string} host
+ * @property {string} value
+ * @property {number | null} priority                    MX only
+ */
+
+/**
  * @typedef {Object} TokenInfo
  * @property {string} chainId
- * @property {string} tick                              ticker (uppercase canonical)
+ * @property {string} tick                               ticker (uppercase canonical)
+ * @property {string | null} name                        TIS document `name` field — the artwork / display title; distinct from the ticker
  * @property {string | null} description                 free-form description text (TIS body if present, else on-chain)
  * @property {string | null} creator                     issuer address
  * @property {string | null} totalSupply                 formatted decimal string ("1000.5")
@@ -56,10 +84,16 @@
  * @property {TisMediaEntry[]} images                    full image gallery (icon / standard / large / hires)
  * @property {TisMediaEntry[]} audio                     audio tracks
  * @property {TisMediaEntry[]} video                     video tracks
- * @property {string | null} website                     primary website URL
+ * @property {string | null} website                     primary website URL (kept as singular for code that only needs the first)
+ * @property {string[]} websites                         all website URLs published with the token (primary + alternates), in declaration order
  * @property {TisSocialEntry[]} socials                  social links (twitter / github / reddit / …)
  * @property {TisFileEntry[]} files                      arbitrary file attachments
- * @property {string | null} category                    primary category from TIS
+ * @property {string | null} category                    primary (`main`-type) category — kept for backwards compatibility with the smoke pin
+ * @property {TisCategory[]} categories                  full category list (main + sub + other)
+ * @property {TisOwner | null} owner                     TIS owner identity (display name / title / organization). Distinct from `creator`, which is the on-chain issuer address.
+ * @property {TisContact[]} contacts                     contact info: email / phone / fax / URL / postal address rows
+ * @property {string | null} pgpsig                      PGP signature block published by the issuer for the metadata document
+ * @property {TisDnsRecord[]} dns                        DNS records published with the metadata (A / CNAME / TXT / MX / …)
  */
 
 const IMAGE_EXTS = ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'avif'];
@@ -172,10 +206,30 @@ export function legacyJsonToTis(raw) {
     // "icon" is a common typo for "image" in community JSONs.
     if (o.icon && !o.image) o.image = o.icon;
     const out = /** @type {any} */ ({});
-    for (const k of ['token', 'name', 'description', 'website', 'pgpsig']) {
+    for (const k of ['token', 'name', 'website', 'pgpsig']) {
         if (o[k]) out[k] = o[k];
     }
-    out.owner = (o.owner && typeof o.owner === 'object') ? o.owner : {};
+    // Some legacy / community JSONs embed raw HTML (iframes, scripts,
+    // `<img>` tags) inside the free-form `description`. React would
+    // render that as literal text, which is safe but ugly. Strip every
+    // tag + any HTML entities so the description renders as plain prose,
+    // matching xchain-explorer's `legacyJsonToXChainTIS`.
+    if (typeof o.description === 'string' && o.description.trim()) {
+        out.description = sanitizeDescription(o.description);
+    }
+    // Owner can be nested (`{ name, title, organization }`), a flat string
+    // (`"Kane Mayfield"`), or a sibling field (`owner_name`). Normalize all
+    // three shapes onto the same nested object.
+    if (o.owner && typeof o.owner === 'object') {
+        out.owner = { ...o.owner };
+    } else if (typeof o.owner === 'string' && o.owner.trim()) {
+        out.owner = { name: o.owner.trim() };
+    } else {
+        out.owner = {};
+    }
+    if (!out.owner.name && typeof o.owner_name === 'string') out.owner.name = o.owner_name;
+    if (!out.owner.title && typeof o.owner_title === 'string') out.owner.title = o.owner_title;
+    if (!out.owner.organization && typeof o.owner_organization === 'string') out.owner.organization = o.owner_organization;
     out.contacts = Array.isArray(o.contacts) ? [...o.contacts] : [];
     out.categories = Array.isArray(o.categories) ? [...o.categories] : [];
     out.social = Array.isArray(o.social) ? [...o.social] : [];
@@ -203,9 +257,56 @@ export function legacyJsonToTis(raw) {
     pushSocial('twitter', o.website_social_twitter);
     pushSocial('reddit', o.website_social_reddit);
     pushSocial('linkedin', o.website_social_linkedin);
+    // Legacy CoinDaddy documents commonly publish `website_alternate1`
+    // and `website_alternate2` for additional URLs. Lift them onto a
+    // wallet-side `websites` array so the renderer can iterate as
+    // "Website 1 / 2 / 3" without having to special-case the legacy
+    // sibling fields.
+    const websites = [];
+    if (typeof o.website === 'string' && o.website.trim()) websites.push(o.website.trim());
+    if (typeof o.website_alternate1 === 'string' && o.website_alternate1.trim()) {
+        websites.push(o.website_alternate1.trim());
+    }
+    if (typeof o.website_alternate2 === 'string' && o.website_alternate2.trim()) {
+        websites.push(o.website_alternate2.trim());
+    }
+    if (Array.isArray(o.websites)) {
+        for (const w of o.websites) {
+            if (typeof w === 'string' && w.trim()) websites.push(w.trim());
+        }
+    }
+    out.websites = websites;
     if (o.category) out.categories.push({ type: 'main', data: o.category });
     if (o.subcategory) out.categories.push({ type: 'sub', data: o.subcategory });
     return out;
+}
+
+// Plain-text scrub for token descriptions. Token issuers occasionally
+// embed HTML markup (iframes, scripts, raw <img> tags) inside the
+// `description` field; we never render that as HTML, but we also don't
+// want the wallet's plain-text view to leak the raw tag soup into the
+// UI. This drops every tag + decodes the four common HTML entities so
+// the displayed prose reads cleanly. Mirrors the explorer's stripHtml
+// step in legacyJsonToXChainTIS.
+function sanitizeDescription(text) {
+    if (typeof text !== 'string') return '';
+    return text
+        // Drop <script>…</script> blocks entirely (tag + body) so script
+        // contents don't bleed into the description body.
+        .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+        // Strip every remaining tag, including <iframe …>.
+        .replace(/<\/?[a-z][^>]*>/gi, '')
+        // Decode the basic HTML entities a hand-written description tends
+        // to contain.
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&amp;/g, '&')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        // Collapse the whitespace runs the tag removal often leaves behind.
+        .replace(/[ \t]+/g, ' ')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
 }
 
 function classifyByExtension(url) {
@@ -236,26 +337,40 @@ function tisEntryToMedia(entry) {
  *
  * @param {any} doc                                      TIS or legacy-normalized record
  * @returns {{
+ *   name: string | null,
  *   description: string | null,
  *   images: TisMediaEntry[],
  *   audio: TisMediaEntry[],
  *   video: TisMediaEntry[],
  *   website: string | null,
+ *   websites: string[],
  *   socials: TisSocialEntry[],
  *   files: TisFileEntry[],
- *   category: string | null
+ *   category: string | null,
+ *   categories: TisCategory[],
+ *   owner: TisOwner | null,
+ *   contacts: TisContact[],
+ *   pgpsig: string | null,
+ *   dns: TisDnsRecord[]
  * }}
  */
 export function tisToMediaBundle(doc) {
     const empty = {
+        name: null,
         description: null,
         images: /** @type {TisMediaEntry[]} */ ([]),
         audio: /** @type {TisMediaEntry[]} */ ([]),
         video: /** @type {TisMediaEntry[]} */ ([]),
         website: null,
+        websites: /** @type {string[]} */ ([]),
         socials: /** @type {TisSocialEntry[]} */ ([]),
         files: /** @type {TisFileEntry[]} */ ([]),
         category: null,
+        categories: /** @type {TisCategory[]} */ ([]),
+        owner: /** @type {TisOwner | null} */ (null),
+        contacts: /** @type {TisContact[]} */ ([]),
+        pgpsig: null,
+        dns: /** @type {TisDnsRecord[]} */ ([]),
     };
     if (!doc || typeof doc !== 'object') return empty;
     const images = (Array.isArray(doc.images) ? doc.images : [])
@@ -299,14 +414,81 @@ export function tisToMediaBundle(doc) {
         })
         .filter(Boolean);
     const website = typeof doc.website === 'string' ? normalizeMediaUrl(doc.website) : null;
+    // Build the de-duplicated websites array. legacyJsonToTis lifts
+    // legacy `website_alternate1/2` and native TIS `websites: []`
+    // entries onto `doc.websites`; here we normalize each URL and drop
+    // duplicates (case-insensitive on the URL string).
+    const websitesSeen = new Set();
+    const websitesRaw = Array.isArray(doc.websites) ? doc.websites : [];
+    const websites = [];
+    for (const w of websitesRaw) {
+        if (typeof w !== 'string') continue;
+        const normalized = normalizeMediaUrl(w);
+        if (!normalized) continue;
+        const key = normalized.toLowerCase();
+        if (websitesSeen.has(key)) continue;
+        websitesSeen.add(key);
+        websites.push(normalized);
+    }
     const description = typeof doc.description === 'string' ? doc.description : null;
-    const categoryEntry = Array.isArray(doc.categories)
-        ? doc.categories.find((c) => c && c.type === 'main')
+    const name = typeof doc.name === 'string' && doc.name.trim() ? doc.name.trim() : null;
+    const pgpsig = typeof doc.pgpsig === 'string' && doc.pgpsig.trim() ? doc.pgpsig.trim() : null;
+    const categoriesRaw = Array.isArray(doc.categories) ? doc.categories : [];
+    const categories = categoriesRaw
+        .map((c) => {
+            if (!c || typeof c !== 'object' || typeof c.data !== 'string') return null;
+            return { type: String(c.type || 'main'), value: c.data };
+        })
+        .filter(Boolean);
+    const mainCategory = categories.find((c) => c.type === 'main');
+    const category = mainCategory ? mainCategory.value : null;
+    const ownerRaw = doc.owner;
+    const owner = ownerRaw && typeof ownerRaw === 'object' && (ownerRaw.name || ownerRaw.title || ownerRaw.organization)
+        ? {
+            name: typeof ownerRaw.name === 'string' ? ownerRaw.name : null,
+            title: typeof ownerRaw.title === 'string' ? ownerRaw.title : null,
+            organization: typeof ownerRaw.organization === 'string' ? ownerRaw.organization : null,
+        }
         : null;
-    const category = categoryEntry && typeof categoryEntry.data === 'string'
-        ? categoryEntry.data
-        : null;
-    return { description, images, audio, video, website, socials, files, category };
+    const contactsRaw = Array.isArray(doc.contacts) ? doc.contacts : [];
+    const contacts = contactsRaw
+        .map((c) => {
+            if (!c || typeof c !== 'object' || typeof c.data !== 'string' || !c.data.trim()) return null;
+            return { type: String(c.type || 'url'), value: c.data.trim() };
+        })
+        .filter(Boolean);
+    const dnsRaw = Array.isArray(doc.dns) ? doc.dns : [];
+    const dns = dnsRaw
+        .map((r) => {
+            if (!r || typeof r !== 'object') return null;
+            const type = typeof r.type === 'string' ? r.type.toUpperCase() : '';
+            if (!type) return null;
+            const host = typeof r.host === 'string' ? r.host : '';
+            const value = typeof r.value === 'string' ? r.value : '';
+            if (!host && !value) return null;
+            const priority = typeof r.priority === 'number' && Number.isFinite(r.priority)
+                ? r.priority
+                : null;
+            return { type, host, value, priority };
+        })
+        .filter(Boolean);
+    return {
+        name,
+        description,
+        images,
+        audio,
+        video,
+        website,
+        websites,
+        socials,
+        files,
+        category,
+        categories,
+        owner,
+        contacts,
+        pgpsig,
+        dns,
+    };
 }
 
 function extractMediaUrlsFromText(text) {
@@ -360,18 +542,26 @@ export function normalizeTokenInfo(chainId, tick, raw, tisBundle = null) {
     // falls back to the regex extractor for tokens that didn't bother
     // with a TIS document.
     const description = tisBundle?.description || onChainDescription;
+    const name = tisBundle?.name || null;
     const images = tisBundle?.images || [];
     const audio = tisBundle?.audio || [];
     const video = tisBundle?.video || [];
     const website = tisBundle?.website || null;
+    const websites = tisBundle?.websites || [];
     const socials = tisBundle?.socials || [];
     const files = tisBundle?.files || [];
     const category = tisBundle?.category || null;
+    const categories = tisBundle?.categories || [];
+    const owner = tisBundle?.owner || null;
+    const contacts = tisBundle?.contacts || [];
+    const pgpsig = tisBundle?.pgpsig || null;
+    const dns = tisBundle?.dns || [];
     const imageUrl = (images.length > 0 && images[0]?.url)
         || extractImageUrl(onChainDescription);
     return {
         chainId,
         tick,
+        name,
         description,
         creator,
         totalSupply,
@@ -385,9 +575,15 @@ export function normalizeTokenInfo(chainId, tick, raw, tisBundle = null) {
         audio,
         video,
         website,
+        websites,
         socials,
         files,
         category,
+        categories,
+        owner,
+        contacts,
+        pgpsig,
+        dns,
     };
 }
 
@@ -460,13 +656,23 @@ export async function tokenInfoFor({
     if (!tick) throw new Error('tokenInfoFor: tick is required');
     const sdk = sdkRegistry.get(chainId);
     if (typeof sdk.getToken !== 'function') {
-        return normalizeTokenInfo(chainId, tick, null);
+        return withDemoFallback(chainId, tick, null, null);
     }
     let raw = null;
     try {
         raw = await sdk.getToken(tick);
     } catch {
-        return normalizeTokenInfo(chainId, tick, null);
+        raw = null;
+    }
+    // When the SDK returned nothing (typical of the demo wallet whose
+    // stub SDK has no real indexer behind it), fall back to a synthetic
+    // row from the demo set. The fallback row's description is treated
+    // EXACTLY like a real on-chain description for the next step —
+    // demos can therefore point at a real TIS JSON URL and the wallet
+    // will fetch + parse it to exercise the live rendering path.
+    const haveRealRow = raw && (Array.isArray(raw) ? raw.length > 0 : true);
+    if (!haveRealRow) {
+        raw = demoRowFor(tick);
     }
     let tisBundle = null;
     if (metadataFetchEnabled) {
@@ -481,5 +687,214 @@ export async function tokenInfoFor({
             });
         }
     }
+    // When a demo entry ships a pre-built `tis` block (offline-friendly
+    // bundle that doesn't need a network round-trip), use it as the
+    // fallback if the live fetch came back empty.
+    if (!tisBundle) {
+        const demo = DEMO_TIS_BY_TICK[String(tick || '').toUpperCase()];
+        if (demo?.tis) tisBundle = tisToMediaBundle(demo.tis);
+    }
     return normalizeTokenInfo(chainId, tick, raw, tisBundle);
 }
+
+// Build a synthetic indexer-row for a demo ticker so the rest of the
+// pipeline (TIS fetch, normalize) treats it identically to a real
+// indexer response. Returns null for unknown tickers.
+function demoRowFor(tick) {
+    const demo = DEMO_TIS_BY_TICK[String(tick || '').toUpperCase()];
+    if (!demo) return null;
+    return {
+        info: { tick, description: demo.description, owner: demo.owner || null },
+        supply: demo.supply || { current: null, max: null },
+        locks: demo.locks || {},
+        market: demo.market || { price: null, floor: null },
+    };
+}
+
+// Hand-rolled demo TIS documents — keyed by ticker, mirror the TIS v1.0.0
+// shape so they flow through `tisToMediaBundle` unchanged. URLs point at
+// publicly hosted, freely-redistributable media so an offline demo can
+// still showcase the gallery in a connected browser.
+const DEMO_TIS_BY_TICK = {
+    // PEPECREATURE — fully-populated TIS showcase. Exercises every field
+    // in token-information-standard-v1.0.0-schema.json (name, owner,
+    // contacts, categories, social, images of every type, audio, video,
+    // files, dns, pgpsig) so the wallet's small popup can be visually
+    // audited against a maxed-out token info document.
+    PEPECREATURE: {
+        description: 'Showcase entry: a fully-populated TIS document for visual QA.',
+        owner: '1EbsYtUeLX2iFLwRLABUKLpNzKga',
+        supply: { current: '170', max: '170' },
+        locks: { description: true, max_supply: true, mint: true, mint_supply: true },
+        market: { price: 0.012, floor: 0.008 },
+        tis: {
+            tick: 'PEPECREATURE',
+            name: 'Pepe Creature',
+            description: 'A fully-populated Token Information Standard document used to stress-test the wallet\'s token detail surface. Pepe Creature is a Fake Rare card minted with extensive metadata — owner identity, contact rows, social presence, layered imagery, audio + video media, attached files, DNS records, and a PGP signature for the whole envelope.',
+            website: 'https://fakeraredirectory.com/fake-rares/',
+            websites: [
+                'https://fakeraredirectory.com/fake-rares/',
+                'https://kanemayfield.example/',
+                'https://pepe-creature.example/',
+            ],
+            pgpsig: '-----BEGIN PGP SIGNATURE-----\nVersion: GnuPG v2\n\niQEcBAEBCgAGBQJabcDEFGAAoJEHbpb1f0F0EXAMPLE/SIGNATURE/BLOCK/HERE\nVjW8a3pVjNqYxqq4u8z2/EXAMPLE/SIGNATURE/BLOCK/HERE+1KZ5GzkXxRz3o5\n7y0qD5xOq5+1KZ5GzkXxRz3o57y0qD5xOq5+EXAMPLE+SIGNATURE+BLOCK+abc/\nlzqzqp4VjW8a3pVjNqYxqq4u8z2EXAMPLE-SIGNATURE-BLOCK-1234567890abcd\n=AbCd\n-----END PGP SIGNATURE-----',
+            owner: {
+                name: 'Kane Mayfield',
+                title: 'Artist',
+                organization: 'Fake Rares Studio',
+            },
+            contacts: [
+                { type: 'email', data: 'hello@fakeraredirectory.com' },
+                { type: 'phone', data: '+1 (555) 010-0123' },
+                { type: 'fax', data: '+1 (555) 010-0124' },
+                { type: 'url', data: 'https://kanemayfield.example/contact' },
+                { type: 'address', data: '123 Fake Rare Way, Suite 4, Brooklyn, NY 11201, USA' },
+            ],
+            categories: [
+                { type: 'main', data: 'Art & Literature' },
+                { type: 'sub', data: 'Digital Collectibles' },
+                { type: 'other', data: 'Fake Rares' },
+            ],
+            social: [
+                { type: 'twitter', data: 'https://twitter.com/KaneMayfield' },
+                { type: 'github', data: 'https://github.com/fakerares' },
+                { type: 'reddit', data: 'https://www.reddit.com/r/rarepepe/' },
+                { type: 'facebook', data: 'https://facebook.com/fakerares' },
+                { type: 'linkedin', data: 'https://linkedin.com/in/kanemayfield' },
+                { type: 'discord', data: 'https://discord.gg/fakerares' },
+                { type: 'telegram', data: 'https://t.me/fakerares' },
+                { type: 'youtube', data: 'https://youtube.com/@fakerares' },
+                { type: 'instagram', data: 'https://instagram.com/fakerares' },
+            ],
+            images: [
+                { type: 'icon', data: 'https://gousue3rn3uppml5r5hloc4wqmojl2cqxyhvhnceairxkccnw7vq.ar.io/M6kqE3Fu6PexfY9OtwuWgxyV6FC-D1O0RAIjdQhNt-s/pepecreature_thumb.png', name: 'Pepe Creature Icon' },
+                { type: 'standard', data: 'https://gousue3rn3uppml5r5hloc4wqmojl2cqxyhvhnceairxkccnw7vq.ar.io/M6kqE3Fu6PexfY9OtwuWgxyV6FC-D1O0RAIjdQhNt-s/pepecreature_thumb.png', name: 'Pepe Creature' },
+                { type: 'large', data: 'https://gousue3rn3uppml5r5hloc4wqmojl2cqxyhvhnceairxkccnw7vq.ar.io/jDEXyFCLp7mv3IozMQ2WL_L-vgoYYWg6_EpKD_62pw4/pepecreature_full.jpg', name: 'Pepe Creature (full)' },
+                { type: 'hires', data: 'https://gousue3rn3uppml5r5hloc4wqmojl2cqxyhvhnceairxkccnw7vq.ar.io/jDEXyFCLp7mv3IozMQ2WL_L-vgoYYWg6_EpKD_62pw4/pepecreature_full.jpg', name: 'Pepe Creature (hi-res)' },
+            ],
+            audio: [
+                { type: 'mp3', data: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3', name: 'Theme song' },
+            ],
+            video: [
+                // Canonical PEPECREATURE video lives at
+                //   https://2ouj…ar.io/06idTprqf…?/16tonspepe.mp4
+                // but that ar.io gateway returns HTTP 402 (paywalled) and
+                // the file isn't replicated to free Arweave gateways. We
+                // substitute a publicly-hosted MP4 so the wallet's video
+                // player actually renders — purely a demo stub.
+                { type: 'mp4', data: 'https://www.w3schools.com/html/mov_bbb.mp4', name: '16 Tons Pepe (demo substitute)' },
+            ],
+            files: [
+                { type: 'pdf', data: 'https://example.com/pepecreature-whitepaper.pdf', name: 'Pepe Creature Whitepaper' },
+                { type: 'doc', data: 'https://example.com/pepecreature-lore.docx', name: 'Lore document' },
+                { type: 'xls', data: 'https://example.com/pepecreature-traits.xlsx', name: 'Trait spreadsheet' },
+            ],
+            dns: [
+                { type: 'A', host: 'pepecreature.example', value: '192.0.2.42' },
+                { type: 'AAAA', host: 'pepecreature.example', value: '2001:db8::42' },
+                { type: 'CNAME', host: 'www.pepecreature.example', value: 'pepecreature.example' },
+                { type: 'TXT', host: 'pepecreature.example', value: 'v=spf1 include:_spf.example.com ~all' },
+                { type: 'MX', host: 'pepecreature.example', value: 'mail.pepecreature.example', priority: 10 },
+            ],
+        },
+    },
+    RAREPEPE: {
+        description: 'A classic Rare Pepe card from the Counterparty era — one of the original on-chain NFTs.',
+        owner: '1RarePepe2WalletDemoBitcoinAddressXyz',
+        supply: { current: '300', max: '300' },
+        locks: { description: true, max_supply: true, mint: true, mint_supply: true },
+        tis: {
+            description: 'A classic Rare Pepe card from the Counterparty era — one of the original on-chain NFTs.',
+            images: [
+                { type: 'icon', data: 'https://rarepepedirectory.com/pepe/PEPECASH.png' },
+                { type: 'standard', data: 'https://rarepepedirectory.com/pepe/NAKAMOTOCARD.png' },
+            ],
+            website: 'https://rarepepedirectory.com/',
+            social: [
+                { type: 'twitter', data: 'https://twitter.com/rarepepenft' },
+                { type: 'reddit', data: 'https://www.reddit.com/r/rarepepe/' },
+            ],
+            files: [
+                { name: 'Rare Pepe Whitepaper (demo)', data: 'https://rarepepedirectory.com/' },
+            ],
+            categories: [{ type: 'main', data: 'Collectibles' }],
+        },
+    },
+    XCHAINLOGO: {
+        description: 'Full-media showcase token. Pairs an image gallery with sample audio and video to exercise every TIS player on the token detail page.',
+        owner: '1XChainDemoOwnerLitecoinAddressDemo',
+        supply: { current: '1', max: '1' },
+        locks: { description: true, max_supply: true, mint: true, mint_supply: true },
+        tis: {
+            description: 'Full-media showcase token. Pairs an image gallery with sample audio and video to exercise every TIS player on the token detail page.',
+            images: [
+                { type: 'icon', data: 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/46/Bitcoin.svg/240px-Bitcoin.svg.png' },
+                { type: 'standard', data: 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/47/Litecoin_Logo.png/240px-Litecoin_Logo.png' },
+                { type: 'standard', data: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d0/Dogecoin_Logo.png/240px-Dogecoin_Logo.png' },
+            ],
+            audio: [
+                { type: 'mp3', name: 'SoundHelix demo track', data: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3' },
+            ],
+            video: [
+                { type: 'mp4', name: 'Big Buck Bunny (sample)', data: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4' },
+            ],
+            website: 'https://xchain.io',
+            social: [
+                { type: 'twitter', data: 'https://twitter.com/' },
+                { type: 'github', data: 'https://github.com/XChain-platform' },
+            ],
+            categories: [{ type: 'main', data: 'Showcase' }],
+        },
+    },
+    XCP: {
+        description: 'Counterparty (XCP) — the original Bitcoin-based token protocol whose conventions XChain extends.',
+        owner: null,
+        supply: { current: '2649755.68', max: '2649755.68' },
+        locks: { description: true, max_supply: true, mint: true, mint_supply: true },
+        market: { price: 0.0001, floor: 0.00009 },
+        tis: {
+            description: 'Counterparty (XCP) — the original Bitcoin-based token protocol whose conventions XChain extends.',
+            images: [
+                { type: 'icon', data: 'https://counterparty.io/static/images/counterparty-logo.png' },
+            ],
+            website: 'https://counterparty.io',
+            social: [
+                { type: 'twitter', data: 'https://twitter.com/counterpartyxcp' },
+                { type: 'github', data: 'https://github.com/CounterpartyXCP' },
+            ],
+            categories: [{ type: 'main', data: 'Protocol' }],
+        },
+    },
+    PEPECASH: {
+        description: 'PEPECASH — the currency of the Rare Pepe ecosystem.',
+        owner: null,
+        supply: { current: '700000000', max: '1000000000' },
+        locks: { description: true, max_supply: true, mint: false, mint_supply: false },
+        market: { price: 0.0000012, floor: 0.0000010 },
+        tis: {
+            description: 'PEPECASH — the currency of the Rare Pepe ecosystem.',
+            images: [
+                { type: 'icon', data: 'https://rarepepedirectory.com/pepe/PEPECASH.png' },
+            ],
+            website: 'https://rarepepedirectory.com/',
+            social: [
+                { type: 'twitter', data: 'https://twitter.com/rarepepenft' },
+            ],
+            categories: [{ type: 'main', data: 'Currency' }],
+        },
+    },
+    DOGINAL: {
+        description: 'A Doginal — Dogecoin-inscribed digital collectible.',
+        owner: null,
+        supply: { current: '1', max: '1' },
+        locks: { description: true, max_supply: true, mint: true, mint_supply: true },
+        tis: {
+            description: 'A Doginal — Dogecoin-inscribed digital collectible.',
+            images: [
+                { type: 'icon', data: 'https://upload.wikimedia.org/wikipedia/en/d/d0/Dogecoin_Logo.png' },
+            ],
+            categories: [{ type: 'main', data: 'Collectibles' }],
+            website: 'https://dogecoin.com',
+        },
+    },
+};

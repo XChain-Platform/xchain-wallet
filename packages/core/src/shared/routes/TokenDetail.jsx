@@ -52,6 +52,7 @@ export function TokenDetail({
     divisibility = 8,
     fiatRate = null,
     quantity = '0',
+    imageUrl: rowImageUrl = null,
     onBack,
     onSend,
     onReceive,
@@ -123,6 +124,20 @@ export function TokenDetail({
         return fiatValue(quantity, divisibility, fiatRate);
     }, [quantity, divisibility, fiatRate]);
 
+    // Header icon picks the smallest representation available: a TIS
+    // `icon`-typed image first, then any other TIS image, then the
+    // regex-extracted hero, then the balance-row image (demo SVG or
+    // pre-known URL). Renders nothing if none of those resolve.
+    const headerIconUrl = useMemo(() => {
+        const tisImages = Array.isArray(assetInfo?.images) ? assetInfo.images : [];
+        const iconHit = tisImages.find((i) => String(i?.type || '').toLowerCase() === 'icon');
+        return iconHit?.url
+            || tisImages[0]?.url
+            || assetInfo?.imageUrl
+            || rowImageUrl
+            || null;
+    }, [assetInfo, rowImageUrl]);
+
     const header = (
         <div className={styles.header}>
             <button
@@ -133,7 +148,18 @@ export function TokenDetail({
             >
                 <Icon.BackIcon />
             </button>
-            <span className={styles.title}>{displayName || tick}</span>
+            <div className={styles.titleGroup}>
+                {headerIconUrl ? (
+                    <img
+                        src={headerIconUrl}
+                        alt=""
+                        aria-hidden="true"
+                        className={styles.headerIcon}
+                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    />
+                ) : null}
+                <span className={styles.title}>{displayName || tick}</span>
+            </div>
             <span className={styles.spacer} />
         </div>
     );
@@ -154,13 +180,21 @@ export function TokenDetail({
     // Market section (stats strip + chart) is hoisted above the tabs
     // for both natives and tokens, so the page leads with performance.
     // Tokens keep tabs below for the longer-form Info + Holders content.
+    // Three tabs for non-natives:
+    //   - Details: stable on-chain metadata (name, ticker, supply, balance, creator, status)
+    //   - Info: TIS-sourced content (description, media gallery, links, files)
+    //   - Holders: distribution list
+    // Default lands on Info because the TIS content is the richest surface;
+    // when a token has no TIS payload the panel renders an empty-state hint.
     const tabs = isNative
         ? null
         : [
-            { id: 'info', label: 'Info' },
-            { id: 'holders', label: 'Holders' },
+            { id: 'about', label: 'About' },
+            { id: 'media', label: 'Media' },
+            { id: 'details', label: 'Details' },
+            { id: 'holders', label: 'Unlock' },
         ];
-    const [activeTab, setActiveTab] = useState(tabs ? tabs[0].id : 'info');
+    const [activeTab, setActiveTab] = useState(tabs ? 'about' : 'details');
     useEffect(() => {
         if (activeTab === 'holders') setHoldersOpen(true);
     }, [activeTab]);
@@ -223,50 +257,61 @@ export function TokenDetail({
                     and the hide-balance eye. Big number = primary,
                     small number underneath = secondary. */}
                 <section className={styles.balanceHero} aria-label={`${displayName || tick} balance`}>
-                    <div className={styles.balanceHeroRow}>
-                        <span className={styles.balanceHeroLabel}>Total balance</span>
-                        <div className={styles.balanceHeroControls}>
-                            <button
-                                type="button"
-                                className={styles.balanceHeroSwap}
-                                onClick={() => setPrimaryUnit((p) => (p === 'tick' ? 'fiat' : 'tick'))}
-                                disabled={!fiatAvailable}
-                                aria-label="Swap primary unit"
-                                title="Swap primary unit"
-                            >
-                                <Icon.SwapIcon />
-                            </button>
-                            <button
-                                type="button"
-                                className={styles.balanceHeroEye}
-                                onClick={toggleBalanceHidden}
-                                aria-label={balanceHidden ? 'Show balance' : 'Hide balance'}
-                                title={balanceHidden ? 'Show balance' : 'Hide balance'}
-                            >
-                                {balanceHidden ? <Icon.EyeOffIcon /> : <Icon.EyeIcon />}
-                            </button>
-                        </div>
-                    </div>
-                    <div className={styles.balanceHeroAmount}>
-                        {balanceHidden ? (
-                            <span className={styles.balanceHeroHidden}>•••••</span>
-                        ) : (
-                            <AutoShrinkText>
-                                {primaryAmount}
-                                <span className={styles.balanceHeroAmountCode}>{primaryCode}</span>
-                            </AutoShrinkText>
-                        )}
-                    </div>
-                    {!balanceHidden && fiatAvailable ? (
-                        <div className={styles.balanceHeroNote}>
-                            <span className={styles.balanceHeroNoteLeft}>
-                                <AutoShrinkText>
-                                    {`≈ ${secondaryAmount}`}
-                                    <span className={styles.balanceHeroNoteCode}>{secondaryCode}</span>
-                                </AutoShrinkText>
-                            </span>
-                        </div>
+                    {headerIconUrl ? (
+                        <img
+                            src={headerIconUrl}
+                            alt=""
+                            aria-hidden="true"
+                            className={styles.balanceHeroIcon}
+                            onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                        />
                     ) : null}
+                    <div className={styles.balanceHeroMain}>
+                        <div className={styles.balanceHeroRow}>
+                            <span className={styles.balanceHeroLabel}>Total balance</span>
+                            <div className={styles.balanceHeroControls}>
+                                <button
+                                    type="button"
+                                    className={styles.balanceHeroSwap}
+                                    onClick={() => setPrimaryUnit((p) => (p === 'tick' ? 'fiat' : 'tick'))}
+                                    disabled={!fiatAvailable}
+                                    aria-label="Swap primary unit"
+                                    title="Swap primary unit"
+                                >
+                                    <Icon.SwapIcon />
+                                </button>
+                                <button
+                                    type="button"
+                                    className={styles.balanceHeroEye}
+                                    onClick={toggleBalanceHidden}
+                                    aria-label={balanceHidden ? 'Show balance' : 'Hide balance'}
+                                    title={balanceHidden ? 'Show balance' : 'Hide balance'}
+                                >
+                                    {balanceHidden ? <Icon.EyeOffIcon /> : <Icon.EyeIcon />}
+                                </button>
+                            </div>
+                        </div>
+                        <div className={styles.balanceHeroAmount}>
+                            {balanceHidden ? (
+                                <span className={styles.balanceHeroHidden}>•••••</span>
+                            ) : (
+                                <AutoShrinkText>
+                                    {primaryAmount}
+                                    <span className={styles.balanceHeroAmountCode}>{primaryCode}</span>
+                                </AutoShrinkText>
+                            )}
+                        </div>
+                        {!balanceHidden && fiatAvailable ? (
+                            <div className={styles.balanceHeroNote}>
+                                <span className={styles.balanceHeroNoteLeft}>
+                                    <AutoShrinkText>
+                                        {`≈ ${secondaryAmount}`}
+                                        <span className={styles.balanceHeroNoteCode}>{secondaryCode}</span>
+                                    </AutoShrinkText>
+                                </span>
+                            </div>
+                        ) : null}
+                    </div>
                 </section>
 
                 {/* Quick actions — Send / Receive / Swap / Buy, matching
@@ -360,20 +405,36 @@ export function TokenDetail({
                         </div>
 
                         <div className={styles.tabPanel} role="tabpanel">
-                            {activeTab === 'info' ? (
+                            {activeTab === 'details' ? (
+                                <div className={styles.infoCard}>
+                                    <DetailsPanel
+                                        tick={tick}
+                                        displayName={displayName}
+                                        descriptor={descriptor}
+                                        chainId={chainId}
+                                        kind={kind}
+                                        isNative={isNative}
+                                        assetInfo={assetInfo}
+                                        quantity={quantity}
+                                        divisibility={divisibility}
+                                        fiat={fiat}
+                                        fiatCurrency={fiatCurrency}
+                                    />
+                                </div>
+                            ) : null}
+
+                            {activeTab === 'about' ? (
                                 <InfoPanel
-                                    tick={tick}
-                                    displayName={displayName}
-                                    descriptor={descriptor}
-                                    chainId={chainId}
-                                    kind={kind}
                                     isNative={isNative}
                                     assetInfo={assetInfo}
                                     hasDescription={hasDescription}
-                                    quantity={quantity}
-                                    divisibility={divisibility}
-                                    fiat={fiat}
-                                    fiatCurrency={fiatCurrency}
+                                />
+                            ) : null}
+
+                            {activeTab === 'media' ? (
+                                <MediaPanel
+                                    isNative={isNative}
+                                    assetInfo={assetInfo}
                                 />
                             ) : null}
 
@@ -389,10 +450,10 @@ export function TokenDetail({
                         </div>
                     </>
                 ) : (
-                    /* Native coin: no tabs. Info panel stacks below the
+                    /* Native coin: no tabs. Details panel stacks below the
                        Market section that already rendered above. */
                     <div className={styles.infoCard}>
-                        <InfoPanel
+                        <DetailsPanel
                             tick={tick}
                             displayName={displayName}
                             descriptor={descriptor}
@@ -400,7 +461,6 @@ export function TokenDetail({
                             kind={kind}
                             isNative={isNative}
                             assetInfo={assetInfo}
-                            hasDescription={hasDescription}
                             quantity={quantity}
                             divisibility={divisibility}
                             fiat={fiat}
@@ -557,7 +617,7 @@ function MarketPanel({ isNative, nativePrice, showSparkline, assetInfo, tick, ch
     );
 }
 
-function InfoPanel({
+function DetailsPanel({
     tick,
     displayName,
     descriptor,
@@ -565,7 +625,6 @@ function InfoPanel({
     kind,
     isNative,
     assetInfo,
-    hasDescription,
     quantity,
     divisibility,
     fiat,
@@ -638,117 +697,415 @@ function InfoPanel({
                     ) : null}
                 </tbody>
             </table>
-
-            {!isNative && assetInfo ? (
-                <MediaGallery assetInfo={assetInfo} />
-            ) : null}
-
-            {hasDescription ? (
-                <p className={styles.descriptionBody}>{assetInfo.description}</p>
-            ) : null}
-
-            {!isNative && assetInfo ? (
-                <LinksAndFiles assetInfo={assetInfo} />
-            ) : null}
-
-            {!isNative && !assetInfo ? (
-                <p className={styles.metadataHint}>Loading description, creator, and supply…</p>
-            ) : null}
         </div>
     );
 }
 
-/**
- * Renders the §27.6 TIS gallery — images / audio / video — derived from
- * the token's TIS document (or the legacy CoinDaddy JSON converted to
- * the same shape). When no TIS document is available, falls back to the
- * single hero `imageUrl` regex-extracted from the on-chain description
- * so older tokens still show their artwork.
- */
-function MediaGallery({ assetInfo }) {
-    const images = Array.isArray(assetInfo?.images) ? assetInfo.images : [];
-    const audio = Array.isArray(assetInfo?.audio) ? assetInfo.audio : [];
-    const video = Array.isArray(assetInfo?.video) ? assetInfo.video : [];
-    const fallbackImage = images.length === 0 && assetInfo?.imageUrl
-        ? [{ url: assetInfo.imageUrl, type: null, name: null }]
-        : [];
-    const allImages = images.length > 0 ? images : fallbackImage;
-    if (allImages.length === 0 && audio.length === 0 && video.length === 0) {
-        return null;
+// Info tab — TIS-sourced content for non-native tokens. Mirrors the
+// per-section layout the explorer uses (artwork title, media gallery,
+// description, owner identity, contact rows, categories, links, files,
+// PGP signature) so a token's published metadata renders in one place.
+// When the token has no TIS document the panel renders an empty-state
+// hint so the tab still has something to land on.
+function InfoPanel({ isNative, assetInfo, hasDescription }) {
+    if (isNative) {
+        return (
+            <div className={styles.infoCard}>
+                <p className={styles.metadataHint}>
+                    Native coin. Token-information documents are an XChain-issued-token concept.
+                </p>
+            </div>
+        );
+    }
+    if (!assetInfo) {
+        return (
+            <div className={styles.infoCard}>
+                <p className={styles.metadataHint}>Loading token information…</p>
+            </div>
+        );
+    }
+    const hasLinks = Boolean(assetInfo.website)
+        || (Array.isArray(assetInfo.socials) && assetInfo.socials.length > 0)
+        || (Array.isArray(assetInfo.files) && assetInfo.files.length > 0);
+    const hasOwner = Boolean(assetInfo.owner
+        && (assetInfo.owner.name || assetInfo.owner.title || assetInfo.owner.organization));
+    const hasContacts = Array.isArray(assetInfo.contacts) && assetInfo.contacts.length > 0;
+    const hasCategories = Array.isArray(assetInfo.categories) && assetInfo.categories.length > 0;
+    const hasPgpsig = Boolean(assetInfo.pgpsig);
+    const hasDns = Array.isArray(assetInfo.dns) && assetInfo.dns.length > 0;
+    const hasAbout = hasDescription
+        || hasOwner
+        || hasContacts
+        || hasCategories
+        || hasLinks
+        || hasDns
+        || hasPgpsig;
+    if (!hasAbout) {
+        return (
+            <div className={styles.infoCard}>
+                <p className={styles.metadataHint}>
+                    No additional information published for this token yet.
+                </p>
+            </div>
+        );
     }
     return (
-        <div className={styles.gallery} aria-label="Token media">
-            {allImages.length > 0 ? (
-                <div
-                    className={
-                        allImages.length === 1
-                            ? styles.galleryImagesSingle
-                            : styles.galleryImagesGrid
-                    }
-                >
-                    {allImages.map((img, i) => (
-                        <a
-                            key={`${img.url}:${i}`}
-                            href={img.url}
-                            target="_blank"
-                            rel="noreferrer noopener"
-                            className={styles.galleryImageLink}
-                            title={img.name || img.type || ''}
-                        >
-                            <img
-                                src={img.url}
-                                alt={img.name || ''}
-                                className={styles.galleryImage}
-                                onError={(e) => {
-                                    const a = e.currentTarget.closest('a');
-                                    if (a) a.style.display = 'none';
-                                }}
-                            />
-                        </a>
-                    ))}
+        <div className={`${styles.infoCard} ${styles.aboutCard}`}>
+            {hasDescription ? (
+                <div className={styles.metaBlock}>
+                    <h4 className={styles.metaBlockTitle}>About</h4>
+                    <p className={styles.descriptionBody}>{assetInfo.description}</p>
                 </div>
             ) : null}
-            {video.length > 0 ? (
-                <div className={styles.galleryMediaStack}>
-                    {video.map((v, i) => (
-                        <div key={`${v.url}:${i}`} className={styles.galleryMediaCard}>
-                            {v.name ? (
-                                <div className={styles.galleryMediaCaption}>{v.name}</div>
-                            ) : null}
-                            <video
-                                className={styles.galleryVideo}
-                                src={v.url}
-                                controls
-                                preload="metadata"
-                                playsInline
-                            />
-                        </div>
-                    ))}
+            {hasOwner ? <OwnerBlock owner={assetInfo.owner} /> : null}
+            {hasCategories ? <CategoriesBlock categories={assetInfo.categories} /> : null}
+            {hasContacts ? <ContactsBlock contacts={assetInfo.contacts} /> : null}
+            {hasLinks ? (
+                <div className={styles.metaBlock}>
+                    <h4 className={styles.metaBlockTitle}>Links</h4>
+                    <LinksAndFiles assetInfo={assetInfo} />
                 </div>
             ) : null}
-            {audio.length > 0 ? (
-                <div className={styles.galleryMediaStack}>
-                    {audio.map((a, i) => (
-                        <div key={`${a.url}:${i}`} className={styles.galleryMediaCard}>
-                            {a.name ? (
-                                <div className={styles.galleryMediaCaption}>{a.name}</div>
-                            ) : null}
-                            <audio
-                                className={styles.galleryAudio}
-                                src={a.url}
-                                controls
-                                preload="metadata"
-                            />
-                        </div>
-                    ))}
-                </div>
-            ) : null}
+            {hasDns ? <DnsBlock dns={assetInfo.dns} /> : null}
+            {hasPgpsig ? <PgpsigBlock pgpsig={assetInfo.pgpsig} /> : null}
         </div>
     );
 }
+
+function DnsBlock({ dns }) {
+    return (
+        <div className={styles.metaBlock}>
+            <h4 className={styles.metaBlockTitle}>DNS</h4>
+            <table className={styles.metaTable}>
+                <tbody>
+                    {dns.map((r, i) => (
+                        <tr key={`${r.type}:${r.host}:${i}`} className={styles.metaRow}>
+                            <th scope="row">
+                                {r.type}
+                                {r.priority != null ? ` · ${r.priority}` : ''}
+                            </th>
+                            <td className={styles.dnsValueCell}>
+                                <div className={styles.dnsHost}>{r.host}</div>
+                                <div className={styles.dnsValue}>{r.value}</div>
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </div>
+    );
+}
+
+// Media tab — images, audio, video published with the token's TIS
+// document. Pure visual surface; everything textual lives in the
+// About tab so a user can browse the artwork without being asked to
+// also read prose.
+function MediaPanel({ isNative, assetInfo }) {
+    // Only large + hires images count toward the Image surface (icon
+    // and standard buckets render in the page header instead). We
+    // derive the buckets unconditionally so the React hook below can
+    // observe them, then decide what to render below based on
+    // isNative / assetInfo state.
+    const images = Array.isArray(assetInfo?.images)
+        ? assetInfo.images.filter((i) => {
+            const t = String(i?.type || '').toLowerCase();
+            return t === 'large' || t === 'hires' || t === 'hi-res' || t === 'highres';
+        })
+        : [];
+    const audio = Array.isArray(assetInfo?.audio) ? assetInfo.audio : [];
+    const video = Array.isArray(assetInfo?.video) ? assetInfo.video : [];
+    const files = Array.isArray(assetInfo?.files) ? assetInfo.files : [];
+    const subtabs = [
+        images.length > 0 ? { id: 'image', label: images.length === 1 ? 'Image' : 'Images' } : null,
+        audio.length > 0 ? { id: 'audio', label: 'Audio' } : null,
+        video.length > 0 ? { id: 'video', label: video.length === 1 ? 'Video' : 'Videos' } : null,
+        files.length > 0 ? { id: 'files', label: files.length === 1 ? 'File' : 'Files' } : null,
+    ].filter(Boolean);
+    const [activeSubtab, setActiveSubtab] = useState(/** @type {string | null} */ (null));
+    useEffect(() => {
+        // Sync the default subtab to the first populated bucket whenever
+        // the available subtab set changes (e.g. token info finishes
+        // loading after the panel mounted).
+        if (subtabs.length === 0) {
+            if (activeSubtab !== null) setActiveSubtab(null);
+            return;
+        }
+        if (!activeSubtab || !subtabs.some((t) => t.id === activeSubtab)) {
+            setActiveSubtab(subtabs[0].id);
+        }
+    }, [subtabs, activeSubtab]);
+
+    if (isNative) {
+        return (
+            <div className={styles.infoCard}>
+                <p className={styles.metadataHint}>
+                    Native coins don't carry attached media.
+                </p>
+            </div>
+        );
+    }
+    if (!assetInfo) {
+        return (
+            <div className={styles.infoCard}>
+                <p className={styles.metadataHint}>Loading media…</p>
+            </div>
+        );
+    }
+    if (subtabs.length === 0) {
+        return (
+            <div className={styles.infoCard}>
+                <p className={styles.metadataHint}>
+                    No images, audio, video, or files published for this token yet.
+                </p>
+            </div>
+        );
+    }
+    // Single media type — no need for a subtab strip; render directly.
+    if (subtabs.length === 1) {
+        return <MediaSubpanel kind={subtabs[0].id} images={images} audio={audio} video={video} files={files} />;
+    }
+    return (
+        <div className={styles.mediaPanel}>
+            <div className={styles.subtabs} role="tablist" aria-label="Token media">
+                {subtabs.map((t) => (
+                    <button
+                        key={t.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={activeSubtab === t.id ? 'true' : 'false'}
+                        className={`${styles.subtab} ${activeSubtab === t.id ? styles.subtabActive : ''}`}
+                        onClick={() => setActiveSubtab(t.id)}
+                    >
+                        {t.label}
+                    </button>
+                ))}
+            </div>
+            <div role="tabpanel">
+                <MediaSubpanel kind={activeSubtab} images={images} audio={audio} video={video} files={files} />
+            </div>
+        </div>
+    );
+}
+
+function MediaSubpanel({ kind, images, audio, video, files }) {
+    if (kind === 'image') {
+        // Dedup by URL so `large` and `hires` pointing at the same file
+        // don't render twice.
+        const seen = new Set();
+        const dedup = images.filter((img) => {
+            if (!img?.url || seen.has(img.url)) return false;
+            seen.add(img.url);
+            return true;
+        });
+        return (
+            <div className={styles.gallery}>
+                {dedup.map((img, i) => (
+                    <ImageHero key={`img:${img.url}:${i}`} img={img} />
+                ))}
+            </div>
+        );
+    }
+    if (kind === 'video') {
+        return (
+            <div className={styles.gallery}>
+                {video.map((v, i) => (
+                    <div key={`${v.url}:${i}`} className={styles.galleryMediaCard}>
+                        <video
+                            className={styles.galleryVideo}
+                            src={v.url}
+                            controls
+                            preload="metadata"
+                            playsInline
+                        />
+                        {v.name ? (
+                            <div className={styles.galleryMediaCaption}>{v.name}</div>
+                        ) : null}
+                    </div>
+                ))}
+            </div>
+        );
+    }
+    if (kind === 'audio') {
+        return (
+            <div className={styles.gallery}>
+                {audio.map((a, i) => (
+                    <div key={`${a.url}:${i}`} className={styles.galleryMediaCard}>
+                        {a.name ? (
+                            <div className={styles.galleryMediaCaption}>{a.name}</div>
+                        ) : null}
+                        <audio
+                            className={styles.galleryAudio}
+                            src={a.url}
+                            controls
+                            preload="metadata"
+                        />
+                    </div>
+                ))}
+            </div>
+        );
+    }
+    if (kind === 'files') {
+        return (
+            <ul className={styles.filesList}>
+                {files.map((f, i) => (
+                    <li key={`${f.url}:${i}`}>
+                        <a
+                            href={f.url}
+                            target="_blank"
+                            rel="noreferrer noopener"
+                            className={styles.fileLink}
+                        >
+                            <span className={styles.fileLinkName}>
+                                {f.name || f.url}
+                            </span>
+                            {f.type ? (
+                                <span className={styles.fileLinkType}>{f.type}</span>
+                            ) : null}
+                        </a>
+                    </li>
+                ))}
+            </ul>
+        );
+    }
+    return null;
+}
+
+function OwnerBlock({ owner }) {
+    return (
+        <div className={styles.metaBlock}>
+            <h4 className={styles.metaBlockTitle}>Owner</h4>
+            <table className={styles.metaTable}>
+                <tbody>
+                    {owner.name ? (
+                        <tr className={styles.metaRow}>
+                            <th scope="row">Name</th>
+                            <td>{owner.name}</td>
+                        </tr>
+                    ) : null}
+                    {owner.title ? (
+                        <tr className={styles.metaRow}>
+                            <th scope="row">Title</th>
+                            <td>{owner.title}</td>
+                        </tr>
+                    ) : null}
+                    {owner.organization ? (
+                        <tr className={styles.metaRow}>
+                            <th scope="row">Organization</th>
+                            <td>{owner.organization}</td>
+                        </tr>
+                    ) : null}
+                </tbody>
+            </table>
+        </div>
+    );
+}
+
+const CONTACT_LABELS = {
+    email: 'Email',
+    phone: 'Phone',
+    fax: 'Fax',
+    url: 'Web',
+    address: 'Address',
+};
+
+function ContactsBlock({ contacts }) {
+    return (
+        <div className={styles.metaBlock}>
+            <h4 className={styles.metaBlockTitle}>Contact</h4>
+            <table className={styles.metaTable}>
+                <tbody>
+                    {contacts.map((c, i) => {
+                        const label = CONTACT_LABELS[c.type] || (c.type.charAt(0).toUpperCase() + c.type.slice(1));
+                        const isMail = c.type === 'email';
+                        const isPhone = c.type === 'phone';
+                        const isUrl = c.type === 'url' || /^https?:\/\//i.test(c.value);
+                        let display = c.value;
+                        if (isMail) {
+                            display = <a href={`mailto:${c.value}`}>{c.value}</a>;
+                        } else if (isPhone) {
+                            display = <a href={`tel:${c.value.replace(/[^+\d]/g, '')}`}>{c.value}</a>;
+                        } else if (isUrl) {
+                            display = (
+                                <a href={c.value} target="_blank" rel="noreferrer noopener">{c.value}</a>
+                            );
+                        }
+                        return (
+                            <tr key={`${c.type}:${i}`} className={styles.metaRow}>
+                                <th scope="row">{label}</th>
+                                <td>{display}</td>
+                            </tr>
+                        );
+                    })}
+                </tbody>
+            </table>
+        </div>
+    );
+}
+
+const CATEGORY_LABELS = { main: 'Category', sub: 'Subcategory', other: 'Other' };
+
+function CategoriesBlock({ categories }) {
+    return (
+        <div className={styles.metaBlock}>
+            <h4 className={styles.metaBlockTitle}>Categories</h4>
+            <table className={styles.metaTable}>
+                <tbody>
+                    {categories.map((c, i) => (
+                        <tr key={`${c.type}:${i}`} className={styles.metaRow}>
+                            <th scope="row">{CATEGORY_LABELS[c.type] || c.type}</th>
+                            <td>{c.value}</td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </div>
+    );
+}
+
+function PgpsigBlock({ pgpsig }) {
+    const [open, setOpen] = useState(false);
+    return (
+        <div className={styles.metaBlock}>
+            <button
+                type="button"
+                className={styles.pgpsigToggle}
+                onClick={() => setOpen((v) => !v)}
+                aria-expanded={open ? 'true' : 'false'}
+            >
+                <span>PGP signature</span>
+                <span aria-hidden="true">{open ? '▴' : '▾'}</span>
+            </button>
+            {open ? <pre className={styles.pgpsigBlock}>{pgpsig}</pre> : null}
+        </div>
+    );
+}
+
+function ImageHero({ img }) {
+    return (
+        <a
+            href={img.url}
+            target="_blank"
+            rel="noreferrer noopener"
+            className={styles.heroImageLink}
+            title={img.name || ''}
+        >
+            <img
+                src={img.url}
+                alt={img.name || ''}
+                className={styles.heroImage}
+                onError={(e) => {
+                    const a = e.currentTarget.closest('a');
+                    if (a) a.style.display = 'none';
+                }}
+            />
+        </a>
+    );
+}
+
 
 const SOCIAL_LABELS = {
     twitter: 'Twitter',
+    x: 'X',
     github: 'GitHub',
     reddit: 'Reddit',
     facebook: 'Facebook',
@@ -766,6 +1123,44 @@ function socialLabel(platform) {
     return SOCIAL_LABELS[key] || (key ? key.charAt(0).toUpperCase() + key.slice(1) : 'Link');
 }
 
+// Inline brand glyphs for the social chips. 16×16 viewBox, filled with
+// `currentColor` so they pick up the chip's text color. Falls back to
+// the generic LinkIcon when the platform key isn't recognized.
+const SOCIAL_ICON_PATHS = {
+    twitter: 'M14.2 3h2.6l-5.7 6.5L18 17h-5.4l-4.2-5.5L3.6 17H1l6.1-7L1 3h5.5l3.8 5L14.2 3zm-1 12.2h1.5L5.9 4.6H4.3l8.9 10.6z',
+    x: 'M14.2 3h2.6l-5.7 6.5L18 17h-5.4l-4.2-5.5L3.6 17H1l6.1-7L1 3h5.5l3.8 5L14.2 3zm-1 12.2h1.5L5.9 4.6H4.3l8.9 10.6z',
+    github: 'M10 1.5a8.5 8.5 0 0 0-2.7 16.6c.4.1.6-.2.6-.4v-1.5c-2.4.5-2.9-1-2.9-1-.4-1-.9-1.2-.9-1.2-.7-.5.1-.5.1-.5.8.1 1.2.8 1.2.8.7 1.2 1.9.9 2.4.7.1-.5.3-.9.5-1.1-1.9-.2-3.9-1-3.9-4.2 0-.9.3-1.7.9-2.3-.1-.2-.4-1.1.1-2.3 0 0 .7-.2 2.4.9a8.3 8.3 0 0 1 4.4 0c1.7-1.1 2.4-.9 2.4-.9.5 1.2.2 2.1.1 2.3.6.6.9 1.4.9 2.3 0 3.3-2 4-3.9 4.2.3.3.6.8.6 1.6V18c0 .2.1.5.6.4A8.5 8.5 0 0 0 10 1.5z',
+    reddit: 'M19 10c0-1.1-.9-2-2-2-.6 0-1 .2-1.4.6-1.3-1-3.2-1.6-5.2-1.6l1-3.4 2.7.6c0 .8.6 1.4 1.4 1.4s1.4-.6 1.4-1.4S16.3 3 15.5 3c-.5 0-1 .3-1.2.7L11.2 3 10 7C8 7 6.1 7.6 4.8 8.6 4.4 8.2 4 8 3.5 8c-1.1 0-2 .9-2 2 0 .8.5 1.5 1.2 1.8 0 .1-.1.3-.1.4 0 2.5 2.8 4.5 6.3 4.5s6.3-2 6.3-4.5c0-.1 0-.3-.1-.4.7-.3 1.2-1 1.2-1.8zM5 11c0-.7.5-1.2 1.2-1.2s1.2.5 1.2 1.2-.5 1.2-1.2 1.2S5 11.7 5 11zm6.7 3.5c-.4.4-1.1.6-1.8.6s-1.4-.2-1.8-.6c-.2-.2-.2-.5 0-.7s.5-.2.7 0c.3.3.7.4 1.2.4s.9-.1 1.2-.4c.2-.2.5-.2.7 0s.2.5-.2.7zm.2-2.3c-.7 0-1.2-.5-1.2-1.2s.5-1.2 1.2-1.2 1.2.5 1.2 1.2-.5 1.2-1.2 1.2z',
+    facebook: 'M16 1.5H4c-1.4 0-2.5 1.1-2.5 2.5v12c0 1.4 1.1 2.5 2.5 2.5h6.4v-6.4H8.3V9.7h2.1V8c0-2.1 1.3-3.2 3.1-3.2.9 0 1.7.1 1.9.1v2.2H14c-1 0-1.2.5-1.2 1.2v1.5h2.4l-.3 2.4h-2.1V18.5H16c1.4 0 2.5-1.1 2.5-2.5V4c0-1.4-1.1-2.5-2.5-2.5z',
+    linkedin: 'M16 1.5H4A2.5 2.5 0 0 0 1.5 4v12A2.5 2.5 0 0 0 4 18.5h12a2.5 2.5 0 0 0 2.5-2.5V4A2.5 2.5 0 0 0 16 1.5zM7 15H5V8h2v7zM6 6.6a1.1 1.1 0 1 1 0-2.2 1.1 1.1 0 0 1 0 2.2zM15 15h-2v-3.6c0-.9-.4-1.4-1.1-1.4-.8 0-1.2.5-1.2 1.4V15h-2V8h2v.8c.4-.5 1-.9 1.9-.9 1.5 0 2.4 1 2.4 2.7V15z',
+    discord: 'M16.3 4.7a13.3 13.3 0 0 0-3.3-1c-.1.2-.3.6-.4.8a12.2 12.2 0 0 0-3.2 0c-.1-.2-.3-.6-.4-.8a13.5 13.5 0 0 0-3.3 1A14 14 0 0 0 3.3 14a13.5 13.5 0 0 0 4 2c.3-.4.6-.9.9-1.3a8.8 8.8 0 0 1-1.4-.7l.3-.2a9.5 9.5 0 0 0 8.2 0l.3.2a8.8 8.8 0 0 1-1.4.7c.3.5.6.9.9 1.3a13.5 13.5 0 0 0 4-2 13.7 13.7 0 0 0-2.4-9.3zM7.4 12.4c-.8 0-1.5-.7-1.5-1.6s.6-1.6 1.5-1.6 1.5.7 1.5 1.6-.6 1.6-1.5 1.6zm5.2 0c-.8 0-1.5-.7-1.5-1.6s.6-1.6 1.5-1.6 1.5.7 1.5 1.6-.6 1.6-1.5 1.6z',
+    telegram: 'M18.4 2.6 1.8 9.2c-1.1.4-1.1 1.1-.2 1.3l4.2 1.3 1.6 5c.2.5.4.7.8.7s.6-.1.9-.4l2.2-2.1 4.5 3.3c.8.5 1.4.2 1.6-.8L19.7 4c.3-1.2-.4-1.8-1.3-1.4zM6 10.8l9.8-6.2c.5-.3.9-.1.5.2L9 11.3l-.3 3.5L7.2 11l-1.2-.2z',
+    youtube: 'M18.5 6.2a2.2 2.2 0 0 0-1.5-1.5C15.6 4.3 10 4.3 10 4.3s-5.6 0-7 .4A2.2 2.2 0 0 0 1.5 6.2 23 23 0 0 0 1.1 10a23 23 0 0 0 .4 3.8 2.2 2.2 0 0 0 1.5 1.5c1.4.4 7 .4 7 .4s5.6 0 7-.4a2.2 2.2 0 0 0 1.5-1.5A23 23 0 0 0 18.9 10a23 23 0 0 0-.4-3.8zM8.3 12.5V7.5L13 10l-4.7 2.5z',
+    instagram: 'M10 3c2.3 0 2.6 0 3.5.1.8.1 1.3.2 1.6.3.4.1.7.3 1 .6.3.3.5.6.6 1 .1.3.2.8.3 1.6.1.9.1 1.2.1 3.5s0 2.6-.1 3.5c-.1.8-.2 1.3-.3 1.6-.1.4-.3.7-.6 1-.3.3-.6.5-1 .6-.3.1-.8.2-1.6.3-.9.1-1.2.1-3.5.1s-2.6 0-3.5-.1c-.8-.1-1.3-.2-1.6-.3-.4-.1-.7-.3-1-.6-.3-.3-.5-.6-.6-1-.1-.3-.2-.8-.3-1.6C3 12.6 3 12.3 3 10s0-2.6.1-3.5c.1-.8.2-1.3.3-1.6.1-.4.3-.7.6-1 .3-.3.6-.5 1-.6.3-.1.8-.2 1.6-.3C7.4 3 7.7 3 10 3zm0-1.5c-2.3 0-2.6 0-3.5.1-.9.1-1.6.2-2.1.4a4 4 0 0 0-1.5 1 4 4 0 0 0-1 1.5c-.2.5-.3 1.2-.4 2.1C1.5 7.4 1.5 7.7 1.5 10s0 2.6.1 3.5c.1.9.2 1.6.4 2.1a4 4 0 0 0 1 1.5 4 4 0 0 0 1.5 1c.5.2 1.2.3 2.1.4.9.1 1.2.1 3.5.1s2.6 0 3.5-.1c.9-.1 1.6-.2 2.1-.4a4 4 0 0 0 1.5-1 4 4 0 0 0 1-1.5c.2-.5.3-1.2.4-2.1.1-.9.1-1.2.1-3.5s0-2.6-.1-3.5c-.1-.9-.2-1.6-.4-2.1a4 4 0 0 0-1-1.5 4 4 0 0 0-1.5-1c-.5-.2-1.2-.3-2.1-.4-.9-.1-1.2-.1-3.5-.1zm0 4.1a4.4 4.4 0 1 0 0 8.8 4.4 4.4 0 0 0 0-8.8zm0 7.3a2.9 2.9 0 1 1 0-5.8 2.9 2.9 0 0 1 0 5.8zm5.6-7.5a1 1 0 1 1-2 0 1 1 0 0 1 2 0z',
+};
+
+function SocialIcon({ platform }) {
+    const key = String(platform || '').toLowerCase();
+    const path = SOCIAL_ICON_PATHS[key];
+    if (path) {
+        return (
+            <svg
+                className={styles.socialChipIcon}
+                viewBox="0 0 20 20"
+                fill="currentColor"
+                aria-hidden="true"
+            >
+                <path d={path} />
+            </svg>
+        );
+    }
+    return (
+        <span className={styles.socialChipIcon} aria-hidden="true">
+            <Icon.LinkIcon />
+        </span>
+    );
+}
+
 /**
  * §27.6 — links + files block. Renders the token's website, primary
  * social links, and file attachments below the media gallery. Returns
@@ -773,23 +1168,37 @@ function socialLabel(platform) {
  * disappears entirely for tokens without rich metadata.
  */
 function LinksAndFiles({ assetInfo }) {
-    const website = assetInfo?.website || null;
+    // Prefer the `websites` array (primary + alternates) but fall back to
+    // the singular `website` field for older bundles that haven't been
+    // re-normalized. Files live in the Media tab's Files subtab now —
+    // they're not rendered here.
+    const websites = Array.isArray(assetInfo?.websites) && assetInfo.websites.length > 0
+        ? assetInfo.websites
+        : (assetInfo?.website ? [assetInfo.website] : []);
     const socials = Array.isArray(assetInfo?.socials) ? assetInfo.socials : [];
-    const files = Array.isArray(assetInfo?.files) ? assetInfo.files : [];
-    const hasAnything = website || socials.length > 0 || files.length > 0;
+    const hasAnything = websites.length > 0 || socials.length > 0;
     if (!hasAnything) return null;
+    const multipleWebsites = websites.length > 1;
     return (
         <div className={styles.linksBlock}>
-            {website ? (
-                <a
-                    href={website}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                    className={styles.linkRow}
-                >
-                    <span className={styles.linkRowLabel}>Website</span>
-                    <span className={styles.linkRowValue} title={website}>{website}</span>
-                </a>
+            {websites.length > 0 ? (
+                <div className={styles.socialsRow}>
+                    {websites.map((w, i) => (
+                        <a
+                            key={`${w}:${i}`}
+                            href={w}
+                            target="_blank"
+                            rel="noreferrer noopener"
+                            className={styles.socialChip}
+                            title={w}
+                        >
+                            <span className={styles.socialChipIcon} aria-hidden="true">
+                                <Icon.ExternalLinkIcon />
+                            </span>
+                            <span>{multipleWebsites ? `Website ${i + 1}` : 'Website'}</span>
+                        </a>
+                    ))}
+                </div>
             ) : null}
             {socials.length > 0 ? (
                 <div className={styles.socialsRow}>
@@ -802,31 +1211,11 @@ function LinksAndFiles({ assetInfo }) {
                             className={styles.socialChip}
                             title={s.url}
                         >
+                            <SocialIcon platform={s.platform} />
                             {socialLabel(s.platform)}
                         </a>
                     ))}
                 </div>
-            ) : null}
-            {files.length > 0 ? (
-                <ul className={styles.filesList}>
-                    {files.map((f, i) => (
-                        <li key={`${f.url}:${i}`}>
-                            <a
-                                href={f.url}
-                                target="_blank"
-                                rel="noreferrer noopener"
-                                className={styles.fileLink}
-                            >
-                                <span className={styles.fileLinkName}>
-                                    {f.name || f.url}
-                                </span>
-                                {f.type ? (
-                                    <span className={styles.fileLinkType}>{f.type}</span>
-                                ) : null}
-                            </a>
-                        </li>
-                    ))}
-                </ul>
             ) : null}
         </div>
     );

@@ -987,6 +987,7 @@ function AppInner() {
                         divisibility={tokenDetailRef.divisibility}
                         fiatRate={tokenDetailRef.fiatRate}
                         quantity={tokenDetailRef.quantity}
+                        imageUrl={tokenDetailRef.imageUrl}
                         onBack={() => setUnlockedView('home')}
                         onSend={() => setUnlockedView('send')}
                         onReceive={() => setUnlockedView('receive')}
