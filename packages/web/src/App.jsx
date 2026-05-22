@@ -186,6 +186,9 @@ function AppInner() {
     // historically owned, and so flipping the filter on TokenDetail
     // affects Home and vice-versa.
     const [globalNetworkFilter, setGlobalNetworkFilter] = useState('all');
+    // Free-text token filter — lifted alongside the network filter so the
+    // AppHeader popover and Home's HomeTabs share one source of truth.
+    const [globalTokenQuery, setGlobalTokenQuery] = useState('');
     const [globalMenuOpen, setGlobalMenuOpen] = useState(false);
     const [resumeAirdropId, setResumeAirdropId] = useState(
         /** @type {string | null} */ (null),
@@ -1181,6 +1184,8 @@ function AppInner() {
                     <Home
                         networkFilter={globalNetworkFilter}
                         onNetworkFilterChange={setGlobalNetworkFilter}
+                        tokenQuery={globalTokenQuery}
+                        onTokenQueryChange={setGlobalTokenQuery}
                         onLocked={refresh}
                         onSend={activeWalletId ? () => setUnlockedView('send') : undefined}
                         onReceive={activeWalletId ? () => setUnlockedView('receive') : undefined}
@@ -1315,6 +1320,8 @@ function AppInner() {
                                     coinFamilies={APP_COIN_FAMILIES}
                                     networkFilter={globalNetworkFilter}
                                     onNetworkFilterChange={setGlobalNetworkFilter}
+                                    tokenQuery={globalTokenQuery}
+                                    onTokenQueryChange={setGlobalTokenQuery}
                                     onMenuOpen={() => setGlobalMenuOpen(true)}
                                     showNetworkFilter={unlockedView === 'home'}
                                 />

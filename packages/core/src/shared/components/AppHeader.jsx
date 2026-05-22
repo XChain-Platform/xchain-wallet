@@ -21,6 +21,8 @@ import styles from './AppHeader.module.css';
  * @param {string[]} props.coinFamilies                              ordered coin family list for the filter popover (e.g. ['bitcoin','litecoin','dogecoin'])
  * @param {string} props.networkFilter                               current filter value ('all' or a coin id)
  * @param {(coin: string) => void} props.onNetworkFilterChange
+ * @param {string} [props.tokenQuery]                                free-text token filter forwarded to the popover; omitting `onTokenQueryChange` hides the text input
+ * @param {(q: string) => void} [props.onTokenQueryChange]
  * @param {() => void} [props.onMenuOpen]                            pancake-tap handler
  * @param {boolean} [props.showNetworkFilter]                        when false, the network-filter button is hidden — used to scope the filter to the home view only
  */
@@ -29,6 +31,8 @@ export function AppHeader({
     coinFamilies,
     networkFilter,
     onNetworkFilterChange,
+    tokenQuery,
+    onTokenQueryChange,
     onMenuOpen,
     showNetworkFilter = true,
 }) {
@@ -48,6 +52,8 @@ export function AppHeader({
                         coinFamilies={coinFamilies}
                         networkFilter={networkFilter}
                         onNetworkFilterChange={onNetworkFilterChange}
+                        tokenQuery={tokenQuery}
+                        onTokenQueryChange={onTokenQueryChange}
                     />
                 ) : null}
                 {onMenuOpen ? (

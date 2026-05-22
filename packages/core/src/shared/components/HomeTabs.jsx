@@ -42,7 +42,7 @@ import styles from './HomeTabs.module.css';
  * @param {import('react').ReactNode} [props.actions]   slot rendered between the total-balance hero and the tab strip — used by Home for the Send / Receive / Swap / Buy quick-action row
  * @param {() => void} [props.onReceive]   forwarded to empty-state nudges so the "No balances yet" cards can render a one-tap Receive CTA (G077)
  */
-export function HomeTabs({ chainRegistry, balances, balancesFetchedAt, walletId, networkFilter, multisig, multisigChainId, actions, onReceive, onSelectToken, onSelectEntry, pinnedKeys, onTogglePin, hiddenKeys, onToggleHide }) {
+export function HomeTabs({ chainRegistry, balances, balancesFetchedAt, walletId, networkFilter, tokenQuery = '', multisig, multisigChainId, actions, onReceive, onSelectToken, onSelectEntry, pinnedKeys, onTogglePin, hiddenKeys, onToggleHide }) {
     const [active, setActive] = useState('coins');
 
     const allRows = useMemo(
@@ -66,6 +66,15 @@ export function HomeTabs({ chainRegistry, balances, balancesFetchedAt, walletId,
         )),
         [filteredRows],
     );
+    const tokenQueryTrim = tokenQuery.trim().toLowerCase();
+    const filteredTokens = useMemo(() => {
+        if (!tokenQueryTrim) return tokens;
+        return tokens.filter((r) => {
+            const tick = String(r.tick || '').toLowerCase();
+            const name = String(r.displayName || '').toLowerCase();
+            return tick.includes(tokenQueryTrim) || name.includes(tokenQueryTrim);
+        });
+    }, [tokens, tokenQueryTrim]);
     // NFTs = subset of Tokens that has a non-empty imageUrl. Purely a
     // visual gallery view — an tick can appear in BOTH Tokens (as a
     // row with balance) and NFTs (as a tile with the image), e.g. a
@@ -137,12 +146,16 @@ export function HomeTabs({ chainRegistry, balances, balancesFetchedAt, walletId,
 
                 {active === 'tokens' ? (
                     <BalanceList
-                        rows={tokens}
-                        emptyTitle={networkFilter === 'all' ? 'No tokens yet' : 'No tokens on this network'}
-                        emptyBody={networkFilter === 'all'
-                            ? 'Browse markets or accept a token transfer to populate this view.'
-                            : undefined}
-                        onReceive={networkFilter === 'all' ? onReceive : undefined}
+                        rows={filteredTokens}
+                        emptyTitle={tokenQueryTrim
+                            ? 'No matching tokens'
+                            : (networkFilter === 'all' ? 'No tokens yet' : 'No tokens on this network')}
+                        emptyBody={tokenQueryTrim
+                            ? `Nothing matches "${tokenQuery.trim()}". Clear the filter from the top toolbar to see all tokens.`
+                            : (networkFilter === 'all'
+                                ? 'Browse markets or accept a token transfer to populate this view.'
+                                : undefined)}
+                        onReceive={!tokenQueryTrim && networkFilter === 'all' ? onReceive : undefined}
                         onSelectToken={onSelectToken}
                         pinnedKeys={pinnedKeys}
                         onTogglePin={onTogglePin}

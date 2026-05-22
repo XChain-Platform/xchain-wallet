@@ -62,7 +62,7 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {(accountId: string) => void} [props.onSwitchAccount]   App-level setter for the active account (still used internally if a future inline picker lands)
  * @param {Array<{ id: string, label: string, description?: string, onSelect?: () => void }>} [props.extraActions]   §40+ entries surfaced in the small-mode pancake drawer; in full mode the host renders these via the dedicated ActionsMenu route
  */
-export function Home({ onLocked, onSend, onReceive, onSwap, onBuy, onCreateToken, onActions, onMarkets, onResumeAirdrop, onResumeCoinpay, onMessaging, onContracts, onStaking, onHistory, onAddresses, onMigrateToBip39, onOpenWalletPicker, onOpenAccountPicker, onCrossChain, onContacts, onMultisig, onSignPsbt, onSignMessage, onVerifySignature, activeAccountId: activeAccountIdProp, onSwitchAccount, extraActions, onSelectToken, onSelectEntry, networkFilter: networkFilterProp, onNetworkFilterChange: onNetworkFilterChangeProp }) {
+export function Home({ onLocked, onSend, onReceive, onSwap, onBuy, onCreateToken, onActions, onMarkets, onResumeAirdrop, onResumeCoinpay, onMessaging, onContracts, onStaking, onHistory, onAddresses, onMigrateToBip39, onOpenWalletPicker, onOpenAccountPicker, onCrossChain, onContacts, onMultisig, onSignPsbt, onSignMessage, onVerifySignature, activeAccountId: activeAccountIdProp, onSwitchAccount, extraActions, onSelectToken, onSelectEntry, networkFilter: networkFilterProp, onNetworkFilterChange: onNetworkFilterChangeProp, tokenQuery: tokenQueryProp, onTokenQueryChange: onTokenQueryChangeProp }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -112,6 +112,11 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onBuy, onCreateToken
     const [networkFilterLocal, setNetworkFilterLocal] = useState('all');
     const networkFilter = networkFilterProp ?? networkFilterLocal;
     const setNetworkFilter = onNetworkFilterChangeProp ?? setNetworkFilterLocal;
+    // Free-text token filter follows the same parent-vs-local pattern as
+    // the network filter — popped into the header's filter popover.
+    const [tokenQueryLocal, setTokenQueryLocal] = useState('');
+    const tokenQuery = tokenQueryProp ?? tokenQueryLocal;
+    const setTokenQuery = onTokenQueryChangeProp ?? setTokenQueryLocal;
     const [settingsOpen, setSettingsOpen] = useState(false);
 
     // 4th quick-action button is a "More" dropdown matching the
@@ -544,6 +549,8 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onBuy, onCreateToken
                     coinFamilies={coinFamilies}
                     networkFilter={networkFilter}
                     onNetworkFilterChange={setNetworkFilter}
+                    tokenQuery={tokenQuery}
+                    onTokenQueryChange={setTokenQuery}
                 />
                 <button
                     type="button"
@@ -688,6 +695,7 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onBuy, onCreateToken
                         balancesFetchedAt={balancesFetchedAt}
                         walletId={activeWalletId}
                         networkFilter={networkFilter}
+                        tokenQuery={tokenQuery}
                         multisig={multisig}
                         multisigChainId={chainRegistry.byCoin('bitcoin')[0]?.id}
                         onReceive={onReceive}

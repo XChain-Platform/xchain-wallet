@@ -15,4 +15,143 @@
     inset-inline-end: auto;
     width: calc(min(375px, 100vw) - 24px);
     max-width: calc(100vw - 24px);
+    /* Override the parent popover's `overflow: hidden` so the
+       network options popover can extend below this card when open. */
+    overflow: visible;
+    padding: var(--xc-space-3);
+    gap: var(--xc-space-2);
+}
+
+/* ───── Token search input — styled as a bordered form box so it
+   matches the Networks select beneath it. ───── */
+.tokenSearchInput {
+    appearance: none;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 8px 10px;
+    border: 1px solid var(--xc-border-strong);
+    border-radius: var(--xc-radius-sm);
+    background: var(--xc-bg);
+    color: var(--xc-text);
+    font-family: inherit;
+    font-size: var(--xc-text-sm);
+}
+
+.tokenSearchInput:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
+/* ───── Custom Networks select — visually mirrors the token input
+   above (same border, padding, radius) but opens a popover with
+   icon-bearing options instead of native <option> rows. ───── */
+.networkSelectWrap {
+    position: relative;
+}
+
+.networkSelect {
+    appearance: none;
+    width: 100%;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    padding: 8px 10px;
+    border: 1px solid var(--xc-border-strong);
+    border-radius: var(--xc-radius-sm);
+    background: var(--xc-bg);
+    color: var(--xc-text);
+    font-family: inherit;
+    font-size: var(--xc-text-sm);
+    cursor: pointer;
+    text-align: start;
+}
+
+.networkSelect:hover {
+    background: var(--xc-bg-muted);
+}
+
+.networkSelect:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
+.networkSelectIcon {
+    flex: 0 0 auto;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    display: block;
+}
+
+.networkSelectIconPlaceholder {
+    flex: 0 0 auto;
+    width: 20px;
+    height: 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--xc-text-muted);
+}
+
+.networkSelectLabel {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.networkSelectCaret {
+    flex: 0 0 auto;
+    color: var(--xc-text-muted);
+    font-size: 12px;
+}
+
+/* Options popover anchored beneath the trigger. */
+.networkOptions {
+    list-style: none;
+    margin: 4px 0 0;
+    padding: 4px 0;
+    position: absolute;
+    top: 100%;
+    inset-inline-start: 0;
+    inset-inline-end: 0;
+    z-index: 10;
+    background: var(--xc-surface);
+    border: 1px solid var(--xc-border-strong);
+    border-radius: var(--xc-radius-sm);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
+    max-height: 220px;
+    overflow-y: auto;
+}
+
+.networkOption {
+    appearance: none;
+    background: transparent;
+    border: none;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    padding: 8px 10px;
+    color: var(--xc-text);
+    text-align: start;
+    font-family: inherit;
+    font-size: var(--xc-text-sm);
+    cursor: pointer;
+}
+
+.networkOption:hover {
+    background: var(--xc-bg-muted);
+}
+
+.networkOption:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: -2px;
+}
+
+.networkOptionActive {
+    background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
+    font-weight: 600;
 }

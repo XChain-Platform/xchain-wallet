@@ -2,36 +2,44 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { Icon } from '@xchain-wallet/core/ui';
 import styles from './HeaderSettingsButton.module.css';
-import filterStyles from './NetworkFilter.module.css';
 import localStyles from './HeaderNetworkButton.module.css';
 
 /**
- * Filter-icon button in the header that, when clicked, opens a popover
- * containing the list of networks directly (no nested trigger). One
- * click to open, one click to pick — total two interactions vs the
- * three-click chain when this wrapped the full `NetworkFilter`
- * dropdown component.
+ * Filter-icon button in the header. Click → popover that hosts BOTH a
+ * free-text token filter and the list of networks. The text input
+ * narrows the Tokens tab to ticks/names matching the query; the list
+ * narrows every tab to a single coin family.
  *
- * The icon shows an accent dot when a non-`all` filter is active so
- * the user has a passive indicator that something is being filtered.
+ * The icon shows an accent dot when either filter is active so the
+ * user has a passive indicator that the view is constrained.
  *
  * @param {object} props
  * @param {import('../../registry/index.js').ChainRegistry} props.chainRegistry
  * @param {string[]} props.coinFamilies
  * @param {string} props.networkFilter
  * @param {(coin: string) => void} props.onNetworkFilterChange
+ * @param {string} [props.tokenQuery]                       free-text query applied to the Tokens tab; when omitted, the text input is not shown
+ * @param {(query: string) => void} [props.onTokenQueryChange]
  */
 export function HeaderNetworkButton({
     chainRegistry,
     coinFamilies,
     networkFilter,
     onNetworkFilterChange,
+    tokenQuery,
+    onTokenQueryChange,
 }) {
     const [open, setOpen] = useState(false);
+    const [networksOpen, setNetworksOpen] = useState(false);
     const wrapRef = useRef(null);
+    const showTokenQuery = typeof onTokenQueryChange === 'function';
+    const tokenQueryActive = showTokenQuery && typeof tokenQuery === 'string' && tokenQuery.trim().length > 0;
 
     useEffect(() => {
-        if (!open) return undefined;
+        if (!open) {
+            setNetworksOpen(false);
+            return undefined;
+        }
         const onClick = (e) => {
             if (wrapRef.current?.contains(e.target)) return;
             setOpen(false);
@@ -45,7 +53,8 @@ export function HeaderNetworkButton({
         };
     }, [open]);
 
-    const filterActive = networkFilter && networkFilter !== 'all';
+    const networkActive = networkFilter && networkFilter !== 'all';
+    const filterActive = networkActive || tokenQueryActive;
 
     const entries = useMemo(() => {
         return coinFamilies.map((coin) => {
@@ -53,15 +62,18 @@ export function HeaderNetworkButton({
             return {
                 coin,
                 label: desc?.displayName || coin,
-                ticker: shortLabelForCoin(coin),
                 chainId: desc?.id,
             };
         });
     }, [coinFamilies, chainRegistry]);
 
-    function pick(next) {
+    const selectedEntry = networkActive ? entries.find((e) => e.coin === networkFilter) : null;
+    const selectedLabel = selectedEntry?.label || 'All networks';
+    const selectedIconUrl = selectedEntry ? branding.chainIconSmallUrl(selectedEntry.chainId || '') : '';
+
+    function pickNetwork(next) {
         onNetworkFilterChange(next);
-        setOpen(false);
+        setNetworksOpen(false);
     }
 
     return (
@@ -70,63 +82,96 @@ export function HeaderNetworkButton({
                 type="button"
                 className={`${styles.btn} ${filterActive ? styles.btnActive : ''}`}
                 onClick={() => setOpen((v) => !v)}
-                aria-haspopup="listbox"
+                aria-haspopup="dialog"
                 aria-expanded={open ? 'true' : 'false'}
-                aria-label="Network filter"
-                title="Network filter"
+                aria-label={showTokenQuery ? 'Filters' : 'Network filter'}
+                title={showTokenQuery ? 'Filters' : 'Network filter'}
             >
                 <Icon.FilterIcon />
                 {filterActive ? <span className={styles.dot} aria-hidden="true" /> : null}
             </button>
             {open ? (
-                <div className={`${styles.popover} ${localStyles.popoverFull}`} role="listbox" aria-label="Network filter">
-                    <ul className={filterStyles.list}>
-                        <li>
-                            <button
-                                type="button"
-                                role="option"
-                                aria-selected={networkFilter === 'all' ? 'true' : 'false'}
-                                className={`${filterStyles.item} ${networkFilter === 'all' ? filterStyles.itemActive : ''}`}
-                                onClick={() => pick('all')}
-                            >
-                                <span className={filterStyles.itemIcon} aria-hidden="true">
+                <div className={`${styles.popover} ${localStyles.popoverFull}`} role="dialog" aria-label="Filters">
+                    {showTokenQuery ? (
+                        <input
+                            type="search"
+                            className={localStyles.tokenSearchInput}
+                            placeholder="Type a token name…"
+                            aria-label="Filter tokens by name"
+                            value={tokenQuery || ''}
+                            onChange={(ev) => onTokenQueryChange(ev.target.value)}
+                            onKeyDown={(ev) => {
+                                if (ev.key === 'Enter') {
+                                    ev.preventDefault();
+                                    setOpen(false);
+                                }
+                            }}
+                            autoFocus
+                        />
+                    ) : null}
+                    <div className={localStyles.networkSelectWrap}>
+                        <button
+                            type="button"
+                            className={localStyles.networkSelect}
+                            onClick={() => setNetworksOpen((v) => !v)}
+                            aria-haspopup="listbox"
+                            aria-expanded={networksOpen ? 'true' : 'false'}
+                            aria-label="Networks"
+                        >
+                            {selectedIconUrl ? (
+                                <img src={selectedIconUrl} alt="" aria-hidden="true" className={localStyles.networkSelectIcon} />
+                            ) : (
+                                <span className={localStyles.networkSelectIconPlaceholder} aria-hidden="true">
                                     <Icon.FilterIcon />
                                 </span>
-                                <span className={filterStyles.itemLabel}>All networks</span>
-                                <span className={filterStyles.itemTicker}>{entries.length}</span>
-                            </button>
-                        </li>
-                        {entries.map((e) => {
-                            const iconUrl = branding.chainIconSmallUrl(e.chainId || '');
-                            return (
-                                <li key={e.coin}>
+                            )}
+                            <span className={localStyles.networkSelectLabel}>{selectedLabel}</span>
+                            <span className={localStyles.networkSelectCaret} aria-hidden="true">
+                                {networksOpen ? '▴' : '▾'}
+                            </span>
+                        </button>
+                        {networksOpen ? (
+                            <ul className={localStyles.networkOptions} role="listbox" aria-label="Networks">
+                                <li>
                                     <button
                                         type="button"
                                         role="option"
-                                        aria-selected={networkFilter === e.coin ? 'true' : 'false'}
-                                        className={`${filterStyles.item} ${networkFilter === e.coin ? filterStyles.itemActive : ''}`}
-                                        onClick={() => pick(e.coin)}
+                                        aria-selected={networkFilter === 'all' ? 'true' : 'false'}
+                                        className={`${localStyles.networkOption} ${networkFilter === 'all' ? localStyles.networkOptionActive : ''}`}
+                                        onClick={() => pickNetwork('all')}
                                     >
-                                        <span className={filterStyles.itemIcon} aria-hidden="true">
-                                            {iconUrl ? <img src={iconUrl} alt="" /> : null}
+                                        <span className={localStyles.networkSelectIconPlaceholder} aria-hidden="true">
+                                            <Icon.FilterIcon />
                                         </span>
-                                        <span className={filterStyles.itemLabel}>{e.label}</span>
-                                        <span className={filterStyles.itemTicker}>{e.ticker}</span>
+                                        <span className={localStyles.networkSelectLabel}>All networks</span>
                                     </button>
                                 </li>
-                            );
-                        })}
-                        {entries.length === 0 ? (
-                            <li className={filterStyles.empty}>No networks yet.</li>
+                                {entries.map((e) => {
+                                    const iconUrl = branding.chainIconSmallUrl(e.chainId || '');
+                                    return (
+                                        <li key={e.coin}>
+                                            <button
+                                                type="button"
+                                                role="option"
+                                                aria-selected={networkFilter === e.coin ? 'true' : 'false'}
+                                                className={`${localStyles.networkOption} ${networkFilter === e.coin ? localStyles.networkOptionActive : ''}`}
+                                                onClick={() => pickNetwork(e.coin)}
+                                            >
+                                                {iconUrl ? (
+                                                    <img src={iconUrl} alt="" aria-hidden="true" className={localStyles.networkSelectIcon} />
+                                                ) : (
+                                                    <span className={localStyles.networkSelectIconPlaceholder} aria-hidden="true" />
+                                                )}
+                                                <span className={localStyles.networkSelectLabel}>{e.label}</span>
+                                            </button>
+                                        </li>
+                                    );
+                                })}
+                            </ul>
                         ) : null}
-                    </ul>
+                    </div>
                 </div>
             ) : null}
         </div>
     );
-}
-
-function shortLabelForCoin(coin) {
-    const map = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
-    return map[coin] || coin.toUpperCase();
 }
