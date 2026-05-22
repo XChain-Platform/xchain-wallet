@@ -17,6 +17,11 @@
     cursor: pointer;
     padding: var(--xc-space-1) var(--xc-space-2);
     border-radius: var(--xc-radius-sm);
+    /* Pull leading edge of the chevron to line up with the X-Chain
+       logo in the global AppHeader above. Screen.header pads with
+       space-4; AppHeader with space-3; compensate plus the button's
+       own space-2 padding. */
+    margin-inline-start: calc(var(--xc-space-3) - var(--xc-space-4) - var(--xc-space-2));
 }
 .back:hover { background: var(--xc-bg-muted); }
 .back:focus-visible {
@@ -33,35 +38,394 @@
 
 .spacer { display: block; }
 
+/* Match TokenDetail's body sizing — Screen.body provides the outer
+   space-4 padding; we just cap the inner column at 1080px and stack. */
 .body {
     display: flex;
     flex-direction: column;
-    gap: var(--xc-space-3);
+    gap: var(--xc-space-1);
     max-width: 1080px;
     margin: 0 auto;
-    padding: var(--xc-space-3) var(--xc-space-4);
     width: 100%;
     box-sizing: border-box;
 }
 
-.filterBar {
+/* Unified filter card — search, chain picker, and the collapsible
+   advanced-filters panel all live in one bordered container so the
+   mobile view reads as one block instead of three stacked widgets. */
+.filterCard {
     display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--xc-space-2);
-    padding: var(--xc-space-2);
+    flex-direction: column;
+    gap: var(--xc-space-3);
+    padding: var(--xc-space-3);
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-md);
-    background: var(--xc-surface-raised);
+    background: var(--xc-surface);
 }
 
-.filterLabel {
+.searchRow {
+    display: flex;
+    gap: var(--xc-space-2);
+    align-items: stretch;
+}
+
+.searchInput {
+    width: 100%;
+    box-sizing: border-box;
+    appearance: none;
+    height: 36px;
+    line-height: 1;
+    padding: 0 var(--xc-space-3);
+    border-radius: var(--xc-radius-sm);
+    border: 1px solid var(--xc-border);
+    background: var(--xc-bg);
+    color: var(--xc-text);
+    font-size: var(--xc-text-sm);
+    font-family: inherit;
+    display: block;
+}
+
+.searchInput:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
+.filterToggle {
+    appearance: none;
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+    padding: var(--xc-space-2) var(--xc-space-3);
+    border-radius: var(--xc-radius-sm);
+    border: 1px solid var(--xc-border-strong);
+    background: var(--xc-bg);
+    color: var(--xc-text);
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.filterToggle:hover { background: var(--xc-bg-muted); }
+.filterToggle:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
+.filterToggleActive {
+    background: var(--xc-bg-muted);
+    border-color: var(--xc-accent-primary);
+}
+
+.filterBadge {
+    color: var(--xc-accent-primary);
+    font-size: var(--xc-text-md);
+    line-height: 1;
+}
+
+.fieldLabel {
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
     text-transform: uppercase;
     letter-spacing: 0.06em;
-    margin-inline-end: var(--xc-space-1);
+    font-weight: 600;
 }
+
+/* Chain picker — full-width button + popover listbox so each option
+   can render its own chain logo (native <select>/<option> can't). */
+.chainPickerWrap {
+    position: relative;
+}
+
+.chainPickerBtn {
+    appearance: none;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--xc-space-2);
+    padding: var(--xc-space-2) var(--xc-space-3);
+    border-radius: var(--xc-radius-sm);
+    border: 1px solid var(--xc-border);
+    background: var(--xc-bg);
+    color: var(--xc-text);
+    font-size: var(--xc-text-sm);
+    font-family: inherit;
+    cursor: pointer;
+}
+
+.chainPickerBtn:hover { background: var(--xc-bg-muted); }
+.chainPickerBtn:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
+.chainPickerLeft {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.chainPickerIcon {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.chainPickerAllIcon {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--xc-bg-muted);
+    color: var(--xc-text-muted);
+    font-size: 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.chainPickerMenu {
+    position: absolute;
+    inset-inline: 0;
+    top: calc(100% + 4px);
+    z-index: 20;
+    list-style: none;
+    margin: 0;
+    padding: 4px;
+    background: var(--xc-surface);
+    border: 1px solid var(--xc-border-strong);
+    border-radius: var(--xc-radius-sm);
+    box-shadow: var(--xc-shadow-md, 0 4px 12px rgba(0, 0, 0, 0.15));
+}
+
+.chainPickerOption {
+    appearance: none;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    padding: var(--xc-space-2) var(--xc-space-2);
+    background: transparent;
+    border: none;
+    color: var(--xc-text);
+    font-size: var(--xc-text-sm);
+    font-family: inherit;
+    cursor: pointer;
+    border-radius: var(--xc-radius-sm);
+}
+
+.chainPickerOption:hover { background: var(--xc-bg-muted); }
+.chainPickerOptionActive {
+    background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
+    color: var(--xc-accent-primary);
+    font-weight: 600;
+}
+
+.checkboxOptionIcon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--xc-text-muted);
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+}
+
+.checkboxMenuHeader {
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 600;
+    padding: var(--xc-space-2) var(--xc-space-2) var(--xc-space-1);
+    border-bottom: 1px solid var(--xc-border);
+    margin-bottom: 4px;
+    list-style: none;
+}
+
+.chainPickerOptionActive .checkboxOptionIcon {
+    color: var(--xc-accent-primary);
+}
+
+/* Bottom row of the filter card — Additional details disclosure on
+   the left, Grouped / Flat seg group anchored to the right. */
+.filterFooter {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+}
+
+.filterFooter > .filterDisclosure {
+    flex: 1 1 auto;
+    width: auto;
+}
+
+/* Filters disclosure — clickable row at the bottom of the form that
+   expands the advanced filters panel. */
+.filterDisclosure {
+    appearance: none;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--xc-space-2) var(--xc-space-3);
+    background: transparent;
+    border: none;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.filterDisclosure:hover { color: var(--xc-text); }
+.filterDisclosure:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: -2px;
+}
+
+.filterDisclosureActive {
+    color: var(--xc-text);
+}
+
+/* Advanced filter panel — fieldsets stacked, each with a small label
+   above and a chip-wrap (or input row) below. */
+.morePanel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-3);
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+}
+
+.chipWrap {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--xc-space-1);
+}
+
+.viewRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--xc-space-2);
+}
+
+.viewRowLabel {
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 600;
+}
+
+.segGroup {
+    display: inline-flex;
+    border-radius: var(--xc-radius-sm);
+    border: 1px solid var(--xc-border);
+    overflow: hidden;
+    align-self: flex-start;
+}
+
+.segBtn {
+    appearance: none;
+    background: var(--xc-bg);
+    border: none;
+    color: var(--xc-text);
+    padding: var(--xc-space-1) var(--xc-space-3);
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.segBtn:not(:first-child) {
+    border-inline-start: 1px solid var(--xc-border);
+}
+
+.segBtnActive {
+    background: var(--xc-accent-primary);
+    color: var(--xc-on-accent, #fff);
+}
+
+.dateRow {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+}
+
+.dateInput {
+    flex: 1 1 0;
+    min-width: 0;
+    /* Keep the native calendar picker indicator — appearance:none
+       would strip it. The indicator naturally renders on the right
+       in LTR; we just give it a hover hint and a normalized color. */
+    height: 36px;
+    line-height: 1;
+    padding: 0 var(--xc-space-2);
+    border-radius: var(--xc-radius-sm);
+    border: 1px solid var(--xc-border);
+    background: var(--xc-bg);
+    color: var(--xc-text);
+    font-size: var(--xc-text-sm);
+    font-family: inherit;
+}
+
+.dateInput::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    opacity: 0.6;
+    margin-inline-start: var(--xc-space-1);
+    /* In dark mode the default indicator can render near-invisible;
+       this filter inverts it so the glyph stays legible against
+       --xc-bg in both palettes. */
+    filter: invert(var(--xc-icon-invert, 0));
+}
+
+.dateInput::-webkit-calendar-picker-indicator:hover {
+    opacity: 1;
+}
+
+@media (prefers-color-scheme: dark) {
+    .dateInput::-webkit-calendar-picker-indicator {
+        --xc-icon-invert: 1;
+    }
+}
+
+.dateSep {
+    color: var(--xc-text-muted);
+    flex: 0 0 auto;
+}
+
+.footerRow {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--xc-space-2);
+    padding-top: var(--xc-space-2);
+    border-top: 1px solid var(--xc-border);
+}
+
+.clearLink {
+    appearance: none;
+    background: transparent;
+    border: none;
+    color: var(--xc-accent-primary);
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    cursor: pointer;
+    padding: 0;
+    font-family: inherit;
+}
+.clearLink:hover { text-decoration: underline; }
 
 .chip {
     display: inline-flex;
@@ -147,6 +511,17 @@
     gap: var(--xc-space-2);
 }
 
+/* Plain chain icon for row headers — no pill / no tinted background.
+   Just the raw 16px logo so the row reads as icon + action label. */
+.rowChainIcon {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+    display: block;
+}
+
 .actionBadge {
     font-weight: 600;
     font-size: var(--xc-text-sm);
@@ -164,6 +539,9 @@
 }
 
 .rowMeta {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
 }
@@ -171,6 +549,75 @@
 .rowSummary {
     font-size: var(--xc-text-sm);
     color: var(--xc-text);
+}
+
+/* Relative timestamp now lives on the meta line (line 3), pushed to
+   the trailing edge. */
+.rowRelativeTime {
+    margin-inline-start: auto;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    font-weight: 400;
+    letter-spacing: 0;
+    text-transform: none;
+}
+
+/* Success / error / pending pill on line 1. Right-aligned via
+   margin-inline-start: auto so it sits flush with the trailing edge
+   regardless of how long the action label is. */
+.statusPill {
+    margin-inline-start: auto;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 var(--xc-space-2);
+    border-radius: var(--xc-radius-pill, 999px);
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.6;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.statusPillSuccess {
+    background: color-mix(in srgb, var(--xc-success, #14b86c) 20%, transparent);
+    color: var(--xc-success, #14b86c);
+}
+
+.statusPillError {
+    background: color-mix(in srgb, var(--xc-danger, #d93838) 20%, transparent);
+    color: var(--xc-danger, #d93838);
+}
+
+.statusPillPending {
+    background: color-mix(in srgb, var(--xc-warning, #d99000) 20%, transparent);
+    color: var(--xc-warning, #d99000);
+}
+
+/* Source-address line (line 2). Monospace + muted so it visually
+   subordinates to the action label above. */
+.rowSourceAddress {
+    font-family: var(--xc-font-mono, monospace);
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    word-break: break-all;
+}
+
+/* Confirmation count pill rendered next to the block number on line 3.
+   Uses the accent color so it pops against the row's muted meta line —
+   confirmations are a key on-chain finality signal and shouldn't blend
+   into the rest of the meta text. */
+.confirmationsPill {
+    display: inline-flex;
+    align-items: center;
+    padding: 0 var(--xc-space-2);
+    border-radius: var(--xc-radius-pill, 999px);
+    background: color-mix(in srgb, var(--xc-accent-primary) 22%, transparent);
+    color: var(--xc-accent-primary);
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.7;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
 }
 
 /* Vertical connector between two adjacent threaded rows. We render
@@ -189,11 +636,353 @@
 .detail {
     margin: var(--xc-space-1) 0 var(--xc-space-3);
     padding: var(--xc-space-3);
-    border: 1px solid var(--xc-accent-primary);
     border-radius: var(--xc-radius-md);
     background: var(--xc-bg);
     display: grid;
     gap: var(--xc-space-3);
+}
+
+/* ───── ActionDetail page layout ───── */
+
+/* Outer wrap — stacks the action-details hero, the explorer-button
+   row, and the Status / Raw / Peer sections with consistent spacing.
+   `gap` matches the inter-button gap inside `.detailActions` so the
+   vertical rhythm between the hero card and the button row equals the
+   horizontal rhythm between adjacent buttons. */
+.detailContainer {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+}
+
+/* One gray card per section. The page no longer wraps in a blue
+   accent-bordered container — each section is its own surface.
+   Vertical padding kept tight (space-1) so the card hugs its inner
+   table / panel; horizontal padding stays at space-3 for breathing
+   room against the card edge. */
+.detailSection {
+    background: var(--xc-surface-raised);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-md);
+    padding: var(--xc-space-1) var(--xc-space-3);
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+}
+
+/* Hero variant — zero card padding so the table inside runs flush
+   to the card edges. The row-divider lines reach the full width and
+   the inner cells re-introduce their own horizontal padding so the
+   text still has breathing room. */
+.detailSectionFlush {
+    padding: 0;
+}
+
+.detailSectionFlush .detailsTable th,
+.detailSectionFlush .detailsTable td {
+    padding: var(--xc-space-2) var(--xc-space-3);
+}
+
+/* Card-header treatment for each section's title — full-strength text,
+   bigger than the muted in-body labels, with a thin divider below it
+   so it reads as a banded header at the top of the gray card. */
+.detailSectionHeading {
+    margin: 0 calc(var(--xc-space-3) * -1);
+    padding: 0 var(--xc-space-3) var(--xc-space-2);
+    border-bottom: 1px solid var(--xc-border);
+    font-size: var(--xc-text-md);
+    color: var(--xc-text);
+    font-weight: 700;
+    letter-spacing: 0;
+    text-transform: none;
+}
+
+/* Key/value table used by the Action details section. Keys (th) are
+   small + uppercase + muted; values (td) are monospace + wrap on any
+   character so a long tx hash / address never breaks the layout. */
+/* The whole `<tbody>` is one CSS-Grid container with two columns —
+   `auto minmax(0, 1fr)`. Every `<tr>` uses `display: contents` so its
+   `<th>` and `<td>` become direct grid items. That way the `auto`
+   column is sized to the widest label across ALL rows (so the value
+   column lines up vertically) instead of recalculating per row. The
+   `minmax(0, 1fr)` column lets values shrink below their intrinsic
+   width so `overflow: hidden / ellipsis` actually triggers. */
+.detailsTable {
+    width: 100%;
+    display: block;
+    font-size: var(--xc-text-sm);
+}
+
+.detailsTable tbody {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    /* `start` so every cell shares the same top edge in its grid row.
+       Baseline alignment was offsetting taller rows (those with a
+       CopyableValue icon button) so the th/td border-tops landed at
+       different y-coordinates and the row divider visibly stair-
+       stepped at the column boundary. */
+    align-items: start;
+    width: 100%;
+    /* No column-gap — visual gap between label and value comes from
+       cell padding so the row-divider border lines stay continuous
+       across the column boundary. */
+    column-gap: 0;
+}
+
+.detailsTable tr {
+    display: contents;
+}
+
+/* Row dividers — applied to th + td of every row except the first.
+   Because there's no column-gap, the two cells' borders meet at the
+   column boundary and read as one continuous line. */
+.detailsTable tr + tr > th,
+.detailsTable tr + tr > td {
+    border-top: 1px solid var(--xc-border);
+}
+
+.detailsTable th,
+.detailsTable td {
+    display: block;
+    padding: var(--xc-space-2) 0;
+    line-height: 1.4;
+    min-width: 0;
+}
+
+.detailsTable th {
+    text-align: start;
+    font-weight: 500;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+    /* Trailing padding inside the label cell creates the visual gap
+       to the value column, replacing what column-gap used to provide. */
+    padding-inline-end: var(--xc-space-3);
+}
+
+.detailsTable td {
+    color: var(--xc-text);
+    font-family: var(--xc-font-mono, monospace);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Colored bubble for the Action row in the details table. Tinted with
+   the accent color so it reads as a primary label / tag. */
+.actionTag {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px var(--xc-space-2);
+    border-radius: var(--xc-radius-pill, 999px);
+    background: color-mix(in srgb, var(--xc-accent-primary) 22%, transparent);
+    color: var(--xc-accent-primary);
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+/* Uppercase status bubble used inside the details table — reuses the
+   .statusPillSuccess / Error / Pending color classes for fill + text. */
+.statusBubble {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px var(--xc-space-2);
+    border-radius: var(--xc-radius-pill, 999px);
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+/* Inline value + copy icon used in the details table for fields the
+   user typically wants to paste (action_index / tx_hash / addresses). */
+.copyableValue {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+    max-width: 100%;
+}
+
+.copyableText {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    /* `min-width: 0` lets the flex item shrink past its intrinsic
+       content width — without it the text refuses to collapse and
+       pushes the parent past the cell boundary. */
+    min-width: 0;
+    flex: 0 1 auto;
+}
+
+.copyIconButton {
+    appearance: none;
+    background: transparent;
+    border: none;
+    color: var(--xc-text-muted);
+    cursor: pointer;
+    padding: 2px;
+    border-radius: var(--xc-radius-sm);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    flex-shrink: 0;
+}
+
+.copyIconButton:hover {
+    color: var(--xc-accent-primary);
+    background: var(--xc-bg-muted);
+}
+
+.copyIconButton:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 1px;
+}
+
+.copyIconButton svg {
+    width: 14px;
+    height: 14px;
+}
+
+/* Explorer button row — equal-width columns that span the full row.
+   `auto-fit` + `minmax(0, 1fr)` divides the available width by the
+   number of buttons actually rendered: 3 buttons → each 1/3, 2 → 1/2,
+   1 → full width. The row always reads as a balanced strip. */
+.detailActions {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+    gap: var(--xc-space-2);
+}
+
+.detailAction {
+    appearance: none;
+    background: var(--xc-surface-raised);
+    border: 1px solid var(--xc-accent-primary);
+    border-radius: var(--xc-radius-md);
+    padding: var(--xc-space-3) var(--xc-space-1);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--xc-space-1);
+    cursor: pointer;
+    color: var(--xc-text);
+    font-family: inherit;
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+    min-height: 72px;
+    text-align: center;
+    text-decoration: none;
+}
+
+.detailAction:hover {
+    background: var(--xc-bg-muted);
+}
+
+.detailActionIcon {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
+    color: var(--xc-accent-primary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    overflow: hidden;
+}
+
+/* Branding logo image inside an explorer action button (XChain). */
+.detailActionLogo {
+    width: 22px;
+    height: 22px;
+    object-fit: contain;
+    display: block;
+}
+
+/* Naked favicon used by the explorer buttons — no circular
+   icon-wrap background; sits at the same vertical position as the
+   wrapped icons on the sibling buttons. */
+.detailActionFavicon {
+    width: 32px;
+    height: 32px;
+    object-fit: contain;
+    display: block;
+}
+
+/* The XChain button uses the bundled product favicon, which has more
+   padding around its glyph than the third-party favicons — bump its
+   render size up so it visually matches Mempool / Blockstream
+   instead of looking smaller. */
+.detailAction[href*="explorer.xchain.io"] .detailActionFavicon {
+    width: 42px;
+    height: 42px;
+}
+
+/* ───── Detail page tab strip ───── */
+
+.detailTabs {
+    display: flex;
+    gap: var(--xc-space-1);
+    border-bottom: 1px solid var(--xc-border);
+    padding-bottom: 1px;
+    margin-bottom: -1px;
+}
+
+.detailTab {
+    appearance: none;
+    background: transparent;
+    border: none;
+    padding: var(--xc-space-3) var(--xc-space-3);
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    color: var(--xc-text-muted);
+    cursor: pointer;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    border-bottom: 2px solid transparent;
+    flex: 0 0 auto;
+    font-family: inherit;
+}
+
+.detailTab:hover {
+    color: var(--xc-text);
+}
+
+.detailTabActive {
+    color: var(--xc-accent-primary);
+    border-bottom-color: var(--xc-accent-primary);
+}
+
+/* Peer block inside the Raw tab — small label + JSON pre below the
+   local raw data so the cross-chain partner is still visible. */
+.detailPeerBlock {
+    margin-top: var(--xc-space-3);
+    padding-top: var(--xc-space-3);
+    border-top: 1px solid var(--xc-border);
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+}
+
+/* Chain icon embedded next to the action label in the ActionDetail
+   header. */
+.titleChainIcon {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    object-fit: cover;
+    margin-inline-end: var(--xc-space-2);
+    vertical-align: -3px;
 }
 
 .detailDual {
@@ -230,6 +1019,24 @@
     word-break: break-all;
     margin: 0;
     overflow-x: auto;
+}
+
+/* JSON viewer wrap with a small copy button anchored to the upper-
+   right corner so a user can copy the whole payload without
+   selecting + ctrl-C. The button sits on a translucent background
+   so it stays legible over the JSON text below it. */
+.rawJsonWrap {
+    position: relative;
+}
+
+.rawJsonCopy {
+    position: absolute;
+    top: 0;
+    right: 0;
+    z-index: 1;
+    background: color-mix(in srgb, var(--xc-surface-raised) 88%, transparent);
+    border-radius: var(--xc-radius-sm);
+    backdrop-filter: blur(2px);
 }
 
 .empty {
@@ -339,44 +1146,26 @@
     justify-content: flex-end;
 }
 
-/* §28.2 activity-feed grouping. The group card uses the same row
- * surface as a normal entry but with a thicker accent border and a
- * count badge so the user can tell at a glance that the row collapses
- * multiple actions. */
+/* §28.2 activity-feed grouping.
+ *
+ * When a group is rendered, the header row + its expanded member rows
+ * are wrapped in a single bordered card (`.groupCardWrap`) so the
+ * relationship between them is visually unmistakable. Internal rows
+ * lose their individual border / radius / margin so they read as
+ * sections of the wrapper card rather than independent rows. */
 .groupCard {
-    border-color: var(--xc-accent-secondary, var(--xc-accent-primary));
-    border-width: 2px;
-    background: var(--xc-bg);
+    /* inherits .row styling; the wrapper below strips the chrome that
+       would otherwise make it look like a standalone row */
 }
 
 .groupCardExpanded {
-    border-end-start-radius: 0;
-    border-end-end-radius: 0;
+    /* intentionally empty */
 }
 
 .groupCount {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 1.5rem;
-    height: 1.25rem;
-    padding: 0 var(--xc-space-1);
-    border-radius: var(--xc-radius-pill, 999px);
-    background: var(--xc-accent-secondary, var(--xc-accent-primary));
-    color: var(--xc-on-accent, #fff);
-    font-size: var(--xc-text-xs);
-    font-weight: 600;
-    letter-spacing: 0;
+    display: none;
 }
 
-.groupExpand {
-    color: var(--xc-text-muted);
-}
-
-/* §28.3 link-pair group cards span two chain badges connected by a ↔
- * glyph; the `link-pair` subkind is the only group that surfaces both
- * chains in the header so the cross-chain relationship is visible
- * without expanding the card. */
 .linkPairConnector {
     display: inline-flex;
     align-items: center;
@@ -388,137 +1177,66 @@
 .groupMembers {
     display: flex;
     flex-direction: column;
-    gap: 0;
     list-style: none;
-    margin: 0 0 var(--xc-space-1) 0;
-    padding: var(--xc-space-1) var(--xc-space-2);
-    border: 2px solid var(--xc-accent-secondary, var(--xc-accent-primary));
-    border-top: none;
-    border-end-start-radius: var(--xc-radius-md);
-    border-end-end-radius: var(--xc-radius-md);
-    background: var(--xc-surface-raised);
-}
-
-/* §28.6 advanced filtering. Search input + "More filters" panel sits
- * directly under the chip filterBar; the panel is collapsed by default
- * to keep the header compact. */
-.searchRow {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--xc-space-2);
-}
-
-.searchInput {
-    flex: 1 1 14rem;
-    min-width: 12rem;
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
-    background: var(--xc-bg);
-    color: var(--xc-text);
-    font-family: inherit;
-    font-size: var(--xc-text-sm);
-}
-.searchInput:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
-}
-
-.filterBadge {
-    margin-inline-start: 0.25rem;
-    color: var(--xc-accent-primary);
-}
-
-.clearLink {
-    background: transparent;
-    border: none;
-    color: var(--xc-accent-primary);
-    cursor: pointer;
-    font-size: var(--xc-text-xs);
-    text-decoration: underline;
-    padding: var(--xc-space-1);
-    font-family: inherit;
-}
-.clearLink:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
-    border-radius: var(--xc-radius-sm);
-}
-
-.morePanel {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-3);
-    padding: var(--xc-space-3);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
-    background: var(--xc-surface-raised);
-}
-
-.fieldset {
     margin: 0;
     padding: 0;
+}
+
+.groupCardWrap {
+    margin: var(--xc-space-1) 0;
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-md);
+    background: var(--xc-surface-raised);
+    overflow: hidden;
+}
+
+/* Group header row inside the wrap — strip per-row chrome so the
+   header merges into the wrapper card visually. */
+.groupCardWrap > .groupCard {
+    margin: 0;
     border: none;
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-2);
+    border-radius: 0;
+    background: transparent;
 }
 
-.legend {
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    margin-bottom: var(--xc-space-1);
-    padding: 0;
+.groupCardWrap > .groupCard:hover {
+    background: var(--xc-bg-muted);
+    border-color: transparent;
 }
 
-.checkboxGrid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr));
-    gap: var(--xc-space-1) var(--xc-space-2);
+/* When expanded, draw a divider beneath the header to separate it
+   visually from the member rows. */
+.groupCardWrapExpanded > .groupCard {
+    border-bottom: 1px solid var(--xc-border);
 }
 
-.checkLabel {
+/* Member rows inside the expanded wrap — strip per-row chrome and
+   separate them with thin dividers so the stack reads as one card. */
+.groupCardWrap > .groupMembers > li > .row {
+    margin: 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+}
+
+.groupCardWrap > .groupMembers > li > .row:hover {
+    background: var(--xc-bg-muted);
+    border-color: transparent;
+}
+
+.groupCardWrap > .groupMembers > li + li > .row {
+    border-top: 1px solid var(--xc-border);
+}
+
+/* Chevron toggle on the group header — uses the shared DoubleChevron
+   component (matching the Additional-details disclosure). Points down
+   when collapsed, up when expanded. Pushed to the far right edge of
+   the meta line. */
+.groupChevron {
     display: inline-flex;
     align-items: center;
-    gap: var(--xc-space-1);
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
-    cursor: pointer;
-}
-
-.statusChips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--xc-space-2);
-}
-
-.dateRow {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--xc-space-3);
-}
-
-.dateLabel {
-    display: inline-flex;
-    flex-direction: column;
-    gap: var(--xc-space-1);
-    font-size: var(--xc-text-xs);
+    justify-content: center;
+    margin-inline-start: auto;
     color: var(--xc-text-muted);
 }
 
-.dateLabel input {
-    padding: var(--xc-space-1) var(--xc-space-2);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-sm);
-    background: var(--xc-bg);
-    color: var(--xc-text);
-    font-family: inherit;
-    font-size: var(--xc-text-sm);
-}
-.dateLabel input:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
-}

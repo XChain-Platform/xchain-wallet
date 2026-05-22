@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { MultisigBadge, Icon } from '@xchain-wallet/core/ui';
 import { EmptyStateNudge } from './EmptyStateNudge.jsx';
+import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import styles from './BalanceList.module.css';
 
 /**
@@ -118,6 +119,11 @@ export function BalanceList({
 function BalanceRowEl({ row, multisig, onSelect, pinned, onTogglePin, hidden, onToggleHide }) {
     const isNative = row.kind === 'native';
     const chainIconUrl = branding.chainIconSmallUrl(row.chainId);
+    // App-wide privacy toggle — when on, replace the per-row qty and
+    // fiat values with dots so navigating to / from the row leaks
+    // nothing. Distinct from the per-row `hidden` prop above, which
+    // controls whether this row appears in the Hidden tokens section.
+    const [balancesHidden] = useBalancesHidden();
     // Network/env (mainnet/testnet/regtest) is already chosen globally
     // in Settings — repeating it on every row adds noise. Show just the
     // asset symbol; chain family is conveyed by the chain icon.
@@ -188,8 +194,12 @@ function BalanceRowEl({ row, multisig, onSelect, pinned, onTogglePin, hidden, on
                 <div className={styles.subtitle}>{subtitle}</div>
             </div>
             <div className={styles.amounts}>
-                <div className={styles.qty}>{formatAmount(row.quantity, row.divisibility)}</div>
-                <div className={styles.fiat}>{formatFiat(fiat)}</div>
+                <div className={styles.qty}>
+                    {balancesHidden ? '•••••' : formatAmount(row.quantity, row.divisibility)}
+                </div>
+                <div className={styles.fiat}>
+                    {balancesHidden ? '•••' : formatFiat(fiat)}
+                </div>
             </div>
             {showPin ? (
                 <span

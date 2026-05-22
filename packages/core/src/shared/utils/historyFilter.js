@@ -44,10 +44,14 @@ export const ACTION_TYPE_OPTIONS = [
     { id: 'crosschain', label: 'Cross-chain' },
 ];
 
+// Labels use the XChain platform terminology (VALID / INVALID) to
+// match the status pill copy elsewhere in the wallet. The `id` values
+// are still `confirmed` / `failed` because `classifyEntryStatus`
+// emits those bucket names from the raw row payload.
 export const STATUS_OPTIONS = [
     { id: 'pending', label: 'Pending' },
-    { id: 'confirmed', label: 'Confirmed' },
-    { id: 'failed', label: 'Failed' },
+    { id: 'confirmed', label: 'Valid' },
+    { id: 'failed', label: 'Invalid' },
 ];
 
 /**

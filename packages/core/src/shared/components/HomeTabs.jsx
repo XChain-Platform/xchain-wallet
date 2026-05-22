@@ -350,17 +350,20 @@ function defiIconFor(kind) {
 
 function describeAction(r) {
     const p = r.params || {};
+    // Platform uses `tick` (and falls back to top-level r.tick when
+    // not nested). `asset` is not an XChain field — never read it.
+    const tick = p.tick || r.tick || '';
     switch (r.action) {
         case 'SEND':
             return p.memo
-                ? `${p.amount} ${p.asset} — ${p.memo}`
-                : `${p.amount} ${p.asset} → ${shortAddr(p.destination)}`;
+                ? `${p.amount} ${tick} — ${p.memo}`
+                : `${p.amount} ${tick} → ${shortAddr(p.destination)}`;
         case 'ISSUE':
-            return `${p.asset} (${p.divisible ? 'divisible' : 'indivisible'})`;
+            return `${tick} (${p.divisible ? 'divisible' : 'indivisible'})`;
         case 'DIVIDEND':
-            return `${p.asset} dividend of ${p.dividend_asset}`;
+            return `${tick} dividend`;
         case 'ORDER':
-            return `${p.give_asset} → ${p.get_asset} (${p.status || 'open'})`;
+            return `${p.give_asset || ''} → ${p.get_asset || ''} (${p.status || 'open'})`;
         case 'EXECUTE':
             return `${p.contract}.${p.method}(${p.amount || ''})`;
         default:

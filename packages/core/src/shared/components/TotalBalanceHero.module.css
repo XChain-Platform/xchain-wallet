@@ -65,6 +65,21 @@
     word-break: break-all;
 }
 
+/* Fiat currency code suffix (USD / JPY / EUR …) rendered to the right
+   of the formatted amount at about half the amount font-size so the
+   denominator is visible without competing with the digits. Kept on
+   the same baseline as the amount and prevented from wrapping away
+   from the trailing digits. */
+.amountCode {
+    font-size: 16px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.75);
+    margin-inline-start: 6px;
+    letter-spacing: 0;
+    white-space: nowrap;
+    vertical-align: baseline;
+}
+
 .hidden {
     letter-spacing: 0.15em;
     color: rgba(255, 255, 255, 0.55);

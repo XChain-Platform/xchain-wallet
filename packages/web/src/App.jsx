@@ -40,6 +40,12 @@ import { isDemoWallet } from '@xchain-wallet/core/flows';
 import { QueuedBroadcastBanner } from '@xchain-wallet/core/shared/components/QueuedBroadcastBanner.jsx';
 import { DemoBanner } from '@xchain-wallet/core/shared/components/DemoBanner.jsx';
 import { LeftNav, FullLayoutWithNav } from '@xchain-wallet/core/shared/components/LeftNav.jsx';
+import { AppHeader } from '@xchain-wallet/core/shared/components/AppHeader.jsx';
+import { HeaderActionMenu } from '@xchain-wallet/core/shared/components/HeaderActionMenu.jsx';
+import { registry as registryLib } from '@xchain-wallet/core';
+
+const APP_CHAIN_REGISTRY = registryLib.defaultRegistry();
+const APP_COIN_FAMILIES = ['bitcoin', 'litecoin', 'dogecoin'];
 import { BottomTabBar } from '@xchain-wallet/core/shared/components/BottomTabBar.jsx';
 import { uri as coreUri } from '@xchain-wallet/core';
 import { Send } from '@xchain-wallet/core/shared/routes/Send.jsx';
@@ -78,6 +84,7 @@ import { StakingActionForm } from '@xchain-wallet/core/shared/routes/StakingActi
 import { DelegationActionForm } from '@xchain-wallet/core/shared/routes/DelegationActionForm.jsx';
 import { OperatorDashboard } from '@xchain-wallet/core/shared/routes/OperatorDashboard.jsx';
 import { History } from '@xchain-wallet/core/shared/routes/History.jsx';
+import { ActionDetail } from '@xchain-wallet/core/shared/routes/ActionDetail.jsx';
 import { LinkForm } from '@xchain-wallet/core/shared/routes/LinkForm.jsx';
 import { SignMessageForm } from '@xchain-wallet/core/shared/routes/SignMessageForm.jsx';
 import { VerifySignatureForm } from '@xchain-wallet/core/shared/routes/VerifySignatureForm.jsx';
@@ -142,17 +149,38 @@ function AppInner() {
         /** @type {'welcome' | 'create' | 'import' | 'import-freewallet'} */ ('welcome'),
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'swap' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'staking-dashboard' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'token-detail' | 'link-form' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'addresses' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'scan'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'swap' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'staking-dashboard' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'addresses' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'scan'} */ ('home'),
     );
     const [tokenDetailRef, setTokenDetailRef] = useState(
         /** @type {{ chainId: string, asset: string, kind: string, displayName: string, divisibility: number, fiatRate: number | null, quantity: string } | null} */ (null),
     );
     const [historyInitialQuery, setHistoryInitialQuery] = useState('');
+    // Coin family to scope History's chain filter to on entry (mirror
+    // of popup wiring). Empty = no scoping.
+    const [historyInitialChainCoin, setHistoryInitialChainCoin] = useState('');
+    // Which view History's Back button returns to. Set explicitly at
+    // each entry point so we don't carry stale state from a previous
+    // visit (e.g. entering from TokenDetail then re-entering from the
+    // home menu should return to home, not back to TokenDetail).
+    const [historyReturnTo, setHistoryReturnTo] = useState(
+        /** @type {'home' | 'token-detail'} */ ('home'),
+    );
+    // Selected entry for the standalone ActionDetail view (mirror of
+    // popup wiring). Set on row click in History; cleared on back.
+    const [selectedHistoryEntry, setSelectedHistoryEntry] = useState(
+        /** @type {any | null} */ (null),
+    );
     const [walletDetailsId, setWalletDetailsId] = useState(/** @type {string | null} */ (null));
     const [walletRenameTarget, setWalletRenameTarget] = useState(
         /** @type {{ id: string, name: string } | null} */ (null),
     );
     const [migrateLegacyWalletId, setMigrateLegacyWalletId] = useState(/** @type {string | null} */ (null));
+    // Global header state — lifted up so the AppHeader in the layout
+    // header slot can render the same filter + pancake the Home page
+    // historically owned, and so flipping the filter on TokenDetail
+    // affects Home and vice-versa.
+    const [globalNetworkFilter, setGlobalNetworkFilter] = useState('all');
+    const [globalMenuOpen, setGlobalMenuOpen] = useState(false);
     const [resumeAirdropId, setResumeAirdropId] = useState(
         /** @type {string | null} */ (null),
     );
@@ -918,9 +946,23 @@ function AppInner() {
                     <History
                         walletId={activeWalletId}
                         accountId={activeAccountId || undefined}
-                        onBack={() => setUnlockedView('home')}
+                        onBack={() => setUnlockedView(historyReturnTo)}
                         onReceive={() => setUnlockedView('receive')}
                         initialSearchQuery={historyInitialQuery}
+                        initialChainCoin={historyInitialChainCoin}
+                        onSelectEntry={(entry) => {
+                            setSelectedHistoryEntry(entry);
+                            setUnlockedView('action-detail');
+                        }}
+                    />
+                );
+            }
+            if (unlockedView === 'action-detail' && activeWalletId && selectedHistoryEntry) {
+                return (
+                    <ActionDetail
+                        entry={selectedHistoryEntry}
+                        walletId={activeWalletId}
+                        onBack={() => setUnlockedView('history')}
                     />
                 );
             }
@@ -939,7 +981,10 @@ function AppInner() {
                         onSend={() => setUnlockedView('send')}
                         onReceive={() => setUnlockedView('receive')}
                         onViewActivity={() => {
-                            setHistoryInitialQuery(tokenDetailRef.asset);
+                            const coin = String(tokenDetailRef.chainId || '').split('-')[0] || '';
+                            setHistoryInitialQuery('');
+                            setHistoryInitialChainCoin(coin);
+                            setHistoryReturnTo('token-detail');
                             setUnlockedView('history');
                         }}
                     />
@@ -1127,6 +1172,8 @@ function AppInner() {
             return (
                 <>
                     <Home
+                        networkFilter={globalNetworkFilter}
+                        onNetworkFilterChange={setGlobalNetworkFilter}
                         onLocked={refresh}
                         onSend={activeWalletId ? () => setUnlockedView('send') : undefined}
                         onReceive={activeWalletId ? () => setUnlockedView('receive') : undefined}
@@ -1138,7 +1185,12 @@ function AppInner() {
                         onMessaging={activeWalletId ? () => setUnlockedView('messaging') : undefined}
                         onContracts={activeWalletId && hasBtcAddress ? () => setUnlockedView('contracts-list') : undefined}
                         onStaking={activeWalletId && hasBtcAddress ? () => setUnlockedView('staking-dashboard') : undefined}
-                        onHistory={activeWalletId ? () => setUnlockedView('history') : undefined}
+                        onHistory={activeWalletId ? () => {
+                            setHistoryInitialQuery('');
+                            setHistoryInitialChainCoin('');
+                            setHistoryReturnTo('home');
+                            setUnlockedView('history');
+                        } : undefined}
                         onAddresses={activeWalletId ? () => setUnlockedView('addresses') : undefined}
                         onResumeAirdrop={activeWalletId ? (id) => {
                             setResumeAirdropId(id);
@@ -1240,6 +1292,20 @@ function AppInner() {
                     header={
                         activeWalletId ? (
                             <>
+                                {/* Persistent global header — brand + menu /
+                                    lock affordances. Mounted here so every
+                                    route (Home, TokenDetail, Send, History,
+                                    Settings, etc.) keeps the wallet's top-
+                                    level controls visible without each route
+                                    re-rendering its own copy. */}
+                                <AppHeader
+                                    chainRegistry={APP_CHAIN_REGISTRY}
+                                    coinFamilies={APP_COIN_FAMILIES}
+                                    networkFilter={globalNetworkFilter}
+                                    onNetworkFilterChange={setGlobalNetworkFilter}
+                                    onMenuOpen={() => setGlobalMenuOpen(true)}
+                                    showNetworkFilter={unlockedView === 'home'}
+                                />
                                 {/* Cluster J FOLLOWUP 2 — DemoBanner persists across every
                                     unlocked view via the shared layout header slot, not
                                     just Home. */}
@@ -1251,6 +1317,22 @@ function AppInner() {
                     }
                 >
                     {routeNode}
+                    {globalMenuOpen ? (
+                        <HeaderActionMenu
+                            onClose={() => setGlobalMenuOpen(false)}
+                            onMarkets={() => { setGlobalMenuOpen(false); setUnlockedView('markets'); }}
+                            onTokens={() => { setGlobalMenuOpen(false); setUnlockedView('actions'); }}
+                            onMessaging={() => { setGlobalMenuOpen(false); setUnlockedView('messaging'); }}
+                            onCrossChain={() => { setGlobalMenuOpen(false); setUnlockedView('cross-chain'); }}
+                            onContacts={() => { setGlobalMenuOpen(false); setUnlockedView('contacts'); }}
+                            onAddresses={() => { setGlobalMenuOpen(false); setUnlockedView('addresses'); }}
+                            onContracts={() => { setGlobalMenuOpen(false); setUnlockedView('contracts'); }}
+                            onStaking={() => { setGlobalMenuOpen(false); setUnlockedView('staking'); }}
+                            onMultisig={() => { setGlobalMenuOpen(false); setUnlockedView('multisig'); }}
+                            onLock={() => { setGlobalMenuOpen(false); handleNavLock(); }}
+                            onSettings={() => { setGlobalMenuOpen(false); handleOpenSettings(); }}
+                        />
+                    ) : null}
                 </FullLayoutWithNav>
             );
         }

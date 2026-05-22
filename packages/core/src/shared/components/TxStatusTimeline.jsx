@@ -33,7 +33,7 @@ export function TxStatusTimeline({ entry, chainTip }) {
     const tip = Number.isFinite(Number(chainTip)) ? Number(chainTip) : 0;
     const confirmations = confirmed && tip >= blockIndex ? tip - blockIndex + 1 : 0;
     const confirmedSubBase = confirmed && timestamp > 0
-        ? new Date(timestamp * 1000).toLocaleString()
+        ? relativeTime(timestamp)
         : '—';
     const confirmedSub = confirmations > 0
         ? (confirmedSubBase === '—'
@@ -46,7 +46,7 @@ export function TxStatusTimeline({ entry, chainTip }) {
             key: 'broadcast',
             label: 'Broadcast',
             done: txHash.length > 0,
-            sub: txHash ? short(txHash) : 'No txid yet',
+            sub: txHash || 'No txid yet',
         },
         {
             key: 'mempool',
@@ -92,4 +92,25 @@ export function TxStatusTimeline({ entry, chainTip }) {
 function short(s) {
     if (typeof s !== 'string' || s.length <= 14) return s;
     return `${s.slice(0, 8)}…${s.slice(-6)}`;
+}
+
+// Human-readable "X ago" for the confirmed-stage sub label. Accepts
+// unix seconds or ms; returns '' for invalid input so the caller can
+// fall back to a static placeholder.
+function relativeTime(ts) {
+    if (!ts) return '';
+    const ms = ts < 1e12 ? ts * 1000 : ts;
+    const diffSec = Math.floor((Date.now() - ms) / 1000);
+    if (diffSec < 5) return 'just now';
+    if (diffSec < 60) return `${diffSec} seconds ago`;
+    const min = Math.floor(diffSec / 60);
+    if (min < 60) return `${min} minute${min === 1 ? '' : 's'} ago`;
+    const hr = Math.floor(diffSec / 3600);
+    if (hr < 24) return `${hr} hour${hr === 1 ? '' : 's'} ago`;
+    const day = Math.floor(diffSec / 86400);
+    if (day < 30) return `${day} day${day === 1 ? '' : 's'} ago`;
+    const month = Math.floor(day / 30);
+    if (month < 12) return `${month} month${month === 1 ? '' : 's'} ago`;
+    const year = Math.floor(day / 365);
+    return `${year} year${year === 1 ? '' : 's'} ago`;
 }

@@ -62,7 +62,7 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {(accountId: string) => void} [props.onSwitchAccount]   App-level setter for the active account (still used internally if a future inline picker lands)
  * @param {Array<{ id: string, label: string, description?: string, onSelect?: () => void }>} [props.extraActions]   §40+ entries surfaced in the small-mode pancake drawer; in full mode the host renders these via the dedicated ActionsMenu route
  */
-export function Home({ onLocked, onSend, onReceive, onSwap, onBuy, onCreateToken, onActions, onMarkets, onResumeAirdrop, onResumeCoinpay, onMessaging, onContracts, onStaking, onHistory, onAddresses, onMigrateToBip39, onOpenWalletPicker, onOpenAccountPicker, onCrossChain, onContacts, onMultisig, onSignPsbt, onSignMessage, onVerifySignature, activeAccountId: activeAccountIdProp, onSwitchAccount, extraActions, onSelectToken }) {
+export function Home({ onLocked, onSend, onReceive, onSwap, onBuy, onCreateToken, onActions, onMarkets, onResumeAirdrop, onResumeCoinpay, onMessaging, onContracts, onStaking, onHistory, onAddresses, onMigrateToBip39, onOpenWalletPicker, onOpenAccountPicker, onCrossChain, onContacts, onMultisig, onSignPsbt, onSignMessage, onVerifySignature, activeAccountId: activeAccountIdProp, onSwitchAccount, extraActions, onSelectToken, networkFilter: networkFilterProp, onNetworkFilterChange: onNetworkFilterChangeProp }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -106,7 +106,12 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onBuy, onCreateToken
     const [locking, setLocking] = useState(false);
     const [menuOpen, setMenuOpen] = useState(false);
     const [alertsOpen, setAlertsOpen] = useState(false);
-    const [networkFilter, setNetworkFilter] = useState('all');
+    // Network filter can be controlled by the parent shell (web AppHeader
+    // owns the toolbar filter button) or self-managed when the parent
+    // doesn't pass props (popup renders its own filter button inline).
+    const [networkFilterLocal, setNetworkFilterLocal] = useState('all');
+    const networkFilter = networkFilterProp ?? networkFilterLocal;
+    const setNetworkFilter = onNetworkFilterChangeProp ?? setNetworkFilterLocal;
     const [settingsOpen, setSettingsOpen] = useState(false);
     // Cluster H FOLLOWUP 7 — when "Back up now" lands the user in
     // Settings, this captures which subpage to deep-link into so the
@@ -554,7 +559,7 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onBuy, onCreateToken
     // shared so the user can still lock / switch wallets / open Settings.
     if (isSignerMode) {
         return (
-            <Screen variant={variant} header={headerInner}>
+            <Screen variant={variant}>
                 <div className={isFull ? styles.bodyFull : styles.bodyPopup}>
                     {loadError ? (
                         <div role="alert" className={styles.error}>{loadError}</div>
@@ -580,7 +585,7 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onBuy, onCreateToken
     }
 
     return (
-        <Screen variant={variant} header={headerInner}>
+        <Screen variant={variant}>
             <div className={isFull ? styles.bodyFull : styles.bodyPopup}>
                 {loadError ? (
                     <div role="alert" className={styles.error}>{loadError}</div>

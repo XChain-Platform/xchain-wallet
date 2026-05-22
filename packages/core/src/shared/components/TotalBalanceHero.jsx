@@ -1,7 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Icon } from '@xchain-wallet/core/ui';
 import { sumFiatValue } from './BalanceList.jsx';
 import { StalenessLabel } from './StalenessLabel.jsx';
+import { useSettings } from '../hooks/useSettings.js';
+import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import styles from './TotalBalanceHero.module.css';
 
 /**
@@ -20,7 +22,9 @@ import styles from './TotalBalanceHero.module.css';
  */
 export function TotalBalanceHero({ rows, networkFilter, lastSyncedAt }) {
     const { total, unpriced } = useMemo(() => sumFiatValue(rows), [rows]);
-    const [hidden, setHidden] = useState(false);
+    const { settings } = useSettings();
+    const fiatCurrency = settings?.fiatCurrency || 'USD';
+    const [hidden, toggleHidden] = useBalancesHidden();
 
     const filterLabel = networkFilter === 'all' ? 'All networks' : networkFilter.toUpperCase();
     const hasUnpriced = unpriced > 0;
@@ -36,7 +40,7 @@ export function TotalBalanceHero({ rows, networkFilter, lastSyncedAt }) {
                 <button
                     type="button"
                     className={styles.eye}
-                    onClick={() => setHidden((v) => !v)}
+                    onClick={toggleHidden}
                     aria-label={hidden ? 'Show balance' : 'Hide balance'}
                     title={hidden ? 'Show balance' : 'Hide balance'}
                 >
@@ -44,7 +48,14 @@ export function TotalBalanceHero({ rows, networkFilter, lastSyncedAt }) {
                 </button>
             </div>
             <div className={styles.amount}>
-                {hidden ? <span className={styles.hidden}>•••••</span> : formatBigFiat(total)}
+                {hidden ? (
+                    <span className={styles.hidden}>•••••</span>
+                ) : (
+                    <>
+                        {formatFiatAmount(total, fiatCurrency)}
+                        <span className={styles.amountCode}>{fiatCurrency}</span>
+                    </>
+                )}
             </div>
             {hasUnpriced || hasSync ? (
                 <div className={styles.note}>
@@ -66,16 +77,24 @@ export function TotalBalanceHero({ rows, networkFilter, lastSyncedAt }) {
     );
 }
 
-/**
- * Larger numbers split into a styled "USD" tail so the eye lands on
- * the digit count, not the symbol. Mirrors the convention every
- * mainstream wallet uses.
- */
-function formatBigFiat(usd) {
-    if (usd === 0) return '$0.00';
-    if (usd > 0 && usd < 0.01) return '<$0.01';
-    return '$' + usd.toLocaleString('en-US', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-    });
+// Format the numeric portion of the total balance in the wallet's
+// preferred fiat. Uses Intl so symbols + decimal conventions are
+// correct per currency (¥ for JPY with no decimals, € for EUR, etc.);
+// the ISO code is rendered separately as a styled suffix span so it
+// can be sized down to ~half the amount text.
+function formatFiatAmount(value, currency) {
+    if (value === null || value === undefined) return '—';
+    const code = String(currency || 'USD').toUpperCase();
+    try {
+        const fmt = new Intl.NumberFormat('en-US', {
+            style: 'currency',
+            currency: code,
+            currencyDisplay: 'symbol',
+        });
+        const minorUnit = fmt.resolvedOptions().maximumFractionDigits === 0 ? 1 : 0.01;
+        if (value > 0 && value < minorUnit) return `<${fmt.format(minorUnit)}`;
+        return fmt.format(value);
+    } catch {
+        return value.toLocaleString('en-US', { maximumFractionDigits: 2 });
+    }
 }

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Screen, Button, ChainBadge, Icon, Skeleton } from '@xchain-wallet/core/ui';
+import { Screen, Button, Icon, Skeleton } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
+import * as branding from '@xchain-wallet/core/branding/branding.js';
 import {
     isEntryReplaceable,
     replaceFromHistoryEntry,
@@ -16,6 +17,7 @@ import { StalenessLabel } from '../components/StalenessLabel.jsx';
 import { flows as flowsLib } from '@xchain-wallet/core';
 import {
     applyHistoryFilters,
+    classifyEntryStatus,
     ACTION_TYPE_OPTIONS,
     STATUS_OPTIONS,
 } from '../utils/historyFilter.js';
@@ -23,6 +25,22 @@ import { readChainSet, writeChainSet } from '../utils/chainFilterMemory.js';
 import styles from './History.module.css';
 
 const HISTORY_CHAIN_FILTER_KEY = 'history';
+const GROUPING_MODE_STORAGE_KEY = 'xc:historyGroupingMode';
+
+function readPersistedGroupingMode() {
+    try {
+        const v = globalThis.localStorage?.getItem(GROUPING_MODE_STORAGE_KEY);
+        return v === 'flat' ? 'flat' : 'grouped';
+    } catch {
+        return 'grouped';
+    }
+}
+
+function writePersistedGroupingMode(mode) {
+    try {
+        globalThis.localStorage?.setItem(GROUPING_MODE_STORAGE_KEY, mode);
+    } catch { /* best-effort */ }
+}
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -77,7 +95,7 @@ const COIN_TICKER_TO_NAME = {
  *        view as soon as it loads. §24.6 / Cluster Y FOLLOWUP 4 — used
  *        by the desktop detach-pending-tx path.
  */
-export function History({ walletId, accountId, onBack, onReceive, initialSearchQuery = '', initialFocus = null }) {
+export function History({ walletId, accountId, onBack, onReceive, onSelectEntry, initialSearchQuery = '', initialChainCoin = '', initialFocus = null }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -99,14 +117,21 @@ export function History({ walletId, accountId, onBack, onReceive, initialSearchQ
     const [crossChainOnly, setCrossChainOnly] = useState(false);
     const [multisigOnly, setMultisigOnly] = useState(false);
     const [multisigAddress, setMultisigAddress] = useState(/** @type {string | null} */ (null));
-    const [groupingMode, setGroupingMode] = useState(/** @type {'grouped' | 'flat'} */ ('grouped'));
+    const [groupingMode, setGroupingModeState] = useState(/** @type {'grouped' | 'flat'} */ (readPersistedGroupingMode));
+    const setGroupingMode = (mode) => {
+        setGroupingModeState(mode);
+        writePersistedGroupingMode(mode);
+    };
     const [expandedGroups, setExpandedGroups] = useState(/** @type {Set<string>} */ (new Set()));
     const [searchQuery, setSearchQuery] = useState(initialSearchQuery || '');
     const [actionTypeFilter, setActionTypeFilter] = useState(/** @type {Set<string>} */ (new Set()));
     const [statusFilter, setStatusFilter] = useState(/** @type {Set<string>} */ (new Set()));
-    const [dateFrom, setDateFrom] = useState(/** @type {string} */ (''));
-    const [dateTo, setDateTo] = useState(/** @type {string} */ (''));
-    const [moreFiltersOpen, setMoreFiltersOpen] = useState(Boolean(initialSearchQuery));
+    // Default to the last 30 days so a fresh History view surfaces
+    // recent activity without the user having to pick a range. ISO
+    // YYYY-MM-DD format matches what <input type="date"> expects.
+    const [dateFrom, setDateFrom] = useState(() => isoDateDaysAgo(30));
+    const [dateTo, setDateTo] = useState(() => isoDateDaysAgo(0));
+    const [moreFiltersOpen, setMoreFiltersOpen] = useState(false);
     // Cluster I FOLLOWUP 5 — single-modal export. Holds the modal's
     // open state + the field choices (format / column set / date-range
     // override). Initial column set = every field; date range defaults
@@ -140,6 +165,20 @@ export function History({ walletId, accountId, onBack, onReceive, initialSearchQ
                         .filter(([, addrs]) => Array.isArray(addrs) && addrs.length > 0)
                         .map(([cid]) => cid),
                 );
+                // When the caller asked us to scope to a specific coin
+                // family (e.g. arrived from the Bitcoin TokenDetail's
+                // History button), narrow enabledChains to only those
+                // chains. One-shot override — we deliberately skip the
+                // remembered-set restore and don't persist this scope,
+                // so revisiting History via the menu reverts to the
+                // user's last manually-chosen filter.
+                if (initialChainCoin) {
+                    const scoped = new Set(
+                        [...all].filter((cid) => chainRegistry.get(cid)?.coin === initialChainCoin),
+                    );
+                    setEnabledChains(scoped.size > 0 ? scoped : all);
+                    return;
+                }
                 // §23.5 / G052 — restore the user's last chain-filter
                 // choice if one is stored, intersected with the wallet's
                 // currently-active chains so a removed chain doesn't
@@ -151,7 +190,7 @@ export function History({ walletId, accountId, onBack, onReceive, initialSearchQ
                 if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
             });
         return () => { cancelled = true; };
-    }, [walletId, accountId, messaging]);
+    }, [walletId, accountId, messaging, initialChainCoin]);
 
     // §22 Multisig-only filter (Step 22). Resolve the wallet's
     // multisig receive address up-front so the chip can filter
@@ -213,12 +252,22 @@ export function History({ walletId, accountId, onBack, onReceive, initialSearchQ
                         messaging.getLinksForAddress({ chainId: cid, address: a.address })
                             .then((r) => extractRows(r))
                             .catch(() => []),
-                    ]).then(([history, links]) => ({
-                        chainId: cid,
-                        address: a.address,
-                        history,
-                        links,
-                    })),
+                    ]).then(([history, links]) => {
+                        // TEMP visual-design preview — fall back to
+                        // the demo-mode synthesizer when a real wallet
+                        // has zero history for this address, so the
+                        // populated UI can be evaluated. Remove once
+                        // the empty state has been reviewed.
+                        if (history.length === 0) {
+                            return {
+                                chainId: cid,
+                                address: a.address,
+                                history: flowsLib.synthesizeDemoHistory(cid, a.address),
+                                links: flowsLib.synthesizeDemoLinks(),
+                            };
+                        }
+                        return { chainId: cid, address: a.address, history, links };
+                    }),
                 );
             }
         }
@@ -470,6 +519,14 @@ export function History({ walletId, accountId, onBack, onReceive, initialSearchQ
     };
 
     const onRowClick = (entry) => {
+        // When the parent shell wired the navigation callback, send the
+        // selected entry up so it can route to the standalone ActionDetail
+        // page. Falls back to the legacy inline expand for builds /
+        // contexts where no handler is provided.
+        if (typeof onSelectEntry === 'function') {
+            onSelectEntry(entry);
+            return;
+        }
         setSelectedKey((cur) => (cur === entry.key ? null : entry.key));
         if (entry.link?.peerChainId && entry.link.peerActionIndex) {
             const pKey = peerCacheKey(entry.link.peerChainId, entry.link.peerActionIndex);
@@ -552,77 +609,126 @@ export function History({ walletId, accountId, onBack, onReceive, initialSearchQ
 
     return wrap(
         <>
-            <div className={styles.filterBar} role="group" aria-label="History filters">
-                <span className={styles.filterLabel}>Chains</span>
-                {activeChainIds.map((cid) => {
-                    const d = chainRegistry.get(cid);
-                    const active = enabledChains.has(cid);
-                    return (
+            {/* Unified filter card — search, chain picker, and the
+                collapsible Filters section all in one container. */}
+            <div className={styles.filterCard} role="group" aria-label="History filters">
+                <input
+                    type="search"
+                    className={styles.searchInput}
+                    placeholder="Search action, address, token, txid, memo…"
+                    aria-label="Search history"
+                    value={searchQuery}
+                    onChange={(ev) => setSearchQuery(ev.target.value)}
+                />
+
+                <div className={styles.dateRow}>
+                    <input
+                        type="date"
+                        aria-label="From date"
+                        value={dateFrom}
+                        onChange={(ev) => setDateFrom(ev.target.value)}
+                        className={styles.dateInput}
+                    />
+                    <span className={styles.dateSep}>→</span>
+                    <input
+                        type="date"
+                        aria-label="To date"
+                        value={dateTo}
+                        onChange={(ev) => setDateTo(ev.target.value)}
+                        className={styles.dateInput}
+                    />
+                </div>
+
+                <div className={styles.filterFooter}>
+                    <button
+                        type="button"
+                        className={`${styles.filterDisclosure} ${moreFiltersOpen ? styles.filterDisclosureActive : ''}`}
+                        onClick={() => setMoreFiltersOpen((v) => !v)}
+                        aria-expanded={moreFiltersOpen}
+                        aria-controls="history-more-filters"
+                    >
+                        <span>Additional details</span>
+                        {moreFiltersOpen
+                            ? <DoubleChevron direction="up" />
+                            : <DoubleChevron direction="down" />}
+                    </button>
+                    <div className={styles.segGroup} role="radiogroup" aria-label="Grouping mode">
                         <button
-                            key={cid}
                             type="button"
-                            onClick={() => toggleChain(cid)}
-                            className={`${styles.chip} ${active ? styles.chipActive : ''}`}
-                            aria-pressed={active}
-                        >
-                            {d ? <ChainBadge descriptor={d} size="sm" /> : null}
-                            <span>{d?.displayName || cid}</span>
-                        </button>
-                    );
-                })}
-                <span className={styles.divider} aria-hidden="true" />
-                <button
-                    type="button"
-                    onClick={() => setCrossChainOnly((v) => !v)}
-                    className={`${styles.chip} ${styles.chipCrossChain} ${crossChainOnly ? styles.chipActive : ''}`}
-                    aria-pressed={crossChainOnly}
-                    title="Show only entries that are one side of a LINK pairing (§23.5)."
-                >
-                    🔗 Cross-chain actions
-                </button>
-                <button
-                    type="button"
-                    onClick={() => setMultisigOnly((v) => !v)}
-                    disabled={!multisigAddress}
-                    className={`${styles.chip} ${styles.chipCrossChain} ${multisigOnly ? styles.chipActive : ''}`}
-                    aria-pressed={multisigOnly}
-                    title={multisigAddress
-                        ? 'Show only entries on this wallet\'s multisig address (§22).'
-                        : 'No multisig address configured for this wallet.'}
-                >
-                    🔐 Multisig only
-                </button>
-                <span className={styles.divider} aria-hidden="true" />
-                <button
-                    type="button"
-                    onClick={() => setGroupingMode((m) => (m === 'grouped' ? 'flat' : 'grouped'))}
-                    className={`${styles.chip} ${groupingMode === 'grouped' ? styles.chipActive : ''}`}
-                    aria-pressed={groupingMode === 'grouped'}
-                    title="Collapse related actions (issuance + mints, dispenser + dispenses, order + fills) into a single expandable card (§28.2)."
-                >
-                    {groupingMode === 'grouped' ? 'Grouped' : 'Flat'}
-                </button>
-                <span className={styles.divider} aria-hidden="true" />
-                <button
-                    type="button"
-                    onClick={() => {
-                        // Pre-fill date range from the active filter so
-                        // the modal is "ready to go" if the user just
-                        // wants to export what's on screen.
-                        setExportFromDate(dateFrom);
-                        setExportToDate(dateTo);
-                        setExportScope('filtered');
-                        setExportModalOpen(true);
-                    }}
-                    disabled={entries.length === 0}
-                    className={styles.chip}
-                    title="Export history with format / column / date-range options (§28.5)."
-                    aria-haspopup="dialog"
-                    aria-expanded={exportModalOpen}
-                >
-                    Export…
-                </button>
+                            role="radio"
+                            aria-checked={groupingMode === 'grouped'}
+                            onClick={() => setGroupingMode('grouped')}
+                            className={`${styles.segBtn} ${groupingMode === 'grouped' ? styles.segBtnActive : ''}`}
+                        >Grouped</button>
+                        <button
+                            type="button"
+                            role="radio"
+                            aria-checked={groupingMode === 'flat'}
+                            onClick={() => setGroupingMode('flat')}
+                            className={`${styles.segBtn} ${groupingMode === 'flat' ? styles.segBtnActive : ''}`}
+                        >Flat</button>
+                    </div>
+                </div>
+
+                {moreFiltersOpen ? (
+                    <div
+                        id="history-more-filters"
+                        className={styles.morePanel}
+                        role="group"
+                        aria-label="Advanced filters"
+                    >
+                        <ChainPicker
+                            activeChainIds={activeChainIds}
+                            chainRegistry={chainRegistry}
+                            enabledChains={enabledChains}
+                            onChange={(next) => {
+                                setEnabledChains(next);
+                                writeChainSet(HISTORY_CHAIN_FILTER_KEY, next);
+                            }}
+                        />
+
+                        <CheckboxPicker
+                            options={ACTION_TYPE_OPTIONS}
+                            selected={actionTypeFilter}
+                            onToggle={toggleSetMember(setActionTypeFilter)}
+                            allLabel="All action types"
+                            summaryNoun="action type"
+                            iconForId={actionTypeIcon}
+                            menuHeader="Action types"
+                        />
+
+                        <CheckboxPicker
+                            options={STATUS_OPTIONS}
+                            selected={statusFilter}
+                            onToggle={toggleSetMember(setStatusFilter)}
+                            allLabel="All statuses"
+                            summaryNoun="status"
+                            menuHeader="Status"
+                        />
+
+                        <CheckboxPicker
+                            options={[
+                                { id: 'crosschain', label: 'Cross-chain only' },
+                                ...(multisigAddress ? [{ id: 'multisig', label: 'Multisig only' }] : []),
+                            ]}
+                            selected={new Set([
+                                ...(crossChainOnly ? ['crosschain'] : []),
+                                ...(multisigOnly ? ['multisig'] : []),
+                            ])}
+                            onToggle={(id) => {
+                                if (id === 'crosschain') setCrossChainOnly((v) => !v);
+                                else if (id === 'multisig') setMultisigOnly((v) => !v);
+                            }}
+                            allLabel="No special filters"
+                            summaryNoun="filter"
+                            iconForId={specialFilterIcon}
+                            menuHeader="Special"
+                        />
+
+                    </div>
+                ) : null}
             </div>
+
             {exportModalOpen ? (
                 <ExportModal
                     onClose={() => setExportModalOpen(false)}
@@ -659,115 +765,9 @@ export function History({ walletId, accountId, onBack, onReceive, initialSearchQ
                 />
             ) : null}
 
-            <div className={styles.searchRow}>
-                <input
-                    type="search"
-                    className={styles.searchInput}
-                    placeholder="Search action, address, token, txid, memo…"
-                    aria-label="Search history"
-                    value={searchQuery}
-                    onChange={(ev) => setSearchQuery(ev.target.value)}
-                />
-                <button
-                    type="button"
-                    className={`${styles.chip} ${moreFiltersOpen ? styles.chipActive : ''}`}
-                    onClick={() => setMoreFiltersOpen((v) => !v)}
-                    aria-expanded={moreFiltersOpen}
-                    aria-controls="history-more-filters"
-                >
-                    More filters
-                    {filtersActive ? <span className={styles.filterBadge} aria-hidden="true">•</span> : null}
-                </button>
-                {filtersActive ? (
-                    <button
-                        type="button"
-                        className={styles.clearLink}
-                        onClick={clearAllFilters}
-                    >
-                        Clear
-                    </button>
-                ) : null}
-            </div>
-
-            {moreFiltersOpen ? (
-                <div
-                    id="history-more-filters"
-                    className={styles.morePanel}
-                    role="group"
-                    aria-label="Advanced filters"
-                >
-                    <fieldset className={styles.fieldset}>
-                        <legend className={styles.legend}>Action types</legend>
-                        <div className={styles.checkboxGrid}>
-                            {ACTION_TYPE_OPTIONS.map((opt) => (
-                                <label key={opt.id} className={styles.checkLabel}>
-                                    <input
-                                        type="checkbox"
-                                        checked={actionTypeFilter.has(opt.id)}
-                                        onChange={() => toggleSetMember(setActionTypeFilter)(opt.id)}
-                                    />
-                                    {opt.label}
-                                </label>
-                            ))}
-                        </div>
-                    </fieldset>
-
-                    <fieldset className={styles.fieldset}>
-                        <legend className={styles.legend}>Status</legend>
-                        <div className={styles.statusChips}>
-                            {STATUS_OPTIONS.map((opt) => {
-                                const active = statusFilter.has(opt.id);
-                                return (
-                                    <button
-                                        key={opt.id}
-                                        type="button"
-                                        onClick={() => toggleSetMember(setStatusFilter)(opt.id)}
-                                        className={`${styles.chip} ${active ? styles.chipActive : ''}`}
-                                        aria-pressed={active}
-                                    >
-                                        {opt.label}
-                                    </button>
-                                );
-                            })}
-                        </div>
-                    </fieldset>
-
-                    <fieldset className={styles.fieldset}>
-                        <legend className={styles.legend}>Date range</legend>
-                        <div className={styles.dateRow}>
-                            <label className={styles.dateLabel}>
-                                From
-                                <input
-                                    type="date"
-                                    value={dateFrom}
-                                    onChange={(ev) => setDateFrom(ev.target.value)}
-                                />
-                            </label>
-                            <label className={styles.dateLabel}>
-                                To
-                                <input
-                                    type="date"
-                                    value={dateTo}
-                                    onChange={(ev) => setDateTo(ev.target.value)}
-                                />
-                            </label>
-                        </div>
-                    </fieldset>
-                </div>
-            ) : null}
-
             {loadingChains.size > 0 ? (
                 <div role="status" aria-label="Loading history">
                     <Skeleton.List rows={Math.max(3, loadingChains.size)} />
-                </div>
-            ) : null}
-
-            {historyFetchedAt && loadingChains.size === 0 ? (
-                <div className={styles.stalenessRow}>
-                    <StalenessLabel
-                        lastSyncedAt={historyFetchedAt}
-                        warnAfterMs={5 * 60_000}
-                    />
                 </div>
             ) : null}
 
@@ -800,32 +800,34 @@ export function History({ walletId, accountId, onBack, onReceive, initialSearchQ
                         const expanded = expandedGroups.has(item.key);
                         return (
                             <li key={item.key}>
-                                <GroupCard
-                                    item={item}
-                                    expanded={expanded}
-                                    onToggle={() => toggleGroupExpanded(item.key)}
-                                />
-                                {expanded ? (
-                                    <ul className={styles.groupMembers}>
-                                        {item.members.map((entry) => (
-                                            <EntryRow
-                                                key={entry.key}
-                                                entry={entry}
-                                                selected={selectedKey === entry.key}
-                                                showConnector={
-                                                    item.subkind === 'link-pair'
-                                                        ? false
-                                                        : connectorByKey.has(entry.key)
-                                                }
-                                                onClick={() => onRowClick(entry)}
-                                                peerCache={peerCache}
-                                                isFull={isFull}
-                                                chainTip={chainTipByChainId[entry.chainId]}
-                                                walletId={walletId}
-                                            />
-                                        ))}
-                                    </ul>
-                                ) : null}
+                                <div className={`${styles.groupCardWrap} ${expanded ? styles.groupCardWrapExpanded : ''}`}>
+                                    <GroupCard
+                                        item={item}
+                                        expanded={expanded}
+                                        onToggle={() => toggleGroupExpanded(item.key)}
+                                    />
+                                    {expanded ? (
+                                        <ul className={styles.groupMembers}>
+                                            {item.members.map((entry) => (
+                                                <EntryRow
+                                                    key={entry.key}
+                                                    entry={entry}
+                                                    selected={selectedKey === entry.key}
+                                                    showConnector={
+                                                        item.subkind === 'link-pair'
+                                                            ? false
+                                                            : connectorByKey.has(entry.key)
+                                                    }
+                                                    onClick={() => onRowClick(entry)}
+                                                    peerCache={peerCache}
+                                                    isFull={isFull}
+                                                    chainTip={chainTipByChainId[entry.chainId]}
+                                                    walletId={walletId}
+                                                />
+                                            ))}
+                                        </ul>
+                                    ) : null}
+                                </div>
                             </li>
                         );
                     }
@@ -853,8 +855,9 @@ export function History({ walletId, accountId, onBack, onReceive, initialSearchQ
  * Inline detail card. For LINK-threaded entries we render two
  * `detailSide` blocks side-by-side; for everything else, one block.
  */
-function DetailCard({ entry, peerCache, chainTip, walletId }) {
+export function DetailCard({ entry, peerCache, chainTip, walletId }) {
     const { shell } = useMessaging();
+    const [activeDetailTab, setActiveDetailTab] = useState(/** @type {'details' | 'status' | 'raw'} */ ('details'));
     const isLinked = Boolean(entry.link);
     const peerKey = entry.link?.peerChainId && entry.link?.peerActionIndex
         ? peerCacheKey(entry.link.peerChainId, entry.link.peerActionIndex)
@@ -873,65 +876,482 @@ function DetailCard({ entry, peerCache, chainTip, walletId }) {
         && isPending
         && typeof globalThis.xchainWalletWindow?.openDetached === 'function';
 
+    const detailRows = basicDetailRows(entry, chainTip);
+    const explorerButtons = explorerLinksFor(entry);
+
+    const fullRows = fullDetailRows(entry);
+    const detailTabs = [
+        { id: 'details', label: 'Details' },
+        { id: 'status',  label: 'Status'  },
+        { id: 'raw',     label: 'Raw'     },
+    ];
+
     return (
-        <div className={`${styles.detail} ${isLinked ? styles.detailDual : ''}`} role="region" aria-label="Action detail">
-            <div className={styles.detailSide}>
-                <span className={styles.detailSideTitle}>
-                    This side · {entry.action} #{entry.actionIndex}
-                </span>
-                <TxStatusTimeline entry={entry} chainTip={chainTip} />
-                <pre className={styles.detailDecoded}>
-                    {decodeActionToText(entry.raw)}
-                </pre>
-                <SaveContactPrompt entry={entry} />
-                <RecipientsBlock entry={entry} />
-                {replaceable.ok ? <RbfActions entry={entry} /> : null}
-                {detachAvailable ? (
-                    <Button
-                        type="button"
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => {
-                            globalThis.xchainWalletWindow.openDetached({
-                                initialView: 'history',
-                                initialContext: {
-                                    walletId,
-                                    chainId: entry.chainId,
-                                    actionIndex: entry.actionIndex,
-                                    txHash: entry.txHash,
-                                },
-                            }).catch(() => { /* main returns ok:false on failure */ });
-                        }}
-                    >
-                        Open in new window
-                    </Button>
-                ) : null}
-            </div>
-            {isLinked ? (
-                <div className={styles.detailSide}>
-                    <span className={styles.detailSideTitle}>
-                        Peer · {entry.link.peerCoinTicker}
-                        {' '}#{entry.link.peerActionIndex}
-                    </span>
-                    {peer?.loading ? (
-                        <p className={styles.empty}>Loading peer ACTION…</p>
-                    ) : peer?.error ? (
-                        <p className={styles.error}>Couldn't load peer: {peer.error}</p>
-                    ) : peer?.action ? (
-                        <pre className={styles.detailDecoded}>
-                            {decodeActionToText(peer.action)}
-                        </pre>
-                    ) : (
-                        <p className={styles.empty}>
-                            Peer chain not bundled in this wallet — open the
-                            block explorer for {entry.link.peerCoinTicker} to
-                            view {entry.link.peerCoinTicker} #{entry.link.peerActionIndex}.
-                        </p>
-                    )}
+        <div className={styles.detailContainer} role="region" aria-label="Action detail">
+            {/* Basic details hero — concise summary at the top of the
+                page. Flush variant: zero card padding so the table's
+                row-divider lines run all the way to the card edges,
+                with horizontal cell padding restoring the inner gutter
+                so text doesn't crowd the border. */}
+            <section className={`${styles.detailSection} ${styles.detailSectionFlush}`}>
+                <table className={styles.detailsTable}>
+                    <tbody>
+                        {detailRows.map(([label, value]) => (
+                            <tr key={label}>
+                                <th scope="row">{label}</th>
+                                <td>{value}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </section>
+
+            {/* Explorer button row — fixed 4-column grid so each
+                button takes exactly a quarter of the width. */}
+            {explorerButtons.length > 0 ? (
+                <div className={styles.detailActions} role="group" aria-label="Explorer links">
+                    {explorerButtons.map((link) => (
+                        <a
+                            key={link.id}
+                            href={link.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={styles.detailAction}
+                        >
+                            {link.iconImg ? (
+                                <img
+                                    src={link.iconImg}
+                                    alt=""
+                                    aria-hidden="true"
+                                    className={styles.detailActionFavicon}
+                                />
+                            ) : (
+                                <span className={styles.detailActionIcon} aria-hidden="true">{link.icon}</span>
+                            )}
+                            <span>{link.label}</span>
+                        </a>
+                    ))}
                 </div>
+            ) : null}
+
+            {/* Tab strip — matches Home's HomeTabs visual rhythm. */}
+            <div className={styles.detailTabs} role="tablist" aria-label="Action detail view">
+                {detailTabs.map((t) => (
+                    <button
+                        key={t.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={activeDetailTab === t.id ? 'true' : 'false'}
+                        className={`${styles.detailTab} ${activeDetailTab === t.id ? styles.detailTabActive : ''}`}
+                        onClick={() => setActiveDetailTab(t.id)}
+                    >
+                        {t.label}
+                    </button>
+                ))}
+            </div>
+
+            <section
+                className={`${styles.detailSection} ${activeDetailTab === 'details' ? styles.detailSectionFlush : ''}`}
+                role="tabpanel"
+            >
+                {/* Details tab — full field dump (every value associated
+                    with the action), as opposed to the curated hero
+                    table at the top. */}
+                {activeDetailTab === 'details' ? (
+                    <table className={styles.detailsTable}>
+                        <tbody>
+                            {fullRows.map(([label, value]) => (
+                                <tr key={label}>
+                                    <th scope="row">{label}</th>
+                                    <td>{value}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                ) : null}
+
+                {activeDetailTab === 'status' ? (
+                    <TxStatusTimeline entry={entry} chainTip={chainTip} />
+                ) : null}
+
+                {activeDetailTab === 'raw' ? (
+                    <>
+                        <div className={styles.rawJsonWrap}>
+                            <span className={styles.rawJsonCopy}>
+                                <CopyIconButton
+                                    value={decodeActionToText(entry.raw)}
+                                    label="Copy raw JSON"
+                                />
+                            </span>
+                            <pre className={styles.detailDecoded}>
+                                {decodeActionToText(entry.raw)}
+                            </pre>
+                        </div>
+                        {isLinked ? (
+                            <div className={styles.detailPeerBlock}>
+                                <h4 className={styles.detailSectionHeading}>
+                                    Peer · {entry.link.peerCoinTicker} #{entry.link.peerActionIndex}
+                                </h4>
+                                {peer?.loading ? (
+                                    <p className={styles.empty}>Loading peer ACTION…</p>
+                                ) : peer?.error ? (
+                                    <p className={styles.error}>Couldn't load peer: {peer.error}</p>
+                                ) : peer?.action ? (
+                                    <div className={styles.rawJsonWrap}>
+                                        <span className={styles.rawJsonCopy}>
+                                            <CopyIconButton
+                                                value={decodeActionToText(peer.action)}
+                                                label="Copy peer raw JSON"
+                                            />
+                                        </span>
+                                        <pre className={styles.detailDecoded}>
+                                            {decodeActionToText(peer.action)}
+                                        </pre>
+                                    </div>
+                                ) : (
+                                    <p className={styles.empty}>
+                                        Peer chain not bundled in this wallet — open the
+                                        block explorer for {entry.link.peerCoinTicker} to
+                                        view {entry.link.peerCoinTicker} #{entry.link.peerActionIndex}.
+                                    </p>
+                                )}
+                            </div>
+                        ) : null}
+                    </>
+                ) : null}
+            </section>
+
+            {/* Interactive widgets appended below the static sections */}
+            <SaveContactPrompt entry={entry} />
+            <RecipientsBlock entry={entry} />
+            {replaceable.ok ? <RbfActions entry={entry} /> : null}
+            {detachAvailable ? (
+                <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                        globalThis.xchainWalletWindow.openDetached({
+                            initialView: 'history',
+                            initialContext: {
+                                walletId,
+                                chainId: entry.chainId,
+                                actionIndex: entry.actionIndex,
+                                txHash: entry.txHash,
+                            },
+                        }).catch(() => { /* main returns ok:false on failure */ });
+                    }}
+                >
+                    Open in new window
+                </Button>
             ) : null}
         </div>
     );
+}
+
+/**
+ * Build the rows shown in the "Action details" table at the top of
+ * ActionDetail. Each tuple is `[label, value]`. Empty / missing fields
+ * are skipped so the table only shows what's actually populated.
+ */
+function basicDetailRows(entry, chainTip) {
+    if (!entry) return [];
+    const raw = entry.raw || {};
+    const rows = [];
+
+    // Action — just the colored bubble. The action number now lives
+    // on its own "Index" row below Block.
+    rows.push(['Action', (
+        <span className={styles.actionTag}>{entry.action || '—'}</span>
+    )]);
+
+    // Status — second, so success / failure is visible immediately.
+    const status = classifyEntryStatus(entry);
+    const statusLabel = status === 'confirmed' ? 'VALID'
+        : status === 'failed' ? 'INVALID'
+        : 'PENDING';
+    const statusColorClass = status === 'confirmed' ? styles.statusPillSuccess
+        : status === 'failed' ? styles.statusPillError
+        : styles.statusPillPending;
+    rows.push(['Status', (
+        <span className={`${styles.statusBubble} ${statusColorClass}`}>{statusLabel}</span>
+    )]);
+
+    // Network — coin icon + network kind (mainnet / testnet / regtest).
+    if (entry.chainId) {
+        const network = String(entry.chainId).split('-')[1] || 'mainnet';
+        rows.push(['Network', (
+            <span className={styles.copyableValue}>
+                <img
+                    src={branding.chainIconSmallUrl(entry.chainId)}
+                    alt=""
+                    aria-hidden="true"
+                    className={styles.rowChainIcon}
+                    width={16}
+                    height={16}
+                />
+                <span>{network}</span>
+            </span>
+        )]);
+    }
+    // Block, Index, Tx hash, and Source intentionally omitted from the
+    // hero table — they're still rendered in the full Details tab below.
+    if (entry.timestamp) rows.push(['Time', formatRelativeTime(entry.timestamp) || formatTimestamp(entry.timestamp)]);
+    const dest = raw.destination ?? raw.DESTINATION ?? raw.recipient ?? raw.RECIPIENT;
+    if (dest) rows.push(['Destination', String(dest)]);
+    const amt = raw.amount ?? raw.AMOUNT ?? raw.quantity ?? raw.QUANTITY;
+    if (amt) rows.push(['Amount', formatNumberWithCommas(amt)]);
+    const memo = raw.memo ?? raw.MEMO;
+    if (memo) rows.push(['Memo', String(memo)]);
+    return rows;
+}
+
+/**
+ * Inline value + small copy-icon button. Used in the ActionDetail
+ * table for fields a user typically needs to paste somewhere else
+ * (action_index, tx_hash, source / destination addresses).
+ */
+function CopyableValue({ display, fullValue, ariaLabel }) {
+    return (
+        <span className={styles.copyableValue}>
+            <CopyIconButton value={fullValue} label={ariaLabel} />
+            <span className={styles.copyableText}>{display}</span>
+        </span>
+    );
+}
+
+function CopyIconButton({ value, label = 'Copy to clipboard' }) {
+    const [copied, setCopied] = useState(false);
+    const handleClick = async (event) => {
+        event.stopPropagation();
+        const text = String(value ?? '');
+        try {
+            if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+                await navigator.clipboard.writeText(text);
+            } else if (typeof document !== 'undefined') {
+                // Fallback for non-secure contexts — hidden textarea + execCommand.
+                const ta = document.createElement('textarea');
+                ta.value = text;
+                ta.setAttribute('readonly', '');
+                ta.style.position = 'fixed';
+                ta.style.opacity = '0';
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+            }
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+        } catch { /* clipboard may be unavailable; swallow silently */ }
+    };
+    return (
+        <button
+            type="button"
+            onClick={handleClick}
+            className={styles.copyIconButton}
+            aria-label={copied ? 'Copied' : label}
+            title={copied ? 'Copied!' : label}
+        >
+            {copied ? <Icon.CheckIcon /> : <Icon.CopyIcon />}
+        </button>
+    );
+}
+
+/**
+ * Comprehensive field-by-field dump shown in the Details tab. Lists
+ * every entry-level identifier plus every key in `entry.raw`, in a
+ * stable order so the user can scan all values associated with the
+ * transaction in one place. The curated hero table at the top of the
+ * page covers the most-relevant fields; this is the long-form view.
+ */
+function fullDetailRows(entry) {
+    if (!entry) return [];
+    const rows = [];
+    const raw = entry.raw || {};
+
+    if (entry.action) rows.push(['action', entry.action]);
+    if (entry.actionIndex) {
+        rows.push(['index', (
+            <CopyableValue
+                display={Number(entry.actionIndex).toLocaleString('en-US')}
+                fullValue={String(entry.actionIndex)}
+                ariaLabel="Copy index"
+            />
+        )]);
+    }
+    // Split chainId (e.g. 'bitcoin-regtest') into two rows so the
+    // chain family and network kind read separately.
+    if (entry.chainId) {
+        const [coin = '', network = 'mainnet'] = String(entry.chainId).split('-');
+        if (coin) rows.push(['chain', coin]);
+        rows.push(['network', network]);
+    }
+    if (entry.blockIndex) rows.push(['block_index', Number(entry.blockIndex).toLocaleString('en-US')]);
+    else if (entry.blockIndex === 0) rows.push(['block_index', 'pending']);
+    if (entry.timestamp) {
+        rows.push(['time', formatRelativeTime(entry.timestamp) || formatTimestamp(entry.timestamp)]);
+    }
+    if (entry.txHash) {
+        rows.push(['tx_hash', (
+            <CopyableValue
+                display={shortenAddress(entry.txHash)}
+                fullValue={entry.txHash}
+                ariaLabel="Copy tx hash"
+            />
+        )]);
+    }
+    if (entry.source) {
+        rows.push(['source', (
+            <CopyableValue
+                display={shortenAddress(entry.source)}
+                fullValue={entry.source}
+                ariaLabel="Copy source address"
+            />
+        )]);
+    }
+    if (entry.address) {
+        rows.push(['address', (
+            <CopyableValue
+                display={shortenAddress(entry.address)}
+                fullValue={entry.address}
+                ariaLabel="Copy address"
+            />
+        )]);
+    }
+
+    // Every other raw key — sorted alphabetically. Skip the
+    // entry-level fields we already surfaced above so we don't print
+    // the same datum twice (matched by snake_case and camelCase).
+    // `params` is also skipped because the synth fixtures nest the
+    // same fields there as at the top level — would render twice.
+    const skipKeys = new Set([
+        'action', 'ACTION',
+        'action_index', 'actionIndex', 'ACTION_INDEX',
+        'chain_id', 'chainId', 'CHAIN_ID',
+        'block_index', 'blockIndex', 'BLOCK_INDEX',
+        'timestamp', 'block_time', 'BLOCK_TIME',
+        'tx_hash', 'txHash', 'TX_HASH',
+        'source', 'SOURCE',
+        'address', 'ADDRESS',
+        'params', 'PARAMS',
+    ]);
+    const rawKeys = Object.keys(raw).sort();
+    for (const k of rawKeys) {
+        if (skipKeys.has(k)) continue;
+        const v = raw[k];
+        let display;
+        if (v === null || v === undefined) display = '—';
+        else if (typeof v === 'number' || (typeof v === 'string' && /^-?\d+$/.test(v))) {
+            display = formatNumberWithCommas(v);
+        }
+        else if (typeof v === 'object') {
+            try { display = JSON.stringify(v); } catch { display = String(v); }
+        } else {
+            display = String(v);
+        }
+        rows.push([k, display]);
+    }
+
+    return rows;
+}
+
+// Thousands-separated formatting that handles strings of digits (which
+// is how the explorer / synth data delivers large integer amounts) as
+// well as JS numbers. Uses BigInt for pure-integer strings so values
+// past Number.MAX_SAFE_INTEGER still round-trip correctly.
+function formatNumberWithCommas(value) {
+    if (value === null || value === undefined) return '';
+    const s = String(value).trim();
+    if (!s) return '';
+    if (/^-?\d+$/.test(s)) {
+        try { return BigInt(s).toLocaleString('en-US'); } catch { /* fall through */ }
+    }
+    const n = Number(s);
+    if (Number.isFinite(n)) return n.toLocaleString('en-US');
+    return s;
+}
+
+/**
+ * Map a wallet chainId ("bitcoin-mainnet" / "bitcoin-regtest" / …)
+ * to the ticker code XChain Explorer uses in its URL path:
+ *
+ *     /{COIN}/action/{action_index}
+ *
+ * where COIN is the network-prefixed ticker:
+ *   - mainnet   → BTC,  LTC,  DOGE
+ *   - testnet   → TBTC, TLTC, TDOGE
+ *   - regtest   → RBTC, RLTC, RDOGE
+ *
+ * Returns null when the chainId is malformed or the coin family isn't
+ * in the XChain explorer's recognized list — the caller skips the
+ * XChain button in that case.
+ */
+function xchainCoinForChainId(chainId) {
+    if (typeof chainId !== 'string' || !chainId.includes('-')) return null;
+    const [coin, network = 'mainnet'] = chainId.split('-');
+    const ticker = ({ bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' })[coin];
+    if (!ticker) return null;
+    if (network === 'mainnet') return ticker;
+    if (network === 'testnet') return `T${ticker}`;
+    if (network === 'regtest') return `R${ticker}`;
+    return null;
+}
+
+/**
+ * Per-chain block-explorer link list. Demo entries (synthesized
+ * tx hashes) get no links since they wouldn't resolve. Always
+ * surfaces the XChain explorer when an action_index is available.
+ */
+function explorerLinksFor(entry) {
+    const links = [];
+    if (!entry) return links;
+    const txHash = entry.txHash;
+    const [coin = '', network = 'mainnet'] = String(entry.chainId || '').split('-');
+
+    // XChain explorer first — addresses ACTIONs by `coin/action/index`
+    // where `coin` is the XChain ticker code for the (chain, network)
+    // pair: BTC/LTC/DOGE for mainnet, T-prefix for testnet, R-prefix
+    // for regtest. Works for demo / regtest data too. Naked favicon
+    // (no circular icon-wrap), just the chain-link glyph above the
+    // label.
+    if (entry.actionIndex) {
+        const xchainCoin = xchainCoinForChainId(entry.chainId);
+        if (xchainCoin) {
+            links.push({
+                id: 'xchain',
+                label: 'XChain',
+                iconImg: branding.faviconUrl(),
+                url: `https://explorer.xchain.io/${xchainCoin}/action/${entry.actionIndex}`,
+            });
+        }
+    }
+
+    // External chain explorers — surfaced for Bitcoin entries that
+    // carry a tx hash, even for demo / regtest data. Demo URLs 404 on
+    // click, but the buttons are visible so the layout matches the
+    // mainnet experience. Both buttons render their site's favicon
+    // (no circular wrap) so they visually match XChain.
+    if (txHash && coin === 'bitcoin') {
+        // Mempool.space serves Bitcoin testnet under `/testnet4/`
+        // (testnet4 is the current testnet variant). Mainnet has no
+        // path prefix. Blockstream.info still uses `/testnet/` for
+        // its classic testnet endpoint; mainnet has no prefix.
+        const mempoolPath = network === 'testnet' ? 'testnet4/' : '';
+        const blockstreamPath = network === 'testnet' ? 'testnet/' : '';
+        links.push({
+            id: 'mempool',
+            label: 'Mempool',
+            iconImg: 'https://mempool.space/resources/favicons/favicon.ico',
+            url: `https://mempool.space/${mempoolPath}tx/${txHash}`,
+        });
+        links.push({
+            id: 'blockstream',
+            label: 'Blockstream',
+            iconImg: 'https://blockstream.info/favicon.ico',
+            url: `https://blockstream.info/${blockstreamPath}tx/${txHash}`,
+        });
+    }
+    return links;
 }
 
 /**
@@ -1411,7 +1831,16 @@ function EntryRow({ entry, selected, showConnector, onClick, peerCache, isFull, 
                     <span className={styles.connector} aria-hidden="true" />
                 ) : null}
                 <span className={styles.rowHeader}>
-                    {d ? <ChainBadge descriptor={d} size="sm" /> : null}
+                    {d ? (
+                        <img
+                            src={branding.chainIconSmallUrl(d.id)}
+                            alt=""
+                            aria-hidden="true"
+                            className={styles.rowChainIcon}
+                            width={16}
+                            height={16}
+                        />
+                    ) : null}
                     <span className={styles.actionBadge}>{entry.action}</span>
                     {entry.link ? (
                         <span
@@ -1421,15 +1850,27 @@ function EntryRow({ entry, selected, showConnector, onClick, peerCache, isFull, 
                             🔗
                         </span>
                     ) : null}
+                    <StatusPill status={classifyEntryStatus(entry)} />
                 </span>
-                <span className={styles.rowSummary}>
-                    {summarizeRow(entry.raw, entry.action)}
+                <span className={styles.rowSourceAddress}>
+                    {entry.source || '—'}
                 </span>
                 <span className={styles.rowMeta}>
-                    {entry.blockIndex ? `Block ${entry.blockIndex}` : 'unconfirmed'}
-                    {' · '}
-                    {entry.timestamp ? formatTimestamp(entry.timestamp) : '—'}
-                    {entry.source ? ` · ${shorten(entry.source)}` : ''}
+                    {entry.blockIndex ? (
+                        <>
+                            <span>Block {Number(entry.blockIndex).toLocaleString('en-US')}</span>
+                            {chainTip ? (
+                                <span className={styles.confirmationsPill}>
+                                    {Math.max(0, chainTip - Number(entry.blockIndex) + 1)} Confirms
+                                </span>
+                            ) : null}
+                        </>
+                    ) : <span>unconfirmed</span>}
+                    {entry.timestamp ? (
+                        <span className={styles.rowRelativeTime}>
+                            {formatRelativeTime(entry.timestamp)}
+                        </span>
+                    ) : null}
                 </span>
             </button>
             {selected ? (
@@ -1460,11 +1901,27 @@ function GroupCard({ item, expanded, onToggle }) {
             aria-expanded={expanded}
         >
             <span className={styles.rowHeader}>
-                {d ? <ChainBadge descriptor={d} size="sm" /> : null}
+                {d ? (
+                    <img
+                        src={branding.chainIconSmallUrl(d.id)}
+                        alt=""
+                        aria-hidden="true"
+                        className={styles.rowChainIcon}
+                        width={16}
+                        height={16}
+                    />
+                ) : null}
                 {isLinkPair && peerDescriptor && peerDescriptor !== d ? (
                     <>
                         <span className={styles.linkPairConnector} aria-hidden="true">↔</span>
-                        <ChainBadge descriptor={peerDescriptor} size="sm" />
+                        <img
+                            src={branding.chainIconSmallUrl(peerDescriptor.id)}
+                            alt=""
+                            aria-hidden="true"
+                            className={styles.rowChainIcon}
+                            width={16}
+                            height={16}
+                        />
                     </>
                 ) : null}
                 <span className={styles.actionBadge}>{groupBadgeLabel(item.subkind)}</span>
@@ -1474,10 +1931,9 @@ function GroupCard({ item, expanded, onToggle }) {
             </span>
             <span className={styles.rowSummary}>{item.summary}</span>
             <span className={styles.rowMeta}>
-                {newest?.timestamp ? `Latest ${formatTimestamp(newest.timestamp)}` : '—'}
-                {' · '}
-                <span className={styles.groupExpand} aria-hidden="true">
-                    {expanded ? 'Hide details ▾' : 'Show details ▸'}
+                {newest?.timestamp ? `Latest ${formatRelativeTime(newest.timestamp)}` : '—'}
+                <span className={styles.groupChevron} aria-hidden="true">
+                    <DoubleChevron direction={expanded ? 'up' : 'down'} />
                 </span>
             </span>
         </button>
@@ -1588,12 +2044,55 @@ function shorten(addr) {
     return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }
 
+// Longer middle-ellipsis truncation used in the ActionDetail "Source"
+// table cell. The cell has more horizontal room than the row meta so
+// we can show more of each end before collapsing.
+function shortenAddress(addr) {
+    if (!addr) return '';
+    if (addr.length <= 26) return addr;
+    return `${addr.slice(0, 16)}…${addr.slice(-8)}`;
+}
+
+/**
+ * Per-row success / error / pending indicator. Reads the entry's
+ * classified status and renders a colored pill so the user can scan a
+ * long list and pick out failures at a glance.
+ */
+function StatusPill({ status }) {
+    if (status === 'confirmed') {
+        return <span className={`${styles.statusPill} ${styles.statusPillSuccess}`} title="Valid">Valid</span>;
+    }
+    if (status === 'failed') {
+        return <span className={`${styles.statusPill} ${styles.statusPillError}`} title="Invalid">Invalid</span>;
+    }
+    return <span className={`${styles.statusPill} ${styles.statusPillPending}`} title="Pending">Pending</span>;
+}
+
 function formatTimestamp(ts) {
     if (!ts) return '—';
     const ms = ts < 1e12 ? ts * 1000 : ts;
     const d = new Date(ms);
     if (Number.isNaN(d.getTime())) return '—';
     return d.toISOString().replace('T', ' ').replace(/\..*/, ' UTC');
+}
+
+// Human-readable "X ago" from a unix timestamp (seconds or ms).
+function formatRelativeTime(ts) {
+    if (!ts) return '';
+    const ms = ts < 1e12 ? ts * 1000 : ts;
+    const diffSec = Math.floor((Date.now() - ms) / 1000);
+    if (diffSec < 5) return 'just now';
+    if (diffSec < 60) return `${diffSec} seconds ago`;
+    const min = Math.floor(diffSec / 60);
+    if (min < 60) return `${min} minute${min === 1 ? '' : 's'} ago`;
+    const hr = Math.floor(diffSec / 3600);
+    if (hr < 24) return `${hr} hour${hr === 1 ? '' : 's'} ago`;
+    const day = Math.floor(diffSec / 86400);
+    if (day < 30) return `${day} day${day === 1 ? '' : 's'} ago`;
+    const month = Math.floor(day / 30);
+    if (month < 12) return `${month} month${month === 1 ? '' : 's'} ago`;
+    const year = Math.floor(day / 365);
+    return `${year} year${year === 1 ? '' : 's'} ago`;
 }
 
 /**
@@ -1635,11 +2134,279 @@ function decodeActionToText(row) {
 
 /* ───── §28.5 / G081 history export ───────────────────────────────── */
 
+/**
+ * Multi-select dropdown — same trigger button as ChainPicker but the
+ * popover contains a checkbox per option. The button summary shows
+ * "All <label>" when nothing's filtered (everything passes), a single
+ * option's label when one is selected, or "N selected" otherwise.
+ */
+/** Per-action-type icon lookup. Maps each option id to an Icon
+ *  element from the shared ui library. */
+function actionTypeIcon(id) {
+    switch (id) {
+        case 'send':       return <Icon.SendIcon />;
+        case 'receive':    return <Icon.ReceiveIcon />;
+        case 'issue':      return <Icon.PlusIcon />;
+        case 'mint':       return <Icon.TokenIcon />;
+        case 'destroy':    return <Icon.TrashIcon />;
+        case 'sweep':      return <Icon.DownloadIcon />;
+        case 'dispenser':  return <Icon.MarketIcon />;
+        case 'dispense':   return <Icon.DownloadIcon />;
+        case 'order':      return <Icon.MarketIcon />;
+        case 'swap':       return <Icon.SwapIcon />;
+        case 'dividend':   return <Icon.DollarIcon />;
+        case 'broadcast':  return <Icon.BroadcastIcon />;
+        case 'message':    return <Icon.MessageIcon />;
+        case 'crosschain': return <Icon.LinkIcon />;
+        default:           return null;
+    }
+}
+
+function specialFilterIcon(id) {
+    if (id === 'crosschain') return <Icon.LinkIcon />;
+    if (id === 'multisig') return <Icon.KeyIcon />;
+    return null;
+}
+
+function CheckboxPicker({ options, selected, onToggle, allLabel, summaryNoun, iconForId, menuHeader }) {
+    const [open, setOpen] = useState(false);
+    const wrapRef = useRef(null);
+
+    useEffect(() => {
+        if (!open) return undefined;
+        const onClick = (e) => {
+            if (wrapRef.current?.contains(e.target)) return;
+            setOpen(false);
+        };
+        const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+        window.addEventListener('mousedown', onClick);
+        window.addEventListener('keydown', onKey);
+        return () => {
+            window.removeEventListener('mousedown', onClick);
+            window.removeEventListener('keydown', onKey);
+        };
+    }, [open]);
+
+    // Empty filter = "no constraint" (everything passes). Match the
+    // existing applyHistoryFilters semantics so this matches the prior
+    // chip-toggle behavior exactly.
+    const isAll = selected.size === 0;
+    const summary = isAll
+        ? allLabel
+        : selected.size === 1
+            ? (options.find((o) => o.id === Array.from(selected)[0])?.label || `1 ${summaryNoun}`)
+            : `${selected.size} ${summaryNoun}s`;
+
+    return (
+        <div ref={wrapRef} className={styles.chainPickerWrap}>
+            <button
+                type="button"
+                className={styles.chainPickerBtn}
+                aria-haspopup="listbox"
+                aria-expanded={open}
+                onClick={() => setOpen((v) => !v)}
+            >
+                <span className={styles.chainPickerLeft}>{summary}</span>
+                <SingleChevron direction="down" />
+            </button>
+            {open ? (
+                <ul className={styles.chainPickerMenu} role="listbox" aria-multiselectable="true">
+                    {menuHeader ? (
+                        <li className={styles.checkboxMenuHeader} aria-hidden="true">
+                            {menuHeader}
+                        </li>
+                    ) : null}
+                    {options.map((opt) => {
+                        const active = selected.has(opt.id);
+                        const icon = typeof iconForId === 'function' ? iconForId(opt.id) : null;
+                        return (
+                            <li key={opt.id}>
+                                <label
+                                    className={`${styles.chainPickerOption} ${active ? styles.chainPickerOptionActive : ''}`}
+                                    role="option"
+                                    aria-selected={active}
+                                >
+                                    <input
+                                        type="checkbox"
+                                        checked={active}
+                                        onChange={() => onToggle(opt.id)}
+                                    />
+                                    {icon ? <span className={styles.checkboxOptionIcon} aria-hidden="true">{icon}</span> : null}
+                                    <span>{opt.label}</span>
+                                </label>
+                            </li>
+                        );
+                    })}
+                </ul>
+            ) : null}
+        </div>
+    );
+}
+
+/** Single chevron — render via SVG so the line weight matches the
+ * surrounding text and stays crisp at any size. */
+function SingleChevron({ direction = 'down' }) {
+    const points = direction === 'up' ? '3,8 6,5 9,8' : '3,5 6,8 9,5';
+    return (
+        <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
+            <polyline
+                points={points}
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+            />
+        </svg>
+    );
+}
+
+/** Two chevrons stacked, both pointing the same way. */
+function DoubleChevron({ direction = 'down' }) {
+    const top = direction === 'up' ? '3,6 6,3 9,6' : '3,3 6,6 9,3';
+    const bot = direction === 'up' ? '3,11 6,8 9,11' : '3,8 6,11 9,8';
+    return (
+        <svg viewBox="0 0 12 14" width="12" height="14" aria-hidden="true">
+            <polyline
+                points={top}
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+            />
+            <polyline
+                points={bot}
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+            />
+        </svg>
+    );
+}
+
+/** Format a date N days ago in local time as YYYY-MM-DD for the
+ *  native <input type="date"> control. */
+function isoDateDaysAgo(days) {
+    const d = new Date();
+    d.setDate(d.getDate() - days);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
+
 function chainScopeLabel(enabledChains, activeChainIds) {
     if (!enabledChains) return 'all';
     const total = activeChainIds.length;
     if (enabledChains.size === 0 || enabledChains.size === total) return 'all';
     return Array.from(enabledChains).sort().join('+');
+}
+
+/**
+ * Custom chain picker — full-width button that opens a popover with
+ * each option rendered as its chain logo + display name. Used instead
+ * of a native <select> because browsers don't render HTML / images
+ * inside <option> elements.
+ */
+function ChainPicker({ activeChainIds, chainRegistry, enabledChains, onChange }) {
+    const [open, setOpen] = useState(false);
+    const wrapRef = useRef(null);
+
+    useEffect(() => {
+        if (!open) return undefined;
+        const onClick = (e) => {
+            if (wrapRef.current?.contains(e.target)) return;
+            setOpen(false);
+        };
+        const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+        window.addEventListener('mousedown', onClick);
+        window.addEventListener('keydown', onKey);
+        return () => {
+            window.removeEventListener('mousedown', onClick);
+            window.removeEventListener('keydown', onKey);
+        };
+    }, [open]);
+
+    const isAll = enabledChains.size === activeChainIds.length || enabledChains.size === 0;
+    const selectedId = isAll ? null : Array.from(enabledChains)[0];
+    const selectedDesc = selectedId ? chainRegistry.get(selectedId) : null;
+
+    const choose = (id) => {
+        const next = id === 'all'
+            ? new Set(activeChainIds)
+            : new Set([id]);
+        onChange(next);
+        setOpen(false);
+    };
+
+    return (
+        <div ref={wrapRef} className={styles.chainPickerWrap}>
+            <button
+                type="button"
+                className={styles.chainPickerBtn}
+                aria-haspopup="listbox"
+                aria-expanded={open}
+                onClick={() => setOpen((v) => !v)}
+            >
+                <span className={styles.chainPickerLeft}>
+                    {selectedDesc ? (
+                        <img
+                            src={branding.chainIconSmallUrl(selectedDesc.id)}
+                            alt=""
+                            aria-hidden="true"
+                            className={styles.chainPickerIcon}
+                        />
+                    ) : (
+                        <span className={styles.chainPickerAllIcon} aria-hidden="true">⛓</span>
+                    )}
+                    <span>{selectedDesc ? selectedDesc.displayName : 'All chains'}</span>
+                </span>
+                <SingleChevron direction="down" />
+            </button>
+            {open ? (
+                <ul className={styles.chainPickerMenu} role="listbox">
+                    <li>
+                        <button
+                            type="button"
+                            role="option"
+                            aria-selected={isAll}
+                            className={`${styles.chainPickerOption} ${isAll ? styles.chainPickerOptionActive : ''}`}
+                            onClick={() => choose('all')}
+                        >
+                            <span className={styles.chainPickerAllIcon} aria-hidden="true">⛓</span>
+                            <span>All chains</span>
+                        </button>
+                    </li>
+                    {activeChainIds.map((cid) => {
+                        const d = chainRegistry.get(cid);
+                        const isSel = selectedId === cid;
+                        return (
+                            <li key={cid}>
+                                <button
+                                    type="button"
+                                    role="option"
+                                    aria-selected={isSel}
+                                    className={`${styles.chainPickerOption} ${isSel ? styles.chainPickerOptionActive : ''}`}
+                                    onClick={() => choose(cid)}
+                                >
+                                    <img
+                                        src={branding.chainIconSmallUrl(cid)}
+                                        alt=""
+                                        aria-hidden="true"
+                                        className={styles.chainPickerIcon}
+                                    />
+                                    <span>{d?.displayName || cid}</span>
+                                </button>
+                            </li>
+                        );
+                    })}
+                </ul>
+            ) : null}
+        </div>
+    );
 }
 
 function runExport({ entries, scope, format, columns }) {

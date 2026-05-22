@@ -141,63 +141,115 @@ export function synthesizeDemoHistory(chainId, address, opts = {}) {
     if (!fixture || !fixture.native) return [];
     const tick = fixture.native.asset;
     const sec = (deltaSec) => Math.floor(now / 1000) - deltaSec;
+
+    // Rows mirror the real `getAddressHistory` shape — top-level
+    // action_index / tx_hash / block_index / source / destination /
+    // tick / asset / amount — so History.jsx accepts them as entries
+    // (it skips rows without action_index, and summarizeRow / search
+    // read flat top-level fields). The `params` nest is preserved so
+    // HomeTabs' demo activity list (which reads `r.params.*`) keeps
+    // working unchanged.
     return [
         {
+            action_index: 100001,
+            tx_hash: `demo-${chainId}-incoming-1`,
             txHash: `demo-${chainId}-incoming-1`,
-            blockIndex: null, // pending — exercises the timeline pending state
+            block_index: null, // pending — exercises the timeline pending state
+            blockIndex: null,
             timestamp: sec(180),
             action: 'SEND',
+            source: 'demo-faucet-1xchainpubdemoxchain',
+            destination: address,
+            tick,
+            amount: fixture.native.quantity,
+            quantity: fixture.native.quantity,
+            memo: 'Welcome to the demo wallet',
             params: {
                 source: 'demo-faucet-1xchainpubdemoxchain',
                 destination: address,
-                asset: tick,
-                amount: fixture.native.quantity,
+                    amount: fixture.native.quantity,
                 memo: 'Welcome to the demo wallet',
             },
         },
         {
+            action_index: 100002,
+            tx_hash: `demo-${chainId}-outgoing-1`,
             txHash: `demo-${chainId}-outgoing-1`,
+            block_index: 12410,
             blockIndex: 12410,
             timestamp: sec(3_600),
             action: 'SEND',
+            source: address,
+            destination: 'demo-friend-1xchainpubrecipient',
+            tick,
+            amount: '5000000', // 0.05 of the native coin
+            quantity: '5000000',
+            memo: 'thanks for lunch',
             params: {
                 source: address,
                 destination: 'demo-friend-1xchainpubrecipient',
-                asset: tick,
-                amount: '5000000', // 0.05 of the native coin
+                    amount: '5000000',
                 memo: 'thanks for lunch',
             },
         },
         {
+            action_index: 100003,
+            tx_hash: `demo-${chainId}-issue-1`,
             txHash: `demo-${chainId}-issue-1`,
+            block_index: 12345,
             blockIndex: 12345,
             timestamp: sec(86_400),
             action: 'ISSUE',
+            source: address,
+            tick: 'DEMOCOIN',
+            amount: '100000000',
+            quantity: '100000000',
+            divisible: true,
+            description: 'Demo token issued during the demo session.',
             params: {
                 source: address,
-                asset: 'DEMOCOIN',
-                quantity: '100000000',
+                    quantity: '100000000',
                 divisible: true,
-                description: 'Demo asset issued during the demo session.',
+                description: 'Demo token issued during the demo session.',
             },
         },
         {
+            action_index: 100004,
+            tx_hash: `demo-${chainId}-dividend-1`,
             txHash: `demo-${chainId}-dividend-1`,
+            block_index: 12380,
             blockIndex: 12380,
             timestamp: sec(43_200),
             action: 'DIVIDEND',
+            source: 'demo-issuer-1xchainpubdivissuer',
+            tick: 'PEPECASH',
+            dividend_asset: tick,
+            quantity_per_unit: '100',
             params: {
                 source: 'demo-issuer-1xchainpubdivissuer',
-                asset: 'PEPECASH',
-                dividend_asset: tick,
+                    dividend_asset: tick,
                 quantity_per_unit: '100',
             },
         },
         {
+            action_index: 100005,
+            tx_hash: `demo-${chainId}-order-1`,
             txHash: `demo-${chainId}-order-1`,
+            block_index: 12390,
             blockIndex: 12390,
             timestamp: sec(21_600),
             action: 'ORDER',
+            source: address,
+            // ORDER's "currency" is the give-side ticker. Surface it at
+            // the top-level tick/asset so this row is searchable by the
+            // native ticker (the TokenDetail → View activity flow opens
+            // History pre-filtered to the asset).
+            tick,
+            give_asset: tick,
+            give_quantity: '2000000',
+            get_asset: 'XCP',
+            get_quantity: '100000000',
+            status: 'filled',
             params: {
                 source: address,
                 give_asset: tick,
@@ -208,15 +260,100 @@ export function synthesizeDemoHistory(chainId, address, opts = {}) {
             },
         },
         {
+            action_index: 100006,
+            tx_hash: `demo-${chainId}-execute-1`,
             txHash: `demo-${chainId}-execute-1`,
+            block_index: 12420,
             blockIndex: 12420,
             timestamp: sec(1_800),
             action: 'EXECUTE',
+            source: address,
+            tick,
+            contract: 'demo-contract-vault',
+            method: 'withdraw',
+            amount: '0.25',
             params: {
                 source: address,
                 contract: 'demo-contract-vault',
                 method: 'withdraw',
                 amount: '0.25',
+            },
+        },
+        // Two ORDER_MATCH rows referencing the ORDER above (action_index
+        // 100005) via `order_action_index` — grouping collapses these
+        // under the ORDER leader card in grouped mode, keeps them as
+        // separate rows in flat mode. Gives the user something visible
+        // to toggle between.
+        {
+            action_index: 100007,
+            tx_hash: `demo-${chainId}-order-match-1`,
+            txHash: `demo-${chainId}-order-match-1`,
+            block_index: 12395,
+            blockIndex: 12395,
+            timestamp: sec(15_000),
+            action: 'ORDER_MATCH',
+            source: address,
+            tick,
+            order_action_index: '100005',
+            tx0_index: '100005',
+            forward_asset: tick,
+            forward_quantity: '1000000',
+            backward_asset: 'XCP',
+            backward_quantity: '50000000',
+            params: {
+                source: address,
+                order_action_index: '100005',
+                forward_asset: tick,
+                forward_quantity: '1000000',
+                backward_asset: 'XCP',
+                backward_quantity: '50000000',
+            },
+        },
+        {
+            action_index: 100008,
+            tx_hash: `demo-${chainId}-order-match-2`,
+            txHash: `demo-${chainId}-order-match-2`,
+            block_index: 12400,
+            blockIndex: 12400,
+            timestamp: sec(9_000),
+            action: 'ORDER_MATCH',
+            source: address,
+            tick,
+            order_action_index: '100005',
+            tx0_index: '100005',
+            forward_asset: tick,
+            forward_quantity: '1000000',
+            backward_asset: 'XCP',
+            backward_quantity: '50000000',
+            params: {
+                source: address,
+                order_action_index: '100005',
+                forward_asset: tick,
+                forward_quantity: '1000000',
+                backward_asset: 'XCP',
+                backward_quantity: '50000000',
+            },
+        },
+        // SWEEP — standalone, demonstrates another action type.
+        {
+            action_index: 100009,
+            tx_hash: `demo-${chainId}-sweep-1`,
+            txHash: `demo-${chainId}-sweep-1`,
+            block_index: 12360,
+            blockIndex: 12360,
+            timestamp: sec(60_000),
+            action: 'SWEEP',
+            source: address,
+            destination: 'demo-cold-storage-1xchainpubcold',
+            tick,
+            amount: '2500000',
+            quantity: '2500000',
+            memo: 'Move to cold storage',
+            params: {
+                source: address,
+                destination: 'demo-cold-storage-1xchainpubcold',
+                    amount: '2500000',
+                memo: 'Move to cold storage',
             },
         },
     ];

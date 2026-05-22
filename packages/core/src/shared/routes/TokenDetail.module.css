@@ -4,8 +4,6 @@
     align-items: center;
     gap: var(--xc-space-2);
     width: 100%;
-    max-width: 1080px;
-    margin: 0 auto;
 }
 
 .back {
@@ -17,8 +15,23 @@
     cursor: pointer;
     padding: var(--xc-space-1) var(--xc-space-2);
     border-radius: var(--xc-radius-sm);
+    /* Pull the back button left so its leading edge lines up with the
+       X-Chain logo in the global AppHeader above. Screen.header pads
+       with space-4 horizontally; AppHeader pads with space-3, so the
+       back button needs to overshoot the inner padding by that
+       difference plus the button's own space-2 padding. */
+    margin-inline-start: calc(var(--xc-space-3) - var(--xc-space-4) - var(--xc-space-2));
 }
-.back:hover { background: var(--xc-bg-muted); }
+/* Hover state highlights the chevron itself instead of painting a
+   muted-bg box behind it — the box rendered as a heavy dark
+   rectangle in dark mode. */
+.back {
+    transition: color 0.12s ease;
+}
+.back:hover {
+    background: transparent;
+    color: color-mix(in srgb, var(--xc-accent-primary) 70%, white 30%);
+}
 .back:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
     outline-offset: 2px;
@@ -33,118 +46,353 @@
 
 .spacer { display: block; }
 
-.body {
+/* Body sizing mirrors Home.module.css exactly so the two routes share
+   visual rhythm. `bodyFull` caps at 1080px and pads; `bodyPopup` fills
+   its parent and has no padding (Screen.body's space-4 is the only
+   horizontal padding). */
+.bodyFull {
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-3);
     max-width: 1080px;
     margin: 0 auto;
-    padding: var(--xc-space-3) var(--xc-space-4);
     width: 100%;
     box-sizing: border-box;
 }
 
-.heroCard,
-.metadataCard,
-.actionsCard,
-.holdersCard {
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
-    background: var(--xc-surface-raised);
-    padding: var(--xc-space-3);
-}
-
-.iconRow {
-    display: flex;
-    align-items: center;
-    gap: var(--xc-space-3);
-    margin-bottom: var(--xc-space-3);
-}
-
-.iconLetter {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 3rem;
-    height: 3rem;
-    border-radius: 999px;
-    color: #fff;
-    font-weight: 700;
-    font-size: 1.5rem;
-}
-
-.iconImg {
-    width: 3rem;
-    height: 3rem;
-    border-radius: 999px;
-    object-fit: cover;
-    flex-shrink: 0;
-}
-
-.heroText { display: flex; flex-direction: column; gap: var(--xc-space-1); }
-
-.heroName {
-    font-size: var(--xc-text-lg);
-    font-weight: 700;
-    color: var(--xc-text);
-}
-
-.heroSub {
-    display: flex;
-    align-items: center;
-    gap: var(--xc-space-2);
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-}
-
-.ticker {
-    font-family: var(--xc-font-mono, monospace);
-    background: var(--xc-bg-muted);
-    color: var(--xc-text);
-    padding: 0 var(--xc-space-1);
-    border-radius: var(--xc-radius-sm);
-}
-
-.balanceBlock {
+.bodyPopup {
     display: flex;
     flex-direction: column;
+    gap: var(--xc-space-3);
+}
+
+.backLink {
+    align-self: flex-start;
+    appearance: none;
+    background: transparent;
+    border: none;
+    color: var(--xc-accent-primary);
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    cursor: pointer;
+    padding: var(--xc-space-1) var(--xc-space-2);
+    border-radius: var(--xc-radius-sm);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+    font-family: inherit;
+}
+.backLink:hover { background: var(--xc-bg-muted); }
+.backLink:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
+/* ───── Asset balance hero — matches TotalBalanceHero ───── */
+
+.balanceHero {
+    background: linear-gradient(180deg, var(--xc-accent-primary) 0%, color-mix(in srgb, var(--xc-accent-primary) 80%, #000) 100%);
+    color: #FFFFFF;
+    border-radius: var(--xc-radius-md);
+    padding: var(--xc-space-4) var(--xc-space-4);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    box-shadow: 0 6px 18px rgba(30, 144, 199, 0.25);
+}
+
+.balanceHeroRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--xc-space-2);
+}
+
+.balanceHeroLabel {
+    font-size: var(--xc-text-xs);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.balanceHeroControls {
+    display: inline-flex;
+    align-items: center;
     gap: var(--xc-space-1);
 }
 
-.balanceLabel {
+.balanceHeroSwap,
+.balanceHeroEye {
+    appearance: none;
+    background: rgba(255, 255, 255, 0.15);
+    border: none;
+    color: #FFFFFF;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+.balanceHeroSwap:hover:not(:disabled),
+.balanceHeroEye:hover { background: rgba(255, 255, 255, 0.25); }
+
+.balanceHeroSwap:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.balanceHeroSwap:focus-visible,
+.balanceHeroEye:focus-visible {
+    outline: 2px solid #FFFFFF;
+    outline-offset: 2px;
+}
+
+.balanceHeroAmount {
+    font-family: var(--xc-font-mono);
+    font-size: 32px;
+    font-weight: 800;
+    line-height: 1.1;
+    letter-spacing: -0.01em;
+    color: #FFFFFF;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+/* AutoShrinkText scaffolding. The wrap is the measurement container —
+   block-level so it inherits the parent's font-size and width. The
+   inner span carries the actual text and is `transform: scale(...)`d
+   to fit when overflowing. Origin: left center so shrinking pulls the
+   trailing characters in toward the leading edge rather than collapsing
+   around the middle. */
+.balanceHeroAmountFitWrap {
+    display: block;
+    overflow: hidden;
+    white-space: nowrap;
+    width: 100%;
+}
+
+.balanceHeroAmountFitInner {
+    display: inline-block;
+    white-space: nowrap;
+    transform-origin: left center;
+}
+
+/* Unit code (BTC / USD / JPY / …) suffix next to the primary big
+   amount. Half the size of the 32px amount so the digits stay the
+   primary visual anchor; slightly lower opacity to push the eye to
+   the number. Matches the Home total-balance hero treatment. */
+.balanceHeroAmountCode {
+    font-size: 16px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.75);
+    margin-inline-start: 6px;
+    letter-spacing: 0;
+    white-space: nowrap;
+    vertical-align: baseline;
+}
+
+/* Unit code suffix for the secondary "≈ …" note line. Sized
+   relative to its parent (which is already smaller) so the ratio
+   stays roughly consistent with the primary's half-size suffix. */
+.balanceHeroNoteCode {
+    font-size: 0.85em;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.65);
+    margin-inline-start: 4px;
+    white-space: nowrap;
+    vertical-align: baseline;
+}
+
+.balanceHeroHidden {
+    letter-spacing: 0.15em;
+    color: rgba(255, 255, 255, 0.55);
+}
+
+.balanceHeroNote {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--xc-space-2);
+    font-size: var(--xc-text-sm);
+    color: rgba(255, 255, 255, 0.85);
+    font-weight: 500;
+}
+
+.balanceHeroNoteLeft {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+/* ───── Quick actions — matches Home's quickActions ───── */
+
+.quickActions {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--xc-space-2);
+}
+
+.quickAction {
+    appearance: none;
+    background: var(--xc-surface-raised);
+    border: 1px solid var(--xc-accent-primary);
+    border-radius: var(--xc-radius-md);
+    padding: var(--xc-space-3) var(--xc-space-1);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--xc-space-1);
+    cursor: pointer;
+    color: var(--xc-text);
+    font-family: inherit;
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+    min-height: 72px;
+    text-align: center;
+}
+.quickAction:hover:not(:disabled) { background: var(--xc-bg-muted); }
+.quickAction:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+.quickAction:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.quickActionIcon {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
+    color: var(--xc-accent-primary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* ───── Tabs — matches HomeTabs ───── */
+
+.tabs {
+    display: flex;
+    gap: var(--xc-space-1);
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-bottom: 1px solid var(--xc-border);
+    padding-bottom: 1px;
+    margin-bottom: -1px;
+    scrollbar-width: none;
+}
+.tabs::-webkit-scrollbar { display: none; }
+
+.tab {
+    appearance: none;
+    background: transparent;
+    border: none;
+    padding: var(--xc-space-3) var(--xc-space-3);
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    color: var(--xc-text-muted);
+    cursor: pointer;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    border-bottom: 2px solid transparent;
+    transition: color var(--xc-transition), border-color var(--xc-transition);
+    flex: 0 0 auto;
+    font-family: inherit;
+}
+.tab:hover { color: var(--xc-text); }
+.tab:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: -2px;
+}
+.tabActive {
+    color: var(--xc-accent-primary);
+    border-bottom-color: var(--xc-accent-primary);
+}
+
+.tabPanel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-3);
+    min-height: 0;
+    padding-top: var(--xc-space-3);
+}
+
+/* Native-coin layout — no tabs, just stacked sections. Each section
+   has its own muted title heading so the user can visually parse the
+   structure as they scroll. */
+.stackedSection {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+}
+
+.infoCard {
+    background: var(--xc-surface);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-md);
+    padding: var(--xc-space-3) var(--xc-space-4);
+}
+
+.sectionTitle {
+    margin: 0;
     font-size: var(--xc-text-xs);
     text-transform: uppercase;
     letter-spacing: 0.06em;
     color: var(--xc-text-muted);
+    font-weight: 600;
 }
 
-.balanceQty {
-    font-size: var(--xc-text-xl, 1.5rem);
-    font-weight: 700;
+/* ───── Per-tab content ───── */
+
+.stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: var(--xc-space-3);
+}
+
+.statCell {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.statLabel {
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.statValue,
+.statValuePositive,
+.statValueNegative {
+    font-size: var(--xc-text-md);
+    font-weight: 600;
     color: var(--xc-text);
+    font-variant-numeric: tabular-nums;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
-.balanceFiat {
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text-muted);
+.statValuePositive { color: var(--xc-success, #14b86c); }
+.statValueNegative { color: var(--xc-danger, #d93838); }
+
+.chart {
+    padding: var(--xc-space-2) 0 0;
 }
 
-.sectionTitle {
-    margin: 0 0 var(--xc-space-2) 0;
-    font-size: var(--xc-text-sm);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--xc-text-muted);
-    font-weight: 600;
-}
-
-.sectionTitleInline {
-    margin: 0;
-    font-size: var(--xc-text-sm);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--xc-text-muted);
-    font-weight: 600;
+.sparkSvg {
+    display: block;
+    width: 100%;
 }
 
 .metaTable {
@@ -155,16 +403,14 @@
 
 .metaRow th,
 .metaRow td {
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border-top: 1px solid var(--xc-border);
+    padding: var(--xc-space-2) 0;
     vertical-align: top;
     line-height: 1.4;
 }
 
-/* First row has no top border — it sits flush under the section title. */
-.metaRow:first-child th,
-.metaRow:first-child td {
-    border-top: none;
+.metaRow + .metaRow th,
+.metaRow + .metaRow td {
+    border-top: 1px solid var(--xc-border);
 }
 
 .metaRow th {
@@ -175,9 +421,6 @@
     text-transform: uppercase;
     letter-spacing: 0.04em;
     font-size: var(--xc-text-xs);
-    /* Match the value cell's line-height so the label baseline aligns
-       with the value's first line. */
-    padding-top: calc(var(--xc-space-2) + 1px);
 }
 
 .metaRow td {
@@ -187,17 +430,16 @@
 }
 
 .metadataHint {
-    margin: var(--xc-space-3) 0 0;
+    margin: var(--xc-space-2) 0 0;
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
     font-style: italic;
 }
 
-.descriptionCard {
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
-    background: var(--xc-surface-raised);
-    padding: var(--xc-space-3);
+.infoStack {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-3);
 }
 
 .descriptionImage {
@@ -206,7 +448,6 @@
     max-height: 16rem;
     object-fit: contain;
     border-radius: var(--xc-radius-sm);
-    margin-bottom: var(--xc-space-2);
     background: var(--xc-bg-muted);
 }
 
@@ -229,7 +470,6 @@
     color: var(--xc-text);
     font-weight: 600;
 }
-
 .lockedFlag::before {
     content: '🔒';
     font-size: var(--xc-text-sm);
@@ -237,41 +477,6 @@
 
 .unlockedFlag {
     color: var(--xc-text-muted);
-}
-
-.actionsRow {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--xc-space-2);
-}
-
-.holdersToggle {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    width: 100%;
-    background: transparent;
-    border: none;
-    cursor: pointer;
-    padding: 0;
-    color: var(--xc-text);
-    font-family: inherit;
-}
-.holdersToggle:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
-    border-radius: var(--xc-radius-sm);
-}
-
-.holdersChevron {
-    color: var(--xc-text-muted);
-    font-size: var(--xc-text-sm);
-}
-
-.holdersBody {
-    margin-top: var(--xc-space-2);
-    padding-top: var(--xc-space-2);
-    border-top: 1px dashed var(--xc-border);
 }
 
 .holdersStaleness {

@@ -1,0 +1,62 @@
+/* Matches Home.module.css `.headerPopup` exactly so the global header
+   visually equals the per-route header it replaces. */
+.bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--xc-space-3);
+    padding: var(--xc-space-2) var(--xc-space-3);
+    background: var(--xc-surface);
+    border-bottom: 1px solid var(--xc-border);
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.left {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.right {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    flex-shrink: 0;
+}
+
+/* Logo is 750×464 (≈1.617:1). Width-only sizing preserves aspect
+   ratio. Matches `.brandLogoPopup` in Home.module.css — ~36px tall. */
+.logo {
+    width: 58px;
+    height: auto;
+    flex: 0 0 auto;
+    display: block;
+}
+
+/* Outline pancake button — matches `.menuBtn` in Home.module.css
+   exactly. */
+.menuBtn {
+    appearance: none;
+    background: transparent;
+    border: 1px solid var(--xc-border-strong);
+    border-radius: 8px;
+    width: 38px;
+    height: 38px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--xc-text);
+    cursor: pointer;
+    flex: 0 0 auto;
+}
+
+.menuBtn:hover {
+    background: var(--xc-bg-muted);
+}
+
+.menuBtn:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
