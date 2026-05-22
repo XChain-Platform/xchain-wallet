@@ -92,6 +92,12 @@ export function TokenDetail({
         /** @type {number | null} */ (null),
     );
 
+    // Token-gated content groups (per KEY_HASH). Populated when the Unlock
+    // tab is opened. See xchain-documentation/protocol/TOKEN_GATED_CONTENT.md.
+    const [gatedGroups, setGatedGroups] = useState(/** @type {any[] | null} */ (null));
+    const [gatedError, setGatedError] = useState(/** @type {string | null} */ (null));
+    const [gatedLoading, setGatedLoading] = useState(false);
+
     useEffect(() => {
         if (!holdersOpen || holders !== null || isNative) return undefined;
         if (typeof messaging.getHoldersForToken !== 'function') {
@@ -118,6 +124,30 @@ export function TokenDetail({
             .finally(() => { if (!cancelled) setHoldersLoading(false); });
         return () => { cancelled = true; };
     }, [holdersOpen, holders, isNative, tick, chainId, messaging]);
+
+    useEffect(() => {
+        if (!holdersOpen || gatedGroups !== null || isNative) return undefined;
+        if (typeof messaging.listGatedContent !== 'function') {
+            // Older host build without gated-content support — skip silently
+            // (no error UI), since pre-feature tokens have no gated entries.
+            setGatedGroups([]);
+            return undefined;
+        }
+        let cancelled = false;
+        setGatedLoading(true);
+        setGatedError(null);
+        messaging.listGatedContent({ chainId, tick })
+            .then((resp) => {
+                if (cancelled) return;
+                setGatedGroups(Array.isArray(resp) ? resp : []);
+            })
+            .catch((err) => {
+                if (cancelled) return;
+                setGatedError(err?.message || 'Failed to load gated content.');
+            })
+            .finally(() => { if (!cancelled) setGatedLoading(false); });
+        return () => { cancelled = true; };
+    }, [holdersOpen, gatedGroups, isNative, tick, chainId, messaging]);
 
     const fiat = useMemo(() => {
         if (typeof fiatRate !== 'number' || !isFinite(fiatRate)) return null;
@@ -439,13 +469,22 @@ export function TokenDetail({
                             ) : null}
 
                             {activeTab === 'holders' && !isNative ? (
-                                <HoldersPanel
-                                    holders={holders}
-                                    holdersLoading={holdersLoading}
-                                    holdersError={holdersError}
-                                    holdersFetchedAt={holdersFetchedAt}
-                                    divisibility={divisibility}
-                                />
+                                <>
+                                    <GatedContentPanel
+                                        tick={tick}
+                                        groups={gatedGroups}
+                                        loading={gatedLoading}
+                                        error={gatedError}
+                                        packsMeta={assetInfo?.packs || {}}
+                                    />
+                                    <HoldersPanel
+                                        holders={holders}
+                                        holdersLoading={holdersLoading}
+                                        holdersError={holdersError}
+                                        holdersFetchedAt={holdersFetchedAt}
+                                        divisibility={divisibility}
+                                    />
+                                </>
                             ) : null}
                         </div>
                     </>
@@ -1243,6 +1282,65 @@ function formatTotalSupply(isNative, chainId, assetInfo) {
     return assetInfo.maxSupply
         ? `${assetInfo.totalSupply} / ${assetInfo.maxSupply}`
         : String(assetInfo.totalSupply);
+}
+
+// Token-gated content panel — renders the list of gated FILEs published
+// for this token, grouped by KEY_HASH so packs (multi-file shares-one-key
+// drops) appear as a single header with member files underneath. The
+// actual unlock click flow (password prompt → ECIES decrypt → AES-256-GCM
+// decrypt → in-browser viewer) is a follow-up; this panel surfaces the
+// structure and the cryptographic identifiers so testers can verify the
+// protocol path renders end-to-end.
+// See xchain-documentation/protocol/TOKEN_GATED_CONTENT.md.
+function GatedContentPanel({ tick, groups, loading, error, packsMeta }) {
+    if (loading) return <p className={styles.muted}>Loading gated content…</p>;
+    if (error) return <p role="alert" className={styles.error}>{error}</p>;
+    if (!groups || groups.length === 0) {
+        return (
+            <p className={styles.muted}>
+                No token-gated content published for {tick}. Holders unlock
+                creator drops, packs, and sealed bundles here when the issuer
+                publishes encrypted FILE actions gated by this ticker.
+            </p>
+        );
+    }
+    return (
+        <div className={styles.infoCard}>
+            {groups.map((g) => {
+                const isPack = g.files.length > 1;
+                const meta = packsMeta && g.files[0]?.packId ? packsMeta[g.files[0].packId] : null;
+                const heading = meta?.name || (isPack ? `Pack (${g.files.length} files)` : g.files[0]?.name) || 'Gated file';
+                return (
+                    <div key={g.keyHash} className={styles.metaBlock}>
+                        <h4 className={styles.metaBlockTitle}>{heading}</h4>
+                        {meta?.description ? (
+                            <p className={styles.descriptionBody}>{meta.description}</p>
+                        ) : null}
+                        <ul className={styles.filesList}>
+                            {g.files.map((f) => (
+                                <li key={f.actionIndex}>
+                                    <span className={styles.fileLink}>
+                                        <span className={styles.fileLinkIcon} aria-hidden="true">
+                                            <Icon.FileTypeIcon type={f.type} />
+                                        </span>
+                                        <span className={styles.fileLinkName}>{f.name || `Action #${f.actionIndex}`}</span>
+                                        {f.type ? (
+                                            <span className={styles.fileLinkType}>{f.type}</span>
+                                        ) : null}
+                                    </span>
+                                </li>
+                            ))}
+                        </ul>
+                        <p className={styles.metadataHint}>
+                            KEY_HASH: <code>{g.keyHash.slice(0, 12)}…{g.keyHash.slice(-6)}</code>
+                            {' · '}
+                            {g.encryptionMethod === 1 ? 'AES-256-GCM' : `method ${g.encryptionMethod}`}
+                        </p>
+                    </div>
+                );
+            })}
+        </div>
+    );
 }
 
 function HoldersPanel({ holders, holdersLoading, holdersError, holdersFetchedAt, divisibility }) {

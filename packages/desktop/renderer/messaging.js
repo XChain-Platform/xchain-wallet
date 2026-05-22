@@ -536,6 +536,16 @@ export function getTokenInfo(req) {
     return /** @type {any} */ (sendMessage('token.info', req));
 }
 
+/** @param {{ chainId: string, tick: string }} req */
+export function listGatedContent(req) {
+    return /** @type {any} */ (sendMessage('gatedContent.list', req));
+}
+
+/** @param {{ walletId: string, password: string, bip39Passphrase?: string, addressId: string, actionIndex: string | number, keyHash: string }} req */
+export function unlockGatedContent(req) {
+    return /** @type {any} */ (sendMessage('gatedContent.unlock', req));
+}
+
 /** @param {object} opts */
 export function createList(opts) {
     return /** @type {any} */ (sendMessage('action.createList', opts));

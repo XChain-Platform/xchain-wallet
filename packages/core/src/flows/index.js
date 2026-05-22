@@ -32,6 +32,16 @@ export { swapAction } from './swapAction.js';
 export { linkAction } from './linkAction.js';
 export { getMessagingInbox } from './messagingInbox.js';
 export {
+    unlockGatedFile,
+    unlockGatedPack,
+    unlockGatedFileForAddress,
+    listGatedFiles,
+    scanGatedKeyHandoffs,
+    buildKeyHandoffPayload,
+    getCachedGatedKey,
+    clearGatedContentCaches,
+} from './gatedContent.js';
+export {
     messageAction,
     getRecipientPubkey,
     PubkeyNotFoundError,

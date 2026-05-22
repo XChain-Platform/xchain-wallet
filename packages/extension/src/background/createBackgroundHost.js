@@ -48,6 +48,8 @@ const {
     getCoinpayObligationsForAddress,
     getCoinpaysForAddress,
     getMessagingInbox,
+    unlockGatedFileForAddress,
+    listGatedFiles,
     messageAction,
     getRecipientPubkey,
     listContacts,
@@ -1687,6 +1689,16 @@ export function createBackgroundHost(deps) {
     // actions for one of the wallet's own addresses.
     host.register('messaging.inbox', async (req, { vault, chainRegistry, sdkRegistry }) => {
         return getMessagingInbox({ ...req, vault, chainRegistry, sdkRegistry });
+    });
+
+    // Token-gated content — list and unlock.
+    // See xchain-documentation/protocol/TOKEN_GATED_CONTENT.md.
+    host.register('gatedContent.list', async (req, { sdkRegistry }) => {
+        const sdk = sdkRegistry.get(req.chainId);
+        return listGatedFiles({ sdk, tick: req.tick });
+    });
+    host.register('gatedContent.unlock', async (req, { vault, chainRegistry, sdkRegistry }) => {
+        return unlockGatedFileForAddress({ ...req, vault, chainRegistry, sdkRegistry });
     });
 
     // §41.7.3 Compose — MESSAGE action signing + recipient pubkey lookup.

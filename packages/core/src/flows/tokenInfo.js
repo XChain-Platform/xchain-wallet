@@ -365,6 +365,7 @@ export function tisToMediaBundle(doc) {
         websites: /** @type {string[]} */ ([]),
         socials: /** @type {TisSocialEntry[]} */ ([]),
         files: /** @type {TisFileEntry[]} */ ([]),
+        packs: /** @type {Record<string, { name: string|null, description: string|null }>} */ ({}),
         category: null,
         categories: /** @type {TisCategory[]} */ ([]),
         owner: /** @type {TisOwner | null} */ (null),
@@ -395,16 +396,40 @@ export function tisToMediaBundle(doc) {
     const files = (Array.isArray(doc.files) ? doc.files : [])
         .map((f) => {
             if (!f) return null;
-            const data = typeof f === 'string' ? f : f.data;
-            const url = normalizeMediaUrl(data);
-            if (!url) return null;
+            // String shorthand → plaintext URL file.
+            if (typeof f === 'string') {
+                const url = normalizeMediaUrl(f);
+                if (!url) return null;
+                return { url, name: null, type: null, dataRef: null, locked: false, packId: null };
+            }
+            // Object form supports: { data: <url>, data_ref: 'action:<index>',
+            // name, type, locked, pack_id }. data_ref takes precedence over data
+            // when both are present (on-chain reference wins over off-chain URL).
+            const dataRef = typeof f.data_ref === 'string' && f.data_ref ? f.data_ref : null;
+            const url = dataRef ? null : normalizeMediaUrl(f.data);
+            if (!dataRef && !url) return null;
             return {
                 url,
-                name: (f && typeof f === 'object' && f.name) ? String(f.name) : null,
-                type: (f && typeof f === 'object' && f.type) ? String(f.type) : null,
+                dataRef,
+                name: (f.name) ? String(f.name) : null,
+                type: (f.type) ? String(f.type) : null,
+                locked: Boolean(f.locked),
+                packId: (f.pack_id) ? String(f.pack_id) : null,
             };
         })
         .filter(Boolean);
+    // Top-level `packs` map for display metadata of token-gated content packs.
+    // See xchain-documentation/protocol/Token_Information_Standard.md.
+    const packs = {};
+    const packsRaw = doc.packs && typeof doc.packs === 'object' ? doc.packs : {};
+    for (const id of Object.keys(packsRaw)) {
+        const p = packsRaw[id];
+        if (!p || typeof p !== 'object') continue;
+        packs[String(id)] = {
+            name: typeof p.name === 'string' ? p.name : null,
+            description: typeof p.description === 'string' ? p.description : null,
+        };
+    }
     const socials = (Array.isArray(doc.social) ? doc.social : [])
         .map((s) => {
             if (!s || typeof s !== 'object') return null;
@@ -482,6 +507,7 @@ export function tisToMediaBundle(doc) {
         websites,
         socials,
         files,
+        packs,
         category,
         categories,
         owner,
@@ -550,6 +576,7 @@ export function normalizeTokenInfo(chainId, tick, raw, tisBundle = null) {
     const websites = tisBundle?.websites || [];
     const socials = tisBundle?.socials || [];
     const files = tisBundle?.files || [];
+    const packs = tisBundle?.packs || {};
     const category = tisBundle?.category || null;
     const categories = tisBundle?.categories || [];
     const owner = tisBundle?.owner || null;
@@ -578,6 +605,7 @@ export function normalizeTokenInfo(chainId, tick, raw, tisBundle = null) {
         websites,
         socials,
         files,
+        packs,
         category,
         categories,
         owner,

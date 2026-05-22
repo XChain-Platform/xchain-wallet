@@ -1160,6 +1160,36 @@ export function getTokenInfo(req) {
 }
 
 /**
+ * List the gated FILE actions for a token, grouped by KEY_HASH so
+ * packs (files sharing one key) appear as one group. Drives the
+ * TokenDetail "Unlock" tab. See
+ *   xchain-documentation/protocol/TOKEN_GATED_CONTENT.md.
+ *
+ * @param {{ chainId: string, tick: string }} req
+ */
+export function listGatedContent(req) {
+    return /** @type {any} */ (sendMessage('gatedContent.list', req));
+}
+
+/**
+ * Unlock a gated FILE. Password-gated: derives WIF for the holder's
+ * address, scans MESSAGE history for the symmetric key, AES-256-GCM
+ * decrypts the ciphertext. Returns the plaintext as base64.
+ *
+ * @param {{
+ *   walletId: string,
+ *   password: string,
+ *   bip39Passphrase?: string,
+ *   addressId: string,
+ *   actionIndex: string | number,
+ *   keyHash: string,
+ * }} req
+ */
+export function unlockGatedContent(req) {
+    return /** @type {any} */ (sendMessage('gatedContent.unlock', req));
+}
+
+/**
  * Build, sign, and broadcast a LIST action (§40.9 stage 3). The
  * §40.9 AIRDROP authoring flow signs LIST first, waits for it to be
  * indexed, then signs an AIRDROP referencing the assigned
