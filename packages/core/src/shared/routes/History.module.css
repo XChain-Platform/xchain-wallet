@@ -23,7 +23,14 @@
        own space-2 padding. */
     margin-inline-start: calc(var(--xc-space-3) - var(--xc-space-4) - var(--xc-space-2));
 }
-.back:hover { background: var(--xc-bg-muted); }
+/* Hover state highlights the chevron itself (color shift) instead of
+   painting a muted-bg box behind it — the box rendered as a heavy
+   dark rectangle in dark mode. Matches TokenDetail.module.css. */
+.back { transition: color 0.12s ease; }
+.back:hover {
+    background: transparent;
+    color: color-mix(in srgb, var(--xc-accent-primary) 70%, white 30%);
+}
 .back:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
     outline-offset: 2px;
@@ -924,6 +931,70 @@
 .detailAction[href*="explorer.xchain.io"] .detailActionFavicon {
     width: 42px;
     height: 42px;
+}
+
+/* "More" action — last button on the row, hosts a popover menu with
+   follow-up options (Save as contact, etc.) anchored to the button.
+   Wrapper is a flex container so the inner button stretches to the
+   grid row's height; without this the button shrinks to its content
+   and reads shorter than the explorer-link siblings beside it. */
+.detailActionMoreWrap {
+    position: relative;
+    display: flex;
+    align-self: stretch;
+}
+.detailActionMoreWrap > .detailAction {
+    flex: 1 1 auto;
+    width: 100%;
+    border: 1px solid var(--xc-accent-primary);
+    background: var(--xc-surface-raised);
+    font-family: inherit;
+}
+.moreMenuItem:disabled {
+    color: var(--xc-text-muted);
+    cursor: not-allowed;
+}
+.moreMenu {
+    position: absolute;
+    inset-inline-end: 0;
+    top: calc(100% + var(--xc-space-1));
+    min-width: 200px;
+    background: var(--xc-surface-raised);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-md);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    padding: var(--xc-space-1) 0;
+}
+.moreMenuItem {
+    appearance: none;
+    background: transparent;
+    border: none;
+    text-align: start;
+    padding: var(--xc-space-2) var(--xc-space-3);
+    font-size: var(--xc-text-sm);
+    font-family: inherit;
+    color: var(--xc-text);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+}
+.moreMenuItem:hover { background: var(--xc-bg-muted); }
+.moreMenuItem:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: -2px;
+}
+.moreMenuItemIcon {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    color: var(--xc-accent-primary);
 }
 
 /* ───── Detail page tab strip ───── */

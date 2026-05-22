@@ -151,11 +151,13 @@ export function TokenDetail({
     // stacked in a single scrollable view since there are only two
     // things to show. Tokens have tabs (Info / Market / Holders) since
     // the Holders list can be long and the description can be too.
+    // Market section (stats strip + chart) is hoisted above the tabs
+    // for both natives and tokens, so the page leads with performance.
+    // Tokens keep tabs below for the longer-form Info + Holders content.
     const tabs = isNative
         ? null
         : [
             { id: 'info', label: 'Info' },
-            { id: 'market', label: 'Market' },
             { id: 'holders', label: 'Holders' },
         ];
     const [activeTab, setActiveTab] = useState(tabs ? tabs[0].id : 'info');
@@ -169,6 +171,35 @@ export function TokenDetail({
     // to see how much BTC they hold first, USD second). Fiat-as-primary
     // is one tap away for users who think in USD.
     const [primaryUnit, setPrimaryUnit] = useState('asset');
+
+    // 4th quick-action button is now a "More" dropdown (matches the
+    // pattern from the ActionDetail page). Buy lives inside the menu so
+    // less-frequent actions stay out of the primary row.
+    const [moreOpen, setMoreOpen] = useState(false);
+    const moreWrapRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+    useEffect(() => {
+        if (!moreOpen) return undefined;
+        const onClick = (e) => {
+            if (moreWrapRef.current?.contains(e.target)) return;
+            setMoreOpen(false);
+        };
+        const onKey = (e) => { if (e.key === 'Escape') setMoreOpen(false); };
+        window.addEventListener('mousedown', onClick);
+        window.addEventListener('keydown', onKey);
+        return () => {
+            window.removeEventListener('mousedown', onClick);
+            window.removeEventListener('keydown', onKey);
+        };
+    }, [moreOpen]);
+    const moreOptions = [];
+    if (typeof onViewActivity === 'function') {
+        moreOptions.push({
+            id: 'history',
+            label: 'History',
+            icon: <Icon.HistoryIcon />,
+            onClick: () => { setMoreOpen(false); onViewActivity(); },
+        });
+    }
 
     const fiatAvailable = fiat != null && isFinite(fiat);
     // Amount + unit code are kept separate so the unit can render as a
@@ -249,21 +280,70 @@ export function TokenDetail({
                         <span className={styles.quickActionIcon} aria-hidden="true"><Icon.ReceiveIcon /></span>
                         <span>Receive</span>
                     </button>
-                    <button type="button" className={styles.quickAction} onClick={onViewActivity} disabled={!onViewActivity}>
-                        <span className={styles.quickActionIcon} aria-hidden="true"><Icon.HistoryIcon /></span>
-                        <span>History</span>
-                    </button>
                     <button type="button" className={styles.quickAction} onClick={onBuy} disabled={!onBuy}>
                         <span className={styles.quickActionIcon} aria-hidden="true"><Icon.DollarIcon /></span>
                         <span>Buy</span>
                     </button>
+                    <div className={styles.quickActionMoreWrap} ref={moreWrapRef}>
+                        <button
+                            type="button"
+                            className={styles.quickAction}
+                            onClick={() => setMoreOpen((o) => !o)}
+                            aria-haspopup="menu"
+                            aria-expanded={moreOpen}
+                            disabled={moreOptions.length === 0}
+                        >
+                            <span className={styles.quickActionIcon} aria-hidden="true"><Icon.MoreIcon /></span>
+                            <span>More</span>
+                        </button>
+                        {moreOpen && moreOptions.length > 0 ? (
+                            <div className={styles.quickActionMoreMenu} role="menu">
+                                {moreOptions.map((opt) => (
+                                    <button
+                                        key={opt.id}
+                                        type="button"
+                                        role="menuitem"
+                                        className={styles.quickActionMoreItem}
+                                        onClick={opt.onClick}
+                                    >
+                                        {opt.icon ? (
+                                            <span className={styles.quickActionMoreItemIcon} aria-hidden="true">
+                                                {opt.icon}
+                                            </span>
+                                        ) : null}
+                                        <span>{opt.label}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        ) : null}
+                    </div>
+                </div>
+
+                {/* Market section — stats strip + sparkline chart at the
+                    top of the page for every asset, so users see price /
+                    24h / chart immediately the same way the Coins detail
+                    surface does. Tokens synthesize a sparkline keyed on
+                    asset+chain when no real history feed exists yet. */}
+                <div className={styles.infoCard}>
+                    <MarketPanel
+                        isNative={isNative}
+                        nativePrice={nativePrice}
+                        showNativeStats={showNativeStats}
+                        showSparkline={showSparkline}
+                        assetInfo={assetInfo}
+                        asset={asset}
+                        chainId={chainId}
+                        hasMarketData={hasMarketData}
+                        fiatRate={fiatRate}
+                        fiatCurrency={fiatCurrency}
+                    />
                 </div>
 
                 {tabs ? (
                     <>
                         {/* Tabs — matches HomeTabs visual rhythm. Tokens
-                            only; native coins render the same content
-                            stacked below. */}
+                            keep Info + Holders here below the Market
+                            section above. */}
                         <div className={styles.tabs} role="tablist" aria-label="Asset detail view">
                             {tabs.map((t) => (
                                 <button
@@ -297,19 +377,6 @@ export function TokenDetail({
                                 />
                             ) : null}
 
-                            {activeTab === 'market' ? (
-                                <MarketPanel
-                                    isNative={isNative}
-                                    nativePrice={nativePrice}
-                                    showNativeStats={showNativeStats}
-                                    showSparkline={showSparkline}
-                                    assetInfo={assetInfo}
-                                    asset={asset}
-                                    chainId={chainId}
-                                    hasMarketData={hasMarketData}
-                                />
-                            ) : null}
-
                             {activeTab === 'holders' && !isNative ? (
                                 <HoldersPanel
                                     holders={holders}
@@ -322,38 +389,24 @@ export function TokenDetail({
                         </div>
                     </>
                 ) : (
-                    /* Native coin: no tabs. Chart + Info stacked, single
-                       scroll, all info available without clicks. */
-                    <>
-                        <div className={styles.infoCard}>
-                            <MarketPanel
-                                isNative={isNative}
-                                nativePrice={nativePrice}
-                                showNativeStats={showNativeStats}
-                                showSparkline={showSparkline}
-                                assetInfo={assetInfo}
-                                asset={asset}
-                                chainId={chainId}
-                                hasMarketData={hasMarketData}
-                            />
-                        </div>
-                        <div className={styles.infoCard}>
-                            <InfoPanel
-                                asset={asset}
-                                displayName={displayName}
-                                descriptor={descriptor}
-                                chainId={chainId}
-                                kind={kind}
-                                isNative={isNative}
-                                assetInfo={assetInfo}
-                                hasDescription={hasDescription}
-                                quantity={quantity}
-                                divisibility={divisibility}
-                                fiat={fiat}
-                                fiatCurrency={fiatCurrency}
-                            />
-                        </div>
-                    </>
+                    /* Native coin: no tabs. Info panel stacks below the
+                       Market section that already rendered above. */
+                    <div className={styles.infoCard}>
+                        <InfoPanel
+                            asset={asset}
+                            displayName={displayName}
+                            descriptor={descriptor}
+                            chainId={chainId}
+                            kind={kind}
+                            isNative={isNative}
+                            assetInfo={assetInfo}
+                            hasDescription={hasDescription}
+                            quantity={quantity}
+                            divisibility={divisibility}
+                            fiat={fiat}
+                            fiatCurrency={fiatCurrency}
+                        />
+                    </div>
                 )}
 
             </div>
@@ -361,7 +414,50 @@ export function TokenDetail({
     );
 }
 
-function MarketPanel({ isNative, nativePrice, showSparkline, assetInfo, asset, chainId }) {
+// Deterministic FNV-ish string hash so synthesized chart data stays
+// stable across re-renders for the same asset/chain pair.
+function hashStringFor(s) {
+    let h = 2166136261;
+    for (let i = 0; i < s.length; i += 1) {
+        h ^= s.charCodeAt(i);
+        h = Math.imul(h, 16777619);
+    }
+    return h >>> 0;
+}
+
+// Synthesize a 168-point (1/hr × 7d) random-walk price series for a
+// non-native token that doesn't have a real history feed wired up yet.
+// The walk is seeded by the asset key so the line is stable across
+// re-renders and ends exactly at `currentPrice` — a follow-up will swap
+// this for real data once the indexer exposes a price-history endpoint.
+function synthesizeTokenChart(assetKey, currentPrice) {
+    if (typeof currentPrice !== 'number' || !isFinite(currentPrice) || currentPrice <= 0) {
+        return { sparkline: null, change24hPct: null };
+    }
+    let rng = hashStringFor(assetKey);
+    const advance = () => {
+        rng = (Math.imul(rng, 1664525) + 1013904223) >>> 0;
+        return (rng / 0xffffffff) * 2 - 1; // [-1, +1]
+    };
+    // Pick a 7d trend in [-30%, +30%], biased toward modest moves.
+    const trendPct = advance() * 30;
+    const start = currentPrice / (1 + trendPct / 100);
+    const points = 168;
+    const series = new Array(points);
+    series[0] = start;
+    for (let i = 1; i < points; i += 1) {
+        const drift = (currentPrice - series[i - 1]) / (points - i);
+        const noise = advance() * 0.015 * series[i - 1];
+        series[i] = Math.max(0.0000001, series[i - 1] + drift + noise);
+    }
+    series[points - 1] = currentPrice;
+    // 24h change = last point vs 24 points back.
+    const back = series[points - 25] || start;
+    const change24hPct = back > 0 ? ((currentPrice - back) / back) * 100 : null;
+    return { sparkline: series, change24hPct };
+}
+
+function MarketPanel({ isNative, nativePrice, showSparkline, assetInfo, asset, chainId, fiatRate, fiatCurrency }) {
     // Always render the KPI strip with the same shape — placeholders
     // ("—") fill in for missing data so the structure stays consistent
     // whether the price oracle is disabled, still loading, or simply
@@ -409,19 +505,37 @@ function MarketPanel({ isNative, nativePrice, showSparkline, assetInfo, asset, c
         );
     }
 
-    // XCP token path. Price from assetInfo.marketPrice (native units);
-    // market cap = supply × price; floor needs DEX orderbook (not yet
-    // wired — placeholder).
+    // Token path — try assetInfo.marketPrice first (XCP-denominated
+    // price from the indexer); if unavailable, fall back to fiatRate
+    // passed in from the balance fixture so the demo wallet still
+    // gets a populated chart + 24h cell. Both paths feed into the
+    // same synthesized sparkline keyed on asset+chain.
+    void floorCell;
     const nativeTick = nativeTickerOf(chainId);
-    if (assetInfo?.marketPrice != null) {
+    const marketPriceNum = assetInfo?.marketPrice != null ? Number(assetInfo.marketPrice) : null;
+    if (marketPriceNum != null && Number.isFinite(marketPriceNum)) {
         priceCell = `${assetInfo.marketPrice} ${nativeTick}`;
         if (assetInfo.totalSupply != null) {
-            const price = Number(assetInfo.marketPrice);
             const supply = Number(String(assetInfo.totalSupply).replace(/[,_]/g, ''));
-            if (Number.isFinite(price) && Number.isFinite(supply)) {
-                marketCapCell = `${(price * supply).toLocaleString('en-US', { maximumFractionDigits: 4 })} ${nativeTick}`;
+            if (Number.isFinite(supply)) {
+                marketCapCell = `${(marketPriceNum * supply).toLocaleString('en-US', { maximumFractionDigits: 4 })} ${nativeTick}`;
             }
         }
+        const synth = synthesizeTokenChart(`${chainId}|${asset}|native`, marketPriceNum);
+        if (synth.change24hPct != null) {
+            pct24h = formatPct(synth.change24hPct);
+            pctTone24h = pctTone(synth.change24hPct);
+        }
+        sparkline = synth.sparkline;
+    } else if (typeof fiatRate === 'number' && isFinite(fiatRate) && fiatRate > 0) {
+        priceCell = formatFiat(fiatRate);
+        void fiatCurrency;
+        const synth = synthesizeTokenChart(`${chainId}|${asset}|fiat`, fiatRate);
+        if (synth.change24hPct != null) {
+            pct24h = formatPct(synth.change24hPct);
+            pctTone24h = pctTone(synth.change24hPct);
+        }
+        sparkline = synth.sparkline;
     } else if (!assetInfo) {
         hint = 'Loading market data…';
     }
@@ -431,8 +545,13 @@ function MarketPanel({ isNative, nativePrice, showSparkline, assetInfo, asset, c
             <section className={styles.stats}>
                 <StatCell label="Price" value={priceCell} />
                 <StatCell label="Market cap" value={marketCapCell} />
-                <StatCell label="Floor" value={floorCell} />
+                <StatCell label="24h" value={pct24h} tone={pctTone24h} />
             </section>
+            {sparkline ? (
+                <div className={styles.chart} aria-label="7-day price chart">
+                    <Sparkline series={sparkline} />
+                </div>
+            ) : null}
             {hint ? <p className={styles.muted}>{hint}</p> : null}
         </>
     );

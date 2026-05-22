@@ -28,7 +28,6 @@
 
 .cardClickable {
     cursor: pointer;
-    background: transparent;
 }
 
 .cardClickable:hover {

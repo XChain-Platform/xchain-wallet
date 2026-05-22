@@ -856,8 +856,59 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
  * `detailSide` blocks side-by-side; for everything else, one block.
  */
 export function DetailCard({ entry, peerCache, chainTip, walletId }) {
-    const { shell } = useMessaging();
-    const [activeDetailTab, setActiveDetailTab] = useState(/** @type {'details' | 'status' | 'raw'} */ ('details'));
+    const { messaging, shell } = useMessaging();
+    const [activeDetailTab, setActiveDetailTab] = useState(/** @type {'status' | 'details' | 'raw'} */ ('status'));
+
+    // ───── More-menu / Save-as-contact state ─────
+    // Contacts are fetched once so the "already a contact" check can run
+    // synchronously when deciding whether to expose the Save-as-contact
+    // option in the More dropdown.
+    const [contacts, setContacts] = useState(/** @type {any[]} */ ([]));
+    const [contactsLoaded, setContactsLoaded] = useState(false);
+    const [moreOpen, setMoreOpen] = useState(false);
+    const [contactSaveStage, setContactSaveStage] = useState(
+        /** @type {'hidden' | 'editing' | 'saving' | 'saved'} */ ('hidden'),
+    );
+    const [contactName, setContactName] = useState('');
+    const [contactSaveError, setContactSaveError] = useState(/** @type {string | null} */ (null));
+    const moreWrapRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+
+    // ───── RBF (Speed up / Cancel) state ─────
+    // Exposed through the More menu now instead of as a standalone
+    // button cluster below the tabs. The status message renders inline
+    // between the action row and the tabs so the user sees the result
+    // of their tap without scrolling.
+    const [rbfBusy, setRbfBusy] = useState(/** @type {'speedup' | 'cancel' | null} */ (null));
+    const [rbfError, setRbfError] = useState(/** @type {string | null} */ (null));
+    const [rbfDone, setRbfDone] = useState(/** @type {string | null} */ (null));
+
+    useEffect(() => {
+        let cancelled = false;
+        messaging.listContacts()
+            .then((rows) => {
+                if (cancelled) return;
+                setContacts(Array.isArray(rows) ? rows : []);
+                setContactsLoaded(true);
+            })
+            .catch(() => { if (!cancelled) setContactsLoaded(true); });
+        return () => { cancelled = true; };
+    }, [messaging]);
+
+    useEffect(() => {
+        if (!moreOpen) return undefined;
+        const onClick = (e) => {
+            if (moreWrapRef.current?.contains(e.target)) return;
+            setMoreOpen(false);
+        };
+        const onKey = (e) => { if (e.key === 'Escape') setMoreOpen(false); };
+        window.addEventListener('mousedown', onClick);
+        window.addEventListener('keydown', onKey);
+        return () => {
+            window.removeEventListener('mousedown', onClick);
+            window.removeEventListener('keydown', onKey);
+        };
+    }, [moreOpen]);
+
     const isLinked = Boolean(entry.link);
     const peerKey = entry.link?.peerChainId && entry.link?.peerActionIndex
         ? peerCacheKey(entry.link.peerChainId, entry.link.peerActionIndex)
@@ -881,10 +932,119 @@ export function DetailCard({ entry, peerCache, chainTip, walletId }) {
 
     const fullRows = fullDetailRows(entry);
     const detailTabs = [
-        { id: 'details', label: 'Details' },
         { id: 'status',  label: 'Status'  },
+        { id: 'details', label: 'Details' },
         { id: 'raw',     label: 'Raw'     },
     ];
+
+    // Compute Save-as-contact saveability + assemble the More menu so
+    // the rightmost button on the explorer row reads as a single
+    // entry-point for follow-up actions instead of being buried below
+    // the tab panels.
+    const contactPeer = peerAddressOfEntry(entry);
+    const contactPeerCoin = coinOfChainId(entry?.chainId);
+    const contactPeerIsSelf = Boolean(entry?.address && contactPeer === entry.address);
+    const contactAlreadySaved = Boolean(contactPeer && contacts.some((c) =>
+        Array.isArray(c?.entries) && c.entries.some((e) => e?.address === contactPeer),
+    ));
+    const canSaveContact = contactsLoaded
+        && Boolean(contactPeer)
+        && !contactPeerIsSelf
+        && !contactAlreadySaved
+        && Boolean(contactPeerCoin)
+        && contactSaveStage !== 'saved';
+    async function runRbf(strategy) {
+        if (rbfBusy) return;
+        setMoreOpen(false);
+        setRbfBusy(strategy);
+        setRbfError(null);
+        setRbfDone(null);
+        try {
+            const res = await replaceFromHistoryEntry({ messaging, entry, strategy });
+            setRbfDone(`Replacement broadcast: ${res?.replacementTxHash || 'pending'}`);
+        } catch (err) {
+            if (err instanceof RbfNotSupportedError || err instanceof RbfInvalidEntryError) {
+                setRbfError(err.message);
+            } else {
+                setRbfError(err?.message || 'Replacement failed.');
+            }
+        } finally {
+            setRbfBusy(null);
+        }
+    }
+
+    const moreOptions = [];
+    if (canSaveContact) {
+        moreOptions.push({
+            id: 'save-contact',
+            label: 'Save as contact',
+            icon: <Icon.UsersIcon />,
+            onClick: () => {
+                setMoreOpen(false);
+                setContactSaveStage('editing');
+                setContactName('');
+                setContactSaveError(null);
+            },
+        });
+    }
+    if (replaceable.ok) {
+        moreOptions.push({
+            id: 'rbf-speedup',
+            label: rbfBusy === 'speedup' ? 'Speeding up…' : 'Speed up',
+            icon: <Icon.ForwardIcon />,
+            disabled: rbfBusy !== null,
+            onClick: () => runRbf('speedup'),
+        });
+        moreOptions.push({
+            id: 'rbf-cancel',
+            label: rbfBusy === 'cancel' ? 'Cancelling…' : 'Cancel transaction',
+            icon: <Icon.XIcon />,
+            disabled: rbfBusy !== null,
+            onClick: () => runRbf('cancel'),
+        });
+    }
+    // Universal option — every entry can have a sharable link copied,
+    // so the menu is never empty (DeFi rows, in particular, hit this
+    // path since they don't have a peer or replaceable state).
+    const shareXchainCoin = xchainCoinForChainId(entry?.chainId);
+    if (shareXchainCoin && entry?.actionIndex) {
+        const shareUrl = `https://explorer.xchain.io/${shareXchainCoin}/action/${entry.actionIndex}`;
+        moreOptions.push({
+            id: 'copy-link',
+            label: 'Copy action link',
+            icon: <Icon.CopyIcon />,
+            onClick: () => {
+                setMoreOpen(false);
+                if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+                    navigator.clipboard.writeText(shareUrl).catch(() => { /* no-op */ });
+                }
+            },
+        });
+    }
+
+    async function handleSaveContact(event) {
+        event.preventDefault();
+        const trimmed = contactName.trim();
+        if (!trimmed) {
+            setContactSaveError('Name is required.');
+            return;
+        }
+        setContactSaveStage('saving');
+        setContactSaveError(null);
+        try {
+            await messaging.saveContact({
+                input: {
+                    name: trimmed,
+                    notes: '',
+                    entries: [{ chain: contactPeerCoin, address: contactPeer, label: '' }],
+                },
+            });
+            setContactSaveStage('saved');
+        } catch (err) {
+            setContactSaveError(err?.message || 'Save failed.');
+            setContactSaveStage('editing');
+        }
+    }
 
     return (
         <div className={styles.detailContainer} role="region" aria-label="Action detail">
@@ -906,10 +1066,14 @@ export function DetailCard({ entry, peerCache, chainTip, walletId }) {
                 </table>
             </section>
 
-            {/* Explorer button row — fixed 4-column grid so each
-                button takes exactly a quarter of the width. */}
+            {/* Action row — explorer links followed by a "More" button
+                that drops down a list of follow-up actions (e.g. Save
+                as contact, Speed up, Cancel). The More button always
+                renders so users get a consistent place to look across
+                every action type; when no actions apply, the menu
+                surfaces a placeholder message instead. */}
             {explorerButtons.length > 0 ? (
-                <div className={styles.detailActions} role="group" aria-label="Explorer links">
+                <div className={styles.detailActions} role="group" aria-label="Action options">
                     {explorerButtons.map((link) => (
                         <a
                             key={link.id}
@@ -931,7 +1095,110 @@ export function DetailCard({ entry, peerCache, chainTip, walletId }) {
                             <span>{link.label}</span>
                         </a>
                     ))}
+                    <div className={styles.detailActionMoreWrap} ref={moreWrapRef}>
+                        <button
+                            type="button"
+                            className={styles.detailAction}
+                            aria-haspopup="menu"
+                            aria-expanded={moreOpen}
+                            onClick={() => setMoreOpen((o) => !o)}
+                        >
+                            <span className={styles.detailActionIcon} aria-hidden="true"><Icon.MoreIcon /></span>
+                            <span>More</span>
+                        </button>
+                        {moreOpen ? (
+                            <div className={styles.moreMenu} role="menu">
+                                {moreOptions.length > 0 ? (
+                                    moreOptions.map((opt) => (
+                                        <button
+                                            key={opt.id}
+                                            type="button"
+                                            role="menuitem"
+                                            className={styles.moreMenuItem}
+                                            onClick={opt.onClick}
+                                            disabled={Boolean(opt.disabled)}
+                                        >
+                                            {opt.icon ? (
+                                                <span className={styles.moreMenuItemIcon} aria-hidden="true">
+                                                    {opt.icon}
+                                                </span>
+                                            ) : null}
+                                            <span>{opt.label}</span>
+                                        </button>
+                                    ))
+                                ) : (
+                                    <button
+                                        type="button"
+                                        role="menuitem"
+                                        className={styles.moreMenuItem}
+                                        disabled
+                                    >
+                                        <span>No additional actions</span>
+                                    </button>
+                                )}
+                            </div>
+                        ) : null}
+                    </div>
                 </div>
+            ) : null}
+
+            {/* RBF status — surfaces the outcome of Speed up / Cancel
+                picked from the More menu. Sits between the action row
+                and the tab strip so the user sees the result without
+                scrolling, mirroring the inline save-contact form. */}
+            {rbfError ? (
+                <p className={styles.rbfError} role="alert">{rbfError}</p>
+            ) : null}
+            {rbfDone ? (
+                <p className={styles.rbfDone} role="status">{rbfDone}</p>
+            ) : null}
+
+            {/* Inline Save-as-contact form. Shown when the user picks
+                "Save as contact" from the More menu — sits between the
+                action buttons and the tab strip so the user doesn't
+                lose the page context the way the bottom-of-card prompt
+                did. */}
+            {contactSaveStage === 'editing' || contactSaveStage === 'saving' ? (
+                <form className={styles.saveContactForm} onSubmit={handleSaveContact}>
+                    <label className={styles.saveContactLabel}>
+                        Save {shortenAddress(contactPeer || '')} as
+                        <input
+                            type="text"
+                            className={styles.saveContactInput}
+                            value={contactName}
+                            onChange={(e) => setContactName(e.target.value)}
+                            autoFocus
+                            maxLength={80}
+                            placeholder="Contact name"
+                        />
+                    </label>
+                    {contactSaveError ? (
+                        <p className={styles.saveContactError} role="alert">{contactSaveError}</p>
+                    ) : null}
+                    <div className={styles.saveContactActions}>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                                setContactSaveStage('hidden');
+                                setContactName('');
+                                setContactSaveError(null);
+                            }}
+                            disabled={contactSaveStage === 'saving'}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            type="submit"
+                            variant="primary"
+                            size="sm"
+                            loading={contactSaveStage === 'saving'}
+                        >
+                            Save
+                        </Button>
+                    </div>
+                </form>
             ) : null}
 
             {/* Tab strip — matches Home's HomeTabs visual rhythm. */}
@@ -1021,10 +1288,12 @@ export function DetailCard({ entry, peerCache, chainTip, walletId }) {
                 ) : null}
             </section>
 
-            {/* Interactive widgets appended below the static sections */}
-            <SaveContactPrompt entry={entry} />
+            {/* Interactive widgets appended below the static sections.
+                Save-as-contact and Speed up / Cancel moved up to the
+                More button in the action row; recipient bulk-save
+                stays here because it's a per-row affordance for
+                DIVIDEND / AIRDROP entries with its own UI. */}
             <RecipientsBlock entry={entry} />
-            {replaceable.ok ? <RbfActions entry={entry} /> : null}
             {detachAvailable ? (
                 <Button
                     type="button"
@@ -1049,6 +1318,11 @@ export function DetailCard({ entry, peerCache, chainTip, walletId }) {
     );
 }
 
+function capitalize(s) {
+    if (typeof s !== 'string' || s.length === 0) return '';
+    return s[0].toUpperCase() + s.slice(1);
+}
+
 /**
  * Build the rows shown in the "Action details" table at the top of
  * ActionDetail. Each tuple is `[label, value]`. Empty / missing fields
@@ -1056,7 +1330,6 @@ export function DetailCard({ entry, peerCache, chainTip, walletId }) {
  */
 function basicDetailRows(entry, chainTip) {
     if (!entry) return [];
-    const raw = entry.raw || {};
     const rows = [];
 
     // Action — just the colored bubble. The action number now lives
@@ -1077,9 +1350,10 @@ function basicDetailRows(entry, chainTip) {
         <span className={`${styles.statusBubble} ${statusColorClass}`}>{statusLabel}</span>
     )]);
 
-    // Network — coin icon + network kind (mainnet / testnet / regtest).
+    // Network — coin icon + full chain name (e.g. "Dogecoin Mainnet").
     if (entry.chainId) {
-        const network = String(entry.chainId).split('-')[1] || 'mainnet';
+        const [coin = '', network = 'mainnet'] = String(entry.chainId).split('-');
+        const label = `${capitalize(coin)} ${capitalize(network)}`.trim();
         rows.push(['Network', (
             <span className={styles.copyableValue}>
                 <img
@@ -1090,19 +1364,14 @@ function basicDetailRows(entry, chainTip) {
                     width={16}
                     height={16}
                 />
-                <span>{network}</span>
+                <span>{label}</span>
             </span>
         )]);
     }
-    // Block, Index, Tx hash, and Source intentionally omitted from the
-    // hero table — they're still rendered in the full Details tab below.
+    // Hero stays minimal — Action, Status, Network, Time only. Block,
+    // Index, Tx hash, Source, Destination, Amount, Memo, and every
+    // per-action field live in the Details tab below.
     if (entry.timestamp) rows.push(['Time', formatRelativeTime(entry.timestamp) || formatTimestamp(entry.timestamp)]);
-    const dest = raw.destination ?? raw.DESTINATION ?? raw.recipient ?? raw.RECIPIENT;
-    if (dest) rows.push(['Destination', String(dest)]);
-    const amt = raw.amount ?? raw.AMOUNT ?? raw.quantity ?? raw.QUANTITY;
-    if (amt) rows.push(['Amount', formatNumberWithCommas(amt)]);
-    const memo = raw.memo ?? raw.MEMO;
-    if (memo) rows.push(['Memo', String(memo)]);
     return rows;
 }
 
@@ -1326,16 +1595,18 @@ function explorerLinksFor(entry) {
         }
     }
 
-    // External chain explorers — surfaced for Bitcoin entries that
-    // carry a tx hash, even for demo / regtest data. Demo URLs 404 on
-    // click, but the buttons are visible so the layout matches the
-    // mainnet experience. Both buttons render their site's favicon
-    // (no circular wrap) so they visually match XChain.
-    if (txHash && coin === 'bitcoin') {
+    // External chain explorers — only mainnet and testnet have
+    // working third-party coverage. Regtest is local-only; suppress
+    // external links so they don't render mainnet URLs that 404.
+    if (!txHash) return links;
+    if (network !== 'mainnet' && network !== 'testnet') return links;
+
+    if (coin === 'bitcoin') {
         // Mempool.space serves Bitcoin testnet under `/testnet4/`
-        // (testnet4 is the current testnet variant). Mainnet has no
-        // path prefix. Blockstream.info still uses `/testnet/` for
-        // its classic testnet endpoint; mainnet has no prefix.
+        // (current testnet variant). Blockstream.info still indexes
+        // the legacy `/testnet/` (testnet3) endpoint, so testnet
+        // links there may not resolve for testnet4 hashes — kept
+        // anyway as a second affordance.
         const mempoolPath = network === 'testnet' ? 'testnet4/' : '';
         const blockstreamPath = network === 'testnet' ? 'testnet/' : '';
         links.push({
@@ -1350,133 +1621,44 @@ function explorerLinksFor(entry) {
             iconImg: 'https://blockstream.info/favicon.ico',
             url: `https://blockstream.info/${blockstreamPath}tx/${txHash}`,
         });
+    } else if (coin === 'litecoin') {
+        // LitecoinSpace mirrors mempool.space's URL scheme (it's a
+        // fork); mainnet has no prefix, testnet is `/testnet/`.
+        // Blockchair covers mainnet only.
+        const litecoinSpacePath = network === 'testnet' ? 'testnet/' : '';
+        links.push({
+            id: 'litecoinspace',
+            label: 'LitecoinSpace',
+            iconImg: 'https://litecoinspace.org/favicon.ico',
+            url: `https://litecoinspace.org/${litecoinSpacePath}tx/${txHash}`,
+        });
+        if (network === 'mainnet') {
+            links.push({
+                id: 'blockchair',
+                label: 'Blockchair',
+                iconImg: 'https://blockchair.com/favicon.ico',
+                url: `https://blockchair.com/litecoin/transaction/${txHash}`,
+            });
+        }
+    } else if (coin === 'dogecoin') {
+        // No reliable third-party DOGE testnet explorer at time of
+        // writing — show external links on mainnet only.
+        if (network === 'mainnet') {
+            links.push({
+                id: 'blockchair',
+                label: 'Blockchair',
+                iconImg: 'https://blockchair.com/favicon.ico',
+                url: `https://blockchair.com/dogecoin/transaction/${txHash}`,
+            });
+            links.push({
+                id: 'blockcypher',
+                label: 'BlockCypher',
+                iconImg: 'https://www.blockcypher.com/assets/favicon/favicon.ico',
+                url: `https://live.blockcypher.com/doge/tx/${txHash}`,
+            });
+        }
     }
     return links;
-}
-
-/**
- * §31.4 — Auto-suggest from history. When a history entry has a peer
- * address (destination on a SEND, source on a RECEIVE) that isn't
- * already saved as a contact and isn't the wallet's own address,
- * surface a "Save as contact" affordance so the user can add it
- * without leaving History.
- *
- * Fetches contacts on first mount and caches across re-renders so
- * scrolling through several entries doesn't refetch repeatedly.
- * Failure modes degrade silently — the prompt just doesn't show.
- *
- * @param {{ entry: any }} props
- */
-function SaveContactPrompt({ entry }) {
-    const { messaging } = useMessaging();
-    const [contacts, setContacts] = useState(/** @type {any[]} */ ([]));
-    const [loaded, setLoaded] = useState(false);
-    const [stage, setStage] = useState(/** @type {'idle' | 'editing' | 'saving' | 'saved'} */ ('idle'));
-    const [name, setName] = useState('');
-    const [error, setError] = useState(/** @type {string | null} */ (null));
-
-    useEffect(() => {
-        let cancelled = false;
-        messaging.listContacts()
-            .then((rows) => {
-                if (cancelled) return;
-                setContacts(Array.isArray(rows) ? rows : []);
-                setLoaded(true);
-            })
-            .catch(() => { if (!cancelled) setLoaded(true); });
-        return () => { cancelled = true; };
-    }, [messaging]);
-
-    if (!loaded) return null;
-
-    const peer = peerAddressOfEntry(entry);
-    if (!peer) return null;
-    if (entry?.address && peer === entry.address) return null;
-
-    const isAlreadyContact = contacts.some((c) =>
-        Array.isArray(c?.entries) && c.entries.some((e) => e?.address === peer),
-    );
-    if (isAlreadyContact) return null;
-    if (stage === 'saved') return null;
-
-    const coin = coinOfChainId(entry.chainId);
-    if (!coin) return null;
-
-    async function handleSave(event) {
-        event.preventDefault();
-        if (!name.trim()) {
-            setError('Name is required.');
-            return;
-        }
-        setStage('saving');
-        setError(null);
-        try {
-            await messaging.saveContact({
-                input: {
-                    name: name.trim(),
-                    notes: '',
-                    entries: [{ chain: coin, address: peer, label: '' }],
-                },
-            });
-            setStage('saved');
-        } catch (err) {
-            setError(err?.message || 'Save failed.');
-            setStage('editing');
-        }
-    }
-
-    if (stage === 'idle') {
-        return (
-            <div className={styles.saveContactRow}>
-                <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => setStage('editing')}
-                >
-                    Save as contact
-                </Button>
-            </div>
-        );
-    }
-
-    return (
-        <form className={styles.saveContactForm} onSubmit={handleSave}>
-            <label className={styles.saveContactLabel}>
-                Name
-                <input
-                    type="text"
-                    className={styles.saveContactInput}
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    autoFocus
-                    maxLength={80}
-                />
-            </label>
-            {error ? (
-                <p className={styles.saveContactError} role="alert">{error}</p>
-            ) : null}
-            <div className={styles.saveContactActions}>
-                <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => { setStage('idle'); setName(''); setError(null); }}
-                    disabled={stage === 'saving'}
-                >
-                    Cancel
-                </Button>
-                <Button
-                    type="submit"
-                    variant="primary"
-                    size="sm"
-                    loading={stage === 'saving'}
-                >
-                    Save
-                </Button>
-            </div>
-        </form>
-    );
 }
 
 /**
@@ -1744,80 +1926,10 @@ function coinOfChainId(chainId) {
 }
 
 /**
- * §29.9 / §44.4 RBF actions — Speed up + Cancel buttons for pending
- * (mempool-only) coin-moving entries. Replacement engine wiring is
- * §44.4 / §44.5 SDK / encoder work; until that lands, the messaging
- * layer surfaces an honest "RBF replacement is not supported by this
- * build" error and we render it inline.
- */
-function RbfActions({ entry }) {
-    const { messaging } = useMessaging();
-    const [busy, setBusy] = useState(/** @type {'speedup' | 'cancel' | null} */ (null));
-    const [error, setError] = useState(/** @type {string | null} */ (null));
-    const [done, setDone] = useState(/** @type {string | null} */ (null));
-
-    const run = async (strategy) => {
-        if (busy) return;
-        setBusy(strategy);
-        setError(null);
-        setDone(null);
-        try {
-            const res = await replaceFromHistoryEntry({
-                messaging,
-                entry,
-                strategy,
-            });
-            setDone(`Replacement broadcast: ${res?.replacementTxHash || 'pending'}`);
-        } catch (err) {
-            if (err instanceof RbfNotSupportedError) {
-                setError(err.message);
-            } else if (err instanceof RbfInvalidEntryError) {
-                setError(err.message);
-            } else {
-                setError(err?.message || 'Replacement failed.');
-            }
-        } finally {
-            setBusy(null);
-        }
-    };
-
-    return (
-        <div className={styles.rbfActions}>
-            <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                loading={busy === 'speedup'}
-                disabled={busy !== null}
-                onClick={() => run('speedup')}
-            >
-                Speed up
-            </Button>
-            <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                loading={busy === 'cancel'}
-                disabled={busy !== null}
-                onClick={() => run('cancel')}
-            >
-                Cancel
-            </Button>
-            {error ? (
-                <p className={styles.rbfError} role="alert">{error}</p>
-            ) : null}
-            {done ? (
-                <p className={styles.rbfDone} role="status">{done}</p>
-            ) : null}
-        </div>
-    );
-}
-
-/**
  * One history row. Used both for top-level entries and for member rows
  * inside an expanded group card.
  */
-function EntryRow({ entry, selected, showConnector, onClick, peerCache, isFull, chainTip, walletId }) {
+export function EntryRow({ entry, selected, showConnector, onClick, peerCache, isFull, chainTip, walletId }) {
     const d = chainRegistry.get(entry.chainId);
     return (
         <li data-history-key={entry.key}>

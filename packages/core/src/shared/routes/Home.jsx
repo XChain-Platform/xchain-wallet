@@ -62,7 +62,7 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {(accountId: string) => void} [props.onSwitchAccount]   App-level setter for the active account (still used internally if a future inline picker lands)
  * @param {Array<{ id: string, label: string, description?: string, onSelect?: () => void }>} [props.extraActions]   §40+ entries surfaced in the small-mode pancake drawer; in full mode the host renders these via the dedicated ActionsMenu route
  */
-export function Home({ onLocked, onSend, onReceive, onSwap, onBuy, onCreateToken, onActions, onMarkets, onResumeAirdrop, onResumeCoinpay, onMessaging, onContracts, onStaking, onHistory, onAddresses, onMigrateToBip39, onOpenWalletPicker, onOpenAccountPicker, onCrossChain, onContacts, onMultisig, onSignPsbt, onSignMessage, onVerifySignature, activeAccountId: activeAccountIdProp, onSwitchAccount, extraActions, onSelectToken, networkFilter: networkFilterProp, onNetworkFilterChange: onNetworkFilterChangeProp }) {
+export function Home({ onLocked, onSend, onReceive, onSwap, onBuy, onCreateToken, onActions, onMarkets, onResumeAirdrop, onResumeCoinpay, onMessaging, onContracts, onStaking, onHistory, onAddresses, onMigrateToBip39, onOpenWalletPicker, onOpenAccountPicker, onCrossChain, onContacts, onMultisig, onSignPsbt, onSignMessage, onVerifySignature, activeAccountId: activeAccountIdProp, onSwitchAccount, extraActions, onSelectToken, onSelectEntry, networkFilter: networkFilterProp, onNetworkFilterChange: onNetworkFilterChangeProp }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -113,6 +113,26 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onBuy, onCreateToken
     const networkFilter = networkFilterProp ?? networkFilterLocal;
     const setNetworkFilter = onNetworkFilterChangeProp ?? setNetworkFilterLocal;
     const [settingsOpen, setSettingsOpen] = useState(false);
+
+    // 4th quick-action button is a "More" dropdown matching the
+    // ActionDetail / TokenDetail pattern — Buy lives inside the menu
+    // so the primary row stays at Send / Receive / Swap / More.
+    const [homeMoreOpen, setHomeMoreOpen] = useState(false);
+    const homeMoreWrapRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+    useEffect(() => {
+        if (!homeMoreOpen) return undefined;
+        const onClick = (e) => {
+            if (homeMoreWrapRef.current?.contains(e.target)) return;
+            setHomeMoreOpen(false);
+        };
+        const onKey = (e) => { if (e.key === 'Escape') setHomeMoreOpen(false); };
+        window.addEventListener('mousedown', onClick);
+        window.addEventListener('keydown', onKey);
+        return () => {
+            window.removeEventListener('mousedown', onClick);
+            window.removeEventListener('keydown', onKey);
+        };
+    }, [homeMoreOpen]);
     // Cluster H FOLLOWUP 7 — when "Back up now" lands the user in
     // Settings, this captures which subpage to deep-link into so the
     // user doesn't land on the Settings root + have to re-find Backup.
@@ -672,6 +692,7 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onBuy, onCreateToken
                         multisigChainId={chainRegistry.byCoin('bitcoin')[0]?.id}
                         onReceive={onReceive}
                         onSelectToken={onSelectToken}
+                        onSelectEntry={onSelectEntry}
                         pinnedKeys={new Set(pinnedTokens)}
                         onTogglePin={showPinAffordance ? handleTogglePin : undefined}
                         hiddenKeys={new Set(hiddenTokens)}
@@ -699,21 +720,50 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onBuy, onCreateToken
                                 <button
                                     type="button"
                                     className={styles.quickAction}
-                                    onClick={onSwap}
-                                    disabled={!onSwap}
-                                >
-                                    <span className={styles.quickActionIcon} aria-hidden="true"><Icon.SwapIcon /></span>
-                                    <span>Swap</span>
-                                </button>
-                                <button
-                                    type="button"
-                                    className={styles.quickAction}
                                     onClick={onBuy}
                                     disabled={!onBuy}
                                 >
                                     <span className={styles.quickActionIcon} aria-hidden="true"><Icon.DollarIcon /></span>
                                     <span>Buy</span>
                                 </button>
+                                <div className={styles.quickActionMoreWrap} ref={homeMoreWrapRef}>
+                                    <button
+                                        type="button"
+                                        className={styles.quickAction}
+                                        aria-haspopup="menu"
+                                        aria-expanded={homeMoreOpen}
+                                        onClick={() => setHomeMoreOpen((o) => !o)}
+                                    >
+                                        <span className={styles.quickActionIcon} aria-hidden="true"><Icon.MoreIcon /></span>
+                                        <span>More</span>
+                                    </button>
+                                    {homeMoreOpen ? (
+                                        <div className={styles.quickActionMoreMenu} role="menu">
+                                            {onSwap ? (
+                                                <button
+                                                    type="button"
+                                                    role="menuitem"
+                                                    className={styles.quickActionMoreItem}
+                                                    onClick={() => { setHomeMoreOpen(false); onSwap(); }}
+                                                >
+                                                    <span className={styles.quickActionMoreItemIcon} aria-hidden="true">
+                                                        <Icon.SwapIcon />
+                                                    </span>
+                                                    <span>Swap</span>
+                                                </button>
+                                            ) : (
+                                                <button
+                                                    type="button"
+                                                    role="menuitem"
+                                                    className={styles.quickActionMoreItem}
+                                                    disabled
+                                                >
+                                                    <span>No additional actions</span>
+                                                </button>
+                                            )}
+                                        </div>
+                                    ) : null}
+                                </div>
                             </div>
                         )}
                     />

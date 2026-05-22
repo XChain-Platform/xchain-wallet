@@ -166,9 +166,15 @@ function AppInner() {
         /** @type {'home' | 'token-detail'} */ ('home'),
     );
     // Selected entry for the standalone ActionDetail view (mirror of
-    // popup wiring). Set on row click in History; cleared on back.
+    // popup wiring). Set on row click in History or in Home's Activity
+    // tab; cleared on back.
     const [selectedHistoryEntry, setSelectedHistoryEntry] = useState(
         /** @type {any | null} */ (null),
+    );
+    // Where ActionDetail's Back returns to — 'history' when opened from
+    // the History timeline, 'home' when opened from Home's Activity tab.
+    const [actionDetailReturnTo, setActionDetailReturnTo] = useState(
+        /** @type {'history' | 'home'} */ ('history'),
     );
     const [walletDetailsId, setWalletDetailsId] = useState(/** @type {string | null} */ (null));
     const [walletRenameTarget, setWalletRenameTarget] = useState(
@@ -952,6 +958,7 @@ function AppInner() {
                         initialChainCoin={historyInitialChainCoin}
                         onSelectEntry={(entry) => {
                             setSelectedHistoryEntry(entry);
+                            setActionDetailReturnTo('history');
                             setUnlockedView('action-detail');
                         }}
                     />
@@ -962,7 +969,7 @@ function AppInner() {
                     <ActionDetail
                         entry={selectedHistoryEntry}
                         walletId={activeWalletId}
-                        onBack={() => setUnlockedView('history')}
+                        onBack={() => setUnlockedView(actionDetailReturnTo)}
                     />
                 );
             }
@@ -1207,6 +1214,11 @@ function AppInner() {
                         onSelectToken={activeWalletId ? (tok) => {
                             setTokenDetailRef(tok);
                             setUnlockedView('token-detail');
+                        } : undefined}
+                        onSelectEntry={activeWalletId ? (entry) => {
+                            setSelectedHistoryEntry(entry);
+                            setActionDetailReturnTo('home');
+                            setUnlockedView('action-detail');
                         } : undefined}
                         onOpenWalletPicker={() => setUnlockedView('wallet-picker')}
                         onOpenAccountPicker={activeWalletId ? () => setUnlockedView('account-picker') : undefined}

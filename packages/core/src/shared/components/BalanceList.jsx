@@ -461,7 +461,7 @@ const PALETTE = [
     '#EF4444', '#8B5CF6', '#EC4899', '#14B8A6', '#F97316',
     '#6366F1', '#84CC16', '#06B6D4', '#A855F7', '#F43F5E',
 ];
-function tickerColor(asset) {
+export function tickerColor(asset) {
     let h = 0;
     for (let i = 0; i < asset.length; i += 1) {
         h = (h * 31 + asset.charCodeAt(i)) >>> 0;

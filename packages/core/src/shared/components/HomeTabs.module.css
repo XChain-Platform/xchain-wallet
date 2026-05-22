@@ -108,26 +108,115 @@
     text-align: justify;
 }
 
-/* Demo activity / defi list rows. Plain stack of cards used only in
-   demo mode — non-demo wallets get the dashed Placeholder box. */
+/* Demo activity / defi list — single rounded card with row dividers,
+   matching the Tokens / Coins list layout so all five tabs share the
+   same visual rhythm. */
 .demoList {
     list-style: none;
     margin: 0;
     padding: 0;
     display: flex;
     flex-direction: column;
-    gap: var(--xc-space-2);
+    background: var(--xc-surface);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-md);
+    overflow: hidden;
+}
+
+/* Small action-type glyph rendered next to the action label on both
+   Activity and DeFi rows. Accent-coloured 16px square that aligns
+   with the row's first-line text. */
+.activityActionIcon {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--xc-accent-primary);
+    width: 16px;
+    height: 16px;
+}
+
+/* Square token icon — used for any non-native asset (XCHAIN, XCP, NFTs,
+   etc.) so the visual cleanly separates "this row is about a token"
+   from "this row is about a native coin" (which uses the circular
+   chain icon via balanceStyles.iconImg). Sized 48px to fill the same
+   wrap, with subtle corner-rounding so it doesn't feel pixel-flush. */
+.tokenIconSquare {
+    width: 48px;
+    height: 48px;
+    object-fit: cover;
+    display: block;
+    border-radius: var(--xc-radius-sm);
+}
+
+/* Status pill used in DeFi rows. Matches History.module.css `.statusPill`
+   (full rounded pill, same font sizing) so the validity badge reads
+   identically across History and DeFi. `margin-inline-start: auto`
+   pushes it to the trailing edge of the row's first line. */
+.statusBadge {
+    margin-inline-start: auto;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 var(--xc-space-2);
+    border-radius: var(--xc-radius-pill, 999px);
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.6;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+.statusValid {
+    background: color-mix(in srgb, var(--xc-success, #14b86c) 18%, transparent);
+    color: var(--xc-success, #14b86c);
+}
+.statusInvalid {
+    background: color-mix(in srgb, var(--xc-danger, #d93838) 18%, transparent);
+    color: var(--xc-danger, #d93838);
+}
+.statusPending {
+    background: color-mix(in srgb, var(--xc-warning, #d99000) 18%, transparent);
+    color: var(--xc-warning, #d99000);
 }
 
 .demoRow {
     display: flex;
     flex-direction: row;
-    align-items: flex-start;
+    align-items: center;
     gap: var(--xc-space-3);
     padding: var(--xc-space-3);
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
+    background: transparent;
+    border: none;
+    border-top: 1px solid var(--xc-border);
+}
+.demoRow:first-of-type { border-top: none; }
+
+/* Button variant of `.demoRow` — used by DeFi so each row can navigate
+   to ActionDetail on click. Resets default button chrome and lines up
+   with `.demoRow` so the visual stays identical. Divider lives on the
+   button (not the parent `<li>`) so we can anchor on the list's first
+   `<li>` to skip the top border — same trick the Activity list uses. */
+.demoRowButton {
+    appearance: none;
+    background: transparent;
+    border: none;
+    border-top: 1px solid var(--xc-border);
+    width: 100%;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--xc-space-3);
+    padding: var(--xc-space-3);
+    cursor: pointer;
+    color: inherit;
+    text-align: left;
+    font-family: inherit;
+    font-size: inherit;
+}
+.demoList > li:first-child > .demoRowButton { border-top: none; }
+.demoRowButton:hover { background: var(--xc-bg-muted); }
+.demoRowButton:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: -2px;
 }
 
 .demoRowBody {
@@ -184,15 +273,16 @@
     flex-wrap: wrap;
 }
 
+/* Action label on the row's first line. Plain bold uppercase text
+   (no pill background) so the leading edge aligns flush with the
+   primary line below and the meta line below that — matches the
+   History row's `.actionBadge` treatment. */
 .demoActionTag {
-    font-size: var(--xc-text-xs);
-    font-weight: 700;
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    padding: 2px 8px;
-    background: var(--xc-bg-muted);
-    border-radius: 999px;
-    color: var(--xc-text-muted);
+    color: var(--xc-text);
 }
 
 .tag_stake {
@@ -236,9 +326,36 @@
 .demoRowMeta {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
+    align-items: center;
+    gap: var(--xc-space-2);
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
+}
+
+/* Confirmation count pill — mirrors History.module.css `.confirmationsPill`
+   so a DeFi row's meta line reads identically to the History timeline. */
+.confirmationsPill {
+    display: inline-flex;
+    align-items: center;
+    padding: 0 var(--xc-space-2);
+    border-radius: var(--xc-radius-pill, 999px);
+    background: color-mix(in srgb, var(--xc-accent-primary) 22%, transparent);
+    color: var(--xc-accent-primary);
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.7;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+}
+
+/* Trailing-edge relative timestamp — mirrors History's `.rowRelativeTime`. */
+.rowRelativeTime {
+    margin-inline-start: auto;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    font-weight: 400;
+    letter-spacing: 0;
+    text-transform: none;
 }
 
 .demoActivityIcon {

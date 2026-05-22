@@ -18,7 +18,14 @@
     padding: var(--xc-space-1) var(--xc-space-2);
     border-radius: var(--xc-radius-sm);
 }
-.back:hover { background: var(--xc-bg-muted); }
+/* Hover state highlights the chevron itself (color shift) instead of
+   painting a muted-bg box behind it — the box rendered as a heavy
+   dark rectangle in dark mode. Matches TokenDetail.module.css. */
+.back { transition: color 0.12s ease; }
+.back:hover {
+    background: transparent;
+    color: color-mix(in srgb, var(--xc-accent-primary) 70%, white 30%);
+}
 .back:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
     outline-offset: 2px;

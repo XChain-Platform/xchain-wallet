@@ -144,9 +144,11 @@ function safeBigInt(v) {
 }
 
 /**
- * Format an atomic-unit string with the configured divisibility,
- * trimming trailing zeros after the decimal point. Non-divisible
- * (divisibility=0) assets render as plain integers.
+ * Format an atomic-unit string with the configured divisibility.
+ * Trailing zeros are preserved so 0.04210000 BTC reads as 0.04210000
+ * — matches the BalanceList convention and BTC-native accounting
+ * expectations. Non-divisible (divisibility=0) assets render as
+ * plain integers.
  */
 function formatAmount(quantityStr, divisibility) {
     const q = String(quantityStr || '0');
@@ -157,10 +159,8 @@ function formatAmount(quantityStr, divisibility) {
     const abs = negative ? q.slice(1) : q;
     const padded = abs.padStart(divisibility + 1, '0');
     const whole = padded.slice(0, padded.length - divisibility);
-    let frac = padded.slice(padded.length - divisibility);
-    frac = frac.replace(/0+$/, '');
-    const wholeFmt = groupThousands(whole);
-    const out = frac ? `${wholeFmt}.${frac}` : wholeFmt;
+    const frac = padded.slice(padded.length - divisibility);
+    const out = `${groupThousands(whole)}.${frac}`;
     return negative ? `-${out}` : out;
 }
 

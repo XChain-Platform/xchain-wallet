@@ -274,6 +274,66 @@
     justify-content: center;
 }
 
+/* "More" entry in the 4-up quick-actions grid. Wrapper is a flex
+   container so the inner button stretches to the grid cell's height,
+   matching the three buttons next to it. The dropdown anchors to the
+   wrapper via `position: relative`. */
+.quickActionMoreWrap {
+    position: relative;
+    display: flex;
+    align-self: stretch;
+}
+.quickActionMoreWrap > .quickAction {
+    flex: 1 1 auto;
+    width: 100%;
+}
+.quickActionMoreMenu {
+    position: absolute;
+    inset-inline-end: 0;
+    top: calc(100% + var(--xc-space-1));
+    min-width: 200px;
+    background: var(--xc-surface-raised);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-md);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    padding: var(--xc-space-1) 0;
+}
+.quickActionMoreItem {
+    appearance: none;
+    background: transparent;
+    border: none;
+    text-align: start;
+    padding: var(--xc-space-2) var(--xc-space-3);
+    font-size: var(--xc-text-sm);
+    font-family: inherit;
+    color: var(--xc-text);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+}
+.quickActionMoreItem:hover { background: var(--xc-bg-muted); }
+.quickActionMoreItem:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: -2px;
+}
+.quickActionMoreItem:disabled {
+    color: var(--xc-text-muted);
+    cursor: not-allowed;
+}
+.quickActionMoreItemIcon {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    color: var(--xc-accent-primary);
+}
+
 /* ───── Tabs — matches HomeTabs ───── */
 
 .tabs {

@@ -179,7 +179,14 @@ export function groupHistoryEntries(entries, mode = 'grouped') {
         if (groupKey) {
             if (seen.has(groupKey)) continue;
             const g = groups.get(groupKey);
-            if (!g || g.members.length === 0) {
+            // Suppress single-child groups for leader-plus-children
+            // subkinds — "Limit order — 1 fill" would expand to show
+            // just the ORDER + its single ORDER_MATCH, which is the
+            // same information as letting them render as two flat
+            // rows but with an extra click. link-pair stays at >=1
+            // because the pair itself is the unit of meaning.
+            const minMembers = g && g.subkind === 'link-pair' ? 1 : 2;
+            if (!g || g.members.length < minMembers) {
                 out.push({ kind: 'entry', entry: e });
                 continue;
             }

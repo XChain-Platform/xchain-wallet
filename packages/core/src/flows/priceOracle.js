@@ -26,12 +26,22 @@ const COINGECKO_BASE = 'https://api.coingecko.com/api/v3';
 const SPOT_TTL_MS = 5 * 60 * 1000;
 const SPARKLINE_TTL_MS = 60 * 60 * 1000;
 
-// CoinGecko's coin-id namespace. Only mainnet chains have entries —
-// testnets/regtests don't have real prices.
+// CoinGecko's coin-id namespace. All networks (mainnet / testnet /
+// regtest) map to the same id per coin — the price of Bitcoin is the
+// same regardless of which network the user is currently holding it
+// on. Testnet / regtest coins are economically worthless, but it's
+// still useful to surface "what would this be worth on mainnet" on
+// the TokenDetail page rather than showing nothing.
 const COINGECKO_ID_BY_CHAIN = {
     'bitcoin-mainnet': 'bitcoin',
+    'bitcoin-testnet': 'bitcoin',
+    'bitcoin-regtest': 'bitcoin',
     'litecoin-mainnet': 'litecoin',
+    'litecoin-testnet': 'litecoin',
+    'litecoin-regtest': 'litecoin',
     'dogecoin-mainnet': 'dogecoin',
+    'dogecoin-testnet': 'dogecoin',
+    'dogecoin-regtest': 'dogecoin',
 };
 
 /**
