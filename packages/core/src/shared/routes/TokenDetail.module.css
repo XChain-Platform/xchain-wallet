@@ -600,27 +600,6 @@
     font-weight: 700;
 }
 
-.pgpsigToggle {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--xc-space-2);
-    padding: var(--xc-space-2);
-    border-radius: var(--xc-radius-sm);
-    background: var(--xc-bg-muted);
-    color: var(--xc-text);
-    border: 0;
-    cursor: pointer;
-    font-size: var(--xc-text-sm);
-    font-weight: 600;
-    text-align: start;
-}
-
-.pgpsigToggle:hover,
-.pgpsigToggle:focus-visible {
-    color: var(--xc-accent-primary);
-}
-
 .pgpsigBlock {
     margin: 0;
     padding: var(--xc-space-2);
@@ -928,19 +907,32 @@
 .fileLink {
     display: flex;
     align-items: center;
-    justify-content: space-between;
     gap: var(--xc-space-2);
     padding: var(--xc-space-2);
     border-radius: var(--xc-radius-sm);
-    background: var(--xc-bg-muted);
-    color: var(--xc-text);
+    border: 1px solid var(--xc-accent-primary);
+    background: transparent;
+    color: var(--xc-accent-primary);
     text-decoration: none;
     font-size: var(--xc-text-sm);
+    font-weight: 600;
 }
 
 .fileLink:hover,
 .fileLink:focus-visible {
-    color: var(--xc-accent-primary);
+    background: color-mix(in srgb, var(--xc-accent-primary, #2563eb) 10%, transparent);
+}
+
+.fileLinkIcon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    color: inherit;
+}
+
+.fileLinkIcon svg {
+    display: block;
 }
 
 .fileLinkName {

@@ -910,6 +910,9 @@ function MediaSubpanel({ kind, images, audio, video, files }) {
             <div className={styles.gallery}>
                 {video.map((v, i) => (
                     <div key={`${v.url}:${i}`} className={styles.galleryMediaCard}>
+                        {v.name ? (
+                            <div className={styles.galleryMediaCaption}>{v.name}</div>
+                        ) : null}
                         <video
                             className={styles.galleryVideo}
                             src={v.url}
@@ -917,9 +920,6 @@ function MediaSubpanel({ kind, images, audio, video, files }) {
                             preload="metadata"
                             playsInline
                         />
-                        {v.name ? (
-                            <div className={styles.galleryMediaCaption}>{v.name}</div>
-                        ) : null}
                     </div>
                 ))}
             </div>
@@ -955,6 +955,9 @@ function MediaSubpanel({ kind, images, audio, video, files }) {
                             rel="noreferrer noopener"
                             className={styles.fileLink}
                         >
+                            <span className={styles.fileLinkIcon} aria-hidden="true">
+                                <Icon.FileTypeIcon type={f.type} />
+                            </span>
                             <span className={styles.fileLinkName}>
                                 {f.name || f.url}
                             </span>
@@ -1063,25 +1066,16 @@ function CategoriesBlock({ categories }) {
 }
 
 function PgpsigBlock({ pgpsig }) {
-    const [open, setOpen] = useState(false);
     return (
         <div className={styles.metaBlock}>
-            <button
-                type="button"
-                className={styles.pgpsigToggle}
-                onClick={() => setOpen((v) => !v)}
-                aria-expanded={open ? 'true' : 'false'}
-            >
-                <span>PGP signature</span>
-                <span aria-hidden="true">{open ? '▴' : '▾'}</span>
-            </button>
-            {open ? <pre className={styles.pgpsigBlock}>{pgpsig}</pre> : null}
+            <h4 className={styles.metaBlockTitle}>PGP signature</h4>
+            <pre className={styles.pgpsigBlock}>{pgpsig}</pre>
         </div>
     );
 }
 
 function ImageHero({ img }) {
-    return (
+    const anchor = (
         <a
             href={img.url}
             target="_blank"
@@ -1094,12 +1088,23 @@ function ImageHero({ img }) {
                 alt={img.name || ''}
                 className={styles.heroImage}
                 onError={(e) => {
+                    const card = e.currentTarget.closest(`.${styles.galleryMediaCard}`);
                     const a = e.currentTarget.closest('a');
-                    if (a) a.style.display = 'none';
+                    if (card) card.style.display = 'none';
+                    else if (a) a.style.display = 'none';
                 }}
             />
         </a>
     );
+    if (img.name) {
+        return (
+            <div className={styles.galleryMediaCard}>
+                <div className={styles.galleryMediaCaption}>{img.name}</div>
+                {anchor}
+            </div>
+        );
+    }
+    return anchor;
 }
 
 

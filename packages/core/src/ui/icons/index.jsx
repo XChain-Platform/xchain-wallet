@@ -364,6 +364,95 @@ export function SwapIcon() {
     );
 }
 
+export function DocumentIcon() {
+    return (
+        <svg {...STROKE_PROPS}>
+            <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+            <path d="M14 3v5h5" />
+            <line x1="8" y1="13" x2="16" y2="13" />
+            <line x1="8" y1="17" x2="13" y2="17" />
+        </svg>
+    );
+}
+
+const FILE_TYPE_STYLES = {
+    pdf: { label: 'PDF', color: '#dc2626' },
+    doc: { label: 'DOC', color: '#2563eb' },
+    docx: { label: 'DOC', color: '#2563eb' },
+    rtf: { label: 'RTF', color: '#2563eb' },
+    odt: { label: 'ODT', color: '#2563eb' },
+    xls: { label: 'XLS', color: '#16a34a' },
+    xlsx: { label: 'XLS', color: '#16a34a' },
+    ods: { label: 'ODS', color: '#16a34a' },
+    csv: { label: 'CSV', color: '#16a34a' },
+    tsv: { label: 'TSV', color: '#16a34a' },
+    ppt: { label: 'PPT', color: '#ea580c' },
+    pptx: { label: 'PPT', color: '#ea580c' },
+    odp: { label: 'ODP', color: '#ea580c' },
+    key: { label: 'KEY', color: '#ea580c' },
+    zip: { label: 'ZIP', color: '#6b7280' },
+    rar: { label: 'RAR', color: '#6b7280' },
+    '7z': { label: '7Z', color: '#6b7280' },
+    tar: { label: 'TAR', color: '#6b7280' },
+    gz: { label: 'GZ', color: '#6b7280' },
+    txt: { label: 'TXT', color: '#6b7280' },
+    md: { label: 'MD', color: '#6b7280' },
+    json: { label: 'JSON', color: '#7c3aed' },
+    xml: { label: 'XML', color: '#7c3aed' },
+    yaml: { label: 'YAML', color: '#7c3aed' },
+    yml: { label: 'YAML', color: '#7c3aed' },
+    html: { label: 'HTML', color: '#ea580c' },
+    htm: { label: 'HTML', color: '#ea580c' },
+    epub: { label: 'EPUB', color: '#0891b2' },
+    mobi: { label: 'MOBI', color: '#0891b2' },
+};
+
+export function FileTypeIcon({ type }) {
+    const key = type ? String(type).toLowerCase().replace(/^\./, '') : '';
+    const meta = FILE_TYPE_STYLES[key] || null;
+    const label = meta
+        ? meta.label
+        : (key ? key.slice(0, 4).toUpperCase() : 'FILE');
+    const color = meta ? meta.color : '#6b7280';
+    const fontSize = label.length >= 4 ? 4 : 5;
+    return (
+        <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+        >
+            <path
+                d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"
+                fill="white"
+                stroke={color}
+                strokeWidth="1.5"
+                strokeLinejoin="round"
+            />
+            <path
+                d="M14 3v5h5"
+                fill="none"
+                stroke={color}
+                strokeWidth="1.5"
+                strokeLinejoin="round"
+            />
+            <rect x="5" y="13.5" width="14" height="5" fill={color} />
+            <text
+                x="12"
+                y="16"
+                textAnchor="middle"
+                dominantBaseline="central"
+                fontSize={fontSize}
+                fontWeight="700"
+                fill="white"
+                fontFamily="system-ui, -apple-system, sans-serif"
+            >
+                {label}
+            </text>
+        </svg>
+    );
+}
+
 export function LinkIcon() {
     return (
         <svg {...STROKE_PROPS}>
