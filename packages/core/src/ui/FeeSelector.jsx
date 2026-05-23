@@ -2,9 +2,8 @@ import { useId, useMemo } from 'react';
 import styles from './FeeSelector.module.css';
 
 const TIER_SPEEDS = ['low', 'normal', 'fast'];
-const SPEEDS = [...TIER_SPEEDS, 'custom'];
+const SPEEDS_WITH_CUSTOM = [...TIER_SPEEDS, 'custom'];
 const SPEED_LABELS = { low: 'Low', normal: 'Normal', fast: 'Fast', custom: 'Custom' };
-const MAX_INDEX = SPEEDS.length - 1;
 
 /**
  * FeeSelector — §44.2 Low / Normal / Fast / Custom slider. Rendering
@@ -44,8 +43,12 @@ export function FeeSelector({
     customEstimate = null,
     disabled = false,
     formatFiat,
+    allowCustom = true,
+    label = null,
 }) {
     const customInputId = useId();
+    const SPEEDS = allowCustom ? SPEEDS_WITH_CUSTOM : TIER_SPEEDS;
+    const MAX_INDEX = SPEEDS.length - 1;
 
     const tierList = useMemo(() => {
         if (!tiers) return [];
@@ -57,13 +60,14 @@ export function FeeSelector({
     if (!tiers || tierList.length === 0) {
         return (
             <div className={styles.wrap}>
+                {label ? <div className={styles.label}>{label}</div> : null}
                 <p className={styles.placeholder}>Fee estimate unavailable for this chain.</p>
             </div>
         );
     }
 
     const mode = value?.mode || 'normal';
-    const isCustom = mode === 'custom';
+    const isCustom = allowCustom && mode === 'custom';
     const sliderSpeed = SPEEDS.includes(mode) ? mode : 'normal';
     const sliderIndex = SPEEDS.indexOf(sliderSpeed);
     const activeEstimate = isCustom ? customEstimate : tiers[sliderSpeed];
@@ -96,6 +100,7 @@ export function FeeSelector({
 
     return (
         <div className={styles.wrap}>
+            {label ? <div className={styles.label}>{label}</div> : null}
             <div className={styles.sliderBlock} data-active-speed={sliderSpeed}>
                 <input
                     type="range"
@@ -111,7 +116,11 @@ export function FeeSelector({
                         : `${SPEED_LABELS[sliderSpeed]} — ${activeEstimate?.coinAmount ?? ''}${activeEstimate?.etaMinutes ? ` · ~${activeEstimate.etaMinutes} min` : ''}`}
                     className={styles.slider}
                 />
-                <div className={styles.sliderTicks} aria-hidden="true">
+                <div
+                    className={styles.sliderTicks}
+                    style={{ gridTemplateColumns: `repeat(${SPEEDS.length}, 1fr)` }}
+                    aria-hidden="true"
+                >
                     {SPEEDS.map((s) => (
                         <button
                             key={s}

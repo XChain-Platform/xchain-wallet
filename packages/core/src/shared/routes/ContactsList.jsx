@@ -10,6 +10,7 @@ import {
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useToast } from '../components/ToastHost.jsx';
+import { ScanRoute } from './ScanRoute.jsx';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -38,7 +39,7 @@ export function ContactsList({ walletId, onSendMessage, onBack }) {
 
     const [contacts, setContacts] = useState(/** @type {any[] | null} */ (null));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
-    const [mode, setMode] = useState(/** @type {'list' | 'detail' | 'edit'} */ ('list'));
+    const [mode, setMode] = useState(/** @type {'list' | 'detail' | 'edit' | 'scan'} */ ('list'));
     const [activeId, setActiveId] = useState(/** @type {string | null} */ (null));
 
     // Edit-mode form state.
@@ -82,6 +83,28 @@ export function ContactsList({ walletId, onSendMessage, onBack }) {
         }
         setSubmitError(null);
         setMode('edit');
+    }
+
+    function handleScanned(outcome) {
+        // ScanRoute fires { kind: 'send', address, chainId? } for plain
+        // addresses, BIP21, and xchain: send URIs. Receive / PSBT scans
+        // have no useful address to add — kick those back to the list
+        // with a toast so the user can try again.
+        if (outcome && outcome.kind === 'send' && outcome.address) {
+            setActiveId(null);
+            setFormName('');
+            setFormNotes('');
+            setFormEntries([{
+                chain: coinFamilyFromChainId(outcome.chainId) || 'bitcoin',
+                address: outcome.address,
+                label: '',
+            }]);
+            setSubmitError(null);
+            setMode('edit');
+        } else {
+            setMode('list');
+            showToast({ message: 'No address detected in that QR code.' });
+        }
     }
 
     async function handleSave(event) {
@@ -185,6 +208,16 @@ export function ContactsList({ walletId, onSendMessage, onBack }) {
 
     if (contacts === null) {
         return wrap(<p className={styles.hint}>Loading contacts…</p>);
+    }
+
+    if (mode === 'scan') {
+        return (
+            <ScanRoute
+                onBack={() => setMode('list')}
+                onClassified={handleScanned}
+                chainRegistry={chainRegistry}
+            />
+        );
     }
 
     if (mode === 'edit') {
@@ -362,6 +395,9 @@ export function ContactsList({ walletId, onSendMessage, onBack }) {
                 <Button variant="primary" onClick={() => { setActiveId(null); startEdit(null); }}>
                     + Add contact
                 </Button>
+                <Button variant="ghost" onClick={() => setMode('scan')} icon={<Icon.ScanIcon />}>
+                    Scan address
+                </Button>
             </div>
         </>,
     );
@@ -375,5 +411,13 @@ function chainIdFor(chain) {
     if (chain === 'bitcoin') return 'bitcoin-mainnet';
     if (chain === 'litecoin') return 'litecoin-mainnet';
     if (chain === 'dogecoin') return 'dogecoin-mainnet';
+    return null;
+}
+
+function coinFamilyFromChainId(chainId) {
+    if (typeof chainId !== 'string') return null;
+    if (chainId.startsWith('bitcoin')) return 'bitcoin';
+    if (chainId.startsWith('litecoin')) return 'litecoin';
+    if (chainId.startsWith('dogecoin')) return 'dogecoin';
     return null;
 }

@@ -34,6 +34,14 @@ const BIP21_PREFIX = 'xchain:';
 // preserved in `intent.action` so new screens can route on it.
 const RECEIVE_ACTIONS = new Set(['receive']);
 
+const FEE_PRIORITIES = new Set(['low', 'normal', 'fast']);
+
+function normalizeFeePriority(raw) {
+    if (typeof raw !== 'string') return undefined;
+    const lower = raw.toLowerCase();
+    return FEE_PRIORITIES.has(lower) ? lower : undefined;
+}
+
 /**
  * @typedef {Object} XchainUriIntent
  * @property {'send' | 'receive' | 'unknown'} kind   routing bucket the wallet uses to pick a screen
@@ -43,6 +51,7 @@ const RECEIVE_ACTIONS = new Set(['receive']);
  * @property {string} [address]                     destination (send) or wallet address (receive)
  * @property {string} [amount]                      decimal string in display units
  * @property {string} [memo]
+ * @property {'low' | 'normal' | 'fast'} [feePriority]   receiver's preferred fee tier; scanners may pre-select but users can override
  * @property {string} [label]
  * @property {string} [message]
  * @property {Record<string, string>} [params]      remaining query params (includes the named ones for caller convenience)
@@ -111,6 +120,8 @@ function parseCoinCodeStyle(raw, chainRegistry) {
     if (params.memo) intent.memo = params.memo;
     if (params.label) intent.label = params.label;
     if (params.message) intent.message = params.message;
+    const feePriority = normalizeFeePriority(params.feePriority);
+    if (feePriority) intent.feePriority = feePriority;
     intent.params = params;
     if (required.length > 0) intent.required = required;
     return intent;
@@ -142,6 +153,8 @@ function parsePathStyle(raw) {
     if (params.message) intent.message = params.message;
     if (params.to) intent.address = params.to;
     if (params.kind === 'receive') intent.kind = 'receive';
+    const feePriority = normalizeFeePriority(params.feePriority);
+    if (feePriority) intent.feePriority = feePriority;
     intent.params = params;
     if (required.length > 0) intent.required = required;
     return intent;
@@ -167,6 +180,8 @@ function parseBip21Style(raw) {
     if (parts.params?.memo) intent.memo = parts.params.memo;
     if (parts.params?.tick) intent.tick = parts.params.tick;
     if (parts.params?.chain) intent.chainId = parts.params.chain;
+    const feePriority = normalizeFeePriority(parts.params?.feePriority);
+    if (feePriority) intent.feePriority = feePriority;
     if (parts.required?.length > 0) intent.required = parts.required;
     return intent;
 }
@@ -286,6 +301,8 @@ export function buildXchainUri(intent, deps) {
     if (intent.amount) params.push(`amount=${encodeURIComponent(intent.amount)}`);
     if (intent.tick) params.push(`tick=${encodeURIComponent(intent.tick)}`);
     if (intent.memo) params.push(`memo=${encodeURIComponent(intent.memo)}`);
+    const feePriority = normalizeFeePriority(intent.feePriority);
+    if (feePriority) params.push(`feePriority=${feePriority}`);
     if (intent.label) params.push(`label=${encodeURIComponent(intent.label)}`);
     if (intent.message) params.push(`message=${encodeURIComponent(intent.message)}`);
     return params.length > 0

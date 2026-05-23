@@ -1,0 +1,28 @@
+.pill {
+    display: inline-flex;
+    background: var(--xc-bg-muted);
+    border: 1px solid var(--xc-border-strong);
+    border-radius: 999px;
+    padding: 2px;
+    gap: 2px;
+}
+.segment {
+    appearance: none;
+    background: transparent;
+    border: none;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    padding: var(--xc-space-1) var(--xc-space-3);
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background-color 160ms ease, color 160ms ease;
+    font-family: inherit;
+    text-align: center;
+}
+.segment:hover { color: var(--xc-text); }
+.segmentActive,
+.segmentActive:hover {
+    background: var(--xc-accent-primary);
+    color: #FFFFFF;
+}

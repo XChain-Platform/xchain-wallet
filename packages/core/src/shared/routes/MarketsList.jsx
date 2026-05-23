@@ -1,57 +1,55 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     Screen,
-    Button,
-    Input,
+    ScreenHeader,
     ChainBadge,
- Icon,} from '@xchain-wallet/core/ui';
-import { registry as registryLib } from '@xchain-wallet/core';
+    Icon,
+} from '@xchain-wallet/core/ui';
+import { registry as registryLib, branding as brandingLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { DispenserBadge } from '../components/DispenserBadge.jsx';
+import { EmptyStateNudge } from '../components/EmptyStateNudge.jsx';
+import { tickerColor } from '../components/BalanceList.jsx';
 import styles from './IssueTokenForm.module.css';
+import receiveStyles from './Receive.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+const NATIVE_TICKER_BY_COIN = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
+function nativeTickerFor(descriptor) {
+    if (!descriptor?.coin) return null;
+    return NATIVE_TICKER_BY_COIN[descriptor.coin] || descriptor.coin.toUpperCase();
+}
 
 /**
- * Markets list — §41.2. Landing view for the DEX surface.
+ * Markets list — §41.2.
  *
- * Two sections:
- *   - **Watchlist** — markets the user has starred (stored per-wallet
- *     in the `watchlistEntries` vault collection). Empty when the
- *     user hasn't pinned anything yet; a hint invites them to star
- *     markets from the Popular list.
- *   - **Popular markets** — the explorer's `getMarkets(tick?)` feed
- *     across whichever chains have addresses on this wallet. Filter
- *     + search narrow the list in-page (no second round-trip).
+ * Flow: the user picks a coin or token via the picker (`onChangeAsset`).
+ * Once a `selectedAsset` is set, the page shows every market pair on
+ * that asset's chain where the asset is one side of the pair.
  *
- * Each row: chain badge, ticker pair, star toggle, and a click target
- * that fires `onOpenMarket(chainId, tick1, tick2)` upstream. The market
- * detail view is Step 2.
- *
- * Explorer-response shape varies chain-to-chain; the helpers near the
- * bottom normalise to `{ tick1, tick2, lastPrice?, change24h?, depth? }`
- * and leave missing fields as "—" on render rather than failing the
- * row.
+ * Empty state: a selector chip + a hint inviting the user to pick.
  *
  * @param {object} props
  * @param {string} props.walletId
+ * @param {{ chainId: string, tick: string, displayName?: string, kind?: string } | null} [props.selectedAsset]
+ * @param {() => void} props.onChangeAsset
  * @param {(chainId: string, tick1: string, tick2: string) => void} props.onOpenMarket
- * @param {() => void} props.onBack
+ * @param {() => void} [props.onBack]
  */
-export function MarketsList({ walletId, onOpenMarket, onBack }) {
+export function MarketsList({
+    walletId,
+    selectedAsset,
+    onChangeAsset,
+    onOpenMarket,
+    onBack,
+}) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
-    const chains = useMemo(() => chainRegistry.supportedChains().map((d) => d.id), []);
-    const [chainFilter, setChainFilter] = useState(/** @type {string} */ ('all'));
-    const [search, setSearch] = useState('');
-    const [popularByChain, setPopularByChain] = useState(
-        /** @type {Record<string, { rows: any[], error: string | null }>} */ ({}),
-    );
+    const [markets, setMarkets] = useState(/** @type {Array<{ tick1: string, tick2: string, lastPrice?: string, change24h?: string, depth?: number }>} */ ([]));
     const [watchlist, setWatchlist] = useState(/** @type {any[]} */ ([]));
-    const [watchlistHydrated, setWatchlistHydrated] = useState(false);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(false);
+    const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
 
     const loadWatchlist = useCallback(async () => {
         try {
@@ -59,37 +57,42 @@ export function MarketsList({ walletId, onOpenMarket, onBack }) {
             setWatchlist(Array.isArray(rows) ? rows : []);
         } catch {
             setWatchlist([]);
-        } finally {
-            setWatchlistHydrated(true);
         }
     }, [walletId, messaging]);
 
-    // Initial load — watchlist from vault, popular markets from every
-    // supported chain in parallel. Failures are per-chain isolated so
-    // a single broken explorer doesn't blank the whole view.
     useEffect(() => {
+        loadWatchlist();
+    }, [loadWatchlist]);
+
+    // Fetch markets on the selected asset's chain whenever the asset changes.
+    useEffect(() => {
+        if (!selectedAsset) {
+            setMarkets([]);
+            setLoadError(null);
+            setLoading(false);
+            return undefined;
+        }
         let cancelled = false;
         setLoading(true);
-        Promise.all([
-            loadWatchlist(),
-            Promise.all(chains.map((cid) =>
-                messaging.getMarkets({ chainId: cid })
-                    .then((resp) => ({ cid, rows: extractRows(resp) }))
-                    .catch((err) => ({ cid, error: err?.message || String(err) }))
-            )).then((results) => {
+        setLoadError(null);
+        messaging.getMarkets({ chainId: selectedAsset.chainId })
+            .then((resp) => {
                 if (cancelled) return;
-                /** @type {Record<string, { rows: any[], error: string | null }>} */
-                const next = {};
-                for (const r of results) {
-                    next[r.cid] = r.error
-                        ? { rows: [], error: r.error }
-                        : { rows: r.rows, error: null };
-                }
-                setPopularByChain(next);
-            }),
-        ]).then(() => { if (!cancelled) setLoading(false); });
+                const tick = selectedAsset.tick.toUpperCase();
+                const rows = extractRows(resp)
+                    .map(normalizeMarket)
+                    .filter(Boolean)
+                    .filter((m) => m.tick1.toUpperCase() === tick || m.tick2.toUpperCase() === tick);
+                setMarkets(rows);
+            })
+            .catch((err) => {
+                if (!cancelled) setLoadError(err?.message || 'Failed to load markets.');
+            })
+            .finally(() => {
+                if (!cancelled) setLoading(false);
+            });
         return () => { cancelled = true; };
-    }, [chains, messaging, loadWatchlist]);
+    }, [selectedAsset, messaging]);
 
     const watchlistKeySet = useMemo(() => {
         const s = new Set();
@@ -110,148 +113,124 @@ export function MarketsList({ walletId, onOpenMarket, onBack }) {
             }
             await loadWatchlist();
         } catch {
-            /* surface via the hint below if persistent */
+            /* ignore; star will revert visually on next reload */
         }
     }, [watchlist, walletId, messaging, loadWatchlist]);
 
-    const filteredPopular = useMemo(() => {
-        const q = search.trim().toUpperCase();
-        const targetChains = chainFilter === 'all' ? chains : [chainFilter];
-        /** @type {Array<{ chainId: string, market: { tick1: string, tick2: string, lastPrice?: string, change24h?: string, depth?: number } }>} */
-        const acc = [];
-        for (const cid of targetChains) {
-            const entry = popularByChain[cid];
-            if (!entry) continue;
-            for (const row of entry.rows) {
-                const norm = normalizeMarket(row);
-                if (!norm) continue;
-                if (q && !`${norm.tick1}/${norm.tick2}`.toUpperCase().includes(q)) continue;
-                acc.push({ chainId: cid, market: norm });
-            }
-        }
-        return acc;
-    }, [popularByChain, chainFilter, chains, search]);
-
-    const filteredWatchlist = useMemo(() => {
-        const q = search.trim().toUpperCase();
-        const rows = chainFilter === 'all'
-            ? watchlist
-            : watchlist.filter((e) => e.chainId === chainFilter);
-        if (!q) return rows;
-        return rows.filter((e) => `${e.tick1}/${e.tick2}`.toUpperCase().includes(q));
-    }, [watchlist, chainFilter, search]);
-
-        const header = (
-        <ScreenHeader
-            onBack={onBack}
-            title="Markets"
-        />
+    const header = (
+        <ScreenHeader onBack={onBack} title="Markets" titleIcon={<Icon.MarketIcon />} />
     );
-    const wrap = (children) => (
+
+    const selectorDescriptor = selectedAsset ? chainRegistry.get(selectedAsset.chainId) : null;
+    const selectorNativeTicker = nativeTickerFor(selectorDescriptor);
+    const selectorTickUpper = selectedAsset ? selectedAsset.tick.toUpperCase() : '';
+    const isTokenSelection = !!selectedAsset
+        && !!selectorNativeTicker
+        && selectorTickUpper !== selectorNativeTicker;
+    const assetName = selectedAsset
+        ? (isTokenSelection
+            ? (selectedAsset.displayName || selectorTickUpper)
+            : (selectorDescriptor?.displayName || selectorNativeTicker || selectorTickUpper))
+        : 'Select coin or token';
+    const assetImageUrl = selectedAsset && selectorDescriptor
+        ? (isTokenSelection ? null : brandingLib.chainIconLargeUrl(selectorDescriptor.id))
+        : null;
+    const assetLetter = selectedAsset
+        ? (isTokenSelection
+            ? selectorTickUpper.slice(0, 1)
+            : (selectorNativeTicker || selectorDescriptor?.displayName || '?').slice(0, 1))
+        : '?';
+    const assetSub = selectedAsset && selectorDescriptor
+        ? (isTokenSelection
+            ? selectorTickUpper
+            : (selectorDescriptor.networkKind !== 'mainnet' ? selectorDescriptor.networkKind : (selectorDescriptor.displayName || '')))
+        : '';
+
+    return (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
-        </Screen>
-    );
-
-    if (loading && !watchlistHydrated) {
-        return wrap(<p className={styles.hint}>Loading markets…</p>);
-    }
-
-    return wrap(
-        <>
-            <label className={styles.pickerLabel}>
-                Chain
-                <select
-                    className={styles.picker}
-                    value={chainFilter}
-                    onChange={(e) => setChainFilter(e.target.value)}
-                    aria-label="Chain filter"
-                >
-                    <option value="all">All chains</option>
-                    {chains.map((cid) => {
-                        const d = chainRegistry.get(cid);
-                        return (
-                            <option key={cid} value={cid}>
-                                {d ? `${d.displayName} (${d.networkKind})` : cid}
-                            </option>
-                        );
-                    })}
-                </select>
-            </label>
-            <Input
-                label="Search"
-                placeholder="TICK or TICK/TICK"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                autoCapitalize="characters"
-                autoComplete="off"
-                autoCorrect="off"
-                spellCheck={false}
-            />
-
-            <section>
-                <p className={styles.successLabel}>Watchlist</p>
-                {filteredWatchlist.length === 0 ? (
-                    <p className={styles.hint}>
-                        {watchlist.length === 0
-                            ? 'No pinned markets yet. Tap ☆ on any market below to watch it.'
-                            : 'No matches in your watchlist for this filter.'}
-                    </p>
-                ) : (
-                    <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                        {filteredWatchlist.map((entry) => (
-                            <MarketRow
-                                key={entry.id}
-                                chainId={entry.chainId}
-                                tick1={entry.tick1}
-                                tick2={entry.tick2}
-                                starred
-                                onOpen={() => onOpenMarket(entry.chainId, entry.tick1, entry.tick2)}
-                                onToggleStar={() => toggleStar(entry.chainId, entry.tick1, entry.tick2)}
+            <button
+                type="button"
+                className={receiveStyles.assetCard}
+                onClick={onChangeAsset}
+                aria-label={selectedAsset
+                    ? `Change asset (currently ${assetName})`
+                    : 'Select coin or token'}
+            >
+                <span className={receiveStyles.assetIconWrap}>
+                    {assetImageUrl ? (
+                        <img
+                            src={assetImageUrl}
+                            alt=""
+                            aria-hidden="true"
+                            className={receiveStyles.assetIcon}
+                            onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                        />
+                    ) : (
+                        <span
+                            className={receiveStyles.assetIconFallback}
+                            style={{ background: tickerColor(selectorTickUpper || 'BTC') }}
+                            aria-hidden="true"
+                        >
+                            {assetLetter}
+                        </span>
+                    )}
+                    {isTokenSelection && selectorDescriptor ? (() => {
+                        const chainPipUrl = brandingLib.chainIconSmallUrl(selectorDescriptor.id);
+                        return chainPipUrl ? (
+                            <img
+                                src={chainPipUrl}
+                                alt=""
+                                aria-hidden="true"
+                                title={selectorDescriptor.displayName}
+                                className={receiveStyles.assetChainOverlay}
                             />
-                        ))}
-                    </ul>
-                )}
-            </section>
+                        ) : null;
+                    })() : null}
+                </span>
+                <span className={receiveStyles.assetText}>
+                    <span className={receiveStyles.assetName}>{assetName}</span>
+                    {assetSub ? (
+                        <span className={receiveStyles.assetSub}>{assetSub}</span>
+                    ) : null}
+                </span>
+                <span className={receiveStyles.assetChevron} aria-hidden="true">›</span>
+            </button>
 
-            <section style={{ marginTop: '1rem' }}>
-                <p className={styles.successLabel}>Popular markets</p>
-                {filteredPopular.length === 0 ? (
-                    <p className={styles.hint}>
-                        {search.trim()
-                            ? 'No markets match your search.'
-                            : 'No markets on the selected chain.'}
-                    </p>
-                ) : (
-                    <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                        {filteredPopular.map(({ chainId, market }) => (
-                            <MarketRow
-                                key={`${chainId}::${market.tick1}::${market.tick2}`}
-                                chainId={chainId}
-                                tick1={market.tick1}
-                                tick2={market.tick2}
-                                lastPrice={market.lastPrice}
-                                change24h={market.change24h}
-                                depth={market.depth}
-                                starred={watchlistKeySet.has(`${chainId}::${market.tick1}::${market.tick2}`)}
-                                onOpen={() => onOpenMarket(chainId, market.tick1, market.tick2)}
-                                onToggleStar={() => toggleStar(chainId, market.tick1, market.tick2)}
-                            />
-                        ))}
-                    </ul>
-                )}
-            </section>
-
-            {Object.values(popularByChain).some((e) => e.error) ? (
-                <p className={styles.hint}>
-                    Some chains could not load market data right now — they're
-                    hidden until the explorer comes back.
-                </p>
+            {loadError ? (
+                <p className={styles.hint} role="alert">{loadError}</p>
             ) : null}
 
-            <div className={styles.actions}>
-            </div>
-        </>,
+            {!selectedAsset ? (
+                <EmptyStateNudge
+                    title="Pick a coin or token"
+                    body="Choose what you want to look at markets for."
+                />
+            ) : loading ? (
+                <p className={styles.hint}>Loading markets…</p>
+            ) : markets.length === 0 ? (
+                <EmptyStateNudge
+                    title={`No markets for ${selectedAsset.tick}`}
+                    body="No pairs found involving this asset on its chain."
+                />
+            ) : (
+                <ul style={{ listStyle: 'none', padding: '0 var(--xc-space-3)', margin: 0 }}>
+                    {markets.map((m) => (
+                        <MarketRow
+                            key={`${m.tick1}::${m.tick2}`}
+                            chainId={selectedAsset.chainId}
+                            tick1={m.tick1}
+                            tick2={m.tick2}
+                            lastPrice={m.lastPrice}
+                            change24h={m.change24h}
+                            depth={m.depth}
+                            starred={watchlistKeySet.has(`${selectedAsset.chainId}::${m.tick1}::${m.tick2}`)}
+                            onOpen={() => onOpenMarket(selectedAsset.chainId, m.tick1, m.tick2)}
+                            onToggleStar={() => toggleStar(selectedAsset.chainId, m.tick1, m.tick2)}
+                        />
+                    ))}
+                </ul>
+            )}
+        </Screen>
     );
 }
 

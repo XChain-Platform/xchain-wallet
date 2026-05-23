@@ -152,7 +152,7 @@ function AppInner() {
         /** @type {'welcome' | 'create' | 'import' | 'import-freewallet'} */ ('welcome'),
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'swap' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'staking-dashboard' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'addresses' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'scan'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'markets-picker' | 'market' | 'coinpay' | 'swap' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'staking-dashboard' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'addresses' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'scan'} */ ('home'),
     );
     const [tokenDetailRef, setTokenDetailRef] = useState(
         /** @type {{ chainId: string, tick: string, kind: string, displayName: string, divisibility: number, fiatRate: number | null, quantity: string } | null} */ (null),
@@ -246,6 +246,16 @@ function AppInner() {
     );
     const [activeMarket, setActiveMarket] = useState(
         /** @type {{ chainId: string, tick1: string, tick2: string } | null} */ (null),
+    );
+    // The coin/token the user picked to scope the Markets list to.
+    // Carried between MarketsList and the picker (`markets-picker`) so
+    // re-entering Markets restores the selection. Defaults to BTC mainnet.
+    const [marketsAsset, setMarketsAsset] = useState(
+        /** @type {{ chainId: string, tick: string, displayName?: string, kind?: string } | null} */ ({
+            chainId: 'bitcoin-mainnet',
+            tick: 'BTC',
+            kind: 'native',
+        }),
     );
     // §47 / Cluster L FOLLOWUP 1 — deep-link prefill for Send. Populated
     // once on mount from `?uri=` in `location.search`; consumed by the
@@ -460,6 +470,10 @@ function AppInner() {
                             setSendBackTo('home');
                         }}
                         prefill={sendPrefill}
+                        onChangeAsset={() => {
+                            setSendPrefill(null);
+                            setUnlockedView('send-picker');
+                        }}
                     />
                 );
             }
@@ -526,6 +540,10 @@ function AppInner() {
                             setReceivePrefill(null);
                             setUnlockedView(receivePrefill ? 'receive-picker' : 'home');
                         }}
+                        onChangeAsset={() => {
+                            setReceivePrefill(null);
+                            setUnlockedView('receive-picker');
+                        }}
                     />
                 );
             }
@@ -541,6 +559,7 @@ function AppInner() {
                                     tick: outcome.tick,
                                     chainId: outcome.chainId,
                                     memo: outcome.memo,
+                                    feePriority: outcome.feePriority,
                                 });
                                 setUnlockedView('send');
                             } else if (outcome.kind === 'receive') {
@@ -707,11 +726,34 @@ function AppInner() {
                 return (
                     <MarketsList
                         walletId={activeWalletId}
+                        selectedAsset={marketsAsset}
+                        onChangeAsset={() => setUnlockedView('markets-picker')}
                         onOpenMarket={(chainId, tick1, tick2) => {
                             setActiveMarket({ chainId, tick1, tick2 });
                             setUnlockedView('market');
                         }}
                         onBack={() => setUnlockedView('home')}
+                    />
+                );
+            }
+            if (unlockedView === 'markets-picker' && activeWalletId) {
+                return (
+                    <ReceivePicker
+                        walletId={activeWalletId}
+                        accountId={activeAccountId || undefined}
+                        title="Select coin or token"
+                        backLabel="Back to markets"
+                        hideOwnFilter
+                        onBack={() => setUnlockedView('markets')}
+                        onSelect={(sel) => {
+                            setMarketsAsset({
+                                chainId: sel.chainId,
+                                tick: sel.tick,
+                                displayName: sel.displayName,
+                                kind: sel.kind,
+                            });
+                            setUnlockedView('markets');
+                        }}
                     />
                 );
             }
@@ -831,7 +873,7 @@ function AppInner() {
                         networkFilter={globalNetworkFilter}
                         tokenQuery={globalTokenQuery}
                         onBack={() => setUnlockedView('home')}
-                        onReceive={() => { setReceivePrefill(null); setUnlockedView('receive-picker'); }}
+                        onReceive={() => { setReceivePrefill(null); setUnlockedView('receive'); }}
                         onShowPrivateKey={(addr) => {
                             setPrivateKeyAddress(addr);
                             setUnlockedView('view-private-key');
@@ -1062,7 +1104,7 @@ function AppInner() {
                         walletId={activeWalletId}
                         accountId={activeAccountId || undefined}
                         onBack={() => setUnlockedView(historyReturnTo)}
-                        onReceive={() => { setReceivePrefill(null); setUnlockedView('receive-picker'); }}
+                        onReceive={() => { setReceivePrefill(null); setUnlockedView('receive'); }}
                         initialSearchQuery={historyInitialQuery}
                         initialChainCoin={historyInitialChainCoin}
                         onSelectEntry={(entry) => {
@@ -1106,7 +1148,16 @@ function AppInner() {
                             setSendBackTo('token-detail');
                             setUnlockedView('send');
                         }}
-                        onReceive={() => { setReceivePrefill(null); setUnlockedView('receive-picker'); }}
+                        onReceive={() => {
+                            setReceivePrefill({
+                                chainId: tokenDetailRef.chainId,
+                                tick: tokenDetailRef.tick,
+                                kind: tokenDetailRef.kind,
+                                displayName: tokenDetailRef.displayName,
+                                imageUrl: tokenDetailRef.imageUrl,
+                            });
+                            setUnlockedView('receive');
+                        }}
                         onViewActivity={() => {
                             const coin = String(tokenDetailRef.chainId || '').split('-')[0] || '';
                             setHistoryInitialQuery('');
@@ -1306,9 +1357,9 @@ function AppInner() {
                         onLocked={refresh}
                         onSend={activeWalletId ? () => {
                             setSendPrefill(null);
-                            setUnlockedView('send-picker');
+                            setUnlockedView('send');
                         } : undefined}
-                        onReceive={activeWalletId ? () => { setReceivePrefill(null); setUnlockedView('receive-picker'); } : undefined}
+                        onReceive={activeWalletId ? () => { setReceivePrefill(null); setUnlockedView('receive'); } : undefined}
                         onSwap={activeWalletId ? () => setUnlockedView('swap') : undefined}
                         onBuy={activeWalletId ? () => setUnlockedView('dispenser-explorer') : undefined}
                         onCreateToken={activeWalletId ? () => setUnlockedView('wizard') : undefined}
@@ -1453,6 +1504,7 @@ function AppInner() {
                                         }
                                     }}
                                     onScan={() => setGlobalScannerOpen(true)}
+                                    onLock={handleNavLock}
                                     showNetworkFilter={unlockedView === 'home' || unlockedView === 'send-picker' || unlockedView === 'addresses'}
                                 />
                                 {/* Cluster J FOLLOWUP 2 — DemoBanner persists across every

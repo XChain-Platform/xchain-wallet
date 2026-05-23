@@ -12,10 +12,103 @@
     margin-bottom: var(--xc-space-3);
 }
 
-.singleChain {
+.assetCard {
     display: flex;
-    justify-content: center;
+    align-items: center;
+    gap: var(--xc-space-3);
+    width: 100%;
+    padding: var(--xc-space-3);
+    background: var(--xc-bg-muted);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-md);
     margin-bottom: var(--xc-space-3);
+    color: var(--xc-text);
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+    appearance: none;
+    transition: border-color 120ms ease, background-color 120ms ease;
+}
+
+.assetCard:hover {
+    border-color: var(--xc-border-strong);
+}
+
+.assetCard:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
+.assetIconWrap {
+    position: relative;
+    flex: 0 0 auto;
+    width: 40px;
+    height: 40px;
+}
+
+.assetIcon {
+    width: 40px;
+    height: 40px;
+    display: block;
+    object-fit: contain;
+    background: transparent;
+}
+
+.assetChainOverlay {
+    position: absolute;
+    bottom: -2px;
+    inset-inline-end: -2px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #FFFFFF;
+    box-shadow: 0 0 0 1.5px var(--xc-bg-muted);
+    object-fit: cover;
+    display: block;
+}
+
+.assetIconFallback {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    font-weight: 700;
+    color: #FFFFFF;
+    font-size: var(--xc-text-md);
+}
+
+.assetText {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.assetName {
+    font-size: var(--xc-text-md);
+    font-weight: 600;
+    color: var(--xc-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.assetSub {
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+}
+
+.assetChevron {
+    flex: 0 0 auto;
+    color: var(--xc-text-muted);
+    font-size: 20px;
+    line-height: 1;
 }
 
 .qrBox {
@@ -76,24 +169,6 @@
     margin-bottom: var(--xc-space-3);
 }
 
-.actions {
-    margin-top: var(--xc-space-2);
-}
-
-.genForm {
-    margin-top: var(--xc-space-2);
-    padding: var(--xc-space-3);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
-    background: var(--xc-surface-raised);
-}
-
-.genButtons {
-    display: flex;
-    justify-content: flex-end;
-    gap: var(--xc-space-2);
-}
-
 .requestRow {
     display: flex;
     gap: var(--xc-space-2);
@@ -106,21 +181,15 @@
     min-width: 140px;
 }
 
-.advanced {
+.qrActions {
+    display: flex;
+    gap: var(--xc-space-2);
     margin-top: var(--xc-space-3);
 }
 
-.advancedToggle {
-    cursor: pointer;
-    font-size: var(--xc-text-xs);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: var(--xc-text-muted);
-    list-style: revert;
-    padding: var(--xc-space-1) 0;
+.qrActions > * {
+    flex: 1 1 0;
+    min-width: 0;
 }
 
-.advancedToggle:hover {
-    color: var(--xc-text);
-}
+

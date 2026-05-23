@@ -1,0 +1,104 @@
+/* Shared "big amount" field used by Send and Receive. Source of truth
+   for the visual contract; both routes mount <AmountField/> with the
+   same look. CSS values mirror what previously lived in Send.module.css
+   under .amountBlock / .amountFooter / .amountMaxInline / etc. */
+
+.amountBlock {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+/* The shared Input component carries `margin-bottom: var(--xc-space-3)`
+   on its wrapper. Inside the amount block we want the footer flush
+   under the field, so zero that out via a structural selector. */
+.amountBlock > div:first-child,
+.amountFieldWrap > div:first-child {
+    margin-bottom: 0;
+}
+
+/* Bumps font-size/padding on the underlying <input> and label inside
+   the shared Input so the field reads as a primary entry surface. */
+.bigField :global(input) {
+    font-size: var(--xc-text-lg);
+    padding: var(--xc-space-3) var(--xc-space-4);
+    min-height: 48px;
+}
+
+.bigField :global(label) {
+    font-size: var(--xc-text-md);
+    font-weight: 600;
+}
+
+.amountFieldWrap {
+    position: relative;
+}
+
+.amountMaxInline {
+    position: absolute;
+    right: var(--xc-space-2);
+    /* Stretch between the bottom of the label area and the bottom of
+       the input. */
+    top: calc(1rem * 1.5 + var(--xc-space-2));
+    bottom: var(--xc-space-3);
+    display: inline-flex;
+    align-items: center;
+    padding: 0 var(--xc-space-3);
+    border: 1px solid var(--xc-accent-primary);
+    border-radius: var(--xc-radius-sm);
+    background: var(--xc-accent-primary);
+    color: #FFFFFF;
+    font-size: var(--xc-text-xs);
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.amountMaxInline:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--xc-accent-primary) 85%, white 15%);
+    border-color: color-mix(in srgb, var(--xc-accent-primary) 85%, white 15%);
+}
+
+.amountMaxInline:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.amountFooter {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--xc-space-3);
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    margin-top: 4px;
+}
+
+.amountFooterRight {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+}
+
+.amountUnitSwap {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+    background: transparent;
+    border: none;
+    padding: 0;
+    font: inherit;
+    color: var(--xc-text-muted);
+    cursor: pointer;
+    font-size: var(--xc-text-xs);
+}
+
+.amountUnitSwap:hover,
+.amountUnitSwap:focus-visible {
+    color: var(--xc-text);
+}
+
+.amountUnitSwap svg {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+}

@@ -3,20 +3,34 @@ import QRCode from 'qrcode';
 import {
     Screen,
     ScreenHeader,
-    Button,
-    Input,
     ChainBadge,
     AddressText,
+    Button,
     CopyButton,
     MultisigBadge,
+    FeeSelector,
     Icon,
 } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     uri as uriLib,
+    branding as brandingLib,
 } from '@xchain-wallet/core';
+import {
+    estimateNativeSendFeeTiers,
+    fetchNativeSendFeeTiers,
+} from '../../flows/feeEstimate.js';
+import { getFiatRate, coinToFiat, fiatToCoin } from '../../flows/priceLookup.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
-import { SignerSelectForm } from './SignerSelectForm.jsx';
+import { useSettings } from '../hooks/useSettings.js';
+import { tickerColor } from '../components/BalanceList.jsx';
+import { useToast } from '../components/ToastHost.jsx';
+import { AmountField } from '../components/AmountField.jsx';
+import {
+    formatWithThousands,
+    countNonCommaBefore,
+    indexAfterNonCommaCount,
+} from '../utils/amountFormat.js';
 import styles from './Receive.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -49,11 +63,14 @@ function nativeTickerFor(descriptor) {
  *        chain's native ticker (no point encoding `?tick=BTC` on a
  *        BTC-native QR).
  * @param {() => void} [props.onBack]
+ * @param {() => void} [props.onChangeAsset]   tapped from the asset card; should navigate to the picker. Falls back to `onBack` when omitted.
  */
-export function Receive({ walletId, accountId, prefill = null, onBack }) {
+export function Receive({ walletId, accountId, prefill = null, onBack, onChangeAsset }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
+    const { showToast } = useToast();
+    const { settings } = useSettings();
 
     const [chainsByWallet, setChainsByWallet] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -64,16 +81,6 @@ export function Receive({ walletId, accountId, prefill = null, onBack }) {
     const [address, setAddress] = useState(/** @type {any | null} */ (null));
     const [qrDataUrl, setQrDataUrl] = useState(/** @type {string | null} */ (null));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
-
-    const [genOpen, setGenOpen] = useState(false);
-    const [genPassword, setGenPassword] = useState('');
-    const [genError, setGenError] = useState(/** @type {string | null} */ (null));
-    const [genBusy, setGenBusy] = useState(false);
-    // null = software (implicit); string = HW SignerRecord id. SignerSelectForm
-    // hides itself when only software is available so the common path
-    // stays a single password prompt.
-    const [genSignerId, setGenSignerId] = useState(/** @type {string | null} */ (null));
-    const genInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
     // §22 + §42.9 multisig receive integration. When the wallet has a
     // persisted MultisigConfig (Step 17) and the active chain is a
@@ -196,91 +203,14 @@ export function Receive({ walletId, accountId, prefill = null, onBack }) {
     }, [multisigs, activeChainId]);
 
     // Unified QR effect lives below — see the `qrUri` memo. Driven by
-    // address + active chain + the optional amount/tick/memo customization.
-
-    const openGen = useCallback(async () => {
-        if (genBusy) return;
-        setGenError(null);
-        setGenPassword('');
-        if (!activeChainId) return;
-        // Try a silent derive first. When the wallet has a pooled
-        // SoftwareSigner (i.e. the user unlocked this session, or this
-        // is a demo wallet whose import populated the pool), the host
-        // re-uses that signer and no password is needed. Only fall back
-        // to the password form when the backend signals it actually
-        // needs credentials. HW-signer cases also fall back to the form
-        // so the user can pick which signer to derive on.
-        setGenBusy(true);
-        try {
-            const fresh = await messaging.generateReceiveAddress({
-                walletId,
-                accountId,
-                chainId: activeChainId,
-            });
-            setAddress(fresh);
-            setGenBusy(false);
-            return;
-        } catch (err) {
-            setGenBusy(false);
-            const msg = err?.message || '';
-            const needsCredential = /`?signer`? or `?password`? is required/i.test(msg);
-            if (!needsCredential) {
-                setGenError(err?.name === 'InvalidPasswordError'
-                    ? 'Incorrect password.'
-                    : msg || 'Failed to derive.');
-                return;
-            }
-            // Pool didn't have this wallet's signer — open the form so
-            // the user can supply a password or pick a HW signer.
-            setGenOpen(true);
-            setTimeout(() => genInputRef.current?.focus(), 0);
-        }
-    }, [genBusy, activeChainId, walletId, accountId, messaging]);
-
-    // HW signer path skips the password prompt — the device confirms
-    // derivation locally. Software path requires the password to re-run
-    // Argon2id KDF on the encrypted seed.
-    const usingHwSigner = genSignerId !== null;
-    const canDerive = activeChainId
-        && !genBusy
-        && (usingHwSigner || genPassword.length > 0);
-
-    async function handleGenerate(event) {
-        event.preventDefault();
-        if (!canDerive) return;
-        setGenBusy(true);
-        setGenError(null);
-        try {
-            const req = {
-                walletId,
-                accountId,
-                chainId: activeChainId,
-                signerId: genSignerId || undefined,
-            };
-            if (!usingHwSigner) req.password = genPassword;
-            const fresh = await messaging.generateReceiveAddress(req);
-            setAddress(fresh);
-            setGenOpen(false);
-            setGenPassword('');
-        } catch (err) {
-            const bad = err?.name === 'InvalidPasswordError';
-            setGenError(bad ? 'Incorrect password.' : err?.message || 'Failed to derive.');
-            if (!usingHwSigner) {
-                genInputRef.current?.focus();
-                genInputRef.current?.select();
-            }
-        } finally {
-            setGenBusy(false);
-        }
-    }
+    // address + active chain + the optional amount/tick customization.
 
     const descriptor = activeChainId ? chainRegistry.get(activeChainId) : null;
 
     // Inline payment-request fields — visible by default so customizing
-    // the QR is a single-glance affair. Memo is optional and tucked into
-    // an "Advanced" disclosure. As any of these change, the QR re-renders.
-    // Token tick seeds from a non-native ReceivePicker prefill so the
-    // QR encodes the requested token without manual entry.
+    // the QR is a single-glance affair. As the amount changes, the QR
+    // re-renders. Token tick seeds from a non-native ReceivePicker prefill
+    // so the QR encodes the requested token without manual entry.
     const [reqAmount, setReqAmount] = useState('');
     const [reqTick, setReqTick] = useState(() => {
         if (!prefill?.tick || !prefill?.chainId) return '';
@@ -289,13 +219,100 @@ export function Receive({ walletId, accountId, prefill = null, onBack }) {
         if (nativeTicker && prefill.tick.toUpperCase() === nativeTicker) return '';
         return prefill.tick.toUpperCase();
     });
-    const [reqMemo, setReqMemo] = useState('');
-    const [shareStatus, setShareStatus] = useState(/** @type {string | null} */ (null));
+    const [feePick, setFeePick] = useState(/** @type {{ mode: 'low' | 'normal' | 'fast' }} */ ({ mode: 'normal' }));
+    const [feeTiers, setFeeTiers] = useState(/** @type {any} */ (null));
+
+    // Fiat-aware amount entry — mirrors Send. Canonical `reqAmount` stays
+    // coin-scale (it's what the QR/URI encodes); when the user toggles
+    // to fiat mode we edit `fiatAmount` and derive the coin value via
+    // priceLookup. Fiat support is only meaningful for the chain's
+    // native asset — we hide the toggle for non-native token requests.
+    const [amountInputMode, setAmountInputMode] = useState(/** @type {'coin' | 'fiat'} */ ('coin'));
+    const [fiatAmount, setFiatAmount] = useState('');
+    const amountInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+
+    const fiatCurrency = settings?.fiatCurrency || 'USD';
+    const isNativeRequest = useMemo(() => {
+        const t = reqTick.trim().toUpperCase();
+        if (!t) return true;
+        const native = nativeTickerFor(activeChainId ? chainRegistry.get(activeChainId) : null);
+        return native ? t === native : false;
+    }, [reqTick, activeChainId]);
+    const fiatRate = useMemo(() => {
+        if (!isNativeRequest) return null;
+        const desc = activeChainId ? chainRegistry.get(activeChainId) : null;
+        const coin = desc?.coin;
+        if (!coin) return null;
+        return getFiatRate({ chainCoin: coin, fiatCurrency });
+    }, [isNativeRequest, activeChainId, fiatCurrency]);
+
+    const onAmountFieldChange = useCallback((rawValue, cursorPos) => {
+        const stripped = String(rawValue).replace(/,/g, '');
+        if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
+        if (amountInputMode === 'fiat') {
+            setFiatAmount(stripped);
+            if (!fiatRate) {
+                if (stripped === '') setReqAmount('');
+            } else {
+                const derivedCoin = fiatToCoin(stripped, fiatRate);
+                setReqAmount(derivedCoin != null ? derivedCoin : '');
+            }
+        } else {
+            setReqAmount(stripped);
+        }
+        if (typeof cursorPos === 'number' && amountInputRef.current) {
+            const formattedNew = formatWithThousands(stripped);
+            const nonCommaBefore = countNonCommaBefore(String(rawValue), cursorPos);
+            const nextCursor = indexAfterNonCommaCount(formattedNew, nonCommaBefore);
+            const el = amountInputRef.current;
+            requestAnimationFrame(() => {
+                if (el && document.activeElement === el) {
+                    try { el.setSelectionRange(nextCursor, nextCursor); } catch { /* selection unavailable */ }
+                }
+            });
+        }
+    }, [amountInputMode, fiatRate]);
+
+    const toggleAmountInputMode = useCallback(() => {
+        if (!fiatRate) return;
+        setAmountInputMode((prev) => {
+            if (prev === 'coin') {
+                const fv = reqAmount ? coinToFiat(reqAmount, fiatRate) : null;
+                setFiatAmount(fv != null ? fv.toFixed(2) : '');
+                return 'fiat';
+            }
+            setFiatAmount('');
+            return 'coin';
+        });
+    }, [reqAmount, fiatRate]);
+
+    // If the request switches to a non-native token mid-edit, fiat
+    // mode loses its rate — fall back to coin entry so the input
+    // doesn't show an empty fiat label with no toggle.
+    useEffect(() => {
+        if (!fiatRate && amountInputMode === 'fiat') {
+            setAmountInputMode('coin');
+            setFiatAmount('');
+        }
+    }, [fiatRate, amountInputMode]);
+
+    useEffect(() => {
+        if (!activeChainId) {
+            setFeeTiers(null);
+            return undefined;
+        }
+        setFeeTiers(estimateNativeSendFeeTiers({ chainId: activeChainId, chainRegistry }));
+        let cancelled = false;
+        fetchNativeSendFeeTiers({ messaging, chainId: activeChainId, chainRegistry })
+            .then((tiers) => { if (!cancelled && tiers) setFeeTiers(tiers); })
+            .catch(() => { /* keep the placeholder seed */ });
+        return () => { cancelled = true; };
+    }, [activeChainId, messaging]);
 
     const nativeTicker = nativeTickerFor(descriptor);
 
-    // QR content. When the user has set ANY of {amount, tick, memo}, encode
-    // a coin-code `xchain:CODE/send?to=…&amount=…&tick=…` URI — the receiver
+    // QR content. When the user has set an amount (or has a token tick),
+    // encode an `xchain:CODE/send?to=…&amount=…&tick=…` URI — the receiver
     // (another XChain wallet) lands on Send with chain + token + amount
     // pre-filled. When nothing is customized, fall back to a bare BIP21 URI
     // (`bitcoin:`/`litecoin:`/`dogecoin:`) so external wallets that only
@@ -304,30 +321,28 @@ export function Receive({ walletId, accountId, prefill = null, onBack }) {
         if (!address || !descriptor || !activeChainId) return null;
         const amount = reqAmount.trim();
         const tick = reqTick.trim().toUpperCase();
-        const memo = reqMemo.trim();
-        const customized = amount || tick || memo;
-        if (customized) {
-            try {
-                return uriLib.buildXchainUri(
-                    {
-                        chainId: activeChainId,
-                        action: 'send',
-                        address: address.address,
-                        amount: amount || undefined,
-                        tick: tick || undefined,
-                        memo: memo || undefined,
-                    },
-                    { chainRegistry },
-                );
-            } catch {
-                // Chain isn't mapped to a coin code yet — fall through to BIP21.
-            }
+        const feePriority = feePick?.mode || 'normal';
+        try {
+            return uriLib.buildXchainUri(
+                {
+                    chainId: activeChainId,
+                    action: 'send',
+                    address: address.address,
+                    amount: amount || undefined,
+                    tick: tick || undefined,
+                    feePriority,
+                },
+                { chainRegistry },
+            );
+        } catch {
+            // Chain isn't mapped to a coin code yet — fall through to BIP21
+            // (BIP21 has no feePriority slot; receiver's preference is dropped).
+            return uriLib.encodeBip21Uri({
+                scheme: descriptor.uriScheme,
+                address: address.address,
+            });
         }
-        return uriLib.encodeBip21Uri({
-            scheme: descriptor.uriScheme,
-            address: address.address,
-        });
-    }, [address, descriptor, activeChainId, reqAmount, reqTick, reqMemo]);
+    }, [address, descriptor, activeChainId, reqAmount, reqTick, feePick]);
 
     useEffect(() => {
         if (!qrUri) {
@@ -346,42 +361,75 @@ export function Receive({ walletId, accountId, prefill = null, onBack }) {
         return () => { cancelled = true; };
     }, [qrUri]);
 
-    // §29.7 Share button. Uses Web Share API when available; falls
-    // back to clipboard. Surfaces inline status (no toast system in
-    // core yet — §37.2 adds the host).
-    const onShare = useCallback(async (uri) => {
-        if (!uri) return;
-        setShareStatus(null);
-        if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
-            try {
-                await navigator.share({
-                    title: 'Payment request',
-                    text: `Pay ${reqAmount.trim() || ''} ${reqTick.trim() || (nativeTicker || '')}`.trim(),
-                    url: uri,
-                });
-                setShareStatus('Shared.');
-                return;
-            } catch (err) {
-                // User cancelled or share failed; fall through to clipboard.
-            }
-        }
+    // QR image actions. The Copy button writes the rendered PNG to the
+    // clipboard as an image (not as text) so the user can paste it into
+    // chat / email like any other image. Share does the same write and
+    // then opens the platform share sheet. We feature-detect file-share
+    // support and hide the Share button on browsers that can't take a
+    // File via navigator.share (older Chromium on desktop, mainly).
+    const canShareFiles = useMemo(() => {
+        if (typeof navigator === 'undefined') return false;
+        if (typeof navigator.share !== 'function') return false;
+        if (typeof navigator.canShare !== 'function') return false;
         try {
-            if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-                await navigator.clipboard.writeText(uri);
-                setShareStatus('Copied to clipboard.');
-                return;
-            }
+            const probe = new File([new Uint8Array([0])], 'probe.png', { type: 'image/png' });
+            return navigator.canShare({ files: [probe] });
         } catch {
-            // ignore — surfaced via fallback message
+            return false;
         }
-        setShareStatus('Share unavailable — copy the link manually.');
-    }, [reqAmount, reqTick, nativeTicker]);
+    }, []);
 
-        const header = (
+    const qrFileName = useMemo(() => {
+        const addrPart = address?.address ? address.address.slice(0, 8) : 'address';
+        const chainPart = descriptor?.id || activeChainId || 'qr';
+        return `xchain-${chainPart}-${addrPart}.png`;
+    }, [address?.address, descriptor?.id, activeChainId]);
+
+    const copyQrImage = useCallback(async () => {
+        if (!qrDataUrl) return;
+        try {
+            const blob = await (await fetch(qrDataUrl)).blob();
+            await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+            showToast({ message: 'QR code copied to clipboard.' });
+        } catch (err) {
+            showToast({ message: `Copy failed: ${err?.message || 'clipboard unavailable'}` });
+        }
+    }, [qrDataUrl, showToast]);
+
+    const shareQrImage = useCallback(async () => {
+        if (!qrDataUrl) return;
+        let blob;
+        try {
+            blob = await (await fetch(qrDataUrl)).blob();
+        } catch (err) {
+            showToast({ message: `Share failed: ${err?.message || 'could not read QR image'}` });
+            return;
+        }
+        // Mirror the Copy action first so the user always ends up with
+        // the image on the clipboard, regardless of which share target
+        // they pick. Clipboard failures are non-fatal — proceed to share.
+        try {
+            await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+        } catch { /* keep going */ }
+        try {
+            const file = new File([blob], qrFileName, { type: blob.type });
+            await navigator.share({
+                files: [file],
+                title: 'XChain receive QR',
+                text: address?.address || '',
+            });
+        } catch (err) {
+            if (err?.name === 'AbortError') return; // user dismissed sheet
+            showToast({ message: `Share failed: ${err?.message || 'share unavailable'}` });
+        }
+    }, [qrDataUrl, address?.address, qrFileName, showToast]);
+
+    const header = (
         <ScreenHeader
             onBack={onBack}
             backLabel="Back to home"
             title="Receive"
+            titleIcon={<Icon.ReceiveIcon />}
         />
     );
     const body = (
@@ -406,62 +454,112 @@ export function Receive({ walletId, accountId, prefill = null, onBack }) {
                 </div>
             ) : null}
 
-            {descriptor ? (
-                <div className={styles.singleChain}>
-                    <ChainBadge descriptor={descriptor} size="md" />
-                </div>
-            ) : null}
-
-            {address ? (
-                <div className={styles.addressBox}>
-                    <AddressText address={address.address} truncate={false} size="sm" />
-                    <CopyButton value={address.address} />
-                    <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => onShare(qrUri)}
-                        disabled={!qrUri}
+            {descriptor ? (() => {
+                const prefillTickUpper = prefill?.tick ? prefill.tick.toUpperCase() : '';
+                const isTokenSelection = !!prefillTickUpper
+                    && nativeTicker
+                    && prefillTickUpper !== nativeTicker;
+                const assetName = isTokenSelection
+                    ? (prefill?.displayName || prefillTickUpper)
+                    : (descriptor.displayName || nativeTicker || '');
+                const assetImageUrl = isTokenSelection
+                    ? (prefill?.imageUrl || null)
+                    : brandingLib.chainIconLargeUrl(descriptor.id);
+                const assetLetter = isTokenSelection
+                    ? prefillTickUpper.slice(0, 1)
+                    : (nativeTicker || descriptor.displayName || '?').slice(0, 1);
+                return (
+                    <button
+                        type="button"
+                        className={styles.assetCard}
+                        onClick={onChangeAsset || onBack}
+                        aria-label={`Change asset (currently ${assetName})`}
                     >
-                        Share
-                    </Button>
-                </div>
-            ) : !loadError ? (
-                <p className={styles.hint}>Loading address…</p>
-            ) : null}
+                        <span className={styles.assetIconWrap}>
+                            {assetImageUrl ? (
+                                <img
+                                    src={assetImageUrl}
+                                    alt=""
+                                    aria-hidden="true"
+                                    className={styles.assetIcon}
+                                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                />
+                            ) : (
+                                <span
+                                    className={styles.assetIconFallback}
+                                    style={{ background: tickerColor(isTokenSelection ? prefillTickUpper : (nativeTicker || '')) }}
+                                    aria-hidden="true"
+                                >
+                                    {assetLetter}
+                                </span>
+                            )}
+                            {isTokenSelection ? (() => {
+                                const chainPipUrl = brandingLib.chainIconSmallUrl(descriptor.id);
+                                return chainPipUrl ? (
+                                    <img
+                                        src={chainPipUrl}
+                                        alt=""
+                                        aria-hidden="true"
+                                        title={descriptor.displayName}
+                                        className={styles.assetChainOverlay}
+                                    />
+                                ) : null;
+                            })() : null}
+                        </span>
+                        <span className={styles.assetText}>
+                            <span className={styles.assetName}>{assetName}</span>
+                            {isTokenSelection ? (
+                                <span className={styles.assetSub}>{prefillTickUpper}</span>
+                            ) : descriptor.networkKind !== 'mainnet' ? (
+                                <span className={styles.assetSub}>{descriptor.networkKind}</span>
+                            ) : null}
+                        </span>
+                        <span className={styles.assetChevron} aria-hidden="true">›</span>
+                    </button>
+                );
+            })() : null}
 
             {address ? (
                 <>
-                    <div className={styles.requestRow}>
-                        <Input
-                            label={`Amount${reqTick.trim() ? ` (${reqTick.trim().toUpperCase()})` : (nativeTicker ? ` (${nativeTicker})` : '')}`}
-                            inputMode="decimal"
-                            value={reqAmount}
-                            onChange={(e) => setReqAmount(e.target.value)}
-                            placeholder="0.001"
-                            autoComplete="off"
-                        />
-                        <Input
-                            label="Token"
-                            value={reqTick}
-                            onChange={(e) => setReqTick(e.target.value)}
-                            placeholder={nativeTicker || ''}
-                            autoComplete="off"
-                            autoCapitalize="characters"
-                        />
+                    <AmountField
+                        amount={reqAmount}
+                        fiatAmount={fiatAmount}
+                        tick={reqTick.trim() || nativeTicker || ''}
+                        fiatRate={fiatRate}
+                        fiatCurrency={fiatCurrency}
+                        amountInputMode={amountInputMode}
+                        onAmountFieldChange={onAmountFieldChange}
+                        toggleAmountInputMode={toggleAmountInputMode}
+                        inputRef={amountInputRef}
+                    />
+                    <FeeSelector
+                        label="Fee priority"
+                        tiers={feeTiers}
+                        value={feePick}
+                        onChange={setFeePick}
+                        allowCustom={false}
+                        disabled={!feeTiers}
+                    />
+                    <div className={styles.qrActions}>
+                        <Button
+                            variant="secondary"
+                            onClick={copyQrImage}
+                            disabled={!qrDataUrl}
+                            icon={<Icon.CopyIcon />}
+                        >
+                            Copy QR
+                        </Button>
+                        {canShareFiles ? (
+                            <Button
+                                variant="secondary"
+                                onClick={shareQrImage}
+                                disabled={!qrDataUrl}
+                                icon={<Icon.UploadIcon />}
+                            >
+                                Share QR
+                            </Button>
+                        ) : null}
                     </div>
-                    <details className={styles.advanced}>
-                        <summary className={styles.advancedToggle}>Advanced</summary>
-                        <Input
-                            label="Memo"
-                            value={reqMemo}
-                            onChange={(e) => setReqMemo(e.target.value)}
-                            autoComplete="off"
-                            error={/[|;]/.test(reqMemo) ? 'Cannot contain | or ; characters.' : undefined}
-                        />
-                    </details>
-                    {shareStatus ? (
-                        <p className={styles.hint} role="status">{shareStatus}</p>
-                    ) : null}
                 </>
             ) : null}
 
@@ -513,67 +611,6 @@ export function Receive({ walletId, accountId, prefill = null, onBack }) {
                 </section>
             ))}
 
-            {genOpen ? (
-                <form onSubmit={handleGenerate} className={styles.genForm}>
-                    <SignerSelectForm
-                        walletId={walletId}
-                        value={genSignerId}
-                        onChange={setGenSignerId}
-                        disabled={genBusy}
-                    />
-                    {usingHwSigner ? (
-                        <p className={styles.hint}>
-                            Confirm the new address on your device when prompted.
-                        </p>
-                    ) : (
-                        <Input
-                            ref={genInputRef}
-                            type="password"
-                            label="Password"
-                            hint="Deriving a new address re-runs the Argon2id KDF."
-                            value={genPassword}
-                            onChange={(e) => {
-                                setGenPassword(e.target.value);
-                                if (genError) setGenError(null);
-                            }}
-                            autoComplete="current-password"
-                            disabled={genBusy}
-                            error={genError || undefined}
-                        />
-                    )}
-                    {usingHwSigner && genError ? (
-                        <p className={styles.error} role="alert">{genError}</p>
-                    ) : null}
-                    <div className={styles.genButtons}>
-                        <Button
-                            type="submit"
-                            variant="primary"
-                            size="sm"
-                            loading={genBusy}
-                            disabled={!canDerive}
-                        >
-                            Derive
-                        </Button>
-                    </div>
-                </form>
-            ) : (
-                <div className={styles.actions}>
-                    {genError ? (
-                        <p className={styles.error} role="alert" style={{ marginBottom: 'var(--xc-space-2)' }}>
-                            {genError}
-                        </p>
-                    ) : null}
-                    <Button
-                        variant="secondary"
-                        block
-                        onClick={openGen}
-                        disabled={!activeChainId || genBusy}
-                        loading={genBusy}
-                    >
-                        New address
-                    </Button>
-                </div>
-            )}
         </>
     );
 

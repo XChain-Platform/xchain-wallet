@@ -1,0 +1,46 @@
+.tabsRow {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--xc-border);
+}
+.tab {
+    appearance: none;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    padding: var(--xc-space-3) var(--xc-space-3);
+    color: var(--xc-text-muted);
+    font: inherit;
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    transition: color 160ms ease, border-color 160ms ease;
+}
+.tab:hover { color: var(--xc-text); }
+.tab:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: -2px;
+}
+.tabActive {
+    color: var(--xc-accent-primary);
+    border-bottom-color: var(--xc-accent-primary);
+}
+.tabLabel { font-weight: 700; }
+.tabCount {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: var(--xc-bg-muted);
+    color: var(--xc-text-muted);
+    line-height: 1.5;
+    letter-spacing: 0.03em;
+}
+.tabActive .tabCount {
+    background: var(--xc-accent-primary);
+    color: #FFFFFF;
+}

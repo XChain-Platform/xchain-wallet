@@ -46,7 +46,7 @@ const PASTE_BOX = {
 
 /**
  * @typedef {(
- *   | { kind: 'send', address?: string, amount?: string, tick?: string, chainId?: string, memo?: string }
+ *   | { kind: 'send', address?: string, amount?: string, tick?: string, chainId?: string, memo?: string, feePriority?: 'low' | 'normal' | 'fast' }
  *   | { kind: 'receive' }
  *   | { kind: 'psbt', psbtHex: string }
  *   | { kind: 'unrecognized', detected: import('../../uri/detectQrContent.js').QrContent['type'] }
@@ -86,6 +86,7 @@ export function ScanRoute({ onClassified, onBack, chainRegistry }) {
                     tick: intent.tick,
                     chainId: intent.chainId,
                     memo: intent.memo,
+                    feePriority: intent.feePriority,
                 });
                 return;
             }

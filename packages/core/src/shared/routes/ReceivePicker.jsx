@@ -55,6 +55,9 @@ export function ReceivePicker({
     kindFilter: kindFilterProp,
     onKindFilterChange: onKindFilterChangeProp,
     hideOwnFilter = false,
+    title = 'Receive',
+    titleIcon,
+    backLabel = 'Back to home',
     onBack,
     onSelect,
 }) {
@@ -290,9 +293,9 @@ export function ReceivePicker({
     const header = (
         <ScreenHeader
             onBack={onBack}
-            backLabel="Back to home"
-            title="Receive"
-            titleIcon={<Icon.ReceiveIcon />}
+            backLabel={backLabel}
+            title={title}
+            titleIcon={titleIcon ?? <Icon.ReceiveIcon />}
             trailing={filterButton}
         />
     );

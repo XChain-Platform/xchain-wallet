@@ -29,6 +29,30 @@ import basicSsl from '@vitejs/plugin-basic-ssl';
 
 const httpsEnabled = process.env.VITE_HTTPS === '1' || process.env.HTTPS === '1';
 
+// Dev-only convenience: rewrite a bare `/style-guide` to `/style-guide/`
+// so Vite picks up the multi-page entry at packages/web/style-guide/
+// index.html. Without the trailing slash, Vite's static-asset middleware
+// returns 404. Attached to both dev + preview servers; production builds
+// don't include this rewrite (the style-guide page is dev-time only).
+function styleGuideRewrite() {
+    return (req, res, next) => {
+        if (req.url === '/style-guide') {
+            res.statusCode = 301;
+            res.setHeader('Location', '/style-guide/');
+            res.end();
+            return;
+        }
+        next();
+    };
+}
+
+const styleGuidePlugin = {
+    name: 'xchain-style-guide-rewrite',
+    apply: 'serve',
+    configureServer(server) { server.middlewares.use(styleGuideRewrite()); },
+    configurePreviewServer(server) { server.middlewares.use(styleGuideRewrite()); },
+};
+
 // Absolute paths to workspace-local Node shims that xchain-sdk pulls
 // in at module load. Vite resolves these via resolve.alias below.
 const wsBrowserShim = fileURLToPath(
@@ -85,5 +109,6 @@ export default defineConfig({
             globals: { Buffer: true, process: true, global: true },
             protocolImports: true,
         }),
+        styleGuidePlugin,
     ],
 });

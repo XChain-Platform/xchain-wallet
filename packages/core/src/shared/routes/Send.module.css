@@ -403,6 +403,30 @@
     gap: var(--xc-space-2);
 }
 
+.amountUnitSwap {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+    background: transparent;
+    border: none;
+    padding: 0;
+    font: inherit;
+    color: var(--xc-text-muted);
+    cursor: pointer;
+    font-size: var(--xc-text-xs);
+}
+
+.amountUnitSwap:hover,
+.amountUnitSwap:focus-visible {
+    color: var(--xc-text);
+}
+
+.amountUnitSwap svg {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+}
+
 .amountFieldWrap {
     position: relative;
 }
@@ -603,6 +627,26 @@
     align-items: center;
     gap: var(--xc-space-1);
     margin: 0 0 var(--xc-space-3);
+}
+
+.heroIconWrapInteractive {
+    appearance: none;
+    background: transparent;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    border-radius: 50%;
+    color: inherit;
+    font: inherit;
+}
+
+.heroIconWrapInteractive:hover {
+    filter: brightness(0.96);
+}
+
+.heroIconWrapInteractive:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 4px;
 }
 
 .heroName {

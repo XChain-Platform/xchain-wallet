@@ -341,6 +341,10 @@ function AppInner() {
                             setUnlockedView(sendBackTo);
                             setSendBackTo('home');
                         }}
+                        onChangeAsset={() => {
+                            setSendPrefill(null);
+                            setUnlockedView('send-picker');
+                        }}
                     />
                 );
             }
@@ -395,6 +399,10 @@ function AppInner() {
                             setReceivePrefill(null);
                             setUnlockedView(hadPrefill ? 'receive-picker' : 'home');
                         }}
+                        onChangeAsset={() => {
+                            setReceivePrefill(null);
+                            setUnlockedView('receive-picker');
+                        }}
                     />
                 );
             }
@@ -410,6 +418,7 @@ function AppInner() {
                                     tick: outcome.tick,
                                     chainId: outcome.chainId,
                                     memo: outcome.memo,
+                                    feePriority: outcome.feePriority,
                                 });
                                 setUnlockedView('send');
                             } else if (outcome.kind === 'receive') {
@@ -1093,9 +1102,9 @@ function AppInner() {
                     onLocked={refresh}
                     onSend={activeWalletId ? () => {
                         setSendPrefill(null);
-                        setUnlockedView('send-picker');
+                        setUnlockedView('send');
                     } : undefined}
-                    onReceive={activeWalletId ? () => { setReceivePrefill(null); setUnlockedView('receive-picker'); } : undefined}
+                    onReceive={activeWalletId ? () => { setReceivePrefill(null); setUnlockedView('receive'); } : undefined}
                     onSwap={activeWalletId ? () => setUnlockedView('swap') : undefined}
                     onBuy={activeWalletId ? () => setUnlockedView('dispenser-explorer') : undefined}
                     onCreateToken={activeWalletId ? () => setUnlockedView('wizard') : undefined}

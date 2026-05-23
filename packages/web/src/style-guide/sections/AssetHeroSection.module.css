@@ -1,0 +1,54 @@
+.heroWrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--xc-space-1);
+    padding: var(--xc-space-3) 0;
+}
+.iconWrap {
+    position: relative;
+    width: 88px;
+    height: 88px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.iconWrapInteractive {
+    appearance: none;
+    background: transparent;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    border-radius: 50%;
+    color: inherit;
+    font: inherit;
+}
+.iconWrapInteractive:hover { filter: brightness(0.96); }
+.iconWrapInteractive:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 4px;
+}
+.icon {
+    width: 88px;
+    height: 88px;
+    object-fit: contain;
+    border-radius: 50%;
+}
+.chainPip {
+    position: absolute;
+    bottom: -2px;
+    inset-inline-end: -2px;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 0 0 1.5px var(--xc-surface);
+    object-fit: cover;
+}
+.name {
+    font-size: var(--xc-text-xl);
+    font-weight: 700;
+    color: var(--xc-text);
+    text-align: center;
+    margin-top: var(--xc-space-1);
+}

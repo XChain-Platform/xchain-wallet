@@ -2,19 +2,17 @@
     position: absolute;
     inset: 0;
     z-index: 1000;
-    background: rgba(15, 23, 42, 0.55);
+    background: transparent;
     display: flex;
     justify-content: flex-end;
 }
 
 .panel {
     width: 100%;
-    max-width: 320px;
-    background: var(--xc-surface);
+    background: var(--xc-bg);
     color: var(--xc-text);
     display: flex;
     flex-direction: column;
-    box-shadow: -16px 0 40px rgba(0, 0, 0, 0.35);
     animation: slideIn 160ms ease-out;
 }
 
@@ -31,7 +29,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: var(--xc-space-3) var(--xc-space-4);
+    padding: var(--xc-space-1) var(--xc-space-1);
     border-bottom: 1px solid var(--xc-border);
     flex: 0 0 auto;
 }
@@ -91,7 +89,7 @@
     text-transform: uppercase;
     letter-spacing: 0.06em;
     color: var(--xc-text-muted);
-    padding: var(--xc-space-3) var(--xc-space-4) var(--xc-space-1);
+    padding: var(--xc-space-3) var(--xc-space-1) var(--xc-space-1);
     background: var(--xc-bg-muted);
     list-style: none;
 }
@@ -104,7 +102,7 @@
     display: flex;
     align-items: center;
     gap: var(--xc-space-3);
-    padding: var(--xc-space-3) var(--xc-space-4);
+    padding: var(--xc-space-3) var(--xc-space-1);
     font-size: var(--xc-text-md);
     font-weight: 500;
     color: var(--xc-text);

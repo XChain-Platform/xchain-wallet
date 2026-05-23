@@ -33,14 +33,20 @@ import {
     customFeeEstimate,
     settingsCustomToDisplayRate,
 } from '../../flows/feeEstimate.js';
-import { getFiatRate, coinToFiat } from '../../flows/priceLookup.js';
+import { getFiatRate, coinToFiat, fiatToCoin } from '../../flows/priceLookup.js';
 import { HwSignBlock } from '../components/HwSignBlock.jsx';
 import { BalanceChanges } from '../components/BalanceChanges.jsx';
 import { RawPsbtViewer } from '../components/RawPsbtViewer.jsx';
 import { useToast } from '../components/ToastHost.jsx';
+import { AmountField } from '../components/AmountField.jsx';
 import { useHaptic } from '../hooks/useHaptic.js';
 import { useFormDraft } from '../hooks/useFormDraft.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
+import {
+    formatWithThousands,
+    countNonCommaBefore,
+    indexAfterNonCommaCount,
+} from '../utils/amountFormat.js';
 import styles from './Send.module.css';
 
 // §30.5 user-initiated cancel detection. HW-device libraries surface a
@@ -82,18 +88,23 @@ function nativeTickerFor(descriptor) {
  * The dev-SDK stub cannot encode / sign / broadcast; Send will surface
  * that error when the user hits Submit. Form + review paths still
  * exercise cleanly — good for UX review before real SDK lands.
- *
+ */
+
+/**
  * @param {object} props
  * @param {string} props.walletId
  * @param {() => void} props.onBack
- * @param {{ address?: string, amount?: string, tick?: string, chainId?: string, memo?: string }} [props.prefill]
+ * @param {{ address?: string, amount?: string, tick?: string, chainId?: string, memo?: string, feePriority?: 'low' | 'normal' | 'fast' }} [props.prefill]
  *        §47 Cluster L FOLLOWUP 1 — initial form values from a deep-link
  *        intent (parseXchainUri). Each field is applied once on mount;
  *        the user can override before submitting. Address comes from
  *        the URI path / `to=` param; chainId from the URI path or the
  *        BIP21 `chain=` param; tick from the URI path or `tick=`.
+ * @param {() => void} [props.onChangeAsset]   tapped from the asset hero;
+ *        should navigate to the SendPicker. Omit to leave the hero
+ *        non-interactive.
  */
-export function Send({ walletId, onBack, prefill = null }) {
+export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -117,6 +128,10 @@ export function Send({ walletId, onBack, prefill = null }) {
     const [tick, setTick] = useState(prefill?.tick || '');
     const [amount, setAmount] = useState(prefill?.amount || '');
     const [memo, setMemo] = useState(prefill?.memo || '');
+    const [amountInputMode, setAmountInputMode] = useState(
+        /** @type {'coin' | 'fiat'} */ ('coin'),
+    );
+    const [fiatAmount, setFiatAmount] = useState('');
     const [password, setPassword] = useState('');
 
     const [stage, setStage] = useState(
@@ -477,6 +492,63 @@ export function Send({ walletId, onBack, prefill = null }) {
         setAmount(value);
     }, []);
 
+    const amountInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+
+    // Amount-block input handler that branches on `amountInputMode`.
+    // The canonical `amount` is always coin-scale (matches the payload
+    // shape Send submits); when the user is typing in fiat, we keep
+    // their raw text in `fiatAmount` for display fidelity and derive
+    // the coin amount via fiatToCoin so the rest of the form (fee
+    // estimate, simulator, Max guards) stays correct.
+    //
+    // Commas are formatting only — strip them before storing, then
+    // restore the cursor by mapping its position from "non-comma chars
+    // to the left" so typing across a thousands boundary doesn't fling
+    // the caret around.
+    const onAmountFieldChange = useCallback((rawValue, cursorPos) => {
+        const stripped = String(rawValue).replace(/,/g, '');
+        // Reject anything that isn't a valid partial decimal — keeps
+        // the field from accepting "1.2.3" or random chars while still
+        // allowing in-progress entries like "" / "." / "1.".
+        if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
+        if (amountInputMode === 'fiat') {
+            setFiatAmount(stripped);
+            if (!fiatRate) {
+                if (stripped === '') setAmount('');
+            } else {
+                const derivedCoin = fiatToCoin(stripped, fiatRate);
+                setAmount(derivedCoin != null ? derivedCoin : '');
+            }
+        } else {
+            setAmount(stripped);
+        }
+        if (typeof cursorPos === 'number' && amountInputRef.current) {
+            const formattedNew = formatWithThousands(stripped);
+            const nonCommaBefore = countNonCommaBefore(String(rawValue), cursorPos);
+            const nextCursor = indexAfterNonCommaCount(formattedNew, nonCommaBefore);
+            const el = amountInputRef.current;
+            requestAnimationFrame(() => {
+                if (el && document.activeElement === el) {
+                    try { el.setSelectionRange(nextCursor, nextCursor); } catch { /* selection unavailable on some input types */ }
+                }
+            });
+        }
+    }, [amountInputMode, fiatRate]);
+
+    const toggleAmountInputMode = useCallback(() => {
+        if (!fiatRate) return;
+        setAmountInputMode((prev) => {
+            if (prev === 'coin') {
+                const fv = amount ? coinToFiat(amount, fiatRate) : null;
+                setFiatAmount(fv != null ? fv.toFixed(2) : '');
+                return 'fiat';
+            }
+            // fiat -> coin: keep canonical amount, clear typed fiat
+            setFiatAmount('');
+            return 'coin';
+        });
+    }, [amount, fiatRate]);
+
     const onSendSmallTest = useCallback(() => {
         const amt = parseFloat(String(amount).trim());
         if (!Number.isFinite(amt) || amt <= 0) return;
@@ -586,10 +658,19 @@ export function Send({ walletId, onBack, prefill = null }) {
     // simulator's fee row + the §29.2 Max button. Default tier is
     // 'normal'; user picks via FeeSelector. Custom mode accepts a
     // sat/vB or DOGE/kB rate via the bound input.
-    const [feePick, setFeePick] = useState(
-        /** @type {{ mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }} */
-        ({ mode: 'normal' }),
-    );
+    const [feePick, setFeePick] = useState(() => {
+        // Prefill-encoded fee priority from a scanned receive-request URI
+        // wins over saved settings on first render; user can still change
+        // via the FeeSelector.
+        const fp = prefill?.feePriority;
+        if (fp && ['low', 'normal', 'fast'].includes(fp)) {
+            return /** @type {{ mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }} */ ({ mode: fp });
+        }
+        return /** @type {{ mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }} */ ({ mode: 'normal' });
+    });
+    const prefillFeeConsumedRef = useRef(Boolean(
+        prefill?.feePriority && ['low', 'normal', 'fast'].includes(prefill.feePriority),
+    ));
 
     // Step 5 of §44 — initial mode + custom rate seeded from
     // settings.fees[chainId]. Persisted preference flows from the §35
@@ -598,6 +679,13 @@ export function Send({ walletId, onBack, prefill = null }) {
     // the active chain changes.
     useEffect(() => {
         if (!chainId || !settings?.fees) return;
+        // Skip the very first run when a scanned URI carried a feePriority
+        // hint — that pick already seeded feePick and should beat the
+        // saved default on initial render.
+        if (prefillFeeConsumedRef.current) {
+            prefillFeeConsumedRef.current = false;
+            return;
+        }
         const chainFees = settings.fees[chainId];
         if (!chainFees || typeof chainFees.strategy !== 'string') return;
         const desc = chainRegistry.get(chainId);
@@ -693,7 +781,11 @@ export function Send({ walletId, onBack, prefill = null }) {
         }
         const display = Number(maxAmount.toFixed(8)).toString();
         setAmount(display);
-    }, [sourceBalance, isNativeSend, feeEstimate]);
+        if (amountInputMode === 'fiat' && fiatRate) {
+            const fv = coinToFiat(display, fiatRate);
+            setFiatAmount(fv != null ? fv.toFixed(2) : '');
+        }
+    }, [sourceBalance, isNativeSend, feeEstimate, amountInputMode, fiatRate]);
 
     const previewResult = useMemo(() => {
         if (stage !== 'review' && stage !== 'submitting') return null;
@@ -924,6 +1016,7 @@ export function Send({ walletId, onBack, prefill = null }) {
         const sendAnother = () => {
             setStage('form');
             setAmount('');
+            setFiatAmount('');
             setToAddress('');
             setResult(null);
             setPreviewResult(null);
@@ -1358,6 +1451,7 @@ export function Send({ walletId, onBack, prefill = null }) {
                 tick={tick}
                 descriptor={descriptor}
                 prefill={prefill}
+                onChangeAsset={onChangeAsset}
             />
             {matchedContact ? (
                 <div className={styles.contactChip}>
@@ -1485,53 +1579,28 @@ export function Send({ walletId, onBack, prefill = null }) {
                     autoCapitalize="characters"
                 />
             ) : null}
-            <div className={`${styles.amountBlock} ${styles.bigField}`}>
-                <div className={styles.amountFieldWrap}>
-                    <Input
-                        label="Amount"
-                        inputMode="decimal"
-                        value={amount}
-                        onChange={(e) => onCoinInputChange(e.target.value)}
-                        autoComplete="off"
-                        placeholder="0.00"
-                        style={{
-                            fontSize: 'var(--xc-text-lg)',
-                            paddingTop: 'var(--xc-space-3)',
-                            paddingBottom: 'var(--xc-space-3)',
-                            paddingLeft: 'var(--xc-space-4)',
-                            paddingRight: '64px',
-                            minHeight: '48px',
-                        }}
-                    />
-                    <button
-                        type="button"
-                        className={styles.amountMaxInline}
-                        onClick={onMax}
-                        disabled={!sourceBalance}
-                        aria-label="Use max available amount"
-                    >
-                        Max
-                    </button>
-                </div>
-                <div className={styles.amountFooter}>
-                    <span>
-                        {fiatRate && amount && coinToFiat(amount, fiatRate) != null
-                            ? `≈ ${coinToFiat(amount, fiatRate).toFixed(2)} ${fiatRate.fiatCurrency || fiatCurrency}`
-                            : fiatRate
-                                ? `≈ 0.00 ${fiatRate.fiatCurrency || fiatCurrency}`
-                                : ''}
-                    </span>
-                    <span className={styles.amountFooterRight}>
-                        {previewBalances.loading
-                            ? 'Loading…'
-                            : previewBalances.error
-                                ? `Balance unavailable (${previewBalances.error})`
-                                : sourceBalance
-                                    ? `${sourceBalance.amount} ${sourceBalance.tick} available`
-                                    : `0 ${(tick.trim().toUpperCase()) || ''} available`.replace(/\s+/g, ' ').trim()}
-                    </span>
-                </div>
-            </div>
+            <AmountField
+                amount={amount}
+                fiatAmount={fiatAmount}
+                tick={tick}
+                fiatRate={fiatRate}
+                fiatCurrency={fiatCurrency}
+                amountInputMode={amountInputMode}
+                onAmountFieldChange={onAmountFieldChange}
+                toggleAmountInputMode={toggleAmountInputMode}
+                inputRef={amountInputRef}
+                onMax={onMax}
+                maxDisabled={!sourceBalance}
+                balanceText={
+                    previewBalances.loading
+                        ? 'Loading…'
+                        : previewBalances.error
+                            ? `Balance unavailable (${previewBalances.error})`
+                            : sourceBalance
+                                ? `${formatWithThousands(sourceBalance.amount)} ${sourceBalance.tick} available`
+                                : `0 ${(tick.trim().toUpperCase()) || ''} available`.replace(/\s+/g, ' ').trim()
+                }
+            />
             {feeTiers ? (
                 <FeeSelector
                     tiers={feeTiers}
@@ -1600,7 +1669,7 @@ function DetailRow({ label, value }) {
 // The prefill's imageUrl only applies when the form's current
 // (chainId, tick) still matches what the user picked — if they retype
 // the tick to something else, fall back to the letter-badge style.
-function SelectedTokenHero({ chainId, tick, descriptor, prefill }) {
+function SelectedTokenHero({ chainId, tick, descriptor, prefill, onChangeAsset }) {
     const tickTrim = (tick || '').trim();
     if (!chainId || !tickTrim) return null;
     const nativeTicker = nativeTickerFor(descriptor);
@@ -1616,9 +1685,19 @@ function SelectedTokenHero({ chainId, tick, descriptor, prefill }) {
     const heroName = prefillMatches && typeof prefill?.displayName === 'string' && prefill.displayName
         ? prefill.displayName
         : (isNative ? (descriptor?.displayName || tickTrim) : tickTrim);
+    const interactive = typeof onChangeAsset === 'function';
+    const IconTag = interactive ? 'button' : 'div';
+    const iconProps = interactive
+        ? {
+            type: 'button',
+            onClick: onChangeAsset,
+            'aria-label': `Change asset (currently ${heroName})`,
+            className: `${styles.heroIconWrap} ${styles.heroIconWrapInteractive}`,
+        }
+        : { className: styles.heroIconWrap, 'aria-hidden': 'true' };
     return (
         <div className={styles.heroWrap}>
-            <div className={styles.heroIconWrap} aria-hidden="true">
+            <IconTag {...iconProps}>
                 {isNative && chainIconLarge ? (
                     <img
                         src={chainIconLarge}
@@ -1649,7 +1728,7 @@ function SelectedTokenHero({ chainId, tick, descriptor, prefill }) {
                         onError={(e) => { e.currentTarget.style.display = 'none'; }}
                     />
                 ) : null}
-            </div>
+            </IconTag>
             {heroName ? (
                 <div className={styles.heroName} title={heroName}>{heroName}</div>
             ) : null}

@@ -5,11 +5,19 @@
     margin-top: var(--xc-space-4);
 }
 
+.label {
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--xc-text-muted);
+}
+
 .sliderBlock {
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-1);
-    padding: var(--xc-space-2) 0;
+    padding: 0;
 }
 
 .slider {

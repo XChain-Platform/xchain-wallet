@@ -129,7 +129,6 @@ export function HeaderActionMenu({
                     ) : null}
                     {primary.length > 0 ? (
                         <ul className={styles.list} role="list">
-                            <li className={styles.section}>Wallet</li>
                             {primary.map(({ id, label, Icon: ItemIcon, handler }) => (
                                 <li key={id}>
                                     <button

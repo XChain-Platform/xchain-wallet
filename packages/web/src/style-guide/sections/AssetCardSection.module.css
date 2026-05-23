@@ -1,0 +1,68 @@
+.card {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-3);
+    width: 100%;
+    padding: var(--xc-space-3);
+    background: var(--xc-bg-muted);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-md);
+    color: var(--xc-text);
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+    appearance: none;
+    transition: border-color 160ms ease;
+    margin-bottom: var(--xc-space-3);
+}
+.card:last-child { margin-bottom: 0; }
+.card:hover { border-color: var(--xc-border-strong); }
+.card:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+.iconWrap {
+    position: relative;
+    flex: 0 0 auto;
+    width: 40px;
+    height: 40px;
+}
+.icon {
+    width: 40px;
+    height: 40px;
+    display: block;
+    object-fit: contain;
+    border-radius: 50%;
+}
+.chainPip {
+    position: absolute;
+    bottom: -2px;
+    inset-inline-end: -2px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 0 0 1.5px var(--xc-bg-muted);
+    object-fit: cover;
+}
+.text {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.name {
+    font-size: var(--xc-text-md);
+    font-weight: 600;
+}
+.sub {
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+}
+.chevron {
+    flex: 0 0 auto;
+    color: var(--xc-text-muted);
+    font-size: 20px;
+    line-height: 1;
+}

@@ -100,7 +100,6 @@ export function MenuRoute({
                 ) : null}
                 {primary.length > 0 || typeof onSettings === 'function' ? (
                     <ul className={menuStyles.list} role="list">
-                        <li className={menuStyles.section}>Wallet</li>
                         {primary.map(({ id, label, Icon: ItemIcon, handler }) => (
                             <li key={id}>
                                 <button

@@ -28,6 +28,8 @@ import styles from './AppHeader.module.css';
  * @param {'all' | 'coins' | 'tokens'} [props.kindFilter]            optional asset-kind segmented control; only shown when `onKindFilterChange` is provided
  * @param {(kind: 'all' | 'coins' | 'tokens') => void} [props.onKindFilterChange]
  * @param {() => void} [props.onScan]                                when provided, renders a QR-scan icon button between the filter and the pancake menu
+ * @param {() => void} [props.onLock]                                when provided, renders a one-tap lock button; same action as the "Lock wallet" row in the pancake menu
+ * @param {boolean} [props.locking]                                  disables the lock button while a lock is in flight
  */
 export function AppHeader({
     chainRegistry,
@@ -41,6 +43,8 @@ export function AppHeader({
     kindFilter,
     onKindFilterChange,
     onScan,
+    onLock,
+    locking,
 }) {
     return (
         <header className={styles.bar} role="banner">
@@ -73,6 +77,18 @@ export function AppHeader({
                         title="Scan a QR code"
                     >
                         <Icon.ScanIcon />
+                    </button>
+                ) : null}
+                {onLock ? (
+                    <button
+                        type="button"
+                        className={styles.menuBtn}
+                        onClick={onLock}
+                        disabled={locking}
+                        aria-label="Lock wallet"
+                        title="Lock wallet"
+                    >
+                        <Icon.LockIcon />
                     </button>
                 ) : null}
                 {onMenuOpen ? (

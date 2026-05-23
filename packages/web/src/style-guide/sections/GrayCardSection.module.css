@@ -1,0 +1,8 @@
+.card {
+    background: var(--xc-bg-muted);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-md);
+    padding: var(--xc-space-3);
+    margin-bottom: var(--xc-space-3);
+}
+.card:last-child { margin-bottom: 0; }

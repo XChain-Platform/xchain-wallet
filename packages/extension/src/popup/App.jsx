@@ -349,6 +349,10 @@ function AppInner() {
                             setUnlockedView(sendBackTo);
                             setSendBackTo('home');
                         }}
+                        onChangeAsset={() => {
+                            setSendPrefill(null);
+                            setUnlockedView('send-picker');
+                        }}
                     />
                 );
             }
@@ -403,6 +407,10 @@ function AppInner() {
                             setReceivePrefill(null);
                             setUnlockedView(hadPrefill ? 'receive-picker' : 'home');
                         }}
+                        onChangeAsset={() => {
+                            setReceivePrefill(null);
+                            setUnlockedView('receive-picker');
+                        }}
                     />
                 );
             }
@@ -418,6 +426,7 @@ function AppInner() {
                                     tick: outcome.tick,
                                     chainId: outcome.chainId,
                                     memo: outcome.memo,
+                                    feePriority: outcome.feePriority,
                                 });
                                 setUnlockedView('send');
                             } else if (outcome.kind === 'receive') {
@@ -714,7 +723,7 @@ function AppInner() {
                         walletId={activeWalletId}
                         accountId={activeAccountId || undefined}
                         onBack={() => setUnlockedView('home')}
-                        onReceive={() => { setReceivePrefill(null); setUnlockedView('receive-picker'); }}
+                        onReceive={() => { setReceivePrefill(null); setUnlockedView('receive'); }}
                         onShowPrivateKey={(addr) => {
                             setPrivateKeyAddress(addr);
                             setUnlockedView('view-private-key');
@@ -937,7 +946,7 @@ function AppInner() {
                         walletId={activeWalletId}
                         accountId={activeAccountId || undefined}
                         onBack={() => setUnlockedView(historyReturnTo)}
-                        onReceive={() => { setReceivePrefill(null); setUnlockedView('receive-picker'); }}
+                        onReceive={() => { setReceivePrefill(null); setUnlockedView('receive'); }}
                         initialSearchQuery={historyInitialQuery}
                         initialChainCoin={historyInitialChainCoin}
                         onSelectEntry={(entry) => {
@@ -981,7 +990,16 @@ function AppInner() {
                             setSendBackTo('token-detail');
                             setUnlockedView('send');
                         }}
-                        onReceive={() => { setReceivePrefill(null); setUnlockedView('receive-picker'); }}
+                        onReceive={() => {
+                            setReceivePrefill({
+                                chainId: tokenDetailRef.chainId,
+                                tick: tokenDetailRef.tick,
+                                kind: tokenDetailRef.kind,
+                                displayName: tokenDetailRef.displayName,
+                                imageUrl: tokenDetailRef.imageUrl,
+                            });
+                            setUnlockedView('receive');
+                        }}
                         onViewActivity={() => {
                             // Scope History by coin family (e.g. 'bitcoin')
                             // rather than pre-filling the search box with
@@ -1156,9 +1174,9 @@ function AppInner() {
                         onLocked={refresh}
                         onSend={activeWalletId ? () => {
                             setSendPrefill(null);
-                            setUnlockedView('send-picker');
+                            setUnlockedView('send');
                         } : undefined}
-                        onReceive={activeWalletId ? () => { setReceivePrefill(null); setUnlockedView('receive-picker'); } : undefined}
+                        onReceive={activeWalletId ? () => { setReceivePrefill(null); setUnlockedView('receive'); } : undefined}
                         onSwap={activeWalletId ? () => setUnlockedView('swap') : undefined}
                         onBuy={activeWalletId ? () => setUnlockedView('dispenser-explorer') : undefined}
                         onCreateToken={activeWalletId ? () => setUnlockedView('wizard') : undefined}

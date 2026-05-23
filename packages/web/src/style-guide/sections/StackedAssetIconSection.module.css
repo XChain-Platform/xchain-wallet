@@ -1,0 +1,83 @@
+.row {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+    align-items: flex-start;
+}
+.demo {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
+.caption {
+    font-size: 11px;
+    color: var(--xc-text-muted);
+}
+.iconWrap48 {
+    position: relative;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: var(--xc-bg-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.iconWrap40 {
+    position: relative;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: var(--xc-bg-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.iconImg48 {
+    width: 48px;
+    height: 48px;
+    display: block;
+    border-radius: 50%;
+    object-fit: contain;
+}
+.iconImg40 {
+    width: 40px;
+    height: 40px;
+    display: block;
+    border-radius: 50%;
+    object-fit: contain;
+}
+.iconLetter {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    font-weight: 700;
+    color: #fff;
+    font-size: var(--xc-text-md);
+}
+.chainOverlay20 {
+    position: absolute;
+    bottom: -2px;
+    inset-inline-end: -2px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 0 0 1.5px var(--xc-surface);
+    object-fit: cover;
+}
+.chainOverlay18 {
+    position: absolute;
+    bottom: -2px;
+    inset-inline-end: -2px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 0 0 1.5px var(--xc-bg-muted);
+    object-fit: cover;
+}
