@@ -125,21 +125,13 @@ export function DispensersList({ walletId, onOpenDispenser, onBack }) {
         return Object.keys(addressesByChain).sort((a, b) => a.localeCompare(b));
     }, [addressesByChain]);
 
-    const header = (
-        <div className={styles.header}>
-            <button
-                type="button"
-                onClick={onBack}
-                className={styles.back}
-                aria-label="Back to home"
-            >
-                <Icon.BackIcon />
-            </button>
-            <span className={styles.title}>My dispensers</span>
-            <span className={styles.spacer} />
-        </div>
+        const header = (
+        <ScreenHeader
+            onBack={onBack}
+            backLabel="Back to home"
+            title="My dispensers"
+        />
     );
-
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
             <div className={isFull ? styles.listFull : styles.listPopup}>

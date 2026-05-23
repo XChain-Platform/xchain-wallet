@@ -141,21 +141,12 @@ export function MarketsList({ walletId, onOpenMarket, onBack }) {
         return rows.filter((e) => `${e.tick1}/${e.tick2}`.toUpperCase().includes(q));
     }, [watchlist, chainFilter, search]);
 
-    const header = (
-        <div className={styles.header}>
-            <button
-                type="button"
-                onClick={onBack}
-                className={styles.back}
-                aria-label="Back"
-            >
-                <Icon.BackIcon />
-            </button>
-            <span className={styles.title}>Markets</span>
-            <span className={styles.spacer} />
-        </div>
+        const header = (
+        <ScreenHeader
+            onBack={onBack}
+            title="Markets"
+        />
     );
-
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
             {isFull ? <div className={styles.card}>{children}</div> : children}

@@ -469,27 +469,16 @@ export function AirdropForm({ walletId, resumeId = null, onBack }) {
 
     const titleSuffix = descriptor ? ` on ${descriptor.displayName}` : '';
 
-    const header = (
-        <div className={styles.header}>
-            <button
-                type="button"
-                onClick={onBack}
-                className={styles.back}
-                aria-label="Back"
-            >
-                <Icon.BackIcon />
-            </button>
-            <span className={styles.title}>
-                {stage === 'review-list' ? 'Review address list'
+        const header = (
+        <ScreenHeader
+            onBack={onBack}
+            title="{stage === 'review-list' ? 'Review address list'
                     : stage === 'wait-index' ? 'Waiting for list to be indexed'
                         : stage === 'review-airdrop' ? 'Review airdrop'
                             : stage === 'done' ? 'Airdrop complete'
-                                : `Airdrop tokens${titleSuffix}`}
-            </span>
-            <span className={styles.spacer} />
-        </div>
+                                : `Airdrop tokens${titleSuffix}`}"
+        />
     );
-
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
             {isFull ? <div className={styles.card}>{children}</div> : children}

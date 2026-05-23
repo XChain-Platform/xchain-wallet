@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Screen, Icon, Skeleton } from '@xchain-wallet/core/ui';
+import { Screen, ScreenHeader, Icon, Skeleton } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import {
     BalanceList,
@@ -175,21 +175,13 @@ export function SendPicker({
     ) : null;
 
     const header = (
-        <div className={styles.header}>
-            <button
-                type="button"
-                onClick={onBack}
-                className={styles.back}
-                aria-label="Back to home"
-            >
-                <Icon.BackIcon />
-            </button>
-            <span className={styles.title}>
-                <span className={styles.titleIcon} aria-hidden="true"><Icon.SendIcon /></span>
-                Send
-            </span>
-            <div className={styles.headerRight}>{filterButton}</div>
-        </div>
+        <ScreenHeader
+            onBack={onBack}
+            backLabel="Back to home"
+            title="Send"
+            titleIcon={<Icon.SendIcon />}
+            trailing={filterButton}
+        />
     );
 
     const emptyTitle = tokenQueryTrim

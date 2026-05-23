@@ -280,25 +280,14 @@ export function DeployContractForm({ walletId, onBack }) {
         setStage('form');
     }
 
-    const header = (
-        <div className={styles.header}>
-            <button
-                type="button"
-                onClick={onBack}
-                className={styles.back}
-                aria-label="Back"
-            >
-                <Icon.BackIcon />
-            </button>
-            <span className={styles.title}>
-                {stage === 'review' || stage === 'submitting'
+        const header = (
+        <ScreenHeader
+            onBack={onBack}
+            title="{stage === 'review' || stage === 'submitting'
                     ? 'Review deploy'
-                    : `Deploy contract${descriptor ? ` on ${descriptor.displayName}` : ''}`}
-            </span>
-            <span className={styles.spacer} />
-        </div>
+                    : `Deploy contract${descriptor ? ` on ${descriptor.displayName}` : ''}`}"
+        />
     );
-
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
             {children}

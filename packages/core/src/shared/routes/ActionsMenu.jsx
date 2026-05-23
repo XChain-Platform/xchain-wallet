@@ -25,21 +25,13 @@ export function ActionsMenu({ entries, onBack }) {
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
 
-    const header = (
-        <div className={styles.header}>
-            <button
-                type="button"
-                onClick={onBack}
-                className={styles.back}
-                aria-label="Back to home"
-            >
-                <Icon.BackIcon />
-            </button>
-            <span className={styles.title}>Actions</span>
-            <span className={styles.spacer} />
-        </div>
+        const header = (
+        <ScreenHeader
+            onBack={onBack}
+            backLabel="Back to home"
+            title="Actions"
+        />
     );
-
     return (
         <Screen variant={variant} header={header}>
             <div className={isFull ? styles.listFull : styles.listPopup}>

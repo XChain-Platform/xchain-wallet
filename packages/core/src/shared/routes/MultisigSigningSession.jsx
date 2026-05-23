@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Screen, Button, Input, AnimatedQrFrames, MultisigBadge, QrScanner , Icon} from '@xchain-wallet/core/ui';
+import { Screen, ScreenHeader, Button, Input, AnimatedQrFrames, MultisigBadge, QrScanner , Icon} from '@xchain-wallet/core/ui';
 import { schemas, uri as uriLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './IssueTokenForm.module.css';
@@ -343,20 +343,10 @@ export function MultisigSigningSession({ walletId, onBack }) {
     }
 
     const header = (
-        <div className={styles.header}>
-            <button
-                type="button"
-                onClick={() => (activeId ? setActiveId(null) : onBack())}
-                className={styles.back}
-                aria-label="Back"
-            >
-                <Icon.BackIcon />
-            </button>
-            <span className={styles.title}>
-                {activeId ? 'Multisig signing' : 'Multisig signing sessions'}
-            </span>
-            <span className={styles.spacer} />
-        </div>
+        <ScreenHeader
+            onBack={() => (activeId ? setActiveId(null) : onBack())}
+            title={activeId ? 'Multisig signing' : 'Multisig signing sessions'}
+        />
     );
 
     const wrap = (children) => (

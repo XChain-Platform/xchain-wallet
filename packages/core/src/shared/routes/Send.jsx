@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Screen,
+    ScreenHeader,
     Button,
     Input,
     AddressCombobox,
@@ -199,6 +200,7 @@ export function Send({ walletId, onBack, prefill = null }) {
     // "save as contact" inline form (idle → naming → saving).
     const [contactsPickerOpen, setContactsPickerOpen] = useState(false);
     const [contactsPickerQuery, setContactsPickerQuery] = useState('');
+    const [contactsFilterOpen, setContactsFilterOpen] = useState(false);
     const [saveContactStage, setSaveContactStage] = useState(
         /** @type {'idle' | 'naming' | 'saving'} */ ('idle'),
     );
@@ -856,25 +858,12 @@ export function Send({ walletId, onBack, prefill = null }) {
     }
 
     const header = (
-        <div className={styles.header}>
-            <button
-                type="button"
-                onClick={onBack}
-                className={styles.back}
-                aria-label="Back to home"
-            >
-                <Icon.BackIcon />
-            </button>
-            <span className={styles.titleGroup}>
-                <span className={styles.headerActionIcon} aria-hidden="true">
-                    <Icon.SendIcon />
-                </span>
-                <span className={styles.title}>
-                    {stage === 'review' || stage === 'submitting' ? 'Review & Send' : 'Send'}
-                </span>
-            </span>
-            <span className={styles.spacer} />
-        </div>
+        <ScreenHeader
+            onBack={onBack}
+            backLabel="Back to home"
+            title={stage === 'review' || stage === 'submitting' ? 'Review & Send' : 'Send'}
+            titleIcon={<Icon.SendIcon />}
+        />
     );
 
     const wrap = (children) => (
@@ -1159,6 +1148,129 @@ export function Send({ walletId, onBack, prefill = null }) {
         );
     }
 
+    // Address-book picker — rendered in place of the form when the user
+    // taps the book icon in the To field. Shows only contacts whose
+    // `entries[].chain` matches the current chain's coin family (so a
+    // DOGE send only surfaces Dogecoin contacts, etc.). Selecting a row
+    // fills the To field and returns to the form with all other field
+    // state intact.
+    if (contactsPickerOpen) {
+        const desc = chainId ? chainRegistry.get(chainId) : null;
+        const chainCoin = desc?.coin || null;
+        const chainLabel = desc?.displayName || (chainCoin ? chainCoin.charAt(0).toUpperCase() + chainCoin.slice(1) : 'this chain');
+        const pickerHeader = (
+            <ScreenHeader
+                onBack={() => {
+                    setContactsPickerOpen(false);
+                    setContactsPickerQuery('');
+                    setContactsFilterOpen(false);
+                }}
+                title="Address Book"
+                titleIcon={<Icon.BookIcon />}
+                trailing={(
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setContactsFilterOpen((o) => {
+                                if (o) setContactsPickerQuery('');
+                                return !o;
+                            });
+                        }}
+                        aria-label={contactsFilterOpen ? 'Hide filter' : 'Filter contacts'}
+                        aria-pressed={contactsFilterOpen}
+                        title="Filter contacts"
+                        style={{
+                            background: 'transparent',
+                            border: 'none',
+                            padding: 'var(--xc-space-1) var(--xc-space-2)',
+                            color: contactsFilterOpen ? 'var(--xc-accent-primary)' : 'var(--xc-text)',
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                        }}
+                    >
+                        <Icon.FilterIcon />
+                    </button>
+                )}
+            />
+        );
+        return (
+            <Screen variant={variant} header={pickerHeader}>
+                <div className={`${styles.card} ${isFull ? styles.cardFull : styles.cardSmall}`}>
+                    <p className={styles.hint} style={{ textAlign: 'left', marginBottom: 'var(--xc-space-3)' }}>
+                        Showing saved {chainLabel} addresses. Other chains live on their own send pages.
+                    </p>
+                    {contactsFilterOpen ? (
+                        <Input
+                            label="Filter"
+                            value={contactsPickerQuery}
+                            onChange={(e) => setContactsPickerQuery(e.target.value)}
+                            placeholder="Search by name or address"
+                            autoComplete="off"
+                            autoFocus
+                        />
+                    ) : null}
+                    {filteredPickerContacts.length === 0 ? (
+                        <div
+                            style={{
+                                marginTop: 'var(--xc-space-3)',
+                                padding: 'var(--xc-space-4)',
+                                border: '1px dashed var(--xc-border)',
+                                borderRadius: 'var(--xc-radius-md)',
+                                background: 'var(--xc-bg-muted)',
+                                color: 'var(--xc-text-muted)',
+                                textAlign: 'center',
+                                fontSize: 'var(--xc-text-sm)',
+                                lineHeight: 1.5,
+                            }}
+                        >
+                            {chainContacts.length === 0
+                                ? `Your address book is empty for ${chainLabel}. Type or paste an address on the Send form, then tap "Save as contact" to build the list.`
+                                : 'No contacts match your filter.'}
+                        </div>
+                    ) : (
+                        <ul style={{ listStyle: 'none', margin: 'var(--xc-space-3) 0 0', padding: 0 }}>
+                            {filteredPickerContacts.map(({ contact, entry }) => (
+                                <li key={`${contact.id}:${entry.address}`} style={{ marginBottom: 'var(--xc-space-2)' }}>
+                                    <button
+                                        type="button"
+                                        onClick={() => handlePickContact(entry)}
+                                        style={{
+                                            width: '100%',
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            alignItems: 'flex-start',
+                                            gap: '2px',
+                                            padding: 'var(--xc-space-3)',
+                                            border: '1px solid var(--xc-border)',
+                                            borderRadius: 'var(--xc-radius-sm)',
+                                            background: 'var(--xc-surface, transparent)',
+                                            color: 'var(--xc-text)',
+                                            textAlign: 'left',
+                                            cursor: 'pointer',
+                                        }}
+                                    >
+                                        <span style={{ fontWeight: 700, fontSize: 'var(--xc-text-md)' }}>
+                                            {contact.name}
+                                        </span>
+                                        <span style={{ fontSize: 'var(--xc-text-xs)', color: 'var(--xc-text-muted)', wordBreak: 'break-all' }}>
+                                            {entry.address}
+                                        </span>
+                                        {entry.label ? (
+                                            <span style={{ fontSize: 'var(--xc-text-xs)', color: 'var(--xc-text-muted)' }}>
+                                                {entry.label}
+                                            </span>
+                                        ) : null}
+                                    </button>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </div>
+            </Screen>
+        );
+    }
+
     // stage === 'form'
     const draftBanner = draft.hasDraft() && !draftPending ? (
         <StatusMessage
@@ -1234,49 +1346,13 @@ export function Send({ walletId, onBack, prefill = null }) {
                 <button
                     type="button"
                     className={styles.inlineContactsButton}
-                    onClick={() => setContactsPickerOpen((o) => !o)}
-                    aria-label={contactsPickerOpen ? 'Close contacts list' : 'Browse contacts'}
-                    aria-expanded={contactsPickerOpen}
-                    title="Browse contacts"
+                    onClick={() => { setContactsPickerOpen(true); setContactsPickerQuery(''); }}
+                    aria-label="Open address book"
+                    title="Address book"
                 >
                     <Icon.BookIcon />
                 </button>
             </div>
-            {contactsPickerOpen ? (
-                <div className={styles.contactsPopover}>
-                    <Input
-                        label="Search contacts"
-                        value={contactsPickerQuery}
-                        onChange={(e) => setContactsPickerQuery(e.target.value)}
-                        placeholder="Filter by name or address"
-                        autoComplete="off"
-                    />
-                    {filteredPickerContacts.length === 0 ? (
-                        <p className={styles.contactsPopoverEmpty}>
-                            {chainContacts.length === 0
-                                ? 'No saved contacts on this chain yet.'
-                                : 'No contacts match.'}
-                        </p>
-                    ) : (
-                        <ul className={styles.contactsPopoverList}>
-                            {filteredPickerContacts.map(({ contact, entry }) => (
-                                <li key={`${contact.id}:${entry.address}`}>
-                                    <button
-                                        type="button"
-                                        className={styles.contactsPopoverItem}
-                                        onClick={() => handlePickContact(entry)}
-                                    >
-                                        <span style={{ fontWeight: 600 }}>{contact.name}</span>
-                                        <span style={{ fontSize: 'var(--xc-text-xs)', color: 'var(--xc-text-muted)' }}>
-                                            {entry.address}
-                                        </span>
-                                    </button>
-                                </li>
-                            ))}
-                        </ul>
-                    )}
-                </div>
-            ) : null}
             {pasteWarning ? (
                 <div role="alert" className={styles.warnings}>
                     <p className={styles.warning}>{pasteWarning}</p>
@@ -1364,6 +1440,7 @@ export function Send({ walletId, onBack, prefill = null }) {
                     value={amount}
                     onChange={(e) => onCoinInputChange(e.target.value)}
                     autoComplete="off"
+                    placeholder="0.00"
                     style={{
                         fontSize: 'var(--xc-text-lg)',
                         padding: 'var(--xc-space-3) var(--xc-space-4)',
@@ -1379,9 +1456,13 @@ export function Send({ walletId, onBack, prefill = null }) {
                                 : ''}
                     </span>
                     <span className={styles.amountFooterRight}>
-                        {sourceBalance
-                            ? `${sourceBalance.amount} ${sourceBalance.tick} available`
-                            : 'Loading…'}
+                        {previewBalances.loading
+                            ? 'Loading…'
+                            : previewBalances.error
+                                ? `Balance unavailable (${previewBalances.error})`
+                                : sourceBalance
+                                    ? `${sourceBalance.amount} ${sourceBalance.tick} available`
+                                    : `0 ${(tick.trim().toUpperCase()) || ''} available`.replace(/\s+/g, ' ').trim()}
                         <button
                             type="button"
                             className={styles.amountMaxButton}
@@ -1394,27 +1475,30 @@ export function Send({ walletId, onBack, prefill = null }) {
                     </span>
                 </div>
             </div>
-            <Input
-                label="Memo"
-                hint="Optional. Cannot contain | or ; characters."
-                value={memo}
-                onChange={(e) => setMemo(e.target.value)}
-                autoComplete="off"
-            />
-            {feeTiers ? (
-                <FeeSelector
-                    tiers={feeTiers}
-                    value={feePick}
-                    onChange={setFeePick}
-                    placeholderBadge={feeEstimate?.source === 'static-placeholder'}
-                    formatFiat={(coinAmount) => {
-                        if (!fiatRate || !coinAmount) return null;
-                        const v = coinToFiat(String(coinAmount), fiatRate);
-                        if (v == null || !Number.isFinite(v)) return null;
-                        return `≈ ${v.toFixed(2)} ${fiatRate.fiatCurrency || ''}`.trim();
-                    }}
+            <details className={styles.details}>
+                <summary className={styles.detailsToggle}>Advanced</summary>
+                <Input
+                    label="Memo"
+                    hint="Optional. Cannot contain | or ; characters."
+                    value={memo}
+                    onChange={(e) => setMemo(e.target.value)}
+                    autoComplete="off"
                 />
-            ) : null}
+                {feeTiers ? (
+                    <FeeSelector
+                        tiers={feeTiers}
+                        value={feePick}
+                        onChange={setFeePick}
+                        placeholderBadge={feeEstimate?.source === 'static-placeholder'}
+                        formatFiat={(coinAmount) => {
+                            if (!fiatRate || !coinAmount) return null;
+                            const v = coinToFiat(String(coinAmount), fiatRate);
+                            if (v == null || !Number.isFinite(v)) return null;
+                            return `≈ ${v.toFixed(2)} ${fiatRate.fiatCurrency || ''}`.trim();
+                        }}
+                    />
+                ) : null}
+            </details>
             {formError ? (
                 <StatusMessage
                     variant="error"

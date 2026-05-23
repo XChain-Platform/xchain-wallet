@@ -286,25 +286,14 @@ export function IssueTokenForm({ walletId, onBack }) {
     }
 
     const titleSuffix = descriptor ? ` on ${descriptor.displayName}` : '';
-    const header = (
-        <div className={styles.header}>
-            <button
-                type="button"
-                onClick={onBack}
-                className={styles.back}
-                aria-label="Back"
-            >
-                <Icon.BackIcon />
-            </button>
-            <span className={styles.title}>
-                {stage === 'review' || stage === 'submitting'
+        const header = (
+        <ScreenHeader
+            onBack={onBack}
+            title="{stage === 'review' || stage === 'submitting'
                     ? 'Review issue'
-                    : `Issue token${titleSuffix}`}
-            </span>
-            <span className={styles.spacer} />
-        </div>
+                    : `Issue token${titleSuffix}`}"
+        />
     );
-
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
             {isFull ? <div className={styles.card}>{children}</div> : children}

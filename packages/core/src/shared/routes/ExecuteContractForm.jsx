@@ -214,25 +214,14 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, on
         setStage('form');
     }
 
-    const header = (
-        <div className={styles.header}>
-            <button
-                type="button"
-                onClick={onBack}
-                className={styles.back}
-                aria-label="Back"
-            >
-                <Icon.BackIcon />
-            </button>
-            <span className={styles.title}>
-                {stage === 'review' || stage === 'submitting'
+        const header = (
+        <ScreenHeader
+            onBack={onBack}
+            title="{stage === 'review' || stage === 'submitting'
                     ? 'Review execute'
-                    : `Execute on contract #${contractActionIndex}`}
-            </span>
-            <span className={styles.spacer} />
-        </div>
+                    : `Execute on contract #${contractActionIndex}`}"
+        />
     );
-
     const wrap = (children) => (
         <Screen variant={variant} header={header}>{children}</Screen>
     );

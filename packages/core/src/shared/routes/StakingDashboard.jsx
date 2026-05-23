@@ -151,21 +151,13 @@ export function StakingDashboard({
         return () => { cancelled = true; };
     }, [btcChainsWithAddresses, addressesByChain, messaging]);
 
-    const header = (
-        <div className={styles.header}>
-            <button
-                type="button"
-                onClick={onBack}
-                className={styles.back}
-                aria-label="Back to home"
-            >
-                <Icon.BackIcon />
-            </button>
-            <span className={styles.title}>Staking</span>
-            <span className={styles.spacer} />
-        </div>
+        const header = (
+        <ScreenHeader
+            onBack={onBack}
+            backLabel="Back to home"
+            title="Staking"
+        />
     );
-
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
             <div className={isFull ? styles.listFull : styles.listPopup}>

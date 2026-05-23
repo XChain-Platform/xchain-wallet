@@ -327,21 +327,13 @@ export function Receive({ walletId, accountId, onBack }) {
         setShareStatus('Share unavailable — copy the link manually.');
     }, [reqAmount, reqTick, descriptor]);
 
-    const header = (
-        <div className={styles.header}>
-            <button
-                type="button"
-                onClick={onBack}
-                className={styles.back}
-                aria-label="Back to home"
-            >
-                <Icon.BackIcon />
-            </button>
-            <span className={styles.title}>Receive</span>
-            <span className={styles.spacer} />
-        </div>
+        const header = (
+        <ScreenHeader
+            onBack={onBack}
+            backLabel="Back to home"
+            title="Receive"
+        />
     );
-
     const body = (
         <>
             {loadError ? (

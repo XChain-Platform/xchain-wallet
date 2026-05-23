@@ -213,21 +213,12 @@ export function MultisigCreate({ walletId, onBack }) {
         }
     }
 
-    const header = (
-        <div className={styles.header}>
-            <button
-                type="button"
-                onClick={onBack}
-                className={styles.back}
-                aria-label="Back"
-            >
-                <Icon.BackIcon />
-            </button>
-            <span className={styles.title}>Create multisig</span>
-            <span className={styles.spacer} />
-        </div>
+        const header = (
+        <ScreenHeader
+            onBack={onBack}
+            title="Create multisig"
+        />
     );
-
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
             {isFull ? <div className={styles.card}>{children}</div> : children}

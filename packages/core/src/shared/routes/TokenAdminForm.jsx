@@ -239,25 +239,14 @@ export function TokenAdminForm({ walletId, mode, onBack }) {
     }
 
     const titleSuffix = descriptor ? ` on ${descriptor.displayName}` : '';
-    const header = (
-        <div className={styles.header}>
-            <button
-                type="button"
-                onClick={onBack}
-                className={styles.back}
-                aria-label="Back"
-            >
-                <Icon.BackIcon />
-            </button>
-            <span className={styles.title}>
-                {stage === 'review' || stage === 'submitting'
+        const header = (
+        <ScreenHeader
+            onBack={onBack}
+            title="{stage === 'review' || stage === 'submitting'
                     ? `Review ${MODE_LABEL_LOWER[mode]}`
-                    : `${MODE_LABEL[mode]}${titleSuffix}`}
-            </span>
-            <span className={styles.spacer} />
-        </div>
+                    : `${MODE_LABEL[mode]}${titleSuffix}`}"
+        />
     );
-
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
             {isFull ? <div className={styles.card}>{children}</div> : children}

@@ -212,25 +212,14 @@ export function DelegationActionForm({ mode, walletId, chainId, onBack }) {
         setStage('form');
     }
 
-    const header = (
-        <div className={styles.header}>
-            <button
-                type="button"
-                onClick={onBack}
-                className={styles.back}
-                aria-label="Back"
-            >
-                <Icon.BackIcon />
-            </button>
-            <span className={styles.title}>
-                {stage === 'review' || stage === 'submitting'
+        const header = (
+        <ScreenHeader
+            onBack={onBack}
+            title="{stage === 'review' || stage === 'submitting'
                     ? `Review ${verb.toLowerCase()}`
-                    : verb}
-            </span>
-            <span className={styles.spacer} />
-        </div>
+                    : verb}"
+        />
     );
-
     const wrap = (children) => <Screen variant={variant} header={header}>{children}</Screen>;
 
     if (loadError) {

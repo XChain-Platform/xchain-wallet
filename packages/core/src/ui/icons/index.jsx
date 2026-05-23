@@ -16,6 +16,7 @@ import {
     DollarSign as LucideDollarSign,
     MoreHorizontal as LucideMoreHorizontal,
     Filter as LucideFilter,
+    BookOpen as LucideBookOpen,
 } from 'lucide-react';
 
 const STROKE_PROPS = {
@@ -114,12 +115,7 @@ export function CameraIcon() {
 }
 
 export function BookIcon() {
-    return (
-        <svg {...STROKE_PROPS}>
-            <path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2V5Z" />
-            <path d="M4 19a2 2 0 0 0 2 2h13" />
-        </svg>
-    );
+    return <LucideBookOpen {...LUCIDE_PROPS} />;
 }
 
 export function SignIcon() {

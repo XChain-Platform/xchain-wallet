@@ -15,7 +15,13 @@
     color: var(--xc-accent-primary);
     font-size: var(--xc-text-sm);
     cursor: pointer;
-    padding: var(--xc-space-1) var(--xc-space-2);
+    /* Zero left padding + negative inline-start margin so the chevron's
+       left edge aligns with the AppHeader logo above. AppHeader pads the
+       outer bar by space-3; Screen.header pads by space-4. The delta
+       (space-3 − space-4) pulls this button leftward enough that the
+       icon glyph lines up with the logo's left edge. */
+    padding: var(--xc-space-1) var(--xc-space-2) var(--xc-space-1) 0;
+    margin-inline-start: calc(var(--xc-space-3) - var(--xc-space-4));
     border-radius: var(--xc-radius-sm);
     transition: color 0.12s ease;
 }

@@ -559,21 +559,13 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         }
     };
 
-    const header = (
-        <div className={styles.header}>
-            <button
-                type="button"
-                onClick={onBack}
-                className={styles.back}
-                aria-label="Back to home"
-            >
-                <Icon.BackIcon />
-            </button>
-            <span className={styles.title}>History</span>
-            <span className={styles.spacer} />
-        </div>
+        const header = (
+        <ScreenHeader
+            onBack={onBack}
+            backLabel="Back to home"
+            title="History"
+        />
     );
-
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
             <div className={styles.body}>{children}</div>

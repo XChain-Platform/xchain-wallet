@@ -236,21 +236,12 @@ export function ParallelComposer({ walletId, onBack, initialRows }) {
 
     const allDoneOrSkipped = rows.every((r) => r.status === 'success' || r.status === 'skipped');
 
-    const header = (
-        <div className={styles.header}>
-            <button
-                type="button"
-                onClick={onBack}
-                className={styles.back}
-                aria-label="Back"
-            >
-                <Icon.BackIcon />
-            </button>
-            <span className={styles.title}>Parallel cross-chain actions</span>
-            <span className={styles.spacer} />
-        </div>
+        const header = (
+        <ScreenHeader
+            onBack={onBack}
+            title="Parallel cross-chain actions"
+        />
     );
-
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
             {isFull ? <div className={styles.card}>{children}</div> : children}

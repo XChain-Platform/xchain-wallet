@@ -206,23 +206,12 @@ export function StakeForm({ walletId, chainId, onBack }) {
         setStage('form');
     }
 
-    const header = (
-        <div className={styles.header}>
-            <button
-                type="button"
-                onClick={onBack}
-                className={styles.back}
-                aria-label="Back"
-            >
-                <Icon.BackIcon />
-            </button>
-            <span className={styles.title}>
-                {stage === 'review' || stage === 'submitting' ? 'Review stake' : 'Stake on Bitcoin'}
-            </span>
-            <span className={styles.spacer} />
-        </div>
+        const header = (
+        <ScreenHeader
+            onBack={onBack}
+            title="{stage === 'review' || stage === 'submitting' ? 'Review stake' : 'Stake on Bitcoin'}"
+        />
     );
-
     const wrap = (children) => <Screen variant={variant} header={header}>{children}</Screen>;
 
     if (loadError) {

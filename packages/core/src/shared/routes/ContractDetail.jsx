@@ -137,21 +137,13 @@ export function ContractDetail({
     const codeHash = contract?.code_hash || contract?.CODE_HASH
         || deployAction?.params?.CODE_HASH || '—';
 
-    const header = (
-        <div className={styles.header}>
-            <button
-                type="button"
-                onClick={onBack}
-                className={styles.back}
-                aria-label="Back to contracts list"
-            >
-                <Icon.BackIcon />
-            </button>
-            <span className={styles.title}>Contract #{contractActionIndex}</span>
-            <span className={styles.spacer} />
-        </div>
+        const header = (
+        <ScreenHeader
+            onBack={onBack}
+            backLabel="Back to contracts list"
+            title="Contract #{contractActionIndex}"
+        />
     );
-
     if (contractError) {
         return (
             <Screen variant={variant} header={header}>

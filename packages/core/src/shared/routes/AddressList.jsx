@@ -217,21 +217,12 @@ export function AddressList({ walletId, accountId, onBack, onReceive, onShowPriv
         });
     };
 
-    const header = (
-        <div className={styles.header}>
-            <button
-                type="button"
-                onClick={onBack}
-                className={styles.back}
-                aria-label="Back"
-            >
-                <Icon.BackIcon />
-            </button>
-            <span className={styles.title}>Addresses</span>
-            <span className={styles.spacer} />
-        </div>
+        const header = (
+        <ScreenHeader
+            onBack={onBack}
+            title="Addresses"
+        />
     );
-
     const wrap = (children) => (
         <Screen variant={variant} header={header}>{children}</Screen>
     );

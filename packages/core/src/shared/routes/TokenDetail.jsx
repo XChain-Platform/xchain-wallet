@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Screen, ChainBadge, Icon, Button, Input } from '@xchain-wallet/core/ui';
+import { Screen, ScreenHeader, ChainBadge, Icon, Button, Input } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -178,29 +178,19 @@ export function TokenDetail({
     }, [assetInfo, rowImageUrl, isNative, chainId]);
 
     const header = (
-        <div className={styles.header}>
-            <button
-                type="button"
-                onClick={onBack}
-                className={styles.back}
-                aria-label="Back"
-            >
-                <Icon.BackIcon />
-            </button>
-            <div className={styles.titleGroup}>
-                {headerIconUrl ? (
-                    <img
-                        src={headerIconUrl}
-                        alt=""
-                        aria-hidden="true"
-                        className={styles.headerIcon}
-                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                    />
-                ) : null}
-                <span className={styles.title}>{displayName || tick}</span>
-            </div>
-            <span className={styles.spacer} />
-        </div>
+        <ScreenHeader
+            onBack={onBack}
+            title={displayName || tick}
+            titleIcon={headerIconUrl ? (
+                <img
+                    src={headerIconUrl}
+                    alt=""
+                    aria-hidden="true"
+                    className={styles.headerIcon}
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                />
+            ) : null}
+        />
     );
 
     const showNativeStats = isNative && !nativePrice.disabled && nativePrice.entry?.priceFiat != null;

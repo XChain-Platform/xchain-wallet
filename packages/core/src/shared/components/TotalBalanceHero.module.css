@@ -85,6 +85,35 @@
     color: rgba(255, 255, 255, 0.55);
 }
 
+.change {
+    display: flex;
+    align-items: baseline;
+    gap: var(--xc-space-1);
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    line-height: 1.2;
+}
+
+.changePositive {
+    color: #6EE7A8;
+}
+
+.changeNegative {
+    color: #FCA5A5;
+}
+
+.changeNeutral {
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.changeLabel {
+    color: rgba(255, 255, 255, 0.55);
+    font-weight: 500;
+    font-size: var(--xc-text-xs);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
 .note {
     display: flex;
     align-items: center;

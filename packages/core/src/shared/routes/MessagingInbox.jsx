@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Screen,
+    ScreenHeader,
     Button,
     Input,
     ChainBadge,
@@ -157,20 +158,7 @@ export function MessagingInbox({ walletId, onCompose, onBack }) {
             .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
     }, [messages, selectedCounterparty, ownerAddress]);
 
-    const header = (
-        <div className={styles.header}>
-            <button
-                type="button"
-                onClick={onBack}
-                className={styles.back}
-                aria-label="Back"
-            >
-                <Icon.BackIcon />
-            </button>
-            <span className={styles.title}>Messaging</span>
-            <span className={styles.spacer} />
-        </div>
-    );
+    const header = <ScreenHeader onBack={onBack} title="Messaging" titleIcon={<Icon.MessageIcon />} />;
 
     const wrap = (children) => (
         <Screen variant={variant} header={header}>

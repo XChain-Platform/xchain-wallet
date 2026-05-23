@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     Screen,
+    ScreenHeader,
     Button,
     Input,
     ChainBadge,
@@ -151,29 +152,19 @@ export function ContactsList({ walletId, onSendMessage, onBack }) {
     }
 
     const header = (
-        <div className={styles.header}>
-            <button
-                type="button"
-                onClick={() => {
-                    if (mode !== 'list') {
-                        setMode(mode === 'edit' && active ? 'detail' : 'list');
-                        if (mode === 'edit' && !active) setActiveId(null);
-                    } else {
-                        onBack();
-                    }
-                }}
-                className={styles.back}
-                aria-label="Back"
-            >
-                <Icon.BackIcon />
-            </button>
-            <span className={styles.title}>
-                {mode === 'edit' ? (active ? 'Edit contact' : 'New contact')
-                    : mode === 'detail' ? 'Contact'
-                    : 'Contacts'}
-            </span>
-            <span className={styles.spacer} />
-        </div>
+        <ScreenHeader
+            onBack={() => {
+                if (mode !== 'list') {
+                    setMode(mode === 'edit' && active ? 'detail' : 'list');
+                    if (mode === 'edit' && !active) setActiveId(null);
+                } else {
+                    onBack();
+                }
+            }}
+            title={mode === 'edit'
+                ? (active ? 'Edit contact' : 'New contact')
+                : mode === 'detail' ? 'Contact' : 'Contacts'}
+        />
     );
 
     const wrap = (children) => (

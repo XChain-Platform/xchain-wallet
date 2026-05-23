@@ -291,7 +291,7 @@
 .amountBlock {
     display: flex;
     flex-direction: column;
-    gap: var(--xc-space-1);
+    gap: 2px;
 }
 
 .toFieldWrap {
@@ -315,12 +315,18 @@
 .inlineContactsButton {
     position: absolute;
     right: 4px;
+    /* Stretch the button between the bottom of the label area and the
+       bottom of the input — both anchors are CSS-known (Input.field has
+       gap space-1 below the text-sm label, and margin-bottom space-3
+       under the input). flex-centering inside lands the icon at the
+       input's vertical midpoint regardless of font-size / line-height
+       making the input taller than its 48px min-height. */
+    top: calc(0.875rem * 1.5 + var(--xc-space-2));
     bottom: var(--xc-space-3);
     display: inline-flex;
     align-items: center;
     justify-content: center;
     width: 44px;
-    height: 48px;
     padding: 0;
     border: none;
     border-radius: var(--xc-radius-sm);
@@ -429,9 +435,9 @@
 
 .amountFooter {
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-end;
     align-items: center;
-    gap: var(--xc-space-2);
+    gap: var(--xc-space-3);
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
     margin-top: 4px;

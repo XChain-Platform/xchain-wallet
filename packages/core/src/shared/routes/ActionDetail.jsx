@@ -5,7 +5,7 @@
 // peer-side panel for cross-chain LINK pairs.
 
 import { useEffect, useState } from 'react';
-import { Screen, Icon } from '@xchain-wallet/core/ui';
+import { Screen, ScreenHeader, Icon } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -59,13 +59,7 @@ export function ActionDetail({ entry, walletId, chainTip, onBack }) {
     if (!entry) {
         return (
             <Screen variant={variant} header={(
-                <div className={styles.header}>
-                    <button type="button" onClick={onBack} className={styles.back} aria-label="Back to history">
-                        <Icon.BackIcon />
-                    </button>
-                    <span className={styles.title}>Action</span>
-                    <span className={styles.spacer} />
-                </div>
+                <ScreenHeader onBack={onBack} backLabel="Back to history" title="Action" />
             )}>
                 <p className={styles.empty}>No action selected.</p>
             </Screen>
@@ -75,30 +69,21 @@ export function ActionDetail({ entry, walletId, chainTip, onBack }) {
     const descriptor = entry.chainId ? chainRegistry.get(entry.chainId) : null;
     const iconUrl = descriptor ? branding.chainIconSmallUrl(descriptor.id) : null;
     const header = (
-        <div className={styles.header}>
-            <button
-                type="button"
-                onClick={onBack}
-                className={styles.back}
-                aria-label="Back to history"
-            >
-                <Icon.BackIcon />
-            </button>
-            <span className={styles.title}>
-                {iconUrl ? (
-                    <img
-                        src={iconUrl}
-                        alt=""
-                        aria-hidden="true"
-                        className={styles.titleChainIcon}
-                        width={18}
-                        height={18}
-                    />
-                ) : null}
-                {entry.action} #{Number(entry.actionIndex || 0).toLocaleString('en-US')}
-            </span>
-            <span className={styles.spacer} />
-        </div>
+        <ScreenHeader
+            onBack={onBack}
+            backLabel="Back to history"
+            title={`${entry.action} #${Number(entry.actionIndex || 0).toLocaleString('en-US')}`}
+            titleIcon={iconUrl ? (
+                <img
+                    src={iconUrl}
+                    alt=""
+                    aria-hidden="true"
+                    className={styles.titleChainIcon}
+                    width={18}
+                    height={18}
+                />
+            ) : null}
+        />
     );
 
     return (

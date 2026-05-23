@@ -1,7 +1,8 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Icon } from '@xchain-wallet/core/ui';
 import { sumFiatValue } from './BalanceList.jsx';
 import { StalenessLabel } from './StalenessLabel.jsx';
+import { useMessaging } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import styles from './TotalBalanceHero.module.css';
@@ -23,8 +24,69 @@ import styles from './TotalBalanceHero.module.css';
 export function TotalBalanceHero({ rows, networkFilter, lastSyncedAt }) {
     const { total, unpriced } = useMemo(() => sumFiatValue(rows), [rows]);
     const { settings } = useSettings();
+    const { messaging } = useMessaging();
     const fiatCurrency = settings?.fiatCurrency || 'USD';
     const [hidden, toggleHidden] = useBalancesHidden();
+
+    // Fetch 24h change for every native chain that has a row in the
+    // balance list. Tokens without a published 24h delta are treated as
+    // unchanged in the total — the figure still reads as "what's moved
+    // in the last 24 hours" rather than a misleading whole-portfolio
+    // weighted average. Skipped when the user has price data disabled
+    // (the messaging route returns `{ disabled: true }`).
+    const nativeChainIds = useMemo(() => {
+        const set = new Set();
+        for (const r of rows || []) {
+            if (r?.kind === 'native' && typeof r.chainId === 'string' && r.chainId) {
+                set.add(r.chainId);
+            }
+        }
+        return Array.from(set);
+    }, [rows]);
+    const nativeChainKey = nativeChainIds.join(',');
+
+    const [priceMap, setPriceMap] = useState(/** @type {Record<string, any>} */ ({}));
+    useEffect(() => {
+        if (typeof messaging?.getNativePricesRequest !== 'function' || nativeChainIds.length === 0) {
+            setPriceMap({});
+            return undefined;
+        }
+        let cancelled = false;
+        messaging.getNativePricesRequest({ chainIds: nativeChainIds })
+            .then((result) => {
+                if (cancelled) return;
+                if (result?.disabled) { setPriceMap({}); return; }
+                setPriceMap(result?.prices || {});
+            })
+            .catch(() => { if (!cancelled) setPriceMap({}); });
+        return () => { cancelled = true; };
+    }, [messaging, nativeChainKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Compute 24h delta: for each native row with a known change pct,
+    // back-derive the 24h-ago fiat value and accumulate the difference.
+    // Non-native rows + native rows without 24h data are treated as
+    // unchanged.
+    const change24h = useMemo(() => {
+        let total24hAgo = 0;
+        let hasAny = false;
+        for (const r of rows || []) {
+            const cur = fiatValueOf(r);
+            if (cur == null) continue;
+            const pct = r.kind === 'native' && r.chainId
+                ? priceMap[r.chainId]?.change24hPct
+                : null;
+            if (typeof pct === 'number' && Number.isFinite(pct)) {
+                hasAny = true;
+                total24hAgo += cur / (1 + pct / 100);
+            } else {
+                total24hAgo += cur;
+            }
+        }
+        if (!hasAny || total24hAgo <= 0) return null;
+        const delta = total - total24hAgo;
+        const pct = (delta / total24hAgo) * 100;
+        return { delta, pct };
+    }, [rows, priceMap, total]);
 
     const filterLabel = networkFilter === 'all' ? 'All networks' : networkFilter.toUpperCase();
     const hasUnpriced = unpriced > 0;
@@ -57,6 +119,22 @@ export function TotalBalanceHero({ rows, networkFilter, lastSyncedAt }) {
                     </>
                 )}
             </div>
+            {!hidden && change24h && Number.isFinite(change24h.delta) && Number.isFinite(change24h.pct) ? (
+                <div className={styles.change} aria-label="24h change">
+                    <span
+                        className={
+                            change24h.delta > 0 ? styles.changePositive
+                                : change24h.delta < 0 ? styles.changeNegative
+                                : styles.changeNeutral
+                        }
+                    >
+                        {change24h.delta > 0 ? '▲' : change24h.delta < 0 ? '▼' : '—'}{' '}
+                        {formatFiatAmount(Math.abs(change24h.delta), fiatCurrency)}{' '}
+                        ({change24h.pct > 0 ? '+' : ''}{change24h.pct.toFixed(2)}%)
+                    </span>
+                    <span className={styles.changeLabel}>· 24h</span>
+                </div>
+            ) : null}
             {hasUnpriced || hasSync ? (
                 <div className={styles.note}>
                     <span className={styles.noteLeft}>
@@ -75,6 +153,26 @@ export function TotalBalanceHero({ rows, networkFilter, lastSyncedAt }) {
             ) : null}
         </section>
     );
+}
+
+// Per-row fiat value used by the 24h-change accumulator. Mirrors the
+// internal `fiatValue` helper in BalanceList.jsx but returns null when
+// the row has no price so the change calculation can treat it as a
+// no-data slot.
+function fiatValueOf(row) {
+    if (!row) return null;
+    if (typeof row.fiatRate !== 'number' || !Number.isFinite(row.fiatRate)) return null;
+    const q = (() => {
+        try { return BigInt(String(row.quantity || '0')); }
+        catch { return 0n; }
+    })();
+    if (q === 0n) return 0;
+    const d = row.divisibility || 0;
+    if (d <= 0) return Number(q) * row.fiatRate;
+    const div = 10n ** BigInt(d);
+    const whole = Number(q / div);
+    const frac = Number(q % div) / Number(div);
+    return (whole + frac) * row.fiatRate;
 }
 
 // Format the numeric portion of the total balance in the wallet's

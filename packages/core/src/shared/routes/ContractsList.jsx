@@ -251,21 +251,13 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
         return () => { cancelled = true; };
     }, [activeChains, messaging]);
 
-    const header = (
-        <div className={styles.header}>
-            <button
-                type="button"
-                onClick={onBack}
-                className={styles.back}
-                aria-label="Back to home"
-            >
-                <Icon.BackIcon />
-            </button>
-            <span className={styles.title}>Contracts</span>
-            <span className={styles.spacer} />
-        </div>
+        const header = (
+        <ScreenHeader
+            onBack={onBack}
+            backLabel="Back to home"
+            title="Contracts"
+        />
     );
-
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
             <div className={isFull ? styles.listFull : styles.listPopup}>

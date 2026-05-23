@@ -87,21 +87,12 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
         });
     }
 
-    const header = (
-        <div className={styles.header}>
-            <button
-                type="button"
-                onClick={onBack}
-                className={styles.back}
-                aria-label="Back"
-            >
-                <Icon.BackIcon />
-            </button>
-            <span className={styles.title}>Dispenser explorer</span>
-            <span className={styles.spacer} />
-        </div>
+        const header = (
+        <ScreenHeader
+            onBack={onBack}
+            title="Dispenser explorer"
+        />
     );
-
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
             {isFull ? <div style={{ maxWidth: 1080, margin: '0 auto', padding: '1rem' }}>{children}</div> : children}
