@@ -10,7 +10,7 @@ configured. Until the release key is published (G180 in
 `claude/reports/xchain-wallet/SPEC_GAPS.md`), `sign.sh` exits with a
 clear error pointing at `SECURITY.md`.
 
-The companion verification side lives at `docs/VERIFY-RELEASE.md` —
+The companion verification side lives at `docs/Verify_Release.md` —
 end users follow that recipe to verify what this pipeline produces.
 
 ---
@@ -34,7 +34,7 @@ Build invocation per shell is documented in `CONTRIBUTING.md` →
 | Script | Purpose | Status |
 |---|---|---|
 | `sign.sh` | Compute SHA-256 manifest of every artifact in the input directory; GPG-sign the manifest with the release key. | Scaffolding — reachable, but errors out if `XCHAIN_RELEASE_GPG_KEY` is unset (G180 pending). |
-| `verify.sh` | Local verification helper: re-compute hashes and verify the GPG signature on a downloaded `RELEASE_HASHES.txt`. Mirrors the recipe in `docs/VERIFY-RELEASE.md`. | Scaffolding — runnable today. |
+| `verify.sh` | Local verification helper: re-compute hashes and verify the GPG signature on a downloaded `RELEASE_HASHES.txt`. Mirrors the recipe in `docs/Verify_Release.md`. | Scaffolding — runnable today. |
 
 Both scripts use `set -euo pipefail`. Both refuse to overwrite an
 existing manifest / signature file unless `--force` is passed.
@@ -57,11 +57,11 @@ existing manifest / signature file unless `--force` is passed.
 
 The reproducible-build verification is a separate step — see
 [`tools/build-reproduce/`](../build-reproduce/) and
-[`docs/REPRODUCIBLE_BUILDS.md`](../../docs/REPRODUCIBLE_BUILDS.md).
+[`docs/Reproducible_Builds.md`](../../docs/Reproducible_Builds.md).
 
 ## Status today
 
-- ✅ Directory + scripts exist and are reachable from `CONTRIBUTING.md` and `docs/VERIFY-RELEASE.md`.
+- ✅ Directory + scripts exist and are reachable from `CONTRIBUTING.md` and `docs/Verify_Release.md`.
 - ⏸ Actual GPG signing pending G180 (release key publication).
 - ⏸ CI integration pending G005 / G157 (no-CI-during-build-phase memory rule).
 - ⏸ SHA-256 publication via `RELEASE_HASHES.md` in-repo pending G159.

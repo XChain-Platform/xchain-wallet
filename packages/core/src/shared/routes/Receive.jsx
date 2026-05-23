@@ -2,13 +2,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import {
     Screen,
+    ScreenHeader,
     Button,
     Input,
     ChainBadge,
     AddressText,
     CopyButton,
     MultisigBadge,
- Icon,} from '@xchain-wallet/core/ui';
+    Icon,
+} from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     uri as uriLib,
@@ -18,6 +20,15 @@ import { SignerSelectForm } from './SignerSelectForm.jsx';
 import styles from './Receive.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+
+// descriptor.coin is the long coin name ('bitcoin' / 'litecoin' / 'dogecoin');
+// the user-facing native ticker is the short symbol ('BTC' / 'LTC' / 'DOGE').
+// Uppercasing descriptor.coin directly leaks 'BITCOIN' into hints and labels.
+const NATIVE_TICKER_BY_COIN = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
+function nativeTickerFor(descriptor) {
+    if (!descriptor?.coin) return null;
+    return NATIVE_TICKER_BY_COIN[descriptor.coin] || descriptor.coin.toUpperCase();
+}
 
 /**
  * Receive view — pick a chain, show the newest persisted HD address as
@@ -177,29 +188,8 @@ export function Receive({ walletId, accountId, onBack }) {
         return () => { cancelled = true; };
     }, [multisigs, activeChainId]);
 
-    useEffect(() => {
-        if (!address) {
-            setQrDataUrl(null);
-            return undefined;
-        }
-        const descriptor = chainRegistry.get(activeChainId ?? '');
-        const uri = descriptor
-            ? uriLib.encodeBip21Uri({
-                scheme: descriptor.uriScheme,
-                address: address.address,
-            })
-            : address.address;
-        let cancelled = false;
-        QRCode.toDataURL(uri, {
-            errorCorrectionLevel: 'M',
-            margin: 2,
-            width: 200,
-            color: { dark: '#0F172A', light: '#FFFFFF' },
-        })
-            .then((dataUrl) => { if (!cancelled) setQrDataUrl(dataUrl); })
-            .catch(() => { if (!cancelled) setQrDataUrl(null); });
-        return () => { cancelled = true; };
-    }, [address, activeChainId]);
+    // Unified QR effect lives below — see the `qrUri` memo. Driven by
+    // address + active chain + the optional amount/tick/memo customization.
 
     const openGen = useCallback(() => {
         setGenOpen(true);
@@ -248,53 +238,67 @@ export function Receive({ walletId, accountId, onBack }) {
     const availableChainIds = chainsByWallet ? Object.keys(chainsByWallet) : [];
     const descriptor = activeChainId ? chainRegistry.get(activeChainId) : null;
 
-    // §29.10 Request payment sub-form. Renders a BIP21 URI with the
-    // user-specified amount / ticker / memo / expiry as a second QR
-    // alongside the bare-address QR above.
-    const [reqOpen, setReqOpen] = useState(false);
+    // Inline payment-request fields — visible by default so customizing
+    // the QR is a single-glance affair. Memo is optional and tucked into
+    // an "Advanced" disclosure. As any of these change, the QR re-renders.
     const [reqAmount, setReqAmount] = useState('');
     const [reqTick, setReqTick] = useState('');
     const [reqMemo, setReqMemo] = useState('');
-    const [reqExpiryMinutes, setReqExpiryMinutes] = useState('');
-    const [reqQrDataUrl, setReqQrDataUrl] = useState(/** @type {string | null} */ (null));
     const [shareStatus, setShareStatus] = useState(/** @type {string | null} */ (null));
 
-    const requestUri = useMemo(() => {
-        if (!address || !descriptor) return null;
-        const params = {};
-        if (reqTick.trim()) params.tick = reqTick.trim().toUpperCase();
-        if (reqExpiryMinutes.trim()) {
-            const minutes = parseInt(reqExpiryMinutes.trim(), 10);
-            if (Number.isFinite(minutes) && minutes > 0) {
-                const expiresAt = new Date(Date.now() + minutes * 60_000).toISOString();
-                params.expiry = expiresAt;
+    const nativeTicker = nativeTickerFor(descriptor);
+
+    // QR content. When the user has set ANY of {amount, tick, memo}, encode
+    // a coin-code `xchain:CODE/send?to=…&amount=…&tick=…` URI — the receiver
+    // (another XChain wallet) lands on Send with chain + token + amount
+    // pre-filled. When nothing is customized, fall back to a bare BIP21 URI
+    // (`bitcoin:`/`litecoin:`/`dogecoin:`) so external wallets that only
+    // understand BIP21 can still pay the bare address.
+    const qrUri = useMemo(() => {
+        if (!address || !descriptor || !activeChainId) return null;
+        const amount = reqAmount.trim();
+        const tick = reqTick.trim().toUpperCase();
+        const memo = reqMemo.trim();
+        const customized = amount || tick || memo;
+        if (customized) {
+            try {
+                return uriLib.buildXchainUri(
+                    {
+                        chainId: activeChainId,
+                        action: 'send',
+                        address: address.address,
+                        amount: amount || undefined,
+                        tick: tick || undefined,
+                        memo: memo || undefined,
+                    },
+                    { chainRegistry },
+                );
+            } catch {
+                // Chain isn't mapped to a coin code yet — fall through to BIP21.
             }
         }
         return uriLib.encodeBip21Uri({
             scheme: descriptor.uriScheme,
             address: address.address,
-            amount: reqAmount.trim() || undefined,
-            message: reqMemo.trim() || undefined,
-            params,
         });
-    }, [address, descriptor, reqAmount, reqTick, reqMemo, reqExpiryMinutes]);
+    }, [address, descriptor, activeChainId, reqAmount, reqTick, reqMemo]);
 
     useEffect(() => {
-        if (!reqOpen || !requestUri) {
-            setReqQrDataUrl(null);
+        if (!qrUri) {
+            setQrDataUrl(null);
             return undefined;
         }
         let cancelled = false;
-        QRCode.toDataURL(requestUri, {
+        QRCode.toDataURL(qrUri, {
             errorCorrectionLevel: 'M',
             margin: 2,
             width: 200,
             color: { dark: '#0F172A', light: '#FFFFFF' },
         })
-            .then((dataUrl) => { if (!cancelled) setReqQrDataUrl(dataUrl); })
-            .catch(() => { if (!cancelled) setReqQrDataUrl(null); });
+            .then((dataUrl) => { if (!cancelled) setQrDataUrl(dataUrl); })
+            .catch(() => { if (!cancelled) setQrDataUrl(null); });
         return () => { cancelled = true; };
-    }, [reqOpen, requestUri]);
+    }, [qrUri]);
 
     // §29.7 Share button. Uses Web Share API when available; falls
     // back to clipboard. Surfaces inline status (no toast system in
@@ -306,7 +310,7 @@ export function Receive({ walletId, accountId, onBack }) {
             try {
                 await navigator.share({
                     title: 'Payment request',
-                    text: `Pay ${reqAmount.trim() || ''} ${reqTick.trim() || (descriptor?.coin?.toUpperCase() || '')}`.trim(),
+                    text: `Pay ${reqAmount.trim() || ''} ${reqTick.trim() || (nativeTicker || '')}`.trim(),
                     url: uri,
                 });
                 setShareStatus('Shared.');
@@ -325,7 +329,7 @@ export function Receive({ walletId, accountId, onBack }) {
             // ignore — surfaced via fallback message
         }
         setShareStatus('Share unavailable — copy the link manually.');
-    }, [reqAmount, reqTick, descriptor]);
+    }, [reqAmount, reqTick, nativeTicker]);
 
         const header = (
         <ScreenHeader
@@ -387,11 +391,8 @@ export function Receive({ walletId, accountId, onBack }) {
                     <Button
                         variant="secondary"
                         size="sm"
-                        onClick={() => onShare(uriLib.encodeBip21Uri({
-                            scheme: descriptor?.uriScheme || 'bitcoin',
-                            address: address.address,
-                        }))}
-                        disabled={!descriptor}
+                        onClick={() => onShare(qrUri)}
+                        disabled={!qrUri}
                     >
                         Share
                     </Button>
@@ -401,84 +402,39 @@ export function Receive({ walletId, accountId, onBack }) {
             ) : null}
 
             {address ? (
-                <section className={styles.requestPanel}>
-                    <button
-                        type="button"
-                        className={styles.requestToggle}
-                        onClick={() => setReqOpen((o) => !o)}
-                        aria-expanded={reqOpen}
-                    >
-                        {reqOpen ? '− Request payment' : '+ Request payment'}
-                    </button>
-                    {reqOpen ? (
-                        <div className={styles.requestForm}>
-                            <Input
-                                label={`Amount (${descriptor?.coin?.toUpperCase() || 'coin'})`}
-                                inputMode="decimal"
-                                value={reqAmount}
-                                onChange={(e) => setReqAmount(e.target.value)}
-                                placeholder="0.001"
-                                autoComplete="off"
-                            />
-                            <Input
-                                label="Token tick"
-                                hint={`Defaults to ${descriptor?.coin?.toUpperCase() || 'native coin'}.`}
-                                value={reqTick}
-                                onChange={(e) => setReqTick(e.target.value)}
-                                placeholder={descriptor?.coin?.toUpperCase() || ''}
-                                autoComplete="off"
-                                autoCapitalize="characters"
-                            />
-                            <Input
-                                label="Memo (optional)"
-                                value={reqMemo}
-                                onChange={(e) => setReqMemo(e.target.value)}
-                                autoComplete="off"
-                            />
-                            <Input
-                                label="Expiry (minutes, optional)"
-                                inputMode="numeric"
-                                value={reqExpiryMinutes}
-                                onChange={(e) => setReqExpiryMinutes(e.target.value)}
-                                hint="Adds an `expiry` ISO timestamp to the URI."
-                                autoComplete="off"
-                            />
-                            {requestUri ? (
-                                <>
-                                    {reqQrDataUrl ? (
-                                        <div className={styles.qrBox}>
-                                            <img
-                                                src={reqQrDataUrl}
-                                                alt="Payment request QR"
-                                                width={200}
-                                                height={200}
-                                                className={styles.qr}
-                                            />
-                                        </div>
-                                    ) : (
-                                        <div className={styles.qrBox} aria-hidden="true">
-                                            <div className={styles.qrPlaceholder}>Rendering QR…</div>
-                                        </div>
-                                    )}
-                                    <code className={styles.requestUri}>{requestUri}</code>
-                                    <div className={styles.requestActions}>
-                                        <CopyButton value={requestUri} />
-                                        <Button
-                                            variant="secondary"
-                                            size="sm"
-                                            onClick={() => onShare(requestUri)}
-                                        >
-                                            Share
-                                        </Button>
-                                    </div>
-                                </>
-                            ) : null}
-                            {shareStatus ? (
-                                <p className={styles.hint} role="status">{shareStatus}</p>
-                            ) : null}
-                        </div>
+                <>
+                    <div className={styles.requestRow}>
+                        <Input
+                            label={`Amount${reqTick.trim() ? ` (${reqTick.trim().toUpperCase()})` : (nativeTicker ? ` (${nativeTicker})` : '')}`}
+                            inputMode="decimal"
+                            value={reqAmount}
+                            onChange={(e) => setReqAmount(e.target.value)}
+                            placeholder="0.001"
+                            autoComplete="off"
+                        />
+                        <Input
+                            label="Token"
+                            value={reqTick}
+                            onChange={(e) => setReqTick(e.target.value)}
+                            placeholder={nativeTicker || ''}
+                            autoComplete="off"
+                            autoCapitalize="characters"
+                        />
+                    </div>
+                    <details className={styles.advanced}>
+                        <summary className={styles.advancedToggle}>Advanced</summary>
+                        <Input
+                            label="Memo"
+                            value={reqMemo}
+                            onChange={(e) => setReqMemo(e.target.value)}
+                            autoComplete="off"
+                            error={/[|;]/.test(reqMemo) ? 'Cannot contain | or ; characters.' : undefined}
+                        />
+                    </details>
+                    {shareStatus ? (
+                        <p className={styles.hint} role="status">{shareStatus}</p>
                     ) : null}
-                </section>
+                </>
             ) : null}
 
             {multisigs.map((multisig) => (

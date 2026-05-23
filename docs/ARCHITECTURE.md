@@ -158,7 +158,7 @@ Each shell maps the same logical schema onto a different physical store:
 | Session (master key after unlock) | in-memory only | `chrome.storage.session` (cleared on browser close) | OS keychain (with consent) or in-memory |
 | Ephemeral metadata (toast state, demo flag, last-view) | `localStorage` | `localStorage` | `localStorage` |
 
-The vault payload is AES-256-GCM-encrypted with a key derived from the user's password via Argon2id. See `docs/THREAT_MODEL.md` for the full posture.
+The vault payload is AES-256-GCM-encrypted with a key derived from the user's password via Argon2id. See `docs/Threat_Model.md` for the full posture.
 
 ---
 
@@ -214,7 +214,7 @@ All workspace packages — root, `core`, `web`, `extension`, `desktop`, `bridge-
 
 ## Where to read next
 
-- `docs/THREAT_MODEL.md` — what we defend against, what we don't, why.
+- `docs/Threat_Model.md` — what we defend against, what we don't, why.
 - `docs/BRIDGE.md` — `window.xchain` API reference for dApp developers.
 - `docs/DEPENDENCIES.md` — per-package "why we depend on this" + audit cadence.
 - `CONTRIBUTING.md` — dev setup, tests, versioning, PR conventions.

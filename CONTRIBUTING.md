@@ -9,7 +9,7 @@ If you're reporting a security issue, **stop here** and read `SECURITY.md` inste
 ## Quick links
 
 - Project README: `README.md` (architecture overview, shell matrix, scripts)
-- Threat model: `docs/THREAT_MODEL.md` (assets, in-scope vs out-of-scope, attacker scenarios)
+- Threat model: `docs/Threat_Model.md` (assets, in-scope vs out-of-scope, attacker scenarios)
 - Disclosure policy: `SECURITY.md` (private vulnerability reporting)
 - Code of Conduct: `CODE_OF_CONDUCT.md`
 - License: `LICENSE.md` + `NOTICE.md` (Dankest Community License)

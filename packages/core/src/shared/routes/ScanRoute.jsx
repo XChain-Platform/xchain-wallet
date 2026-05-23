@@ -75,7 +75,7 @@ export function ScanRoute({ onClassified, onBack, chainRegistry }) {
         // intent split + chainId/tick breakdown that detectQrContent
         // surfaces only as a generic 'xchain-uri' wrapper.
         if (detected.type === 'xchain-uri') {
-            const intent = parseXchainUri(text);
+            const intent = parseXchainUri(text, { chainRegistry });
             if (intent.kind === 'send') {
                 claimedRef.current = true;
                 setStopped(true);
@@ -102,11 +102,19 @@ export function ScanRoute({ onClassified, onBack, chainRegistry }) {
         if (detected.type === 'bip21') {
             claimedRef.current = true;
             setStopped(true);
+            const tickParam = detected.parts.params?.tick;
+            const chainParam = detected.parts.params?.chain;
             onClassified({
                 kind: 'send',
                 address: detected.address,
                 amount: detected.parts.amount,
                 memo: detected.parts.message ?? detected.parts.label,
+                tick: typeof tickParam === 'string' && tickParam.length > 0
+                    ? tickParam.toUpperCase()
+                    : undefined,
+                chainId: typeof chainParam === 'string' && chainParam.length > 0
+                    ? chainParam
+                    : undefined,
             });
             return;
         }

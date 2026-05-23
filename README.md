@@ -49,18 +49,18 @@ Full wallet documentation lives in the [xchain-documentation](https://github.com
 |---|---|
 | [README](https://github.com/XChain-platform/xchain-documentation/blob/master/components/wallet/README.md) | Overview, shell matrix, package layout, usage modes |
 | [Architecture](https://github.com/XChain-platform/xchain-documentation/blob/master/components/wallet/ARCHITECTURE.md) | Repo layout, package boundaries, state flow, three-shell model, core/web/extension/desktop seams |
-| [Keys & Signing](https://github.com/XChain-platform/xchain-documentation/blob/master/components/wallet/KEYS_SIGNING.md) | BIP39 + passphrase, HD derivation, vault encryption, signer interface, software / Trezor / Ledger / Remote / Multisig |
+| [Keys & Signing](https://github.com/XChain-platform/xchain-documentation/blob/master/components/wallet/Keys_Signing.md) | BIP39 + passphrase, HD derivation, vault encryption, signer interface, software / Trezor / Ledger / Remote / Multisig |
 | [Security & Threat Model](https://github.com/XChain-platform/xchain-documentation/blob/master/components/wallet/SECURITY.md) | Protected assets, in-scope and out-of-scope threats, sign-screen safety rails, audit posture |
 | [UX Surfaces](https://github.com/XChain-platform/xchain-documentation/blob/master/components/wallet/UX.md) | Onboarding, lock/unlock, balances, history, send/receive, sign screens, contacts, QR scanner, command palette, settings |
 | [Features](https://github.com/XChain-platform/xchain-documentation/blob/master/components/wallet/FEATURES.md) | Token issuance, DEX, messaging, dispensers, contracts, staking, multisig, cross-chain — surface-by-surface |
 | [Bridge](https://github.com/XChain-platform/xchain-documentation/blob/master/components/wallet/BRIDGE.md) | `window.xchain` dApp bridge: connect, signMessage, signPsbt, signAction, signIn, events, error codes |
-| [URI Schemes](https://github.com/XChain-platform/xchain-documentation/blob/master/components/wallet/URI_SCHEMES.md) | BIP21 + chain URIs + multisig PSBT envelope + chunked PSBT-QR transport |
+| [URI Schemes](https://github.com/XChain-platform/xchain-documentation/blob/master/components/wallet/URI_Schemes.md) | BIP21 + chain URIs + multisig PSBT envelope + chunked PSBT-QR transport |
 | [Multisig](https://github.com/XChain-platform/xchain-documentation/blob/master/components/wallet/MULTISIG.md) | Classical n-of-m + MuSig2: create flow, paste inbox, session state machine, PSBT-QR cosigner round-trips |
-| [Shell — Extension](https://github.com/XChain-platform/xchain-documentation/blob/master/components/wallet/SHELL_EXTENSION.md) | Chrome MV3 architecture, manifest, service worker, content script, injected provider, approval popup |
-| [Shell — Desktop](https://github.com/XChain-platform/xchain-documentation/blob/master/components/wallet/SHELL_DESKTOP.md) | Electron main / renderer split, OS keychain, WebHID hardware transports, electron-builder packaging, auto-updater |
-| [Shell — Web](https://github.com/XChain-platform/xchain-documentation/blob/master/components/wallet/SHELL_WEB.md) | Vite SPA, mobile responsiveness, extension-detect banner, session-only key handling |
-| [Build & Release](https://github.com/XChain-platform/xchain-documentation/blob/master/components/wallet/BUILD_RELEASE.md) | Synchronized versioning, Chrome Web Store submission, electron-builder, signing, release-hashes |
-| [Reproducible Builds](https://github.com/XChain-platform/xchain-documentation/blob/master/components/wallet/REPRODUCIBLE_BUILDS.md) | Level-2 reproducibility: scope, scaffolding audit, run-twice verification, drift sources |
+| [Shell — Extension](https://github.com/XChain-platform/xchain-documentation/blob/master/components/wallet/Shell_Extension.md) | Chrome MV3 architecture, manifest, service worker, content script, injected provider, approval popup |
+| [Shell — Desktop](https://github.com/XChain-platform/xchain-documentation/blob/master/components/wallet/Shell_Desktop.md) | Electron main / renderer split, OS keychain, WebHID hardware transports, electron-builder packaging, auto-updater |
+| [Shell — Web](https://github.com/XChain-platform/xchain-documentation/blob/master/components/wallet/Shell_Web.md) | Vite SPA, mobile responsiveness, extension-detect banner, session-only key handling |
+| [Build & Release](https://github.com/XChain-platform/xchain-documentation/blob/master/components/wallet/Build_Release.md) | Synchronized versioning, Chrome Web Store submission, electron-builder, signing, release-hashes |
+| [Reproducible Builds](https://github.com/XChain-platform/xchain-documentation/blob/master/components/wallet/Reproducible_Builds.md) | Level-2 reproducibility: scope, scaffolding audit, run-twice verification, drift sources |
 | [Testing](https://github.com/XChain-platform/xchain-documentation/blob/master/components/wallet/TESTING.md) | Smoke gates, Playwright E2E, a11y audit, repro-build audit, manifest audit, bridge-e2e, hw-sign-e2e |
 | [Configuration](https://github.com/XChain-platform/xchain-documentation/blob/master/components/wallet/CONFIGURATION.md) | Per-chain endpoints, custom RPC, signer registration, settings store, developer mode |
 

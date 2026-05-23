@@ -207,17 +207,17 @@ worse than one that's silent.
   signPsbt, signIn, disconnect, parallel, on/off) is registered in
   `packages/extension/src/bridge/handlers.js`. Error code table covers
   every code the handlers throw (BLOCKED_BY_USER, THROTTLED, etc.).
-- ⬜ `docs/REPRODUCIBLE_BUILDS.md` — per-target status table reflects
+- ⬜ `docs/Reproducible_Builds.md` — per-target status table reflects
   the current build pipeline. Desktop `reproduce.sh` references the
   hash file the script actually produces.
-- ⬜ `docs/VERIFY-RELEASE.md` — GPG key fingerprint placeholder is up
+- ⬜ `docs/Verify_Release.md` — GPG key fingerprint placeholder is up
   to date with the actual published key (or still flagged honestly as
   "pending publication").
 - ⬜ `docs/GLOSSARY.md` — newly-added user-facing terms from this
   release are present (e.g. when a feature ships a new on-screen word
-  the user might not know). Cross-link to `xchain-documentation/KEY_TERMS.md`
+  the user might not know). Cross-link to `xchain-documentation/Key_Terms.md`
   is current.
-- ⬜ `docs/THREAT_MODEL.md` — controls table and out-of-scope section
+- ⬜ `docs/Threat_Model.md` — controls table and out-of-scope section
   still hold. Anything new in the threat surface (a new bridge method,
   a new signer kind, a new persistent surface) gets a row.
 - ⬜ `MAINTAINERS.md` — lead maintainer + escalation contacts are

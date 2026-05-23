@@ -3,7 +3,7 @@
 A reference for terms used throughout the wallet's code, documentation,
 and user-facing surfaces. Wallet-specific vocabulary lives here;
 protocol-level terms (ACTION names, encoding types, BATCH, magic
-prefix) are defined upstream in [`xchain-documentation/getting-started/KEY_TERMS.md`](https://github.com/XChain-platform/xchain-documentation/blob/master/getting-started/KEY_TERMS.md)
+prefix) are defined upstream in [`xchain-documentation/getting-started/Key_Terms.md`](https://github.com/XChain-platform/xchain-documentation/blob/master/getting-started/Key_Terms.md)
 and not duplicated here unless the wallet reuses the term with a
 narrower meaning.
 
@@ -201,7 +201,7 @@ wipe" affordance.
 **reproducible build** — A build that produces the same bytes given
 the same source tree, locked toolchain, and pinned environment. The
 wallet's desktop pipeline targets Level-2 reproducibility (pre-signing
-artifact). See [`docs/REPRODUCIBLE_BUILDS.md`](REPRODUCIBLE_BUILDS.md).
+artifact). See [`docs/Reproducible_Builds.md`](Reproducible_Builds.md).
 
 **synchronized versioning** — The wallet's release rule: every
 `package.json` bumps to the same version on every release, plus

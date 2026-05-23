@@ -53,6 +53,19 @@ const USER_CANCEL_RE = /cancel|reject|denied/i;
 
 const chainRegistry = registryLib.defaultRegistry();
 
+// Descriptor.coin is the long-form coin name ('bitcoin' / 'litecoin' /
+// 'dogecoin'); the user-facing native ticker is the short symbol the SDK
+// emits as `b.native.tick` (BTC / LTC / DOGE). Uppercasing descriptor.coin
+// directly compares against the wrong string ('BITCOIN' !== 'BTC') and
+// breaks every "is this the native asset?" check downstream — most
+// visibly the SelectedTokenHero, which falls through to the letter-badge
+// + chain-overlay branch meant for tokens.
+const NATIVE_TICKER_BY_COIN = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
+function nativeTickerFor(descriptor) {
+    if (!descriptor?.coin) return null;
+    return NATIVE_TICKER_BY_COIN[descriptor.coin] || descriptor.coin.toUpperCase();
+}
+
 /**
  * Send view — §29 authoring surface for the SEND action.
  *
@@ -343,13 +356,17 @@ export function Send({ walletId, onBack, prefill = null }) {
             setPasteHint(`Filled from ${detected.scheme}: URI`);
         } else if (detected.type === 'xchain-uri') {
             e.preventDefault();
-            setToAddress(detected.parts.address);
-            const tickParam = detected.parts.params?.tick;
-            if (typeof tickParam === 'string' && tickParam.length > 0) {
-                setTick(tickParam.toUpperCase());
+            // Route through the richer parser so the new coin-code form
+            // (xchain:TBTC/send?to=…) yields intent.address rather than the
+            // raw "TBTC/send" that the BIP21 fallback would surface.
+            const intent = uriLib.parseXchainUri(trimmed, { chainRegistry });
+            if (intent.address) setToAddress(intent.address);
+            if (intent.tick) setTick(intent.tick.toUpperCase());
+            if (intent.amount) setAmount(intent.amount);
+            if (intent.memo) setMemo(intent.memo);
+            if (intent.chainId && intent.chainId !== chainId) {
+                setChainId(intent.chainId);
             }
-            if (detected.parts.amount) setAmount(detected.parts.amount);
-            if (detected.parts.message) setMemo(detected.parts.message);
             setPasteHint('Filled from xchain: URI');
         } else if (detected.type === 'wif') {
             e.preventDefault();
@@ -367,7 +384,7 @@ export function Send({ walletId, onBack, prefill = null }) {
         Promise.resolve().then(() => checkPasteIntegrity({ pastedText: text }))
             .then((res) => { if (!res.ok) setPasteWarning(res.reason || 'Clipboard altered after paste — verify the address before sending.'); })
             .catch(() => { /* silent */ });
-    }, []);
+    }, [chainId]);
 
     // §21.4 test-send protection. Session-scoped acknowledgement set —
     // marking an address tested suppresses the gate for the rest of
@@ -418,7 +435,7 @@ export function Send({ walletId, onBack, prefill = null }) {
         const dest = toAddress.trim();
         if (!dest) return null;
         const desc = chainId ? chainRegistry.get(chainId) : null;
-        const nativeTicker = desc?.coin?.toUpperCase();
+        const nativeTicker = nativeTickerFor(desc);
         if (!nativeTicker || tick.trim().toUpperCase() !== nativeTicker) return null;
         const amt = parseFloat(String(amount).trim());
         if (!Number.isFinite(amt) || amt <= 0) return null;
@@ -452,7 +469,7 @@ export function Send({ walletId, onBack, prefill = null }) {
 
     const isNativeSend = useMemo(() => {
         const desc = chainId ? chainRegistry.get(chainId) : null;
-        const nativeTicker = desc?.coin?.toUpperCase();
+        const nativeTicker = nativeTickerFor(desc);
         return Boolean(nativeTicker && tick.trim().toUpperCase() === nativeTicker);
     }, [chainId, tick]);
 
@@ -498,7 +515,8 @@ export function Send({ walletId, onBack, prefill = null }) {
         // by 'TBTC' the moment this effect fires post-mount.
         const descriptor = chainRegistry.get(chainId);
         if (descriptor && !tickRef.current.trim()) {
-            setTick(descriptor.coin.toUpperCase());
+            const nativeTicker = nativeTickerFor(descriptor);
+            if (nativeTicker) setTick(nativeTicker);
         }
     }, [chainId, addressesByChain]);
 
@@ -753,7 +771,7 @@ export function Send({ walletId, onBack, prefill = null }) {
     const signRisk = useMemo(() => {
         if (!isHwSource) return { requireExplicitConfirm: false, reason: null };
         const desc = chainId ? chainRegistry.get(chainId) : null;
-        const nativeTicker = desc?.coin?.toUpperCase();
+        const nativeTicker = nativeTickerFor(desc);
         const amt = parseFloat(String(amount).trim());
         const isNativeSend = !!nativeTicker
             && tick.trim().toUpperCase() === nativeTicker
@@ -1528,14 +1546,17 @@ export function Send({ walletId, onBack, prefill = null }) {
                     }}
                 />
             ) : null}
-            <details className={styles.details}>
+            <details
+                className={styles.details}
+                style={{ marginTop: 'var(--xc-space-6)' }}
+            >
                 <summary className={styles.detailsToggle}>Advanced</summary>
                 <Input
                     label="Memo"
-                    hint="Optional. Cannot contain | or ; characters."
                     value={memo}
                     onChange={(e) => setMemo(e.target.value)}
                     autoComplete="off"
+                    error={/[|;]/.test(memo) ? 'Cannot contain | or ; characters.' : undefined}
                 />
             </details>
             {formError ? (
@@ -1557,9 +1578,8 @@ export function Send({ walletId, onBack, prefill = null }) {
                 form="send-form"
                 variant="primary"
                 block
-                disabled={!fromAddress || !toAddress || !amount}
             >
-                Review
+                Send
             </Button>
         </div>,
     );
@@ -1583,7 +1603,7 @@ function DetailRow({ label, value }) {
 function SelectedTokenHero({ chainId, tick, descriptor, prefill }) {
     const tickTrim = (tick || '').trim();
     if (!chainId || !tickTrim) return null;
-    const nativeTicker = descriptor?.coin?.toUpperCase();
+    const nativeTicker = nativeTickerFor(descriptor);
     const isNative = !!nativeTicker && tickTrim.toUpperCase() === nativeTicker;
     const chainIconUrl = branding.chainIconSmallUrl(chainId);
     const chainIconLarge = branding.chainIconLargeUrl(chainId);

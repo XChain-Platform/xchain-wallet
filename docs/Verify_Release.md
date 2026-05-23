@@ -9,7 +9,7 @@ reproduce script, compare hashes, then verify the GPG signature on the
 hash manifest. The detail below walks you through each step.
 
 **Spec reference:** §51 of `XCHAIN_WALLET_SPEC.md` — Build and Release
-Per Target. **Companion docs:** [`docs/REPRODUCIBLE_BUILDS.md`](REPRODUCIBLE_BUILDS.md)
+Per Target. **Companion docs:** [`docs/Reproducible_Builds.md`](Reproducible_Builds.md)
 (what we promise + how we made the bytes deterministic), [`SECURITY.md`](../SECURITY.md)
 (disclosure policy + release key fingerprint).
 
@@ -149,7 +149,7 @@ diff reproduce-out/RELEASE_HASHES.txt RELEASE_HASHES.txt
 
 A zero-byte diff means the artifact matches what source produces.
 Any diff is diagnostic — see the desktop doc's
-[diagnostics section](../packages/desktop/REPRODUCIBLE_BUILDS.md)
+[diagnostics section](../packages/desktop/Reproducible_Builds.md)
 ("Toolchain drift / Timestamp leakage / Supply-chain tampering").
 
 ### Desktop (macOS / Windows)
@@ -183,7 +183,7 @@ key. It does NOT mean:
   pins versions but does not audit them. The Electron framework
   (desktop) and Chromium (web) trust chains live upstream.
 - **Every locale / chain / signer behaves correctly.** That is what
-  testing + the QA checklist (`docs/QA-CHECKLIST.md`) cover.
+  testing + the QA checklist (`docs/QA_Checklist.md`) cover.
 
 Verification protects against tampering between source and download.
 It is one defensive layer among many.

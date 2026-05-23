@@ -279,7 +279,7 @@ If you depend on a method that lands after `0.1.0`, set `requiredBridgeVersion: 
 
 ## Threat model crossovers
 
-If you're building a dApp, you should also read the wallet's `docs/THREAT_MODEL.md` — particularly §2.3 (network threats) and §4.1 (malicious dApp). It describes the assumptions the wallet makes about your code so you can stay inside them.
+If you're building a dApp, you should also read the wallet's `docs/Threat_Model.md` — particularly §2.3 (network threats) and §4.1 (malicious dApp). It describes the assumptions the wallet makes about your code so you can stay inside them.
 
 ---
 

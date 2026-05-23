@@ -10,6 +10,11 @@ export {
     describeXchainIntent,
 } from './xchainUri.js';
 export {
+    coinCodeForChainId,
+    chainIdForCoinCode,
+    isKnownCoinCode,
+} from './coinCodes.js';
+export {
     encodeXcwChunks,
     decodeXcwChunks,
     parseXcwChunk,

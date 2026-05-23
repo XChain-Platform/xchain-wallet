@@ -791,11 +791,11 @@ Closes Cluster U FOLLOWUP 5. (Bundles into the Cluster U FU 6 smoke above.)
 
 §13 / Cluster T FOLLOWUP 5 — per-section documentation parity check in the QA-CHECKLIST. Before sign-off, the release manager now runs a pass through ARCHITECTURE / BRIDGE / REPRODUCIBLE_BUILDS / VERIFY-RELEASE / GLOSSARY / THREAT_MODEL / MAINTAINERS / SECURITY / CONTRIBUTING / CODE_OF_CONDUCT to confirm each doc still matches what the code actually does. A doc that lies is worse than one that's silent.
 
-`docs/QA-CHECKLIST.md` gains a "Documentation parity check" section above Sign-off with one bullet per major doc and concrete questions to verify (e.g., "every BRIDGE.md method is registered in handlers.js", "GPG fingerprint placeholder is up to date", "Last reviewed footer was bumped if process changed"). The new audit smoke pins both the bullet existence and that each named doc actually exists on disk so the checklist isn't pointing at thin air.
+`docs/QA_Checklist.md` gains a "Documentation parity check" section above Sign-off with one bullet per major doc and concrete questions to verify (e.g., "every BRIDGE.md method is registered in handlers.js", "GPG fingerprint placeholder is up to date", "Last reviewed footer was bumped if process changed"). The new audit smoke pins both the bullet existence and that each named doc actually exists on disk so the checklist isn't pointing at thin air.
 
 ### Added
 
-- **`docs/QA-CHECKLIST.md`** — Documentation parity check section + Last reviewed footer bumped.
+- **`docs/QA_Checklist.md`** — Documentation parity check section + Last reviewed footer bumped.
 - **`test/smoke/audits/docs-governance-checklist.smoke.js`** (new) — pins the QA-CHECKLIST + CONTRIBUTING governance content + on-disk file existence.
 
 Closes Cluster T FOLLOWUP 5.
@@ -814,9 +814,9 @@ Closes Cluster T FOLLOWUP 4. (Bundles into the Cluster T FU 5 smoke above.)
 
 ## [0.311.0] - 2026-04-29
 
-§13 / Cluster T FOLLOWUP 2 — VERIFY-RELEASE.md surfaced from Settings → About. The verification recipe (key import → manifest download → GPG verify → artifact hash check → optional reproduce) lives at `docs/VERIFY-RELEASE.md`; the About panel previously only linked to `docs/REPRODUCIBLE_BUILDS.md`, leaving the user to discover the per-step recipe themselves.
+§13 / Cluster T FOLLOWUP 2 — Verify_Release.md surfaced from Settings → About. The verification recipe (key import → manifest download → GPG verify → artifact hash check → optional reproduce) lives at `docs/Verify_Release.md`; the About panel previously only linked to `docs/Reproducible_Builds.md`, leaving the user to discover the per-step recipe themselves.
 
-`packages/core/src/buildInfo.js` exports `VERIFY_RELEASE_DOC = 'docs/VERIFY-RELEASE.md'`. `AboutSection.jsx` imports it and renders a "Verify a release" row pointing at the doc via the existing DocLink primitive.
+`packages/core/src/buildInfo.js` exports `VERIFY_RELEASE_DOC = 'docs/Verify_Release.md'`. `AboutSection.jsx` imports it and renders a "Verify a release" row pointing at the doc via the existing DocLink primitive.
 
 ### Added
 
@@ -2184,7 +2184,7 @@ New `tools/release/` directory holds the release-signing pipeline scaffolding: `
 
 Both scripts use `set -euo pipefail`, accept `--input` / `--force` / `--no-sig` / `--recompute` flags, and refuse to overwrite existing manifests without `--force`. `sign.sh` exits with a clear diagnostic that cites G180 (release-key publication) when `XCHAIN_RELEASE_GPG_KEY` is unset, so the pre-G180 verification path (run with `--recompute` from `verify.sh`) is the documented fallback.
 
-The companion verification side already exists at `docs/VERIFY-RELEASE.md` (Cluster T Step 2, v0.222.0); the user-facing recipe there mirrors what `verify.sh` runs locally.
+The companion verification side already exists at `docs/Verify_Release.md` (Cluster T Step 2, v0.222.0); the user-facing recipe there mirrors what `verify.sh` runs locally.
 
 ### Added
 
@@ -2293,7 +2293,7 @@ Closes G055.
 
 New `docs/GLOSSARY.md` defines the canonical wallet vocabulary across architecture (core / shell / vault / flow / MessageHost), signing (HD wallet, BIP39 passphrase, signer, SignerPool, panic mode), the dApp bridge (ConnectedSite, approval, throttle, blocklist, SIWX, every error code), storage (Wallet / Account / Address / Settings record, v2-tolerant, ADS), onboarding (dry-run restore, word-quiz, backup reminder, demo mode), and build / release (reproducible build, synchronized versioning, smoke, spec gap ledger, cluster).
 
-Protocol-level terms (ACTION, encoding type, BATCH, magic prefix) are NOT duplicated — the doc cross-links to the upstream `xchain-documentation/getting-started/KEY_TERMS.md` for those.
+Protocol-level terms (ACTION, encoding type, BATCH, magic prefix) are NOT duplicated — the doc cross-links to the upstream `xchain-documentation/getting-started/Key_Terms.md` for those.
 
 ### Added
 
@@ -2321,13 +2321,13 @@ Closes G178.
 
 §13 — Cluster T Step 2 of 4 — User-facing release verification doc (G016).
 
-New `docs/VERIFY-RELEASE.md` walks an end user through the three claims that combine into a real release verification — bit-for-bit reproducibility, hash integrity, and signature authenticity — with concrete shell commands for importing the maintainer's release key, downloading the artifact + manifest + signature, GPG-verifying the manifest, hash-checking the artifact, and (optionally) reproducing the build.
+New `docs/Verify_Release.md` walks an end user through the three claims that combine into a real release verification — bit-for-bit reproducibility, hash integrity, and signature authenticity — with concrete shell commands for importing the maintainer's release key, downloading the artifact + manifest + signature, GPG-verifying the manifest, hash-checking the artifact, and (optionally) reproducing the build.
 
 The doc is honest about what verification does NOT prove (source bug-freeness, upstream supply chain safety, key-rotation events) and where each platform stands today (desktop Linux reproducible end-to-end; macOS / Windows / extension / web have hash + signature guarantees but per-target reproduce scripts are still gated on §51 work).
 
 ### Added
 
-- **`docs/VERIFY-RELEASE.md`** (new) — end-user verification recipe.
+- **`docs/Verify_Release.md`** (new) — end-user verification recipe.
 - **`test/smoke/audits/verify-release-doc.smoke.js`** (new) — pins the headings, the three claim names, the required shell commands, the cross-links to companion docs, the §51 spec citation, the stop-on-failure guidance, and the honest framing of verification's scope.
 
 Closes G016.
@@ -2336,17 +2336,17 @@ Closes G016.
 
 §13 — Cluster T Step 1 of 4 — Root reproducible-builds doc (G015).
 
-New `docs/REPRODUCIBLE_BUILDS.md` orients across every shell, captures the project-wide Level-2-pre-signing-artifact promise, and links out to the existing per-target deeper doc under `packages/desktop/`. Per-target table covers desktop / extension / web with a clear status note for each. Cross-links to `docs/VERIFY-RELEASE.md` (next step) and `SECURITY.md`.
+New `docs/Reproducible_Builds.md` orients across every shell, captures the project-wide Level-2-pre-signing-artifact promise, and links out to the existing per-target deeper doc under `packages/desktop/`. Per-target table covers desktop / extension / web with a clear status note for each. Cross-links to `docs/Verify_Release.md` (next step) and `SECURITY.md`.
 
 ### Added
 
-- **`docs/REPRODUCIBLE_BUILDS.md`** (new) — root entry point for reproducible builds.
+- **`docs/Reproducible_Builds.md`** (new) — root entry point for reproducible builds.
 - **`buildInfo.REPRODUCIBLE_BUILD_DOC_DESKTOP`** (new) — pointer to the desktop-specific deeper recipe so consumers that previously read `REPRODUCIBLE_BUILD_DOC` can still reach the desktop doc.
 - **`test/smoke/audits/repro-build-root-doc.smoke.js`** (new) — pins the doc's headings, per-target table coverage, cross-links, and the buildInfo constant flip.
 
 ### Changed
 
-- **`packages/core/src/buildInfo.js`** — `REPRODUCIBLE_BUILD_DOC` now points at the new root doc (`docs/REPRODUCIBLE_BUILDS.md`); `REPRODUCIBLE_BUILD_DOC_DESKTOP` keeps the per-target path. `AboutSection` consumes `REPRODUCIBLE_BUILD_DOC` and automatically picks up the new path with no UI edit.
+- **`packages/core/src/buildInfo.js`** — `REPRODUCIBLE_BUILD_DOC` now points at the new root doc (`docs/Reproducible_Builds.md`); `REPRODUCIBLE_BUILD_DOC_DESKTOP` keeps the per-target path. `AboutSection` consumes `REPRODUCIBLE_BUILD_DOC` and automatically picks up the new path with no UI edit.
 
 Closes G015.
 
@@ -2822,13 +2822,13 @@ Closes G032.
 
 ## [0.199.0] - 2026-04-27
 
-§13 — Cluster M Step 6 of 6 — `docs/QA-CHECKLIST.md` (G017). Cluster M closed.
+§13 — Cluster M Step 6 of 6 — `docs/QA_Checklist.md` (G017). Cluster M closed.
 
 Manual pre-release checklist a release manager runs against every shell (web / extension / desktop) before tagging. Sections cover pre-flight, onboarding, send, receive, history, token detail, sign screens, lock / unlock / panic, backup and recovery, hardware signers, multisig, dApp bridge, offline mode, accessibility, URI schemes, and build / release artifacts. Sign-off block at the end captures the release manager, version under test, and any waivers. Status icons (✅ / ⬜ / ❌ / ⏸) used throughout per project memory rule (no GFM checkboxes). Cluster M (§13 + §55 docs / legal pre-launch paperwork) closes here at six rows shipped (G008 / G013 / G014 / G017 / G175 / G176 / G177).
 
 ### Added
 
-- **`docs/QA-CHECKLIST.md`** (new) — manual pre-release feature-correctness checklist.
+- **`docs/QA_Checklist.md`** (new) — manual pre-release feature-correctness checklist.
 
 Closes G017. **Cluster M — §13 + §55 Docs & Legal — closed at v0.199.0.**
 
@@ -2884,7 +2884,7 @@ Closes G176.
 
 §55 — Cluster M Step 1 of 6 — `SECURITY.md` (G175 / G008).
 
-Adds a root-level `SECURITY.md` documenting the private vulnerability disclosure path (GitHub Security Advisories preferred; `security@dankest.llc` fallback), 72-hour ack / 90-day disclosure SLAs, in-scope and out-of-scope surfaces (referencing `docs/THREAT_MODEL.md` §3), researcher conduct expectations, and pointers to release-verification artifacts. `buildInfo.js` flips `SECURITY_PUBLISHED` from `false` to `true` so the About panel can render the link as live.
+Adds a root-level `SECURITY.md` documenting the private vulnerability disclosure path (GitHub Security Advisories preferred; `security@dankest.llc` fallback), 72-hour ack / 90-day disclosure SLAs, in-scope and out-of-scope surfaces (referencing `docs/Threat_Model.md` §3), researcher conduct expectations, and pointers to release-verification artifacts. `buildInfo.js` flips `SECURITY_PUBLISHED` from `false` to `true` so the About panel can render the link as live.
 
 ### Added
 
@@ -4943,7 +4943,7 @@ This commit is a marker; no source changes other than the version bump.
 
 ### Added
 
-- `packages/core/scripts/repro-build-audit.js` — 18-rule static audit covering Dockerfile (digest-pinned base, NODE_VERSION pinned, locale + TZ pinned), `build.sh` (asserts SOURCE_DATE_EPOCH, uses `--frozen-lockfile`, emits a `RELEASE_HASHES.txt` sha256 manifest), `reproduce.sh` (derives SOURCE_DATE_EPOCH from `git log -1 --pretty=%ct`, builds from a fresh worktree), `electron-builder.config.cjs` (asar: true, references SOURCE_DATE_EPOCH, pins AppImage compression to xz), and `REPRODUCIBLE_BUILDS.md` (mentions Level-2 + RELEASE_HASHES). Exits 0 on a clean tree, exits 1 with a per-rule failure report otherwise.
+- `packages/core/scripts/repro-build-audit.js` — 18-rule static audit covering Dockerfile (digest-pinned base, NODE_VERSION pinned, locale + TZ pinned), `build.sh` (asserts SOURCE_DATE_EPOCH, uses `--frozen-lockfile`, emits a `RELEASE_HASHES.txt` sha256 manifest), `reproduce.sh` (derives SOURCE_DATE_EPOCH from `git log -1 --pretty=%ct`, builds from a fresh worktree), `electron-builder.config.cjs` (asar: true, references SOURCE_DATE_EPOCH, pins AppImage compression to xz), and `Reproducible_Builds.md` (mentions Level-2 + RELEASE_HASHES). Exits 0 on a clean tree, exits 1 with a per-rule failure report otherwise.
 
 - `packages/core/test/repro-build-audit.smoke.js` — smoke gate. Imports `runReproBuildAudit()`, asserts every rule returns `ok: true`. Future PRs that drop a digest pin / un-freeze the lockfile / introduce non-determinism in the build config fail this smoke.
 
@@ -5131,7 +5131,7 @@ Phase 4 closes the §42 surface. **§56.3 pre-launch is its own track, not a Pha
 
 - External security audit (cryptography in xchain-sdk; wallet flows; shell wiring).
 - A11y audit for sign-screen + multisig surfaces.
-- Reproducible-build verification (`packages/desktop/REPRODUCIBLE_BUILDS.md` already documents the procedure).
+- Reproducible-build verification (`packages/desktop/Reproducible_Builds.md` already documents the procedure).
 - Chrome Web Store submission.
 - Four small follow-ups documented in `claude/reports/specs/2026-04-24_phase4-close.md` (hardware classical multisig path, camera scanner for paste-inbox, per-address multisig configs, standalone `<AddressList>` route).
 
@@ -6445,7 +6445,7 @@ Phase 2 — Step 19 of 26 — piece 5d. Electron-builder packaging pipeline for 
 - `.dockerignore` — excludes `node_modules`, `dist`, `.vite`, etc. from the build context so the image stays small + doesn't leak local dev state.
 - `scripts/build.sh` — in-container build entry. Enforces `SOURCE_DATE_EPOCH`, runs `pnpm install --frozen-lockfile`, builds the renderer, invokes `electron-builder --dir` (unpacked app only — signing happens outside), emits `/out/RELEASE_HASHES.txt` (sorted find | xargs sha256sum).
 - `scripts/reproduce.sh` — third-party reproduction entry. Takes a git ref, derives `SOURCE_DATE_EPOCH` from its commit date, creates an isolated git worktree, builds the image with the ref's pnpm version, runs the build, prints the manifest for diffing against published `RELEASE_HASHES.md`.
-- `REPRODUCIBLE_BUILDS.md` — end-to-end verification protocol: what's reproducible (Linux pre-signing artifact), what's NOT (signed outputs, macOS + Windows builds — those need platform-specific runners — the Electron framework download itself), the `diff` recipe, non-determinism sources we've addressed (SOURCE_DATE_EPOCH, LC_ALL / TZ, frozen lockfile, Vite deterministic hashing), update trust chain (platform-specific integrity checks), Trezor Connect trust boundary + on-device-confirmation mitigation, per-release checklist.
+- `Reproducible_Builds.md` — end-to-end verification protocol: what's reproducible (Linux pre-signing artifact), what's NOT (signed outputs, macOS + Windows builds — those need platform-specific runners — the Electron framework download itself), the `diff` recipe, non-determinism sources we've addressed (SOURCE_DATE_EPOCH, LC_ALL / TZ, frozen lockfile, Vite deterministic hashing), update trust chain (platform-specific integrity checks), Trezor Connect trust boundary + on-device-confirmation mitigation, per-release checklist.
 
 **URI scheme registration + deep-link dispatch** (`packages/desktop/main/protocol.js`)
 
@@ -6486,8 +6486,8 @@ Phase 2 — Step 19 of 26 — piece 5d. Electron-builder packaging pipeline for 
   - `build.sh` / `reproduce.sh` — strict mode, `SOURCE_DATE_EPOCH` required, `--frozen-lockfile`, SHA256 manifest emission, `git worktree` isolation, `--user $(id -u):$(id -g)` mapping.
   - Scripts are executable.
   - CSP allowlists only `connect.trezor.io` for `frame-src`.
-  - `REPRODUCIBLE_BUILDS.md` sections present.
-- `packages/desktop/REPRODUCIBLE_BUILDS.md` — end-to-end verifier docs.
+  - `Reproducible_Builds.md` sections present.
+- `packages/desktop/Reproducible_Builds.md` — end-to-end verifier docs.
 
 ### Changed
 
@@ -7130,7 +7130,7 @@ Closes the `TEST_DAPP_RUNBOOK` bootstrap gap for the extension.
 
 **Piece 21 — threat-model artifact** (§12)
 
-- `docs/THREAT_MODEL.md` — full draft covering protected assets, in/out-of-scope threats, 5 attacker scenarios with code-pointer mitigations, known open items, review cadence, and a Verification section cross-referencing smoke tests. Release-gating-checklist item has a concrete artifact to hand to reviewers.
+- `docs/Threat_Model.md` — full draft covering protected assets, in/out-of-scope threats, 5 attacker scenarios with code-pointer mitigations, known open items, review cadence, and a Verification section cross-referencing smoke tests. Release-gating-checklist item has a concrete artifact to hand to reviewers.
 
 **Piece 22 — reproducible-build scaffold** (§51.4)
 

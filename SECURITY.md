@@ -57,7 +57,7 @@ If we cannot meet a timeline, we will tell you why and propose a new one. We wil
 
 ### Out of scope
 
-These are documented in `docs/THREAT_MODEL.md` §3 and are not bugs we can fix in this codebase:
+These are documented in `docs/Threat_Model.md` §3 and are not bugs we can fix in this codebase:
 
 - Zero-day browser sandbox escapes.
 - Compromise of upstream dependencies (we mitigate via `pnpm audit` + `docs/DEPENDENCIES.md` review, but a backdoor in a dep is the dep author's incident).
@@ -93,7 +93,7 @@ If you are unsure, send the report anyway and we will tell you whether it falls 
 
 The architectural threat model — assets we protect, threats explicitly in scope, threats explicitly out of scope, attacker scenarios, and known open items — lives at:
 
-- `docs/THREAT_MODEL.md`
+- `docs/Threat_Model.md`
 
 Read that document before reporting. It tells you what we already know, what we have already mitigated, and what we have already declared out of scope. A report citing the threat-model section it relates to gets triaged faster.
 
@@ -101,7 +101,7 @@ Read that document before reporting. It tells you what we already know, what we 
 
 ## Verifying releases
 
-When release-signing infrastructure ships (tracked as G158 / G159 / G180), the procedure for verifying a release artifact will be documented at `docs/VERIFY-RELEASE.md`. Until then, build from source against a tagged commit; the reproducible-build pipeline targets at `tools/build-reproduce/` and `packages/desktop/REPRODUCIBLE_BUILDS.md` document the procedure.
+When release-signing infrastructure ships (tracked as G158 / G159 / G180), the procedure for verifying a release artifact will be documented at `docs/Verify_Release.md`. Until then, build from source against a tagged commit; the reproducible-build pipeline targets at `tools/build-reproduce/` and `packages/desktop/Reproducible_Builds.md` document the procedure.
 
 ---
 

@@ -1,19 +1,22 @@
 // xchain: URI parser — §47.
 //
-// Two URI shapes:
+// Three URI shapes (the first is preferred for new QRs):
 //
-//   1. BIP21-style:  xchain:<address>?amount=&tick=&memo=&label=&message=
+//   1. Coin-code form:  xchain:<COINCODE>/<action>?to=&amount=&tick=&memo=
+//      e.g. xchain:TBTC/send?to=tb1q…&amount=1&tick=PEPECREATURE
+//      Short single token combines coin + network (BTC / TBTC / RBTC,
+//      LTC / TLTC / RLTC, DOGE / TDOGE / RDOGE — same convention used
+//      across explorer/encoder/hub URL paths). The action segment
+//      (send / receive / future routes) drives wallet routing.
+//
+//   2. Legacy path-style:  xchain://<chainId>/<tick>?amount=&to=&memo=&kind=receive
+//      Pre-coin-code QRs that may already be in the wild. Still parsed
+//      so existing QRs keep working.
+//
+//   3. BIP21-style:  xchain:<address>?amount=&tick=&memo=&label=&message=
 //      Mirrors per-chain BIP21 (`bitcoin:bc1q…?amount=0.1`) but with the
 //      cross-chain `xchain` scheme. The receiving wallet picks the chain
-//      based on the address format. Most QR-generated payment requests
-//      land here.
-//
-//   2. Path-style:   xchain://<chainId>/<tick>?amount=&to=&memo=&label=
-//      Used when the URI needs to nail a specific chain explicitly (e.g.
-//      a regtest endpoint) or when the tick isn't the native coin (e.g.
-//      a Counterparty token transfer). The host part is the chainId
-//      (`bitcoin-mainnet` / `litecoin-regtest` / etc.) and the path
-//      segment is the tick (`XCP` / `BTC` / `^TICK_ID`).
+//      based on the address format.
 //
 // Output is a normalized navigation intent that Send / Receive routes
 // consume directly. Returns `{ kind: 'unknown' }` for malformed input
@@ -21,14 +24,21 @@
 // or paste, so we don't want to abort their flow over a typo.
 
 import { parseBip21Uri, InvalidBip21Error } from './bip21.js';
+import { chainIdForCoinCode, coinCodeForChainId, isKnownCoinCode } from './coinCodes.js';
 
 const PATH_PREFIX = 'xchain://';
 const BIP21_PREFIX = 'xchain:';
 
+// Actions that map to `kind: 'receive'` on the parsed intent. Everything
+// else is treated as kind:'send' by default, with the literal action
+// preserved in `intent.action` so new screens can route on it.
+const RECEIVE_ACTIONS = new Set(['receive']);
+
 /**
  * @typedef {Object} XchainUriIntent
- * @property {'send' | 'receive' | 'unknown'} kind
- * @property {string} [chainId]                     for path-style URIs only
+ * @property {'send' | 'receive' | 'unknown'} kind   routing bucket the wallet uses to pick a screen
+ * @property {string} [action]                      literal action segment from a coin-code URI ('send' / 'receive' / 'execute' / etc.) when present
+ * @property {string} [chainId]                     resolved chainId for coin-code or legacy path-style URIs
  * @property {string} [tick]                       'BTC' / 'XCP' / '^TICK_ID' / etc.
  * @property {string} [address]                     destination (send) or wallet address (receive)
  * @property {string} [amount]                      decimal string in display units
@@ -41,9 +51,13 @@ const BIP21_PREFIX = 'xchain:';
 
 /**
  * @param {string} uri
+ * @param {{ chainRegistry?: { chainIdFor: (coin: string, networkKind: string) => string | null } }} [deps]
+ *        Registry is only needed to resolve coin codes (`xchain:TBTC/...`)
+ *        back to chainIds. Without it, coin-code URIs still parse but
+ *        intent.chainId will be undefined — the caller can resolve later.
  * @returns {XchainUriIntent}
  */
-export function parseXchainUri(uri) {
+export function parseXchainUri(uri, deps) {
     if (typeof uri !== 'string') return { kind: 'unknown' };
     const raw = uri.trim();
     if (raw.length === 0) return { kind: 'unknown' };
@@ -53,9 +67,53 @@ export function parseXchainUri(uri) {
         return parsePathStyle(raw);
     }
     if (lower.startsWith(BIP21_PREFIX)) {
+        // Disambiguate `xchain:<CODE>/<action>?...` from `xchain:<address>?...`
+        // by inspecting the first path segment. Coin codes never contain
+        // characters that addresses use (they're 3–5 ASCII letters), and
+        // a slash before the query is a strong signal for the routed form.
+        const afterScheme = raw.slice(BIP21_PREFIX.length);
+        const queryAt = afterScheme.indexOf('?');
+        const pathPart = queryAt === -1 ? afterScheme : afterScheme.slice(0, queryAt);
+        const firstSeg = pathPart.split('/')[0];
+        if (pathPart.includes('/') && isKnownCoinCode(firstSeg)) {
+            return parseCoinCodeStyle(raw, deps?.chainRegistry);
+        }
         return parseBip21Style(raw);
     }
     return { kind: 'unknown' };
+}
+
+function parseCoinCodeStyle(raw, chainRegistry) {
+    // raw === 'xchain:<CODE>/<action>?<params>'
+    const after = raw.slice(BIP21_PREFIX.length);
+    const queryIdx = after.indexOf('?');
+    const pathPart = queryIdx === -1 ? after : after.slice(0, queryIdx);
+    const queryPart = queryIdx === -1 ? '' : after.slice(queryIdx + 1);
+
+    const segments = pathPart.split('/').filter(Boolean);
+    if (segments.length === 0) return { kind: 'unknown' };
+    const code = segments[0];
+    const action = segments[1] ? segments[1].toLowerCase() : 'send';
+
+    const { params, required, errors } = parseQuery(queryPart);
+    if (errors.length > 0) return { kind: 'unknown' };
+
+    /** @type {XchainUriIntent} */
+    const intent = {
+        kind: RECEIVE_ACTIONS.has(action) ? 'receive' : 'send',
+        action,
+    };
+    const chainId = chainRegistry ? chainIdForCoinCode(code, chainRegistry) : null;
+    if (chainId) intent.chainId = chainId;
+    if (params.tick) intent.tick = params.tick;
+    if (params.to) intent.address = params.to;
+    if (params.amount) intent.amount = params.amount;
+    if (params.memo) intent.memo = params.memo;
+    if (params.label) intent.label = params.label;
+    if (params.message) intent.message = params.message;
+    intent.params = params;
+    if (required.length > 0) intent.required = required;
+    return intent;
 }
 
 function parsePathStyle(raw) {
@@ -205,28 +263,32 @@ function shortenAddress(addr) {
 }
 
 /**
- * Build an `xchain://` URI from an intent. Inverse of `parseXchainUri`
- * for path-style URIs. Useful for share / receive surfaces that want to
- * generate URIs for the user to copy.
+ * Build a coin-code URI: `xchain:<CODE>/<action>?<params>`.
  *
- * @param {XchainUriIntent} intent
+ * @param {XchainUriIntent & { action?: string }} intent
+ * @param {{ chainRegistry: { descriptorFor: (id: string) => any } }} deps
+ *        Registry resolves intent.chainId to its short coin code.
  * @returns {string}
  */
-export function buildXchainUri(intent) {
-    if (!intent || !intent.chainId) {
-        throw new Error('buildXchainUri: chainId is required');
+export function buildXchainUri(intent, deps) {
+    if (!intent) throw new Error('buildXchainUri: intent is required');
+    if (!intent.chainId) throw new Error('buildXchainUri: intent.chainId is required');
+    const chainRegistry = deps?.chainRegistry;
+    if (!chainRegistry) throw new Error('buildXchainUri: deps.chainRegistry is required');
+    const code = coinCodeForChainId(intent.chainId, chainRegistry);
+    if (!code) {
+        throw new Error(`buildXchainUri: no coin code for chainId "${intent.chainId}"`);
     }
-    const path = intent.tick
-        ? `${encodeURIComponent(intent.chainId)}/${encodeURIComponent(intent.tick)}`
-        : encodeURIComponent(intent.chainId);
+    const action = (intent.action || (intent.kind === 'receive' ? 'receive' : 'send')).toLowerCase();
+
     const params = [];
-    if (intent.amount) params.push(`amount=${encodeURIComponent(intent.amount)}`);
     if (intent.address) params.push(`to=${encodeURIComponent(intent.address)}`);
+    if (intent.amount) params.push(`amount=${encodeURIComponent(intent.amount)}`);
+    if (intent.tick) params.push(`tick=${encodeURIComponent(intent.tick)}`);
     if (intent.memo) params.push(`memo=${encodeURIComponent(intent.memo)}`);
     if (intent.label) params.push(`label=${encodeURIComponent(intent.label)}`);
     if (intent.message) params.push(`message=${encodeURIComponent(intent.message)}`);
-    if (intent.kind === 'receive') params.push('kind=receive');
     return params.length > 0
-        ? `xchain://${path}?${params.join('&')}`
-        : `xchain://${path}`;
+        ? `xchain:${code}/${action}?${params.join('&')}`
+        : `xchain:${code}/${action}`;
 }

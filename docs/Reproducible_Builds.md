@@ -1,7 +1,7 @@
 # Reproducible builds — XChain Wallet (root)
 
 This document is the project-wide entry point for reproducible builds
-across every wallet shell. Each target ships its own deeper `REPRODUCIBLE_BUILDS.md`
+across every wallet shell. Each target ships its own deeper `Reproducible_Builds.md`
 or equivalent script under its package; this file orients readers,
 states the project-wide promise, and links out.
 
@@ -46,7 +46,7 @@ What this does NOT protect against (out of scope for Level 2):
 
 | Target | Package | Artifact | Status | Doc |
 |---|---|---|---|---|
-| Desktop | `packages/desktop` | Linux pre-signing `linux-unpacked/` directory | Reproducible (Level 2). macOS / Windows publish maintainer-built pre-signing SHAs only — see desktop doc for rationale | [`packages/desktop/REPRODUCIBLE_BUILDS.md`](../packages/desktop/REPRODUCIBLE_BUILDS.md) |
+| Desktop | `packages/desktop` | Linux pre-signing `linux-unpacked/` directory | Reproducible (Level 2). macOS / Windows publish maintainer-built pre-signing SHAs only — see desktop doc for rationale | [`packages/desktop/Reproducible_Builds.md`](../packages/desktop/Reproducible_Builds.md) |
 | Extension | `packages/extension` | Unpacked extension directory + signed `.zip` for the Chrome / Firefox / Edge stores | Pre-signing reproducibility shipping alongside store-listing automation in §51 follow-up; build is deterministic today (Vite + frozen-lockfile) but the per-release SHA capture is not yet published | tracked in `MAINTAINERS.md` |
 | Web | `packages/web` | Static SPA bundle uploaded to `downloads.xchain.io` | Build is deterministic; artifact integrity ships via Subresource Integrity (SRI) attributes on script / link tags so the browser refuses to execute a tampered file. Per-release SHA-256 capture lands in tandem with extension publishing | same |
 
@@ -70,7 +70,7 @@ a regression in our determinism handling, or supply-chain tampering —
 see the desktop doc's diagnostics section.
 
 For the broader user-facing story — "I downloaded a release artifact;
-how do I verify it?" — see [`docs/VERIFY-RELEASE.md`](VERIFY-RELEASE.md).
+how do I verify it?" — see [`docs/Verify_Release.md`](Verify_Release.md).
 
 ## Verification protocol — extension and web
 
@@ -123,7 +123,7 @@ under the `reproducibility` label — it is a bug.
 
 A reproducible build is one of three legs of release trust. The other
 two are GPG-signed release artifacts (G158 / G180) and a verification
-flow ([`docs/VERIFY-RELEASE.md`](VERIFY-RELEASE.md)). All three are
+flow ([`docs/Verify_Release.md`](Verify_Release.md)). All three are
 tracked under §51 in the spec gap ledger. Until G180 is live, the
 release fingerprint is published in [`SECURITY.md`](../SECURITY.md).
 
