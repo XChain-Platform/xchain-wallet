@@ -1,11 +1,11 @@
 .wrap {
     display: flex;
     flex-direction: column;
-    gap: var(--xc-space-2);
+    gap: 2px;
     background: var(--xc-surface);
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-md);
-    padding: var(--xc-space-3);
+    padding: var(--xc-space-2) var(--xc-space-3);
 }
 
 .change {
@@ -14,23 +14,16 @@
     line-height: 1.2;
 }
 
-.changeLabel {
-    font-size: var(--xc-text-xs);
-    font-weight: 500;
-    color: var(--xc-text-muted);
-    margin-inline-start: 6px;
-}
-
 .changePositive { color: var(--xc-success, #14b86c); }
 .changeNegative { color: var(--xc-danger,  #d93838); }
 .changeNeutral  { color: var(--xc-text-muted); }
 
 .chart {
-    padding: var(--xc-space-1) 0 0;
+    padding: 0;
 }
 
 .placeholder {
-    padding: var(--xc-space-4) 0;
+    padding: var(--xc-space-2) 0;
     text-align: center;
     color: var(--xc-text-muted);
     font-size: var(--xc-text-sm);
@@ -40,7 +33,7 @@
     display: flex;
     gap: var(--xc-space-1);
     justify-content: center;
-    padding-top: var(--xc-space-1);
+    padding-top: 0;
 }
 
 .range {

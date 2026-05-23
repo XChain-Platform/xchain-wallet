@@ -358,6 +358,15 @@ export function EyeOffIcon() {
     );
 }
 
+export function LineChartIcon() {
+    return (
+        <svg {...STROKE_PROPS}>
+            <path d="M3 3v18h18" />
+            <path d="M7 14l4-4 3 3 5-6" />
+        </svg>
+    );
+}
+
 export function SwapIcon() {
     return (
         <svg {...STROKE_PROPS}>

@@ -3,6 +3,7 @@ import { Sparkline, synthesizeTokenChart } from './Sparkline.jsx';
 import { useMessaging } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
+import { usePortfolioChartVisible } from '../hooks/usePortfolioChartVisible.js';
 import styles from './PortfolioChart.module.css';
 
 // Range definitions. CoinGecko's sparkline is 168 hourly points (7d),
@@ -37,6 +38,7 @@ export function PortfolioChart({ rows, walletId }) {
     const { settings } = useSettings();
     const fiatCurrency = settings?.fiatCurrency || 'USD';
     const [hidden] = useBalancesHidden();
+    const [chartVisible] = usePortfolioChartVisible();
     const [rangeId, setRangeId] = useState('7d');
     const range = RANGES.find((r) => r.id === rangeId) || RANGES[1];
 
@@ -91,24 +93,26 @@ export function PortfolioChart({ rows, walletId }) {
         : delta > 0 ? styles.changePositive : styles.changeNegative;
     const arrow = delta == null || delta === 0 ? '—' : delta > 0 ? '▲' : '▼';
 
+    // Chart-icon toggle in TotalBalanceHero collapses the whole section.
+    // The eye toggle is a separate, narrower concern handled below — it
+    // suppresses the numeric delta line but leaves the chart shape and
+    // range pills visible. The early return lives below every hook call
+    // so the hook count stays stable as the toggle flips.
+    if (!chartVisible) return null;
+
     return (
         <section className={styles.wrap} aria-label="Portfolio performance">
-            {hasData && delta != null ? (
+            {hasData && delta != null && !hidden ? (
                 <div className={`${styles.change} ${tone}`}>
-                    {hidden ? '•••' : (
-                        <>
-                            {arrow} {formatFiat(Math.abs(delta), fiatCurrency)}
-                            {pct != null && Number.isFinite(pct)
-                                ? ` (${pct > 0 ? '+' : ''}${pct.toFixed(2)}%)`
-                                : ''}
-                        </>
-                    )}
-                    <span className={styles.changeLabel}>· {range.label}</span>
+                    {arrow} {formatFiat(Math.abs(delta), fiatCurrency)}
+                    {pct != null && Number.isFinite(pct)
+                        ? ` (${pct > 0 ? '+' : ''}${pct.toFixed(2)}%)`
+                        : ''}
                 </div>
             ) : null}
             {hasData ? (
                 <div className={styles.chart}>
-                    <Sparkline series={series} height={100} />
+                    <Sparkline series={series} height={40} />
                 </div>
             ) : (
                 <div className={styles.placeholder}>No price data for this view.</div>

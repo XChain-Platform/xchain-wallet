@@ -5,6 +5,7 @@ import { StalenessLabel } from './StalenessLabel.jsx';
 import { useMessaging } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
+import { usePortfolioChartVisible } from '../hooks/usePortfolioChartVisible.js';
 import styles from './TotalBalanceHero.module.css';
 
 /**
@@ -27,6 +28,7 @@ export function TotalBalanceHero({ rows, networkFilter, lastSyncedAt }) {
     const { messaging } = useMessaging();
     const fiatCurrency = settings?.fiatCurrency || 'USD';
     const [hidden, toggleHidden] = useBalancesHidden();
+    const [chartVisible, toggleChartVisible] = usePortfolioChartVisible();
 
     // Fetch 24h change for every native chain that has a row in the
     // balance list. Tokens without a published 24h delta are treated as
@@ -106,15 +108,27 @@ export function TotalBalanceHero({ rows, networkFilter, lastSyncedAt }) {
                         <span className={styles.scope}>· {filterLabel}</span>
                     ) : null}
                 </span>
-                <button
-                    type="button"
-                    className={styles.eye}
-                    onClick={toggleHidden}
-                    aria-label={hidden ? 'Show balance' : 'Hide balance'}
-                    title={hidden ? 'Show balance' : 'Hide balance'}
-                >
-                    {hidden ? <Icon.EyeOffIcon /> : <Icon.EyeIcon />}
-                </button>
+                <div className={styles.actions}>
+                    <button
+                        type="button"
+                        className={`${styles.eye} ${chartVisible ? styles.eyeActive : ''}`}
+                        onClick={toggleChartVisible}
+                        aria-pressed={chartVisible ? 'true' : 'false'}
+                        aria-label={chartVisible ? 'Hide chart' : 'Show chart'}
+                        title={chartVisible ? 'Hide chart' : 'Show chart'}
+                    >
+                        <Icon.LineChartIcon />
+                    </button>
+                    <button
+                        type="button"
+                        className={styles.eye}
+                        onClick={toggleHidden}
+                        aria-label={hidden ? 'Show balance' : 'Hide balance'}
+                        title={hidden ? 'Show balance' : 'Hide balance'}
+                    >
+                        {hidden ? <Icon.EyeOffIcon /> : <Icon.EyeIcon />}
+                    </button>
+                </div>
             </div>
             <div className={styles.amount}>
                 {hidden ? (

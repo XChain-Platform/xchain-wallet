@@ -32,6 +32,12 @@
     letter-spacing: 0;
 }
 
+.actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
 .eye {
     appearance: none;
     background: rgba(255, 255, 255, 0.15);
@@ -53,6 +59,10 @@
 .eye:focus-visible {
     outline: 2px solid #FFFFFF;
     outline-offset: 2px;
+}
+
+.eyeActive {
+    background: rgba(255, 255, 255, 0.35);
 }
 
 .amount {
