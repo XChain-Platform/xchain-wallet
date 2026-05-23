@@ -10,7 +10,7 @@ import styles from './PortfolioChart.module.css';
 // so 24h slices the tail of that real series and 7d uses it as-is.
 // Anything beyond 7d is synthesized via the same helper TokenDetail
 // uses for tokens without a real price history feed.
-const RANGES = [
+export const RANGES = [
     { id: '24h', label: '24h', points: 24,  realCapable: true  },
     { id: '7d',  label: '7d',  points: 168, realCapable: true  },
     { id: '30d', label: '30d', points: 60,  realCapable: false },
@@ -39,8 +39,8 @@ export function PortfolioChart({ rows, walletId }) {
     const fiatCurrency = settings?.fiatCurrency || 'USD';
     const [hidden] = useBalancesHidden();
     const [chartVisible] = usePortfolioChartVisible();
-    const [rangeId, setRangeId] = useState('7d');
-    const range = RANGES.find((r) => r.id === rangeId) || RANGES[1];
+    const [rangeId, setRangeId] = useState('30d');
+    const range = RANGES.find((r) => r.id === rangeId) || RANGES[2];
 
     // Pull native price entries (with sparkline) for any native row in
     // the displayed set. Mirrors TotalBalanceHero's fetch pattern.
@@ -182,7 +182,7 @@ function seriesForRow(row, current, priceMap, walletId, range) {
 // Linear resample of `src` onto `n` evenly-spaced points. Used when a
 // real sparkline doesn't already have exactly the count we need (the
 // 24h slice off a 168-pt series is 24, but the helper is generic).
-function resampleTo(src, n) {
+export function resampleTo(src, n) {
     if (src.length === n) return src.slice();
     if (n <= 1) return [src[src.length - 1]];
     const out = new Array(n);

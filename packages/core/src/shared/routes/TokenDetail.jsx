@@ -6,6 +6,8 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { isDemoGatedActionIndex } from '../../flows/demoGatedContent.js';
 import { StalenessLabel } from '../components/StalenessLabel.jsx';
 import { Sparkline, synthesizeTokenChart } from '../components/Sparkline.jsx';
+import { RANGES as CHART_RANGES, resampleTo as resampleSeriesTo } from '../components/PortfolioChart.jsx';
+import portfolioChartStyles from '../components/PortfolioChart.module.css';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { useNativePrice } from '../hooks/useNativePrice.js';
 import { useSettings } from '../hooks/useSettings.js';
@@ -364,7 +366,7 @@ export function TokenDetail({
                     button in the balance hero (same hook the Home portfolio
                     chart uses, so the toggle persists across both surfaces). */}
                 {chartVisible ? (
-                    <div className={styles.infoCard}>
+                    <div className={`${styles.infoCard} ${styles.marketCardOffset}`}>
                         <MarketPanel
                             isNative={isNative}
                             nativePrice={nativePrice}
@@ -522,6 +524,13 @@ function MarketPanel({ isNative, nativePrice, showSparkline, assetInfo, tick, ch
     // whether the price oracle is disabled, still loading, or simply
     // doesn't have data for this tick (e.g. testnet, regtest).
 
+    // Range picker — mirrors the PortfolioChart buttons on Home. Native
+    // coins have a 7d CoinGecko sparkline (168 hourly points), so 24h /
+    // 7d are slices of the real series; 30d / 90d / All synthesize the
+    // same way single tokens do (the line still ends at current price).
+    const [rangeId, setRangeId] = useState('30d');
+    const range = CHART_RANGES.find((r) => r.id === rangeId) || CHART_RANGES[2];
+
     let priceCell = '—';
     let marketCapCell = '—';
     let floorCell = '—';
@@ -543,18 +552,23 @@ function MarketPanel({ isNative, nativePrice, showSparkline, assetInfo, tick, ch
                 pct24h = formatPct(e.change24hPct);
                 pctTone24h = pctTone(e.change24hPct);
             }
-            if (showSparkline) {
-                sparkline = e.sparkline;
+            if (showSparkline && range.realCapable && Array.isArray(e.sparkline) && e.sparkline.length >= 2) {
+                // Real CoinGecko sparkline = 168 hourly points (7d).
+                // 24h uses the tail; 7d uses the full series; longer
+                // ranges fall through to synthesis below.
+                const src = range.id === '24h'
+                    ? e.sparkline.slice(-Math.min(range.points, e.sparkline.length))
+                    : e.sparkline;
+                sparkline = resampleSeriesTo(src, range.points);
             } else if (e.priceFiat != null) {
-                // Sparkline fetch missing (CoinGecko rate-limit, network
-                // hiccup, demo wallet without a real oracle). Synthesize
-                // a 7-day walk seeded by chain + price + change so the
-                // chart always renders something — the line still ends
-                // at the actual current price and reflects the real 24h
-                // delta if we know it.
+                // No real series available for this range (or sparkline
+                // fetch failed) — synthesize a walk seeded by chain +
+                // change so the chart always renders something. The line
+                // still ends at the actual current price.
                 const synth = synthesizeTokenChart(
-                    `${chainId}|native|${(e.change24hPct ?? 0).toFixed(2)}`,
+                    `${chainId}|native|${range.id}|${(e.change24hPct ?? 0).toFixed(2)}`,
                     e.priceFiat,
+                    range.points,
                 );
                 sparkline = synth.sparkline;
             }
@@ -569,9 +583,25 @@ function MarketPanel({ isNative, nativePrice, showSparkline, assetInfo, tick, ch
                     <StatCell label="24h" value={pct24h} tone={pctTone24h} />
                 </section>
                 {sparkline ? (
-                    <div className={styles.chart} aria-label="7-day price chart">
-                        <Sparkline series={sparkline} height={40} />
-                    </div>
+                    <>
+                        <div className={styles.chart} aria-label={`${range.label} price chart`}>
+                            <Sparkline series={sparkline} height={40} />
+                        </div>
+                        <div className={portfolioChartStyles.ranges} role="tablist" aria-label="Chart range">
+                            {CHART_RANGES.map((r) => (
+                                <button
+                                    key={r.id}
+                                    type="button"
+                                    role="tab"
+                                    aria-selected={r.id === rangeId ? 'true' : 'false'}
+                                    className={`${portfolioChartStyles.range} ${r.id === rangeId ? portfolioChartStyles.rangeActive : ''}`}
+                                    onClick={() => setRangeId(r.id)}
+                                >
+                                    {r.label}
+                                </button>
+                            ))}
+                        </div>
+                    </>
                 ) : null}
                 {hint ? <p className={styles.muted}>{hint}</p> : null}
             </>
@@ -594,7 +624,7 @@ function MarketPanel({ isNative, nativePrice, showSparkline, assetInfo, tick, ch
                 marketCapCell = `${(marketPriceNum * supply).toLocaleString('en-US', { maximumFractionDigits: 4 })} ${nativeTick}`;
             }
         }
-        const synth = synthesizeTokenChart(`${chainId}|${tick}|native`, marketPriceNum);
+        const synth = synthesizeTokenChart(`${chainId}|${tick}|native|${range.id}`, marketPriceNum, range.points);
         if (synth.change24hPct != null) {
             pct24h = formatPct(synth.change24hPct);
             pctTone24h = pctTone(synth.change24hPct);
@@ -603,7 +633,7 @@ function MarketPanel({ isNative, nativePrice, showSparkline, assetInfo, tick, ch
     } else if (typeof fiatRate === 'number' && isFinite(fiatRate) && fiatRate > 0) {
         priceCell = formatFiat(fiatRate);
         void fiatCurrency;
-        const synth = synthesizeTokenChart(`${chainId}|${tick}|fiat`, fiatRate);
+        const synth = synthesizeTokenChart(`${chainId}|${tick}|fiat|${range.id}`, fiatRate, range.points);
         if (synth.change24hPct != null) {
             pct24h = formatPct(synth.change24hPct);
             pctTone24h = pctTone(synth.change24hPct);

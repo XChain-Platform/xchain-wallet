@@ -382,6 +382,20 @@
     padding: var(--xc-space-3) var(--xc-space-4);
 }
 
+/* Pulls the market card up under the balance hero's box-shadow halo so
+   the visible gap above the chart matches the gap to the quick-action
+   row below it. Mirrors the same offset PortfolioChart uses on Home.
+   Also tightens the card's padding + internal gap to mirror Home's
+   PortfolioChart.module.css `.wrap` exactly so the two chart cards
+   render at the same vertical size. */
+.marketCardOffset {
+    margin-top: -6px;
+    padding: var(--xc-space-2) var(--xc-space-3);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
 /* Adjacent metaBlocks inside an infoCard get a divider + vertical
    breathing room so stacked groups (e.g. the multiple gated-content
    groups in the Unlock tab) don't run their unlock button straight
@@ -439,7 +453,7 @@
 .statValueNegative { color: var(--xc-danger, #d93838); }
 
 .chart {
-    padding: var(--xc-space-2) 0 0;
+    padding: 0;
 }
 
 .sparkSvg {
