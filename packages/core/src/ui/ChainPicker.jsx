@@ -23,6 +23,11 @@ import styles from './ChainPicker.module.css';
  * @param {string} [props.label]
  * @param {string} [props.placeholder]
  * @param {boolean} [props.disabled]
+ * @param {boolean} [props.hideNetworkKind]   When true, suppresses the
+ *        ` · testnet` / ` · regtest` suffix in the subtext. Useful on
+ *        Receive where the page is already scoped to the user's own
+ *        addresses; defaults to false so Send / Swap / Issue keep the
+ *        "real money vs play money" cue.
  */
 export function ChainPicker({
     value,
@@ -32,6 +37,7 @@ export function ChainPicker({
     label,
     placeholder = 'Select a network',
     disabled,
+    hideNetworkKind = false,
 }) {
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState('');
@@ -100,7 +106,7 @@ export function ChainPicker({
                             <span className={styles.triggerLabel}>{selected.label}</span>
                             <span className={styles.triggerSub}>
                                 {selected.ticker}
-                                {selected.networkKind !== 'mainnet'
+                                {!hideNetworkKind && selected.networkKind !== 'mainnet'
                                     ? ` · ${selected.networkKind}`
                                     : ''}
                             </span>
@@ -144,7 +150,7 @@ export function ChainPicker({
                                         <span className={styles.itemLabel}>{e.label}</span>
                                         <span className={styles.itemSub}>
                                             {e.ticker}
-                                            {e.networkKind !== 'mainnet' ? ` · ${e.networkKind}` : ''}
+                                            {!hideNetworkKind && e.networkKind !== 'mainnet' ? ` · ${e.networkKind}` : ''}
                                         </span>
                                     </span>
                                 </button>

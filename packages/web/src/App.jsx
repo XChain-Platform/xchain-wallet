@@ -52,6 +52,7 @@ import { uri as coreUri } from '@xchain-wallet/core';
 import { Send } from '@xchain-wallet/core/shared/routes/Send.jsx';
 import { SendPicker } from '@xchain-wallet/core/shared/routes/SendPicker.jsx';
 import { Receive } from '@xchain-wallet/core/shared/routes/Receive.jsx';
+import { ReceivePicker } from '@xchain-wallet/core/shared/routes/ReceivePicker.jsx';
 import { ScanRoute } from '@xchain-wallet/core/shared/routes/ScanRoute.jsx';
 import { TokenWizard } from '@xchain-wallet/core/shared/routes/TokenWizard.jsx';
 import { ActionsMenu } from '@xchain-wallet/core/shared/routes/ActionsMenu.jsx';
@@ -151,7 +152,7 @@ function AppInner() {
         /** @type {'welcome' | 'create' | 'import' | 'import-freewallet'} */ ('welcome'),
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'swap' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'staking-dashboard' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'addresses' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'scan'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'swap' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'staking-dashboard' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'addresses' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'scan'} */ ('home'),
     );
     const [tokenDetailRef, setTokenDetailRef] = useState(
         /** @type {{ chainId: string, tick: string, kind: string, displayName: string, divisibility: number, fiatRate: number | null, quantity: string } | null} */ (null),
@@ -257,6 +258,11 @@ function AppInner() {
     // out lands on the token list the user was just browsing.
     const [sendBackTo, setSendBackTo] = useState(
         /** @type {'home' | 'send-picker' | 'token-detail'} */ ('home'),
+    );
+    // ReceivePicker → Receive prefill carrier; cleared when the user
+    // backs out of Receive. Mirrors `sendPrefill` for the Send side.
+    const [receivePrefill, setReceivePrefill] = useState(
+        /** @type {{ chainId?: string, tick?: string, kind?: string, displayName?: string, imageUrl?: string | null } | null} */ (null),
     );
 
     const refresh = useCallback(() => {
@@ -484,12 +490,42 @@ function AppInner() {
                     />
                 );
             }
+            if (unlockedView === 'receive-picker' && activeWalletId) {
+                return (
+                    <ReceivePicker
+                        walletId={activeWalletId}
+                        accountId={activeAccountId || undefined}
+                        networkFilter={globalNetworkFilter}
+                        onNetworkFilterChange={setGlobalNetworkFilter}
+                        tokenQuery={globalTokenQuery}
+                        onTokenQueryChange={setGlobalTokenQuery}
+                        kindFilter={globalKindFilter}
+                        onKindFilterChange={setGlobalKindFilter}
+                        hideOwnFilter
+                        onBack={() => setUnlockedView('home')}
+                        onSelect={(sel) => {
+                            setReceivePrefill({
+                                chainId: sel.chainId,
+                                tick: sel.tick,
+                                kind: sel.kind,
+                                displayName: sel.displayName,
+                                imageUrl: sel.imageUrl,
+                            });
+                            setUnlockedView('receive');
+                        }}
+                    />
+                );
+            }
             if (unlockedView === 'receive' && activeWalletId) {
                 return (
                     <Receive
                         walletId={activeWalletId}
                         accountId={activeAccountId || undefined}
-                        onBack={() => setUnlockedView('home')}
+                        prefill={receivePrefill}
+                        onBack={() => {
+                            setReceivePrefill(null);
+                            setUnlockedView(receivePrefill ? 'receive-picker' : 'home');
+                        }}
                     />
                 );
             }
@@ -795,7 +831,7 @@ function AppInner() {
                         networkFilter={globalNetworkFilter}
                         tokenQuery={globalTokenQuery}
                         onBack={() => setUnlockedView('home')}
-                        onReceive={() => setUnlockedView('receive')}
+                        onReceive={() => { setReceivePrefill(null); setUnlockedView('receive-picker'); }}
                         onShowPrivateKey={(addr) => {
                             setPrivateKeyAddress(addr);
                             setUnlockedView('view-private-key');
@@ -1026,7 +1062,7 @@ function AppInner() {
                         walletId={activeWalletId}
                         accountId={activeAccountId || undefined}
                         onBack={() => setUnlockedView(historyReturnTo)}
-                        onReceive={() => setUnlockedView('receive')}
+                        onReceive={() => { setReceivePrefill(null); setUnlockedView('receive-picker'); }}
                         initialSearchQuery={historyInitialQuery}
                         initialChainCoin={historyInitialChainCoin}
                         onSelectEntry={(entry) => {
@@ -1070,7 +1106,7 @@ function AppInner() {
                             setSendBackTo('token-detail');
                             setUnlockedView('send');
                         }}
-                        onReceive={() => setUnlockedView('receive')}
+                        onReceive={() => { setReceivePrefill(null); setUnlockedView('receive-picker'); }}
                         onViewActivity={() => {
                             const coin = String(tokenDetailRef.chainId || '').split('-')[0] || '';
                             setHistoryInitialQuery('');
@@ -1272,7 +1308,7 @@ function AppInner() {
                             setSendPrefill(null);
                             setUnlockedView('send-picker');
                         } : undefined}
-                        onReceive={activeWalletId ? () => setUnlockedView('receive') : undefined}
+                        onReceive={activeWalletId ? () => { setReceivePrefill(null); setUnlockedView('receive-picker'); } : undefined}
                         onSwap={activeWalletId ? () => setUnlockedView('swap') : undefined}
                         onBuy={activeWalletId ? () => setUnlockedView('dispenser-explorer') : undefined}
                         onCreateToken={activeWalletId ? () => setUnlockedView('wizard') : undefined}

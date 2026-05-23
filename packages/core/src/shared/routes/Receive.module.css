@@ -8,23 +8,8 @@
     box-shadow: var(--xc-shadow-md);
 }
 
-.pickerLabel {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-1);
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text-muted);
+.pickerWrap {
     margin-bottom: var(--xc-space-3);
-}
-
-.picker {
-    padding: var(--xc-space-2) var(--xc-space-3);
-    font-family: var(--xc-font-sans);
-    font-size: var(--xc-text-md);
-    color: var(--xc-text);
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
 }
 
 .singleChain {
@@ -37,8 +22,8 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    padding: var(--xc-space-2);
-    background: #FFFFFF;
+    padding: var(--xc-space-3);
+    background: var(--xc-bg-muted);
     border-radius: var(--xc-radius-md);
     border: 1px solid var(--xc-border);
     margin-bottom: var(--xc-space-3);
@@ -46,13 +31,15 @@
 
 .qr {
     display: block;
-    width: 200px;
-    height: 200px;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1;
+    border-radius: var(--xc-radius-sm);
 }
 
 .qrPlaceholder {
-    width: 200px;
-    height: 200px;
+    width: 100%;
+    aspect-ratio: 1;
     display: flex;
     align-items: center;
     justify-content: center;

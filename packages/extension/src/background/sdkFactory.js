@@ -43,19 +43,12 @@ export async function resolveSdkFactory({ devMockFactory }) {
 }
 
 /** Dev SDK stub — matches the web shell's fallback. */
-export function createDevMockSdk() {
+export function createDevMockSdk(constructorOpts) {
+    const chainId = constructorOpts?.network || 'bitcoin-mainnet';
     return {
         wallet: {
             deriveAddress(publicKeyHex, opts) {
-                const type = opts?.type ?? 'p2wpkh';
-                const prefix = {
-                    p2pkh: '1devmock',
-                    'p2sh-p2wpkh': '3devmock',
-                    p2wpkh: 'bc1qdevmock',
-                    p2tr: 'bc1pdevmock',
-                }[type] ?? `${type}:`;
-                const tail = String(publicKeyHex || '').slice(0, 24);
-                return `${prefix}${tail}`.toLowerCase();
+                return sdkLib.mockDeriveAddress(chainId, opts?.type ?? 'p2wpkh', publicKeyHex);
             },
             signPsbt() { throw new Error('Dev SDK stub: signing requires the real xchain-sdk'); },
             validateAddress(addr) {

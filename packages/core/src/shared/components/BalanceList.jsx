@@ -364,6 +364,32 @@ export function buildBalanceRows(balances, chainRegistry) {
     return out.map((r) => ({ ...r, quantity: r.quantity.toString() }));
 }
 
+/**
+ * Build a zero-balance native row for a chain. Used by ReceivePicker to
+ * make sure every chain the wallet has addresses on appears in the
+ * Coins list even when the balance is 0 (so receive against that chain
+ * is one tap away).
+ *
+ * @param {string} chainId
+ * @param {import('../../registry/index.js').ChainRegistry} chainRegistry
+ * @returns {object | null} BalanceRow with `quantity: "0"`, or null if
+ *          the chain isn't registered.
+ */
+export function buildNativeRow(chainId, chainRegistry) {
+    const descriptor = chainRegistry.get(chainId);
+    if (!descriptor) return null;
+    const row = mkRow({
+        kind: 'native',
+        chainId,
+        descriptor,
+        tick: shortLabelForCoin(descriptor.coin),
+        displayName: descriptor.displayName,
+        divisibility: 8,
+        fiatRate: null,
+    });
+    return { ...row, quantity: row.quantity.toString() };
+}
+
 function mkRow({ kind, chainId, descriptor, tick, displayName, divisibility, fiatRate, imageUrl }) {
     return {
         kind,

@@ -43,9 +43,14 @@ function nativeTickerFor(descriptor) {
  * @param {object} props
  * @param {string} props.walletId
  * @param {string} [props.accountId]   active BIP44 account; when set, scopes addresses + new-receive derivation to that account
+ * @param {{ chainId?: string, tick?: string, kind?: string, displayName?: string, imageUrl?: string | null }} [props.prefill]
+ *        Selection from ReceivePicker. `chainId` becomes the active
+ *        chain; `tick` pre-fills the Token field unless it matches the
+ *        chain's native ticker (no point encoding `?tick=BTC` on a
+ *        BTC-native QR).
  * @param {() => void} [props.onBack]
  */
-export function Receive({ walletId, accountId, onBack }) {
+export function Receive({ walletId, accountId, prefill = null, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -54,7 +59,7 @@ export function Receive({ walletId, accountId, onBack }) {
         /** @type {Record<string, any[]> | null} */ (null),
     );
     const [activeChainId, setActiveChainId] = useState(
-        /** @type {string | null} */ (null),
+        /** @type {string | null} */ (prefill?.chainId || null),
     );
     const [address, setAddress] = useState(/** @type {any | null} */ (null));
     const [qrDataUrl, setQrDataUrl] = useState(/** @type {string | null} */ (null));
@@ -92,7 +97,9 @@ export function Receive({ walletId, accountId, onBack }) {
                 setChainsByWallet(byChain);
                 const firstChain = Object.keys(byChain)[0];
                 if (firstChain) {
-                    setActiveChainId(firstChain);
+                    // Preserve a chainId set by ReceivePicker prefill so
+                    // the user lands on the chain they actually picked.
+                    setActiveChainId((prev) => prev || firstChain);
                 } else {
                     setLoadError('No addresses yet on any chain.');
                 }
@@ -172,7 +179,7 @@ export function Receive({ walletId, accountId, onBack }) {
                 const dataUrl = await QRCode.toDataURL(uri, {
                     errorCorrectionLevel: 'M',
                     margin: 2,
-                    width: 200,
+                    width: 512,
                     color: { dark: '#0F172A', light: '#FFFFFF' },
                 });
                 return [m.multisigConfigId, dataUrl];
@@ -191,12 +198,44 @@ export function Receive({ walletId, accountId, onBack }) {
     // Unified QR effect lives below — see the `qrUri` memo. Driven by
     // address + active chain + the optional amount/tick/memo customization.
 
-    const openGen = useCallback(() => {
-        setGenOpen(true);
+    const openGen = useCallback(async () => {
+        if (genBusy) return;
         setGenError(null);
         setGenPassword('');
-        setTimeout(() => genInputRef.current?.focus(), 0);
-    }, []);
+        if (!activeChainId) return;
+        // Try a silent derive first. When the wallet has a pooled
+        // SoftwareSigner (i.e. the user unlocked this session, or this
+        // is a demo wallet whose import populated the pool), the host
+        // re-uses that signer and no password is needed. Only fall back
+        // to the password form when the backend signals it actually
+        // needs credentials. HW-signer cases also fall back to the form
+        // so the user can pick which signer to derive on.
+        setGenBusy(true);
+        try {
+            const fresh = await messaging.generateReceiveAddress({
+                walletId,
+                accountId,
+                chainId: activeChainId,
+            });
+            setAddress(fresh);
+            setGenBusy(false);
+            return;
+        } catch (err) {
+            setGenBusy(false);
+            const msg = err?.message || '';
+            const needsCredential = /`?signer`? or `?password`? is required/i.test(msg);
+            if (!needsCredential) {
+                setGenError(err?.name === 'InvalidPasswordError'
+                    ? 'Incorrect password.'
+                    : msg || 'Failed to derive.');
+                return;
+            }
+            // Pool didn't have this wallet's signer — open the form so
+            // the user can supply a password or pick a HW signer.
+            setGenOpen(true);
+            setTimeout(() => genInputRef.current?.focus(), 0);
+        }
+    }, [genBusy, activeChainId, walletId, accountId, messaging]);
 
     // HW signer path skips the password prompt — the device confirms
     // derivation locally. Software path requires the password to re-run
@@ -235,14 +274,21 @@ export function Receive({ walletId, accountId, onBack }) {
         }
     }
 
-    const availableChainIds = chainsByWallet ? Object.keys(chainsByWallet) : [];
     const descriptor = activeChainId ? chainRegistry.get(activeChainId) : null;
 
     // Inline payment-request fields — visible by default so customizing
     // the QR is a single-glance affair. Memo is optional and tucked into
     // an "Advanced" disclosure. As any of these change, the QR re-renders.
+    // Token tick seeds from a non-native ReceivePicker prefill so the
+    // QR encodes the requested token without manual entry.
     const [reqAmount, setReqAmount] = useState('');
-    const [reqTick, setReqTick] = useState('');
+    const [reqTick, setReqTick] = useState(() => {
+        if (!prefill?.tick || !prefill?.chainId) return '';
+        const desc = chainRegistry.get(prefill.chainId);
+        const nativeTicker = nativeTickerFor(desc);
+        if (nativeTicker && prefill.tick.toUpperCase() === nativeTicker) return '';
+        return prefill.tick.toUpperCase();
+    });
     const [reqMemo, setReqMemo] = useState('');
     const [shareStatus, setShareStatus] = useState(/** @type {string | null} */ (null));
 
@@ -292,7 +338,7 @@ export function Receive({ walletId, accountId, onBack }) {
         QRCode.toDataURL(qrUri, {
             errorCorrectionLevel: 'M',
             margin: 2,
-            width: 200,
+            width: 512,
             color: { dark: '#0F172A', light: '#FFFFFF' },
         })
             .then((dataUrl) => { if (!cancelled) setQrDataUrl(dataUrl); })
@@ -344,43 +390,25 @@ export function Receive({ walletId, accountId, onBack }) {
                 <div role="alert" className={styles.error}>{loadError}</div>
             ) : null}
 
-            {availableChainIds.length > 1 ? (
-                <label className={styles.pickerLabel}>
-                    Chain
-                    <select
-                        className={styles.picker}
-                        value={activeChainId ?? ''}
-                        onChange={(e) => setActiveChainId(e.target.value)}
-                    >
-                        {availableChainIds.map((cid) => {
-                            const d = chainRegistry.get(cid);
-                            return (
-                                <option key={cid} value={cid}>
-                                    {d ? `${d.displayName} (${d.networkKind})` : cid}
-                                </option>
-                            );
-                        })}
-                    </select>
-                </label>
-            ) : descriptor ? (
-                <div className={styles.singleChain}>
-                    <ChainBadge descriptor={descriptor} size="md" />
-                </div>
-            ) : null}
-
             {address && qrDataUrl ? (
                 <div className={styles.qrBox}>
                     <img
                         src={qrDataUrl}
                         alt={`QR code for ${address.address}`}
-                        width={200}
-                        height={200}
+                        width={512}
+                        height={512}
                         className={styles.qr}
                     />
                 </div>
             ) : address ? (
                 <div className={styles.qrBox} aria-hidden="true">
                     <div className={styles.qrPlaceholder}>Rendering QR…</div>
+                </div>
+            ) : null}
+
+            {descriptor ? (
+                <div className={styles.singleChain}>
+                    <ChainBadge descriptor={descriptor} size="md" />
                 </div>
             ) : null}
 
@@ -463,8 +491,8 @@ export function Receive({ walletId, accountId, onBack }) {
                             <img
                                 src={multisigQrs[multisig.multisigConfigId]}
                                 alt={`Multisig QR code for ${multisig.address}`}
-                                width={200}
-                                height={200}
+                                width={512}
+                                height={512}
                                 className={styles.qr}
                             />
                         </div>
@@ -530,11 +558,17 @@ export function Receive({ walletId, accountId, onBack }) {
                 </form>
             ) : (
                 <div className={styles.actions}>
+                    {genError ? (
+                        <p className={styles.error} role="alert" style={{ marginBottom: 'var(--xc-space-2)' }}>
+                            {genError}
+                        </p>
+                    ) : null}
                     <Button
                         variant="secondary"
                         block
                         onClick={openGen}
-                        disabled={!activeChainId}
+                        disabled={!activeChainId || genBusy}
+                        loading={genBusy}
                     >
                         New address
                     </Button>
