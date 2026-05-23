@@ -1,0 +1,48 @@
+.header {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: var(--xc-space-2);
+    width: 100%;
+    max-width: 1080px;
+    margin: 0 auto;
+}
+
+.back {
+    justify-self: start;
+    background: transparent;
+    border: none;
+    color: var(--xc-accent-primary);
+    font-size: var(--xc-text-sm);
+    cursor: pointer;
+    /* Zero left padding + negative inline-start margin so the chevron's
+       left edge aligns with the AppHeader logo above. AppHeader pads the
+       outer bar by space-3; Screen.header pads by space-4. The delta
+       (space-3 − space-4) pulls this button leftward enough that the
+       icon glyph lines up with the logo's left edge. */
+    padding: var(--xc-space-1) var(--xc-space-2) var(--xc-space-1) 0;
+    margin-inline-start: calc(var(--xc-space-3) - var(--xc-space-4));
+    border-radius: var(--xc-radius-sm);
+    transition: color 0.12s ease;
+}
+
+.back:hover {
+    background: transparent;
+    color: color-mix(in srgb, var(--xc-accent-primary) 70%, white 30%);
+}
+
+.back:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
+.title {
+    font-weight: 700;
+    font-size: var(--xc-text-lg);
+    color: var(--xc-text);
+    text-align: center;
+}
+
+.spacer {
+    display: block;
+}

@@ -30,10 +30,14 @@ export function QrScanner({ onFrame, autoStart = true, width = 320, alt = 'QR sc
     const videoRef = useRef(/** @type {HTMLVideoElement | null} */ (null));
     const [running, setRunning] = useState(false);
     const [error, setError] = useState(/** @type {string | null} */ (null));
-    const supported = typeof window !== 'undefined'
-        && typeof window.BarcodeDetector === 'function'
-        && typeof navigator !== 'undefined'
+    const hasBarcodeDetector = typeof window !== 'undefined'
+        && typeof window.BarcodeDetector === 'function';
+    const hasGetUserMedia = typeof navigator !== 'undefined'
         && typeof navigator.mediaDevices?.getUserMedia === 'function';
+    const isSecureContext = typeof window !== 'undefined'
+        && (window.isSecureContext === true
+            || ['localhost', '127.0.0.1', '[::1]'].includes(window.location?.hostname));
+    const supported = hasBarcodeDetector && hasGetUserMedia && isSecureContext;
 
     useEffect(() => {
         if (!supported || !autoStart) return undefined;
@@ -114,16 +118,51 @@ export function QrScanner({ onFrame, autoStart = true, width = 320, alt = 'QR sc
     }, [supported, autoStart, onFrame]);
 
     if (!supported) {
+        let reason;
+        if (!isSecureContext) {
+            const origin = typeof window !== 'undefined' ? window.location?.origin : '';
+            reason = (
+                <>
+                    Camera scanning requires a <strong>secure context</strong>{' '}
+                    (HTTPS, or <code>localhost</code>). This page is loaded from{' '}
+                    <code>{origin}</code> which browsers treat as insecure, so
+                    <code>getUserMedia</code> and <code>BarcodeDetector</code> are
+                    blocked. Either open the wallet via <code>https://</code> or
+                    <code>http://localhost</code>, or add this origin to Chrome's
+                    {' '}<code>chrome://flags/#unsafely-treat-insecure-origin-as-secure</code>.
+                </>
+            );
+        } else if (!hasBarcodeDetector) {
+            reason = (
+                <>
+                    Camera scanning needs the <code>BarcodeDetector</code> API. Use a
+                    Chromium-based browser (Chrome, Edge, modern Opera) or paste the
+                    payload below instead.
+                </>
+            );
+        } else {
+            reason = (
+                <>
+                    Camera access isn't available on this browser. Paste the QR
+                    contents below instead.
+                </>
+            );
+        }
         return (
             <div
                 role="status"
                 aria-label={`${alt} — unsupported`}
                 data-testid="qr-scanner-unsupported"
-                style={{ padding: '1rem', fontSize: '0.85rem', color: '#64748B' }}
+                style={{
+                    padding: '0.75rem',
+                    fontSize: '0.85rem',
+                    color: 'var(--xc-text)',
+                    lineHeight: 1.4,
+                    background: 'var(--xc-bg-muted)',
+                    borderRadius: 'var(--xc-radius-sm)',
+                }}
             >
-                Camera scanning isn't supported on this browser — paste XCW chunks
-                into the textarea below instead. Chromium-based browsers (Chrome,
-                Edge, modern Opera) expose the required `BarcodeDetector` API.
+                {reason}
             </div>
         );
     }

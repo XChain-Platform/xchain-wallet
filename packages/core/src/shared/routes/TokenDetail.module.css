@@ -50,8 +50,7 @@
     width: 1.75rem;
     height: 1.75rem;
     border-radius: 6px;
-    object-fit: cover;
-    background: var(--xc-bg-muted);
+    object-fit: contain;
     flex: 0 0 auto;
 }
 
@@ -187,10 +186,7 @@
     width: 4.5rem;
     height: 4.5rem;
     flex: 0 0 auto;
-    border-radius: 10px;
-    object-fit: cover;
-    background: rgba(255, 255, 255, 0.12);
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+    object-fit: contain;
 }
 
 .balanceHeroAmount {

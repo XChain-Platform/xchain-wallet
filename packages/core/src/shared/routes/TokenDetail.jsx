@@ -157,16 +157,25 @@ export function TokenDetail({
     // Header icon picks the smallest representation available: a TIS
     // `icon`-typed image first, then any other TIS image, then the
     // regex-extracted hero, then the balance-row image (demo SVG or
-    // pre-known URL). Renders nothing if none of those resolve.
+    // pre-known URL). For native coins the TIS lookup is skipped, so
+    // we fall back to the branded chain logo so BTC/LTC/DOGE always
+    // show the right glyph in the header + balance hero.
     const headerIconUrl = useMemo(() => {
         const tisImages = Array.isArray(assetInfo?.images) ? assetInfo.images : [];
         const iconHit = tisImages.find((i) => String(i?.type || '').toLowerCase() === 'icon');
-        return iconHit?.url
+        const fromTis = iconHit?.url
             || tisImages[0]?.url
             || assetInfo?.imageUrl
             || rowImageUrl
             || null;
-    }, [assetInfo, rowImageUrl]);
+        if (fromTis) return fromTis;
+        if (isNative) {
+            return branding.chainIconLargeUrl(chainId)
+                || branding.chainIconSmallUrl(chainId)
+                || null;
+        }
+        return null;
+    }, [assetInfo, rowImageUrl, isNative, chainId]);
 
     const header = (
         <div className={styles.header}>

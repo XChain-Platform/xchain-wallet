@@ -17,14 +17,8 @@ import { Screen, Button, Icon, QrScanner, StatusMessage } from '@xchain-wallet/c
 import { detectQrContent } from '../../uri/detectQrContent.js';
 import { parseXchainUri } from '../../uri/xchainUri.js';
 import { t } from '../../i18n/index.js';
+import scanStyles from './ScanRoute.module.css';
 
-const HEADER = {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 'var(--xc-space-2)',
-    padding: 'var(--xc-space-2) var(--xc-space-3)',
-};
-const TITLE = { flex: 1, fontWeight: 600, fontSize: 'var(--xc-text-base)' };
 const BODY = {
     display: 'flex',
     flexDirection: 'column',
@@ -168,18 +162,21 @@ export function ScanRoute({ onClassified, onBack, chainRegistry }) {
     }, [classify, paste]);
 
     const header = useMemo(() => (
-        <div style={HEADER}>
+        <div className={scanStyles.header}>
             {onBack ? (
-                <Button
-                    size="sm"
-                    variant="ghost"
+                <button
+                    type="button"
                     onClick={onBack}
+                    className={scanStyles.back}
                     aria-label={t('common.back')}
                 >
                     <Icon.BackIcon />
-                </Button>
-            ) : null}
-            <span style={TITLE}>{t('scan.title')}</span>
+                </button>
+            ) : (
+                <span className={scanStyles.spacer} />
+            )}
+            <span className={scanStyles.title}>{t('scan.title')}</span>
+            <span className={scanStyles.spacer} />
         </div>
     ), [onBack]);
 

@@ -1,8 +1,22 @@
-// Inline SVG icon set. Hand-rolled (no icon-library dep) so the
-// bundle stays tight and we control stroke / fill / sizing centrally.
-// Every icon is a 24×24 viewBox, `currentColor`-driven so they pick up
-// the parent button's text colour automatically. Add new icons here
-// rather than inlining SVG at call sites.
+// Icon set. The wallet started with hand-rolled inline SVGs; the
+// scoped migration adopts `lucide-react` (MIT licensed, vendored at
+// install-time so the wallet has no runtime icon-service dependency)
+// for the most prominent action icons while leaving the remaining
+// hand-rolled glyphs in place. Export names stay stable so call sites
+// pick up the swap transparently.
+//
+// Lucide defaults: 24×24 viewBox, 2px stroke, currentColor, round
+// caps/joins — matches STROKE_PROPS exactly. Each migrated icon below
+// passes `size={18}` to land on the wallet's 18×18 render size.
+import {
+    QrCode as LucideQrCode,
+    Menu as LucideMenu,
+    Send as LucideSend,
+    ArrowDownToLine as LucideArrowDownToLine,
+    DollarSign as LucideDollarSign,
+    MoreHorizontal as LucideMoreHorizontal,
+    Filter as LucideFilter,
+} from 'lucide-react';
 
 const STROKE_PROPS = {
     width: 18,
@@ -13,6 +27,14 @@ const STROKE_PROPS = {
     strokeWidth: 2,
     strokeLinecap: 'round',
     strokeLinejoin: 'round',
+    'aria-hidden': 'true',
+};
+
+// Lucide wrapper — matches the hand-rolled icons' 18×18 render + 2px
+// stroke so swapping a single icon doesn't disturb surrounding layout.
+const LUCIDE_PROPS = {
+    size: 18,
+    strokeWidth: 2,
     'aria-hidden': 'true',
 };
 
@@ -62,22 +84,11 @@ export function CheckIcon() {
 }
 
 export function SendIcon() {
-    return (
-        <svg {...STROKE_PROPS}>
-            <path d="m22 2-7 20-4-9-9-4 20-7Z" />
-            <path d="M22 2 11 13" />
-        </svg>
-    );
+    return <LucideSend {...LUCIDE_PROPS} />;
 }
 
 export function ReceiveIcon() {
-    return (
-        <svg {...STROKE_PROPS}>
-            <path d="M12 4v12" />
-            <path d="m6 12 6 6 6-6" />
-            <path d="M4 20h16" />
-        </svg>
-    );
+    return <LucideArrowDownToLine {...LUCIDE_PROPS} />;
 }
 
 export function CopyIcon() {
@@ -90,15 +101,7 @@ export function CopyIcon() {
 }
 
 export function ScanIcon() {
-    return (
-        <svg {...STROKE_PROPS}>
-            <path d="M3 7V5a2 2 0 0 1 2-2h2" />
-            <path d="M17 3h2a2 2 0 0 1 2 2v2" />
-            <path d="M21 17v2a2 2 0 0 1-2 2h-2" />
-            <path d="M7 21H5a2 2 0 0 1-2-2v-2" />
-            <line x1="3" y1="12" x2="21" y2="12" />
-        </svg>
-    );
+    return <LucideQrCode {...LUCIDE_PROPS} />;
 }
 
 export function CameraIcon() {
@@ -207,23 +210,11 @@ export function StakeIcon() {
 }
 
 export function MoreIcon() {
-    return (
-        <svg {...STROKE_PROPS}>
-            <circle cx="6" cy="12" r="1.5" />
-            <circle cx="12" cy="12" r="1.5" />
-            <circle cx="18" cy="12" r="1.5" />
-        </svg>
-    );
+    return <LucideMoreHorizontal {...LUCIDE_PROPS} />;
 }
 
 export function MenuIcon() {
-    return (
-        <svg {...STROKE_PROPS}>
-            <line x1="4" y1="7" x2="20" y2="7" />
-            <line x1="4" y1="12" x2="20" y2="12" />
-            <line x1="4" y1="17" x2="20" y2="17" />
-        </svg>
-    );
+    return <LucideMenu {...LUCIDE_PROPS} />;
 }
 
 /* ------------------------------------------------------------------ *
@@ -578,11 +569,7 @@ export function SearchIcon() {
 }
 
 export function FilterIcon() {
-    return (
-        <svg {...STROKE_PROPS}>
-            <path d="M3 4h18l-7 9v6l-4-2v-4Z" />
-        </svg>
-    );
+    return <LucideFilter {...LUCIDE_PROPS} />;
 }
 
 export function InfoIcon() {
@@ -596,12 +583,7 @@ export function InfoIcon() {
 }
 
 export function DollarIcon() {
-    return (
-        <svg {...STROKE_PROPS}>
-            <line x1="12" y1="3" x2="12" y2="21" />
-            <path d="M17 7H9.5a2.5 2.5 0 0 0 0 5h5a2.5 2.5 0 0 1 0 5H7" />
-        </svg>
-    );
+    return <LucideDollarSign {...LUCIDE_PROPS} />;
 }
 
 export function UsersIcon() {

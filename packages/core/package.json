@@ -27,6 +27,7 @@
         "@scure/bip32": "^1.5.0",
         "@scure/bip39": "^1.4.0",
         "lightweight-charts": "^4.2.0",
+        "lucide-react": "^1.16.0",
         "pako": "^1.0.11",
         "qrcode": "^1.5.4"
     },
