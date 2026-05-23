@@ -6,6 +6,10 @@
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-md);
     padding: var(--xc-space-2) var(--xc-space-3);
+    /* Pulls the chart up under the TotalBalanceHero's box-shadow halo
+       so the visible gap above the chart matches the gap to the action
+       buttons below it. */
+    margin-top: -6px;
 }
 
 .change {

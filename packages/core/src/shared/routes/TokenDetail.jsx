@@ -10,6 +10,7 @@ import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { useNativePrice } from '../hooks/useNativePrice.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
+import { usePortfolioChartVisible } from '../hooks/usePortfolioChartVisible.js';
 import styles from './TokenDetail.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -218,19 +219,22 @@ export function TokenDetail({
     // Default lands on Info because the TIS content is the richest surface;
     // when a token has no TIS payload the panel renders an empty-state hint.
     const tabs = isNative
-        ? null
+        ? [
+            { id: 'details', label: 'Details' },
+        ]
         : [
             { id: 'about', label: 'About' },
             { id: 'media', label: 'Media' },
             { id: 'details', label: 'Details' },
             { id: 'holders', label: 'Unlock' },
         ];
-    const [activeTab, setActiveTab] = useState(tabs ? 'about' : 'details');
+    const [activeTab, setActiveTab] = useState(isNative ? 'details' : 'about');
     useEffect(() => {
         if (activeTab === 'holders') setHoldersOpen(true);
     }, [activeTab]);
 
     const [balanceHidden, toggleBalanceHidden] = useBalancesHidden();
+    const [chartVisible, toggleChartVisible] = usePortfolioChartVisible();
     // Tap the amount to swap primary / secondary. Default: tick units
     // (matches the BalanceList convention; users opening Bitcoin expect
     // to see how much BTC they hold first, USD second). Fiat-as-primary
@@ -314,6 +318,16 @@ export function TokenDetail({
                                 <button
                                     type="button"
                                     className={styles.balanceHeroEye}
+                                    onClick={toggleChartVisible}
+                                    aria-pressed={chartVisible ? 'true' : 'false'}
+                                    aria-label={chartVisible ? 'Hide chart' : 'Show chart'}
+                                    title={chartVisible ? 'Hide chart' : 'Show chart'}
+                                >
+                                    <Icon.LineChartIcon />
+                                </button>
+                                <button
+                                    type="button"
+                                    className={styles.balanceHeroEye}
                                     onClick={toggleBalanceHidden}
                                     aria-label={balanceHidden ? 'Show balance' : 'Hide balance'}
                                     title={balanceHidden ? 'Show balance' : 'Hide balance'}
@@ -344,6 +358,27 @@ export function TokenDetail({
                         ) : null}
                     </div>
                 </section>
+
+                {/* Market section — stats strip + sparkline. Sits above
+                    the quick actions and is collapsible via the chart-icon
+                    button in the balance hero (same hook the Home portfolio
+                    chart uses, so the toggle persists across both surfaces). */}
+                {chartVisible ? (
+                    <div className={styles.infoCard}>
+                        <MarketPanel
+                            isNative={isNative}
+                            nativePrice={nativePrice}
+                            showNativeStats={showNativeStats}
+                            showSparkline={showSparkline}
+                            assetInfo={assetInfo}
+                            tick={tick}
+                            chainId={chainId}
+                            hasMarketData={hasMarketData}
+                            fiatRate={fiatRate}
+                            fiatCurrency={fiatCurrency}
+                        />
+                    </div>
+                ) : null}
 
                 {/* Quick actions — Send / Receive / Swap / Buy, matching
                     Home's 4-up grid. */}
@@ -395,32 +430,11 @@ export function TokenDetail({
                     </div>
                 </div>
 
-                {/* Market section — stats strip + sparkline chart at the
-                    top of the page for every tick, so users see price /
-                    24h / chart immediately the same way the Coins detail
-                    surface does. Tokens synthesize a sparkline keyed on
-                    tick+chain when no real history feed exists yet. */}
-                <div className={styles.infoCard}>
-                    <MarketPanel
-                        isNative={isNative}
-                        nativePrice={nativePrice}
-                        showNativeStats={showNativeStats}
-                        showSparkline={showSparkline}
-                        assetInfo={assetInfo}
-                        tick={tick}
-                        chainId={chainId}
-                        hasMarketData={hasMarketData}
-                        fiatRate={fiatRate}
-                        fiatCurrency={fiatCurrency}
-                    />
-                </div>
-
-                {tabs ? (
-                    <>
-                        {/* Tabs — matches HomeTabs visual rhythm. Tokens
-                            keep Info + Holders here below the Market
-                            section above. */}
-                        <div className={styles.tabs} role="tablist" aria-label="Token detail view">
+                {/* Tabs — matches HomeTabs visual rhythm. Native coins
+                    get a single Details tab; tokens add About / Media /
+                    Unlock so the per-asset content surfaces in tab form
+                    rather than stacking. */}
+                <div className={styles.tabs} role="tablist" aria-label="Token detail view">
                             {tabs.map((t) => (
                                 <button
                                     key={t.id}
@@ -496,26 +510,6 @@ export function TokenDetail({
                                 </>
                             ) : null}
                         </div>
-                    </>
-                ) : (
-                    /* Native coin: no tabs. Details panel stacks below the
-                       Market section that already rendered above. */
-                    <div className={styles.infoCard}>
-                        <DetailsPanel
-                            tick={tick}
-                            displayName={displayName}
-                            descriptor={descriptor}
-                            chainId={chainId}
-                            kind={kind}
-                            isNative={isNative}
-                            assetInfo={assetInfo}
-                            quantity={quantity}
-                            divisibility={divisibility}
-                            fiat={fiat}
-                            fiatCurrency={fiatCurrency}
-                        />
-                    </div>
-                )}
 
             </div>
         </Screen>
@@ -576,7 +570,7 @@ function MarketPanel({ isNative, nativePrice, showSparkline, assetInfo, tick, ch
                 </section>
                 {sparkline ? (
                     <div className={styles.chart} aria-label="7-day price chart">
-                        <Sparkline series={sparkline} />
+                        <Sparkline series={sparkline} height={40} />
                     </div>
                 ) : null}
                 {hint ? <p className={styles.muted}>{hint}</p> : null}
@@ -628,7 +622,7 @@ function MarketPanel({ isNative, nativePrice, showSparkline, assetInfo, tick, ch
             </section>
             {sparkline ? (
                 <div className={styles.chart} aria-label="7-day price chart">
-                    <Sparkline series={sparkline} />
+                    <Sparkline series={sparkline} height={40} />
                 </div>
             ) : null}
             {hint ? <p className={styles.muted}>{hint}</p> : null}
