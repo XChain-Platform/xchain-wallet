@@ -18,13 +18,14 @@ import {
     isDemoGatedActionIndex,
 } from './demoGatedContent.js';
 
+import { createHash } from 'crypto';
+
 const KEY_CACHE = /** @type {Map<string, Buffer>} */ (new Map());
 const PT_CACHE  = /** @type {Map<string, Uint8Array>} */ (new Map());
 
-const HANDOFF_TYPE = 'xchain.gated_keys.v1';
-
 function keyKey(address, keyHash) { return address + '|' + String(keyHash).toLowerCase(); }
 function ptKey(address, actionIndex) { return address + '|' + String(actionIndex); }
+function sha256Hex(buf) { return createHash('sha256').update(buf).digest('hex'); }
 
 export function clearGatedContentCaches() {
     KEY_CACHE.clear();
@@ -45,11 +46,13 @@ export function getCachedGatedKey(address, keyHash) {
 }
 
 /**
- * Scan the holder's MESSAGEs (auto-decrypted by the SDK) for any
- * `xchain.gated_keys.v1` payloads and populate the per-address key
- * cache. Returns the map of keyHash → key Buffer that was discovered
- * in this scan. Subsequent unlock calls can reuse the cache without
- * re-scanning. Safe to call multiple times.
+ * Scan the holder's MESSAGEs (auto-decrypted by the SDK) for binary
+ * key-handoff payloads and populate the per-address key cache. Each
+ * ECIES MESSAGE addressed to the holder is treated as a candidate
+ * handoff: the binary payload is parsed into 32-byte keys, each is
+ * hashed, and the resulting (address, sha256(K)) → K entry lands in
+ * the cache. Returns the map of keyHash → key Buffer discovered in
+ * this scan. Safe to call multiple times.
  *
  * @param {{
  *   sdk: import('xchain-sdk').XChainSDK,
@@ -66,7 +69,9 @@ export async function scanGatedKeyHandoffs({ sdk, address, wif, opts }) {
 
     const found = /** @type {Record<string, Buffer>} */ ({});
     // Pull MESSAGEs addressed to this address (received). The SDK
-    // auto-decrypts ECIES (method 1) entries when wif is supplied.
+    // auto-decrypts ECIES (method 1) entries when wif is supplied and
+    // exposes the raw plaintext via msg.bytes so binary key-handoff
+    // payloads survive without utf8 corruption.
     const messages = await sdk.getMessagesForAddress(
         address,
         { ...(opts || {}), wif, type: 'received' },
@@ -74,24 +79,17 @@ export async function scanGatedKeyHandoffs({ sdk, address, wif, opts }) {
     if (!Array.isArray(messages)) return found;
 
     for (const msg of messages) {
-        // Only ECIES messages with a successfully-decrypted plaintext
-        // can carry key handoffs. Skip everything else.
-        const plaintext = msg && typeof msg.text === 'string' ? msg.text : null;
-        if (!plaintext) continue;
-        let parsed;
-        try { parsed = JSON.parse(plaintext); } catch (_e) { continue; }
-        if (!parsed || parsed.type !== HANDOFF_TYPE) continue;
-        const keys = parsed.keys && typeof parsed.keys === 'object' ? parsed.keys : null;
-        if (!keys) continue;
-        for (const hashRaw of Object.keys(keys)) {
-            const hash = String(hashRaw).toLowerCase();
-            const b64 = keys[hashRaw];
-            if (typeof b64 !== 'string') continue;
-            let key;
-            try { key = Buffer.from(b64, 'base64'); } catch (_e) { continue; }
+        const bytes = msg && Buffer.isBuffer(msg.bytes) ? msg.bytes : null;
+        if (!bytes) continue;
+
+        let candidateKeys;
+        try { candidateKeys = sdk.gatedFile.parseKeyPayload(bytes); }
+        catch (_e) { continue; }
+        if (!Array.isArray(candidateKeys) || candidateKeys.length === 0) continue;
+
+        for (const key of candidateKeys) {
             if (!Buffer.isBuffer(key) || key.length !== 32) continue;
-            // Verify key matches its claimed hash (defends against malformed payloads).
-            if (!sdk.gatedFile.verifyKey(key, hash)) continue;
+            const hash = sha256Hex(key);
             found[hash] = key;
             KEY_CACHE.set(keyKey(address, hash), key);
         }
@@ -186,16 +184,21 @@ export async function unlockGatedPack({ sdk, address, wif, keyHash, fileEntries 
 }
 
 /**
- * Build the JSON payload an issuer or current holder sends to a
+ * Build the binary payload an issuer or current holder sends to a
  * recipient inside an ECIES MESSAGE alongside a SEND of a gated token.
- * The payload covers every distinct KEY_HASH the recipient needs to
- * unlock all gated files for the token.
+ * The payload covers every distinct K the recipient needs to unlock
+ * all gated files for the token. The recipient hashes each 32-byte
+ * candidate to identify which gated FILE it unlocks.
+ *
+ * Pass the returned Buffer as the `message` field of `sdk.sendMessage`
+ * (or `messaging.send`) — the messaging layer detects the Buffer and
+ * encrypts via the binary ECIES path so the bytes survive intact.
  *
  * @param {{
  *   sdk: import('xchain-sdk').XChainSDK,
  *   keysByHash: Record<string, Buffer>,
  * }} params
- * @returns {string} JSON string ready for ECIES encryption
+ * @returns {Buffer} Binary payload ready for ECIES encryption.
  */
 export function buildKeyHandoffPayload({ sdk, keysByHash }) {
     if (!sdk) throw new Error('buildKeyHandoffPayload: sdk is required');
