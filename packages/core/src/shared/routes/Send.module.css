@@ -81,6 +81,16 @@
     margin-top: var(--xc-space-4);
 }
 
+.actionsBar {
+    margin-top: var(--xc-space-3);
+}
+
+.actionsBarFull {
+    max-width: 560px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
 .summary {
     font-size: var(--xc-text-md);
     font-weight: 600;
@@ -233,7 +243,8 @@
    block we want the footer (USD / balance / Max) flush under the
    field, so zero that out via a structural selector — overriding the
    CSS-module class name from outside isn't reachable. */
-.amountBlock > div:first-child {
+.amountBlock > div:first-child,
+.amountFieldWrap > div:first-child {
     margin-bottom: 0;
 }
 
@@ -378,12 +389,11 @@
 
 .amountFooter {
     display: flex;
-    justify-content: flex-end;
+    justify-content: space-between;
     align-items: center;
     gap: var(--xc-space-3);
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
-    margin-top: 4px;
     margin-top: 4px;
 }
 
@@ -393,8 +403,22 @@
     gap: var(--xc-space-2);
 }
 
-.amountMaxButton {
-    padding: 2px var(--xc-space-2);
+.amountFieldWrap {
+    position: relative;
+}
+
+.amountMaxInline {
+    position: absolute;
+    right: var(--xc-space-2);
+    /* Stretch between the bottom of the label area and the bottom of
+       the input (Input.field has gap space-1 below the label and
+       margin-bottom space-3 below the input). The bigField label is
+       text-md / weight 600 — 1rem × 1.5 line-height matches. */
+    top: calc(1rem * 1.5 + var(--xc-space-2));
+    bottom: var(--xc-space-3);
+    display: inline-flex;
+    align-items: center;
+    padding: 0 var(--xc-space-3);
     border: 1px solid var(--xc-accent-primary);
     border-radius: var(--xc-radius-sm);
     background: var(--xc-accent-primary);
@@ -404,12 +428,12 @@
     cursor: pointer;
 }
 
-.amountMaxButton:hover:not(:disabled) {
+.amountMaxInline:hover:not(:disabled) {
     background: color-mix(in srgb, var(--xc-accent-primary) 85%, white 15%);
     border-color: color-mix(in srgb, var(--xc-accent-primary) 85%, white 15%);
 }
 
-.amountMaxButton:disabled {
+.amountMaxInline:disabled {
     opacity: 0.5;
     cursor: not-allowed;
 }

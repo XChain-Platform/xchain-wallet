@@ -876,11 +876,12 @@ export function Send({ walletId, onBack, prefill = null }) {
         />
     );
 
-    const wrap = (children) => (
+    const wrap = (children, footer = null) => (
         <Screen variant={variant} header={header}>
             <div className={`${styles.card} ${isFull ? styles.cardFull : styles.cardSmall}`}>
                 {children}
             </div>
+            {footer}
         </Screen>
     );
 
@@ -1332,7 +1333,7 @@ export function Send({ walletId, onBack, prefill = null }) {
     ) : null;
     const hasTokenSelected = !!chainId && !!tick.trim();
     return wrap(
-        <form onSubmit={handleReview} noValidate>
+        <form id="send-form" onSubmit={handleReview} noValidate>
             {draftBanner}
             <SelectedTokenHero
                 chainId={chainId}
@@ -1467,19 +1468,33 @@ export function Send({ walletId, onBack, prefill = null }) {
                 />
             ) : null}
             <div className={`${styles.amountBlock} ${styles.bigField}`}>
-                <Input
-                    label="Amount"
-                    inputMode="decimal"
-                    value={amount}
-                    onChange={(e) => onCoinInputChange(e.target.value)}
-                    autoComplete="off"
-                    placeholder="0.00"
-                    style={{
-                        fontSize: 'var(--xc-text-lg)',
-                        padding: 'var(--xc-space-3) var(--xc-space-4)',
-                        minHeight: '48px',
-                    }}
-                />
+                <div className={styles.amountFieldWrap}>
+                    <Input
+                        label="Amount"
+                        inputMode="decimal"
+                        value={amount}
+                        onChange={(e) => onCoinInputChange(e.target.value)}
+                        autoComplete="off"
+                        placeholder="0.00"
+                        style={{
+                            fontSize: 'var(--xc-text-lg)',
+                            paddingTop: 'var(--xc-space-3)',
+                            paddingBottom: 'var(--xc-space-3)',
+                            paddingLeft: 'var(--xc-space-4)',
+                            paddingRight: '64px',
+                            minHeight: '48px',
+                        }}
+                    />
+                    <button
+                        type="button"
+                        className={styles.amountMaxInline}
+                        onClick={onMax}
+                        disabled={!sourceBalance}
+                        aria-label="Use max available amount"
+                    >
+                        Max
+                    </button>
+                </div>
                 <div className={styles.amountFooter}>
                     <span>
                         {fiatRate && amount && coinToFiat(amount, fiatRate) != null
@@ -1496,15 +1511,6 @@ export function Send({ walletId, onBack, prefill = null }) {
                                 : sourceBalance
                                     ? `${sourceBalance.amount} ${sourceBalance.tick} available`
                                     : `0 ${(tick.trim().toUpperCase()) || ''} available`.replace(/\s+/g, ' ').trim()}
-                        <button
-                            type="button"
-                            className={styles.amountMaxButton}
-                            onClick={onMax}
-                            disabled={!sourceBalance}
-                            aria-label="Use max available amount"
-                        >
-                            Max
-                        </button>
                     </span>
                 </div>
             </div>
@@ -1513,7 +1519,7 @@ export function Send({ walletId, onBack, prefill = null }) {
                     tiers={feeTiers}
                     value={feePick}
                     onChange={setFeePick}
-                    placeholderBadge={feeEstimate?.source === 'static-placeholder'}
+                    customEstimate={feePick.mode === 'custom' ? feeEstimate : null}
                     formatFiat={(coinAmount) => {
                         if (!fiatRate || !coinAmount) return null;
                         const v = coinToFiat(String(coinAmount), fiatRate);
@@ -1544,16 +1550,18 @@ export function Send({ walletId, onBack, prefill = null }) {
                     {formError}
                 </StatusMessage>
             ) : null}
-            <div className={styles.actions}>
-                <Button
-                    type="submit"
-                    variant="primary"
-                    disabled={!fromAddress || !toAddress || !amount}
-                >
-                    Review
-                </Button>
-            </div>
         </form>,
+        <div className={`${styles.actionsBar} ${isFull ? styles.actionsBarFull : ''}`.trim()}>
+            <Button
+                type="submit"
+                form="send-form"
+                variant="primary"
+                block
+                disabled={!fromAddress || !toAddress || !amount}
+            >
+                Review
+            </Button>
+        </div>,
     );
 }
 

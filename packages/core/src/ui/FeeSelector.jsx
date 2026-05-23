@@ -1,20 +1,22 @@
 import { useId, useMemo } from 'react';
-import { InfoTip } from './InfoTip.jsx';
 import styles from './FeeSelector.module.css';
 
-const SPEEDS = ['low', 'normal', 'fast'];
-const SPEED_LABELS = { low: 'Low', normal: 'Normal', fast: 'Fast' };
+const TIER_SPEEDS = ['low', 'normal', 'fast'];
+const SPEEDS = [...TIER_SPEEDS, 'custom'];
+const SPEED_LABELS = { low: 'Low', normal: 'Normal', fast: 'Fast', custom: 'Custom' };
+const MAX_INDEX = SPEEDS.length - 1;
 
 /**
- * FeeSelector — §44.2 Low / Normal / Fast slider + separate Custom
- * toggle. Rendering is driven by `tiers` from
+ * FeeSelector — §44.2 Low / Normal / Fast / Custom slider. Rendering
+ * is driven by `tiers` from
  * `flows/feeEstimate.estimateNativeSendFeeTiers`; selection writes
  * back via `onChange`.
  *
- * The slider has three discrete stops (low / normal / fast); the
- * active stop's rate + ETA + fee amount are shown below the track. A
- * checkbox underneath flips the picker into Custom mode, hiding the
- * slider and revealing a sat/vB (or equivalent) input.
+ * The slider has four discrete stops (low / normal / fast / custom).
+ * For the three tier stops the active rate + ETA + fee amount are
+ * shown under the track. When the user lands on Custom, a sat/vB (or
+ * equivalent) input appears in place of the readout so the rate can
+ * be edited directly.
  *
  * The component is presentation-only — it does NOT compute fees
  * itself. Callers fetch tiers via `estimateNativeSendFeeTiers` and
@@ -25,8 +27,11 @@ const SPEED_LABELS = { low: 'Low', normal: 'Normal', fast: 'Fast' };
  *   - tiers      `{ low, normal, fast, unit }` from estimateNativeSendFeeTiers
  *   - value      `{ mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }`
  *   - onChange   `(next) => void` — same shape as `value`
+ *   - customEstimate  optional `FeeEstimate` for Custom mode — when provided,
+ *                     its `coinAmount` + (via `formatFiat`) fiat figure render
+ *                     in the same readout slot the tier modes use, so the live
+ *                     fee stays visible as the user edits the rate.
  *   - disabled   `boolean`
- *   - placeholderBadge  `boolean` — when true, renders a "(placeholder rate)" hint under the tiers; surfaces use this until §44 SDK fee fetch lands
  *
  * @typedef {object} FeeSelectorValue
  * @property {'low' | 'normal' | 'fast' | 'custom'} mode
@@ -36,17 +41,15 @@ export function FeeSelector({
     tiers,
     value,
     onChange,
+    customEstimate = null,
     disabled = false,
-    placeholderBadge = false,
     formatFiat,
 }) {
-    const labelId = useId();
     const customInputId = useId();
-    const customToggleId = useId();
 
     const tierList = useMemo(() => {
         if (!tiers) return [];
-        return SPEEDS
+        return TIER_SPEEDS
             .map((speed) => ({ speed, estimate: tiers[speed] }))
             .filter((t) => t.estimate);
     }, [tiers]);
@@ -54,7 +57,6 @@ export function FeeSelector({
     if (!tiers || tierList.length === 0) {
         return (
             <div className={styles.wrap}>
-                <span className={styles.label} id={labelId}>Network fee</span>
                 <p className={styles.placeholder}>Fee estimate unavailable for this chain.</p>
             </div>
         );
@@ -62,25 +64,29 @@ export function FeeSelector({
 
     const mode = value?.mode || 'normal';
     const isCustom = mode === 'custom';
-    const sliderSpeed = isCustom ? 'normal' : (SPEEDS.includes(mode) ? mode : 'normal');
+    const sliderSpeed = SPEEDS.includes(mode) ? mode : 'normal';
     const sliderIndex = SPEEDS.indexOf(sliderSpeed);
-    const activeEstimate = tiers[sliderSpeed];
+    const activeEstimate = isCustom ? customEstimate : tiers[sliderSpeed];
 
-    const onSliderChange = (raw) => {
-        const i = Number(raw);
-        const nextSpeed = SPEEDS[Math.max(0, Math.min(2, i))] || 'normal';
-        onChange({ mode: nextSpeed });
+    const seedCustomRate = () => (
+        value?.customRate
+        ?? tiers.normal?.rateValue
+        ?? tiers.fast?.rateValue
+        ?? tiers.low?.rateValue
+        ?? 0
+    );
+
+    const pickSpeed = (speed) => {
+        if (speed === 'custom') {
+            onChange({ mode: 'custom', customRate: seedCustomRate() });
+        } else {
+            onChange({ mode: speed });
+        }
     };
 
-    const onCustomToggle = (checked) => {
-        if (checked) {
-            onChange({
-                mode: 'custom',
-                customRate: value?.customRate ?? tiers.normal?.rateValue,
-            });
-        } else {
-            onChange({ mode: 'normal' });
-        }
+    const onSliderChange = (raw) => {
+        const i = Math.max(0, Math.min(MAX_INDEX, Number(raw)));
+        pickSpeed(SPEEDS[i] || 'normal');
     };
 
     const onCustomRateChange = (raw) => {
@@ -90,99 +96,78 @@ export function FeeSelector({
 
     return (
         <div className={styles.wrap}>
-            <span className={styles.label} id={labelId}>
-                Network fee
-                <InfoTip
-                    aria="Network fee help"
-                    label="Higher fees confirm sooner. Low can take an hour or more under busy mempool conditions; Fast usually lands in the next 1–2 blocks. Custom lets you set a specific sat/vB rate."
-                />
-            </span>
-
-            {!isCustom ? (
-                <div className={styles.sliderBlock} data-active-speed={sliderSpeed}>
-                    <input
-                        type="range"
-                        min={0}
-                        max={2}
-                        step={1}
-                        value={sliderIndex}
-                        onChange={(e) => onSliderChange(e.target.value)}
-                        disabled={disabled}
-                        aria-labelledby={labelId}
-                        aria-valuetext={`${SPEED_LABELS[sliderSpeed]} — ${activeEstimate?.coinAmount ?? ''}${activeEstimate?.etaMinutes ? ` · ~${activeEstimate.etaMinutes} min` : ''}`}
-                        className={styles.slider}
-                    />
-                    <div className={styles.sliderTicks} aria-hidden="true">
-                        {SPEEDS.map((s) => (
-                            <button
-                                key={s}
-                                type="button"
-                                className={`${styles.sliderTick} ${sliderSpeed === s ? styles.sliderTickActive : ''}`.trim()}
-                                onClick={() => onChange({ mode: s })}
-                                disabled={disabled}
-                                tabIndex={-1}
-                            >
-                                {SPEED_LABELS[s]}
-                            </button>
-                        ))}
-                    </div>
-                    {activeEstimate ? (() => {
-                        const fiatStr = typeof formatFiat === 'function'
-                            ? formatFiat(activeEstimate.coinAmount)
-                            : null;
-                        return (
-                            <div className={styles.sliderReadout} role="status" aria-live="polite">
-                                <span className={styles.sliderReadoutPrimary}>
-                                    {activeEstimate.coinAmount}
-                                    {fiatStr ? (
-                                        <span className={styles.sliderReadoutFiat}> ({fiatStr})</span>
-                                    ) : null}
-                                    {activeEstimate.etaMinutes ? (
-                                        <span className={styles.sliderReadoutEta}> · ~{activeEstimate.etaMinutes} min</span>
-                                    ) : null}
-                                </span>
-                                <span className={styles.sliderReadoutRate}>{activeEstimate.rate}</span>
-                            </div>
-                        );
-                    })() : null}
-                </div>
-            ) : null}
-
-            <label className={styles.customToggle} htmlFor={customToggleId}>
+            <div className={styles.sliderBlock} data-active-speed={sliderSpeed}>
                 <input
-                    id={customToggleId}
-                    type="checkbox"
-                    role="switch"
-                    checked={isCustom}
-                    onChange={(e) => onCustomToggle(e.target.checked)}
+                    type="range"
+                    min={0}
+                    max={MAX_INDEX}
+                    step={1}
+                    value={sliderIndex}
+                    onChange={(e) => onSliderChange(e.target.value)}
                     disabled={disabled}
+                    aria-label="Network fee"
+                    aria-valuetext={isCustom
+                        ? `Custom — ${Number.isFinite(value?.customRate) ? value.customRate : ''} ${tiers.unit}`.trim()
+                        : `${SPEED_LABELS[sliderSpeed]} — ${activeEstimate?.coinAmount ?? ''}${activeEstimate?.etaMinutes ? ` · ~${activeEstimate.etaMinutes} min` : ''}`}
+                    className={styles.slider}
                 />
-                <span className={styles.customToggleLabel}>Custom rate</span>
-            </label>
-
-            {isCustom ? (
-                <div className={styles.customRow}>
-                    <input
-                        id={customInputId}
-                        type="number"
-                        inputMode="decimal"
-                        min={0}
-                        step={tiers.unit === 'DOGE/kB' ? 1 : 0.1}
-                        className={styles.customInput}
-                        value={Number.isFinite(value?.customRate) ? value.customRate : ''}
-                        onChange={(e) => onCustomRateChange(e.target.value)}
-                        aria-label={`Custom fee rate (${tiers.unit})`}
-                        disabled={disabled}
-                    />
-                    <span className={styles.customUnit}>{tiers.unit}</span>
+                <div className={styles.sliderTicks} aria-hidden="true">
+                    {SPEEDS.map((s) => (
+                        <button
+                            key={s}
+                            type="button"
+                            className={`${styles.sliderTick} ${sliderSpeed === s ? styles.sliderTickActive : ''}`.trim()}
+                            onClick={() => pickSpeed(s)}
+                            disabled={disabled}
+                            tabIndex={-1}
+                        >
+                            {SPEED_LABELS[s]}
+                        </button>
+                    ))}
                 </div>
-            ) : null}
-
-            {placeholderBadge ? (
-                <p className={styles.placeholder}>
-                    Placeholder rates — real SDK fee estimation lands in a later step.
-                </p>
-            ) : null}
+                {(isCustom || activeEstimate) ? (() => {
+                    const fiatStr = activeEstimate && typeof formatFiat === 'function'
+                        ? formatFiat(activeEstimate.coinAmount)
+                        : null;
+                    return (
+                        <div className={styles.sliderReadout} role="status" aria-live="polite">
+                            <span className={styles.sliderReadoutPrimary}>
+                                {activeEstimate ? (
+                                    <>
+                                        {activeEstimate.coinAmount}
+                                        {fiatStr ? (
+                                            <span className={styles.sliderReadoutFiat}> ({fiatStr})</span>
+                                        ) : null}
+                                        {activeEstimate.etaMinutes ? (
+                                            <span className={styles.sliderReadoutEta}> · ~{activeEstimate.etaMinutes} min</span>
+                                        ) : null}
+                                    </>
+                                ) : null}
+                            </span>
+                            {isCustom ? (
+                                <span className={styles.customRow}>
+                                    <input
+                                        id={customInputId}
+                                        type="number"
+                                        inputMode="decimal"
+                                        min={0}
+                                        step={tiers.unit === 'DOGE/kB' ? 1 : 0.1}
+                                        className={styles.customInput}
+                                        value={Number.isFinite(value?.customRate) ? value.customRate : ''}
+                                        onChange={(e) => onCustomRateChange(e.target.value)}
+                                        aria-label={`Custom fee rate (${tiers.unit})`}
+                                        disabled={disabled}
+                                        autoFocus
+                                    />
+                                    <span className={styles.customUnit}>{tiers.unit}</span>
+                                </span>
+                            ) : (
+                                <span className={styles.sliderReadoutRate}>{activeEstimate.rate}</span>
+                            )}
+                        </div>
+                    );
+                })() : null}
+            </div>
         </div>
     );
 }

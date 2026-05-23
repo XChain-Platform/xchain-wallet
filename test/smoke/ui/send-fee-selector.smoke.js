@@ -69,10 +69,5 @@ const formBlock = sendSrc.slice(formIdx, formIdx + 400);
 assert.match(formBlock, /tiers=\{feeTiers\}/);
 assert.match(formBlock, /value=\{feePick\}/);
 assert.match(formBlock, /onChange=\{setFeePick\}/);
-assert.match(
-    formBlock,
-    /placeholderBadge=\{feeEstimate\?\.source === 'static-placeholder'\}/,
-    'placeholder badge surfaces while source is static',
-);
 
 console.log('send-fee-selector smoke OK');
