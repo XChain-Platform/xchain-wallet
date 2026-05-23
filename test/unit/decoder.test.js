@@ -87,13 +87,17 @@ describe('decodeAction', () => {
 
     describe('fallback', () => {
         it('surfaces the "no plain-English" warning for unknown kinds', () => {
+            // Use a synthetic action name guaranteed to miss every
+            // friendly decoder so the fallback summary + warning render.
+            // ISSUE used to fit here, but it now gets a friendly
+            // "Configure token …" summary from the decoder.
             const d = decodeAction({
-                action: 'ISSUE',
-                params: { ASSET: 'NEWCOIN' },
+                action: 'NOT_A_REAL_ACTION',
+                params: { foo: 'bar' },
                 chainId: 'bitcoin-mainnet',
                 chainRegistry,
             });
-            expect(d.summary).toMatch(/^Sign ISSUE on Bitcoin$/);
+            expect(d.summary).toMatch(/^Sign NOT_A_REAL_ACTION on Bitcoin$/);
             expect(d.warnings[0]).toMatch(/no plain-english summary/i);
         });
 

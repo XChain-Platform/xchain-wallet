@@ -23,7 +23,11 @@ describe('<CopyButton>', () => {
     });
 
     it('flips label to "Copied" briefly after a successful write', async () => {
-        vi.useFakeTimers();
+        // `shouldAdvanceTime` lets fake setTimeout still tick along, which
+        // is what waitFor needs to poll the assertion. Without it the
+        // fake clock freezes both the component's feedbackMs timer AND
+        // waitFor's own polling loop, and the test deadlocks.
+        vi.useFakeTimers({ shouldAdvanceTime: true, advanceTimeDelta: 5 });
         try {
             render(<CopyButton value="x" feedbackMs={100} />);
             fireEvent.click(screen.getByRole('button'));

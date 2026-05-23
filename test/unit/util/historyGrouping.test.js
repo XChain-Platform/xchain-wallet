@@ -109,7 +109,14 @@ describe('shared/utils/historyGrouping', () => {
     });
 
     it('falls back to tick-only summary when a MINT amount is missing', () => {
+        // Two MINTs (one with a missing amount) so the group passes the
+        // minMembers threshold but the supply rollup degrades to the
+        // tick-only form per totalAmount()'s null-on-missing contract.
         const entries = [
+            entry({
+                chainId: BTC, actionIndex: 21, action: 'MINT', blockIndex: 210,
+                raw: { tick: 'MYTOKEN', source: 'src1', amount: '100' },
+            }),
             entry({
                 chainId: BTC, actionIndex: 20, action: 'MINT', blockIndex: 200,
                 raw: { tick: 'MYTOKEN', source: 'src1' /* no amount */ },
@@ -160,7 +167,15 @@ describe('shared/utils/historyGrouping', () => {
     });
 
     it('collapses ORDER + ORDER_MATCH fills via order_action_index', () => {
+        // Two ORDER_MATCH fills referencing the leader via
+        // order_action_index — single-fill groups are intentionally
+        // suppressed (impl historyGrouping.js:188) since collapsing
+        // ORDER + one MATCH would only add an extra click.
         const entries = [
+            entry({
+                chainId: BTC, actionIndex: 61, action: 'ORDER_MATCH', blockIndex: 510,
+                raw: { order_action_index: 5 },
+            }),
             entry({
                 chainId: BTC, actionIndex: 60, action: 'ORDER_MATCH', blockIndex: 500,
                 raw: { order_action_index: 5 },
@@ -174,7 +189,7 @@ describe('shared/utils/historyGrouping', () => {
         expect(out).toHaveLength(1);
         expect(out[0].kind).toBe('group');
         expect(out[0].subkind).toBe('order-fills');
-        expect(out[0].summary).toBe('Limit order — 1 fill');
+        expect(out[0].summary).toBe('Limit order — 2 fills');
     });
 
     it('collapses ORDER fills via the canonical tx0_index reference', () => {
@@ -196,15 +211,21 @@ describe('shared/utils/historyGrouping', () => {
     });
 
     it('emits a group at the position of its newest member so recent activity stays on top', () => {
-        // Unrelated SEND between MINTs and ISSUE — the group bubbles to
-        // the newest member (MINT-30) so the History feed keeps its
-        // "newest first" reading order; the SEND-25 follows.
+        // Two MINTs + an unrelated SEND between them and the ISSUE
+        // leader. The group needs ≥2 MINTs to render (impl:188), and
+        // when it does it bubbles to the newest member (MINT-30) so the
+        // History feed keeps its "newest first" reading order; the
+        // unrelated SEND-25 follows.
         const entries = [
             entry({
                 chainId: BTC, actionIndex: 30, action: 'MINT', blockIndex: 300,
                 raw: { tick: 'MYTOKEN', source: 'src1', amount: '100' },
             }),
             entry({ chainId: BTC, actionIndex: 25, action: 'SEND', blockIndex: 250 }),
+            entry({
+                chainId: BTC, actionIndex: 20, action: 'MINT', blockIndex: 200,
+                raw: { tick: 'MYTOKEN', source: 'src1', amount: '50' },
+            }),
             entry({
                 chainId: BTC, actionIndex: 10, action: 'ISSUE', blockIndex: 100,
                 source: 'src1', raw: { tick: 'MYTOKEN', source: 'src1' },
@@ -219,7 +240,12 @@ describe('shared/utils/historyGrouping', () => {
     });
 
     it('handles uppercase ACTION names', () => {
+        // Two uppercase-keyed MINTs so the group passes minMembers.
         const entries = [
+            entry({
+                chainId: BTC, actionIndex: 31, action: 'MINT',
+                raw: { TICK: 'MYTOKEN', SOURCE: 'src1', AMOUNT: '20' },
+            }),
             entry({
                 chainId: BTC, actionIndex: 30, action: 'MINT',
                 raw: { TICK: 'MYTOKEN', SOURCE: 'src1', AMOUNT: '50' },
@@ -232,7 +258,7 @@ describe('shared/utils/historyGrouping', () => {
         const out = groupHistoryEntries(entries, 'grouped');
         expect(out).toHaveLength(1);
         expect(out[0].kind).toBe('group');
-        expect(out[0].summary).toBe('Launched MYTOKEN (supply 50)');
+        expect(out[0].summary).toBe('Launched MYTOKEN (supply 70)');
     });
 
     // §28.3 / Cluster C FOLLOWUP 2 — cross-chain LINK pair grouping.
