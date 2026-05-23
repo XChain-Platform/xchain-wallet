@@ -12,6 +12,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, AddressText } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../useMessaging.js';
+import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { SignCredentials, isHwSource } from './SignCredentials.jsx';
 
 const POLL_INTERVAL_MS = 5000;
@@ -25,6 +26,7 @@ const POLL_INTERVAL_MS = 5000;
  */
 export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
     const { messaging } = useMessaging();
+    const [balancesHidden] = useBalancesHidden();
     const [addresses, setAddresses] = useState(/** @type {any[]} */ ([]));
     const [orders, setOrders] = useState(/** @type {any[]} */ ([]));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
@@ -160,11 +162,11 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                         <span style={{ color: r.side === 'buy' ? '#26a69a' : '#ef5350' }}>
                             {r.side === 'buy' ? 'Buy' : 'Sell'}
                         </span>
-                        <span>{r.price}</span>
-                        <span>{r.size}</span>
+                        <span>{balancesHidden ? '•••••' : r.price}</span>
+                        <span>{balancesHidden ? '•••••' : r.size}</span>
                         <span>
                             {r.filled > 0
-                                ? `${r.filled}/${r.size} filled`
+                                ? (balancesHidden ? '••••• filled' : `${r.filled}/${r.size} filled`)
                                 : <span style={{ color: 'var(--xc-fg-muted)' }}>open</span>}
                         </span>
                         <Button

@@ -9,6 +9,7 @@ import {
     RbfInvalidEntryError,
 } from '../../flows/rbfReplace.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { EmptyStateNudge } from '../components/EmptyStateNudge.jsx';
 import { useToast } from '../components/ToastHost.jsx';
 import { groupHistoryEntries } from '../utils/historyGrouping.js';
@@ -849,6 +850,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
  */
 export function DetailCard({ entry, peerCache, chainTip, walletId }) {
     const { messaging, shell } = useMessaging();
+    const [balancesHidden] = useBalancesHidden();
     const [activeDetailTab, setActiveDetailTab] = useState(/** @type {'status' | 'details' | 'raw'} */ ('status'));
 
     // ───── More-menu / Save-as-contact state ─────
@@ -922,7 +924,10 @@ export function DetailCard({ entry, peerCache, chainTip, walletId }) {
     const detailRows = basicDetailRows(entry, chainTip);
     const explorerButtons = explorerLinksFor(entry);
 
-    const fullRows = fullDetailRows(entry);
+    const fullRows = fullDetailRows(entry, balancesHidden);
+    // Redact entry + peer raw payloads before stringifying. Cheap walk;
+    // returns the same shape so the JSON pretty-printer indents identically.
+    const rawForDisplay = balancesHidden ? redactAmountFields(entry.raw) : entry.raw;
     const detailTabs = [
         { id: 'status',  label: 'Status'  },
         { id: 'details', label: 'Details' },
@@ -1238,12 +1243,12 @@ export function DetailCard({ entry, peerCache, chainTip, walletId }) {
                         <div className={styles.rawJsonWrap}>
                             <span className={styles.rawJsonCopy}>
                                 <CopyIconButton
-                                    value={decodeActionToText(entry.raw)}
+                                    value={decodeActionToText(rawForDisplay)}
                                     label="Copy raw JSON"
                                 />
                             </span>
                             <pre className={styles.detailDecoded}>
-                                {decodeActionToText(entry.raw)}
+                                {decodeActionToText(rawForDisplay)}
                             </pre>
                         </div>
                         {isLinked ? (
@@ -1259,12 +1264,12 @@ export function DetailCard({ entry, peerCache, chainTip, walletId }) {
                                     <div className={styles.rawJsonWrap}>
                                         <span className={styles.rawJsonCopy}>
                                             <CopyIconButton
-                                                value={decodeActionToText(peer.action)}
+                                                value={decodeActionToText(balancesHidden ? redactAmountFields(peer.action) : peer.action)}
                                                 label="Copy peer raw JSON"
                                             />
                                         </span>
                                         <pre className={styles.detailDecoded}>
-                                            {decodeActionToText(peer.action)}
+                                            {decodeActionToText(balancesHidden ? redactAmountFields(peer.action) : peer.action)}
                                         </pre>
                                     </div>
                                 ) : (
@@ -1425,7 +1430,7 @@ function CopyIconButton({ value, label = 'Copy to clipboard' }) {
  * transaction in one place. The curated hero table at the top of the
  * page covers the most-relevant fields; this is the long-form view.
  */
-function fullDetailRows(entry) {
+function fullDetailRows(entry, balancesHidden = false) {
     if (!entry) return [];
     const rows = [];
     const raw = entry.raw || {};
@@ -1501,7 +1506,9 @@ function fullDetailRows(entry) {
         if (skipKeys.has(k)) continue;
         const v = raw[k];
         let display;
-        if (v === null || v === undefined) display = '—';
+        if (balancesHidden && AMOUNT_KEY_RE.test(k)) {
+            display = '•••••';
+        } else if (v === null || v === undefined) display = '—';
         else if (typeof v === 'number' || (typeof v === 'string' && /^-?\d+$/.test(v))) {
             display = formatNumberWithCommas(v);
         }
@@ -1989,6 +1996,7 @@ export function EntryRow({ entry, selected, showConnector, onClick, peerCache, i
  * expands to reveal its member entries when clicked.
  */
 function GroupCard({ item, expanded, onToggle }) {
+    const [balancesHidden] = useBalancesHidden();
     const d = chainRegistry.get(item.leader.chainId);
     // §28.3 — link-pair groups span two chains; surface both badges so
     // the user sees the cross-chain relationship without expanding.
@@ -1997,6 +2005,13 @@ function GroupCard({ item, expanded, onToggle }) {
     const peer = isLinkPair ? item.members[0] : null;
     const peerDescriptor = peer ? chainRegistry.get(peer.chainId) : null;
     const newest = item.members[0];
+    // Only issue-mint group summaries embed a financial amount
+    // ("Launched TICK (supply 12345)"); strip the supply parenthetical
+    // when privacy mode is on. Other subkinds carry counts or
+    // chain-link metadata that aren't amounts.
+    const displaySummary = (balancesHidden && item.subkind === 'issue-mint')
+        ? stripSupplyParenthetical(item.summary)
+        : item.summary;
     return (
         <button
             type="button"
@@ -2033,7 +2048,7 @@ function GroupCard({ item, expanded, onToggle }) {
                     <span className={styles.groupCount}>{item.members.length}</span>
                 ) : null}
             </span>
-            <span className={styles.rowSummary}>{item.summary}</span>
+            <span className={styles.rowSummary}>{displaySummary}</span>
             <span className={styles.rowMeta}>
                 {newest?.timestamp ? `Latest ${formatRelativeTime(newest.timestamp)}` : '—'}
                 <span className={styles.groupChevron} aria-hidden="true">
@@ -2224,6 +2239,40 @@ function summarizeRow(row, action) {
     }
     if (row.memo || row.MEMO) return String(row.memo || row.MEMO);
     return action;
+}
+
+// Field names whose values are financial amounts the privacy toggle
+// should opaque. Matched case-insensitively against both snake_case and
+// camelCase variants. Keep this conservative — only known amount-bearing
+// keys, not address / index / status fields.
+const AMOUNT_KEY_RE = /^(amount|quantity|supply|max_supply|maxSupply|give_amount|giveAmount|get_amount|getAmount|give_remaining|giveRemaining|get_remaining|getRemaining|escrow_quantity|escrowQuantity|mainchainrate|dispense_quantity|dispenseQuantity|dispense_count|dispenseCount|fee|fee_per_kb|feePerKb)$/i;
+
+// Drop the "(supply 12345)" tail from an issue-mint group summary when
+// privacy mode is on. Matches the format emitted by historyGrouping's
+// `summarizeGroup` — anything else is returned unchanged.
+function stripSupplyParenthetical(summary) {
+    if (typeof summary !== 'string') return summary;
+    return summary.replace(/\s*\(supply [^)]+\)\s*$/, '');
+}
+
+/**
+ * Recursively replace amount-field values with `'•••••'`. Object / array
+ * traversal is preserved so the rest of the structure stays readable
+ * when the redacted result is JSON.stringify'd into the Raw tab or
+ * fed into the Details table. Returns the input unchanged when it
+ * contains no amount fields, so the React identity stays stable.
+ */
+function redactAmountFields(value) {
+    if (value === null || value === undefined) return value;
+    if (Array.isArray(value)) return value.map(redactAmountFields);
+    if (typeof value === 'object') {
+        const out = {};
+        for (const [k, v] of Object.entries(value)) {
+            out[k] = AMOUNT_KEY_RE.test(k) ? '•••••' : redactAmountFields(v);
+        }
+        return out;
+    }
+    return value;
 }
 
 /** Render the row's raw fields as pretty-printed JSON for the detail card. */
