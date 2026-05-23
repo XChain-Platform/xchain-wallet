@@ -12,6 +12,11 @@
 // Caches are in-memory, per-process. Clearing happens on wallet lock.
 
 import { exportPrivateKey } from './exportPrivateKey.js';
+import {
+    getDemoGatedGroupsForTick,
+    getDemoGatedPlaintextBase64,
+    isDemoGatedActionIndex,
+} from './demoGatedContent.js';
 
 const KEY_CACHE = /** @type {Map<string, Buffer>} */ (new Map());
 const PT_CACHE  = /** @type {Map<string, Uint8Array>} */ (new Map());
@@ -228,10 +233,27 @@ export async function unlockGatedFileForAddress({
     actionIndex,
     keyHash,
 }) {
-    if (!vault) throw new Error('unlockGatedFileForAddress: vault is required');
-    if (!sdkRegistry) throw new Error('unlockGatedFileForAddress: sdkRegistry is required');
     if (!actionIndex) throw new Error('unlockGatedFileForAddress: actionIndex is required');
     if (!keyHash) throw new Error('unlockGatedFileForAddress: keyHash is required');
+
+    // Demo content short-circuit — bypass crypto entirely so the demo
+    // wallet can show what unlocked files look like without needing a
+    // real key handoff or explorer ciphertext.
+    if (isDemoGatedActionIndex(actionIndex)) {
+        const demo = getDemoGatedPlaintextBase64(actionIndex);
+        if (demo) {
+            return {
+                address: 'demo',
+                chainId: 'demo',
+                actionIndex: String(actionIndex),
+                plaintextBase64: demo.plaintextBase64,
+                byteLength: demo.byteLength,
+            };
+        }
+    }
+
+    if (!vault) throw new Error('unlockGatedFileForAddress: vault is required');
+    if (!sdkRegistry) throw new Error('unlockGatedFileForAddress: sdkRegistry is required');
 
     const { wif, address, chainId } = await exportPrivateKey({
         vault,
@@ -287,9 +309,20 @@ export async function unlockGatedFileForAddress({
  * }>>}
  */
 export async function listGatedFiles({ sdk, tick }) {
-    if (!sdk) throw new Error('listGatedFiles: sdk is required');
     if (!tick) throw new Error('listGatedFiles: tick is required');
-    const rows = await sdk.getFiles(tick, 'token');
+
+    // Demo content short-circuit — known demo tickers serve in-memory
+    // fixtures so the wallet's Unlock tab has something to render even
+    // when no real explorer is wired up.
+    const demoGroups = getDemoGatedGroupsForTick(tick);
+
+    // No SDK + demo groups available => return demo only (skip explorer).
+    if (!sdk) {
+        if (demoGroups.length > 0) return demoGroups;
+        throw new Error('listGatedFiles: sdk is required');
+    }
+
+    const rows = await sdk.getFiles(tick, 'token').catch(() => []);
     const list = Array.isArray(rows) ? rows : (rows && Array.isArray(rows.data) ? rows.data : []);
     const byKeyHash = /** @type {Map<string, any>} */ (new Map());
     for (const row of list) {
@@ -313,5 +346,5 @@ export async function listGatedFiles({ sdk, tick }) {
             status: row.status ? String(row.status) : null,
         });
     }
-    return Array.from(byKeyHash.values());
+    return [...demoGroups, ...Array.from(byKeyHash.values())];
 }

@@ -1339,7 +1339,12 @@ function GatedContentPanel({ walletId, chainId, tick, groups, loading, error, pa
         <div className={styles.infoCard}>
             {groups.map((g) => {
                 const isPack = g.files.length > 1;
-                const meta = packsMeta && g.files[0]?.packId ? packsMeta[g.files[0].packId] : null;
+                const tisMeta = packsMeta && g.files[0]?.packId ? packsMeta[g.files[0].packId] : null;
+                // packMeta lives directly on the group when serving
+                // demo fixtures (no TIS document in the loop). TIS
+                // packsMeta takes precedence so production payloads
+                // override demo defaults if they ever collide.
+                const meta = tisMeta || g.packMeta || null;
                 const heading = meta?.name || (isPack ? `Pack (${g.files.length} files)` : g.files[0]?.name) || 'Gated file';
                 return (
                     <GatedGroupCard
