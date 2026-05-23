@@ -161,6 +161,20 @@ function BalanceRowEl({ row, multisig, onSelect, pinned, onTogglePin, hidden, on
             <div className={styles.iconWrap}>
                 {isNative && chainIconUrl ? (
                     <img src={chainIconUrl} alt="" aria-hidden="true" className={styles.iconImg} />
+                ) : row.imageUrl ? (
+                    <img
+                        src={row.imageUrl}
+                        alt=""
+                        aria-hidden="true"
+                        className={styles.iconImg}
+                        onError={(e) => {
+                            // If the published image 404s, fall back to
+                            // the letter chip by hiding the broken img;
+                            // the next render still has imageUrl set, so
+                            // we can't swap to <span> — just hide.
+                            e.currentTarget.style.display = 'none';
+                        }}
+                    />
                 ) : (
                     <span
                         className={styles.iconLetter}
