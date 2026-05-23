@@ -295,13 +295,24 @@ export function TokenDetail({
                     small number underneath = secondary. */}
                 <section className={styles.balanceHero} aria-label={`${displayName || tick} balance`}>
                     {headerIconUrl ? (
-                        <img
-                            src={headerIconUrl}
-                            alt=""
-                            aria-hidden="true"
-                            className={styles.balanceHeroIcon}
-                            onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                        />
+                        <div className={styles.balanceHeroIconWrap}>
+                            <img
+                                src={headerIconUrl}
+                                alt=""
+                                aria-hidden="true"
+                                className={styles.balanceHeroIcon}
+                                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                            />
+                            {!isNative && chainId ? (
+                                <img
+                                    src={branding.chainIconSmallUrl(chainId)}
+                                    alt=""
+                                    aria-hidden="true"
+                                    title={descriptor?.displayName || chainId}
+                                    className={styles.balanceHeroChainOverlay}
+                                />
+                            ) : null}
+                        </div>
                     ) : null}
                     <div className={styles.balanceHeroMain}>
                         <div className={styles.balanceHeroRow}>

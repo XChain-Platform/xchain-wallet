@@ -10,7 +10,7 @@
 // `navigator.hid.requestDevice()` from the renderer will return empty
 // (Electron's default-deny behavior under `contextIsolation: true`).
 
-import { makeLedgerFactory } from '../../../../core/src/signerFactories/index.js';
+import { makeLedgerFactory } from '@xchain-wallet/core/signerFactories';
 
 /** @type {any | null} */
 let sharedTransport = null;

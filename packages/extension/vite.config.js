@@ -46,6 +46,12 @@ function copyManifestPlugin() {
                 fileURLToPath(new URL('./manifest.json', import.meta.url)),
                 'utf8',
             );
+            // Ensure dist/ exists in case rollup tree-shook everything
+            // away — the plugin's own output still needs a parent dir.
+            await mkdir(
+                fileURLToPath(new URL('./dist/', import.meta.url)),
+                { recursive: true },
+            );
             await writeFile(
                 fileURLToPath(new URL('./dist/manifest.json', import.meta.url)),
                 manifest,

@@ -174,6 +174,11 @@ export function AdsSection() {
                                 ) : null}
                             </span>
                         </div>
+                        {chainState.lifetimeDonatedSats > 0 ? (
+                            <div style={{ ...SUBTLE, fontStyle: 'italic', textAlign: 'right' }}>
+                                You've donated {chainState.lifetimeDonatedSats.toLocaleString()} sats to XChain development — thank you.
+                            </div>
+                        ) : null}
                     </div>
                 );
             })}

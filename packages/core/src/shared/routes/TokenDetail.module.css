@@ -120,6 +120,17 @@
     outline-offset: 2px;
 }
 
+/* Positioning wrapper around the hero icon so the per-chain network
+   overlay (visible only for non-native tokens) can anchor to its
+   bottom-right corner — same affordance the Home BalanceList rows
+   use to indicate which chain a token lives on. */
+.balanceHeroIconWrap {
+    position: relative;
+    flex: 0 0 auto;
+    width: 4.5rem;
+    height: 4.5rem;
+}
+
 .balanceHeroIcon {
     display: block;
     /* Sized to match the height of the right-side content stack (label
@@ -129,6 +140,21 @@
     height: 4.5rem;
     flex: 0 0 auto;
     object-fit: contain;
+}
+
+.balanceHeroChainOverlay {
+    position: absolute;
+    bottom: -2px;
+    inset-inline-end: -2px;
+    width: 1.5rem;
+    height: 1.5rem;
+    border-radius: 50%;
+    background: #FFFFFF;
+    /* White ring against the gradient hero so the overlay reads as a
+       distinct badge rather than blending into the token artwork. */
+    box-shadow: 0 0 0 2px var(--xc-accent-primary);
+    object-fit: cover;
+    display: block;
 }
 
 .balanceHeroAmount {
@@ -394,6 +420,10 @@
     display: flex;
     flex-direction: column;
     gap: 2px;
+    /* Blue accent border to match the Home PortfolioChart and the
+       quick-action buttons immediately below — same accent cue tying
+       the chart card into the page's blue-highlighted controls. */
+    border-color: var(--xc-accent-primary);
 }
 
 /* Adjacent metaBlocks inside an infoCard get a divider + vertical
@@ -421,6 +451,14 @@
     display: grid;
     grid-template-columns: 1fr 1fr 1fr;
     gap: var(--xc-space-3);
+}
+
+/* The third stats cell (24h change) is right-aligned so the +/- pct
+   reads against the chart's right edge — same visual anchor the Home
+   PortfolioChart uses for its single change line. */
+.stats > .statCell:last-child {
+    text-align: end;
+    align-items: flex-end;
 }
 
 .statCell {

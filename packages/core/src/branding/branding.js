@@ -18,7 +18,7 @@
 //   Node (tests), it returns a file:// URL that still resolves on disk.
 
 export const PRODUCT_NAME = 'XChain Wallet';
-export const TAGLINE = 'The self-custodial wallet for the XChain Platform.';
+export const TAGLINE = 'The open-source, non-custodial wallet for the XChain Platform.';
 
 export const CANONICAL_DOMAIN = 'wallet.xchain.io';
 export const HOMEPAGE_URL = `https://${CANONICAL_DOMAIN}`;

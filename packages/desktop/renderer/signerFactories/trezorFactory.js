@@ -13,7 +13,7 @@
 // Cross-package relative path keeps the smoke harness resolving this
 // under plain Node without pnpm workspace symlinks.
 
-import { makeTrezorFactory } from '../../../../core/src/signerFactories/index.js';
+import { makeTrezorFactory } from '@xchain-wallet/core/signerFactories';
 
 /**
  * Trezor Connect manifest — must match a domain Trezor whitelists or

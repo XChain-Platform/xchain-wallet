@@ -10,8 +10,10 @@
 // renderer the user most recently interacted with. Disconnect
 // tears down only the transports this specific port registered.
 
-import { createBackgroundTransport } from '@xchain-wallet/core';
+import { signers } from '@xchain-wallet/core';
 import * as signerBridge from './signerBridge.js';
+
+const { createBackgroundTransport } = signers;
 
 /**
  * Attach the signer-bridge onConnect listener. Returns a detach

@@ -17,7 +17,9 @@
 // reject with "signer bridge disconnected". The next popup open
 // re-opens the port and re-registers.
 
-import { bindRendererPortBridge } from '@xchain-wallet/core';
+import { signers } from '@xchain-wallet/core';
+
+const { bindRendererPortBridge } = signers;
 
 /** @type {Map<string, import('@xchain-wallet/core/signers/Signer.js').Signer>} */
 const liveSigners = new Map();
