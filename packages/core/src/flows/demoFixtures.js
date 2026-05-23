@@ -13,6 +13,18 @@ function nftImg(label, bgFrom, bgTo, fg = '#FFFFFF') {
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="${bgFrom}"/><stop offset="100%" stop-color="${bgTo}"/></linearGradient></defs><rect width="200" height="200" fill="url(#g)"/><text x="100" y="118" font-family="system-ui,sans-serif" font-size="44" font-weight="800" fill="${fg}" text-anchor="middle">${t}</text></svg>`;
     return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
+
+// Real icon URLs mirrored from DEMO_TIS_BY_TICK in tokenInfo.js so the
+// Home / SendPicker / TokenDetail rows show the published artwork
+// instead of the colored-letter placeholder. Tickers that don't appear
+// here fall back to `nftImg(...)`.
+const DEMO_TOKEN_ICONS = {
+    PEPECREATURE: 'https://gousue3rn3uppml5r5hloc4wqmojl2cqxyhvhnceairxkccnw7vq.ar.io/M6kqE3Fu6PexfY9OtwuWgxyV6FC-D1O0RAIjdQhNt-s/pepecreature_thumb.png',
+    RAREPEPE: 'https://rarepepedirectory.com/pepe/NAKAMOTOCARD.png',
+    PEPECASH: 'https://rarepepedirectory.com/pepe/PEPECASH.png',
+    XCP: 'https://counterparty.io/static/images/counterparty-logo.png',
+    DOGINAL: 'https://upload.wikimedia.org/wikipedia/en/d/d0/Dogecoin_Logo.png',
+};
 //
 // Demo wallets are real BIP39 wallets — they have real addresses on
 // real chains; only the on-chain balances are zero. The fixtures
@@ -37,15 +49,15 @@ const PER_CHAIN_DEFAULTS = /** @type {Record<string, BalanceFixture>} */ ({
         tokens: [
             // Divisible mainnet tokens
             { tick: 'XCP', displayName: 'Counterparty', divisibility: 8, quantity: '500000000', fiatRate: 35 }, // 5 XCP
-            { tick: 'PEPECASH', displayName: 'PepeCash', divisibility: 8, quantity: '10000000000', fiatRate: 0.0012, imageUrl: nftImg('PEPE', '#1B5E20', '#388E3C') }, // 100 PEPECASH
+            { tick: 'PEPECASH', displayName: 'PepeCash', divisibility: 8, quantity: '10000000000', fiatRate: 0.0012, imageUrl: DEMO_TOKEN_ICONS.PEPECASH }, // 100 PEPECASH
             { tick: 'BANANE', displayName: 'Banane', divisibility: 8, quantity: '20000000000', fiatRate: 0.04 }, // 200 BANANE
             { tick: 'RUSTBITS', displayName: 'Rustbits', divisibility: 8, quantity: '750000000', fiatRate: 2.50 }, // 7.5 RUSTBITS
             // Indivisible — surfaced in NFTs because they carry imageUrl
-            { tick: 'RAREPEPE', displayName: 'Rare Pepe', divisibility: 0, quantity: '1', fiatRate: 650, imageUrl: nftImg('PEPE', '#7B2C8F', '#C2185B') },
+            { tick: 'RAREPEPE', displayName: 'Rare Pepe', divisibility: 0, quantity: '1', fiatRate: 650, imageUrl: DEMO_TOKEN_ICONS.RAREPEPE },
             { tick: 'BITCRYSTAL', displayName: 'Bitcrystals', divisibility: 0, quantity: '1', fiatRate: 220, imageUrl: nftImg('BIT', '#1565C0', '#00838F') },
             { tick: 'XCPCARD', displayName: 'XCP Founders Card', divisibility: 0, quantity: '1', fiatRate: 120, imageUrl: nftImg('XCP', '#1E90C7', '#7B2C8F') },
             { tick: 'XCHAINLOGO', displayName: 'XChain Logo NFT', divisibility: 0, quantity: '1', fiatRate: 50, imageUrl: nftImg('XC', '#1E90C7', '#7B2C8F') },
-            { tick: 'PEPECREATURE', displayName: 'Pepe Creature', divisibility: 0, quantity: '1', fiatRate: 800, imageUrl: nftImg('CRE', '#16A34A', '#15803D') },
+            { tick: 'PEPECREATURE', displayName: 'Pepe Creature', divisibility: 0, quantity: '1', fiatRate: 800, imageUrl: DEMO_TOKEN_ICONS.PEPECREATURE },
         ],
     },
     'bitcoin-testnet': {
@@ -58,11 +70,11 @@ const PER_CHAIN_DEFAULTS = /** @type {Record<string, BalanceFixture>} */ ({
             // Divisible tokens — appear in Tokens tab
             { tick: 'XCP', displayName: 'Counterparty', divisibility: 8, quantity: '500000000', fiatRate: 30 },
             // PEPECASH carries an image, so it appears in BOTH Tokens (row) and NFTs (tile)
-            { tick: 'PEPECASH', displayName: 'PEPECASH', divisibility: 8, quantity: '10000000000', fiatRate: 0.0008, imageUrl: nftImg('PEPE', '#1B5E20', '#388E3C') },
+            { tick: 'PEPECASH', displayName: 'PEPECASH', divisibility: 8, quantity: '10000000000', fiatRate: 0.0008, imageUrl: DEMO_TOKEN_ICONS.PEPECASH },
             { tick: 'USDX', displayName: 'USD Stablecoin (demo)', divisibility: 8, quantity: '25000000000', fiatRate: 1 },
             { tick: 'DEMOCOIN', displayName: 'Demo Coin', divisibility: 8, quantity: '100000000', fiatRate: 0.05 },
             // Indivisible tokens — also appear in NFTs because they have an imageUrl
-            { tick: 'RAREPEPE', displayName: 'Rare Pepe', divisibility: 0, quantity: '1', fiatRate: 500, imageUrl: nftImg('PEPE', '#7B2C8F', '#C2185B') },
+            { tick: 'RAREPEPE', displayName: 'Rare Pepe', divisibility: 0, quantity: '1', fiatRate: 500, imageUrl: DEMO_TOKEN_ICONS.RAREPEPE },
             { tick: 'BITCRYSTAL', displayName: 'Bitcrystals', divisibility: 0, quantity: '1', fiatRate: 200, imageUrl: nftImg('BIT', '#1565C0', '#00838F') },
             { tick: 'XCHAINLOGO', displayName: 'XChain Logo NFT', divisibility: 0, quantity: '1', fiatRate: 50, imageUrl: nftImg('XC', '#1E90C7', '#7B2C8F') },
         ],
@@ -99,7 +111,7 @@ const PER_CHAIN_DEFAULTS = /** @type {Record<string, BalanceFixture>} */ ({
             { tick: 'WOW', displayName: 'Wow Such Token', divisibility: 8, quantity: '7500000000', fiatRate: 0.45 }, // 75 WOW
             { tick: 'DSHIB', displayName: 'Doge Shib', divisibility: 8, quantity: '5000000000000', fiatRate: 0.00009 }, // 50,000 DSHIB
             // Indivisible — NFTs tab
-            { tick: 'DOGINAL', displayName: 'Doginal #1337', divisibility: 0, quantity: '1', fiatRate: 18, imageUrl: nftImg('1337', '#F59E0B', '#B45309') },
+            { tick: 'DOGINAL', displayName: 'Doginal #1337', divisibility: 0, quantity: '1', fiatRate: 18, imageUrl: DEMO_TOKEN_ICONS.DOGINAL },
             { tick: 'MEMECARD', displayName: 'Meme Card: To The Moon', divisibility: 0, quantity: '1', fiatRate: 32, imageUrl: nftImg('MOON', '#EAB308', '#92400E') },
         ],
     },
@@ -112,7 +124,7 @@ const PER_CHAIN_DEFAULTS = /** @type {Record<string, BalanceFixture>} */ ({
             { tick: 'DSHIB', displayName: 'Doge Shib', divisibility: 8, quantity: '7500000000000', fiatRate: 0.0001 },
             { tick: 'BARK', displayName: 'Bark Stablecoin (demo)', divisibility: 8, quantity: '20000000000', fiatRate: 1 },
             // Indivisible — NFTs tab (have imageUrl)
-            { tick: 'DOGINAL', displayName: 'Doginal #1337', divisibility: 0, quantity: '1', fiatRate: 15, imageUrl: nftImg('1337', '#F59E0B', '#B45309') },
+            { tick: 'DOGINAL', displayName: 'Doginal #1337', divisibility: 0, quantity: '1', fiatRate: 15, imageUrl: DEMO_TOKEN_ICONS.DOGINAL },
             { tick: 'MEMECARD', displayName: 'Meme Card: To The Moon', divisibility: 0, quantity: '1', fiatRate: 30, imageUrl: nftImg('MOON', '#EAB308', '#92400E') },
         ],
     },
