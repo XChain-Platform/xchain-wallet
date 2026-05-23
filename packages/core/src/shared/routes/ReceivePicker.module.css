@@ -6,19 +6,20 @@
 
 .toolbar {
     display: flex;
-    gap: var(--xc-space-2);
+    flex-direction: row;
     align-items: center;
+    gap: var(--xc-space-2);
     margin-bottom: var(--xc-space-3);
-    flex-wrap: wrap;
 }
 
 .kindSegments {
-    display: inline-flex;
+    display: flex;
     background: var(--xc-bg-muted);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
+    border: 1px solid var(--xc-border-strong);
+    border-radius: 999px;
     padding: 2px;
     gap: 2px;
+    flex-shrink: 0;
 }
 
 .kindSegment {
@@ -29,19 +30,21 @@
     font-size: var(--xc-text-sm);
     font-weight: 600;
     padding: var(--xc-space-1) var(--xc-space-3);
-    border-radius: var(--xc-radius-sm);
+    border-radius: 999px;
     cursor: pointer;
     transition: background-color 120ms ease, color 120ms ease;
+    font-family: inherit;
+    text-align: center;
 }
 
 .kindSegment:hover {
     color: var(--xc-text);
 }
 
-.kindSegmentActive {
-    background: var(--xc-surface);
-    color: var(--xc-text);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+.kindSegmentActive,
+.kindSegmentActive:hover {
+    background: var(--xc-accent-primary);
+    color: #FFFFFF;
 }
 
 .search {
@@ -58,4 +61,18 @@
 
 .search::placeholder {
     color: var(--xc-text-muted);
+}
+
+.platformSection {
+    margin-top: var(--xc-space-4);
+}
+
+.platformHeading {
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--xc-text-muted);
+    margin-bottom: var(--xc-space-2);
+    padding: 0 var(--xc-space-1);
 }

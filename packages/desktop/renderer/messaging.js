@@ -536,6 +536,11 @@ export function getTokenInfo(req) {
     return /** @type {any} */ (sendMessage('token.info', req));
 }
 
+/** @param {{ chainId: string, query: string, limit?: number }} req */
+export function searchTokens(req) {
+    return /** @type {any} */ (sendMessage('tokens.search', req));
+}
+
 /** @param {{ chainId: string, tick: string }} req */
 export function listGatedContent(req) {
     return /** @type {any} */ (sendMessage('gatedContent.list', req));

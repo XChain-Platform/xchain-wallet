@@ -1,17 +1,22 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Screen, ScreenHeader, Icon, Skeleton } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import {
     BalanceList,
     buildBalanceRows,
     buildNativeRow,
+    buildPlatformTokenRow,
     sortByChainThenAsset,
     coinFromChainId,
 } from '../components/BalanceList.jsx';
+import { EmptyStateNudge } from '../components/EmptyStateNudge.jsx';
 import { HeaderNetworkButton } from '../components/HeaderNetworkButton.jsx';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import sendPickerStyles from './SendPicker.module.css';
 import styles from './ReceivePicker.module.css';
+
+const PLATFORM_QUERY_MIN_CHARS = 3;
+const PLATFORM_QUERY_DEBOUNCE_MS = 350;
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -188,6 +193,87 @@ export function ReceivePicker({
     const hiddenSet = useMemo(() => new Set(hiddenTokens), [hiddenTokens]);
     const pinnedSet = useMemo(() => new Set(pinnedTokens), [pinnedTokens]);
 
+    // Platform discovery — when the user types a partial ticker, do a
+    // substring search across every chain the wallet has addresses on
+    // and surface matching tokens that aren't already in their balance
+    // as a second "On the platform" section. Lets the user receive a
+    // token they've never held before in one tap.
+    //
+    // Server-side `LIKE '%query%'` against `index_tickers.tick`, so
+    // "PEPE" surfaces PEPECREATURE, PEPECASH, PEPELOL, etc. Debounced
+    // so each keystroke doesn't fire a wave of cross-chain calls.
+    // Per-component cache keyed by `${chainId}::${query}` so re-typing
+    // the same prefix doesn't re-fetch.
+    const [platformResults, setPlatformResults] = useState(/** @type {any[]} */ ([]));
+    const [platformBusy, setPlatformBusy] = useState(false);
+    const platformCacheRef = useRef(/** @type {Map<string, any>} */ (new Map()));
+
+    const localKeySet = useMemo(() => {
+        const s = new Set();
+        for (const r of allRows) s.add(`${r.chainId}:${r.tick}`);
+        return s;
+    }, [allRows]);
+
+    useEffect(() => {
+        const query = tokenQuery.trim().toUpperCase();
+        if (!query
+            || query.length < PLATFORM_QUERY_MIN_CHARS
+            || kindFilter === 'coins'
+            || !addressesByChain
+            || typeof messaging?.searchTokens !== 'function'
+        ) {
+            setPlatformResults([]);
+            setPlatformBusy(false);
+            return undefined;
+        }
+        let cancelled = false;
+        setPlatformBusy(true);
+        const handle = setTimeout(async () => {
+            const chainIds = Object.keys(addressesByChain);
+            const cache = platformCacheRef.current;
+            try {
+                const lookups = await Promise.all(chainIds.map(async (chainId) => {
+                    const cacheKey = `${chainId}::${query}`;
+                    if (cache.has(cacheKey)) return { chainId, hits: cache.get(cacheKey) };
+                    try {
+                        const hits = await messaging.searchTokens({ chainId, query });
+                        const normalized = Array.isArray(hits) ? hits : [];
+                        cache.set(cacheKey, normalized);
+                        return { chainId, hits: normalized };
+                    } catch {
+                        cache.set(cacheKey, []);
+                        return { chainId, hits: [] };
+                    }
+                }));
+                if (cancelled) return;
+                const rows = [];
+                for (const { chainId, hits } of lookups) {
+                    for (const hit of hits) {
+                        if (!hit || !hit.tick) continue;
+                        if (localKeySet.has(`${chainId}:${hit.tick}`)) continue;
+                        const row = buildPlatformTokenRow(chainId, hit.tick, null, chainRegistry);
+                        if (row) rows.push(row);
+                    }
+                }
+                setPlatformResults(sortByChainThenAsset(rows));
+            } finally {
+                if (!cancelled) setPlatformBusy(false);
+            }
+        }, PLATFORM_QUERY_DEBOUNCE_MS);
+        return () => {
+            cancelled = true;
+            clearTimeout(handle);
+        };
+    }, [tokenQuery, kindFilter, addressesByChain, messaging, localKeySet]);
+
+    const handleSelect = (tok) => onSelect?.({
+        chainId: tok.chainId,
+        tick: tok.tick,
+        kind: tok.kind,
+        displayName: tok.displayName,
+        imageUrl: tok.imageUrl,
+    });
+
     const filterButton = !hideOwnFilter ? (
         <HeaderNetworkButton
             chainRegistry={chainRegistry}
@@ -206,6 +292,7 @@ export function ReceivePicker({
             onBack={onBack}
             backLabel="Back to home"
             title="Receive"
+            titleIcon={<Icon.ReceiveIcon />}
             trailing={filterButton}
         />
     );
@@ -233,6 +320,18 @@ export function ReceivePicker({
                 <div role="alert" className={styles.error}>{loadError}</div>
             ) : null}
             <div className={styles.toolbar}>
+                <input
+                    type="text"
+                    className={styles.search}
+                    placeholder="Search coins or tokens"
+                    value={tokenQuery}
+                    onChange={(e) => setTokenQuery(e.target.value)}
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="characters"
+                    spellCheck={false}
+                    aria-label="Search coins or tokens"
+                />
                 <div className={styles.kindSegments} role="tablist" aria-label="Asset kind">
                     {KIND_OPTIONS.map((opt) => {
                         const active = (kindFilter || 'all') === opt.id;
@@ -250,18 +349,6 @@ export function ReceivePicker({
                         );
                     })}
                 </div>
-                <input
-                    type="text"
-                    className={styles.search}
-                    placeholder="Search coins or tokens"
-                    value={tokenQuery}
-                    onChange={(e) => setTokenQuery(e.target.value)}
-                    autoComplete="off"
-                    autoCorrect="off"
-                    autoCapitalize="characters"
-                    spellCheck={false}
-                    aria-label="Search coins or tokens"
-                />
             </div>
             {balances === null && !loadError ? (
                 <div role="status" aria-label="Loading balances">
@@ -269,20 +356,37 @@ export function ReceivePicker({
                 </div>
             ) : null}
             {balances ? (
-                <BalanceList
-                    rows={rows}
-                    emptyTitle={emptyTitle}
-                    emptyBody={emptyBody}
-                    onSelectToken={(tok) => onSelect?.({
-                        chainId: tok.chainId,
-                        tick: tok.tick,
-                        kind: tok.kind,
-                        displayName: tok.displayName,
-                        imageUrl: tok.imageUrl,
-                    })}
-                    hiddenKeys={hiddenSet}
-                    pinnedKeys={pinnedSet}
-                />
+                <>
+                    {rows.length > 0 ? (
+                        <BalanceList
+                            rows={rows}
+                            onSelectToken={handleSelect}
+                            hiddenKeys={hiddenSet}
+                            pinnedKeys={pinnedSet}
+                        />
+                    ) : (platformResults.length === 0 && !platformBusy) ? (
+                        <EmptyStateNudge
+                            title={emptyTitle}
+                            body={emptyBody}
+                        />
+                    ) : null}
+                    {(platformResults.length > 0 || platformBusy) ? (
+                        <div className={styles.platformSection}>
+                            <div className={styles.platformHeading}>On the platform</div>
+                            {platformBusy && platformResults.length === 0 ? (
+                                <div role="status" aria-label="Searching platform">
+                                    <Skeleton.List rows={1} />
+                                </div>
+                            ) : null}
+                            {platformResults.length > 0 ? (
+                                <BalanceList
+                                    rows={platformResults}
+                                    onSelectToken={handleSelect}
+                                />
+                            ) : null}
+                        </div>
+                    ) : null}
+                </>
             ) : null}
         </>
     );

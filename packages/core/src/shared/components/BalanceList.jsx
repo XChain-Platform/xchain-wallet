@@ -390,6 +390,40 @@ export function buildNativeRow(chainId, chainRegistry) {
     return { ...row, quantity: row.quantity.toString() };
 }
 
+/**
+ * Build a zero-balance token row from a platform search hit. Used by
+ * ReceivePicker's "On the platform" discovery section to surface
+ * tokens that exist on the platform but aren't in the user's balance.
+ * Tapping the row lands on Receive with the chain + tick pre-filled.
+ *
+ * `meta` is whatever the picker has on hand from its search call —
+ * usually just nulls — so the row falls back to a letter chip + the
+ * tick as displayName. Callers are responsible for confirming the
+ * token exists; this helper trusts its inputs and only fails on an
+ * unregistered chain.
+ *
+ * @param {string} chainId
+ * @param {string} tick
+ * @param {{ displayName?: string | null, imageUrl?: string | null } | null} [meta]
+ * @param {import('../../registry/index.js').ChainRegistry} chainRegistry
+ * @returns {object | null}
+ */
+export function buildPlatformTokenRow(chainId, tick, meta, chainRegistry) {
+    const descriptor = chainRegistry.get(chainId);
+    if (!descriptor) return null;
+    const row = mkRow({
+        kind: 'token',
+        chainId,
+        descriptor,
+        tick,
+        displayName: meta?.displayName || tick,
+        divisibility: 8,
+        fiatRate: null,
+        imageUrl: meta?.imageUrl || null,
+    });
+    return { ...row, quantity: row.quantity.toString() };
+}
+
 function mkRow({ kind, chainId, descriptor, tick, displayName, divisibility, fiatRate, imageUrl }) {
     return {
         kind,

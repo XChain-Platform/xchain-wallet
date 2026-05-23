@@ -1160,6 +1160,18 @@ export function getTokenInfo(req) {
 }
 
 /**
+ * Substring search for tokens that exist on the platform. Drives
+ * ReceivePicker's "On the platform" discovery section so the user
+ * can receive a token they've never held before in one tap.
+ *
+ * @param {{ chainId: string, query: string, limit?: number }} req
+ * @returns {Promise<Array<{ tick: string, totalSupply: string | null, maxSupply: string | null }>>}
+ */
+export function searchTokens(req) {
+    return /** @type {any} */ (sendMessage('tokens.search', req));
+}
+
+/**
  * List the gated FILE actions for a token, grouped by KEY_HASH so
  * packs (files sharing one key) appear as one group. Drives the
  * TokenDetail "Unlock" tab. See

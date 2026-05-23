@@ -129,6 +129,7 @@ export {
     tisToMediaBundle,
     fetchTisBundle,
 } from './tokenInfo.js';
+export { searchPlatformTokens } from './searchTokens.js';
 export { createMultisigConfig } from './createMultisigConfig.js';
 export { receiveMultisigAddress, listMultisigReceiveAddresses } from './multisigAddress.js';
 export {

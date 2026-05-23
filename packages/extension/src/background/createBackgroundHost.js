@@ -87,6 +87,7 @@ const {
     broadcastsForAddress,
     linksForAddress,
     tokenInfoFor,
+    searchPlatformTokens,
     createMultisigConfig,
     receiveMultisigAddress,
     listMultisigReceiveAddresses,
@@ -1859,6 +1860,14 @@ export function createBackgroundHost(deps) {
 
     host.register('links.address', async (req, { sdkRegistry }) => {
         return linksForAddress({ ...req, sdkRegistry });
+    });
+
+    host.register('tokens.search', async (req, { sdkRegistry }) => {
+        // Substring-search the platform for tokens whose ticker matches
+        // the query. Backs ReceivePicker's "On the platform" discovery
+        // section. One-chain-at-a-time call shape mirrors `token.info`;
+        // the renderer fans out across active chains.
+        return searchPlatformTokens({ ...req, sdkRegistry });
     });
 
     host.register('token.info', async (req, { sdkRegistry, vault }) => {
