@@ -16,7 +16,7 @@ import { dirname, join } from 'node:path';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
-const e2e = join(wsRoot, 'e2e');
+const e2e = join(wsRoot, 'test', 'e2e');
 
 // --- 1. dev dep -----------------------------------------------------
 
@@ -28,7 +28,7 @@ assert.ok(
 
 // --- 2. a11y spec ---------------------------------------------------
 
-const spec = readFileSync(join(e2e, 'tests', 'a11y.spec.js'), 'utf8');
+const spec = readFileSync(join(e2e, 'tests', 'a11y', 'a11y.spec.js'), 'utf8');
 assert.ok(
     /import AxeBuilder from '@axe-core\/playwright'/.test(spec),
     'spec imports AxeBuilder',

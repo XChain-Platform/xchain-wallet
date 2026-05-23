@@ -8,12 +8,12 @@
 import {
     SIGN_IN_DEFAULT_EXPIRY_MS,
     SIGN_IN_CHALLENGE_VERSION,
-} from './index.js';
+} from './index.ts';
 import type {
     XChainProvider,
     SignInChallengeV1,
     SignInParams,
-} from './index.js';
+} from './index.ts';
 
 // Event fired on `window` by the wallet's inject script once
 // `window.xchain` is assigned. dApps that load before injection can wait

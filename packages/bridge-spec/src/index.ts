@@ -475,5 +475,5 @@ export {
     generateNonce,
     makeSignInParams,
     validateSignInChallenge,
-} from './client.js';
-export type { GetProviderOpts } from './client.js';
+} from './client.ts';
+export type { GetProviderOpts } from './client.ts';
