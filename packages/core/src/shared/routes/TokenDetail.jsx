@@ -3,6 +3,7 @@ import { Screen, ScreenHeader, ChainBadge, Icon, Button, Input } from '@xchain-w
 import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { isDemoGatedActionIndex } from '../../flows/demoGatedContent.js';
 import { StalenessLabel } from '../components/StalenessLabel.jsx';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { useNativePrice } from '../hooks/useNativePrice.js';
@@ -590,7 +591,21 @@ function MarketPanel({ isNative, nativePrice, showSparkline, assetInfo, tick, ch
                 pct24h = formatPct(e.change24hPct);
                 pctTone24h = pctTone(e.change24hPct);
             }
-            if (showSparkline) sparkline = e.sparkline;
+            if (showSparkline) {
+                sparkline = e.sparkline;
+            } else if (e.priceFiat != null) {
+                // Sparkline fetch missing (CoinGecko rate-limit, network
+                // hiccup, demo wallet without a real oracle). Synthesize
+                // a 7-day walk seeded by chain + price + change so the
+                // chart always renders something — the line still ends
+                // at the actual current price and reflects the real 24h
+                // delta if we know it.
+                const synth = synthesizeTokenChart(
+                    `${chainId}|native|${(e.change24hPct ?? 0).toFixed(2)}`,
+                    e.priceFiat,
+                );
+                sparkline = synth.sparkline;
+            }
         } else {
             hint = 'No market data available for this network.';
         }
@@ -1385,7 +1400,6 @@ function GatedGroupCard({
     ownsToken,
     tokenLabel,
 }) {
-    const [selectedAddrId, setSelectedAddrId] = useState(/** @type {string | null} */ (null));
     const [password, setPassword] = useState('');
     const [unlockError, setUnlockError] = useState(/** @type {string | null} */ (null));
     const [accessError, setAccessError] = useState(/** @type {string | null} */ (null));
@@ -1397,13 +1411,6 @@ function GatedGroupCard({
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
     const passwordOpen = pendingFile !== null;
-
-    useEffect(() => {
-        if (!passwordOpen || selectedAddrId) return;
-        if (Array.isArray(addresses) && addresses.length > 0) {
-            setSelectedAddrId(addresses[0].id);
-        }
-    }, [passwordOpen, addresses, selectedAddrId]);
 
     useEffect(() => {
         if (passwordOpen && !submitting) {
@@ -1446,7 +1453,7 @@ function GatedGroupCard({
         }
     }
 
-    function handleFileClick(file) {
+    async function handleFileClick(file) {
         setAccessError(null);
         if (!ownsToken) {
             setAccessError(
@@ -1459,8 +1466,43 @@ function GatedGroupCard({
             openFile(plain, file);
             return;
         }
-        // No cached plaintext — open the password prompt and remember
-        // which file the user wants opened once decryption succeeds.
+        // Demo content — the backend short-circuit (flows/gatedContent.js)
+        // returns hardcoded plaintext for `demo:` action indices without
+        // touching the vault, so we can unlock the whole group inline
+        // without a password prompt or address picker.
+        if (isDemoGatedActionIndex(file.actionIndex)) {
+            if (submitting) return;
+            setSubmitting(true);
+            try {
+                const results = new Map(unlocked);
+                for (const f of group.files) {
+                    if (results.has(String(f.actionIndex))) continue;
+                    const resp = await messaging.unlockGatedContent({
+                        walletId,
+                        password: '',
+                        addressId: '',
+                        actionIndex: f.actionIndex,
+                        keyHash: group.keyHash,
+                    });
+                    results.set(String(f.actionIndex), {
+                        plaintextBase64: resp.plaintextBase64,
+                        byteLength: resp.byteLength,
+                    });
+                }
+                setUnlocked(results);
+                const target = results.get(String(file.actionIndex));
+                if (target) openFile(target, file);
+            } catch (err) {
+                setAccessError(err?.message || 'Failed to unlock demo content.');
+            } finally {
+                setSubmitting(false);
+            }
+            return;
+        }
+        // Real content — open password prompt. The holding address is
+        // discovered automatically on submit (handleUnlock iterates the
+        // user's addresses to find whichever one received the seller's
+        // key handoff for this group's KEY_HASH).
         onRequestAddresses();
         setUnlockError(null);
         setPendingFile(file);
@@ -1474,24 +1516,70 @@ function GatedGroupCard({
 
     async function handleUnlock(event) {
         event.preventDefault();
-        if (submitting || !selectedAddrId || password.length === 0) return;
+        if (submitting || password.length === 0) return;
+        if (!Array.isArray(addresses) || addresses.length === 0) {
+            setUnlockError('No usable holding address found for this chain.');
+            return;
+        }
         setSubmitting(true);
         setUnlockError(null);
         try {
             const results = new Map(unlocked);
-            for (const file of group.files) {
-                if (results.has(String(file.actionIndex))) continue;
-                const resp = await messaging.unlockGatedContent({
-                    walletId,
-                    password,
-                    addressId: selectedAddrId,
-                    actionIndex: file.actionIndex,
-                    keyHash: group.keyHash,
+            const firstFile = group.files.find((f) => !results.has(String(f.actionIndex)));
+            // Probe addresses with the first un-decrypted file. The seller's
+            // key handoff is per-address; the first address that decrypts it
+            // is the one that holds the right CMS envelope, and the same
+            // address works for every file in this group (shared KEY_HASH).
+            let workingAddrId = null;
+            let firstResp = null;
+            let probeErr = null;
+            if (firstFile) {
+                for (const a of addresses) {
+                    try {
+                        firstResp = await messaging.unlockGatedContent({
+                            walletId,
+                            password,
+                            addressId: a.id,
+                            actionIndex: firstFile.actionIndex,
+                            keyHash: group.keyHash,
+                        });
+                        workingAddrId = a.id;
+                        break;
+                    } catch (err) {
+                        // Only "this address doesn't have the handoff" is a
+                        // try-next-address signal; password / vault errors
+                        // bubble up so we don't quietly retry under bad creds.
+                        if (err?.code === 'GATED_FILE_KEY_MISSING') {
+                            probeErr = err;
+                            continue;
+                        }
+                        throw err;
+                    }
+                }
+                if (!workingAddrId || !firstResp) {
+                    throw probeErr || Object.assign(
+                        new Error('No key handoff found on any holding address.'),
+                        { code: 'GATED_FILE_KEY_MISSING' },
+                    );
+                }
+                results.set(String(firstFile.actionIndex), {
+                    plaintextBase64: firstResp.plaintextBase64,
+                    byteLength: firstResp.byteLength,
                 });
-                results.set(String(file.actionIndex), {
-                    plaintextBase64: resp.plaintextBase64,
-                    byteLength: resp.byteLength,
-                });
+                for (const file of group.files) {
+                    if (results.has(String(file.actionIndex))) continue;
+                    const resp = await messaging.unlockGatedContent({
+                        walletId,
+                        password,
+                        addressId: workingAddrId,
+                        actionIndex: file.actionIndex,
+                        keyHash: group.keyHash,
+                    });
+                    results.set(String(file.actionIndex), {
+                        plaintextBase64: resp.plaintextBase64,
+                        byteLength: resp.byteLength,
+                    });
+                }
             }
             setUnlocked(results);
             setPassword('');
@@ -1507,9 +1595,9 @@ function GatedGroupCard({
             if (name === 'WrongPasswordError' || name === 'InvalidPasswordError') {
                 setUnlockError('Incorrect password.');
             } else if (name === 'NoKeyForAddressError') {
-                setUnlockError('This address has no decryption key in the wallet.');
+                setUnlockError('No decryption key found in the wallet for any holding address.');
             } else if (code === 'GATED_FILE_KEY_MISSING') {
-                setUnlockError('No key handoff found in this address’s messages. Ask the seller to re-send.');
+                setUnlockError('No key handoff found on any of your addresses. Ask the seller to re-send.');
             } else if (code === 'GATED_FILE_NOT_FOUND') {
                 setUnlockError('Ciphertext not available from the explorer yet — try again in a moment.');
             } else {
@@ -1594,28 +1682,6 @@ function GatedGroupCard({
                         <p className={styles.muted}>Loading addresses…</p>
                     ) : addressesError ? (
                         <p role="alert" className={styles.error}>{addressesError}</p>
-                    ) : Array.isArray(addresses) && addresses.length > 0 ? (
-                        <label style={{ display: 'block', marginBottom: 'var(--xc-space-2)' }}>
-                            <span style={{ display: 'block', fontSize: 'var(--xc-text-sm)', marginBottom: 'var(--xc-space-1)' }}>
-                                Holding address
-                            </span>
-                            <select
-                                value={selectedAddrId || ''}
-                                onChange={(e) => setSelectedAddrId(e.target.value)}
-                                style={{
-                                    width: '100%',
-                                    padding: 'var(--xc-space-2)',
-                                    border: '1px solid var(--xc-border)',
-                                    borderRadius: 'var(--xc-radius-sm)',
-                                    background: 'var(--xc-bg)',
-                                    color: 'var(--xc-text)',
-                                }}
-                            >
-                                {addresses.map((a) => (
-                                    <option key={a.id} value={a.id}>{a.address}</option>
-                                ))}
-                            </select>
-                        </label>
                     ) : null}
                     <Input
                         ref={passwordRef}
@@ -1642,7 +1708,6 @@ function GatedGroupCard({
                             disabled={
                                 submitting
                                 || password.length === 0
-                                || !selectedAddrId
                                 || !Array.isArray(addresses)
                                 || addresses.length === 0
                             }
