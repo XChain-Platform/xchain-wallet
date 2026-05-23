@@ -478,6 +478,11 @@ export function TokenDetail({
                                         error={gatedError}
                                         packsMeta={assetInfo?.packs || {}}
                                         messaging={messaging}
+                                        ownsToken={(() => {
+                                            try { return BigInt(String(quantity || '0')) > 0n; }
+                                            catch { return false; }
+                                        })()}
+                                        displayName={displayName || tick}
                                     />
                                     <HoldersPanel
                                         holders={holders}
@@ -1293,7 +1298,7 @@ function formatTotalSupply(isNative, chainId, assetInfo) {
 // enter password) and decrypts every file in the group; viewers render
 // inline for text / JSON / images and as a download link for everything
 // else. See xchain-documentation/protocol/TOKEN_GATED_CONTENT.md.
-function GatedContentPanel({ walletId, chainId, tick, groups, loading, error, packsMeta, messaging }) {
+function GatedContentPanel({ walletId, chainId, tick, groups, loading, error, packsMeta, messaging, ownsToken, displayName }) {
     const [addresses, setAddresses] = useState(/** @type {any[] | null} */ (null));
     const [addressesError, setAddressesError] = useState(/** @type {string | null} */ (null));
     const [addressesLoading, setAddressesLoading] = useState(false);
@@ -1358,6 +1363,8 @@ function GatedContentPanel({ walletId, chainId, tick, groups, loading, error, pa
                         addressesError={addressesError}
                         addressesLoading={addressesLoading}
                         onRequestAddresses={ensureAddresses}
+                        ownsToken={ownsToken}
+                        tokenLabel={displayName || tick}
                     />
                 );
             })}
@@ -1375,34 +1382,95 @@ function GatedGroupCard({
     addressesError,
     addressesLoading,
     onRequestAddresses,
+    ownsToken,
+    tokenLabel,
 }) {
-    const [expanded, setExpanded] = useState(false);
     const [selectedAddrId, setSelectedAddrId] = useState(/** @type {string | null} */ (null));
     const [password, setPassword] = useState('');
     const [unlockError, setUnlockError] = useState(/** @type {string | null} */ (null));
+    const [accessError, setAccessError] = useState(/** @type {string | null} */ (null));
     const [submitting, setSubmitting] = useState(false);
     /** @type {[Map<string, { plaintextBase64: string, byteLength: number }>, Function]} */
     const [unlocked, setUnlocked] = useState(() => new Map());
+    /** @type {[any | null, Function]} */
+    const [pendingFile, setPendingFile] = useState(null);
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
-    const handleToggle = () => {
-        if (!expanded) onRequestAddresses();
-        setExpanded((v) => !v);
-        setUnlockError(null);
-    };
+    const passwordOpen = pendingFile !== null;
 
     useEffect(() => {
-        if (!expanded || selectedAddrId) return;
+        if (!passwordOpen || selectedAddrId) return;
         if (Array.isArray(addresses) && addresses.length > 0) {
             setSelectedAddrId(addresses[0].id);
         }
-    }, [expanded, addresses, selectedAddrId]);
+    }, [passwordOpen, addresses, selectedAddrId]);
 
     useEffect(() => {
-        if (expanded && !submitting) {
+        if (passwordOpen && !submitting) {
             setTimeout(() => passwordRef.current?.focus(), 0);
         }
-    }, [expanded, submitting]);
+    }, [passwordOpen, submitting]);
+
+    function openFile(plain, file) {
+        if (!plain) return;
+        try {
+            const bin = typeof atob === 'function'
+                ? atob(plain.plaintextBase64)
+                : Buffer.from(plain.plaintextBase64, 'base64').toString('binary');
+            const bytes = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
+            const mime = String(file.type || '').toLowerCase();
+            const blob = new Blob([bytes], { type: mime || 'application/octet-stream' });
+            const url = URL.createObjectURL(blob);
+            const isInlineRenderable = mime.startsWith('image/')
+                || mime.startsWith('text/')
+                || mime === 'application/json'
+                || mime.endsWith('+json')
+                || mime === 'application/pdf';
+            if (isInlineRenderable) {
+                window.open(url, '_blank', 'noopener,noreferrer');
+            } else {
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = file.name || 'unlocked-file';
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+            }
+            // Give the new tab / download time to grab the blob before
+            // revoking. 60s is generous but cheap.
+            setTimeout(() => URL.revokeObjectURL(url), 60_000);
+        } catch (_e) {
+            // Decoding failures are silent — the file row stays clickable
+            // so the user can try again.
+        }
+    }
+
+    function handleFileClick(file) {
+        setAccessError(null);
+        if (!ownsToken) {
+            setAccessError(
+                `You need to hold at least 1 ${tokenLabel} to view this content. Pick one up on a marketplace, or import a wallet that already holds one.`,
+            );
+            return;
+        }
+        const plain = unlocked.get(String(file.actionIndex));
+        if (plain) {
+            openFile(plain, file);
+            return;
+        }
+        // No cached plaintext — open the password prompt and remember
+        // which file the user wants opened once decryption succeeds.
+        onRequestAddresses();
+        setUnlockError(null);
+        setPendingFile(file);
+    }
+
+    function closePasswordPrompt() {
+        setPendingFile(null);
+        setPassword('');
+        setUnlockError(null);
+    }
 
     async function handleUnlock(event) {
         event.preventDefault();
@@ -1427,6 +1495,12 @@ function GatedGroupCard({
             }
             setUnlocked(results);
             setPassword('');
+            // Auto-open the file that triggered the prompt.
+            if (pendingFile) {
+                const target = results.get(String(pendingFile.actionIndex));
+                if (target) openFile(target, pendingFile);
+            }
+            setPendingFile(null);
         } catch (err) {
             const name = err?.name;
             const code = err?.code;
@@ -1448,8 +1522,6 @@ function GatedGroupCard({
         }
     }
 
-    const allUnlocked = group.files.every((f) => unlocked.has(String(f.actionIndex)));
-
     return (
         <div className={styles.metaBlock}>
             <h4 className={styles.metaBlockTitle}>{heading}</h4>
@@ -1459,9 +1531,34 @@ function GatedGroupCard({
             <ul className={styles.filesList}>
                 {group.files.map((f) => {
                     const plain = unlocked.get(String(f.actionIndex));
+                    if (plain) {
+                        return (
+                            <li key={f.actionIndex}>
+                                <UnlockedFileLink
+                                    name={f.name || `Action #${f.actionIndex}`}
+                                    type={f.type}
+                                    plaintextBase64={plain.plaintextBase64}
+                                />
+                            </li>
+                        );
+                    }
                     return (
                         <li key={f.actionIndex}>
-                            <span className={styles.fileLink}>
+                            <button
+                                type="button"
+                                onClick={() => handleFileClick(f)}
+                                className={styles.fileLink}
+                                style={{
+                                    cursor: 'pointer',
+                                    font: 'inherit',
+                                    width: '100%',
+                                    textAlign: 'left',
+                                    opacity: ownsToken ? 1 : 0.65,
+                                }}
+                                aria-label={ownsToken
+                                    ? `Unlock and open ${f.name || 'gated file'}`
+                                    : `Locked — purchase required to access ${f.name || 'gated file'}`}
+                            >
                                 <span className={styles.fileLinkIcon} aria-hidden="true">
                                     <Icon.FileTypeIcon type={f.type} />
                                 </span>
@@ -1469,31 +1566,30 @@ function GatedGroupCard({
                                 {f.type ? (
                                     <span className={styles.fileLinkType}>{f.type}</span>
                                 ) : null}
-                            </span>
-                            {plain ? (
-                                <UnlockedViewer
-                                    name={f.name}
-                                    type={f.type}
-                                    plaintextBase64={plain.plaintextBase64}
-                                    byteLength={plain.byteLength}
-                                />
-                            ) : null}
+                            </button>
                         </li>
                     );
                 })}
             </ul>
-            <p className={styles.metadataHint}>
-                KEY_HASH: <code>{group.keyHash.slice(0, 12)}…{group.keyHash.slice(-6)}</code>
-                {' · '}
-                {group.encryptionMethod === 1 ? 'AES-256-GCM' : `method ${group.encryptionMethod}`}
-            </p>
-            <div style={{ marginTop: 'var(--xc-space-2)' }}>
-                <Button variant="primary" onClick={handleToggle} disabled={allUnlocked}>
-                    {allUnlocked ? 'Unlocked' : expanded ? 'Cancel' : (group.files.length > 1 ? 'Unlock pack' : 'Unlock')}
-                </Button>
-            </div>
-            {expanded && !allUnlocked ? (
-                <form onSubmit={handleUnlock} noValidate style={{ marginTop: 'var(--xc-space-2)' }}>
+            {accessError ? (
+                <p
+                    role="alert"
+                    style={{
+                        marginTop: 'var(--xc-space-2)',
+                        padding: 'var(--xc-space-3)',
+                        background: 'var(--xc-bg-muted)',
+                        border: '1px dashed var(--xc-border)',
+                        borderRadius: 'var(--xc-radius-sm)',
+                        fontSize: 'var(--xc-text-sm)',
+                        color: 'var(--xc-text)',
+                        lineHeight: 1.5,
+                    }}
+                >
+                    {accessError}
+                </p>
+            ) : null}
+            {passwordOpen ? (
+                <form onSubmit={handleUnlock} noValidate style={{ marginTop: 'var(--xc-space-3)' }}>
                     {addressesLoading ? (
                         <p className={styles.muted}>Loading addresses…</p>
                     ) : addressesError ? (
@@ -1538,7 +1634,7 @@ function GatedGroupCard({
                             {unlockError}
                         </p>
                     ) : null}
-                    <div style={{ marginTop: 'var(--xc-space-2)' }}>
+                    <div style={{ display: 'flex', gap: 'var(--xc-space-2)', marginTop: 'var(--xc-space-2)' }}>
                         <Button
                             type="submit"
                             variant="primary"
@@ -1551,7 +1647,15 @@ function GatedGroupCard({
                                 || addresses.length === 0
                             }
                         >
-                            Decrypt
+                            Open file
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            onClick={closePasswordPrompt}
+                            disabled={submitting}
+                        >
+                            Cancel
                         </Button>
                     </div>
                 </form>
@@ -1560,28 +1664,22 @@ function GatedGroupCard({
     );
 }
 
-function UnlockedViewer({ name, type, plaintextBase64, byteLength }) {
+// Unlocked file rendered as the same colored full-width button used in
+// the Media → Files section. Click opens the file: browser-renderable
+// MIME types (image/*, text/*, application/json, application/pdf) open
+// inline in a new tab; everything else downloads via the `download`
+// attribute. The plaintext bytes live entirely in-memory via a Blob
+// URL — no network round-trip and no on-disk artifact unless the user
+// chooses to save the download.
+function UnlockedFileLink({ name, type, plaintextBase64 }) {
     const mime = String(type || '').toLowerCase();
-    const isImage = mime.startsWith('image/');
-    const isJson = mime === 'application/json' || mime.endsWith('+json');
-    const isText = mime.startsWith('text/') || isJson;
-
-    const decodedText = useMemo(() => {
-        if (!isText) return null;
-        try {
-            const bin = typeof atob === 'function'
-                ? atob(plaintextBase64)
-                : Buffer.from(plaintextBase64, 'base64').toString('binary');
-            const bytes = new Uint8Array(bin.length);
-            for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
-            return new TextDecoder('utf-8', { fatal: false }).decode(bytes);
-        } catch (_e) {
-            return null;
-        }
-    }, [isText, plaintextBase64]);
+    const isInlineRenderable = mime.startsWith('image/')
+        || mime.startsWith('text/')
+        || mime === 'application/json'
+        || mime.endsWith('+json')
+        || mime === 'application/pdf';
 
     const blobUrl = useMemo(() => {
-        if (isText) return null;
         try {
             const bin = typeof atob === 'function'
                 ? atob(plaintextBase64)
@@ -1593,70 +1691,32 @@ function UnlockedViewer({ name, type, plaintextBase64, byteLength }) {
         } catch (_e) {
             return null;
         }
-    }, [isText, mime, plaintextBase64]);
+    }, [mime, plaintextBase64]);
 
     useEffect(() => {
         if (!blobUrl) return undefined;
         return () => URL.revokeObjectURL(blobUrl);
     }, [blobUrl]);
 
-    if (isImage && blobUrl) {
-        return (
-            <div style={{ marginTop: 'var(--xc-space-1)' }}>
-                <img
-                    src={blobUrl}
-                    alt={name || ''}
-                    style={{ maxWidth: '100%', borderRadius: 'var(--xc-radius-sm)' }}
-                />
-            </div>
-        );
-    }
-    if (isText && decodedText !== null) {
-        const pretty = isJson
-            ? (() => { try { return JSON.stringify(JSON.parse(decodedText), null, 2); } catch { return decodedText; } })()
-            : decodedText;
-        return (
-            <pre
-                style={{
-                    marginTop: 'var(--xc-space-1)',
-                    padding: 'var(--xc-space-2)',
-                    background: 'var(--xc-bg-muted)',
-                    borderRadius: 'var(--xc-radius-sm)',
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'break-word',
-                    fontFamily: 'var(--xc-font-mono, monospace)',
-                    fontSize: 'var(--xc-text-xs)',
-                    maxHeight: '20rem',
-                    overflow: 'auto',
-                }}
-            >{pretty}</pre>
-        );
-    }
-    if (blobUrl) {
-        return (
-            <div style={{ marginTop: 'var(--xc-space-1)' }}>
-                <a
-                    href={blobUrl}
-                    download={name || `gated-${Date.now()}`}
-                    className={styles.fileLink}
-                >
-                    <span className={styles.fileLinkIcon} aria-hidden="true">
-                        <Icon.FileTypeIcon type={type} />
-                    </span>
-                    <span className={styles.fileLinkName}>Download ({formatBytes(byteLength)})</span>
-                </a>
-            </div>
-        );
-    }
-    return null;
-}
+    if (!blobUrl) return null;
 
-function formatBytes(n) {
-    if (typeof n !== 'number' || !isFinite(n)) return '—';
-    if (n < 1024) return `${n} B`;
-    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-    if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
-    return `${(n / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+    return (
+        <a
+            href={blobUrl}
+            className={styles.fileLink}
+            target={isInlineRenderable ? '_blank' : undefined}
+            rel="noreferrer noopener"
+            download={isInlineRenderable ? undefined : (name || 'unlocked-file')}
+        >
+            <span className={styles.fileLinkIcon} aria-hidden="true">
+                <Icon.FileTypeIcon type={type} />
+            </span>
+            <span className={styles.fileLinkName}>{name}</span>
+            {type ? (
+                <span className={styles.fileLinkType}>{type}</span>
+            ) : null}
+        </a>
+    );
 }
 
 function HoldersPanel({ holders, holdersLoading, holdersError, holdersFetchedAt, divisibility }) {

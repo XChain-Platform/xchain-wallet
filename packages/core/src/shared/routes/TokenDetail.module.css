@@ -382,6 +382,16 @@
     padding: var(--xc-space-3) var(--xc-space-4);
 }
 
+/* Adjacent metaBlocks inside an infoCard get a divider + vertical
+   breathing room so stacked groups (e.g. the multiple gated-content
+   groups in the Unlock tab) don't run their unlock button straight
+   into the next group's heading. */
+.infoCard > .metaBlock + .metaBlock {
+    margin-top: var(--xc-space-4);
+    padding-top: var(--xc-space-4);
+    border-top: 1px solid var(--xc-border);
+}
+
 .sectionTitle {
     margin: 0;
     font-size: var(--xc-text-xs);
@@ -766,7 +776,7 @@
 }
 
 .galleryMediaCaption {
-    font-size: var(--xc-text-xs);
+    font-size: var(--xc-text-sm);
     color: var(--xc-text-muted);
     font-weight: 600;
 }
@@ -839,7 +849,7 @@
     margin: 0;
     display: flex;
     flex-direction: column;
-    gap: var(--xc-space-1);
+    gap: var(--xc-space-3);
 }
 
 .fileLink {
