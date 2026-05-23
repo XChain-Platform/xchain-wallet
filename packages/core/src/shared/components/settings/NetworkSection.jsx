@@ -6,38 +6,19 @@
 // trips. Switching back is instant; cached data isn't wiped, so it
 // reappears as soon as the filter flips.
 //
-// Cross-network features (LINK / SWAP spanning networks) are
-// structurally impossible while the filter is on — that's a
-// clarification rather than a regression since cross-mainnet-testnet
-// bridges don't exist anyway.
-//
 // After a flip we reload the page. Many components fetch their chain-
 // scoped state once in a useEffect keyed only on (walletId, accountId)
 // and won't re-derive when settings.activeNetwork changes. A reload is
-// the cheapest robust path to a fully consistent post-switch UI. The
-// operation is rare (this is a dev-oriented affordance) and the user
-// just made a deliberate choice, so a reload doesn't surprise them.
+// the cheapest robust path to a fully consistent post-switch UI.
 
 import { useSettings } from '../../hooks/useSettings.js';
 import { NETWORKS, NETWORK_DEFAULT } from '../../../schemas/settings.js';
-import { ROW, ROW_HINT, STACK, Status } from './_settingsPrimitives.jsx';
+import { ROW, SELECT, Status } from './_settingsPrimitives.jsx';
 
 const NETWORK_OPTIONS = /** @type {const} */ ([
-    {
-        value: 'mainnet',
-        label: 'Mainnet',
-        hint: 'Real funds on the production blockchains. The everyday default.',
-    },
-    {
-        value: 'testnet',
-        label: 'Testnet',
-        hint: 'Public testnets for each chain (testnet3 / litecoin testnet / dogecoin testnet). Coins have no real value.',
-    },
-    {
-        value: 'regtest',
-        label: 'Regtest',
-        hint: 'Local regression-test networks for development. Requires a regtest node running on your machine or LAN.',
-    },
+    { value: 'mainnet', label: 'Mainnet' },
+    { value: 'testnet', label: 'Testnet' },
+    { value: 'regtest', label: 'Regtest' },
 ]);
 
 export function NetworkSection() {
@@ -56,11 +37,6 @@ export function NetworkSection() {
         if (next === current) return;
         try {
             await update({ activeNetwork: next });
-            // Components that pulled their chain-scoped state on mount
-            // (Home / History / AddressList / Send / every action form)
-            // won't re-fetch on settings change. A reload guarantees a
-            // fully consistent post-switch UI without per-component
-            // refresh wiring.
             if (typeof window !== 'undefined') window.location.reload();
         } catch (err) {
             // eslint-disable-next-line no-console
@@ -69,54 +45,18 @@ export function NetworkSection() {
     };
 
     return (
-        <fieldset
-            style={{
-                ...STACK,
-                border: 'none',
-                padding: 0,
-                margin: 0,
-            }}
-        >
-            <legend
-                style={{
-                    color: 'var(--xc-text-muted)',
-                    fontSize: 'var(--xc-text-xs)',
-                    marginBottom: 'var(--xc-space-1)',
-                }}
+        <div style={ROW}>
+            <span style={{ color: 'var(--xc-text-muted)' }}>Network</span>
+            <select
+                value={current}
+                onChange={(e) => onChange(e.target.value)}
+                aria-label="Active network"
+                style={SELECT}
             >
-                The wallet shows balances, history, and chain pickers only for the selected network. Switching does not delete any wallet data — chains on the other networks stay configured and reappear when you switch back. The page reloads on change.
-            </legend>
-            {NETWORK_OPTIONS.map((opt) => (
-                <label
-                    key={opt.value}
-                    style={{
-                        ...ROW,
-                        alignItems: 'flex-start',
-                        cursor: 'pointer',
-                    }}
-                >
-                    <input
-                        type="radio"
-                        name="activeNetwork"
-                        value={opt.value}
-                        checked={current === opt.value}
-                        onChange={() => onChange(opt.value)}
-                        aria-describedby={`activeNetwork-${opt.value}-hint`}
-                        style={{
-                            marginTop: 2,
-                            marginInlineEnd: 'var(--xc-space-2)',
-                            cursor: 'pointer',
-                            flexShrink: 0,
-                        }}
-                    />
-                    <span style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                        <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>{opt.label}</span>
-                        <span id={`activeNetwork-${opt.value}-hint`} style={ROW_HINT}>
-                            {opt.hint}
-                        </span>
-                    </span>
-                </label>
-            ))}
-        </fieldset>
+                {NETWORK_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+            </select>
+        </div>
     );
 }

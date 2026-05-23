@@ -473,6 +473,10 @@ export function Send({ walletId, onBack, prefill = null }) {
         setStage('form');
     }, [amount]);
 
+    // Latest-tick ref so the chainId effect below can preserve a
+    // non-empty tick without subscribing to every keystroke.
+    const tickRef = useRef(tick);
+    tickRef.current = tick;
     useEffect(() => {
         if (!chainId || !addressesByChain) return;
         const addrs = (addressesByChain[chainId] || []).filter(
@@ -488,8 +492,14 @@ export function Send({ walletId, onBack, prefill = null }) {
         } else {
             setFromAddressId(null);
         }
+        // Default the tick to the native coin only when the field is
+        // empty. Without this guard, SendPicker prefilling a non-native
+        // token (e.g. PEPECREATURE on Bitcoin testnet4) gets clobbered
+        // by 'TBTC' the moment this effect fires post-mount.
         const descriptor = chainRegistry.get(chainId);
-        if (descriptor) setTick(descriptor.coin.toUpperCase());
+        if (descriptor && !tickRef.current.trim()) {
+            setTick(descriptor.coin.toUpperCase());
+        }
     }, [chainId, addressesByChain]);
 
     useEffect(() => {
@@ -1194,6 +1204,31 @@ export function Send({ walletId, onBack, prefill = null }) {
                 )}
             />
         );
+        // Truly-empty path: no saved contacts on this chain at all.
+        // Render a single calm card with the empty message — skip the
+        // outer surface, the hint copy, and the filter input so the
+        // page doesn't show a card-inside-a-card.
+        if (chainContacts.length === 0) {
+            return (
+                <Screen variant={variant} header={pickerHeader}>
+                    <div
+                        className={isFull ? styles.cardFull : styles.cardSmall}
+                        style={{
+                            padding: 'var(--xc-space-6)',
+                            background: 'var(--xc-surface)',
+                            border: '1px solid var(--xc-border)',
+                            borderRadius: 'var(--xc-radius-lg)',
+                            textAlign: 'center',
+                            fontSize: 'var(--xc-text-md)',
+                            fontWeight: 600,
+                            color: 'var(--xc-text)',
+                        }}
+                    >
+                        Your address book is empty for {chainLabel}
+                    </div>
+                </Screen>
+            );
+        }
         return (
             <Screen variant={variant} header={pickerHeader}>
                 <div className={`${styles.card} ${isFull ? styles.cardFull : styles.cardSmall}`}>
@@ -1215,18 +1250,16 @@ export function Send({ walletId, onBack, prefill = null }) {
                             style={{
                                 marginTop: 'var(--xc-space-3)',
                                 padding: 'var(--xc-space-4)',
-                                border: '1px dashed var(--xc-border)',
+                                border: '1px solid var(--xc-border)',
                                 borderRadius: 'var(--xc-radius-md)',
-                                background: 'var(--xc-bg-muted)',
-                                color: 'var(--xc-text-muted)',
+                                background: 'var(--xc-surface)',
+                                color: 'var(--xc-text)',
                                 textAlign: 'center',
-                                fontSize: 'var(--xc-text-sm)',
-                                lineHeight: 1.5,
+                                fontSize: 'var(--xc-text-md)',
+                                fontWeight: 600,
                             }}
                         >
-                            {chainContacts.length === 0
-                                ? `Your address book is empty for ${chainLabel}. Type or paste an address on the Send form, then tap "Save as contact" to build the list.`
-                                : 'No contacts match your filter.'}
+                            No contacts match your filter
                         </div>
                     ) : (
                         <ul style={{ listStyle: 'none', margin: 'var(--xc-space-3) 0 0', padding: 0 }}>
@@ -1475,6 +1508,20 @@ export function Send({ walletId, onBack, prefill = null }) {
                     </span>
                 </div>
             </div>
+            {feeTiers ? (
+                <FeeSelector
+                    tiers={feeTiers}
+                    value={feePick}
+                    onChange={setFeePick}
+                    placeholderBadge={feeEstimate?.source === 'static-placeholder'}
+                    formatFiat={(coinAmount) => {
+                        if (!fiatRate || !coinAmount) return null;
+                        const v = coinToFiat(String(coinAmount), fiatRate);
+                        if (v == null || !Number.isFinite(v)) return null;
+                        return `≈ ${v.toFixed(2)} ${fiatRate.fiatCurrency || ''}`.trim();
+                    }}
+                />
+            ) : null}
             <details className={styles.details}>
                 <summary className={styles.detailsToggle}>Advanced</summary>
                 <Input
@@ -1484,20 +1531,6 @@ export function Send({ walletId, onBack, prefill = null }) {
                     onChange={(e) => setMemo(e.target.value)}
                     autoComplete="off"
                 />
-                {feeTiers ? (
-                    <FeeSelector
-                        tiers={feeTiers}
-                        value={feePick}
-                        onChange={setFeePick}
-                        placeholderBadge={feeEstimate?.source === 'static-placeholder'}
-                        formatFiat={(coinAmount) => {
-                            if (!fiatRate || !coinAmount) return null;
-                            const v = coinToFiat(String(coinAmount), fiatRate);
-                            if (v == null || !Number.isFinite(v)) return null;
-                            return `≈ ${v.toFixed(2)} ${fiatRate.fiatCurrency || ''}`.trim();
-                        }}
-                    />
-                ) : null}
             </details>
             {formError ? (
                 <StatusMessage

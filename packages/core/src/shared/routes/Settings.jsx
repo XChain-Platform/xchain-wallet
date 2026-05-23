@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Screen, Icon } from '@xchain-wallet/core/ui';
+import { Screen, ScreenHeader, Icon } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { WALLET_VERSION } from '../../buildInfo.js';
@@ -20,9 +20,8 @@ import { PrivacySection } from '../components/settings/PrivacySection.jsx';
 import { SafetySection } from '../components/settings/SafetySection.jsx';
 import { ThisWalletSection } from '../components/settings/ThisWalletSection.jsx';
 import { WalletModeSection } from '../components/settings/WalletModeSection.jsx';
-import { WALLET_MODE_DEFAULT, NETWORK_DEFAULT, NETWORKS } from '../../schemas/settings.js';
+import { WALLET_MODE_DEFAULT } from '../../schemas/settings.js';
 import styles from './ActionsMenu.module.css';
-import pickerStyles from './WalletPicker.module.css';
 
 /**
  * Settings page — §35.
@@ -174,11 +173,10 @@ export function Settings({
         {
             id: 'network',
             title: 'Network',
-            description: 'Choose Mainnet, Testnet, or Regtest. Filters every visible chain and stops queries to the inactive networks.',
+            description: 'Choose Mainnet, Testnet, or Regtest. Filters every visible chain and stops queries to the inactive networks. The page reloads on change.',
             keywords: 'network mainnet testnet regtest active filter chain switch mode dev',
-            kind: 'internal-drill',
+            kind: 'panel',
             Component: NetworkSection,
-            summary: networkSummary(settings),
         },
         {
             id: 'network-endpoints',
@@ -265,19 +263,11 @@ export function Settings({
         if (section && section.kind === 'internal-drill' && section.Component) {
             const SectionComponent = section.Component;
             const subpageHeader = (
-                <div className={pickerStyles.header}>
-                    <button
-                        type="button"
-                        onClick={() => setSubpageId(null)}
-                        className={pickerStyles.iconBtn}
-                        aria-label="Back to settings"
-                        title="Back to settings"
-                    >
-                        <Icon.BackIcon />
-                    </button>
-                    <span className={pickerStyles.title}>{section.title}</span>
-                    <span />
-                </div>
+                <ScreenHeader
+                    onBack={() => setSubpageId(null)}
+                    backLabel="Back to settings"
+                    title={section.title}
+                />
             );
             return (
                 <Screen variant={variant} header={subpageHeader}>
@@ -293,21 +283,7 @@ export function Settings({
 
     // ─── List view ────────────────────────────────────────────────
 
-    const header = (
-        <div className={pickerStyles.header}>
-            <button
-                type="button"
-                onClick={onBack}
-                className={pickerStyles.iconBtn}
-                aria-label="Back"
-                title="Back"
-            >
-                <Icon.BackIcon />
-            </button>
-            <span className={pickerStyles.title}>Settings</span>
-            <span />
-        </div>
-    );
+    const header = <ScreenHeader onBack={onBack} title="Settings" />;
 
     return (
         <Screen variant={variant} header={header}>
@@ -522,17 +498,6 @@ function walletModeSummary(settings) {
     if (mode === 'watcher') return 'Watcher (watch-only)';
     if (mode === 'signer') return 'Signer (air-gapped)';
     return mode;
-}
-
-function networkSummary(settings) {
-    if (!settings) return '—';
-    const net = NETWORKS.includes(settings.activeNetwork)
-        ? settings.activeNetwork
-        : NETWORK_DEFAULT;
-    if (net === 'mainnet') return 'Mainnet';
-    if (net === 'testnet') return 'Testnet';
-    if (net === 'regtest') return 'Regtest';
-    return net;
 }
 
 function feesSummary(settings) {

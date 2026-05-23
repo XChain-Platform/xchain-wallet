@@ -555,8 +555,8 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onBuy, onCreateToken
                 <button
                     type="button"
                     className={styles.menuBtn}
-                    onClick={() => setMenuOpen(true)}
-                    aria-label="Open menu"
+                    onClick={() => setMenuOpen((v) => !v)}
+                    aria-label={menuOpen ? 'Close menu' : 'Open menu'}
                     aria-haspopup="dialog"
                     aria-expanded={menuOpen ? 'true' : 'false'}
                 >

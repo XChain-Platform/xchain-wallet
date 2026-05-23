@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
     Screen,
+    ScreenHeader,
     Button,
     ChainBadge,
     AddressText,
@@ -13,6 +14,7 @@ import {
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { EmptyStateNudge } from '../components/EmptyStateNudge.jsx';
+import { coinFromChainId } from '../components/BalanceList.jsx';
 import styles from './History.module.css';
 import wifStyles from './AddressList.wif.module.css';
 
@@ -38,7 +40,15 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {() => void} [props.onReceive]
  * @param {(address: { id: string, address: string, source: string, chain: string, network: string, derivationPath: string | null, label: string }) => void} [props.onShowPrivateKey]   §17.7 — when supplied, each non-multisig row gets a "Show key" affordance that hands the row's address back to the caller (shell wires it to <ViewPrivateKey>)
  */
-export function AddressList({ walletId, accountId, onBack, onReceive, onShowPrivateKey }) {
+export function AddressList({
+    walletId,
+    accountId,
+    onBack,
+    onReceive,
+    onShowPrivateKey,
+    networkFilter = 'all',
+    tokenQuery = '',
+}) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
 
@@ -46,8 +56,6 @@ export function AddressList({ walletId, accountId, onBack, onReceive, onShowPriv
         /** @type {Record<string, any[]> | null} */ (null),
     );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
-    const [enabledChains, setEnabledChains] = useState(/** @type {Set<string>} */ (new Set()));
-    const [multisigOnly, setMultisigOnly] = useState(false);
     const [multisigs, setMultisigs] = useState(
         /** @type {Array<{ multisigConfigId: string, address: string, threshold: number, cosignerCount: number, scheme: string }>} */ ([]),
     );
@@ -126,12 +134,6 @@ export function AddressList({ walletId, accountId, onBack, onReceive, onShowPriv
             .then((byChain) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain || {});
-                const initial = new Set(
-                    Object.entries(byChain || {})
-                        .filter(([, addrs]) => Array.isArray(addrs) && addrs.length > 0)
-                        .map(([cid]) => cid),
-                );
-                setEnabledChains(initial);
             })
             .catch((err) => {
                 if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
@@ -161,17 +163,18 @@ export function AddressList({ walletId, accountId, onBack, onReceive, onShowPriv
 
     const rows = useMemo(() => {
         if (!addressesByChain) return [];
-        // Map of lower-case address → matching multisig config so each
-        // row knows which (if any) config it belongs to.
         const multisigByAddress = new Map(
             multisigs
                 .filter((m) => typeof m.address === 'string')
                 .map((m) => [m.address.toLowerCase(), m]),
         );
+        const networkMatch = (chainId) => (
+            networkFilter === 'all' || coinFromChainId(chainId) === networkFilter
+        );
         /** @type {Array<{ key: string, chainId: string, address: string, label: string, multisig: any, record: any }>} */
         const out = [];
         for (const [chainId, addrs] of Object.entries(addressesByChain)) {
-            if (!enabledChains.has(chainId)) continue;
+            if (!networkMatch(chainId)) continue;
             if (!Array.isArray(addrs)) continue;
             for (const a of addrs) {
                 const matched = multisigByAddress.get((a.address || '').toLowerCase()) || null;
@@ -185,12 +188,11 @@ export function AddressList({ walletId, accountId, onBack, onReceive, onShowPriv
                 });
             }
         }
-        // Synthesize one row per multisig config when its derived
-        // address isn't already in the wallet's address table —
-        // Receive derives them on-demand and doesn't necessarily
-        // persist them.
+        // Synthesize one row per multisig config when its derived address
+        // isn't already in the wallet's address table — Receive derives
+        // them on-demand and doesn't necessarily persist them.
         const btc = chainRegistry.byCoin('bitcoin')[0]?.id;
-        if (btc && enabledChains.has(btc)) {
+        if (btc && networkMatch(btc)) {
             for (const m of multisigs) {
                 if (!out.some((r) => r.address?.toLowerCase() === m.address.toLowerCase())) {
                     out.push({
@@ -204,18 +206,16 @@ export function AddressList({ walletId, accountId, onBack, onReceive, onShowPriv
                 }
             }
         }
-        if (multisigOnly) return out.filter((r) => r.multisig);
-        return out;
-    }, [addressesByChain, enabledChains, multisigs, multisigOnly]);
-
-    const toggleChain = (cid) => {
-        setEnabledChains((prev) => {
-            const next = new Set(prev);
-            if (next.has(cid)) next.delete(cid);
-            else next.add(cid);
-            return next;
-        });
-    };
+        let next = out;
+        const q = String(tokenQuery || '').trim().toLowerCase();
+        if (q) {
+            next = next.filter((r) => (
+                String(r.address || '').toLowerCase().includes(q)
+                || String(r.label || '').toLowerCase().includes(q)
+            ));
+        }
+        return next;
+    }, [addressesByChain, networkFilter, tokenQuery, multisigs]);
 
         const header = (
         <ScreenHeader
@@ -263,39 +263,6 @@ export function AddressList({ walletId, accountId, onBack, onReceive, onShowPriv
 
     return wrap(
         <>
-            <div className={styles.filterBar} role="group" aria-label="Address filters">
-                <span className={styles.filterLabel}>Chains</span>
-                {activeChainIds.map((cid) => {
-                    const d = chainRegistry.get(cid);
-                    const active = enabledChains.has(cid);
-                    return (
-                        <button
-                            key={cid}
-                            type="button"
-                            onClick={() => toggleChain(cid)}
-                            className={`${styles.chip} ${active ? styles.chipActive : ''}`}
-                            aria-pressed={active}
-                        >
-                            {d ? <ChainBadge descriptor={d} size="sm" /> : null}
-                            <span>{d?.displayName || cid}</span>
-                        </button>
-                    );
-                })}
-                <span className={styles.divider} aria-hidden="true" />
-                <button
-                    type="button"
-                    onClick={() => setMultisigOnly((v) => !v)}
-                    disabled={multisigs.length === 0}
-                    className={`${styles.chip} ${styles.chipCrossChain} ${multisigOnly ? styles.chipActive : ''}`}
-                    aria-pressed={multisigOnly}
-                    title={multisigs.length > 0
-                        ? 'Show only this wallet\'s multisig receive addresses (§22).'
-                        : 'No multisig address configured for this wallet.'}
-                >
-                    🔐 Multisig only
-                </button>
-            </div>
-
             <div className={wifStyles.wifBar}>
                 {wifNotice && !showWifForm ? (
                     <p className={wifStyles.wifNotice} role="status">{wifNotice}</p>
@@ -404,9 +371,7 @@ export function AddressList({ walletId, accountId, onBack, onReceive, onShowPriv
 
             {rows.length === 0 ? (
                 <p className={styles.empty}>
-                    {multisigOnly
-                        ? 'No multisig address available.'
-                        : 'No addresses for the selected chains.'}
+                    No addresses match the current filter.
                 </p>
             ) : null}
 

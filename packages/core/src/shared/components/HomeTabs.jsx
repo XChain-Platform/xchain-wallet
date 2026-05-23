@@ -11,6 +11,7 @@ import {
 import balanceStyles from './BalanceList.module.css';
 import { CollectiblesView } from './CollectiblesView.jsx';
 import { TotalBalanceHero } from './TotalBalanceHero.jsx';
+import { PortfolioChart } from './PortfolioChart.jsx';
 import {
     isDemoWallet,
     synthesizeDemoHistory,
@@ -106,6 +107,11 @@ export function HomeTabs({ chainRegistry, balances, balancesFetchedAt, walletId,
                 rows={filteredRows}
                 networkFilter={networkFilter}
                 lastSyncedAt={balancesFetchedAt}
+            />
+
+            <PortfolioChart
+                rows={filteredRows}
+                walletId={walletId}
             />
 
             {actions}
@@ -357,7 +363,13 @@ function ActivityRow({ entry, walletAddresses, assetLookup, chainTip, onClick })
                     {isNative && chainIconUrl ? (
                         <img src={chainIconUrl} alt="" aria-hidden="true" className={balanceStyles.iconImg} />
                     ) : tokenInfo?.imageUrl ? (
-                        <img src={tokenInfo.imageUrl} alt="" aria-hidden="true" className={styles.tokenIconSquare} />
+                        <img
+                            src={tokenInfo.imageUrl}
+                            alt=""
+                            aria-hidden="true"
+                            className={styles.tokenIconSquare}
+                            onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                        />
                     ) : (
                         <span
                             className={balanceStyles.iconLetter}
@@ -569,7 +581,13 @@ function DemoDefiList({ networkFilter, balances, onSelectEntry }) {
                                         <img src={chainIconUrl} alt="" aria-hidden="true" className={balanceStyles.iconImg} />
                                     ) : null
                                 ) : tokenInfo?.imageUrl ? (
-                                    <img src={tokenInfo.imageUrl} alt="" aria-hidden="true" className={styles.tokenIconSquare} />
+                                    <img
+                                        src={tokenInfo.imageUrl}
+                                        alt=""
+                                        aria-hidden="true"
+                                        className={styles.tokenIconSquare}
+                                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                    />
                                 ) : (
                                     <span
                                         className={balanceStyles.iconLetter}

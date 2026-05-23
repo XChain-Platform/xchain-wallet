@@ -42,6 +42,7 @@ import { DemoBanner } from '@xchain-wallet/core/shared/components/DemoBanner.jsx
 import { LeftNav, FullLayoutWithNav } from '@xchain-wallet/core/shared/components/LeftNav.jsx';
 import { AppHeader } from '@xchain-wallet/core/shared/components/AppHeader.jsx';
 import { HeaderActionMenu } from '@xchain-wallet/core/shared/components/HeaderActionMenu.jsx';
+import { MenuRoute } from '@xchain-wallet/core/shared/routes/MenuRoute.jsx';
 import { registry as registryLib } from '@xchain-wallet/core';
 
 const APP_CHAIN_REGISTRY = registryLib.defaultRegistry();
@@ -195,7 +196,10 @@ function AppInner() {
     // all / coins / tokens. Lifted here so the popover and SendPicker
     // share one source of truth.
     const [globalKindFilter, setGlobalKindFilter] = useState(/** @type {'all' | 'coins' | 'tokens'} */ ('all'));
-    const [globalMenuOpen, setGlobalMenuOpen] = useState(false);
+    // Tracks which unlockedView the user was on when they tapped the
+    // pancake. The back-button on MenuRoute returns to it; tapping the
+    // pancake again from inside Menu does the same.
+    const [menuBackTo, setMenuBackTo] = useState('home');
     // QR scanner overlay — available from any unlocked view via the
     // AppHeader scan button. On a `send` outcome we populate the
     // sendPrefill and navigate into Send; receive jumps to the Receive
@@ -422,6 +426,24 @@ function AppInner() {
             // ≥900px viewports. Existing route returns are captured by
             // the IIFE so the surrounding switch case stays readable.
             const routeNode = (() => {
+            if (unlockedView === 'menu' && activeWalletId) {
+                return (
+                    <MenuRoute
+                        onBack={() => setUnlockedView(menuBackTo)}
+                        onMarkets={() => setUnlockedView('markets')}
+                        onTokens={() => setUnlockedView('actions')}
+                        onMessaging={() => setUnlockedView('messaging')}
+                        onCrossChain={() => setUnlockedView('cross-chain')}
+                        onContacts={() => setUnlockedView('contacts')}
+                        onAddresses={() => setUnlockedView('addresses')}
+                        onContracts={() => setUnlockedView('contracts')}
+                        onStaking={() => setUnlockedView('staking')}
+                        onMultisig={() => setUnlockedView('multisig')}
+                        onLock={() => { lockWallet().then(refresh).catch(() => refresh()); }}
+                        onSettings={() => setUnlockedView('settings')}
+                    />
+                );
+            }
             if (unlockedView === 'send' && activeWalletId) {
                 return (
                     <Send
@@ -770,6 +792,8 @@ function AppInner() {
                     <AddressList
                         walletId={activeWalletId}
                         accountId={activeAccountId || undefined}
+                        networkFilter={globalNetworkFilter}
+                        tokenQuery={globalTokenQuery}
                         onBack={() => setUnlockedView('home')}
                         onReceive={() => setUnlockedView('receive')}
                         onShowPrivateKey={(addr) => {
@@ -1384,9 +1408,16 @@ function AppInner() {
                                     onTokenQueryChange={setGlobalTokenQuery}
                                     kindFilter={unlockedView === 'send-picker' ? globalKindFilter : undefined}
                                     onKindFilterChange={unlockedView === 'send-picker' ? setGlobalKindFilter : undefined}
-                                    onMenuOpen={() => setGlobalMenuOpen(true)}
+                                    onMenuOpen={() => {
+                                        if (unlockedView === 'menu') {
+                                            setUnlockedView(menuBackTo);
+                                        } else {
+                                            setMenuBackTo(unlockedView);
+                                            setUnlockedView('menu');
+                                        }
+                                    }}
                                     onScan={() => setGlobalScannerOpen(true)}
-                                    showNetworkFilter={unlockedView === 'home' || unlockedView === 'send-picker'}
+                                    showNetworkFilter={unlockedView === 'home' || unlockedView === 'send-picker' || unlockedView === 'addresses'}
                                 />
                                 {/* Cluster J FOLLOWUP 2 — DemoBanner persists across every
                                     unlocked view via the shared layout header slot, not
@@ -1399,22 +1430,6 @@ function AppInner() {
                     }
                 >
                     {routeNode}
-                    {globalMenuOpen ? (
-                        <HeaderActionMenu
-                            onClose={() => setGlobalMenuOpen(false)}
-                            onMarkets={() => { setGlobalMenuOpen(false); setUnlockedView('markets'); }}
-                            onTokens={() => { setGlobalMenuOpen(false); setUnlockedView('actions'); }}
-                            onMessaging={() => { setGlobalMenuOpen(false); setUnlockedView('messaging'); }}
-                            onCrossChain={() => { setGlobalMenuOpen(false); setUnlockedView('cross-chain'); }}
-                            onContacts={() => { setGlobalMenuOpen(false); setUnlockedView('contacts'); }}
-                            onAddresses={() => { setGlobalMenuOpen(false); setUnlockedView('addresses'); }}
-                            onContracts={() => { setGlobalMenuOpen(false); setUnlockedView('contracts'); }}
-                            onStaking={() => { setGlobalMenuOpen(false); setUnlockedView('staking'); }}
-                            onMultisig={() => { setGlobalMenuOpen(false); setUnlockedView('multisig'); }}
-                            onLock={() => { setGlobalMenuOpen(false); handleNavLock(); }}
-                            onSettings={() => { setGlobalMenuOpen(false); handleOpenSettings(); }}
-                        />
-                    ) : null}
                     {globalScannerOpen ? (
                         <div
                             role="dialog"

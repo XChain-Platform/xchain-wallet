@@ -88,16 +88,23 @@ export function TotalBalanceHero({ rows, networkFilter, lastSyncedAt }) {
         return { delta, pct };
     }, [rows, priceMap, total]);
 
-    const filterLabel = networkFilter === 'all' ? 'All networks' : networkFilter.toUpperCase();
+    const filterLabel = networkFilter === 'all' ? null : networkFilter.toUpperCase();
     const hasUnpriced = unpriced > 0;
     const hasSync = typeof lastSyncedAt === 'number' && lastSyncedAt > 0;
+    const hasChange = !hidden
+        && change24h
+        && Number.isFinite(change24h.delta)
+        && Number.isFinite(change24h.pct);
+    const showMeta = hasChange || hasUnpriced || hasSync;
 
     return (
         <section className={styles.hero} aria-label="Total balance">
             <div className={styles.row}>
                 <span className={styles.label}>
                     Total balance
-                    <span className={styles.scope}>· {filterLabel}</span>
+                    {filterLabel ? (
+                        <span className={styles.scope}>· {filterLabel}</span>
+                    ) : null}
                 </span>
                 <button
                     type="button"
@@ -119,34 +126,33 @@ export function TotalBalanceHero({ rows, networkFilter, lastSyncedAt }) {
                     </>
                 )}
             </div>
-            {!hidden && change24h && Number.isFinite(change24h.delta) && Number.isFinite(change24h.pct) ? (
-                <div className={styles.change} aria-label="24h change">
-                    <span
-                        className={
-                            change24h.delta > 0 ? styles.changePositive
-                                : change24h.delta < 0 ? styles.changeNegative
-                                : styles.changeNeutral
-                        }
-                    >
-                        {change24h.delta > 0 ? '▲' : change24h.delta < 0 ? '▼' : '—'}{' '}
-                        {formatFiatAmount(Math.abs(change24h.delta), fiatCurrency)}{' '}
-                        ({change24h.pct > 0 ? '+' : ''}{change24h.pct.toFixed(2)}%)
-                    </span>
-                    <span className={styles.changeLabel}>· 24h</span>
-                </div>
-            ) : null}
-            {hasUnpriced || hasSync ? (
-                <div className={styles.note}>
-                    <span className={styles.noteLeft}>
-                        {hasUnpriced
-                            ? `${unpriced} ${unpriced === 1 ? 'tick' : 'tokens'} not priced`
-                            : ''}
+            {showMeta ? (
+                <div className={styles.meta} aria-label="Balance summary">
+                    <span className={styles.metaLeft}>
+                        {hasChange ? (
+                            <span
+                                className={
+                                    change24h.delta > 0 ? styles.changePositive
+                                        : change24h.delta < 0 ? styles.changeNegative
+                                        : styles.changeNeutral
+                                }
+                            >
+                                {change24h.delta > 0 ? '▲' : change24h.delta < 0 ? '▼' : '—'}{' '}
+                                {formatFiatAmount(Math.abs(change24h.delta), fiatCurrency)}{' '}
+                                ({change24h.pct > 0 ? '+' : ''}{change24h.pct.toFixed(2)}%)
+                            </span>
+                        ) : null}
+                        {hasUnpriced ? (
+                            <span className={styles.metaUnpriced}>
+                                {hasChange ? ' · ' : ''}{unpriced} {unpriced === 1 ? 'tick' : 'tokens'} not priced
+                            </span>
+                        ) : null}
                     </span>
                     {hasSync ? (
                         <StalenessLabel
                             lastSyncedAt={lastSyncedAt}
                             warnAfterMs={5 * 60_000}
-                            className={styles.noteRight}
+                            className={styles.metaRight}
                         />
                     ) : null}
                 </div>
