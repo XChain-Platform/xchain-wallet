@@ -162,8 +162,8 @@ for (const [shell, pkgPath] of [
     ['web', join(web, 'package.json')],
 ]) {
     const pkg = readFileSync(pkgPath, 'utf8');
-    assert.ok(/"xchain-sdk":\s*"\^1\.13\.0"/.test(pkg),
-        `${shell} pkg pins xchain-sdk ^1.13.0`);
+    assert.ok(/"xchain-sdk":\s*"(?:link:|\^1\.(?:1[3-9]|[2-9]\d)\.0)/.test(pkg),
+        `${shell} pkg pins xchain-sdk ≥ ^1.13.0 or uses link: for sibling-repo dev`);
 }
 
 console.log(

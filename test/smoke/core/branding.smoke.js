@@ -44,7 +44,7 @@ for (const name of [
 assert.equal(branding.PRODUCT_NAME, 'XChain Wallet');
 assert.equal(branding.CANONICAL_DOMAIN, 'wallet.xchain.io');
 assert.equal(branding.HOMEPAGE_URL, 'https://wallet.xchain.io');
-assert.ok(/^The self-custodial/.test(branding.TAGLINE), 'tagline set');
+assert.ok(/^The open-source, non-custodial/.test(branding.TAGLINE), 'tagline set');
 
 // 3. Accent colours are CSS hex
 const HEX = /^#[0-9A-Fa-f]{6}$/;

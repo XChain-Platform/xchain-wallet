@@ -133,8 +133,8 @@ for (const [shell, viteConfigPath, pkgPath] of [
     const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
     assert.match(
         pkg.dependencies?.['xchain-sdk'] || '',
-        /^\^1\.(?:1[1-9]|[2-9]\d)\.0$/,
-        `${shell} pins xchain-sdk ≥ ^1.11.0 (Phase 4 Step 18 baseline)`,
+        /^(?:link:|\^1\.(?:1[1-9]|[2-9]\d)\.0$)/,
+        `${shell} pins xchain-sdk ≥ ^1.11.0 (Phase 4 Step 18 baseline) — or link: for sibling-repo dev`,
     );
     assert.match(
         pkg.devDependencies?.['vite-plugin-node-polyfills'] || '',

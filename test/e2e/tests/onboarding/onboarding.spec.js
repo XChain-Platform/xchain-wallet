@@ -26,7 +26,7 @@ test.describe('onboarding', () => {
         await expect(
             page.getByRole('heading', { name: 'XChain Wallet' }),
         ).toBeVisible();
-        await page.getByRole('button', { name: 'Create a new wallet' }).click();
+        await page.getByRole('button', { name: 'Create new wallet' }).click();
 
         // Password stage
         await expect(
@@ -66,7 +66,7 @@ test.describe('onboarding', () => {
     test('wrong password surfaces inline', async ({ page }) => {
         // Seed a wallet first.
         await page.goto('/');
-        await page.getByRole('button', { name: 'Create a new wallet' }).click();
+        await page.getByRole('button', { name: 'Create new wallet' }).click();
         await page.getByLabel('Password', { exact: true }).fill('rightpassword');
         await page.getByLabel('Confirm password').fill('rightpassword');
         await page.getByRole('button', { name: 'Next' }).click();
@@ -86,7 +86,7 @@ test.describe('onboarding', () => {
     test('import an existing BIP39 mnemonic', async ({ page }) => {
         await page.goto('/');
         await page
-            .getByRole('button', { name: 'I already have a wallet' })
+            .getByRole('button', { name: 'Import wallet' })
             .click();
 
         await page.getByLabel('Recovery phrase').fill(KNOWN_BIP39);
@@ -103,7 +103,7 @@ test.describe('onboarding', () => {
     test('import rejects wrong word count', async ({ page }) => {
         await page.goto('/');
         await page
-            .getByRole('button', { name: 'I already have a wallet' })
+            .getByRole('button', { name: 'Import wallet' })
             .click();
 
         // 13 words — not a valid BIP39 count.

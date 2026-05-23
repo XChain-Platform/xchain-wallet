@@ -175,8 +175,8 @@ for (const [shell, pkgPath] of [
     ['web', join(web, 'package.json')],
 ]) {
     const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
-    assert.match(pkg.dependencies['xchain-sdk'], /^\^1\.(?:1[1-9]|[2-9]\d)\.0$/,
-        `${shell} pins xchain-sdk ≥ ^1.11.0 (Phase 4 Step 18 baseline)`);
+    assert.match(pkg.dependencies['xchain-sdk'], /^(?:link:|\^1\.(?:1[1-9]|[2-9]\d)\.0$)/,
+        `${shell} pins xchain-sdk ≥ ^1.11.0 (Phase 4 Step 18 baseline) or uses link: for sibling-repo dev`);
 }
 
 console.log(

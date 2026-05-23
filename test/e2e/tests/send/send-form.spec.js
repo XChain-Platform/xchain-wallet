@@ -10,7 +10,7 @@ test.describe('send form', () => {
         // Seed a wallet per test — each browser context starts with
         // empty IDB, so we create fresh every time.
         await page.goto('/');
-        await page.getByRole('button', { name: 'Create a new wallet' }).click();
+        await page.getByRole('button', { name: 'Create new wallet' }).click();
         await page.getByLabel('Password', { exact: true }).fill('sendpassword123');
         await page.getByLabel('Confirm password').fill('sendpassword123');
         await page.getByRole('button', { name: 'Next' }).click();

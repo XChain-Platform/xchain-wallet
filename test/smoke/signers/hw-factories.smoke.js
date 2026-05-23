@@ -260,8 +260,8 @@ assert.ok(
     'desktop trezorFactory delegates to core makeTrezorFactory',
 );
 assert.ok(
-    /\.\.\/\.\.\/\.\.\/\.\.\/core\/src\/signerFactories\/index\.js/.test(dTrezorSrc),
-    'desktop trezorFactory imports core via cross-package relative path',
+    /@xchain-wallet\/core\/signerFactories|\.\.\/\.\.\/\.\.\/core\/src\/signerFactories/.test(dTrezorSrc),
+    'desktop trezorFactory imports core (workspace package or correct relative path)',
 );
 assert.ok(
     /import\(.@trezor\/connect-web.\)/.test(dTrezorSrc),
