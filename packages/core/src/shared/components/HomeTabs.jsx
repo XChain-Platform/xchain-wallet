@@ -18,6 +18,7 @@ import {
     synthesizeDemoDefiPositions,
 } from '@xchain-wallet/core/flows';
 import { classifyEntryAction, classifyEntryStatus } from '../utils/historyFilter.js';
+import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import styles from './HomeTabs.module.css';
 
 /**
@@ -328,6 +329,7 @@ const ACTION_LABEL = {
 //   2. amount + tick (primary content)
 //   3. Block N + Confirms pill + relative time (right)
 function ActivityRow({ entry, walletAddresses, assetLookup, chainTip, onClick }) {
+    const [balancesHidden] = useBalancesHidden();
     const kind = classifyEntryAction(entry, walletAddresses);
     const status = classifyEntryStatus(entry);
     const tick = entry.raw?.tick || entry.raw?.TICK || '';
@@ -341,6 +343,10 @@ function ActivityRow({ entry, walletAddresses, assetLookup, chainTip, onClick })
     const rawAmount = entry.raw?.amount ?? entry.raw?.AMOUNT ?? entry.raw?.quantity ?? entry.raw?.QUANTITY ?? '';
     const amount = rawAmount ? formatAmount(rawAmount, tokenInfo?.divisibility ?? 8) : '';
     const primary = amount ? `${amount}${tick ? ` ${tick}` : ''}` : (tick || '');
+    // Match the per-row quantity mask used by BalanceList — privacy
+    // mode should opaque every financial figure the user sees, not
+    // just balances on the Coins/Tokens tab.
+    const displayPrimary = balancesHidden && primary ? '•••••' : primary;
     const label = ACTION_LABEL[kind] || (entry.action || 'EVENT');
     const iconFn = ACTION_ICON[kind] || ACTION_ICON.other;
     const statusLabel = status === 'confirmed' ? 'VALID'
@@ -390,7 +396,7 @@ function ActivityRow({ entry, walletAddresses, assetLookup, chainTip, onClick })
                         <span className={`${styles.statusBadge} ${statusClass}`}>{statusLabel}</span>
                     </div>
                     {primary ? (
-                        <div className={styles.demoRowPrimary}>{primary}</div>
+                        <div className={styles.demoRowPrimary}>{displayPrimary}</div>
                     ) : null}
                     <div className={styles.demoRowMeta}>
                         {entry.blockIndex ? (
@@ -515,6 +521,7 @@ function defiPositionToEntry(position, idx) {
 }
 
 function DemoDefiList({ networkFilter, balances, onSelectEntry }) {
+    const [balancesHidden] = useBalancesHidden();
     const positions = useMemo(() => {
         const all = synthesizeDemoDefiPositions();
         const filtered = networkFilter === 'all'
@@ -614,7 +621,9 @@ function DemoDefiList({ networkFilter, balances, onSelectEntry }) {
                                     <span className={styles.demoActionTag}>{p.action}</span>
                                     <span className={`${styles.statusBadge} ${statusClass}`}>{statusLabel}</span>
                                 </div>
-                                <div className={styles.demoRowPrimary}>{p.primary}</div>
+                                <div className={styles.demoRowPrimary}>
+                                    {balancesHidden ? '•••••' : p.primary}
+                                </div>
                                 <div className={styles.demoRowMeta}>
                                     {p.blockIndex ? (
                                         <>
