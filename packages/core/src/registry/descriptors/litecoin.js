@@ -54,8 +54,8 @@ export const litecoinDescriptors = [
         networkKind: 'regtest',
         icon: 'litecoin-regtest-icon-20.png',
         wifVersionByte: 0xef,
-        explorer: { defaultUrl: 'http://localhost', defaultPort: 19081 },
-        encoder: { defaultUrl: 'http://localhost', defaultPort: 19082 },
-        hub: { defaultUrl: 'http://localhost', defaultPort: 18000 },
+        explorer: { defaultUrl: 'http://localhost', defaultPort: 18080 },
+        encoder: { defaultUrl: 'http://localhost', defaultPort: 3223 },
+        hub: { defaultUrl: 'http://localhost', defaultPort: 10000 },
     },
 ];

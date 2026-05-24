@@ -60,8 +60,8 @@ export const bitcoinDescriptors = [
         networkKind: 'regtest',
         icon: 'bitcoin-regtest-icon-20.png',
         wifVersionByte: 0xef,
-        explorer: { defaultUrl: 'http://localhost', defaultPort: 18081 },
-        encoder: { defaultUrl: 'http://localhost', defaultPort: 18082 },
-        hub: { defaultUrl: 'http://localhost', defaultPort: 18000 },
+        explorer: { defaultUrl: 'http://localhost', defaultPort: 18080 },
+        encoder: { defaultUrl: 'http://localhost', defaultPort: 3023 },
+        hub: { defaultUrl: 'http://localhost', defaultPort: 10000 },
     },
 ];

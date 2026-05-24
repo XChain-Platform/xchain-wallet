@@ -52,9 +52,12 @@ export const dogecoinDescriptors = [
         id: 'dogecoin-regtest',
         networkKind: 'regtest',
         icon: 'dogecoin-regtest-icon-20.png',
-        wifVersionByte: 0xf1,
-        explorer: { defaultUrl: 'http://localhost', defaultPort: 20081 },
-        encoder: { defaultUrl: 'http://localhost', defaultPort: 20082 },
-        hub: { defaultUrl: 'http://localhost', defaultPort: 18000 },
+        // Dogecoin Core in regtest uses Bitcoin-testnet base58 prefixes (0xef
+        // for WIF), not Dogecoin-testnet (0xf1). Matches xchain-sdk
+        // networks.js and the four backend services' CryptoNetworks.
+        wifVersionByte: 0xef,
+        explorer: { defaultUrl: 'http://localhost', defaultPort: 18080 },
+        encoder: { defaultUrl: 'http://localhost', defaultPort: 3123 },
+        hub: { defaultUrl: 'http://localhost', defaultPort: 10000 },
     },
 ];
