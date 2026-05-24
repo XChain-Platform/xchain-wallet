@@ -15,9 +15,9 @@
 
 .entry {
     display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--xc-space-1);
+    flex-direction: row;
+    align-items: center;
+    gap: var(--xc-space-3);
     padding: var(--xc-space-3) var(--xc-space-4);
     background: var(--xc-surface-raised);
     border: 1px solid var(--xc-border);
@@ -26,6 +26,29 @@
     cursor: pointer;
     color: var(--xc-text);
     font-family: inherit;
+}
+
+.entryIcon {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    color: var(--xc-accent-primary);
+}
+
+.entryIcon > svg {
+    width: 32px;
+    height: 32px;
+}
+
+.entryText {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--xc-space-1);
+    min-width: 0;
 }
 
 .entry:hover:not(:disabled) {

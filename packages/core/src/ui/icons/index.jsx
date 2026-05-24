@@ -17,6 +17,9 @@ import {
     MoreHorizontal as LucideMoreHorizontal,
     Filter as LucideFilter,
     BookOpen as LucideBookOpen,
+    Printer as LucidePrinter,
+    Handshake as LucideHandshake,
+    ShieldCheck as LucideShieldCheck,
 } from 'lucide-react';
 
 const STROKE_PROPS = {
@@ -213,6 +216,18 @@ export function MenuIcon() {
     return <LucideMenu {...LUCIDE_PROPS} />;
 }
 
+export function PrinterIcon() {
+    return <LucidePrinter {...LUCIDE_PROPS} />;
+}
+
+export function HandshakeIcon() {
+    return <LucideHandshake {...LUCIDE_PROPS} />;
+}
+
+export function VerifyIcon() {
+    return <LucideShieldCheck {...LUCIDE_PROPS} />;
+}
+
 /* ------------------------------------------------------------------ *
  *  Label → icon resolver
  *  Shared by Button auto-icon + drawer/menu rendering so a route's
@@ -223,6 +238,7 @@ const LABEL_MAP = [
     [/^send\b/, SendIcon],
     [/^receive\b/, ReceiveIcon],
     [/^sign\b/, SignIcon],
+    [/^verify\b/, VerifyIcon],
     [/^broadcast\b/, BroadcastIcon],
     [/^lock\b/, LockIcon],
     [/^unlock\b/, UnlockIcon],
@@ -243,7 +259,9 @@ const LABEL_MAP = [
     [/^cancel\b|^close\b|^dismiss\b|^skip\b|^not now\b|^nevermind\b|^reject\b|^deny\b|^no\b/, XIcon],
     [/^delete\b|^remove\b|^discard\b|^destroy\b|^revoke\b|^clear\b|^burn\b|^sweep\b/, TrashIcon],
     [/^edit\b|^rename\b|^modify\b|^update\b|^compose\b|^write\b|^draft\b/, PencilIcon],
-    [/^new\b|^add\b|^create\b|^generate\b|^issue\b|^mint\b/, PlusIcon],
+    [/^mint\b/, PrinterIcon],
+    [/^transfer\b/, HandshakeIcon],
+    [/^new\b|^add\b|^create\b|^generate\b|^issue\b/, PlusIcon],
     [/^refresh\b|^reload\b|^sync\b|^retry\b|^reconnect\b/, RefreshIcon],
     [/^copy\b/, CopyIcon],
     [/^paste\b/, PasteIcon],

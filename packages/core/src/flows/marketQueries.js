@@ -85,3 +85,46 @@ export async function getOrderbook({ sdkRegistry, chainId, tick1, tick2 }) {
     const sdk = sdkRegistry.get(chainId);
     return sdk.getOrderbook(tick1, tick2);
 }
+
+/**
+ * All orders mentioning a tick on either side (give or get). Used by
+ * §40.5 ManageToken's Orders tab: "every open order for my token,
+ * regardless of pair".
+ *
+ * @param {SdkCtx & { tick: string, opts?: object }} params
+ */
+export async function ordersForToken({ sdkRegistry, chainId, tick, opts }) {
+    if (!sdkRegistry) throw new Error('ordersForToken: sdkRegistry is required');
+    if (!chainId) throw new Error('ordersForToken: chainId is required');
+    if (!tick) throw new Error('ordersForToken: tick is required');
+    const sdk = sdkRegistry.get(chainId);
+    return sdk.getOrders(tick, 'token', opts);
+}
+
+/**
+ * Recent SWAP actions involving a tick on either side. Used by §40.5
+ * ManageToken's Swaps tab.
+ *
+ * @param {SdkCtx & { tick: string, opts?: object }} params
+ */
+export async function swapsForToken({ sdkRegistry, chainId, tick, opts }) {
+    if (!sdkRegistry) throw new Error('swapsForToken: sdkRegistry is required');
+    if (!chainId) throw new Error('swapsForToken: chainId is required');
+    if (!tick) throw new Error('swapsForToken: tick is required');
+    const sdk = sdkRegistry.get(chainId);
+    return sdk.getSwaps(tick, 'token', opts);
+}
+
+/**
+ * Recent on-chain history for a token — every action that mentions
+ * the tick. Powers §40.5 ManageToken's Activity tab.
+ *
+ * @param {SdkCtx & { tick: string, opts?: object }} params
+ */
+export async function historyForToken({ sdkRegistry, chainId, tick, opts }) {
+    if (!sdkRegistry) throw new Error('historyForToken: sdkRegistry is required');
+    if (!chainId) throw new Error('historyForToken: chainId is required');
+    if (!tick) throw new Error('historyForToken: tick is required');
+    const sdk = sdkRegistry.get(chainId);
+    return sdk.getHistory(tick, 'token', opts);
+}

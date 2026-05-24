@@ -27,7 +27,8 @@ import styles from './HeaderActionMenu.module.css';
  * @param {() => void} [props.onAlerts]
  * @param {number} [props.alertCount]
  * @param {() => void} [props.onMarkets]
- * @param {() => void} [props.onTokens]         opens ActionsMenu (token issue/mint/destroy/dispenser/dividend/airdrop/broadcast/advanced)
+ * @param {() => void} [props.onTokens]         opens the My Tokens page (tokens owned by this wallet)
+ * @param {() => void} [props.onMoreActions]    opens the catch-all Token Actions page (all §40+ entries)
  * @param {() => void} [props.onMessaging]
  * @param {() => void} [props.onCrossChain]     opens CrossChainTemplates (link/parallel/cross-chain swap)
  * @param {() => void} [props.onContacts]
@@ -44,7 +45,9 @@ export function HeaderActionMenu({
     onAlerts,
     alertCount = 0,
     onMarkets,
+    onMarketActivity,
     onTokens,
+    onMoreActions,
     onMessaging,
     onCrossChain,
     onContacts,
@@ -63,9 +66,11 @@ export function HeaderActionMenu({
     }, [onClose]);
 
     const primary = [
-        { id: 'markets',     label: 'Decentralized Exchange', Icon: Icon.MarketIcon,   handler: onMarkets },
-        { id: 'tokens',      label: 'Tokens',      Icon: Icon.TokenIcon,    handler: onTokens },
-        { id: 'messaging',   label: 'Messaging',   Icon: Icon.MessageIcon,  handler: onMessaging },
+        { id: 'markets',          label: 'Decentralized Exchange', Icon: Icon.MarketIcon,   handler: onMarkets },
+        { id: 'market-activity',  label: 'Marketplace', Icon: Icon.DollarIcon,   handler: onMarketActivity },
+        { id: 'tokens',           label: 'My Tokens',   Icon: Icon.TokenIcon,    handler: onTokens },
+        { id: 'more-actions',     label: 'More actions', Icon: Icon.MoreIcon,    handler: onMoreActions },
+        { id: 'messaging',    label: 'Messaging',   Icon: Icon.MessageIcon,  handler: onMessaging },
         { id: 'cross-chain', label: 'Cross-chain', Icon: Icon.LinkIcon,     handler: onCrossChain },
         { id: 'contacts',    label: 'Contacts',    Icon: Icon.UsersIcon,    handler: onContacts },
         { id: 'addresses',   label: 'Addresses',   Icon: Icon.AddressIcon,  handler: onAddresses },

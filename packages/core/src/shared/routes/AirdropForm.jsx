@@ -13,6 +13,7 @@ import {
     schemas as schemasLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useDropZone } from '../hooks/useDropZone.js';
@@ -51,7 +52,7 @@ const POLL_INTERVAL_MS = 10_000;
  * @param {string | null} [props.resumeId]
  * @param {() => void} props.onBack
  */
-export function AirdropForm({ walletId, resumeId = null, onBack }) {
+export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId, initialTick }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -61,12 +62,13 @@ export function AirdropForm({ walletId, resumeId = null, onBack }) {
     );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
 
-    const [chainId, setChainId] = useState(/** @type {string | null} */ (null));
+    const [chainId, setChainId] = useState(/** @type {string | null} */ (initialChainId || null));
+    const lockedToken = !!(initialChainId && initialTick);
     const [fromAddressId, setFromAddressId] = useState(
         /** @type {string | null} */ (null),
     );
 
-    const [token, setToken] = useState('');
+    const [token, setToken] = useState((initialTick || '').toUpperCase());
     const [amountPer, setAmountPer] = useState('');
     const [memo, setMemo] = useState('');
     const [pasteText, setPasteText] = useState('');
@@ -109,7 +111,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack }) {
                     );
                     return;
                 }
-                if (!resumeId) setChainId(first);
+                if (!resumeId && !lockedToken) setChainId(first);
             })
             .catch((err) => {
                 if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
@@ -715,13 +717,19 @@ export function AirdropForm({ walletId, resumeId = null, onBack }) {
     // stage === 'compose'
     return wrap(
         <form onSubmit={handleReviewList} noValidate>
-            {chainsWithAddresses.length > 1 ? (
-                <ChainPicker label="Chain" value={chainId} onChange={setChainId} chainIds={chainsWithAddresses} chainRegistry={chainRegistry} />
-            ) : descriptor ? (
-                <div className={styles.chainLine}>
-                    <ChainBadge descriptor={descriptor} size="sm" />
-                </div>
-            ) : null}
+            {lockedToken && chainId ? (
+                <LockedTokenContext chainId={chainId} tick={token} label="Token to drop" />
+            ) : (
+                <>
+                    {chainsWithAddresses.length > 1 ? (
+                        <ChainPicker label="Chain" value={chainId} onChange={setChainId} chainIds={chainsWithAddresses} chainRegistry={chainRegistry} />
+                    ) : descriptor ? (
+                        <div className={styles.chainLine}>
+                            <ChainBadge descriptor={descriptor} size="sm" />
+                        </div>
+                    ) : null}
+                </>
+            )}
 
             {fromAddress ? (
                 <div className={styles.fromLine}>
@@ -734,16 +742,18 @@ export function AirdropForm({ walletId, resumeId = null, onBack }) {
                 </div>
             )}
 
-            <Input
-                label="Token to drop"
-                hint="Ticker of the token each recipient will receive."
-                value={token}
-                onChange={(e) => setToken(e.target.value.toUpperCase())}
-                autoCapitalize="characters"
-                autoComplete="off"
-                autoCorrect="off"
-                spellCheck={false}
-            />
+            {lockedToken ? null : (
+                <Input
+                    label="Token to drop"
+                    hint="Ticker of the token each recipient will receive."
+                    value={token}
+                    onChange={(e) => setToken(e.target.value.toUpperCase())}
+                    autoCapitalize="characters"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck={false}
+                />
+            )}
             <Input
                 label="Per-recipient amount"
                 hint="Amount sent to each address on the list."

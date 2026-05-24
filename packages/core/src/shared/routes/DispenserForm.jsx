@@ -11,6 +11,7 @@ import {
     decoder as decoderLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
@@ -60,7 +61,7 @@ const FIAT_CODES = ['USD', 'CAD', 'AUD', 'MXN', 'GBP', 'JPY', 'CNY', 'CHF', 'BRL
  * @param {string} props.walletId
  * @param {() => void} props.onBack
  */
-export function DispenserForm({ walletId, onBack }) {
+export function DispenserForm({ walletId, onBack, initialChainId, initialTick }) {
     const { messaging, shell } = useMessaging();
     const { settings } = useSettings();
     const variant = screenVariantFor(shell);
@@ -71,12 +72,13 @@ export function DispenserForm({ walletId, onBack }) {
     );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
 
-    const [chainId, setChainId] = useState(/** @type {string | null} */ (null));
+    const [chainId, setChainId] = useState(/** @type {string | null} */ (initialChainId || null));
+    const lockedToken = !!(initialChainId && initialTick);
     const [fromAddressId, setFromAddressId] = useState(
         /** @type {string | null} */ (null),
     );
 
-    const [ticker, setTicker] = useState('');
+    const [ticker, setTicker] = useState((initialTick || '').toUpperCase());
     const [giveAmount, setGiveAmount] = useState('');
     const [escrow, setEscrow] = useState('');
     const [triggerPrice, setTriggerPrice] = useState('');
@@ -148,7 +150,7 @@ export function DispenserForm({ walletId, onBack }) {
                     );
                     return;
                 }
-                setChainId(first);
+                if (!lockedToken) setChainId(first);
             })
             .catch((err) => {
                 if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
@@ -548,13 +550,19 @@ export function DispenserForm({ walletId, onBack }) {
     return wrap(
         <form onSubmit={handleReview} noValidate>
             {draftBanner}
-            {chainsWithAddresses.length > 1 ? (
-                <ChainPicker label="Chain" value={chainId} onChange={setChainId} chainIds={chainsWithAddresses} chainRegistry={chainRegistry} />
-            ) : descriptor ? (
-                <div className={styles.chainLine}>
-                    <ChainBadge descriptor={descriptor} size="sm" />
-                </div>
-            ) : null}
+            {lockedToken && chainId ? (
+                <LockedTokenContext chainId={chainId} tick={ticker} />
+            ) : (
+                <>
+                    {chainsWithAddresses.length > 1 ? (
+                        <ChainPicker label="Chain" value={chainId} onChange={setChainId} chainIds={chainsWithAddresses} chainRegistry={chainRegistry} />
+                    ) : descriptor ? (
+                        <div className={styles.chainLine}>
+                            <ChainBadge descriptor={descriptor} size="sm" />
+                        </div>
+                    ) : null}
+                </>
+            )}
 
             {fromAddress ? (
                 <div className={styles.fromLine}>
@@ -567,16 +575,18 @@ export function DispenserForm({ walletId, onBack }) {
                 </div>
             )}
 
-            <Input
-                label="Token"
-                hint="Ticker of the token you will dispense. Must be owned by this address."
-                value={ticker}
-                onChange={(e) => setTicker(e.target.value.toUpperCase())}
-                autoCapitalize="characters"
-                autoComplete="off"
-                autoCorrect="off"
-                spellCheck={false}
-            />
+            {lockedToken ? null : (
+                <Input
+                    label="Token"
+                    hint="Ticker of the token you will dispense. Must be owned by this address."
+                    value={ticker}
+                    onChange={(e) => setTicker(e.target.value.toUpperCase())}
+                    autoCapitalize="characters"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck={false}
+                />
+            )}
             <Input
                 label="Give amount (per fill)"
                 hint="Tokens sent to the buyer every time the dispenser is triggered."

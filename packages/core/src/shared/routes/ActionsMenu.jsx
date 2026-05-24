@@ -1,4 +1,4 @@
-import { Screen, Button , Icon} from '@xchain-wallet/core/ui';
+import { Screen, ScreenHeader, Icon } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './ActionsMenu.module.css';
 
@@ -25,30 +25,41 @@ export function ActionsMenu({ entries, onBack }) {
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
 
-        const header = (
+    const header = (
         <ScreenHeader
             onBack={onBack}
             backLabel="Back to home"
-            title="Actions"
+            title="Token Actions"
+            titleIcon={<Icon.TokenIcon />}
         />
     );
     return (
         <Screen variant={variant} header={header}>
             <div className={isFull ? styles.listFull : styles.listPopup}>
-                {entries.map((e) => (
-                    <button
-                        key={e.id}
-                        type="button"
-                        className={styles.entry}
-                        onClick={e.onSelect}
-                        disabled={e.disabled}
-                    >
-                        <span className={styles.entryLabel}>{e.label}</span>
-                        {e.description ? (
-                            <span className={styles.entryDescription}>{e.description}</span>
-                        ) : null}
-                    </button>
-                ))}
+                {entries.map((e) => {
+                    const EntryIcon = Icon.iconForLabel(e.label);
+                    return (
+                        <button
+                            key={e.id}
+                            type="button"
+                            className={styles.entry}
+                            onClick={e.onSelect}
+                            disabled={e.disabled}
+                        >
+                            {EntryIcon ? (
+                                <span className={styles.entryIcon} aria-hidden="true">
+                                    <EntryIcon />
+                                </span>
+                            ) : null}
+                            <span className={styles.entryText}>
+                                <span className={styles.entryLabel}>{e.label}</span>
+                                {e.description ? (
+                                    <span className={styles.entryDescription}>{e.description}</span>
+                                ) : null}
+                            </span>
+                        </button>
+                    );
+                })}
             </div>
             <div className={styles.actions}>
             </div>

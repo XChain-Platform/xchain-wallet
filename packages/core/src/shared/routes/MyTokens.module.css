@@ -1,0 +1,217 @@
+/* `<Screen>` already provides `padding: var(--xc-space-4)` on its
+   inner main element; this wrapper only needs to stack children with
+   a gap. No extra padding, no max-width — match the DEX / MarketsList
+   layout the rest of the wallet uses. */
+.body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-4);
+    width: 100%;
+}
+
+.toolbar {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--xc-space-3);
+}
+
+.issueButton {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: 1px solid var(--xc-border);
+    border-radius: 50%;
+    background: transparent;
+    color: var(--xc-accent-primary);
+    cursor: pointer;
+}
+
+.issueButton:hover {
+    background: var(--xc-bg-muted);
+    border-color: var(--xc-accent-primary);
+}
+
+.issueButton:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
+.filters {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--xc-space-3);
+    flex: 1 1 auto;
+    min-width: 0;
+    flex-wrap: nowrap;
+}
+
+.search {
+    flex: 1 1 auto;
+    min-width: 160px;
+    max-width: 320px;
+}
+
+/* `<Input>` wraps its native <input> in a column-flex `.field` that
+   adds `margin-bottom: --xc-space-3` to leave room for an inline error
+   slot. In this toolbar context there's no error/hint to render and
+   the margin throws the search box out of vertical alignment with the
+   adjacent segmented chips. Strip it inline. */
+.search > * {
+    margin-bottom: 0;
+}
+
+/* Outlined segmented control — adjacent chips share a stroke so the
+   pair reads as "pick one of these" instead of two independent toggles.
+   Height locked to the Input's 36px (via box-sizing) so it baselines
+   with the search box. */
+.chipGroup {
+    display: inline-flex;
+    flex-direction: row;
+    align-items: stretch;
+    flex: 0 0 auto;
+    box-sizing: border-box;
+    height: 36px;
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-pill, 999px);
+    overflow: hidden;
+}
+
+.chip {
+    background: transparent;
+    color: var(--xc-text-muted);
+    padding: 0 var(--xc-space-4);
+    border: 0;
+    border-inline-start: 1px solid var(--xc-border);
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    line-height: 1;
+}
+
+.chip:first-child {
+    border-inline-start: 0;
+}
+
+.chip:hover:not(.chipActive) {
+    color: var(--xc-text);
+    background: var(--xc-bg-muted);
+}
+
+.chipActive {
+    background: var(--xc-accent-primary);
+    color: var(--xc-on-accent, #FFFFFF);
+}
+
+.chip:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
+.error {
+    color: var(--xc-status-error);
+    font-size: var(--xc-text-sm);
+}
+
+.empty {
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+    padding: var(--xc-space-6) var(--xc-space-3);
+    text-align: center;
+}
+
+.list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--xc-space-3);
+    width: 100%;
+    padding: var(--xc-space-3) var(--xc-space-4);
+    background: var(--xc-surface-raised);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-md);
+    text-align: start;
+    cursor: pointer;
+    color: var(--xc-text);
+    font-family: inherit;
+}
+
+.row:hover {
+    background: var(--xc-bg-muted);
+    border-color: var(--xc-accent-primary);
+}
+
+.row:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
+.rowChain {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.rowText {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.rowTick {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    font-size: var(--xc-text-md);
+    font-weight: 600;
+}
+
+.lockedBadge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--xc-text-muted);
+}
+
+.lockedBadge > svg {
+    width: 14px;
+    height: 14px;
+}
+
+.rowDescription {
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    line-height: 1.3;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+
+.rowChevron {
+    flex: 0 0 auto;
+    color: var(--xc-text-muted);
+    display: inline-flex;
+    align-items: center;
+}

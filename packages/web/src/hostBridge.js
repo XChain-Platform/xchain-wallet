@@ -33,7 +33,16 @@ import {
 // third shell appears.
 import { createBackgroundHost } from '../../extension/src/background/createBackgroundHost.js';
 import { WALLET_VERSION } from '@xchain-wallet/core/buildInfo.js';
-import { fakeBalanceFor } from './devFakeBalances.js';
+import {
+    fakeBalanceFor,
+    fakeOwnedTokensFor,
+    fakeTokenInfoFor,
+    fakeDispensersFor,
+    fakeOrdersFor,
+    fakeSwapsFor,
+    fakeHoldersFor,
+    fakeHistoryFor,
+} from './devFakeBalances.js';
 
 // §50 / Cluster L FOLLOWUP 4 — shell-specific diagnostic env + build
 // for the dump handler. Same shape across all three createBackgroundHost
@@ -84,6 +93,60 @@ const createDevMockSdk = (constructorOpts) => {
             if (typeof prop !== 'string') return undefined;
             if (prop === 'getBalances') {
                 return async (address /* , opts */) => fakeBalanceFor(address, chainId);
+            }
+            if (prop === 'getToken') {
+                // Single-token lookup powering useTokenInfo + the chart
+                // on ManageToken / TokenDetail. Returns the indexer's
+                // wire shape (info / supply / locks / market) when the
+                // tick is in the dev dataset.
+                return async (tick) => fakeTokenInfoFor(tick, chainId);
+            }
+            if (prop === 'getTokens') {
+                // Only the "tokens owned by this address" lookup gets a
+                // populated dev response; the substring-search shape
+                // (type === 'token') stays empty so dev ReceivePicker
+                // doesn't promise fake results from the platform.
+                return async (_query, type /* , opts */) => {
+                    if (type === 'address') return fakeOwnedTokensFor(chainId);
+                    return [];
+                };
+            }
+            // ManageToken tab panels — Dispensers / Orders / Swaps /
+            // Holders / Activity. Real explorer isn't reachable from
+            // this build (explorer.xchain.io is not yet provisioned),
+            // so the dev mock returns realistic populated rows for the
+            // tick-scoped queries that ManageToken issues. Other shapes
+            // (address-scoped, market-scoped) stay empty to avoid
+            // promising fake results elsewhere in the UI.
+            if (prop === 'getDispensers') {
+                return async (query, type /* , opts */) => {
+                    if (type === 'token' && query) return fakeDispensersFor(query, chainId);
+                    return [];
+                };
+            }
+            if (prop === 'getOrders') {
+                return async (query, type /* , opts */) => {
+                    if (type === 'token' && query) return fakeOrdersFor(query, chainId);
+                    return [];
+                };
+            }
+            if (prop === 'getSwaps') {
+                return async (query, type /* , opts */) => {
+                    if (type === 'token' && query) return fakeSwapsFor(query, chainId);
+                    return [];
+                };
+            }
+            if (prop === 'getHistory') {
+                return async (query, type /* , opts */) => {
+                    if (type === 'token' && query) return fakeHistoryFor(query, chainId);
+                    return [];
+                };
+            }
+            if (prop === 'getHolders') {
+                return async (tick /* , opts */) => {
+                    if (tick) return fakeHoldersFor(tick, chainId);
+                    return [];
+                };
             }
             if (prop.startsWith('get')) {
                 return async () => [];

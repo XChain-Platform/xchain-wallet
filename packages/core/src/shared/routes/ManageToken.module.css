@@ -1,0 +1,615 @@
+/* `<Screen>` already provides `padding: var(--xc-space-4)` on its
+   inner main element; this wrapper only needs to stack children with
+   a gap. */
+.body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-4);
+    width: 100%;
+}
+
+/* ───── Hero — token identity (no balance, this is the issuer view). ───── */
+
+.hero {
+    position: relative;
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: var(--xc-space-4);
+    background: var(--xc-surface-raised);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-lg, 12px);
+    padding: var(--xc-space-4);
+}
+
+.heroIconWrap {
+    flex: 0 0 auto;
+}
+
+.heroMain {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+}
+
+.heroTitleRow {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--xc-space-2);
+    flex-wrap: wrap;
+}
+
+.heroTick {
+    margin: 0;
+    font-size: var(--xc-text-2xl, 1.5rem);
+    font-weight: 700;
+}
+
+.lockBadge {
+    position: absolute;
+    top: var(--xc-space-3);
+    inset-inline-end: var(--xc-space-3);
+    font-size: var(--xc-text-xs);
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+    padding: var(--xc-space-1) var(--xc-space-2);
+    border-radius: var(--xc-radius-pill, 999px);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.lockBadgeLocked {
+    background: color-mix(in srgb, var(--xc-danger, #d93838) 20%, transparent);
+    color: var(--xc-danger, #d93838);
+}
+
+.lockBadgeUnlocked {
+    background: color-mix(in srgb, var(--xc-success, #14b86c) 20%, transparent);
+    color: var(--xc-success, #14b86c);
+}
+
+.lockBadge > svg {
+    width: 12px;
+    height: 12px;
+}
+
+.heroSub {
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text-muted);
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--xc-space-1);
+}
+
+.heroDot {
+    margin: 0 var(--xc-space-1);
+    color: var(--xc-text-muted);
+}
+
+.heroOwner {
+    font-family: var(--xc-font-mono, monospace);
+    color: var(--xc-text);
+}
+
+.heroDescription {
+    margin: var(--xc-space-2) 0 0;
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text);
+    line-height: 1.4;
+}
+
+/* ───── Market panel — stats strip + chart placeholder. ───── */
+
+.marketPanel {
+    background: var(--xc-surface-raised);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-lg, 12px);
+    padding: var(--xc-space-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-3);
+}
+
+.statsStrip {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--xc-space-3);
+}
+
+@media (max-width: 599px) {
+    .statsStrip {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+.stat {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.statLabel {
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+}
+
+.statValue {
+    font-size: var(--xc-text-lg, 1.125rem);
+    font-weight: 700;
+    color: var(--xc-text);
+    font-variant-numeric: tabular-nums;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.statSub {
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+}
+
+.supplyBar {
+    height: 6px;
+    background: var(--xc-bg-muted);
+    border-radius: var(--xc-radius-pill, 999px);
+    overflow: hidden;
+}
+
+.supplyBarFill {
+    height: 100%;
+    background: var(--xc-accent-primary);
+    border-radius: var(--xc-radius-pill, 999px);
+    transition: width 0.2s ease-out;
+}
+
+.chartHint {
+    margin: 0;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+}
+
+/* ───── Manage action grid (carried over). ───── */
+
+.manageGrid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--xc-space-2);
+}
+
+@media (max-width: 599px) {
+    .manageGrid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+.manageBtn {
+    appearance: none;
+    background: var(--xc-surface-raised);
+    border: 1px solid var(--xc-accent-primary);
+    border-radius: var(--xc-radius-md);
+    padding: var(--xc-space-3) var(--xc-space-1);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--xc-space-1);
+    cursor: pointer;
+    color: var(--xc-text);
+    font-family: inherit;
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+    min-height: 72px;
+    text-align: center;
+}
+
+.manageBtn:hover { background: var(--xc-bg-muted); }
+.manageBtn:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
+.manageBtnDanger {
+    border-color: var(--xc-danger, #DC2626);
+    color: var(--xc-danger, #DC2626);
+}
+
+.manageIcon {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
+    color: var(--xc-accent-primary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.manageBtnDanger .manageIcon {
+    background: color-mix(in srgb, var(--xc-danger, #DC2626) 12%, transparent);
+    color: var(--xc-danger, #DC2626);
+}
+
+.manageIcon > svg {
+    width: 18px;
+    height: 18px;
+}
+
+.manageLabel { font-weight: 600; }
+
+/* "More" dropdown — mirrors Home's quickActionMore. */
+
+.manageMoreWrap {
+    position: relative;
+    display: flex;
+    align-self: stretch;
+}
+
+.manageMoreWrap > .manageBtn {
+    flex: 1 1 auto;
+    width: 100%;
+}
+
+.manageMoreMenu {
+    position: absolute;
+    inset-inline-end: 0;
+    top: calc(100% + var(--xc-space-1));
+    min-width: 220px;
+    background: var(--xc-surface-raised);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-md);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    padding: var(--xc-space-1) 0;
+}
+
+.manageMoreItem {
+    appearance: none;
+    background: transparent;
+    border: none;
+    text-align: start;
+    padding: var(--xc-space-2) var(--xc-space-3);
+    font-size: var(--xc-text-sm);
+    font-family: inherit;
+    color: var(--xc-text);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+}
+
+.manageMoreItem:hover { background: var(--xc-bg-muted); }
+.manageMoreItem:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: -2px;
+}
+
+.manageMoreItemDanger { color: var(--xc-danger, #DC2626); }
+
+.manageMoreItemIcon {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    color: var(--xc-accent-primary);
+}
+
+.manageMoreItemDanger .manageMoreItemIcon { color: var(--xc-danger, #DC2626); }
+
+/* ───── Tabs — match TokenDetail's pattern. ───── */
+
+.tabs {
+    display: flex;
+    gap: var(--xc-space-1);
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-bottom: 1px solid var(--xc-border);
+    padding-bottom: 1px;
+    margin-bottom: -1px;
+    scrollbar-width: none;
+}
+
+.tabs::-webkit-scrollbar { display: none; }
+
+.tab {
+    appearance: none;
+    background: transparent;
+    border: none;
+    padding: var(--xc-space-3) var(--xc-space-3);
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    color: var(--xc-text-muted);
+    cursor: pointer;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    border-bottom: 2px solid transparent;
+    flex: 0 0 auto;
+    font-family: inherit;
+}
+
+.tab:hover { color: var(--xc-text); }
+
+.tab:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: -2px;
+}
+
+.tabActive {
+    color: var(--xc-accent-primary);
+    border-bottom-color: var(--xc-accent-primary);
+}
+
+.tabPanel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-3);
+    min-height: 0;
+}
+
+/* ───── Shared list-row styles used by all tab panels. ───── */
+
+.list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+}
+
+.row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--xc-space-2);
+    width: 100%;
+    padding: var(--xc-space-2) var(--xc-space-3);
+    background: transparent;
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-md);
+    color: var(--xc-text);
+    font-family: inherit;
+    text-align: start;
+    cursor: pointer;
+    min-height: 36px;
+}
+
+.row:disabled { cursor: default; }
+
+button.row:hover:not(:disabled) {
+    background: var(--xc-bg-muted);
+    border-color: var(--xc-accent-primary);
+}
+
+.rowMain {
+    font-size: var(--xc-text-sm);
+    font-weight: 500;
+    color: var(--xc-text);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.rowMono {
+    font-family: var(--xc-font-mono, monospace);
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text);
+}
+
+.rowSub {
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.empty {
+    margin: 0;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+    text-align: center;
+    padding: var(--xc-space-4);
+}
+
+.error {
+    margin: 0;
+    color: var(--xc-status-error, var(--xc-danger, #DC2626));
+    font-size: var(--xc-text-sm);
+}
+
+.viewAll {
+    align-self: center;
+    background: transparent;
+    border: 0;
+    color: var(--xc-accent-primary);
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    cursor: pointer;
+    padding: var(--xc-space-2);
+    font-family: inherit;
+}
+
+.viewAll:hover { text-decoration: underline; }
+
+.inlineLink {
+    background: transparent;
+    border: 0;
+    color: var(--xc-accent-primary);
+    font: inherit;
+    cursor: pointer;
+    padding: 0;
+}
+
+.inlineLink:hover { text-decoration: underline; }
+
+/* ───── History-style row used by Dispensers / Orders / Swaps panels.
+   Mirrors the §23 timeline row visually: header (chain icon + ACTION
+   label + status pill), source line (mono muted), meta line (block +
+   confirms + relative time). Lives alongside the simple .row above
+   because Holders / Activity still use the compact two-column layout
+   and don't need the full history-row chrome. ───── */
+
+.histRow {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+    width: 100%;
+    padding: var(--xc-space-3);
+    background: var(--xc-surface-raised);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-md);
+    color: var(--xc-text);
+    font-family: inherit;
+    text-align: start;
+    cursor: pointer;
+    appearance: none;
+    margin: var(--xc-space-1) 0;
+}
+
+/* Row variant with a leading TickerIcon — used by OrdersPanel. Switches
+   the row into a horizontal flex with a fixed icon column on the left
+   and the existing header / summary / source / meta stack on the right. */
+.histRowWithIcon {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: var(--xc-space-3);
+}
+
+.histTickerIcon {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.histContent {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+}
+
+.histRow:hover {
+    background: var(--xc-bg-muted);
+    border-color: var(--xc-accent-primary);
+}
+
+.histRow:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
+.histRow:disabled {
+    cursor: default;
+}
+
+.histHeader {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+}
+
+.histChainIcon {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+    display: block;
+}
+
+.histAction {
+    font-weight: 600;
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.histStatus {
+    margin-inline-start: auto;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 var(--xc-space-2);
+    border-radius: var(--xc-radius-pill, 999px);
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.6;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.histStatusSuccess {
+    background: color-mix(in srgb, var(--xc-success, #14b86c) 20%, transparent);
+    color: var(--xc-success, #14b86c);
+}
+
+.histStatusOpen {
+    background: color-mix(in srgb, var(--xc-accent-primary) 22%, transparent);
+    color: var(--xc-accent-primary);
+}
+
+.histStatusPending {
+    background: color-mix(in srgb, var(--xc-warning, #d99000) 20%, transparent);
+    color: var(--xc-warning, #d99000);
+}
+
+.histSummary {
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text);
+    font-variant-numeric: tabular-nums;
+}
+
+.histSource {
+    font-family: var(--xc-font-mono, monospace);
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    word-break: break-all;
+}
+
+.histMeta {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+}
+
+.histTime {
+    margin-inline-start: auto;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    font-weight: 400;
+    letter-spacing: 0;
+    text-transform: none;
+}
+
+.histConfirms {
+    display: inline-flex;
+    align-items: center;
+    padding: 0 var(--xc-space-2);
+    border-radius: var(--xc-radius-pill, 999px);
+    background: color-mix(in srgb, var(--xc-accent-primary) 22%, transparent);
+    color: var(--xc-accent-primary);
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.7;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+}

@@ -39,6 +39,8 @@ import { Receive } from '@xchain-wallet/core/shared/routes/Receive.jsx';
 import { ScanRoute } from '@xchain-wallet/core/shared/routes/ScanRoute.jsx';
 import { TokenWizard } from '@xchain-wallet/core/shared/routes/TokenWizard.jsx';
 import { ActionsMenu } from '@xchain-wallet/core/shared/routes/ActionsMenu.jsx';
+import { MyTokens } from '@xchain-wallet/core/shared/routes/MyTokens.jsx';
+import { ManageToken } from '@xchain-wallet/core/shared/routes/ManageToken.jsx';
 import { IssueTokenForm } from '@xchain-wallet/core/shared/routes/IssueTokenForm.jsx';
 import { MintForm } from '@xchain-wallet/core/shared/routes/MintForm.jsx';
 import { DestroyForm } from '@xchain-wallet/core/shared/routes/DestroyForm.jsx';
@@ -106,7 +108,7 @@ function AppInner() {
         /** @type {'welcome' | 'create' | 'import' | 'import-freewallet'} */ ('welcome'),
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'swap' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'staking-dashboard' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'link-form' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'addresses' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'sign-message' | 'verify-signature' | 'sign-psbt' | 'scan'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'swap' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'staking-dashboard' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'link-form' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'addresses' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'sign-message' | 'verify-signature' | 'sign-psbt' | 'scan'} */ ('home'),
     );
     const [walletDetailsId, setWalletDetailsId] = useState(/** @type {string | null} */ (null));
     const [walletRenameTarget, setWalletRenameTarget] = useState(
@@ -934,6 +936,17 @@ function AppInner() {
                     />
                 );
             }
+            if (unlockedView === 'my-tokens' && activeWalletId) {
+                return (
+                    <MyTokens
+                        walletId={activeWalletId}
+                        accountId={activeAccountId || undefined}
+                        onBack={() => setUnlockedView('home')}
+                        onIssue={() => setUnlockedView('issue')}
+                        onSelectTick={() => setUnlockedView('actions')}
+                    />
+                );
+            }
             if (unlockedView === 'actions' && activeWalletId) {
                 return (
                     <ActionsMenu
@@ -1120,6 +1133,7 @@ function AppInner() {
                     } : undefined}
                     onCreateToken={activeWalletId ? () => setUnlockedView('wizard') : undefined}
                     onActions={activeWalletId ? () => setUnlockedView('actions') : undefined}
+                    onMyTokens={activeWalletId ? () => setUnlockedView('my-tokens') : undefined}
                     onMarkets={activeWalletId ? () => setUnlockedView('markets') : undefined}
                     onMessaging={activeWalletId ? () => setUnlockedView('messaging') : undefined}
                     onContracts={activeWalletId && hasBtcAddress ? () => setUnlockedView('contracts-list') : undefined}

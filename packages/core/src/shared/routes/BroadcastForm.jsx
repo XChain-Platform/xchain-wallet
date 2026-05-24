@@ -11,6 +11,7 @@ import {
     decoder as decoderLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
@@ -49,7 +50,7 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {string} props.walletId
  * @param {() => void} props.onBack
  */
-export function BroadcastForm({ walletId, onBack }) {
+export function BroadcastForm({ walletId, onBack, initialChainId, initialTick }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -59,12 +60,13 @@ export function BroadcastForm({ walletId, onBack }) {
     );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
 
-    const [chainId, setChainId] = useState(/** @type {string | null} */ (null));
+    const [chainId, setChainId] = useState(/** @type {string | null} */ (initialChainId || null));
+    const lockedToken = !!(initialChainId && initialTick);
     const [fromAddressId, setFromAddressId] = useState(
         /** @type {string | null} */ (null),
     );
 
-    const [feedName, setFeedName] = useState('');
+    const [feedName, setFeedName] = useState(initialTick ? initialTick.toUpperCase() : '');
     const [text, setText] = useState('');
     const [value, setValue] = useState('');
     const [feedFee, setFeedFee] = useState('');
@@ -92,7 +94,7 @@ export function BroadcastForm({ walletId, onBack }) {
                     );
                     return;
                 }
-                setChainId(first);
+                if (!lockedToken) setChainId(first);
             })
             .catch((err) => {
                 if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
@@ -389,13 +391,19 @@ export function BroadcastForm({ walletId, onBack }) {
 
     return wrap(
         <form onSubmit={handleReview} noValidate>
-            {chainsWithAddresses.length > 1 ? (
-                <ChainPicker label="Chain" value={chainId} onChange={setChainId} chainIds={chainsWithAddresses} chainRegistry={chainRegistry} />
-            ) : descriptor ? (
-                <div className={styles.chainLine}>
-                    <ChainBadge descriptor={descriptor} size="sm" />
-                </div>
-            ) : null}
+            {lockedToken && chainId ? (
+                <LockedTokenContext chainId={chainId} tick={initialTick.toUpperCase()} />
+            ) : (
+                <>
+                    {chainsWithAddresses.length > 1 ? (
+                        <ChainPicker label="Chain" value={chainId} onChange={setChainId} chainIds={chainsWithAddresses} chainRegistry={chainRegistry} />
+                    ) : descriptor ? (
+                        <div className={styles.chainLine}>
+                            <ChainBadge descriptor={descriptor} size="sm" />
+                        </div>
+                    ) : null}
+                </>
+            )}
 
             {fromAddress ? (
                 <div className={styles.fromLine}>

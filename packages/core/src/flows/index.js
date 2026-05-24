@@ -130,6 +130,7 @@ export {
     fetchTisBundle,
 } from './tokenInfo.js';
 export { searchPlatformTokens } from './searchTokens.js';
+export { listOwnedTokens } from './listOwnedTokens.js';
 export { createMultisigConfig } from './createMultisigConfig.js';
 export { receiveMultisigAddress, listMultisigReceiveAddresses } from './multisigAddress.js';
 export {
@@ -166,6 +167,9 @@ export {
     getMarketHistory,
     getMarketOrders,
     getOrderbook,
+    ordersForToken,
+    swapsForToken,
+    historyForToken,
 } from './marketQueries.js';
 export {
     listWatchlistForWallet,

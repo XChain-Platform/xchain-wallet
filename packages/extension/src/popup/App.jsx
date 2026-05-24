@@ -40,6 +40,8 @@ import { ReceivePicker } from '@xchain-wallet/core/shared/routes/ReceivePicker.j
 import { ScanRoute } from '@xchain-wallet/core/shared/routes/ScanRoute.jsx';
 import { TokenWizard } from '@xchain-wallet/core/shared/routes/TokenWizard.jsx';
 import { ActionsMenu } from '@xchain-wallet/core/shared/routes/ActionsMenu.jsx';
+import { MyTokens } from '@xchain-wallet/core/shared/routes/MyTokens.jsx';
+import { ManageToken } from '@xchain-wallet/core/shared/routes/ManageToken.jsx';
 import { IssueTokenForm } from '@xchain-wallet/core/shared/routes/IssueTokenForm.jsx';
 import { MintForm } from '@xchain-wallet/core/shared/routes/MintForm.jsx';
 import { DestroyForm } from '@xchain-wallet/core/shared/routes/DestroyForm.jsx';
@@ -109,7 +111,7 @@ function AppInner() {
         /** @type {'welcome' | 'create' | 'import' | 'import-freewallet'} */ ('welcome'),
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'swap' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'staking-dashboard' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'addresses' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'scan'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'swap' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'staking-dashboard' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'addresses' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'scan'} */ ('home'),
     );
     const [tokenDetailRef, setTokenDetailRef] = useState(
         /** @type {{ chainId: string, tick: string, kind: string, displayName: string, divisibility: number, fiatRate: number | null, quantity: string } | null} */ (null),
@@ -1021,6 +1023,39 @@ function AppInner() {
                     />
                 );
             }
+            if (unlockedView === 'my-tokens' && activeWalletId) {
+                return (
+                    <MyTokens
+                        walletId={activeWalletId}
+                        accountId={activeAccountId || undefined}
+                        onBack={() => setUnlockedView('home')}
+                        onIssue={() => setUnlockedView('issue')}
+                        onSelectTick={(tick, chainId) => {
+                            setTokenDetailRef({ chainId, tick, kind: 'token' });
+                            setUnlockedView('manage-token');
+                        }}
+                    />
+                );
+            }
+            if (unlockedView === 'manage-token' && activeWalletId && tokenDetailRef) {
+                return (
+                    <ManageToken
+                        walletId={activeWalletId}
+                        chainId={tokenDetailRef.chainId}
+                        tick={tokenDetailRef.tick}
+                        onBack={() => setUnlockedView('my-tokens')}
+                        onMint={() => setUnlockedView('mint')}
+                        onDestroy={() => setUnlockedView('destroy')}
+                        onLock={() => setUnlockedView('lock')}
+                        onUpdateDescription={() => setUnlockedView('description')}
+                        onTransferOwnership={() => setUnlockedView('transfer')}
+                        onCreateDispenser={() => setUnlockedView('dispenser')}
+                        onPayDividend={() => setUnlockedView('dividend')}
+                        onAirdrop={() => setUnlockedView('airdrop')}
+                        onBroadcast={() => setUnlockedView('broadcast')}
+                    />
+                );
+            }
             if (unlockedView === 'actions' && activeWalletId) {
                 return (
                     <ActionsMenu
@@ -1192,6 +1227,7 @@ function AppInner() {
                         } : undefined}
                         onCreateToken={activeWalletId ? () => setUnlockedView('wizard') : undefined}
                         onActions={activeWalletId ? () => setUnlockedView('actions') : undefined}
+                        onMyTokens={activeWalletId ? () => setUnlockedView('my-tokens') : undefined}
                         onMarkets={activeWalletId ? () => setUnlockedView('markets') : undefined}
                         onMessaging={activeWalletId ? () => setUnlockedView('messaging') : undefined}
                         onContracts={activeWalletId && hasBtcAddress ? () => setUnlockedView('contracts-list') : undefined}

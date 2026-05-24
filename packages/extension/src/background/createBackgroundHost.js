@@ -88,6 +88,7 @@ const {
     linksForAddress,
     tokenInfoFor,
     searchPlatformTokens,
+    listOwnedTokens,
     createMultisigConfig,
     receiveMultisigAddress,
     listMultisigReceiveAddresses,
@@ -134,6 +135,9 @@ const {
     getMarketHistory,
     getMarketOrders,
     getOrderbook,
+    ordersForToken,
+    swapsForToken,
+    historyForToken,
     listWatchlistForWallet,
     saveWatchlistEntry,
     clearWatchlistEntry,
@@ -1870,6 +1874,10 @@ export function createBackgroundHost(deps) {
         return searchPlatformTokens({ ...req, sdkRegistry });
     });
 
+    host.register('tokens.owned', async (req, { sdkRegistry }) => {
+        return listOwnedTokens({ ...req, sdkRegistry });
+    });
+
     host.register('token.info', async (req, { sdkRegistry, vault }) => {
         // settings.privacy.metadataFetchEnabled (default true) gates the
         // description-as-URL TIS fetch. When false the handler still
@@ -2031,6 +2039,15 @@ export function createBackgroundHost(deps) {
     });
     host.register('markets.orderbook', async (req, { sdkRegistry }) => {
         return getOrderbook({ ...req, sdkRegistry });
+    });
+    host.register('orders.forToken', async (req, { sdkRegistry }) => {
+        return ordersForToken({ ...req, sdkRegistry });
+    });
+    host.register('swaps.forToken', async (req, { sdkRegistry }) => {
+        return swapsForToken({ ...req, sdkRegistry });
+    });
+    host.register('history.forToken', async (req, { sdkRegistry }) => {
+        return historyForToken({ ...req, sdkRegistry });
     });
 
     // §41.2 watchlist CRUD — per-wallet pinned markets. No signing;

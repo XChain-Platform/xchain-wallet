@@ -11,6 +11,7 @@ import {
     decoder as decoderLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
@@ -36,7 +37,7 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {string} props.walletId
  * @param {() => void} props.onBack
  */
-export function DestroyForm({ walletId, onBack }) {
+export function DestroyForm({ walletId, onBack, initialChainId, initialTick }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -46,12 +47,13 @@ export function DestroyForm({ walletId, onBack }) {
     );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
 
-    const [chainId, setChainId] = useState(/** @type {string | null} */ (null));
+    const [chainId, setChainId] = useState(/** @type {string | null} */ (initialChainId || null));
+    const lockedToken = !!(initialChainId && initialTick);
     const [fromAddressId, setFromAddressId] = useState(
         /** @type {string | null} */ (null),
     );
 
-    const [ticker, setTicker] = useState('');
+    const [ticker, setTicker] = useState((initialTick || '').toUpperCase());
     const [amount, setAmount] = useState('');
     const [password, setPassword] = useState('');
 
@@ -76,7 +78,7 @@ export function DestroyForm({ walletId, onBack }) {
                     );
                     return;
                 }
-                setChainId(first);
+                if (!lockedToken) setChainId(first);
             })
             .catch((err) => {
                 if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
@@ -355,13 +357,19 @@ export function DestroyForm({ walletId, onBack }) {
                 </p>
             </div>
 
-            {chainsWithAddresses.length > 1 ? (
-                <ChainPicker label="Chain" value={chainId} onChange={setChainId} chainIds={chainsWithAddresses} chainRegistry={chainRegistry} />
-            ) : descriptor ? (
-                <div className={styles.chainLine}>
-                    <ChainBadge descriptor={descriptor} size="sm" />
-                </div>
-            ) : null}
+            {lockedToken && chainId ? (
+                <LockedTokenContext chainId={chainId} tick={ticker} />
+            ) : (
+                <>
+                    {chainsWithAddresses.length > 1 ? (
+                        <ChainPicker label="Chain" value={chainId} onChange={setChainId} chainIds={chainsWithAddresses} chainRegistry={chainRegistry} />
+                    ) : descriptor ? (
+                        <div className={styles.chainLine}>
+                            <ChainBadge descriptor={descriptor} size="sm" />
+                        </div>
+                    ) : null}
+                </>
+            )}
 
             {fromAddress ? (
                 <div className={styles.fromLine}>
@@ -374,16 +382,18 @@ export function DestroyForm({ walletId, onBack }) {
                 </div>
             )}
 
-            <Input
-                label="Ticker"
-                hint="The token to destroy. Uppercase."
-                value={ticker}
-                onChange={(e) => setTicker(e.target.value.toUpperCase())}
-                autoCapitalize="characters"
-                autoComplete="off"
-                autoCorrect="off"
-                spellCheck={false}
-            />
+            {lockedToken ? null : (
+                <Input
+                    label="Ticker"
+                    hint="The token to destroy. Uppercase."
+                    value={ticker}
+                    onChange={(e) => setTicker(e.target.value.toUpperCase())}
+                    autoCapitalize="characters"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck={false}
+                />
+            )}
             <Input
                 label="Amount"
                 hint="How much to destroy."

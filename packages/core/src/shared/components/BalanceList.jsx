@@ -473,7 +473,7 @@ function safeBigInt(v) {
     return 0n;
 }
 
-function formatAmount(quantityStr, divisibility) {
+export function formatAmount(quantityStr, divisibility) {
     const q = String(quantityStr || '0');
     if (!divisibility || divisibility <= 0) return groupThousands(q);
     const negative = q.startsWith('-');

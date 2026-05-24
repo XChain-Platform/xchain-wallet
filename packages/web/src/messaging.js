@@ -735,6 +735,26 @@ export function searchTokens(req) {
     return /** @type {any} */ (sendMessage('tokens.search', req));
 }
 
+/** @param {{ chainId: string, address: string, limit?: number }} req */
+export function getOwnedTokens(req) {
+    return /** @type {any} */ (sendMessage('tokens.owned', req));
+}
+
+/** @param {{ chainId: string, tick: string, opts?: object }} req */
+export function getOrdersForToken(req) {
+    return /** @type {any} */ (sendMessage('orders.forToken', req));
+}
+
+/** @param {{ chainId: string, tick: string, opts?: object }} req */
+export function getSwapsForToken(req) {
+    return /** @type {any} */ (sendMessage('swaps.forToken', req));
+}
+
+/** @param {{ chainId: string, tick: string, opts?: object }} req */
+export function getHistoryForToken(req) {
+    return /** @type {any} */ (sendMessage('history.forToken', req));
+}
+
 /** @param {{ chainId: string, tick: string }} req */
 export function listGatedContent(req) {
     return /** @type {any} */ (sendMessage('gatedContent.list', req));

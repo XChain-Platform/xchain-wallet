@@ -11,6 +11,7 @@ import {
     decoder as decoderLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
@@ -40,7 +41,7 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {string} props.walletId
  * @param {() => void} props.onBack
  */
-export function DividendForm({ walletId, onBack }) {
+export function DividendForm({ walletId, onBack, initialChainId, initialTick }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -50,12 +51,13 @@ export function DividendForm({ walletId, onBack }) {
     );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
 
-    const [chainId, setChainId] = useState(/** @type {string | null} */ (null));
+    const [chainId, setChainId] = useState(/** @type {string | null} */ (initialChainId || null));
+    const lockedToken = !!(initialChainId && initialTick);
     const [fromAddressId, setFromAddressId] = useState(
         /** @type {string | null} */ (null),
     );
 
-    const [tick, setTick] = useState('');
+    const [tick, setTick] = useState((initialTick || '').toUpperCase());
     const [dividendTick, setDividendTick] = useState('');
     const [amount, setAmount] = useState('');
     const [memo, setMemo] = useState('');
@@ -90,7 +92,7 @@ export function DividendForm({ walletId, onBack }) {
                     );
                     return;
                 }
-                setChainId(first);
+                if (!lockedToken) setChainId(first);
             })
             .catch((err) => {
                 if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
@@ -458,13 +460,19 @@ export function DividendForm({ walletId, onBack }) {
 
     return wrap(
         <form onSubmit={handleReview} noValidate>
-            {chainsWithAddresses.length > 1 ? (
-                <ChainPicker label="Chain" value={chainId} onChange={setChainId} chainIds={chainsWithAddresses} chainRegistry={chainRegistry} />
-            ) : descriptor ? (
-                <div className={styles.chainLine}>
-                    <ChainBadge descriptor={descriptor} size="sm" />
-                </div>
-            ) : null}
+            {lockedToken && chainId ? (
+                <LockedTokenContext chainId={chainId} tick={tick} label="Holder-of token" />
+            ) : (
+                <>
+                    {chainsWithAddresses.length > 1 ? (
+                        <ChainPicker label="Chain" value={chainId} onChange={setChainId} chainIds={chainsWithAddresses} chainRegistry={chainRegistry} />
+                    ) : descriptor ? (
+                        <div className={styles.chainLine}>
+                            <ChainBadge descriptor={descriptor} size="sm" />
+                        </div>
+                    ) : null}
+                </>
+            )}
 
             {fromAddress ? (
                 <div className={styles.fromLine}>
@@ -477,16 +485,18 @@ export function DividendForm({ walletId, onBack }) {
                 </div>
             )}
 
-            <Input
-                label="Holder-of token"
-                hint="The token whose holders will receive this dividend."
-                value={tick}
-                onChange={(e) => setTick(e.target.value.toUpperCase())}
-                autoCapitalize="characters"
-                autoComplete="off"
-                autoCorrect="off"
-                spellCheck={false}
-            />
+            {lockedToken ? null : (
+                <Input
+                    label="Holder-of token"
+                    hint="The token whose holders will receive this dividend."
+                    value={tick}
+                    onChange={(e) => setTick(e.target.value.toUpperCase())}
+                    autoCapitalize="characters"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck={false}
+                />
+            )}
             <Input
                 label="Dividend tick"
                 hint="The token you are distributing."

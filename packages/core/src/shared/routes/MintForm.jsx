@@ -11,6 +11,7 @@ import {
     decoder as decoderLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
@@ -37,8 +38,10 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {object} props
  * @param {string} props.walletId
  * @param {() => void} props.onBack
+ * @param {string} [props.initialChainId]   When supplied with `initialTick`, the chain + ticker are locked (no picker / no input). Used by ManageToken so per-token actions can't operate on the wrong token.
+ * @param {string} [props.initialTick]
  */
-export function MintForm({ walletId, onBack }) {
+export function MintForm({ walletId, onBack, initialChainId, initialTick }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -48,12 +51,13 @@ export function MintForm({ walletId, onBack }) {
     );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
 
-    const [chainId, setChainId] = useState(/** @type {string | null} */ (null));
+    const [chainId, setChainId] = useState(/** @type {string | null} */ (initialChainId || null));
     const [fromAddressId, setFromAddressId] = useState(
         /** @type {string | null} */ (null),
     );
 
-    const [ticker, setTicker] = useState('');
+    const [ticker, setTicker] = useState((initialTick || '').toUpperCase());
+    const lockedToken = !!(initialChainId && initialTick);
     const [amount, setAmount] = useState('');
     const [destination, setDestination] = useState('');
     const [password, setPassword] = useState('');
@@ -79,7 +83,9 @@ export function MintForm({ walletId, onBack }) {
                     );
                     return;
                 }
-                setChainId(first);
+                // Honor an externally-locked chain (ManageToken context)
+                // by not overwriting it with the first-found chain.
+                if (!lockedToken) setChainId(first);
             })
             .catch((err) => {
                 if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
@@ -353,13 +359,19 @@ export function MintForm({ walletId, onBack }) {
 
     return wrap(
         <form onSubmit={handleReview} noValidate>
-            {chainsWithAddresses.length > 1 ? (
-                <ChainPicker label="Chain" value={chainId} onChange={setChainId} chainIds={chainsWithAddresses} chainRegistry={chainRegistry} />
-            ) : descriptor ? (
-                <div className={styles.chainLine}>
-                    <ChainBadge descriptor={descriptor} size="sm" />
-                </div>
-            ) : null}
+            {lockedToken && chainId ? (
+                <LockedTokenContext chainId={chainId} tick={ticker} />
+            ) : (
+                <>
+                    {chainsWithAddresses.length > 1 ? (
+                        <ChainPicker label="Chain" value={chainId} onChange={setChainId} chainIds={chainsWithAddresses} chainRegistry={chainRegistry} />
+                    ) : descriptor ? (
+                        <div className={styles.chainLine}>
+                            <ChainBadge descriptor={descriptor} size="sm" />
+                        </div>
+                    ) : null}
+                </>
+            )}
 
             {fromAddress ? (
                 <div className={styles.fromLine}>
@@ -372,16 +384,18 @@ export function MintForm({ walletId, onBack }) {
                 </div>
             )}
 
-            <Input
-                label="Ticker"
-                hint="The token you own. Uppercase."
-                value={ticker}
-                onChange={(e) => setTicker(e.target.value.toUpperCase())}
-                autoCapitalize="characters"
-                autoComplete="off"
-                autoCorrect="off"
-                spellCheck={false}
-            />
+            {lockedToken ? null : (
+                <Input
+                    label="Ticker"
+                    hint="The token you own. Uppercase."
+                    value={ticker}
+                    onChange={(e) => setTicker(e.target.value.toUpperCase())}
+                    autoCapitalize="characters"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck={false}
+                />
+            )}
             <Input
                 label="Amount"
                 hint="How much to mint."

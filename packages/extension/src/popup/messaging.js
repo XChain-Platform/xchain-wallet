@@ -1172,6 +1172,17 @@ export function searchTokens(req) {
 }
 
 /**
+ * List tokens whose issuer (owner) is the given address. Fans out
+ * across the user's addresses to drive the My Tokens page.
+ *
+ * @param {{ chainId: string, address: string, limit?: number }} req
+ * @returns {Promise<Array<{ tick: string, totalSupply: string | null, maxSupply: string | null, description: string | null, locked: boolean, divisibility: number | null }>>}
+ */
+export function getOwnedTokens(req) {
+    return /** @type {any} */ (sendMessage('tokens.owned', req));
+}
+
+/**
  * List the gated FILE actions for a token, grouped by KEY_HASH so
  * packs (files sharing one key) appear as one group. Drives the
  * TokenDetail "Unlock" tab. See
