@@ -39,7 +39,7 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {string} props.walletId
  * @param {string} props.chainId
  * @param {string} props.tick                       canonical ticker (uppercase)
- * @param {number | null} [props.divisibility]      threaded from MyTokens (which has it from listOwnedTokens); used to render supply numbers in token units rather than raw atomic counts
+ * @param {number | null} [props.divisibility]      fallback only — primary source is `assetInfo.divisibility`. Threaded from MyTokens for the (rare) case where the explorer strips decimals.
  * @param {() => void} props.onBack
  * @param {() => void} [props.onMint]
  * @param {() => void} [props.onDestroy]
@@ -53,12 +53,13 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {() => void} [props.onViewActivity]       drill into History pre-filtered to this tick
  * @param {() => void} [props.onViewHolders]        drill into the full holders list (optional)
  * @param {(chainId: string, actionIndex: string | number) => void} [props.onOpenDispenser]   drill into a dispenser's detail page
+ * @param {(creator: string | null) => void} [props.onIssuerResolved]   fires once `assetInfo.creator` is known so the host can stash it for form prefill (preferred From-address)
  */
 export function ManageToken({
     walletId,
     chainId,
     tick,
-    divisibility = null,
+    divisibility: divisibilityProp = null,
     onBack,
     onMint,
     onDestroy,
@@ -72,6 +73,7 @@ export function ManageToken({
     onViewActivity,
     onViewHolders,
     onOpenDispenser,
+    onIssuerResolved,
 }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
@@ -80,10 +82,15 @@ export function ManageToken({
     const assetInfo = useTokenInfo({ chainId, tick });
 
     const locked = !!assetInfo?.locked;
-    const totalSupply = assetInfo?.supply ?? null;
+    const totalSupply = assetInfo?.totalSupply ?? null;
     const maxSupply = assetInfo?.maxSupply ?? null;
     const description = assetInfo?.description || null;
     const owner = assetInfo?.creator || null;
+    // Prefer the indexer-supplied divisibility; fall back to whatever
+    // MyTokens threaded in via props when the explorer strips it.
+    const divisibility = (assetInfo?.divisibility != null && Number.isFinite(Number(assetInfo.divisibility)))
+        ? Number(assetInfo.divisibility)
+        : divisibilityProp;
 
     // Holders panel — single page, surfacing count + top 5. The full
     // list lives behind `onViewHolders` (host-routed).
@@ -127,6 +134,35 @@ export function ManageToken({
             .catch(() => { if (!cancelled) setYourBalance('0'); });
         return () => { cancelled = true; };
     }, [messaging, walletId, chainId, tick]);
+
+    // Surface the on-chain issuer to the host as soon as we know it
+    // so per-form openers can default the From row to that address
+    // (and the owner gate has a real address to compare against).
+    useEffect(() => {
+        if (typeof onIssuerResolved === 'function') onIssuerResolved(owner || null);
+    }, [owner, onIssuerResolved]);
+
+    // Owner gate — true when one of the wallet's addresses on this
+    // chain matches the on-chain creator. Drives both the warning
+    // banner above the action grid and the hiding of issuer-only
+    // actions (Mint / Description / Transfer / Broadcast / Lock).
+    // null = unknown (loading or no creator on the indexer record).
+    const [isOwner, setIsOwner] = useState(/** @type {boolean | null} */ (null));
+    useEffect(() => {
+        if (!owner) { setIsOwner(null); return undefined; }
+        if (typeof messaging?.getAddressesByChain !== 'function') { setIsOwner(null); return undefined; }
+        let cancelled = false;
+        messaging.getAddressesByChain(walletId)
+            .then((byChain) => {
+                if (cancelled) return;
+                const addrs = (byChain?.[chainId] || [])
+                    .map((a) => a?.address)
+                    .filter((a) => typeof a === 'string');
+                setIsOwner(addrs.includes(owner));
+            })
+            .catch(() => { if (!cancelled) setIsOwner(null); });
+        return () => { cancelled = true; };
+    }, [messaging, walletId, chainId, owner]);
 
     // Percentage of circulating supply the user holds. Returns null
     // when supply isn't known yet so the renderer can hide the line.
@@ -227,6 +263,46 @@ export function ManageToken({
         return () => { cancelled = true; };
     }, [activeTab, swaps, messaging, chainId, tick]);
 
+    // Genesis (first ISSUE) + subassets — small read-only metadata
+    // section below the tabs. Fetched once on mount; both calls
+    // tolerate missing fields and return null/[] when the SDK lacks
+    // the underlying methods (dev mock falls through to []).
+    const [genesis, setGenesis] = useState(/** @type {any | null} */ (null));
+    const [subassets, setSubassets] = useState(/** @type {any[] | null} */ (null));
+    useEffect(() => {
+        if (typeof messaging?.getGenesisForToken !== 'function') return undefined;
+        let cancelled = false;
+        messaging.getGenesisForToken({ chainId, tick })
+            .then((row) => { if (!cancelled) setGenesis(row || null); })
+            .catch(() => { if (!cancelled) setGenesis(null); });
+        return () => { cancelled = true; };
+    }, [messaging, chainId, tick]);
+    useEffect(() => {
+        if (typeof messaging?.getSubassetsForToken !== 'function') return undefined;
+        let cancelled = false;
+        messaging.getSubassetsForToken({ chainId, tick })
+            .then((resp) => {
+                if (cancelled) return;
+                const rows = Array.isArray(resp) ? resp : (Array.isArray(resp?.data) ? resp.data : []);
+                setSubassets(rows);
+            })
+            .catch(() => { if (!cancelled) setSubassets([]); });
+        return () => { cancelled = true; };
+    }, [messaging, chainId, tick]);
+    const genesisInfo = useMemo(() => normalizeGenesisRow(genesis), [genesis]);
+    const subassetTicks = useMemo(() => {
+        if (!Array.isArray(subassets)) return [];
+        const out = [];
+        for (const raw of subassets) {
+            if (Array.isArray(raw)) {
+                if (typeof raw[3] === 'string' && raw[3]) out.push(raw[3]);
+            } else if (raw && typeof raw.tick === 'string' && raw.tick) {
+                out.push(raw.tick);
+            }
+        }
+        return out;
+    }, [subassets]);
+
     useEffect(() => {
         if (activeTab !== 'activity' || activity !== null) return undefined;
         if (typeof messaging?.getHistoryForToken !== 'function') {
@@ -287,16 +363,21 @@ export function ManageToken({
         return `${a.slice(0, 6)}…${a.slice(-4)}`;
     }
 
+    // Issuer-only vs anyone-with-balance actions. Mint / Description /
+    // Transfer / Broadcast / Lock require the calling address to match
+    // the on-chain creator. Dispenser / Airdrop / Destroy operate on a
+    // balance and don't have that constraint.
+    const blockIssuerActions = isOwner === false;
     /** @type {Array<{ id: string, label: string, Icon: any, onSelect: (() => void) | undefined, danger?: boolean }>} */
     const actions = [
-        { id: 'mint', label: 'Mint', Icon: Icon.PrinterIcon, onSelect: locked ? undefined : onMint },
+        { id: 'mint', label: 'Mint', Icon: Icon.PrinterIcon, onSelect: (locked || blockIssuerActions) ? undefined : onMint },
         { id: 'dispenser', label: 'Dispenser', Icon: Icon.DollarIcon, onSelect: onCreateDispenser },
-        { id: 'dividend', label: 'Dividends', Icon: Icon.TokenIcon, onSelect: onPayDividend },
+        { id: 'dividend', label: 'Dividends', Icon: Icon.TokenIcon, onSelect: blockIssuerActions ? undefined : onPayDividend },
         { id: 'airdrop', label: 'Airdrop', Icon: Icon.SendIcon, onSelect: onAirdrop },
-        { id: 'description', label: 'Description', Icon: Icon.PencilIcon, onSelect: onUpdateDescription },
-        { id: 'transfer', label: 'Transfer', Icon: Icon.HandshakeIcon, onSelect: onTransferOwnership },
-        { id: 'broadcast', label: 'Broadcast', Icon: Icon.BroadcastIcon, onSelect: onBroadcast },
-        { id: 'lock', label: 'Lock', Icon: Icon.LockIcon, onSelect: locked ? undefined : onLock },
+        { id: 'description', label: 'Description', Icon: Icon.PencilIcon, onSelect: blockIssuerActions ? undefined : onUpdateDescription },
+        { id: 'transfer', label: 'Transfer', Icon: Icon.HandshakeIcon, onSelect: blockIssuerActions ? undefined : onTransferOwnership },
+        { id: 'broadcast', label: 'Broadcast', Icon: Icon.BroadcastIcon, onSelect: blockIssuerActions ? undefined : onBroadcast },
+        { id: 'lock', label: 'Lock', Icon: Icon.LockIcon, onSelect: (locked || blockIssuerActions) ? undefined : onLock },
         { id: 'destroy', label: 'Destroy', Icon: Icon.TrashIcon, onSelect: onDestroy, danger: true },
     ];
 
@@ -386,10 +467,10 @@ export function ManageToken({
                         <div className={styles.stat}>
                             <span className={styles.statLabel}>Supply</span>
                             <span className={styles.statValue}>
-                                {totalSupply != null ? formatAmount(totalSupply, divisibility || 0) : '—'}
+                                {totalSupply != null ? formatSupplyValue(totalSupply, divisibility) : '—'}
                             </span>
                             <span className={styles.statSub}>
-                                {maxSupply != null ? `of ${formatAmount(maxSupply, divisibility || 0)} cap` : 'no cap'}
+                                {maxSupply != null ? `of ${formatSupplyValue(maxSupply, divisibility)} cap` : 'no cap'}
                             </span>
                         </div>
                         <div className={styles.stat}>
@@ -397,6 +478,11 @@ export function ManageToken({
                             <span className={styles.statValue}>
                                 {yourBalance != null ? formatAmount(yourBalance, divisibility || 0) : '—'}
                             </span>
+                            {/* yourBalance comes from getWalletBalances
+                                in raw atomic units, so formatAmount is
+                                the correct formatter here. Supply
+                                values above use formatSupplyValue since
+                                the real explorer pre-formats them. */}
                             <span className={styles.statSub}>
                                 {yourSharePct != null ? `${yourSharePct.toFixed(1)}% of supply` : ' '}
                             </span>
@@ -460,6 +546,18 @@ export function ManageToken({
                         <p className={styles.chartHint}>No market data yet for this token.</p>
                     )}
                 </section>
+
+                {/* Owner-mismatch banner — surfaces when the wallet
+                    holds the token but none of its addresses matches
+                    the on-chain creator. Issuer-only actions are
+                    auto-hidden below; the banner explains why. */}
+                {isOwner === false ? (
+                    <p className={styles.ownerWarning} role="status">
+                        This wallet doesn't hold the token's issuer address.
+                        Mint, Lock, Description, Transfer, Broadcast, and
+                        Dividend require signing from {shortAddress(owner)}.
+                    </p>
+                ) : null}
 
                 {/* Action buttons — same 3-primary + More pattern as Home. */}
                 <div className={styles.manageGrid} role="group" aria-label="Manage actions">
@@ -561,6 +659,55 @@ export function ManageToken({
                         />
                     ) : null}
                 </div>
+
+                {/* Genesis + subassets — small read-only metadata
+                    section. Hidden when neither piece of data is
+                    present (dev mock returns nothing). */}
+                {(genesisInfo || subassetTicks.length > 0) ? (
+                    <section className={styles.genesisPanel} aria-label="Genesis and subassets">
+                        <h3 className={styles.genesisHeading}>Genesis</h3>
+                        {genesisInfo ? (
+                            <dl className={styles.genesisList}>
+                                {genesisInfo.actionIndex ? (
+                                    <>
+                                        <dt>Issue action</dt>
+                                        <dd className={styles.genesisMono}>{genesisInfo.actionIndex}</dd>
+                                    </>
+                                ) : null}
+                                {genesisInfo.blockIndex ? (
+                                    <>
+                                        <dt>Block</dt>
+                                        <dd>{Number(genesisInfo.blockIndex).toLocaleString('en-US')}</dd>
+                                    </>
+                                ) : null}
+                                {genesisInfo.timestamp ? (
+                                    <>
+                                        <dt>Issued</dt>
+                                        <dd>{new Date(Number(genesisInfo.timestamp) * (Number(genesisInfo.timestamp) > 1e12 ? 1 : 1000)).toLocaleString()}</dd>
+                                    </>
+                                ) : null}
+                                {genesisInfo.source ? (
+                                    <>
+                                        <dt>Issuer</dt>
+                                        <dd className={styles.genesisMono} title={genesisInfo.source}>{shortAddress(genesisInfo.source)}</dd>
+                                    </>
+                                ) : null}
+                            </dl>
+                        ) : (
+                            <p className={styles.empty}>No genesis row indexed for {tick} yet.</p>
+                        )}
+                        {subassetTicks.length > 0 ? (
+                            <>
+                                <h3 className={styles.genesisHeading}>Subassets ({subassetTicks.length})</h3>
+                                <ul className={styles.subassetList} role="list">
+                                    {subassetTicks.slice(0, 20).map((t) => (
+                                        <li key={t} className={styles.subassetItem}>{t}</li>
+                                    ))}
+                                </ul>
+                            </>
+                        ) : null}
+                    </section>
+                ) : null}
             </div>
         </Screen>
     );
@@ -851,6 +998,48 @@ function HistoryRow({ as, chainId, tick, action, status, statusLabel, source, su
 
 function nativeTickerOf(descriptor) {
     return descriptor?.coin ? descriptor.coin.toUpperCase() : '';
+}
+
+// The /issues endpoint emits rows either as keyed objects (some
+// adapters) or as the explorer's collapsed array
+// `[count, block_index, timestamp, source, tick, max_supply, max_mint,
+//  locks, status, action_index]` (see xchain-explorer
+// XChainExplorer.js line 793). Normalize either into a stable shape so
+// the Genesis section can render the same fields against either path.
+// Exported so tests can pin the array vs keyed paths.
+export function normalizeGenesisRow(raw) {
+    if (!raw) return null;
+    if (Array.isArray(raw)) {
+        return {
+            blockIndex: raw[1] != null ? Number(raw[1]) : null,
+            timestamp: raw[2] != null ? Number(raw[2]) : null,
+            source: typeof raw[3] === 'string' ? raw[3] : null,
+            actionIndex: raw[9] != null ? String(raw[9]) : null,
+        };
+    }
+    return {
+        blockIndex: raw.block_index != null ? Number(raw.block_index) : null,
+        timestamp: raw.timestamp != null ? Number(raw.timestamp) : (raw.block_time != null ? Number(raw.block_time) : null),
+        source: typeof raw.source === 'string' ? raw.source : null,
+        actionIndex: raw.action_index != null ? String(raw.action_index) : (raw.actionIndex != null ? String(raw.actionIndex) : null),
+    };
+}
+
+// Render a supply value tolerating two upstream shapes:
+//   1. Real xchain-explorer `/api/token/{TICK}` strips `decimals` and
+//      pre-formats supply via bcformat, so we get "1000.5" already.
+//   2. Indexer-style raw atomic units ("125000000000000" + divisibility)
+//      come through the dev mock + future explorer revisions.
+// String values containing '.' are treated as case (1) and re-grouped
+// with thousands separators only. Other strings get formatAmount.
+function formatSupplyValue(value, divisibility) {
+    const s = String(value || '');
+    if (s.includes('.')) {
+        const [whole, frac] = s.split('.');
+        const grouped = String(whole).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+        return frac ? `${grouped}.${frac}` : grouped;
+    }
+    return formatAmount(s, divisibility || 0);
 }
 
 // Format a native-coin amount (BTC / LTC / DOGE) for the chart's change

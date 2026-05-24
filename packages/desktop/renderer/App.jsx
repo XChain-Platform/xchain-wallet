@@ -41,6 +41,7 @@ import { TokenWizard } from '@xchain-wallet/core/shared/routes/TokenWizard.jsx';
 import { ActionsMenu } from '@xchain-wallet/core/shared/routes/ActionsMenu.jsx';
 import { MyTokens } from '@xchain-wallet/core/shared/routes/MyTokens.jsx';
 import { ManageToken } from '@xchain-wallet/core/shared/routes/ManageToken.jsx';
+import { MarketActivity } from '@xchain-wallet/core/shared/routes/MarketActivity.jsx';
 import { IssueTokenForm } from '@xchain-wallet/core/shared/routes/IssueTokenForm.jsx';
 import { MintForm } from '@xchain-wallet/core/shared/routes/MintForm.jsx';
 import { DestroyForm } from '@xchain-wallet/core/shared/routes/DestroyForm.jsx';
@@ -108,7 +109,7 @@ function AppInner() {
         /** @type {'welcome' | 'create' | 'import' | 'import-freewallet'} */ ('welcome'),
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'swap' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'staking-dashboard' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'link-form' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'addresses' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'sign-message' | 'verify-signature' | 'sign-psbt' | 'scan'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'swap' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'staking-dashboard' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'link-form' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'addresses' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'sign-message' | 'verify-signature' | 'sign-psbt' | 'scan'} */ ('home'),
     );
     const [walletDetailsId, setWalletDetailsId] = useState(/** @type {string | null} */ (null));
     const [walletRenameTarget, setWalletRenameTarget] = useState(
@@ -152,8 +153,24 @@ function AppInner() {
         /** @type {string | null} */ (null),
     );
     const [dispenserRef, setDispenserRef] = useState(
-        /** @type {{ chainId: string, actionIndex: string } | null} */ (null),
+        /** @type {{ chainId: string, actionIndex: string, origin?: 'explorer' | 'list' | 'manage-token' } | null} */ (null),
     );
+    const [tokenDetailRef, setTokenDetailRef] = useState(
+        /** @type {{ chainId: string, tick: string, kind: string, divisibility?: number | null } | null} */ (null),
+    );
+    // Which view to return to from a form. ManageToken sets this to
+    // 'manage-token' before opening a per-token form so Back returns
+    // to the token's detail page instead of the actions menu.
+    const [formReturnView, setFormReturnView] = useState(/** @type {string | null} */ (null));
+    const formBack = () => {
+        const target = formReturnView || 'actions';
+        setFormReturnView(null);
+        setUnlockedView(target);
+    };
+    const fromManage = formReturnView === 'manage-token';
+    const prefillChainId = fromManage ? tokenDetailRef?.chainId : undefined;
+    const prefillTick = fromManage ? tokenDetailRef?.tick : undefined;
+    const prefillFromAddress = fromManage ? tokenDetailRef?.issuer : undefined;
     const [contractRef, setContractRef] = useState(
         /** @type {{ chainId: string, contractActionIndex: string } | null} */ (null),
     );
@@ -459,7 +476,10 @@ function AppInner() {
                 return (
                     <MintForm
                         walletId={activeWalletId}
-                        onBack={() => setUnlockedView('actions')}
+                        initialChainId={prefillChainId}
+                        initialTick={prefillTick}
+                        initialFromAddress={prefillFromAddress}
+                        onBack={formBack}
                     />
                 );
             }
@@ -467,7 +487,10 @@ function AppInner() {
                 return (
                     <DestroyForm
                         walletId={activeWalletId}
-                        onBack={() => setUnlockedView('actions')}
+                        initialChainId={prefillChainId}
+                        initialTick={prefillTick}
+                        initialFromAddress={prefillFromAddress}
+                        onBack={formBack}
                     />
                 );
             }
@@ -481,7 +504,10 @@ function AppInner() {
                     <TokenAdminForm
                         walletId={activeWalletId}
                         mode={unlockedView}
-                        onBack={() => setUnlockedView('actions')}
+                        initialChainId={prefillChainId}
+                        initialTick={prefillTick}
+                        initialFromAddress={prefillFromAddress}
+                        onBack={formBack}
                     />
                 );
             }
@@ -489,7 +515,10 @@ function AppInner() {
                 return (
                     <BroadcastForm
                         walletId={activeWalletId}
-                        onBack={() => setUnlockedView('actions')}
+                        initialChainId={prefillChainId}
+                        initialTick={prefillTick}
+                        initialFromAddress={prefillFromAddress}
+                        onBack={formBack}
                     />
                 );
             }
@@ -497,7 +526,10 @@ function AppInner() {
                 return (
                     <DispenserForm
                         walletId={activeWalletId}
-                        onBack={() => setUnlockedView('actions')}
+                        initialChainId={prefillChainId}
+                        initialTick={prefillTick}
+                        initialFromAddress={prefillFromAddress}
+                        onBack={formBack}
                     />
                 );
             }
@@ -519,7 +551,11 @@ function AppInner() {
                         walletId={activeWalletId}
                         chainId={dispenserRef.chainId}
                         actionIndex={dispenserRef.actionIndex}
-                        onBack={() => setUnlockedView(dispenserRef.origin === 'explorer' ? 'dispenser-explorer' : 'dispensers-list')}
+                        onBack={() => {
+                            if (dispenserRef.origin === 'manage-token') return setUnlockedView('manage-token');
+                            if (dispenserRef.origin === 'explorer') return setUnlockedView('dispenser-explorer');
+                            return setUnlockedView('dispensers-list');
+                        }}
                     />
                 );
             }
@@ -538,7 +574,10 @@ function AppInner() {
                 return (
                     <DividendForm
                         walletId={activeWalletId}
-                        onBack={() => setUnlockedView('actions')}
+                        initialChainId={prefillChainId}
+                        initialTick={prefillTick}
+                        initialFromAddress={prefillFromAddress}
+                        onBack={formBack}
                     />
                 );
             }
@@ -547,9 +586,16 @@ function AppInner() {
                     <AirdropForm
                         walletId={activeWalletId}
                         resumeId={resumeAirdropId}
+                        initialChainId={resumeAirdropId ? undefined : prefillChainId}
+                        initialTick={resumeAirdropId ? undefined : prefillTick}
+                        initialFromAddress={resumeAirdropId ? undefined : prefillFromAddress}
                         onBack={() => {
-                            setResumeAirdropId(null);
-                            setUnlockedView(resumeAirdropId ? 'home' : 'actions');
+                            if (resumeAirdropId) {
+                                setResumeAirdropId(null);
+                                setUnlockedView('home');
+                                return;
+                            }
+                            formBack();
                         }}
                     />
                 );
@@ -936,6 +982,17 @@ function AppInner() {
                     />
                 );
             }
+            if (unlockedView === 'market-activity') {
+                return (
+                    <MarketActivity
+                        onBack={() => setUnlockedView('home')}
+                        onOpenDispenser={(chainId, actionIndex) => {
+                            setDispenserRef({ chainId, actionIndex, origin: 'explorer' });
+                            setUnlockedView('dispenser-detail');
+                        }}
+                    />
+                );
+            }
             if (unlockedView === 'my-tokens' && activeWalletId) {
                 return (
                     <MyTokens
@@ -943,7 +1000,43 @@ function AppInner() {
                         accountId={activeAccountId || undefined}
                         onBack={() => setUnlockedView('home')}
                         onIssue={() => setUnlockedView('issue')}
-                        onSelectTick={() => setUnlockedView('actions')}
+                        onSelectTick={(tick, chainId, row) => {
+                            setTokenDetailRef({
+                                chainId,
+                                tick,
+                                kind: 'token',
+                                divisibility: row?.divisibility ?? null,
+                            });
+                            setUnlockedView('manage-token');
+                        }}
+                    />
+                );
+            }
+            if (unlockedView === 'manage-token' && activeWalletId && tokenDetailRef) {
+                const openForm = (view) => { setFormReturnView('manage-token'); setUnlockedView(view); };
+                return (
+                    <ManageToken
+                        walletId={activeWalletId}
+                        chainId={tokenDetailRef.chainId}
+                        tick={tokenDetailRef.tick}
+                        divisibility={tokenDetailRef.divisibility ?? null}
+                        onBack={() => setUnlockedView('my-tokens')}
+                        onMint={() => openForm('mint')}
+                        onDestroy={() => openForm('destroy')}
+                        onLock={() => openForm('lock')}
+                        onUpdateDescription={() => openForm('description')}
+                        onTransferOwnership={() => openForm('transfer')}
+                        onCreateDispenser={() => openForm('dispenser')}
+                        onPayDividend={() => openForm('dividend')}
+                        onAirdrop={() => openForm('airdrop')}
+                        onBroadcast={() => openForm('broadcast')}
+                        onOpenDispenser={(chainId, actionIndex) => {
+                            setDispenserRef({ chainId, actionIndex, origin: 'manage-token' });
+                            setUnlockedView('dispenser-detail');
+                        }}
+                        onIssuerResolved={(creator) => {
+                            setTokenDetailRef((prev) => (prev ? { ...prev, issuer: creator || null } : prev));
+                        }}
                     />
                 );
             }
@@ -1134,6 +1227,7 @@ function AppInner() {
                     onCreateToken={activeWalletId ? () => setUnlockedView('wizard') : undefined}
                     onActions={activeWalletId ? () => setUnlockedView('actions') : undefined}
                     onMyTokens={activeWalletId ? () => setUnlockedView('my-tokens') : undefined}
+                    onMarketActivity={activeWalletId ? () => setUnlockedView('market-activity') : undefined}
                     onMarkets={activeWalletId ? () => setUnlockedView('markets') : undefined}
                     onMessaging={activeWalletId ? () => setUnlockedView('messaging') : undefined}
                     onContracts={activeWalletId && hasBtcAddress ? () => setUnlockedView('contracts-list') : undefined}

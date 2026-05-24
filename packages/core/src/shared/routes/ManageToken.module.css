@@ -177,6 +177,20 @@
     font-size: var(--xc-text-sm);
 }
 
+/* Owner-mismatch banner above the action grid. Yellow / warning tone
+   so it reads as informational rather than error; sits flush above the
+   action buttons whose disabled-state it explains. */
+.ownerWarning {
+    margin: 0;
+    padding: var(--xc-space-2) var(--xc-space-3);
+    background: color-mix(in srgb, var(--xc-warning, #d99000) 14%, transparent);
+    border: 1px solid color-mix(in srgb, var(--xc-warning, #d99000) 40%, transparent);
+    color: var(--xc-text);
+    border-radius: var(--xc-radius-md);
+    font-size: var(--xc-text-sm);
+    line-height: 1.4;
+}
+
 /* ───── Manage action grid (carried over). ───── */
 
 .manageGrid {
@@ -455,6 +469,71 @@ button.row:hover:not(:disabled) {
 }
 
 .inlineLink:hover { text-decoration: underline; }
+
+/* ───── Genesis + subassets section — read-only metadata block at
+   the bottom of the page. Two-column key/value list + chip-style
+   subasset list so the bottom of the page has structured info
+   without competing with the tabs above. ───── */
+
+.genesisPanel {
+    background: var(--xc-surface-raised);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-lg, 12px);
+    padding: var(--xc-space-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+}
+
+.genesisHeading {
+    margin: 0;
+    font-size: var(--xc-text-sm);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--xc-text-muted);
+}
+
+.genesisList {
+    margin: 0;
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    column-gap: var(--xc-space-4);
+    row-gap: var(--xc-space-1);
+    font-size: var(--xc-text-sm);
+}
+
+.genesisList > dt {
+    color: var(--xc-text-muted);
+}
+
+.genesisList > dd {
+    margin: 0;
+    color: var(--xc-text);
+    overflow-wrap: anywhere;
+}
+
+.genesisMono {
+    font-family: var(--xc-font-mono, monospace);
+}
+
+.subassetList {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--xc-space-1);
+}
+
+.subassetItem {
+    padding: 2px var(--xc-space-2);
+    background: var(--xc-bg-muted);
+    border-radius: var(--xc-radius-pill, 999px);
+    font-size: var(--xc-text-xs);
+    font-family: var(--xc-font-mono, monospace);
+    color: var(--xc-text);
+}
 
 /* ───── History-style row used by Dispensers / Orders / Swaps panels.
    Mirrors the §23 timeline row visually: header (chain icon + ACTION

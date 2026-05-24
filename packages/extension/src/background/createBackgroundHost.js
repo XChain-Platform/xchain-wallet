@@ -138,6 +138,8 @@ const {
     ordersForToken,
     swapsForToken,
     historyForToken,
+    genesisForToken,
+    subtokensForTick,
     listWatchlistForWallet,
     saveWatchlistEntry,
     clearWatchlistEntry,
@@ -2048,6 +2050,12 @@ export function createBackgroundHost(deps) {
     });
     host.register('history.forToken', async (req, { sdkRegistry }) => {
         return historyForToken({ ...req, sdkRegistry });
+    });
+    host.register('genesis.forToken', async (req, { sdkRegistry }) => {
+        return genesisForToken({ ...req, sdkRegistry });
+    });
+    host.register('tokens.subassets', async (req, { sdkRegistry }) => {
+        return subtokensForTick({ ...req, sdkRegistry });
     });
 
     // §41.2 watchlist CRUD — per-wallet pinned markets. No signing;

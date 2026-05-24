@@ -128,3 +128,37 @@ export async function historyForToken({ sdkRegistry, chainId, tick, opts }) {
     const sdk = sdkRegistry.get(chainId);
     return sdk.getHistory(tick, 'token', opts);
 }
+
+/**
+ * Genesis (ISSUE) action for a token — the first issuance row, which
+ * carries the creator address, originating block, and tx hash. Used
+ * by ManageToken's Genesis sub-section.
+ *
+ * @param {SdkCtx & { tick: string, opts?: object }} params
+ */
+export async function genesisForToken({ sdkRegistry, chainId, tick, opts }) {
+    if (!sdkRegistry) throw new Error('genesisForToken: sdkRegistry is required');
+    if (!chainId) throw new Error('genesisForToken: chainId is required');
+    if (!tick) throw new Error('genesisForToken: tick is required');
+    const sdk = sdkRegistry.get(chainId);
+    if (typeof sdk.getIssues !== 'function') return null;
+    const rows = await sdk.getIssues(tick, 'token', opts);
+    const list = Array.isArray(rows) ? rows : (Array.isArray(rows?.data) ? rows.data : []);
+    return list.length > 0 ? list[list.length - 1] : null;
+}
+
+/**
+ * Subassets (children) of a token. xchain-explorer's tokens/subtoken
+ * filter matches ticks LIKE `${tick}.%`. Returns the raw rows; the
+ * renderer normalizes the array vs keyed-object shape.
+ *
+ * @param {SdkCtx & { tick: string, opts?: object }} params
+ */
+export async function subtokensForTick({ sdkRegistry, chainId, tick, opts }) {
+    if (!sdkRegistry) throw new Error('subtokensForTick: sdkRegistry is required');
+    if (!chainId) throw new Error('subtokensForTick: chainId is required');
+    if (!tick) throw new Error('subtokensForTick: tick is required');
+    const sdk = sdkRegistry.get(chainId);
+    if (typeof sdk.getTokens !== 'function') return [];
+    return sdk.getTokens(tick, 'subtoken', opts);
+}

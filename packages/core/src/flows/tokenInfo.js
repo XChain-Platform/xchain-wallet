@@ -80,6 +80,7 @@
  * @property {Object} locks                              full lock map (per-field booleans)
  * @property {number | null} marketPrice                 coin-denominated price, null if unset
  * @property {number | null} marketFloor                 coin-denominated floor, null if unset
+ * @property {number | null} divisibility                token decimals (0-8); null when the explorer doesn't expose this field
  * @property {string | null} imageUrl                    best-effort hero image URL (TIS images[0] if present, else regex from description)
  * @property {TisMediaEntry[]} images                    full image gallery (icon / standard / large / hires)
  * @property {TisMediaEntry[]} audio                     audio tracks
@@ -561,6 +562,15 @@ export function normalizeTokenInfo(chainId, tick, raw, tisBundle = null) {
     );
     const marketPrice = isFiniteNum(row?.market?.price) ? row.market.price : null;
     const marketFloor = isFiniteNum(row?.market?.floor) ? row.market.floor : null;
+    // Divisibility lives at the top of the indexer row (or, in legacy
+    // exports, as `decimals`). Real xchain-explorer currently strips
+    // this field — `bcformat` runs server-side so supply values come
+    // back pre-formatted. We surface whatever's present so dev / future
+    // explorer-exposure consumers can read a single field.
+    const divisibilityRaw = row?.divisibility ?? row?.decimals ?? null;
+    const divisibility = (divisibilityRaw != null && Number.isFinite(Number(divisibilityRaw)))
+        ? Number(divisibilityRaw)
+        : null;
     // TIS bundle (when fetched) supplies the richer description body and
     // media arrays. We keep the on-chain description string as a fallback
     // for the description text, but prefer the TIS body when available
@@ -597,6 +607,7 @@ export function normalizeTokenInfo(chainId, tick, raw, tisBundle = null) {
         locks: lockMap,
         marketPrice,
         marketFloor,
+        divisibility,
         imageUrl,
         images,
         audio,

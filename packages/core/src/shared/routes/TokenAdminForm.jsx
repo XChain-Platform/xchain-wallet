@@ -45,7 +45,7 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {AdminMode} props.mode
  * @param {() => void} props.onBack
  */
-export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initialTick }) {
+export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initialTick, initialFromAddress }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -65,6 +65,11 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     const [description, setDescription] = useState('');
     const [transferTo, setTransferTo] = useState('');
     const [password, setPassword] = useState('');
+    // Lock-mode typed-confirmation gate. Locking is irreversible, so
+    // the review stage requires the user to type LOCK before the Sign
+    // button enables (on top of the existing password / HW gate).
+    const [typedConfirm, setTypedConfirm] = useState('');
+    const typedConfirmOk = typedConfirm.trim().toUpperCase() === 'LOCK';
 
     const [stage, setStage] = useState(
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
@@ -97,7 +102,15 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
 
     useEffect(() => {
         if (!chainId || !addressesByChain) return;
-        const addrs = (addressesByChain[chainId] || []).filter(
+        const all = addressesByChain[chainId] || [];
+        // When the caller knows which address must sign (e.g. issuer
+        // address from ManageToken), prefer that. Falls through to the
+        // standard "newest HD-derived receive-chain address" otherwise.
+        if (initialFromAddress) {
+            const match = all.find((a) => a.address === initialFromAddress);
+            if (match) { setFromAddressId(match.id); return; }
+        }
+        const addrs = all.filter(
             (a) => a.source === 'hd' && a.derivationPath?.split('/')?.[4] === '0',
         );
         if (addrs.length > 0) {
@@ -110,7 +123,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         } else {
             setFromAddressId(null);
         }
-    }, [chainId, addressesByChain]);
+    }, [chainId, addressesByChain, initialFromAddress]);
 
     useEffect(() => {
         if (stage === 'review') {
@@ -341,17 +354,30 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 {(isWatcherMode || isHwSource) && submitError ? (
                     <div role="alert" className={styles.error}>{submitError}</div>
                 ) : null}
+                {mode === 'lock' ? (
+                    <Input
+                        label="Type LOCK to confirm"
+                        hint="Locking is permanent — supply and minting freeze forever."
+                        value={typedConfirm}
+                        onChange={(e) => setTypedConfirm(e.target.value)}
+                        autoComplete="off"
+                        autoCorrect="off"
+                        spellCheck={false}
+                    />
+                ) : null}
                 <div className={styles.actions}>
                     <Button
                         type="submit"
                         variant={isWatcherMode ? 'primary' : (mode === 'lock' ? 'danger' : 'primary')}
                         loading={stage === 'submitting'}
                         disabled={
-                            isWatcherMode
-                                ? false
-                                : isHwSource
-                                    ? hwStatus !== 'available'
-                                    : password.length === 0
+                            (mode === 'lock' && !typedConfirmOk) || (
+                                isWatcherMode
+                                    ? false
+                                    : isHwSource
+                                        ? hwStatus !== 'available'
+                                        : password.length === 0
+                            )
                         }
                     >
                         {isWatcherMode

@@ -10,7 +10,8 @@ import {
     BackIcon, ForwardIcon, CopyIcon, ScanIcon, SearchIcon, FilterIcon,
     EyeIcon, UploadIcon, DownloadIcon, MigrateIcon, TokenIcon,
     MultisigIcon, AddressIcon, ContractIcon, MarketIcon, MessageIcon,
-    HistoryIcon, HomeIcon, GearIcon, MoreIcon,
+    HistoryIcon, HomeIcon, GearIcon, MoreIcon, PrinterIcon, HandshakeIcon,
+    VerifyIcon,
 } from '../../../packages/core/src/ui/icons/index.jsx';
 
 describe('ui/icons/iconForLabel', () => {
@@ -57,7 +58,9 @@ describe('ui/icons/iconForLabel', () => {
         ['Migrate to BIP39', MigrateIcon],
         ['Issue token', PlusIcon], // matches "issue" in PlusIcon list
         ['Token', TokenIcon],
-        ['Mint additional supply', PlusIcon], // "mint" matches PlusIcon
+        ['Mint additional supply', PrinterIcon], // "mint" now routes to Printer
+        ['Transfer ownership', HandshakeIcon],   // "transfer" → Handshake
+        ['Verify signature', VerifyIcon],        // "verify" → shield-check
         ['Multisig signing', MultisigIcon],
         ['Addresses', AddressIcon],
         ['Contracts', ContractIcon],

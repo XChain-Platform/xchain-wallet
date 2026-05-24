@@ -411,6 +411,79 @@ export function fakeTokenInfoFor(tick, chainId) {
 }
 
 /**
+ * Genesis (ISSUE) row for `tick`. Used by the dev-mock SDK's
+ * getIssues(tick, 'token') path. Returns the indexer's collapsed
+ * positional array shape — same wire format the explorer emits — so
+ * the ManageToken Genesis section can normalize it identically to
+ * real-data rows.
+ *
+ * @param {string} tick
+ * @param {string} chainId
+ */
+export function fakeGenesisFor(tick, chainId) {
+    const found = lookupTokenRow(tick, chainId);
+    if (!found) return [];
+    const ownerAddr = fakeAddress(chainId, found.tick, 0);
+    const { blockIndex, actionIndex } = fakeBlockFor(chainId, 'ISSUE', tick, 0);
+    // Two years ago — deterministic but far enough back to look like a
+    // genuine genesis row rather than a recent reissue.
+    const timestamp = Math.floor(Date.now() / 1000) - 60 * 60 * 24 * 365 * 2;
+    // [count_reverse, block_index, timestamp, source, tick, max_supply,
+    //  max_mint, locks, status, action_index] — see xchain-explorer
+    // XChainExplorer.js line 793.
+    return [[
+        1,
+        blockIndex,
+        timestamp,
+        ownerAddr,
+        found.tick,
+        String(found.quantity),
+        '0',
+        '0|0|0|0|0|0|0',
+        'CONFIRMED',
+        actionIndex,
+    ]];
+}
+
+/**
+ * Subassets (children) of `tick`. Used by the dev-mock SDK's
+ * getTokens(tick, 'subtoken') path. Returns 0-3 fake subasset rows in
+ * the same positional shape the real explorer uses.
+ *
+ * @param {string} tick
+ * @param {string} chainId
+ */
+export function fakeSubassetsFor(tick, chainId) {
+    const found = lookupTokenRow(tick, chainId);
+    if (!found) return [];
+    // Map tick to a deterministic count [0..3] so some tokens show
+    // empty + others show populated lists.
+    let n = 0;
+    for (let i = 0; i < tick.length; i += 1) n = (n * 17 + tick.charCodeAt(i)) >>> 0;
+    const count = n % 4;
+    const labels = ['A', 'B', 'C'];
+    return Array.from({ length: count }, (_, i) => {
+        const subTick = `${found.tick}.${labels[i] || `S${i}`}`;
+        const { blockIndex, actionIndex } = fakeBlockFor(chainId, 'SUBASSET', subTick, i);
+        const timestamp = Math.floor(Date.now() / 1000) - 60 * 60 * 24 * 90 * (i + 1);
+        // Match the explorer's getTokens collapsed shape:
+        // [count_reverse, block_index, timestamp, tick, supply,
+        //  max_supply, max_mint, locks, id]
+        return [
+            i + 1,
+            blockIndex,
+            timestamp,
+            subTick,
+            String(1000 * (i + 1)),
+            String(1000 * (i + 1)),
+            '0',
+            '0|0|0|0|0|0|0',
+            actionIndex,
+        ];
+    });
+}
+
+/**
  * Recent on-chain history for `tick` — every action that mentions the
  * tick. Used by the dev-mock SDK's getHistory(tick, 'token') path.
  *

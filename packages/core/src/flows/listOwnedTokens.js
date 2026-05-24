@@ -97,23 +97,84 @@ export async function listOwnedTokens({ sdkRegistry, chainId, address, limit = 2
     }
 
     const out = /** @type {OwnedTokenHit[]} */ ([]);
-    for (const row of tokenRowsRaw) {
-        if (!row || typeof row.tick !== 'string' || !row.tick) continue;
+    for (const raw of tokenRowsRaw) {
+        const row = normalizeTokenRow(raw);
+        if (!row || !row.tick) continue;
         const tick = row.tick.toUpperCase();
         out.push({
             tick,
-            totalSupply: row.supply != null ? String(row.supply) : null,
-            maxSupply: row.max_supply != null ? String(row.max_supply) : null,
-            description: typeof row.description === 'string' ? row.description : null,
-            locked: !!(row.locked || row.lock || row.is_locked),
-            divisibility: row.divisibility != null ? Number(row.divisibility) : null,
-            youOwn: typeof row.youOwn === 'boolean'
-                ? row.youOwn
+            totalSupply: row.supply,
+            maxSupply: row.maxSupply,
+            description: row.description,
+            locked: row.locked,
+            divisibility: row.divisibility,
+            youOwn: typeof raw.youOwn === 'boolean'
+                ? raw.youOwn
                 : (heldTicks === null ? true : heldTicks.has(tick)),
-            hasOpenDispenser: typeof row.hasOpenDispenser === 'boolean'
-                ? row.hasOpenDispenser
+            hasOpenDispenser: typeof raw.hasOpenDispenser === 'boolean'
+                ? raw.hasOpenDispenser
                 : listedTicks.has(tick),
         });
     }
     return out;
+}
+
+// The /tokens/{address}/address endpoint returns rows as either a
+// keyed object (dev mock + future explorer revisions) or a positional
+// array (current xchain-explorer XChainExplorer.js line 817 collapses
+// the row to `[count_reverse, block_index, timestamp, tick, supply,
+// max_supply, max_mint, locks, id]` to shrink the wire payload). We
+// accept both shapes and produce a stable internal object. Exported
+// so tests can hit the array / keyed paths without spinning the SDK.
+export function normalizeTokenRow(raw) {
+    if (!raw) return null;
+    if (Array.isArray(raw)) {
+        // Positional shape: [count, block, ts, tick, supply, max_supply, max_mint, locks, id]
+        const tick = typeof raw[3] === 'string' ? raw[3] : null;
+        if (!tick) return null;
+        // `locks` is a pipe-joined string of 7 boolean-flags in this
+        // order: lock_max_supply, lock_mint, lock_mint_supply,
+        // lock_max_mint, lock_description, lock_sleep, lock_callback.
+        // Any of the first three being truthy makes the token "locked"
+        // in the wallet's sense (no further mint possible).
+        let locked = false;
+        if (typeof raw[7] === 'string') {
+            const flags = raw[7].split('|');
+            locked = flags[0] === '1' || flags[1] === '1' || flags[2] === '1';
+        }
+        return {
+            tick,
+            supply: raw[4] != null ? String(raw[4]) : null,
+            maxSupply: raw[5] != null ? String(raw[5]) : null,
+            description: null, // not exposed by the tokens-list endpoint
+            locked,
+            divisibility: null, // bcformat is server-side; explorer strips decimals
+        };
+    }
+    // Keyed shape — accept both `divisibility` and the legacy `decimals`
+    // alias since the explorer's row name is `m.decimals` even when
+    // exposed as a raw field.
+    const tick = typeof raw.tick === 'string' ? raw.tick : null;
+    if (!tick) return null;
+    const divRaw = raw.divisibility ?? raw.decimals ?? null;
+    // Lock columns can appear individually (raw indexer row) or as a
+    // pipe-string (post-XChainExplorer collapse). Cover both.
+    let locked = !!(raw.locked || raw.lock || raw.is_locked);
+    if (!locked) {
+        if (raw.lock_max_supply === 1 || raw.lock_max_supply === '1') locked = true;
+        else if (raw.lock_mint === 1 || raw.lock_mint === '1') locked = true;
+        else if (raw.lock_mint_supply === 1 || raw.lock_mint_supply === '1') locked = true;
+        else if (typeof raw.locks === 'string') {
+            const flags = raw.locks.split('|');
+            locked = flags[0] === '1' || flags[1] === '1' || flags[2] === '1';
+        }
+    }
+    return {
+        tick,
+        supply: raw.supply != null ? String(raw.supply) : null,
+        maxSupply: raw.max_supply != null ? String(raw.max_supply) : null,
+        description: typeof raw.description === 'string' ? raw.description : null,
+        locked,
+        divisibility: (divRaw != null && Number.isFinite(Number(divRaw))) ? Number(divRaw) : null,
+    };
 }

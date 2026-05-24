@@ -170,6 +170,8 @@ export {
     ordersForToken,
     swapsForToken,
     historyForToken,
+    genesisForToken,
+    subtokensForTick,
 } from './marketQueries.js';
 export {
     listWatchlistForWallet,

@@ -18,14 +18,25 @@ import {
     isDemoGatedActionIndex,
 } from './demoGatedContent.js';
 
-import { createHash } from 'crypto';
+// @noble/hashes is pure-JS so this code path works in every shell
+// target — popup / extension service worker / web bundle / desktop
+// renderer. Node's `crypto` module isn't reachable from Vite's
+// browser builds, hence the swap.
+import { sha256 } from '@noble/hashes/sha2';
 
 const KEY_CACHE = /** @type {Map<string, Buffer>} */ (new Map());
 const PT_CACHE  = /** @type {Map<string, Uint8Array>} */ (new Map());
 
 function keyKey(address, keyHash) { return address + '|' + String(keyHash).toLowerCase(); }
 function ptKey(address, actionIndex) { return address + '|' + String(actionIndex); }
-function sha256Hex(buf) { return createHash('sha256').update(buf).digest('hex'); }
+function sha256Hex(buf) {
+    const digest = sha256(buf);
+    let out = '';
+    for (let i = 0; i < digest.length; i += 1) {
+        out += digest[i].toString(16).padStart(2, '0');
+    }
+    return out;
+}
 
 export function clearGatedContentCaches() {
     KEY_CACHE.clear();

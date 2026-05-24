@@ -52,7 +52,7 @@ const POLL_INTERVAL_MS = 10_000;
  * @param {string | null} [props.resumeId]
  * @param {() => void} props.onBack
  */
-export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId, initialTick }) {
+export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId, initialTick, initialFromAddress }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -155,10 +155,16 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         return () => { cancelled = true; };
     }, [resumeId, hydrated, addressesByChain, walletId, messaging]);
 
-    // Default fromAddressId → newest external HD address on the chosen chain.
+    // Default fromAddressId → preferred issuer address (when present)
+    // or the newest external HD address on the chosen chain.
     useEffect(() => {
         if (!chainId || !addressesByChain || fromAddressId) return;
-        const addrs = (addressesByChain[chainId] || []).filter(
+        const all = addressesByChain[chainId] || [];
+        if (initialFromAddress) {
+            const match = all.find((a) => a.address === initialFromAddress);
+            if (match) { setFromAddressId(match.id); return; }
+        }
+        const addrs = all.filter(
             (a) => a.source === 'hd' && a.derivationPath?.split('/')?.[4] === '0',
         );
         if (addrs.length > 0) {
@@ -169,7 +175,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
             });
             setFromAddressId(sorted[0].id);
         }
-    }, [chainId, addressesByChain, fromAddressId]);
+    }, [chainId, addressesByChain, fromAddressId, initialFromAddress]);
 
     // Re-classify recipients whenever the paste text changes.
     useEffect(() => {

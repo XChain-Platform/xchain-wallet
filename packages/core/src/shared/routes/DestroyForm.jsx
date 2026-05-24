@@ -37,7 +37,7 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {string} props.walletId
  * @param {() => void} props.onBack
  */
-export function DestroyForm({ walletId, onBack, initialChainId, initialTick }) {
+export function DestroyForm({ walletId, onBack, initialChainId, initialTick, initialFromAddress }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -48,6 +48,13 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick }) {
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
 
     const [chainId, setChainId] = useState(/** @type {string | null} */ (initialChainId || null));
+    // Typed-confirmation gate on the review stage — user must type
+    // DESTROY before the Sign button enables, on top of the existing
+    // password / HW gate. Reset on every stage transition so the
+    // confirmation can't carry forward from a previously-cancelled
+    // review.
+    const [typedConfirm, setTypedConfirm] = useState('');
+    const typedConfirmOk = typedConfirm.trim().toUpperCase() === 'DESTROY';
     const lockedToken = !!(initialChainId && initialTick);
     const [fromAddressId, setFromAddressId] = useState(
         /** @type {string | null} */ (null),
@@ -88,7 +95,12 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick }) {
 
     useEffect(() => {
         if (!chainId || !addressesByChain) return;
-        const addrs = (addressesByChain[chainId] || []).filter(
+        const all = addressesByChain[chainId] || [];
+        if (initialFromAddress) {
+            const match = all.find((a) => a.address === initialFromAddress);
+            if (match) { setFromAddressId(match.id); return; }
+        }
+        const addrs = all.filter(
             (a) => a.source === 'hd' && a.derivationPath?.split('/')?.[4] === '0',
         );
         if (addrs.length > 0) {
@@ -101,7 +113,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick }) {
         } else {
             setFromAddressId(null);
         }
-    }, [chainId, addressesByChain]);
+    }, [chainId, addressesByChain, initialFromAddress]);
 
     useEffect(() => {
         if (stage === 'review') {
@@ -325,17 +337,28 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick }) {
                 {(isWatcherMode || isHwSource) && submitError ? (
                     <div role="alert" className={styles.error}>{submitError}</div>
                 ) : null}
+                <Input
+                    label="Type DESTROY to confirm"
+                    hint="This burns the amount above and cannot be undone."
+                    value={typedConfirm}
+                    onChange={(e) => setTypedConfirm(e.target.value)}
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck={false}
+                />
                 <div className={styles.actions}>
                     <Button
                         type="submit"
                         variant={isWatcherMode ? 'primary' : 'danger'}
                         loading={stage === 'submitting'}
                         disabled={
-                            isWatcherMode
-                                ? false
-                                : isHwSource
-                                    ? hwStatus !== 'available'
-                                    : password.length === 0
+                            !typedConfirmOk || (
+                                isWatcherMode
+                                    ? false
+                                    : isHwSource
+                                        ? hwStatus !== 'available'
+                                        : password.length === 0
+                            )
                         }
                     >
                         {isWatcherMode

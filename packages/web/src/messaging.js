@@ -755,6 +755,16 @@ export function getHistoryForToken(req) {
     return /** @type {any} */ (sendMessage('history.forToken', req));
 }
 
+/** @param {{ chainId: string, tick: string, opts?: object }} req */
+export function getGenesisForToken(req) {
+    return /** @type {any} */ (sendMessage('genesis.forToken', req));
+}
+
+/** @param {{ chainId: string, tick: string, opts?: object }} req */
+export function getSubassetsForToken(req) {
+    return /** @type {any} */ (sendMessage('tokens.subassets', req));
+}
+
 /** @param {{ chainId: string, tick: string }} req */
 export function listGatedContent(req) {
     return /** @type {any} */ (sendMessage('gatedContent.list', req));

@@ -178,6 +178,10 @@ function AppInner() {
     const fromManage = formReturnView === 'manage-token';
     const prefillChainId = fromManage ? tokenDetailRef?.chainId : undefined;
     const prefillTick = fromManage ? tokenDetailRef?.tick : undefined;
+    // Issuer address stashed by ManageToken via `onIssuerResolved`.
+    // When set, each prefill-enabled form defaults its From row to the
+    // creator address instead of the newest receive-chain HD address.
+    const prefillFromAddress = fromManage ? tokenDetailRef?.issuer : undefined;
     // Coin family to scope History's chain filter to on entry (mirror
     // of popup wiring). Empty = no scoping.
     const [historyInitialChainCoin, setHistoryInitialChainCoin] = useState('');
@@ -616,6 +620,7 @@ function AppInner() {
                         onBack={formBack}
                         initialChainId={prefillChainId}
                         initialTick={prefillTick}
+                        initialFromAddress={prefillFromAddress}
                     />
                 );
             }
@@ -626,6 +631,7 @@ function AppInner() {
                         onBack={formBack}
                         initialChainId={prefillChainId}
                         initialTick={prefillTick}
+                        initialFromAddress={prefillFromAddress}
                     />
                 );
             }
@@ -642,6 +648,7 @@ function AppInner() {
                         onBack={formBack}
                         initialChainId={prefillChainId}
                         initialTick={prefillTick}
+                        initialFromAddress={prefillFromAddress}
                     />
                 );
             }
@@ -652,6 +659,7 @@ function AppInner() {
                         onBack={formBack}
                         initialChainId={prefillChainId}
                         initialTick={prefillTick}
+                        initialFromAddress={prefillFromAddress}
                     />
                 );
             }
@@ -662,6 +670,7 @@ function AppInner() {
                         onBack={formBack}
                         initialChainId={prefillChainId}
                         initialTick={prefillTick}
+                        initialFromAddress={prefillFromAddress}
                     />
                 );
             }
@@ -709,6 +718,7 @@ function AppInner() {
                         onBack={formBack}
                         initialChainId={prefillChainId}
                         initialTick={prefillTick}
+                        initialFromAddress={prefillFromAddress}
                     />
                 );
             }
@@ -727,6 +737,7 @@ function AppInner() {
                         }}
                         initialChainId={resumeAirdropId ? undefined : prefillChainId}
                         initialTick={resumeAirdropId ? undefined : prefillTick}
+                        initialFromAddress={resumeAirdropId ? undefined : prefillFromAddress}
                     />
                 );
             }
@@ -1277,6 +1288,9 @@ function AppInner() {
                         onOpenDispenser={(chainId, actionIndex) => {
                             setDispenserRef({ chainId, actionIndex, origin: 'manage-token' });
                             setUnlockedView('dispenser-detail');
+                        }}
+                        onIssuerResolved={(creator) => {
+                            setTokenDetailRef((prev) => (prev ? { ...prev, issuer: creator || null } : prev));
                         }}
                         onViewActivity={() => {
                             const coin = String(tokenDetailRef.chainId || '').split('-')[0] || '';

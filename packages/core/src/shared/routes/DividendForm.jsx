@@ -41,7 +41,7 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {string} props.walletId
  * @param {() => void} props.onBack
  */
-export function DividendForm({ walletId, onBack, initialChainId, initialTick }) {
+export function DividendForm({ walletId, onBack, initialChainId, initialTick, initialFromAddress }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -102,7 +102,12 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick }) 
 
     useEffect(() => {
         if (!chainId || !addressesByChain) return;
-        const addrs = (addressesByChain[chainId] || []).filter(
+        const all = addressesByChain[chainId] || [];
+        if (initialFromAddress) {
+            const match = all.find((a) => a.address === initialFromAddress);
+            if (match) { setFromAddressId(match.id); return; }
+        }
+        const addrs = all.filter(
             (a) => a.source === 'hd' && a.derivationPath?.split('/')?.[4] === '0',
         );
         if (addrs.length > 0) {
@@ -115,7 +120,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick }) 
         } else {
             setFromAddressId(null);
         }
-    }, [chainId, addressesByChain]);
+    }, [chainId, addressesByChain, initialFromAddress]);
 
     useEffect(() => {
         if (stage === 'review') {

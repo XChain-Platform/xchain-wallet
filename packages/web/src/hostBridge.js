@@ -42,6 +42,8 @@ import {
     fakeSwapsFor,
     fakeHoldersFor,
     fakeHistoryFor,
+    fakeGenesisFor,
+    fakeSubassetsFor,
 } from './devFakeBalances.js';
 
 // §50 / Cluster L FOLLOWUP 4 — shell-specific diagnostic env + build
@@ -106,8 +108,19 @@ const createDevMockSdk = (constructorOpts) => {
                 // populated dev response; the substring-search shape
                 // (type === 'token') stays empty so dev ReceivePicker
                 // doesn't promise fake results from the platform.
-                return async (_query, type /* , opts */) => {
+                // type === 'subtoken' feeds ManageToken's Subassets list.
+                return async (query, type /* , opts */) => {
                     if (type === 'address') return fakeOwnedTokensFor(chainId);
+                    if (type === 'subtoken' && query) return fakeSubassetsFor(query, chainId);
+                    return [];
+                };
+            }
+            if (prop === 'getIssues') {
+                // Genesis (ISSUE) lookup. Only the token-filtered shape
+                // is populated — ManageToken takes the latest row and
+                // treats it as the genesis event.
+                return async (query, type /* , opts */) => {
+                    if (type === 'token' && query) return fakeGenesisFor(query, chainId);
                     return [];
                 };
             }
