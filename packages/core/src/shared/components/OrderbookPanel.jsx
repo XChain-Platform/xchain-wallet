@@ -15,6 +15,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMessaging } from '../useMessaging.js';
 import { normalizeOrderbook } from '../../market/orderbook.js';
+import { sampleOrderbookFor } from '../../market/sampleMarketData.js';
 
 const POLL_INTERVAL_MS = 5000;
 
@@ -46,11 +47,21 @@ export function OrderbookPanel({ chainId, tick1, tick2, onPickPrice }) {
             try {
                 const resp = await messaging.getOrderbook({ chainId, tick1, tick2 });
                 if (cancelled) return;
-                setBook(normalizeOrderbook(resp));
+                let normalized = normalizeOrderbook(resp);
+                // TEMP — sample fallback so the panel renders something
+                // when the explorer has no live book yet. Remove with
+                // sampleMarketData.js once real feeds populate here.
+                if (normalized.bids.length === 0 && normalized.asks.length === 0) {
+                    normalized = normalizeOrderbook(sampleOrderbookFor(tick1, tick2));
+                }
+                setBook(normalized);
                 setLoadError(null);
                 setLastRefreshed(Date.now());
             } catch (err) {
                 if (cancelled) return;
+                // TEMP — still show sample data even on error so the UI
+                // isn't dead during dev/CORS outages.
+                setBook(normalizeOrderbook(sampleOrderbookFor(tick1, tick2)));
                 setLoadError(err?.message || String(err));
             }
         };

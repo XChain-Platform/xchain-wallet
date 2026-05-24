@@ -8,6 +8,7 @@
 import { useEffect, useState } from 'react';
 import { AddressText } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../useMessaging.js';
+import { sampleMatchesFor } from '../../market/sampleMarketData.js';
 
 const MAX_ROWS = 30;
 
@@ -30,10 +31,15 @@ export function RecentTradesPanel({ chainId, tick1, tick2, onOpenTx }) {
         messaging.getMarketHistory({ chainId, tick1, tick2 })
             .then((resp) => {
                 if (cancelled) return;
-                setRows(extractRows(resp).slice(0, MAX_ROWS));
+                const real = extractRows(resp);
+                // TEMP — sample fallback when no real history exists.
+                const next = real.length > 0 ? real : sampleMatchesFor(tick1, tick2);
+                setRows(next.slice(0, MAX_ROWS));
             })
             .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || String(err));
+                if (cancelled) return;
+                setRows(sampleMatchesFor(tick1, tick2).slice(0, MAX_ROWS));
+                setLoadError(err?.message || String(err));
             });
         return () => { cancelled = true; };
     }, [messaging, chainId, tick1, tick2]);

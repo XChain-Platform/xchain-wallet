@@ -768,6 +768,11 @@ function AppInner() {
                             setActiveMarket(null);
                             setUnlockedView('markets');
                         }}
+                        onSwap={() => setActiveMarket({
+                            chainId: activeMarket.chainId,
+                            tick1: activeMarket.tick2,
+                            tick2: activeMarket.tick1,
+                        })}
                     />
                 );
             }

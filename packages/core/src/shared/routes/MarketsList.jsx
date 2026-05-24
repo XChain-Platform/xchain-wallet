@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     Screen,
     ScreenHeader,
-    ChainBadge,
     Icon,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib, branding as brandingLib } from '@xchain-wallet/core';
@@ -10,8 +9,11 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { DispenserBadge } from '../components/DispenserBadge.jsx';
 import { EmptyStateNudge } from '../components/EmptyStateNudge.jsx';
 import { tickerColor } from '../components/BalanceList.jsx';
+import { TickerIcon } from '../components/TickerIcon.jsx';
 import styles from './IssueTokenForm.module.css';
 import receiveStyles from './Receive.module.css';
+import receivePickerStyles from './ReceivePicker.module.css';
+import marketsStyles from './MarketsList.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 const NATIVE_TICKER_BY_COIN = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
@@ -50,6 +52,8 @@ export function MarketsList({
     const [watchlist, setWatchlist] = useState(/** @type {any[]} */ ([]));
     const [loading, setLoading] = useState(false);
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
+    const [tab, setTab] = useState(/** @type {'all' | 'popular' | 'watchlist'} */ ('popular'));
+    const [search, setSearch] = useState('');
 
     const loadWatchlist = useCallback(async () => {
         try {
@@ -75,19 +79,26 @@ export function MarketsList({
         let cancelled = false;
         setLoading(true);
         setLoadError(null);
+        const applyResult = (rows) => {
+            if (cancelled) return;
+            const tick = selectedAsset.tick.toUpperCase();
+            const filtered = rows
+                .map(normalizeMarket)
+                .filter(Boolean)
+                .filter((m) => m.tick1.toUpperCase() === tick || m.tick2.toUpperCase() === tick);
+            // TEMP: until real market feeds exist on every chain, fall back
+            // to a fixed sample list so designers can see the populated UI.
+            // Remove once getMarkets returns real data here.
+            if (filtered.length === 0) {
+                const samples = SAMPLE_MARKETS[tick] || [];
+                setMarkets(samples);
+            } else {
+                setMarkets(filtered);
+            }
+        };
         messaging.getMarkets({ chainId: selectedAsset.chainId })
-            .then((resp) => {
-                if (cancelled) return;
-                const tick = selectedAsset.tick.toUpperCase();
-                const rows = extractRows(resp)
-                    .map(normalizeMarket)
-                    .filter(Boolean)
-                    .filter((m) => m.tick1.toUpperCase() === tick || m.tick2.toUpperCase() === tick);
-                setMarkets(rows);
-            })
-            .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || 'Failed to load markets.');
-            })
+            .then((resp) => applyResult(extractRows(resp)))
+            .catch(() => applyResult([]))
             .finally(() => {
                 if (!cancelled) setLoading(false);
             });
@@ -99,6 +110,44 @@ export function MarketsList({
         for (const e of watchlist) s.add(`${e.chainId}::${e.tick1}::${e.tick2}`);
         return s;
     }, [watchlist]);
+
+    const displayMarkets = useMemo(() => {
+        const selTick = selectedAsset?.tick.toUpperCase() || '';
+        // Side of each pair the user didn't pick — the "other" side
+        // we display as the row's primary ticker. Used for filtering.
+        const otherOf = (m) => (m.tick2.toUpperCase() === selTick ? m.tick1
+            : m.tick1.toUpperCase() === selTick ? m.tick2
+            : m.tick1);
+        const q = search.trim().toUpperCase();
+        const applySearch = (rows) => (q ? rows.filter((m) => otherOf(m).toUpperCase().includes(q)) : rows);
+
+        if (tab === 'all') return applySearch(markets);
+        if (tab === 'popular') {
+            // Sort by depth desc and take the top 5 so 'Popular' visibly
+            // differs from 'All' even on the sample data.
+            const sorted = [...markets].sort((a, b) => (b.depth ?? 0) - (a.depth ?? 0));
+            return applySearch(sorted.slice(0, 5));
+        }
+        // 'watchlist'
+        if (!selectedAsset) return [];
+        const onChain = watchlist.filter((e) => e.chainId === selectedAsset.chainId
+            && (e.tick1.toUpperCase() === selTick || e.tick2.toUpperCase() === selTick));
+        // Hydrate from the markets list when the same pair has live data,
+        // so prices/changes show up for starred rows too.
+        const byPair = new Map();
+        for (const m of markets) byPair.set(`${m.tick1}::${m.tick2}`, m);
+        const rows = onChain.map((e) => {
+            const hit = byPair.get(`${e.tick1}::${e.tick2}`);
+            return {
+                tick1: e.tick1,
+                tick2: e.tick2,
+                lastPrice: hit?.lastPrice,
+                change24h: hit?.change24h,
+                depth: hit?.depth,
+            };
+        });
+        return applySearch(rows);
+    }, [tab, markets, watchlist, selectedAsset, search]);
 
     const toggleStar = useCallback(async (chainId, tick1, tick2) => {
         const key = `${chainId}::${tick1}::${tick2}`;
@@ -196,6 +245,61 @@ export function MarketsList({
                 <span className={receiveStyles.assetChevron} aria-hidden="true">›</span>
             </button>
 
+            {selectedAsset ? (
+                <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 'var(--xc-space-2)',
+                    marginBottom: 'var(--xc-space-3)',
+                }}>
+                    <input
+                        type="search"
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        placeholder="Search"
+                        aria-label="Search markets"
+                        style={{
+                            flex: '1 1 auto',
+                            minWidth: 0,
+                            padding: 'var(--xc-space-2) var(--xc-space-3)',
+                            border: '1px solid var(--xc-border)',
+                            borderRadius: 999,
+                            background: 'var(--xc-bg-muted)',
+                            color: 'var(--xc-text)',
+                            font: 'inherit',
+                            fontSize: 'var(--xc-text-sm)',
+                            outline: 'none',
+                        }}
+                    />
+                    <div
+                        className={receivePickerStyles.kindSegments}
+                        role="tablist"
+                        aria-label="Markets view"
+                        style={{ flexShrink: 0 }}
+                    >
+                        {[
+                            { id: 'all',       label: 'All' },
+                            { id: 'popular',   label: 'Popular' },
+                            { id: 'watchlist', label: 'Watchlist' },
+                        ].map((opt) => {
+                            const active = tab === opt.id;
+                            return (
+                                <button
+                                    key={opt.id}
+                                    type="button"
+                                    role="tab"
+                                    aria-selected={active}
+                                    className={`${receivePickerStyles.kindSegment} ${active ? receivePickerStyles.kindSegmentActive : ''}`}
+                                    onClick={() => setTab(opt.id)}
+                                >
+                                    {opt.label}
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+            ) : null}
+
             {loadError ? (
                 <p className={styles.hint} role="alert">{loadError}</p>
             ) : null}
@@ -207,28 +311,40 @@ export function MarketsList({
                 />
             ) : loading ? (
                 <p className={styles.hint}>Loading markets…</p>
-            ) : markets.length === 0 ? (
+            ) : displayMarkets.length === 0 ? (
                 <EmptyStateNudge
-                    title={`No markets for ${selectedAsset.tick}`}
-                    body="No pairs found involving this asset on its chain."
+                    title={search.trim()
+                        ? 'No matches'
+                        : tab === 'watchlist'
+                            ? 'Watchlist is empty'
+                            : `No markets for ${selectedAsset.tick}`}
+                    body={search.trim()
+                        ? `Nothing matches "${search.trim()}". Clear the search to see everything.`
+                        : tab === 'watchlist'
+                            ? `Tap ☆ on any market to add it to your watchlist for ${selectedAsset.tick}.`
+                            : 'No pairs found involving this asset on its chain.'}
                 />
             ) : (
-                <ul style={{ listStyle: 'none', padding: '0 var(--xc-space-3)', margin: 0 }}>
-                    {markets.map((m) => (
-                        <MarketRow
-                            key={`${m.tick1}::${m.tick2}`}
-                            chainId={selectedAsset.chainId}
-                            tick1={m.tick1}
-                            tick2={m.tick2}
-                            lastPrice={m.lastPrice}
-                            change24h={m.change24h}
-                            depth={m.depth}
-                            starred={watchlistKeySet.has(`${selectedAsset.chainId}::${m.tick1}::${m.tick2}`)}
-                            onOpen={() => onOpenMarket(selectedAsset.chainId, m.tick1, m.tick2)}
-                            onToggleStar={() => toggleStar(selectedAsset.chainId, m.tick1, m.tick2)}
-                        />
-                    ))}
-                </ul>
+                <div className={receiveStyles.assetCard} style={{ display: 'block', padding: 0, marginBottom: 'var(--xc-space-3)' }}>
+                    <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                        {displayMarkets.map((m, idx) => (
+                            <MarketRow
+                                key={`${m.tick1}::${m.tick2}`}
+                                chainId={selectedAsset.chainId}
+                                selectedTick={selectedAsset.tick}
+                                tick1={m.tick1}
+                                tick2={m.tick2}
+                                lastPrice={m.lastPrice}
+                                change24h={m.change24h}
+                                depth={m.depth}
+                                starred={watchlistKeySet.has(`${selectedAsset.chainId}::${m.tick1}::${m.tick2}`)}
+                                onOpen={() => onOpenMarket(selectedAsset.chainId, m.tick1, m.tick2)}
+                                onToggleStar={() => toggleStar(selectedAsset.chainId, m.tick1, m.tick2)}
+                                first={idx === 0}
+                            />
+                        ))}
+                    </ul>
+                </div>
             )}
         </Screen>
     );
@@ -246,47 +362,133 @@ export function MarketsList({
  * @param {() => void} props.onOpen
  * @param {() => void} props.onToggleStar
  */
-function MarketRow({ chainId, tick1, tick2, lastPrice, change24h, depth, starred, onOpen, onToggleStar }) {
+function MarketRow({ chainId, selectedTick, tick1, tick2, lastPrice, change24h, depth, starred, onOpen, onToggleStar, first }) {
     const descriptor = chainRegistry.get(chainId);
+    const selUpper = String(selectedTick || '').toUpperCase();
+    // Show the icon for the OTHER side of the pair — the side the user
+    // didn't pick. Falls back to tick1 if neither side matches.
+    const otherTick = tick2.toUpperCase() === selUpper ? tick1
+        : tick1.toUpperCase() === selUpper ? tick2
+        : tick1;
+    const changeNum = change24h ? parseFloat(String(change24h).replace(/[^\d.+-]/g, '')) : NaN;
+    const changeColor = Number.isFinite(changeNum)
+        ? (changeNum > 0 ? 'var(--xc-success, #16a34a)' : changeNum < 0 ? 'var(--xc-danger, #dc2626)' : 'var(--xc-text-muted)')
+        : 'var(--xc-text-muted)';
+    // Depth intensity — same accent hue, more saturated background as
+    // depth grows. Five tiers tuned to feel meaningful from 1 → 30+.
+    const depthPct = typeof depth === 'number' && Number.isFinite(depth)
+        ? (depth <= 1 ? 8
+            : depth <= 4 ? 14
+            : depth <= 12 ? 22
+            : depth <= 25 ? 34
+            : 48)
+        : 0;
     return (
-        <li style={{ padding: '0.5rem 0', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+        <li className={marketsStyles.row} onClick={onOpen}>
             <button
                 type="button"
-                onClick={onToggleStar}
+                onClick={(e) => { e.stopPropagation(); onToggleStar(); }}
                 aria-label={starred ? 'Remove from watchlist' : 'Add to watchlist'}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1rem' }}
+                onMouseDown={(e) => e.stopPropagation()}
+                style={{
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontSize: '1.1rem',
+                    color: starred ? 'var(--xc-accent-primary)' : 'var(--xc-text-muted)',
+                    padding: 0,
+                    lineHeight: 1,
+                }}
             >
                 {starred ? '★' : '☆'}
             </button>
-            {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
-            <button
-                type="button"
-                onClick={onOpen}
+            <TickerIcon chainId={chainId} tick={otherTick} />
+            <div
                 style={{
                     flex: 1,
-                    background: 'none',
-                    border: 'none',
-                    textAlign: 'left',
-                    cursor: 'pointer',
-                    padding: 0,
                     display: 'flex',
-                    gap: '0.5rem',
-                    alignItems: 'baseline',
-                    flexWrap: 'wrap',
+                    flexDirection: 'column',
+                    gap: '2px',
+                    minWidth: 0,
                 }}
             >
-                <strong>{tick1}/{tick2}</strong>
-                {lastPrice ? <span>last {lastPrice}</span> : null}
-                {change24h ? <span>{change24h}</span> : null}
-                {typeof depth === 'number' && Number.isFinite(depth) ? (
-                    <span>depth {depth}</span>
+                <span style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--xc-space-2)', flexWrap: 'wrap' }}>
+                    <strong style={{ fontSize: 'var(--xc-text-md)' }}>{otherTick}</strong>
+                    <DispenserBadge chainId={chainId} tick={otherTick} />
+                </span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--xc-space-2)', fontSize: 'var(--xc-text-xs)', color: 'var(--xc-text-muted)' }}>
+                    {lastPrice ? <span>last {lastPrice}</span> : null}
+                </span>
+            </div>
+            <div style={{
+                flex: '0 0 auto',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'flex-end',
+                gap: '2px',
+            }}>
+                {change24h ? (
+                    <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 2,
+                        fontSize: 'var(--xc-text-sm)',
+                        fontWeight: 600,
+                        color: changeColor,
+                    }}>
+                        {change24h}
+                        {Number.isFinite(changeNum) && changeNum !== 0 ? (
+                            <span aria-hidden="true" style={{ fontSize: '0.8em', lineHeight: 1 }}>
+                                {changeNum > 0 ? '▲' : '▼'}
+                            </span>
+                        ) : null}
+                    </span>
                 ) : null}
-                <DispenserBadge chainId={chainId} tick={tick1} />
-                <DispenserBadge chainId={chainId} tick={tick2} />
-            </button>
+                {typeof depth === 'number' && Number.isFinite(depth) ? (
+                    <span style={{
+                        display: 'inline-block',
+                        background: `color-mix(in srgb, var(--xc-accent-primary) ${depthPct}%, transparent)`,
+                        color: 'var(--xc-accent-primary)',
+                        fontWeight: 600,
+                        padding: '1px 8px',
+                        borderRadius: 999,
+                        fontSize: 11,
+                        lineHeight: 1.5,
+                    }}>
+                        depth {depth}
+                    </span>
+                ) : null}
+            </div>
         </li>
     );
 }
+
+// --- TEMP sample markets (delete when real feeds populate) -------
+
+const SAMPLE_MARKETS = {
+    BTC: [
+        { tick1: 'PEPECASH',     tick2: 'BTC', lastPrice: '0.00000089', change24h: '+5.2%',  depth: 14 },
+        { tick1: 'XCP',          tick2: 'BTC', lastPrice: '0.00012450', change24h: '-2.1%',  depth: 22 },
+        { tick1: 'RAREPEPE',     tick2: 'BTC', lastPrice: '0.00078900', change24h: '+12.3%', depth: 18 },
+        { tick1: 'BITCRYSTAL',   tick2: 'BTC', lastPrice: '0.00000045', change24h: '+1.8%',  depth: 6 },
+        { tick1: 'LTBCOIN',      tick2: 'BTC', lastPrice: '0.00000034', change24h: '0.0%',   depth: 9 },
+        { tick1: 'MEMECASH',     tick2: 'BTC', lastPrice: '0.00000890', change24h: '-5.7%',  depth: 11 },
+        { tick1: 'WAVEY',        tick2: 'BTC', lastPrice: '0.00002300', change24h: '+3.4%',  depth: 8 },
+        { tick1: 'TOKENLY',      tick2: 'BTC', lastPrice: '0.00001500', change24h: '-1.2%',  depth: 7 },
+        { tick1: 'PEPECREATURE', tick2: 'BTC', lastPrice: '0.00000067', change24h: '+8.9%',  depth: 13 },
+        { tick1: 'COIN',         tick2: 'BTC', lastPrice: '0.00045000', change24h: '+0.5%',  depth: 5 },
+    ],
+    LTC: [
+        { tick1: 'LTBPLUS',  tick2: 'LTC', lastPrice: '0.00012300', change24h: '+2.1%',  depth: 4 },
+        { tick1: 'PEPELITE', tick2: 'LTC', lastPrice: '0.00000456', change24h: '-1.4%',  depth: 6 },
+        { tick1: 'LITECASH', tick2: 'LTC', lastPrice: '0.00001100', change24h: '+4.7%',  depth: 8 },
+    ],
+    DOGE: [
+        { tick1: 'DOGEFREN',  tick2: 'DOGE', lastPrice: '0.00050000', change24h: '+15.0%', depth: 12 },
+        { tick1: 'WOWTOKEN',  tick2: 'DOGE', lastPrice: '0.00120000', change24h: '-3.2%',  depth: 7 },
+        { tick1: 'SHIBOGECOIN', tick2: 'DOGE', lastPrice: '0.00002300', change24h: '+8.4%', depth: 5 },
+    ],
+};
 
 // --- Explorer-response normalisation ------------------------------
 
