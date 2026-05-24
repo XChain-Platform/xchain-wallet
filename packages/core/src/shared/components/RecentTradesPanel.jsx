@@ -6,7 +6,6 @@
 // (tick1, tick2) the view is looking at.
 
 import { useEffect, useState } from 'react';
-import { AddressText } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../useMessaging.js';
 import { sampleMatchesFor } from '../../market/sampleMarketData.js';
 
@@ -56,7 +55,7 @@ export function RecentTradesPanel({ chainId, tick1, tick2, onOpenTx }) {
             <div
                 style={{
                     display: 'grid',
-                    gridTemplateColumns: '1fr 1fr 1fr 0.75fr 1.5fr',
+                    gridTemplateColumns: '1fr 1fr 1fr 0.75fr',
                     gap: '0.25rem',
                     fontSize: '0.75rem',
                     color: 'var(--xc-fg-muted)',
@@ -67,7 +66,6 @@ export function RecentTradesPanel({ chainId, tick1, tick2, onOpenTx }) {
                 <span>Price</span>
                 <span>Size ({tick1})</span>
                 <span>Side</span>
-                <span>Counterparty</span>
             </div>
             {loadError ? (
                 <p style={{ margin: '0.25rem 0.25rem 0', color: 'var(--xc-fg-muted)', fontSize: '0.75rem' }}>
@@ -87,10 +85,11 @@ export function RecentTradesPanel({ chainId, tick1, tick2, onOpenTx }) {
                         <div
                             style={{
                                 display: 'grid',
-                                gridTemplateColumns: '1fr 1fr 1fr 0.75fr 1.5fr',
+                                gridTemplateColumns: '1fr 1fr 1fr 0.75fr',
                                 gap: '0.25rem',
                                 padding: '0.15rem 0.25rem',
-                                fontSize: '0.8rem',
+                                fontSize: '0.7rem',
+                                fontVariantNumeric: 'tabular-nums',
                             }}
                         >
                             <span style={{ color: 'var(--xc-fg-muted)' }}>
@@ -101,11 +100,6 @@ export function RecentTradesPanel({ chainId, tick1, tick2, onOpenTx }) {
                             </span>
                             <span>{summary.size}</span>
                             <span>{summary.side === 'buy' ? 'Buy' : 'Sell'}</span>
-                            <span>
-                                {summary.counterparty ? (
-                                    <AddressText address={summary.counterparty} />
-                                ) : '—'}
-                            </span>
                         </div>
                     );
                     const key = String(row.action_index ?? `${summary.timeLabel}-${summary.price}-${summary.size}`);
@@ -161,12 +155,27 @@ function summarizeRow(row, tick1, tick2) {
     }
     const ts = parseTimestamp(row);
     return {
-        price: String(price),
-        size: String(size),
+        price: formatPrice(price),
+        size: formatSize(size),
         side,
         timeLabel: ts ? formatTime(ts) : '—',
         counterparty: row.destination || row.give_address || row.get_address || null,
     };
+}
+
+function formatPrice(n) {
+    if (!Number.isFinite(n)) return '—';
+    if (n === 0) return '0';
+    if (n >= 1) return n.toFixed(4);
+    if (n >= 0.01) return n.toFixed(6);
+    return n.toFixed(8);
+}
+
+function formatSize(n) {
+    if (!Number.isFinite(n)) return '—';
+    if (Number.isInteger(n)) return String(n);
+    if (n >= 1) return n.toFixed(2);
+    return n.toFixed(4);
 }
 
 function parseTimestamp(row) {

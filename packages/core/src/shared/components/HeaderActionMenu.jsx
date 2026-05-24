@@ -63,7 +63,7 @@ export function HeaderActionMenu({
     }, [onClose]);
 
     const primary = [
-        { id: 'markets',     label: 'Markets',     Icon: Icon.MarketIcon,   handler: onMarkets },
+        { id: 'markets',     label: 'Decentralized Exchange', Icon: Icon.MarketIcon,   handler: onMarkets },
         { id: 'tokens',      label: 'Tokens',      Icon: Icon.TokenIcon,    handler: onTokens },
         { id: 'messaging',   label: 'Messaging',   Icon: Icon.MessageIcon,  handler: onMessaging },
         { id: 'cross-chain', label: 'Cross-chain', Icon: Icon.LinkIcon,     handler: onCrossChain },

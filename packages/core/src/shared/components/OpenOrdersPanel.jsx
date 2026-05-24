@@ -135,14 +135,23 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                 padding: '0.5rem',
             }}
         >
-            <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>My open orders</p>
             {loadError ? (
-                <p style={{ margin: '0.25rem 0.25rem 0', color: 'var(--xc-fg-muted)', fontSize: '0.75rem' }}>
+                <p style={{
+                    margin: 'var(--xc-space-3) 0',
+                    color: 'var(--xc-text-muted)',
+                    fontSize: 'var(--xc-text-sm)',
+                    textAlign: 'center',
+                }}>
                     {loadError}
                 </p>
             ) : null}
             {!loadError && rows.length === 0 ? (
-                <p style={{ margin: '0.25rem 0.25rem 0', color: 'var(--xc-fg-muted)', fontSize: '0.8rem' }}>
+                <p style={{
+                    margin: 'var(--xc-space-3) 0',
+                    color: 'var(--xc-text-muted)',
+                    fontSize: 'var(--xc-text-sm)',
+                    textAlign: 'center',
+                }}>
                     No open orders on this market.
                 </p>
             ) : null}

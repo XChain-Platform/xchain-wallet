@@ -227,8 +227,6 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
     // Contacts UX state: picker open/close, search query, and the
     // "save as contact" inline form (idle → naming → saving).
     const [contactsPickerOpen, setContactsPickerOpen] = useState(false);
-    const [contactsPickerQuery, setContactsPickerQuery] = useState('');
-    const [contactsFilterOpen, setContactsFilterOpen] = useState(false);
     const [saveContactStage, setSaveContactStage] = useState(
         /** @type {'idle' | 'naming' | 'saving'} */ ('idle'),
     );
@@ -289,16 +287,6 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
         return out;
     }, [contacts, chainId, chainCoinFor]);
 
-    const filteredPickerContacts = useMemo(() => {
-        const q = contactsPickerQuery.trim().toLowerCase();
-        if (!q) return chainContacts;
-        return chainContacts.filter(({ contact, entry }) => {
-            return contact.name.toLowerCase().includes(q)
-                || entry.address.toLowerCase().includes(q)
-                || (entry.label || '').toLowerCase().includes(q);
-        });
-    }, [chainContacts, contactsPickerQuery]);
-
     // If the typed address exactly matches a contact entry on this
     // chain, show the chip + skip the save-as-contact affordance.
     const matchedContact = useMemo(() => {
@@ -317,7 +305,6 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
     const handlePickContact = useCallback((entry) => {
         setToAddress(entry.address);
         setContactsPickerOpen(false);
-        setContactsPickerQuery('');
     }, []);
 
     const handleSubmitSaveContact = useCallback(async (e) => {
@@ -1282,44 +1269,15 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
         const chainLabel = desc?.displayName || (chainCoin ? chainCoin.charAt(0).toUpperCase() + chainCoin.slice(1) : 'this chain');
         const pickerHeader = (
             <ScreenHeader
-                onBack={() => {
-                    setContactsPickerOpen(false);
-                    setContactsPickerQuery('');
-                    setContactsFilterOpen(false);
-                }}
+                onBack={() => setContactsPickerOpen(false)}
                 title="Address Book"
                 titleIcon={<Icon.BookIcon />}
-                trailing={(
-                    <button
-                        type="button"
-                        onClick={() => {
-                            setContactsFilterOpen((o) => {
-                                if (o) setContactsPickerQuery('');
-                                return !o;
-                            });
-                        }}
-                        aria-label={contactsFilterOpen ? 'Hide filter' : 'Filter contacts'}
-                        aria-pressed={contactsFilterOpen}
-                        title="Filter contacts"
-                        style={{
-                            background: 'transparent',
-                            border: 'none',
-                            padding: 'var(--xc-space-1) var(--xc-space-2)',
-                            color: contactsFilterOpen ? 'var(--xc-accent-primary)' : 'var(--xc-text)',
-                            cursor: 'pointer',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                        }}
-                    >
-                        <Icon.FilterIcon />
-                    </button>
-                )}
             />
         );
         // Truly-empty path: no saved contacts on this chain at all.
         // Render a single calm card with the empty message — skip the
-        // outer surface, the hint copy, and the filter input so the
-        // page doesn't show a card-inside-a-card.
+        // outer surface and hint copy so the page doesn't show a
+        // card-inside-a-card.
         if (chainContacts.length === 0) {
             return (
                 <Screen variant={variant} header={pickerHeader}>
@@ -1347,70 +1305,42 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                     <p className={styles.hint} style={{ textAlign: 'left', marginBottom: 'var(--xc-space-3)' }}>
                         Showing saved {chainLabel} addresses. Other chains live on their own send pages.
                     </p>
-                    {contactsFilterOpen ? (
-                        <Input
-                            label="Filter"
-                            value={contactsPickerQuery}
-                            onChange={(e) => setContactsPickerQuery(e.target.value)}
-                            placeholder="Search by name or address"
-                            autoComplete="off"
-                            autoFocus
-                        />
-                    ) : null}
-                    {filteredPickerContacts.length === 0 ? (
-                        <div
-                            style={{
-                                marginTop: 'var(--xc-space-3)',
-                                padding: 'var(--xc-space-4)',
-                                border: '1px solid var(--xc-border)',
-                                borderRadius: 'var(--xc-radius-md)',
-                                background: 'var(--xc-surface)',
-                                color: 'var(--xc-text)',
-                                textAlign: 'center',
-                                fontSize: 'var(--xc-text-md)',
-                                fontWeight: 600,
-                            }}
-                        >
-                            No contacts match your filter
-                        </div>
-                    ) : (
-                        <ul style={{ listStyle: 'none', margin: 'var(--xc-space-3) 0 0', padding: 0 }}>
-                            {filteredPickerContacts.map(({ contact, entry }) => (
-                                <li key={`${contact.id}:${entry.address}`} style={{ marginBottom: 'var(--xc-space-2)' }}>
-                                    <button
-                                        type="button"
-                                        onClick={() => handlePickContact(entry)}
-                                        style={{
-                                            width: '100%',
-                                            display: 'flex',
-                                            flexDirection: 'column',
-                                            alignItems: 'flex-start',
-                                            gap: '2px',
-                                            padding: 'var(--xc-space-3)',
-                                            border: '1px solid var(--xc-border)',
-                                            borderRadius: 'var(--xc-radius-sm)',
-                                            background: 'var(--xc-surface, transparent)',
-                                            color: 'var(--xc-text)',
-                                            textAlign: 'left',
-                                            cursor: 'pointer',
-                                        }}
-                                    >
-                                        <span style={{ fontWeight: 700, fontSize: 'var(--xc-text-md)' }}>
-                                            {contact.name}
+                    <ul style={{ listStyle: 'none', margin: 'var(--xc-space-3) 0 0', padding: 0 }}>
+                        {chainContacts.map(({ contact, entry }) => (
+                            <li key={`${contact.id}:${entry.address}`} style={{ marginBottom: 'var(--xc-space-2)' }}>
+                                <button
+                                    type="button"
+                                    onClick={() => handlePickContact(entry)}
+                                    style={{
+                                        width: '100%',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        alignItems: 'flex-start',
+                                        gap: '2px',
+                                        padding: 'var(--xc-space-3)',
+                                        border: '1px solid var(--xc-border)',
+                                        borderRadius: 'var(--xc-radius-sm)',
+                                        background: 'var(--xc-surface, transparent)',
+                                        color: 'var(--xc-text)',
+                                        textAlign: 'left',
+                                        cursor: 'pointer',
+                                    }}
+                                >
+                                    <span style={{ fontWeight: 700, fontSize: 'var(--xc-text-md)' }}>
+                                        {contact.name}
+                                    </span>
+                                    <span style={{ fontSize: 'var(--xc-text-xs)', color: 'var(--xc-text-muted)', wordBreak: 'break-all' }}>
+                                        {entry.address}
+                                    </span>
+                                    {entry.label ? (
+                                        <span style={{ fontSize: 'var(--xc-text-xs)', color: 'var(--xc-text-muted)' }}>
+                                            {entry.label}
                                         </span>
-                                        <span style={{ fontSize: 'var(--xc-text-xs)', color: 'var(--xc-text-muted)', wordBreak: 'break-all' }}>
-                                            {entry.address}
-                                        </span>
-                                        {entry.label ? (
-                                            <span style={{ fontSize: 'var(--xc-text-xs)', color: 'var(--xc-text-muted)' }}>
-                                                {entry.label}
-                                            </span>
-                                        ) : null}
-                                    </button>
-                                </li>
-                            ))}
-                        </ul>
-                    )}
+                                    ) : null}
+                                </button>
+                            </li>
+                        ))}
+                    </ul>
                 </div>
             </Screen>
         );
@@ -1492,7 +1422,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                 <button
                     type="button"
                     className={styles.inlineContactsButton}
-                    onClick={() => { setContactsPickerOpen(true); setContactsPickerQuery(''); }}
+                    onClick={() => setContactsPickerOpen(true)}
                     aria-label="Open address book"
                     title="Address book"
                 >

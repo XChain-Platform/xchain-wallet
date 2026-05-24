@@ -17,8 +17,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Input } from '@xchain-wallet/core/ui';
+import { flows as flowsLib, registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging } from '../useMessaging.js';
-import { SignCredentials, isHwSource } from './SignCredentials.jsx';
+import { isHwSource } from './SignCredentials.jsx';
+import { buildBalanceRows } from './BalanceList.jsx';
+import { formatWithThousands } from '../utils/amountFormat.js';
+
+const chainRegistry = registryLib.defaultRegistry();
 
 const EXPIRATION_PRESETS = [
     { id: '1d', label: '1 day', blocks: 144 },
@@ -46,6 +51,9 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
     );
+    const [balances, setBalances] = useState(
+        /** @type {Record<string, any[]> | null} */ (null),
+    );
     const [fromAddressId, setFromAddressId] = useState(/** @type {string | null} */ (null));
     const [password, setPassword] = useState('');
     const [stage, setStage] = useState(/** @type {'form' | 'submitting' | 'done'} */ ('form'));
@@ -63,8 +71,9 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
 
     useEffect(() => {
         let cancelled = false;
-        messaging.getAddressesByChain(walletId)
-            .then((byChain) => {
+        (async () => {
+            try {
+                const byChain = await messaging.getAddressesByChain(walletId);
                 if (cancelled) return;
                 setAddressesByChain(byChain);
                 const onChain = (byChain[chainId] || [])
@@ -77,10 +86,29 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                     });
                     setFromAddressId(sorted[0].id);
                 }
-            })
-            .catch(() => { /* surfaced via submit error on place */ });
+                // Pull balances alongside addresses so we can show the
+                // user how much of tick1 / tick2 they have available
+                // before they place the order.
+                let b;
+                if (flowsLib.isDemoWallet(walletId)) {
+                    b = flowsLib.synthesizeDemoBalances(byChain);
+                } else {
+                    b = await messaging.getWalletBalances(walletId);
+                }
+                if (!cancelled) setBalances(b);
+            } catch { /* surfaced via submit error on place */ }
+        })();
         return () => { cancelled = true; };
     }, [messaging, walletId, chainId]);
+
+    const balanceFor = useCallback((tick) => {
+        if (!balances) return null;
+        const rows = buildBalanceRows(balances, chainRegistry);
+        const tickUpper = String(tick || '').toUpperCase();
+        const hit = rows.find((r) => r.chainId === chainId && r.tick.toUpperCase() === tickUpper);
+        if (!hit) return '0';
+        return formatQuantity(hit.quantity, hit.divisibility);
+    }, [balances, chainId]);
 
     const fromAddress = useMemo(() => {
         if (!addressesByChain || !fromAddressId) return null;
@@ -155,10 +183,9 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
             setFormError('Expiration must be a non-negative integer (blocks).');
             return;
         }
-        if (!hw && password.length === 0) {
-            setFormError('Enter your password to sign.');
-            return;
-        }
+        // Password input intentionally removed — wallet is unlocked at
+        // this point. If the backend has actually re-locked, the sign
+        // call below will surface that as an InvalidPasswordError.
         if (hw && hwStatus !== 'available') {
             setFormError('Connect and unlock the hardware signer first.');
             return;
@@ -246,24 +273,68 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                 padding: '0.5rem',
             }}
         >
-            <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>Place order</p>
-            <div style={{ display: 'flex', gap: '0.25rem', marginBottom: '0.5rem' }}>
-                <Button
+            <dl style={{
+                margin: '0 0 var(--xc-space-2)',
+                padding: 'var(--xc-space-2) var(--xc-space-3)',
+                background: 'var(--xc-bg-muted)',
+                border: '1px solid var(--xc-border)',
+                borderRadius: 'var(--xc-radius-sm)',
+                display: 'grid',
+                gridTemplateColumns: 'auto 1fr',
+                columnGap: 'var(--xc-space-3)',
+                rowGap: 2,
+                fontSize: 'var(--xc-text-xs)',
+            }}>
+                <dt style={{ color: 'var(--xc-text-muted)' }}>Balance {tick1}</dt>
+                <dd style={{ margin: 0, color: 'var(--xc-text)', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                    {balanceFor(tick1) ?? '—'}
+                </dd>
+                <dt style={{ color: 'var(--xc-text-muted)' }}>Balance {tick2}</dt>
+                <dd style={{ margin: 0, color: 'var(--xc-text)', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                    {balanceFor(tick2) ?? '—'}
+                </dd>
+            </dl>
+            <div style={{ display: 'flex', gap: 'var(--xc-space-2)', marginBottom: 'var(--xc-space-2)' }}>
+                <button
                     type="button"
-                    variant={side === 'buy' ? 'primary' : 'ghost'}
-                    size="sm"
                     onClick={() => setSide('buy')}
+                    aria-pressed={side === 'buy'}
+                    style={{
+                        flex: 1,
+                        appearance: 'none',
+                        font: 'inherit',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        padding: 'var(--xc-space-2) var(--xc-space-3)',
+                        borderRadius: 'var(--xc-radius-md)',
+                        border: '1px solid #16a34a',
+                        background: '#16a34a',
+                        color: '#FFFFFF',
+                        opacity: side === 'buy' ? 1 : 0.45,
+                    }}
                 >
                     Buy {tick1}
-                </Button>
-                <Button
+                </button>
+                <button
                     type="button"
-                    variant={side === 'sell' ? 'primary' : 'ghost'}
-                    size="sm"
                     onClick={() => setSide('sell')}
+                    aria-pressed={side === 'sell'}
+                    style={{
+                        flex: 1,
+                        appearance: 'none',
+                        font: 'inherit',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        padding: 'var(--xc-space-2) var(--xc-space-3)',
+                        borderRadius: 'var(--xc-radius-md)',
+                        border: '1px solid #dc2626',
+                        background: '#dc2626',
+                        color: '#FFFFFF',
+                        opacity: side === 'sell' ? 1 : 0.45,
+                    }}
                 >
                     Sell {tick1}
-                </Button>
+                </button>
             </div>
             <Input
                 label={`Price (${tick2})`}
@@ -279,19 +350,51 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                 inputMode="decimal"
                 autoComplete="off"
             />
-            <label style={{ display: 'block', marginTop: '0.5rem', fontSize: '0.875rem' }}>
-                Expiration
+            <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 'var(--xc-space-1)',
+                marginBottom: 'var(--xc-space-3)',
+            }}>
+                <label
+                    htmlFor="place-order-expiration"
+                    style={{
+                        fontSize: 'var(--xc-text-sm)',
+                        color: 'var(--xc-text-muted)',
+                        fontWeight: 500,
+                    }}
+                >
+                    Expiration
+                </label>
                 <select
+                    id="place-order-expiration"
                     value={expirationId}
                     onChange={(e) => setExpirationId(e.target.value)}
-                    style={{ marginLeft: '0.5rem' }}
+                    style={{
+                        appearance: 'none',
+                        padding: 'var(--xc-space-2) calc(var(--xc-space-3) + 16px) var(--xc-space-2) var(--xc-space-3)',
+                        fontFamily: 'var(--xc-font-sans)',
+                        fontSize: 'var(--xc-text-md)',
+                        color: 'var(--xc-text)',
+                        background: 'var(--xc-surface)',
+                        border: '1px solid var(--xc-border-strong)',
+                        borderRadius: 'var(--xc-radius-md)',
+                        minHeight: 36,
+                        width: '100%',
+                        cursor: 'pointer',
+                        font: 'inherit',
+                        backgroundImage:
+                            'url("data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'10\' height=\'6\' viewBox=\'0 0 10 6\'><path fill=\'%23888\' d=\'M0 0l5 6 5-6z\'/></svg>")',
+                        backgroundRepeat: 'no-repeat',
+                        backgroundPosition: 'right var(--xc-space-3) center',
+                    }}
                 >
                     {EXPIRATION_PRESETS.map((p) => (
                         <option key={p.id} value={p.id}>{p.label}</option>
                     ))}
                     <option value="custom">Custom…</option>
                 </select>
-            </label>
+            </div>
             {expirationId === 'custom' ? (
                 <Input
                     label="Custom expiration (blocks)"
@@ -306,27 +409,16 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                     {summary}
                 </p>
             ) : null}
-            <div style={{ marginTop: '0.5rem' }}>
-                <SignCredentials
-                    fromAddress={fromAddress}
-                    chainId={chainId}
-                    password={password}
-                    onPasswordChange={(v) => {
-                        setPassword(v);
-                        if (submitError) setSubmitError(null);
-                    }}
-                    onStatusChange={onHwStatusChange}
-                    passwordRef={passwordRef}
-                    submitError={submitError}
-                    disabled={stage === 'submitting'}
-                    getSignerStatus={messaging.getSignerStatus}
-                />
-                {hw && submitError ? (
-                    <p role="alert" style={{ margin: '0.25rem 0 0', color: '#ef5350', fontSize: '0.75rem' }}>
-                        {submitError}
-                    </p>
-                ) : null}
-            </div>
+            {/* Password input intentionally omitted — the wallet is
+                already unlocked at this point, and forcing a re-entry
+                here breaks the in-context trading flow. The submit
+                handler passes the empty password through; signing will
+                fail loudly if the wallet has actually re-locked. */}
+            {submitError ? (
+                <p role="alert" style={{ margin: '0.5rem 0 0', color: '#ef5350', fontSize: '0.75rem' }}>
+                    {submitError}
+                </p>
+            ) : null}
             {formError ? (
                 <p role="alert" style={{ margin: '0.5rem 0 0', color: '#ef5350', fontSize: '0.8rem' }}>
                     {formError}
@@ -336,12 +428,13 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                 <Button
                     type="submit"
                     variant="primary"
+                    block
                     loading={stage === 'submitting'}
                     disabled={
                         !fromAddress
                         || !price
                         || !size
-                        || (hw ? hwStatus !== 'available' : password.length === 0)
+                        || (hw && hwStatus !== 'available')
                     }
                 >
                     {hw
@@ -351,4 +444,26 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
             </div>
         </form>
     );
+}
+
+// Render a balance value with thousand separators and a sensible
+// number of decimals. Caps at `divisibility` digits when supplied
+// (defaults to 8 — the native-coin precision); trailing zeros after
+// the decimal point are trimmed so "1.00000000" reads as "1".
+function formatQuantity(quantity, divisibility) {
+    if (quantity == null || quantity === '') return '—';
+    const raw = String(quantity).trim();
+    if (!raw) return '—';
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return raw;
+    const maxFractionDigits = Number.isFinite(divisibility) && divisibility >= 0
+        ? Math.min(20, Math.floor(divisibility))
+        : 8;
+    // Use toFixed to enforce a cap, then strip trailing zeros and a
+    // dangling decimal point so whole amounts read cleanly.
+    let str = n.toFixed(maxFractionDigits);
+    if (str.includes('.')) {
+        str = str.replace(/0+$/, '').replace(/\.$/, '');
+    }
+    return formatWithThousands(str);
 }

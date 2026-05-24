@@ -405,8 +405,8 @@ export function TokenDetail({
                         <span>Receive</span>
                     </button>
                     <button type="button" className={styles.quickAction} onClick={onBuy} disabled={!onBuy}>
-                        <span className={styles.quickActionIcon} aria-hidden="true"><Icon.DollarIcon /></span>
-                        <span>Buy</span>
+                        <span className={styles.quickActionIcon} aria-hidden="true"><Icon.MarketIcon /></span>
+                        <span>Markets</span>
                     </button>
                     <div className={styles.quickActionMoreWrap} ref={moreWrapRef}>
                         <button

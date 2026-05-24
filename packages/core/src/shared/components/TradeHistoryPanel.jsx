@@ -26,7 +26,6 @@ import { useMessaging } from '../useMessaging.js';
  */
 export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx }) {
     const { messaging } = useMessaging();
-    const [expanded, setExpanded] = useState(false);
     const [addresses, setAddresses] = useState(/** @type {any[]} */ ([]));
     const [rows, setRows] = useState(/** @type {any[]} */ ([]));
     const [loading, setLoading] = useState(false);
@@ -71,12 +70,10 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
     }, [messaging, chainId, tick1, tick2, addresses]);
 
     useEffect(() => {
-        if (!expanded) return;
         reload();
-    }, [expanded, reload]);
+    }, [reload]);
 
     useEffect(() => {
-        setExpanded(false);
         setRows([]);
     }, [chainId, tick1, tick2, walletId]);
 
@@ -93,54 +90,27 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
                 marginTop: '0.75rem',
             }}
         >
-            <div
-                style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.5rem',
-                }}
-            >
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.25rem' }}>
                 <button
                     type="button"
-                    onClick={() => setExpanded((v) => !v)}
-                    aria-expanded={expanded}
+                    onClick={reload}
+                    disabled={loading}
                     style={{
                         background: 'none',
-                        border: 'none',
-                        padding: 0,
-                        margin: 0,
+                        border: '1px solid var(--xc-border)',
+                        borderRadius: '3px',
+                        padding: '0.1rem 0.4rem',
                         font: 'inherit',
-                        fontWeight: 600,
-                        cursor: 'pointer',
+                        fontSize: '0.75rem',
+                        cursor: loading ? 'default' : 'pointer',
                         color: 'inherit',
                     }}
                 >
-                    {expanded ? '▾' : '▸'} My trade history
+                    {loading ? 'Loading…' : 'Refresh'}
                 </button>
-                <span style={{ flex: 1 }} />
-                {expanded ? (
-                    <button
-                        type="button"
-                        onClick={reload}
-                        disabled={loading}
-                        style={{
-                            background: 'none',
-                            border: '1px solid var(--xc-border)',
-                            borderRadius: '3px',
-                            padding: '0.1rem 0.4rem',
-                            font: 'inherit',
-                            fontSize: '0.75rem',
-                            cursor: loading ? 'default' : 'pointer',
-                            color: 'inherit',
-                        }}
-                    >
-                        {loading ? 'Loading…' : 'Refresh'}
-                    </button>
-                ) : null}
             </div>
 
-            {expanded ? (
-                <div style={{ marginTop: '0.5rem' }}>
+            <div>
                     <div
                         style={{
                             display: 'grid',
@@ -238,7 +208,6 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
                         })}
                     </ul>
                 </div>
-            ) : null}
         </div>
     );
 }

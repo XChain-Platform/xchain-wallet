@@ -194,6 +194,13 @@ function AppInner() {
     const [activeMarket, setActiveMarket] = useState(
         /** @type {{ chainId: string, tick1: string, tick2: string } | null} */ (null),
     );
+    const [marketsAsset, setMarketsAsset] = useState(
+        /** @type {{ chainId: string, tick: string, displayName?: string, kind?: string } | null} */ ({
+            chainId: 'bitcoin-mainnet',
+            tick: 'BTC',
+            kind: 'native',
+        }),
+    );
 
     const refresh = useCallback(() => {
         setStatus({ state: 'loading' });
@@ -593,6 +600,7 @@ function AppInner() {
                 return (
                     <MarketsList
                         walletId={activeWalletId}
+                        selectedAsset={marketsAsset}
                         onOpenMarket={(chainId, tick1, tick2) => {
                             setActiveMarket({ chainId, tick1, tick2 });
                             setUnlockedView('market');
@@ -1178,7 +1186,10 @@ function AppInner() {
                         } : undefined}
                         onReceive={activeWalletId ? () => { setReceivePrefill(null); setUnlockedView('receive'); } : undefined}
                         onSwap={activeWalletId ? () => setUnlockedView('swap') : undefined}
-                        onBuy={activeWalletId ? () => setUnlockedView('dispenser-explorer') : undefined}
+                        onExchange={activeWalletId ? () => {
+                            setMarketsAsset({ chainId: 'bitcoin-mainnet', tick: 'BTC', kind: 'native' });
+                            setUnlockedView('markets');
+                        } : undefined}
                         onCreateToken={activeWalletId ? () => setUnlockedView('wizard') : undefined}
                         onActions={activeWalletId ? () => setUnlockedView('actions') : undefined}
                         onMarkets={activeWalletId ? () => setUnlockedView('markets') : undefined}

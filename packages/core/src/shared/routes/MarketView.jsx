@@ -16,6 +16,7 @@ import { TradeHistoryPanel } from '../components/TradeHistoryPanel.jsx';
 import { TickerIcon } from '../components/TickerIcon.jsx';
 import { sampleMatchesFor } from '../../market/sampleMarketData.js';
 import styles from './IssueTokenForm.module.css';
+import receivePickerStyles from './ReceivePicker.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -56,6 +57,7 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
     const [summary, setSummary] = useState(/** @type {any | null} */ (null));
     const [summaryError, setSummaryError] = useState(/** @type {string | null} */ (null));
     const [prefillPrice, setPrefillPrice] = useState(/** @type {string | null} */ (null));
+    const [tab, setTab] = useState(/** @type {'book' | 'trades' | 'place' | 'orders' | 'history'} */ ('book'));
 
     useEffect(() => {
         let cancelled = false;
@@ -171,43 +173,52 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
             ) : null}
             {headerCard}
 
-            <div
-                className={isFull ? undefined : undefined}
-                style={isFull ? {
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-                    gap: '0.75rem',
-                    marginTop: '1rem',
-                } : {
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '0.75rem',
-                    marginTop: '1rem',
-                }}
-            >
+            <div style={{ marginTop: 'var(--xc-space-3)' }}>
                 <MarketChart chainId={chainId} tick1={tick1} tick2={tick2} />
+            </div>
+
+            <div
+                className={receivePickerStyles.kindSegments}
+                role="tablist"
+                aria-label="Market panels"
+                style={{ width: '100%', marginTop: 'var(--xc-space-3)', marginBottom: 'var(--xc-space-3)', flexShrink: 1 }}
+            >
+                {[
+                    { id: 'book',    label: 'Book' },
+                    { id: 'trades',  label: 'Trades' },
+                    { id: 'place',   label: 'Place' },
+                    { id: 'orders',  label: 'Orders' },
+                    { id: 'history', label: 'History' },
+                ].map((opt) => {
+                    const active = tab === opt.id;
+                    return (
+                        <button
+                            key={opt.id}
+                            type="button"
+                            role="tab"
+                            aria-selected={active}
+                            className={`${receivePickerStyles.kindSegment} ${active ? receivePickerStyles.kindSegmentActive : ''}`}
+                            style={{ flex: 1 }}
+                            onClick={() => setTab(opt.id)}
+                        >
+                            {opt.label}
+                        </button>
+                    );
+                })}
+            </div>
+
+            {tab === 'book' ? (
                 <OrderbookPanel
                     chainId={chainId}
                     tick1={tick1}
                     tick2={tick2}
-                    onPickPrice={(price) => setPrefillPrice(price)}
+                    onPickPrice={(price) => { setPrefillPrice(price); setTab('place'); }}
                 />
+            ) : null}
+            {tab === 'trades' ? (
                 <RecentTradesPanel chainId={chainId} tick1={tick1} tick2={tick2} />
-            </div>
-
-            <div
-                style={isFull ? {
-                    display: 'grid',
-                    gridTemplateColumns: '1fr 1fr',
-                    gap: '0.75rem',
-                    marginTop: '0.75rem',
-                } : {
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '0.75rem',
-                    marginTop: '0.75rem',
-                }}
-            >
+            ) : null}
+            {tab === 'place' ? (
                 <PlaceOrderPanel
                     walletId={walletId}
                     chainId={chainId}
@@ -215,20 +226,23 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                     tick2={tick2}
                     prefillPrice={prefillPrice}
                 />
+            ) : null}
+            {tab === 'orders' ? (
                 <OpenOrdersPanel
                     walletId={walletId}
                     chainId={chainId}
                     tick1={tick1}
                     tick2={tick2}
                 />
-            </div>
-
-            <TradeHistoryPanel
-                walletId={walletId}
-                chainId={chainId}
-                tick1={tick1}
-                tick2={tick2}
-            />
+            ) : null}
+            {tab === 'history' ? (
+                <TradeHistoryPanel
+                    walletId={walletId}
+                    chainId={chainId}
+                    tick1={tick1}
+                    tick2={tick2}
+                />
+            ) : null}
 
             <div className={styles.actions}>
             </div>

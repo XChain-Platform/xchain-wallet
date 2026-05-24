@@ -24,6 +24,9 @@ export const PERIODS = /** @type {const} */ ([
     { id: '4h', label: '4h', seconds: 14400 },
     { id: '1d', label: '1d', seconds: 86400 },
     { id: '1w', label: '1w', seconds: 604800 },
+    { id: '30d', label: '30d', seconds: 2592000 },
+    { id: '60d', label: '60d', seconds: 5184000 },
+    { id: '90d', label: '90d', seconds: 7776000 },
 ]);
 
 export const DEFAULT_PERIOD_ID = '1h';

@@ -42,7 +42,7 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {() => void} [props.onSend]          navigate to Send sub-route
  * @param {() => void} [props.onReceive]       navigate to Receive sub-route
  * @param {() => void} [props.onSwap]          navigate to SwapForm sub-route — quick action #3
- * @param {() => void} [props.onBuy]           navigate to a buy flow (DispenserExplorer or fiat ramp) — quick action #4
+ * @param {() => void} [props.onExchange]      navigate to the Decentralized Exchange list with BTC preselected — quick action #4
  * @param {() => void} [props.onCreateToken]   navigate to Token Wizard sub-route (§40.1)
  * @param {() => void} [props.onActions]       navigate to the Actions menu (§40.2+)
  * @param {() => void} [props.onMarkets]       navigate to the Markets list (§41.2)
@@ -62,7 +62,7 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {(accountId: string) => void} [props.onSwitchAccount]   App-level setter for the active account (still used internally if a future inline picker lands)
  * @param {Array<{ id: string, label: string, description?: string, onSelect?: () => void }>} [props.extraActions]   §40+ entries surfaced in the small-mode pancake drawer; in full mode the host renders these via the dedicated ActionsMenu route
  */
-export function Home({ onLocked, onSend, onReceive, onSwap, onBuy, onCreateToken, onActions, onMarkets, onResumeAirdrop, onResumeCoinpay, onMessaging, onContracts, onStaking, onHistory, onAddresses, onMigrateToBip39, onOpenWalletPicker, onOpenAccountPicker, onCrossChain, onContacts, onMultisig, onSignPsbt, onSignMessage, onVerifySignature, activeAccountId: activeAccountIdProp, onSwitchAccount, extraActions, onSelectToken, onSelectEntry, networkFilter: networkFilterProp, onNetworkFilterChange: onNetworkFilterChangeProp, tokenQuery: tokenQueryProp, onTokenQueryChange: onTokenQueryChangeProp }) {
+export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreateToken, onActions, onMarkets, onResumeAirdrop, onResumeCoinpay, onMessaging, onContracts, onStaking, onHistory, onAddresses, onMigrateToBip39, onOpenWalletPicker, onOpenAccountPicker, onCrossChain, onContacts, onMultisig, onSignPsbt, onSignMessage, onVerifySignature, activeAccountId: activeAccountIdProp, onSwitchAccount, extraActions, onSelectToken, onSelectEntry, networkFilter: networkFilterProp, onNetworkFilterChange: onNetworkFilterChangeProp, tokenQuery: tokenQueryProp, onTokenQueryChange: onTokenQueryChangeProp }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -728,11 +728,11 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onBuy, onCreateToken
                                 <button
                                     type="button"
                                     className={styles.quickAction}
-                                    onClick={onBuy}
-                                    disabled={!onBuy}
+                                    onClick={onExchange}
+                                    disabled={!onExchange}
                                 >
-                                    <span className={styles.quickActionIcon} aria-hidden="true"><Icon.DollarIcon /></span>
-                                    <span>Buy</span>
+                                    <span className={styles.quickActionIcon} aria-hidden="true"><Icon.MarketIcon /></span>
+                                    <span>Exchange</span>
                                 </button>
                                 <div className={styles.quickActionMoreWrap} ref={homeMoreWrapRef}>
                                     <button

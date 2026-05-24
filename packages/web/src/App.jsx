@@ -1170,6 +1170,15 @@ function AppInner() {
                             setHistoryReturnTo('token-detail');
                             setUnlockedView('history');
                         }}
+                        onBuy={() => {
+                            setMarketsAsset({
+                                chainId: tokenDetailRef.chainId,
+                                tick: tokenDetailRef.tick,
+                                kind: tokenDetailRef.kind,
+                                displayName: tokenDetailRef.displayName,
+                            });
+                            setUnlockedView('markets');
+                        }}
                     />
                 );
             }
@@ -1366,7 +1375,10 @@ function AppInner() {
                         } : undefined}
                         onReceive={activeWalletId ? () => { setReceivePrefill(null); setUnlockedView('receive'); } : undefined}
                         onSwap={activeWalletId ? () => setUnlockedView('swap') : undefined}
-                        onBuy={activeWalletId ? () => setUnlockedView('dispenser-explorer') : undefined}
+                        onExchange={activeWalletId ? () => {
+                            setMarketsAsset({ chainId: 'bitcoin-mainnet', tick: 'BTC', kind: 'native' });
+                            setUnlockedView('markets');
+                        } : undefined}
                         onCreateToken={activeWalletId ? () => setUnlockedView('wizard') : undefined}
                         onActions={activeWalletId ? () => setUnlockedView('actions') : undefined}
                         onMarkets={activeWalletId ? () => setUnlockedView('markets') : undefined}
