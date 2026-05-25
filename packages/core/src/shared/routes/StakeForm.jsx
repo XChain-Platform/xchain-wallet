@@ -56,6 +56,12 @@ export function StakeForm({ walletId, chainId, onBack }) {
     const [signingPubkey, setSigningPubkey] = useState('');
     const [password, setPassword] = useState('');
 
+    // Auto-detection of new-vs-top-up: when the pubkey is a valid 64-hex,
+    // query the indexer for existing stakes by this source and surface the
+    // result as a hint. Auto-sets stakeMode but the radio remains editable
+    // (user can override). 'idle' until a valid pubkey is entered.
+    const [detectStatus, setDetectStatus] = useState(/** @type {'idle' | 'checking' | 'new' | 'topup' | 'error'} */ ('idle'));
+
     const [stage, setStage] = useState(
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
     );
@@ -93,6 +99,42 @@ export function StakeForm({ walletId, chainId, onBack }) {
     useEffect(() => {
         if (stage === 'review') setTimeout(() => passwordRef.current?.focus(), 0);
     }, [stage]);
+
+    // Auto-detect new-vs-top-up by querying the indexer for existing
+    // stakes from this source matching the entered pubkey. Fires once
+    // the pubkey is a valid 64-hex string and the source address is
+    // resolved. Cancels in-flight requests when inputs change so a
+    // stale response can't overwrite a newer detection.
+    useEffect(() => {
+        const pk = signingPubkey.trim().toLowerCase();
+        if (!/^[0-9a-f]{64}$/.test(pk) || !fromAddress || !chainId) {
+            setDetectStatus('idle');
+            return;
+        }
+        let cancelled = false;
+        setDetectStatus('checking');
+        messaging.getStakesForAddress({ chainId, address: fromAddress.address })
+            .then((resp) => {
+                if (cancelled) return;
+                const rows = Array.isArray(resp) ? resp
+                    : Array.isArray(resp?.data) ? resp.data
+                    : Array.isArray(resp?.rows) ? resp.rows
+                    : [];
+                const match = rows.some((row) => {
+                    const rowPk = String(row.signing_pubkey || row.SIGNING_PUBKEY || '').toLowerCase();
+                    const rowStatus = String(row.status || row.STATUS || '').toLowerCase();
+                    return rowPk === pk && rowStatus === 'valid';
+                });
+                setDetectStatus(match ? 'topup' : 'new');
+                setStakeMode(match ? '2' : '1');
+            })
+            .catch(() => {
+                if (cancelled) return;
+                // Network/indexer failure — fall back to user's manual choice silently
+                setDetectStatus('error');
+            });
+        return () => { cancelled = true; };
+    }, [signingPubkey, fromAddress, chainId, messaging]);
 
     const descriptor = chainRegistry.get(chainId);
     const fromAddress = useMemo(() => {
@@ -327,7 +369,7 @@ export function StakeForm({ walletId, chainId, onBack }) {
             <fieldset style={{ border: '1px solid var(--border, #ccc)', padding: '0.5rem', borderRadius: '4px', marginBottom: '0.75rem' }}>
                 <legend style={{ padding: '0 0.25rem' }}>Mode</legend>
                 <p style={{ fontSize: '0.85rem', margin: '0 0 0.5rem', color: 'var(--muted, #666)' }}>
-                    "Top up" adds to an existing stake for this pubkey from this same address.
+                    Auto-set from the signing pubkey below — flip if you want to override.
                 </p>
                 <label style={{ display: 'block', marginBottom: '0.25rem' }}>
                     <input
@@ -347,6 +389,14 @@ export function StakeForm({ walletId, chainId, onBack }) {
                         onChange={() => setStakeMode('2')}
                     /> Top up an existing stake
                 </label>
+                {detectStatus !== 'idle' ? (
+                    <p style={{ fontSize: '0.8rem', margin: '0.5rem 0 0', color: 'var(--muted, #666)' }}>
+                        {detectStatus === 'checking' && 'Checking the indexer for an existing stake…'}
+                        {detectStatus === 'new' && '✓ No existing stake for this pubkey — defaulting to New stake.'}
+                        {detectStatus === 'topup' && '✓ Existing stake found — defaulting to Top up. (Choose New stake to force-reject as duplicate.)'}
+                        {detectStatus === 'error' && 'Couldn\'t reach the indexer — pick the mode manually. The indexer will reject if the wrong one is chosen.'}
+                    </p>
+                ) : null}
             </fieldset>
 
             <Input

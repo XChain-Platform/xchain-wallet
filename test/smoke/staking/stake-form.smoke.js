@@ -59,8 +59,17 @@ for (const call of [
     'messaging.stakeActionHw',
     'messaging.getAddressesByChain',
     'messaging.getSignerStatus',
+    'messaging.getStakesForAddress',   // auto-detect new-vs-top-up mode
 ]) {
     assert.ok(formSrc.includes(call), `StakeForm calls ${call}`);
+}
+
+// Auto-detect status hint should be wired
+assert.ok(/detectStatus/.test(formSrc),
+    'StakeForm tracks detection status for new-vs-top-up auto-detect');
+for (const status of ['checking', 'new', 'topup', 'error']) {
+    assert.ok(new RegExp(`detectStatus === '${status}'`).test(formSrc),
+        `StakeForm renders detectStatus '${status}' hint`);
 }
 // §20 Cluster X Step 13 — handler refactored from a ternary into an if/
 // else cascade (watcher-mode branch wins first). Pin the HW branch
