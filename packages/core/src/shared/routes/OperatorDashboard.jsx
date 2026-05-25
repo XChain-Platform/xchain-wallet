@@ -128,11 +128,7 @@ export function OperatorDashboard({ walletId, chainId, address, onBack }) {
                 <Section title="Staking status" loading={stakes.loading} error={stakes.error}>
                     {primaryStake ? (
                         <ul style={{ margin: 0, paddingLeft: '1rem' }}>
-                            <li>Tier: {formatTier(primaryStake)}</li>
                             <li>Amount: {formatAmount(primaryStake)} XCP</li>
-                            {primaryStake.chains || primaryStake.CHAINS ? (
-                                <li>Chains: {primaryStake.chains || primaryStake.CHAINS}</li>
-                            ) : null}
                             {primaryStake.activation_block || primaryStake.ACTIVATION_BLOCK ? (
                                 <li>Activation block: {primaryStake.activation_block || primaryStake.ACTIVATION_BLOCK}</li>
                             ) : null}
@@ -435,14 +431,6 @@ function extractRows(resp) {
 
 function formatAmount(stake) {
     return String(stake?.amount ?? stake?.AMOUNT ?? stake?.quantity ?? '—');
-}
-
-function formatTier(stake) {
-    const tier = stake?.tier ?? stake?.TIER;
-    if (tier === 1 || tier === '1') return 'Tier 1 — Oracle';
-    if (tier === 2 || tier === '2') return 'Tier 2 — Cross-chain validator';
-    if (tier === 3 || tier === '3') return 'Tier 3 — Publisher';
-    return tier ? `Tier ${tier}` : '—';
 }
 
 function splitRewards(rows) {

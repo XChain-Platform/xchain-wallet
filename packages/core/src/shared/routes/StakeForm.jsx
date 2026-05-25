@@ -15,33 +15,24 @@ import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 
-// Protocol-fixed stake amounts per STAKE.md's "Tier Stake Amounts"
-// table. Informational only — the indexer enforces these from its
-// protocol config at processing time; the user doesn't pick them.
-const TIER_AMOUNTS = {
-    '1': '1,000 XCHAIN',
-    '2': '5,000 XCHAIN',
-};
-
-// Chains the Tier 2 signing key can validate. Tier 1 passes an empty
-// CHAINS field; Tier 2 picks a subset here.
-const CHAIN_OPTIONS = ['BTC', 'LTC', 'DOGE'];
-
 /**
  * STAKE authoring form — §42.7.1.
  *
- * Tier 1 (Oracle) and Tier 2 (Cross-chain validator) supported. Tier 3
- * (Oracle publisher) is deferred — the STAKE format currently in SDK
- * 1.10.0's `formats.js` omits DOGE_ADDRESS even though STAKE.md
- * documents it as required for Tier 3. Captured in spec follow-ups
- * (see claude/reports/specs/2026-04-24_phase4-staking-followups.md).
+ * Capability-staking model: one STAKE action, no tier. The user enters
+ * an amount and the signing pubkey; capabilities (price, cross_chain,
+ * oracle_publish, attestation) auto-qualify when the pubkey's total
+ * stake reaches each capability's MIN_STAKE. See
+ * claude/reports/specs/2026-05-24_capability-staking-model.md.
+ *
+ * Two modes:
+ *   - "New stake" (VERSION 1) — fresh pubkey. Indexer rejects if the
+ *     pubkey already has an active stake.
+ *   - "Top up" (VERSION 2) — adds to a pubkey this address already
+ *     staked. Indexer rejects if no active stake or source mismatch.
  *
  * Fields:
- *   - Tier: radio (1 / 2).
+ *   - Amount: decimal XCHAIN (≤ 8 fractional digits, > 0).
  *   - Signing pubkey: 64 hex char Ed25519 input.
- *   - Chains: Tier 2 only — multi-checkbox (BTC/LTC/DOGE).
- *
- * Amount is display-only (protocol-fixed per tier).
  *
  * @param {object} props
  * @param {string} props.walletId
@@ -59,9 +50,10 @@ export function StakeForm({ walletId, chainId, onBack }) {
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
 
     const [fromAddressId, setFromAddressId] = useState(/** @type {string | null} */ (null));
-    const [tier, setTier] = useState(/** @type {'1' | '2'} */ ('2'));
+    // VERSION '1' = new stake, '2' = top-up an existing pubkey owned by SOURCE.
+    const [stakeMode, setStakeMode] = useState(/** @type {'1' | '2'} */ ('1'));
+    const [amount, setAmount] = useState('');
     const [signingPubkey, setSigningPubkey] = useState('');
-    const [selectedChains, setSelectedChains] = useState(/** @type {string[]} */ (['BTC', 'DOGE']));
     const [password, setPassword] = useState('');
 
     const [stage, setStage] = useState(
@@ -118,19 +110,12 @@ export function StakeForm({ walletId, chainId, onBack }) {
     const actionParams = useMemo(() => {
         /** @type {Record<string, string>} */
         const p = {
-            VERSION: '0',
-            TIER: tier,
+            VERSION:        stakeMode,
+            AMOUNT:         amount.trim(),
             SIGNING_PUBKEY: signingPubkey.trim().toLowerCase(),
-            CHAINS: tier === '2' ? selectedChains.join(',') : '',
         };
         return p;
-    }, [tier, signingPubkey, selectedChains]);
-
-    function toggleChain(chain) {
-        setSelectedChains((prev) =>
-            prev.includes(chain) ? prev.filter((c) => c !== chain) : [...prev, chain],
-        );
-    }
+    }, [stakeMode, amount, signingPubkey]);
 
     function handleReview(event) {
         event.preventDefault();
@@ -138,13 +123,14 @@ export function StakeForm({ walletId, chainId, onBack }) {
             setFormError('No source address available.');
             return;
         }
+        const amt = amount.trim();
+        if (!/^[0-9]+(\.[0-9]{1,8})?$/.test(amt) || Number(amt) <= 0) {
+            setFormError('Amount must be a positive number with up to 8 decimals.');
+            return;
+        }
         const pk = signingPubkey.trim();
         if (!/^[0-9a-fA-F]{64}$/.test(pk)) {
             setFormError('Signing pubkey must be exactly 64 hex characters (Ed25519 public key).');
-            return;
-        }
-        if (tier === '2' && selectedChains.length === 0) {
-            setFormError('Tier 2 requires at least one chain.');
             return;
         }
         setFormError(null);
@@ -252,14 +238,12 @@ export function StakeForm({ walletId, chainId, onBack }) {
     }
 
     if (stage === 'review' || stage === 'submitting') {
-        const amount = TIER_AMOUNTS[tier];
-        const tierLabel = tier === '1' ? 'Tier 1 (Oracle)' : 'Tier 2 (Cross-chain validator)';
+        const verb = stakeMode === '2' ? 'Top up' : 'Stake';
         return wrap(
             <form onSubmit={handleSubmit} noValidate>
                 <p className={styles.summary}>
-                    Stake {amount} as {tierLabel}
-                    {tier === '2' && actionParams.CHAINS ? ` for ${actionParams.CHAINS}` : ''}.
-                    {' '}Delegated signing pubkey: {actionParams.SIGNING_PUBKEY.slice(0, 12)}…
+                    {verb} {actionParams.AMOUNT} XCHAIN for signing pubkey{' '}
+                    {actionParams.SIGNING_PUBKEY.slice(0, 12)}….
                 </p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Chain</dt>
@@ -270,20 +254,16 @@ export function StakeForm({ walletId, chainId, onBack }) {
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />
                     </dd>
-                    <dt className={styles.detailsLabel}>Tier</dt>
-                    <dd className={styles.detailsValue}>{tierLabel}</dd>
-                    {tier === '2' ? (
-                        <>
-                            <dt className={styles.detailsLabel}>Chains</dt>
-                            <dd className={styles.detailsValue}>{actionParams.CHAINS}</dd>
-                        </>
-                    ) : null}
+                    <dt className={styles.detailsLabel}>Mode</dt>
+                    <dd className={styles.detailsValue}>
+                        {stakeMode === '2' ? 'Top up an existing stake' : 'New stake'}
+                    </dd>
                     <dt className={styles.detailsLabel}>Signing pubkey</dt>
                     <dd className={styles.detailsValue} style={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>
                         {actionParams.SIGNING_PUBKEY}
                     </dd>
                     <dt className={styles.detailsLabel}>Amount</dt>
-                    <dd className={styles.detailsValue}>{amount} (protocol-fixed)</dd>
+                    <dd className={styles.detailsValue}>{actionParams.AMOUNT} XCHAIN</dd>
                 </dl>
                 {isWatcherMode ? (
                     <p className={styles.hint}>
@@ -345,26 +325,38 @@ export function StakeForm({ walletId, chainId, onBack }) {
             ) : null}
 
             <fieldset style={{ border: '1px solid var(--border, #ccc)', padding: '0.5rem', borderRadius: '4px', marginBottom: '0.75rem' }}>
-                <legend style={{ padding: '0 0.25rem' }}>Tier</legend>
+                <legend style={{ padding: '0 0.25rem' }}>Mode</legend>
+                <p style={{ fontSize: '0.85rem', margin: '0 0 0.5rem', color: 'var(--muted, #666)' }}>
+                    "Top up" adds to an existing stake for this pubkey from this same address.
+                </p>
                 <label style={{ display: 'block', marginBottom: '0.25rem' }}>
                     <input
                         type="radio"
-                        name="tier"
+                        name="stakeMode"
                         value="1"
-                        checked={tier === '1'}
-                        onChange={() => setTier('1')}
-                    /> Tier 1 — Oracle ({TIER_AMOUNTS['1']})
+                        checked={stakeMode === '1'}
+                        onChange={() => setStakeMode('1')}
+                    /> New stake
                 </label>
                 <label style={{ display: 'block' }}>
                     <input
                         type="radio"
-                        name="tier"
+                        name="stakeMode"
                         value="2"
-                        checked={tier === '2'}
-                        onChange={() => setTier('2')}
-                    /> Tier 2 — Cross-chain validator ({TIER_AMOUNTS['2']})
+                        checked={stakeMode === '2'}
+                        onChange={() => setStakeMode('2')}
+                    /> Top up an existing stake
                 </label>
             </fieldset>
+
+            <Input
+                label="Amount"
+                hint="How much XCHAIN to stake. More stake means more validator capabilities qualify (price, cross-chain, oracle publish, attestation)."
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                autoComplete="off"
+                inputMode="decimal"
+            />
 
             <Input
                 label="Signing pubkey"
@@ -377,21 +369,6 @@ export function StakeForm({ walletId, chainId, onBack }) {
                 spellCheck={false}
             />
 
-            {tier === '2' ? (
-                <fieldset style={{ border: '1px solid var(--border, #ccc)', padding: '0.5rem', borderRadius: '4px', marginBottom: '0.75rem' }}>
-                    <legend style={{ padding: '0 0.25rem' }}>Chains</legend>
-                    {CHAIN_OPTIONS.map((chain) => (
-                        <label key={chain} style={{ display: 'inline-block', marginRight: '1rem' }}>
-                            <input
-                                type="checkbox"
-                                checked={selectedChains.includes(chain)}
-                                onChange={() => toggleChain(chain)}
-                            /> {chain}
-                        </label>
-                    ))}
-                </fieldset>
-            ) : null}
-
             {formError ? (
                 <div role="alert" className={styles.error}>{formError}</div>
             ) : null}
@@ -399,7 +376,7 @@ export function StakeForm({ walletId, chainId, onBack }) {
                 <Button
                     type="submit"
                     variant="primary"
-                    disabled={!fromAddress || !signingPubkey.trim()}
+                    disabled={!fromAddress || !amount.trim() || !signingPubkey.trim()}
                 >
                     Preview
                 </Button>

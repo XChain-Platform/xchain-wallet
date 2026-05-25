@@ -1,4 +1,8 @@
 // Smoke for Phase 4 — Step 8 of 23 — STAKE authoring form (§42.7.1).
+//
+// Capability-staking model: form takes an amount + signing pubkey;
+// no tier picker, no chains selector. Spec:
+// claude/reports/specs/2026-05-24_capability-staking-model.md
 
 import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
@@ -33,18 +37,17 @@ for (const stage of ['form', 'review', 'submitting', 'done']) {
         `StakeForm tracks '${stage}' stage`);
 }
 
-// Tier 1/2 radios present
-assert.ok(/Tier 1 .* Oracle/.test(formSrc), 'StakeForm renders Tier 1 option');
-assert.ok(/Tier 2 .* Cross-chain validator/.test(formSrc), 'StakeForm renders Tier 2 option');
-// Tier 3 intentionally NOT exposed as a user-selectable radio option
-// (SDK format limitation, deferred). A Tier 3 label is still kept in
-// the tier-label lookup for dashboard rendering of externally-created
-// Tier 3 stakes — the gate is on the radio inputs only.
-assert.ok(!/value="3"/.test(formSrc),
-    'StakeForm does not offer Tier 3 as a selectable radio input (deferred — SDK format limitation)');
-// Chains only when Tier 2
-assert.ok(/tier === '2' \?/.test(formSrc) || /tier === '2'\s*\?/.test(formSrc),
-    'StakeForm conditionally renders Chains fieldset on Tier 2');
+// Capability-model fields: amount input + new/top-up mode radio.
+// Tier and chains pickers are gone (the protocol no longer uses tiers).
+assert.ok(!/Tier 1/.test(formSrc) && !/Tier 2/.test(formSrc),
+    'StakeForm does not surface tier labels (capability-staking model dropped them)');
+assert.ok(/label="Amount"/.test(formSrc),
+    'StakeForm renders an Amount input');
+assert.ok(/New stake/.test(formSrc), 'StakeForm offers "New stake" mode');
+assert.ok(/Top up an existing stake/.test(formSrc),
+    'StakeForm offers "Top up" mode (VERSION 2)');
+assert.ok(/AMOUNT:\s*amount\.trim\(\)/.test(formSrc),
+    'StakeForm passes AMOUNT in action params');
 
 // Pubkey validation — 64 hex chars
 assert.ok(/\[0-9a-fA-F\]\{64\}/.test(formSrc),
@@ -84,24 +87,34 @@ await assert.rejects(
     'stakeAction guards params',
 );
 await assert.rejects(
-    async () => flows.stakeAction({ params: { SIGNING_PUBKEY: 'a'.repeat(64) } }),
-    /stakeAction: params\.TIER is required/,
-    'stakeAction guards TIER',
+    async () => flows.stakeAction({ params: { AMOUNT: '100', SIGNING_PUBKEY: 'a'.repeat(64) } }),
+    /VERSION must be "1" \(new stake\) or "2" \(top-up\)/,
+    'stakeAction guards VERSION',
 );
 await assert.rejects(
-    async () => flows.stakeAction({ params: { TIER: '1' } }),
+    async () => flows.stakeAction({ params: { VERSION: '1', SIGNING_PUBKEY: 'a'.repeat(64) } }),
+    /stakeAction: params\.AMOUNT is required/,
+    'stakeAction guards AMOUNT',
+);
+await assert.rejects(
+    async () => flows.stakeAction({ params: { VERSION: '1', AMOUNT: 'NaN', SIGNING_PUBKEY: 'a'.repeat(64) } }),
+    /AMOUNT must be a positive decimal/,
+    'stakeAction validates AMOUNT format',
+);
+await assert.rejects(
+    async () => flows.stakeAction({ params: { VERSION: '1', AMOUNT: '0', SIGNING_PUBKEY: 'a'.repeat(64) } }),
+    /AMOUNT must be greater than 0/,
+    'stakeAction rejects zero amount',
+);
+await assert.rejects(
+    async () => flows.stakeAction({ params: { VERSION: '1', AMOUNT: '100' } }),
     /stakeAction: params\.SIGNING_PUBKEY is required/,
     'stakeAction guards SIGNING_PUBKEY',
 );
 await assert.rejects(
-    async () => flows.stakeAction({ params: { TIER: '1', SIGNING_PUBKEY: 'not-hex' } }),
+    async () => flows.stakeAction({ params: { VERSION: '1', AMOUNT: '100', SIGNING_PUBKEY: 'not-hex' } }),
     /SIGNING_PUBKEY must be 64 hex chars/,
     'stakeAction validates SIGNING_PUBKEY format',
-);
-await assert.rejects(
-    async () => flows.stakeAction({ params: { TIER: '2', SIGNING_PUBKEY: 'a'.repeat(64) } }),
-    /CHAINS is required for Tier 2/,
-    'stakeAction requires CHAINS for Tier 2',
 );
 
 // --- Background host + 3-shell messaging helpers ---
@@ -141,12 +154,6 @@ for (const [shell, appPath] of [
         `${shell} wires StakingDashboard.onStake → stake-form with ref`);
 }
 
-// --- Followups note exists ---
-
-const followupsPath = join(platformRoot, 'claude', 'reports', 'specs', '2026-04-24_phase4-staking-followups.md');
-assert.ok(existsSync(followupsPath),
-    'Staking followups captured at claude/reports/specs/2026-04-24_phase4-staking-followups.md');
-
 console.log(
-    'OK — stake form smoke (StakeForm Tier 1+2 with pubkey validation + chains multi-select + bg handler + 3-shell messaging + dashboard onStake wire-through + followups file with Tier 3 deferral)',
+    'OK — stake form smoke (capability-staking model: amount + signing pubkey, new-stake/top-up modes, bg handler + 3-shell messaging + dashboard onStake wire-through)',
 );

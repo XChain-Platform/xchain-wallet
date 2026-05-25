@@ -2,11 +2,14 @@
 // form. Mirrors broadcastAction / deployAction. BTC-only per §10.3
 // (SDK staking actions are bitcoin-exclusive).
 //
-// Amount is not a user-chosen field — the protocol fixes it per tier
-// (Tier 1: 1,000 XCHAIN; Tier 2: 5,000 XCHAIN; Tier 3: 500 XCHAIN per
-// STAKE.md). The indexer looks up the tier-amount at processing time.
-// CHAINS is only populated for Tier 2 (comma-separated BTC/LTC/DOGE
-// subset); Tier 1 passes an empty string.
+// Capability-staking model (capability-staking-model.md §3): one STAKE
+// action, no tier. User picks the AMOUNT; capabilities (price,
+// cross_chain, oracle_publish, attestation) auto-qualify when the
+// pubkey's total stake reaches each capability's MIN_STAKE.
+//   - VERSION '1' — new stake for a fresh signing pubkey
+//   - VERSION '2' — top-up an existing pubkey owned by SOURCE
+// CHAINS and DOGE_ADDRESS were dropped from the action format — those
+// sub-features now live in the operator's hub config (spec §8).
 
 import { submitAction } from './submitAction.js';
 import { normalizeSource } from './sendToken.js';
@@ -21,7 +24,7 @@ import { normalizeSource } from './sendToken.js';
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
  * @property {string} chainId
  * @property {import('./sendToken.js').SourceRef | import('../schemas/address.js').Address} from
- * @property {{ VERSION: string, TIER: string, CHAINS?: string, SIGNING_PUBKEY: string }} params
+ * @property {{ VERSION: string, AMOUNT: string, SIGNING_PUBKEY: string }} params
  * @property {number} [fee]
  * @property {number} [feePerKb]
  * @property {boolean} [rbf]
@@ -39,29 +42,32 @@ export async function stakeAction(opts) {
     if (!opts.params || typeof opts.params !== 'object') {
         throw new Error('stakeAction: params is required');
     }
-    if (!opts.params.TIER) throw new Error('stakeAction: params.TIER is required');
+    const version = String(opts.params.VERSION || '');
+    if (version !== '1' && version !== '2') {
+        throw new Error('stakeAction: params.VERSION must be "1" (new stake) or "2" (top-up)');
+    }
+    if (!opts.params.AMOUNT) {
+        throw new Error('stakeAction: params.AMOUNT is required');
+    }
+    if (!/^[0-9]+(\.[0-9]{1,8})?$/.test(String(opts.params.AMOUNT))) {
+        throw new Error('stakeAction: AMOUNT must be a positive decimal with at most 8 fractional digits');
+    }
+    if (Number(opts.params.AMOUNT) <= 0) {
+        throw new Error('stakeAction: AMOUNT must be greater than 0');
+    }
     if (!opts.params.SIGNING_PUBKEY) {
         throw new Error('stakeAction: params.SIGNING_PUBKEY is required');
     }
     if (!/^[0-9a-fA-F]{64}$/.test(opts.params.SIGNING_PUBKEY)) {
         throw new Error('stakeAction: SIGNING_PUBKEY must be 64 hex chars');
     }
-    if (opts.params.TIER === '2' || opts.params.TIER === 2) {
-        if (!opts.params.CHAINS) {
-            throw new Error('stakeAction: CHAINS is required for Tier 2');
-        }
-    }
     const source = normalizeSource(opts.from, 'stakeAction');
-    const tierLabel = {
-        '1': 'Tier 1 (Oracle)',
-        '2': 'Tier 2 (Cross-chain validator)',
-        '3': 'Tier 3 (Oracle publisher)',
-    }[String(opts.params.TIER)] || `Tier ${opts.params.TIER}`;
+    const verb = version === '2' ? 'Top up stake' : 'Stake';
 
     const pendingTxMeta = opts.trackPendingTx === false ? undefined : {
         fromAddress: source.address,
         toAddress: null,
-        actionSummary: `Stake as ${tierLabel}${opts.params.CHAINS ? ` for ${opts.params.CHAINS}` : ''}`,
+        actionSummary: `${verb} ${opts.params.AMOUNT} XCHAIN`,
     };
 
     return submitAction({

@@ -1,13 +1,15 @@
 // UNSTAKE + CLAIM_REWARDS composers for the §42.7.2 (unstake-lane) +
 // §42.7.3 (rewards) authoring surfaces. Both actions are trivially
-// small — UNSTAKE is `VERSION|TIER`, CLAIM_REWARDS is `VERSION` — so
-// they share a file and the UI combines them in StakingActionForm.jsx
-// via a `mode` prop (same pattern as §42.5 ContractFundsForm).
+// small — UNSTAKE is `VERSION|SIGNING_PUBKEY`, CLAIM_REWARDS is
+// `VERSION` — so they share a file and the UI combines them in
+// StakingActionForm.jsx via a `mode` prop (same pattern as §42.5
+// ContractFundsForm).
 //
-// §42.7.2 prose mentions an "amount" but the SDK format is
-// VERSION|TIER only. Per STAKE.md, UNSTAKE withdraws the FULL tier
-// stake (partial unstake isn't a protocol concept). FOLLOWUP 4 in
-// the staking followups doc captures the spec/format divergence.
+// Capability-staking model (capability-staking-model.md §3): UNSTAKE
+// addresses a specific signing pubkey, not a tier. The indexer
+// deactivates every active stake row for that pubkey (the original
+// v1 + any v2 top-ups). Partial unstake isn't a protocol concept —
+// the full balance for the pubkey is returned after the cooldown.
 
 import { submitAction } from './submitAction.js';
 import { normalizeSource } from './sendToken.js';
@@ -22,7 +24,7 @@ import { normalizeSource } from './sendToken.js';
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
  * @property {string} chainId
  * @property {import('./sendToken.js').SourceRef | import('../schemas/address.js').Address} from
- * @property {{ VERSION: string, TIER: string }} params
+ * @property {{ VERSION: string, SIGNING_PUBKEY: string }} params
  * @property {number} [fee]
  * @property {number} [feePerKb]
  * @property {boolean} [rbf]
@@ -38,12 +40,17 @@ export async function unstakeAction(opts) {
     if (!opts.params || typeof opts.params !== 'object') {
         throw new Error('unstakeAction: params is required');
     }
-    if (!opts.params.TIER) throw new Error('unstakeAction: params.TIER is required');
+    if (!opts.params.SIGNING_PUBKEY) {
+        throw new Error('unstakeAction: params.SIGNING_PUBKEY is required');
+    }
+    if (!/^[0-9a-fA-F]{64}$/.test(opts.params.SIGNING_PUBKEY)) {
+        throw new Error('unstakeAction: SIGNING_PUBKEY must be 64 hex chars');
+    }
     const source = normalizeSource(opts.from, 'unstakeAction');
     const pendingTxMeta = opts.trackPendingTx === false ? undefined : {
         fromAddress: source.address,
         toAddress: null,
-        actionSummary: `Unstake ${tierLabelFor(opts.params.TIER)}`,
+        actionSummary: `Unstake (${opts.params.SIGNING_PUBKEY.slice(0, 12)}…)`,
     };
     return submitAction({
         vault: opts.vault,
@@ -127,10 +134,3 @@ export async function claimRewardsAction(opts) {
     });
 }
 
-function tierLabelFor(tier) {
-    return {
-        '1': 'Tier 1 (Oracle)',
-        '2': 'Tier 2 (Cross-chain validator)',
-        '3': 'Tier 3 (Oracle publisher)',
-    }[String(tier)] || `Tier ${tier}`;
-}

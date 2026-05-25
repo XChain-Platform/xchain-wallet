@@ -20,9 +20,8 @@ const STAKING_COIN = 'bitcoin';
  *
  * Read-only central view for stakers. Shows (per BTC chain the wallet
  * has an address on):
- *   - Your stake (amount + tier)
+ *   - Your stake (amount)
  *   - Delegated signing pubkey (if DELEGATE has been issued)
- *   - Chains the signing key validates (Tier 2 only)
  *   - Pending rewards + Claim button
  *   - Lifetime rewards
  *   - Action buttons: Unstake / Delegate new key / Revoke delegation
@@ -210,7 +209,7 @@ export function StakingDashboard({
                                 <div>
                                     <strong>Your stake:</strong>{' '}
                                     {primaryStake
-                                        ? <>{formatAmount(primaryStake)} {formatTier(primaryStake)}</>
+                                        ? formatAmount(primaryStake)
                                         : '— (not staked on this chain)'}
                                 </div>
                                 <div>
@@ -219,11 +218,6 @@ export function StakingDashboard({
                                         ? <>{shortPubkey(primaryDelegation.signing_pubkey || primaryDelegation.SIGNING_PUBKEY)}{' '}{ageLabel(primaryDelegation.block_index)}</>
                                         : '— (none)'}
                                 </div>
-                                {primaryStake?.chains || primaryStake?.CHAINS ? (
-                                    <div>
-                                        <strong>Chains:</strong> {primaryStake.chains || primaryStake.CHAINS}
-                                    </div>
-                                ) : null}
                                 <div>
                                     <strong>Pending rewards:</strong>{' '}
                                     {pending > 0 ? `${pending} XCP` : '0'}
@@ -337,14 +331,6 @@ function extractRows(resp) {
 function formatAmount(stake) {
     const amt = stake?.amount ?? stake?.AMOUNT ?? stake?.quantity ?? '—';
     return `${amt} XCP`;
-}
-
-function formatTier(stake) {
-    const tier = stake?.tier ?? stake?.TIER;
-    if (tier === 1 || tier === '1') return '(Tier 1 — Oracle)';
-    if (tier === 2 || tier === '2') return '(Tier 2 — Cross-chain validator)';
-    if (tier === 3 || tier === '3') return '(Tier 3 — Publisher)';
-    return tier ? `(Tier ${tier})` : '';
 }
 
 function splitRewards(rows) {

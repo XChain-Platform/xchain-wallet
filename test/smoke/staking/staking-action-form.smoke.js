@@ -41,17 +41,17 @@ for (const stage of ['form', 'review', 'submitting', 'done']) {
         `StakingActionForm tracks '${stage}' stage`);
 }
 
-// Unstake tier picker (Tier 1 / Tier 2 — Tier 3 deferred, same as StakeForm)
-assert.ok(/Tier 1 .* Oracle/.test(formSrc),
-    'StakingActionForm renders Tier 1 option for unstake');
-assert.ok(/Tier 2 .* Cross-chain validator/.test(formSrc),
-    'StakingActionForm renders Tier 2 option for unstake');
-assert.ok(!/value="3"/.test(formSrc),
-    'StakingActionForm does not offer Tier 3 as a selectable radio input');
+// Capability-staking model: UNSTAKE addresses a signing pubkey, not a tier.
+assert.ok(!/Tier 1/.test(formSrc) && !/Tier 2/.test(formSrc),
+    'StakingActionForm does not surface tier labels (capability-staking model dropped tiers)');
+assert.ok(/label="Signing pubkey"/.test(formSrc),
+    'StakingActionForm renders a Signing pubkey input for unstake');
+assert.ok(/SIGNING_PUBKEY:\s*signingPubkey\.trim/.test(formSrc),
+    'StakingActionForm passes SIGNING_PUBKEY in action params');
 
-// Protocol-correct copy: full-tier unstake, no partial amount.
-assert.ok(/full tier stake|full tier amount/.test(formSrc),
-    'StakingActionForm explains unstake returns the full tier stake (not a partial amount)');
+// Protocol-correct copy: full balance returned (no partial unstake).
+assert.ok(/full active balance/.test(formSrc),
+    'StakingActionForm explains unstake returns the full active balance for the pubkey');
 
 // Wiring of all four messaging helpers + shared chassis.
 for (const call of [
@@ -81,8 +81,13 @@ await assert.rejects(
 );
 await assert.rejects(
     async () => flows.unstakeAction({ params: {} }),
-    /unstakeAction: params\.TIER is required/,
-    'unstakeAction guards TIER',
+    /unstakeAction: params\.SIGNING_PUBKEY is required/,
+    'unstakeAction guards SIGNING_PUBKEY',
+);
+await assert.rejects(
+    async () => flows.unstakeAction({ params: { SIGNING_PUBKEY: 'not-hex' } }),
+    /SIGNING_PUBKEY must be 64 hex chars/,
+    'unstakeAction validates SIGNING_PUBKEY format',
 );
 
 await assert.rejects(
@@ -140,14 +145,6 @@ for (const [shell, appPath] of [
         `${shell} App.jsx passes mode="claim-rewards" to StakingActionForm for the claim route`);
 }
 
-// --- Followups note updated to include the spec/format divergence ---
-
-const followupsPath = join(platformRoot, 'claude', 'reports', 'specs', '2026-04-24_phase4-staking-followups.md');
-assert.ok(existsSync(followupsPath), 'Staking followups file exists');
-const followupsSrc = readFileSync(followupsPath, 'utf8');
-assert.ok(/FOLLOWUP 4/.test(followupsSrc),
-    'Staking followups doc records the §42.7.2 unstake amount-vs-format divergence as FOLLOWUP 4');
-
 console.log(
-    'OK — staking action form smoke (StakingActionForm mode=unstake|claim-rewards + unstakeAction/claimRewardsAction flows + bg handlers + 3-shell messaging + two App.jsx sub-routes wired from StakingDashboard + FOLLOWUP 4 recorded)',
+    'OK — staking action form smoke (StakingActionForm mode=unstake|claim-rewards + capability-model pubkey-based unstake + bg handlers + 3-shell messaging + two App.jsx sub-routes wired from StakingDashboard)',
 );

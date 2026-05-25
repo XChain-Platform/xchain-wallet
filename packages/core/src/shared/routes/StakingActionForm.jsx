@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Screen,
     Button,
+    Input,
     ChainBadge,
     AddressText,
  Icon,} from '@xchain-wallet/core/ui';
@@ -24,11 +25,11 @@ const chainRegistry = registryLib.defaultRegistry();
  * and diverge only in which field inputs appear, which messaging
  * helper is called, and the verb rendered on the submit button.
  *
- *   - `mode: 'unstake'` — VERSION|TIER. Tier radio (1 / 2). Per
- *     STAKE.md, UNSTAKE withdraws the full tier stake; there is no
- *     partial-amount field (spec §42.7.2 mentions an amount, but the
- *     on-chain format doesn't carry one — captured as FOLLOWUP 4 in
- *     the staking followups doc).
+ *   - `mode: 'unstake'` — VERSION|SIGNING_PUBKEY. Capability-staking
+ *     model (capability-staking-model.md §3): UNSTAKE addresses a
+ *     specific signing pubkey, returning the full active balance for
+ *     that pubkey (sum of original v1 stake + any v2 top-ups).
+ *     Partial unstake is not a protocol concept.
  *   - `mode: 'claim-rewards'` — VERSION only. No input fields; the
  *     form is a confirm-and-sign screen.
  *
@@ -51,7 +52,7 @@ export function StakingActionForm({ mode, walletId, chainId, onBack }) {
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
 
     const [fromAddressId, setFromAddressId] = useState(/** @type {string | null} */ (null));
-    const [tier, setTier] = useState(/** @type {'1' | '2'} */ ('2'));
+    const [signingPubkey, setSigningPubkey] = useState('');
     const [password, setPassword] = useState('');
 
     const [stage, setStage] = useState(
@@ -111,16 +112,23 @@ export function StakingActionForm({ mode, walletId, chainId, onBack }) {
 
     const actionParams = useMemo(() => {
         if (isUnstake) {
-            return { VERSION: '0', TIER: tier };
+            return { VERSION: '0', SIGNING_PUBKEY: signingPubkey.trim().toLowerCase() };
         }
         return { VERSION: '0' };
-    }, [isUnstake, tier]);
+    }, [isUnstake, signingPubkey]);
 
     function handleReview(event) {
         event.preventDefault();
         if (!fromAddress) {
             setFormError('No source address available.');
             return;
+        }
+        if (isUnstake) {
+            const pk = signingPubkey.trim();
+            if (!/^[0-9a-fA-F]{64}$/.test(pk)) {
+                setFormError('Signing pubkey must be exactly 64 hex characters.');
+                return;
+            }
         }
         setFormError(null);
         setStage('review');
@@ -236,12 +244,11 @@ export function StakingActionForm({ mode, walletId, chainId, onBack }) {
     }
 
     if (stage === 'review' || stage === 'submitting') {
-        const tierLabel = tier === '1' ? 'Tier 1 (Oracle)' : 'Tier 2 (Cross-chain validator)';
         return wrap(
             <form onSubmit={handleSubmit} noValidate>
                 <p className={styles.summary}>
                     {isUnstake
-                        ? `Unstake ${tierLabel} — the full tier stake is returned.`
+                        ? `Unstake signing pubkey ${actionParams.SIGNING_PUBKEY.slice(0, 12)}… — the full active balance for this pubkey is returned after the cooldown.`
                         : 'Claim all pending staking rewards for this address.'}
                 </p>
                 <dl className={styles.detailsList}>
@@ -255,8 +262,10 @@ export function StakingActionForm({ mode, walletId, chainId, onBack }) {
                     </dd>
                     {isUnstake ? (
                         <>
-                            <dt className={styles.detailsLabel}>Tier</dt>
-                            <dd className={styles.detailsValue}>{tierLabel}</dd>
+                            <dt className={styles.detailsLabel}>Signing pubkey</dt>
+                            <dd className={styles.detailsValue} style={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>
+                                {actionParams.SIGNING_PUBKEY}
+                            </dd>
                         </>
                     ) : null}
                 </dl>
@@ -323,30 +332,21 @@ export function StakingActionForm({ mode, walletId, chainId, onBack }) {
             ) : null}
 
             {isUnstake ? (
-                <fieldset style={{ border: '1px solid var(--border, #ccc)', padding: '0.5rem', borderRadius: '4px', marginBottom: '0.75rem' }}>
-                    <legend style={{ padding: '0 0.25rem' }}>Tier</legend>
+                <>
                     <p style={{ fontSize: '0.85rem', margin: '0 0 0.5rem', color: 'var(--muted, #666)' }}>
-                        Pick which tier stake to withdraw. Unstake returns the full tier amount — the protocol doesn't support partial unstakes.
+                        Enter the signing pubkey to unstake. Returns the full active balance for that pubkey (original stake + any top-ups) after the cooldown — the protocol doesn't support partial unstakes.
                     </p>
-                    <label style={{ display: 'block', marginBottom: '0.25rem' }}>
-                        <input
-                            type="radio"
-                            name="tier"
-                            value="1"
-                            checked={tier === '1'}
-                            onChange={() => setTier('1')}
-                        /> Tier 1 — Oracle (1,000 XCHAIN)
-                    </label>
-                    <label style={{ display: 'block' }}>
-                        <input
-                            type="radio"
-                            name="tier"
-                            value="2"
-                            checked={tier === '2'}
-                            onChange={() => setTier('2')}
-                        /> Tier 2 — Cross-chain validator (5,000 XCHAIN)
-                    </label>
-                </fieldset>
+                    <Input
+                        label="Signing pubkey"
+                        hint="64-character hex-encoded Ed25519 public key — the same one used to stake."
+                        value={signingPubkey}
+                        onChange={(e) => setSigningPubkey(e.target.value)}
+                        autoComplete="off"
+                        autoCapitalize="none"
+                        autoCorrect="off"
+                        spellCheck={false}
+                    />
+                </>
             ) : (
                 <p style={{ fontSize: '0.9rem', color: 'var(--muted, #666)' }}>
                     Claiming sweeps all pending staking rewards for this address into your balance. Rewards continue to accrue after the claim.
