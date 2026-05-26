@@ -73,3 +73,59 @@ export async function validatorsForChain({ sdkRegistry, chainId, opts }) {
     const sdk = sdkRegistry.get(chainId);
     return sdk.getValidators(opts);
 }
+
+/**
+ * Contract-targeted staking queries — parallel to the capability staking ones above.
+ * Backs the §42.7.x ContractStakedPositions dashboard surface.
+ *
+ * NOTE: These call sdk.getContractStakes / getContractUnstakes / getContractDelegations /
+ * getSlashEvents — methods that need to be added to ExplorerClient in xchain-sdk + REST
+ * endpoints exposed by xchain-explorer. Tracked as a Phase 7 follow-up alongside the
+ * wallet UI work. Until the SDK methods land, these wrappers will throw at runtime.
+ */
+
+/**
+ * List contract-targeted stakes keyed to an address.
+ * @param {StakingQueryOpts} params
+ */
+export async function contractStakesForAddress({ sdkRegistry, chainId, address, opts }) {
+    if (!sdkRegistry) throw new Error('contractStakesForAddress: sdkRegistry is required');
+    if (!chainId) throw new Error('contractStakesForAddress: chainId is required');
+    if (!address) throw new Error('contractStakesForAddress: address is required');
+    const sdk = sdkRegistry.get(chainId);
+    if (typeof sdk.getContractStakes !== 'function') {
+        throw new Error('contractStakesForAddress: sdk.getContractStakes not yet available (Phase 7 follow-up)');
+    }
+    return sdk.getContractStakes(address, 'address', opts);
+}
+
+/**
+ * List active contract-targeted unstakes (positions in cooldown) for an address.
+ * @param {StakingQueryOpts} params
+ */
+export async function contractUnstakesForAddress({ sdkRegistry, chainId, address, opts }) {
+    if (!sdkRegistry) throw new Error('contractUnstakesForAddress: sdkRegistry is required');
+    if (!chainId) throw new Error('contractUnstakesForAddress: chainId is required');
+    if (!address) throw new Error('contractUnstakesForAddress: address is required');
+    const sdk = sdkRegistry.get(chainId);
+    if (typeof sdk.getContractUnstakes !== 'function') {
+        throw new Error('contractUnstakesForAddress: sdk.getContractUnstakes not yet available (Phase 7 follow-up)');
+    }
+    return sdk.getContractUnstakes(address, 'address', opts);
+}
+
+/**
+ * List slash events affecting an address (either as the slashed staker, or as the
+ * destination receiving slashed funds).
+ * @param {StakingQueryOpts} params
+ */
+export async function slashEventsForAddress({ sdkRegistry, chainId, address, opts }) {
+    if (!sdkRegistry) throw new Error('slashEventsForAddress: sdkRegistry is required');
+    if (!chainId) throw new Error('slashEventsForAddress: chainId is required');
+    if (!address) throw new Error('slashEventsForAddress: address is required');
+    const sdk = sdkRegistry.get(chainId);
+    if (typeof sdk.getSlashEvents !== 'function') {
+        throw new Error('slashEventsForAddress: sdk.getSlashEvents not yet available (Phase 7 follow-up)');
+    }
+    return sdk.getSlashEvents(address, 'address', opts);
+}

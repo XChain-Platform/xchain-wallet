@@ -72,6 +72,11 @@ export function DeployContractForm({ walletId, onBack }) {
     const [code, setCode] = useState('');
     const [gasLimit, setGasLimit] = useState('');
     const [constructorParams, setConstructorParams] = useState('');
+    // DEPLOY v1 — optional staking config. Leaving cooldownBlocks blank deploys a
+    // non-stakeable contract (DEPLOY v0 behavior). Setting it opts into contract-staking;
+    // slashDestination defaults to 'BURN' when cooldown is set but destination is blank.
+    const [cooldownBlocks, setCooldownBlocks] = useState('');
+    const [slashDestination, setSlashDestination] = useState('');
     const [password, setPassword] = useState('');
 
     const [validation, setValidation] = useState(
@@ -151,15 +156,23 @@ export function DeployContractForm({ walletId, onBack }) {
 
     const actionParams = useMemo(() => {
         /** @type {Record<string, string>} */
+        const hasCooldown = cooldownBlocks.trim() !== '';
         const p = {
-            VERSION: '0',
+            // Bump to v1 when the user opts into contract-staking metadata; otherwise stay on v0.
+            VERSION: hasCooldown ? '1' : '0',
             CODE: code,
             GAS_LIMIT: String(gasLimit || suggestedGas || ''),
         };
         if (name.trim()) p.NAME = name.trim();
         if (constructorParams.trim()) p.CONSTRUCTOR_PARAMS = constructorParams.trim();
+        if (hasCooldown) {
+            p.COOLDOWN_BLOCKS = cooldownBlocks.trim();
+            // Default to BURN if cooldown is set but destination is blank — the indexer
+            // applies the same default, but surfacing it here makes review honest.
+            p.SLASH_DESTINATION = slashDestination.trim() || 'BURN';
+        }
         return p;
-    }, [code, gasLimit, suggestedGas, name, constructorParams]);
+    }, [code, gasLimit, suggestedGas, name, constructorParams, cooldownBlocks, slashDestination]);
 
     async function handleValidate() {
         if (!chainId) return;
@@ -214,6 +227,17 @@ export function DeployContractForm({ walletId, onBack }) {
         }
         if (validation?.ok === false) {
             setFormError('Fix the syntax error before previewing (see Validate code).');
+            return;
+        }
+        // Staking config validation — only enforced when the user opted in
+        if (cooldownBlocks.trim() !== '') {
+            const cb = Number(cooldownBlocks.trim());
+            if (!Number.isInteger(cb) || cb < 1 || cb > 100000) {
+                setFormError('Cooldown blocks must be an integer between 1 and 100000.');
+                return;
+            }
+        } else if (slashDestination.trim() !== '') {
+            setFormError('Slash destination requires a cooldown duration (otherwise the contract is not stakeable).');
             return;
         }
         setFormError(null);
@@ -361,6 +385,14 @@ export function DeployContractForm({ walletId, onBack }) {
                         <>
                             <dt className={styles.detailsLabel}>Constructor</dt>
                             <dd className={styles.detailsValue}>{actionParams.CONSTRUCTOR_PARAMS}</dd>
+                        </>
+                    ) : null}
+                    {actionParams.COOLDOWN_BLOCKS ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Cooldown</dt>
+                            <dd className={styles.detailsValue}>{actionParams.COOLDOWN_BLOCKS} blocks</dd>
+                            <dt className={styles.detailsLabel}>Slash to</dt>
+                            <dd className={styles.detailsValue}>{actionParams.SLASH_DESTINATION}</dd>
                         </>
                     ) : null}
                 </dl>
@@ -533,6 +565,26 @@ export function DeployContractForm({ walletId, onBack }) {
                 value={constructorParams}
                 onChange={(e) => setConstructorParams(e.target.value)}
                 autoComplete="off"
+            />
+
+            <Input
+                label="Cooldown blocks (optional)"
+                hint="Set to enable contract-staking. Blocks between an unstake and token release (1–100000). Leave blank for a non-stakeable contract."
+                inputMode="numeric"
+                value={cooldownBlocks}
+                onChange={(e) => setCooldownBlocks(e.target.value)}
+                autoComplete="off"
+            />
+
+            <Input
+                label="Slash destination (optional)"
+                hint='Where slashed tokens go. Enter an address or "BURN" to route to the chain burn address. Defaults to BURN when cooldown is set. Locked at deploy — cannot change later.'
+                value={slashDestination}
+                onChange={(e) => setSlashDestination(e.target.value)}
+                autoComplete="off"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
             />
 
             {formError ? (

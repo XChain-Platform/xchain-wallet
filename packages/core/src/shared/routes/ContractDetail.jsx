@@ -46,6 +46,7 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {(ref: { chainId: string, contractActionIndex: string }) => void} [props.onExecute]
  * @param {(ref: { chainId: string, contractActionIndex: string }) => void} [props.onDeposit]
  * @param {(ref: { chainId: string, contractActionIndex: string }) => void} [props.onWithdraw]
+ * @param {(ref: { chainId: string, contractActionIndex: string }) => void} [props.onStakeToContract]
  * @param {() => void} props.onBack
  */
 export function ContractDetail({
@@ -55,6 +56,7 @@ export function ContractDetail({
     onExecute,
     onDeposit,
     onWithdraw,
+    onStakeToContract,
     onBack,
 }) {
     const { messaging, shell } = useMessaging();
@@ -136,6 +138,11 @@ export function ContractDetail({
     const status = String(contract?.status || contract?.STATUS || 'Active');
     const codeHash = contract?.code_hash || contract?.CODE_HASH
         || deployAction?.params?.CODE_HASH || '—';
+    // Contract-staking metadata (DEPLOY v1+) — null on non-stakeable contracts
+    const cooldownBlocks = contract?.cooldown_blocks ?? contract?.COOLDOWN_BLOCKS ?? null;
+    const slashDestinationAddr = contract?.slash_destination ?? contract?.SLASH_DESTINATION
+        ?? contract?.slash_destination_address ?? null;
+    const isStakeable = cooldownBlocks !== null && cooldownBlocks !== undefined;
 
         const header = (
         <ScreenHeader
@@ -181,6 +188,16 @@ export function ContractDetail({
                         <div><strong>Gas limit:</strong> {gasLimit}</div>
                         <div><strong>Status:</strong> {status}</div>
                         <div><strong>Code hash:</strong> {String(codeHash)}</div>
+                        {isStakeable ? (
+                            <>
+                                <div><strong>Stakeable:</strong> yes — {String(cooldownBlocks)}-block cooldown</div>
+                                <div><strong>Slash destination:</strong>{' '}
+                                    {slashDestinationAddr
+                                        ? <AddressText address={String(slashDestinationAddr)} />
+                                        : '(set at deploy)'}
+                                </div>
+                            </>
+                        ) : null}
                     </dl>
                     {deployError ? (
                         <p role="alert" className={styles.entryDescription}>
@@ -286,6 +303,15 @@ export function ContractDetail({
                     >
                         Withdraw
                     </Button>
+                    {isStakeable ? (
+                        <Button
+                            variant="secondary"
+                            onClick={onStakeToContract ? () => onStakeToContract({ chainId, contractActionIndex }) : undefined}
+                            disabled={!onStakeToContract}
+                        >
+                            Stake here
+                        </Button>
+                    ) : null}
                 </div>
                 {!onExecute && !onDeposit && !onWithdraw ? (
                     <p className={styles.entryDescription}>
