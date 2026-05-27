@@ -917,6 +917,31 @@ export function unstakeActionHw(opts) {
     return /** @type {any} */ (sendMessage('action.unstake.hw', opts));
 }
 
+/** @param {object} req */
+export function getContractStakesForAddress(req) {
+    return /** @type {any} */ (sendMessage('contract_stakes.forAddress', req));
+}
+
+/** @param {object} req */
+export function getContractUnstakesForAddress(req) {
+    return /** @type {any} */ (sendMessage('contract_unstakes.forAddress', req));
+}
+
+/** @param {object} req */
+export function getSlashEventsForAddress(req) {
+    return /** @type {any} */ (sendMessage('slash_events.forAddress', req));
+}
+
+/** @param {object} opts */
+export function contractStakeAction(opts) {
+    return /** @type {any} */ (sendMessage('action.contractStake', opts));
+}
+
+/** @param {object} opts */
+export function contractStakeActionHw(opts) {
+    return /** @type {any} */ (sendMessage('action.contractStake.hw', opts));
+}
+
 /**
  * Build, sign, and broadcast a CLAIM_REWARDS action (§42.7.3). One-click
  * from the Staking dashboard — protocol format is just VERSION.

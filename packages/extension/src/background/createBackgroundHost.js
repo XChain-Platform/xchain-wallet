@@ -79,11 +79,15 @@ const {
     delegationsForAddress,
     rewardsForAddress,
     validatorsForChain,
+    contractStakesForAddress,
+    contractUnstakesForAddress,
+    slashEventsForAddress,
     stakeAction,
     unstakeAction,
     claimRewardsAction,
     delegateAction,
     revokeDelegationAction,
+    contractStakeAction,
     broadcastsForAddress,
     linksForAddress,
     tokenInfoFor,
@@ -1612,6 +1616,7 @@ export function createBackgroundHost(deps) {
     registerHwHandler('action.claimRewards.hw', claimRewardsAction);
     registerHwHandler('action.delegate.hw', delegateAction);
     registerHwHandler('action.revokeDelegation.hw', revokeDelegationAction);
+    registerHwHandler('action.contractStake.hw', contractStakeAction);
 
     // Signer status probe — routes straight through the signer bridge
     // without touching vault/SDK. Returns `'idle'` when the bridge
@@ -1858,6 +1863,25 @@ export function createBackgroundHost(deps) {
 
     host.register('action.revokeDelegation', async (req, { vault, chainRegistry, sdkRegistry }) => {
         return revokeDelegationAction({ ...req, vault, chainRegistry, sdkRegistry });
+    });
+
+    // Contract-targeted staking — parallel to the capability staking passthroughs above.
+    // Backs ContractStakedPositions (reads) and ContractStakeForm (write).
+
+    host.register('contract_stakes.forAddress', async (req, { sdkRegistry }) => {
+        return contractStakesForAddress({ ...req, sdkRegistry });
+    });
+
+    host.register('contract_unstakes.forAddress', async (req, { sdkRegistry }) => {
+        return contractUnstakesForAddress({ ...req, sdkRegistry });
+    });
+
+    host.register('slash_events.forAddress', async (req, { sdkRegistry }) => {
+        return slashEventsForAddress({ ...req, sdkRegistry });
+    });
+
+    host.register('action.contractStake', async (req, { vault, chainRegistry, sdkRegistry }) => {
+        return contractStakeAction({ ...req, vault, chainRegistry, sdkRegistry });
     });
 
     host.register('broadcasts.forAddress', async (req, { sdkRegistry }) => {
