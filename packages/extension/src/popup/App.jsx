@@ -68,6 +68,8 @@ import { ContractDetail } from '@xchain-wallet/core/shared/routes/ContractDetail
 import { DeployContractForm } from '@xchain-wallet/core/shared/routes/DeployContractForm.jsx';
 import { ExecuteContractForm } from '@xchain-wallet/core/shared/routes/ExecuteContractForm.jsx';
 import { ContractFundsForm } from '@xchain-wallet/core/shared/routes/ContractFundsForm.jsx';
+import { ContractStakeForm } from '@xchain-wallet/core/shared/routes/ContractStakeForm.jsx';
+import { ContractStakedPositions } from '@xchain-wallet/core/shared/routes/ContractStakedPositions.jsx';
 import { StakingDashboard } from '@xchain-wallet/core/shared/routes/StakingDashboard.jsx';
 import { StakeForm } from '@xchain-wallet/core/shared/routes/StakeForm.jsx';
 import { StakingActionForm } from '@xchain-wallet/core/shared/routes/StakingActionForm.jsx';
@@ -861,7 +863,31 @@ function AppInner() {
                         onExecute={() => setUnlockedView('contract-execute')}
                         onDeposit={() => setUnlockedView('contract-deposit')}
                         onWithdraw={() => setUnlockedView('contract-withdraw')}
+                        onStakeToContract={() => setUnlockedView('contract-stake')}
                         onBack={() => setUnlockedView('contracts-list')}
+                    />
+                );
+            }
+            if (unlockedView === 'contract-stake' && activeWalletId && contractRef) {
+                return (
+                    <ContractStakeForm
+                        walletId={activeWalletId}
+                        chainId={contractRef.chainId}
+                        contractActionIndex={contractRef.contractActionIndex}
+                        onBack={() => setUnlockedView('contract-detail')}
+                    />
+                );
+            }
+            if (unlockedView === 'contract-staked-positions' && activeWalletId && contractRef) {
+                return (
+                    <ContractStakedPositions
+                        walletId={activeWalletId}
+                        chainId={contractRef.chainId}
+                        onStakeToContract={(ref) => {
+                            setContractRef(ref);
+                            setUnlockedView('contract-stake');
+                        }}
+                        onBack={() => setUnlockedView('contract-detail')}
                     />
                 );
             }

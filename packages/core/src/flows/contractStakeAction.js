@@ -2,7 +2,7 @@
 // "Stake on a Contract" form. Mirrors stakeAction.js (capability staking v1/v2)
 // but routes to the contract-targeted protocol surface: any token, per-contract
 // cooldown, contract-decided slash semantics. See:
-//   xchain-documentation/protocol/actions/CONTRACT_STAKING.md
+//   xchain-documentation/protocol/Contract_Staking.md
 //
 // Three operations share the same composer, distinguished by `mode`:
 //   - 'stake'    → STAKE v3 (AMOUNT + SIGNING_PUBKEY + TARGET_CONTRACT_INDEX + TICK)
