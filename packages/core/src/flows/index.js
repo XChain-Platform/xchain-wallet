@@ -120,7 +120,7 @@ export {
 } from './stakingQueries.js';
 export { stakeAction } from './stakeAction.js';
 export { contractStakeAction } from './contractStakeAction.js';
-export { unstakeAction, claimRewardsAction } from './unstakeClaimActions.js';
+export { unstakeAction, collectAction } from './unstakeClaimActions.js';
 export { delegateAction, revokeDelegationAction } from './delegateRevokeActions.js';
 export { broadcastsForAddress } from './broadcastQueries.js';
 export { linksForAddress } from './linkQueries.js';

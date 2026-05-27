@@ -1,6 +1,6 @@
-// UNSTAKE + CLAIM_REWARDS composers for the §42.7.2 (unstake-lane) +
+// UNSTAKE + COLLECT composers for the §42.7.2 (unstake-lane) +
 // §42.7.3 (rewards) authoring surfaces. Both actions are trivially
-// small — UNSTAKE is `VERSION|SIGNING_PUBKEY`, CLAIM_REWARDS is
+// small — UNSTAKE is `VERSION|SIGNING_PUBKEY`, COLLECT is
 // `VERSION` — so they share a file and the UI combines them in
 // StakingActionForm.jsx via a `mode` prop (same pattern as §42.5
 // ContractFundsForm).
@@ -78,7 +78,7 @@ export async function unstakeAction(opts) {
 }
 
 /**
- * @typedef {Object} ClaimRewardsActionOpts
+ * @typedef {Object} CollectActionOpts
  * @property {import('../storage/Vault.js').Vault} vault
  * @property {string} walletId
  * @property {string} password
@@ -97,17 +97,17 @@ export async function unstakeAction(opts) {
  * @property {boolean} [trackPendingTx]
  */
 
-/** @param {ClaimRewardsActionOpts} opts */
-export async function claimRewardsAction(opts) {
-    if (!opts) throw new Error('claimRewardsAction: opts is required');
+/** @param {CollectActionOpts} opts */
+export async function collectAction(opts) {
+    if (!opts) throw new Error('collectAction: opts is required');
     if (!opts.params || typeof opts.params !== 'object') {
-        throw new Error('claimRewardsAction: params is required');
+        throw new Error('collectAction: params is required');
     }
-    const source = normalizeSource(opts.from, 'claimRewardsAction');
+    const source = normalizeSource(opts.from, 'collectAction');
     const pendingTxMeta = opts.trackPendingTx === false ? undefined : {
         fromAddress: source.address,
         toAddress: null,
-        actionSummary: 'Claim staking rewards',
+        actionSummary: 'Collect staking rewards',
     };
     return submitAction({
         vault: opts.vault,
@@ -117,7 +117,7 @@ export async function claimRewardsAction(opts) {
         chainRegistry: opts.chainRegistry,
         sdkRegistry: opts.sdkRegistry,
         chainId: opts.chainId,
-        actionData: { action: 'CLAIM_REWARDS', params: opts.params },
+        actionData: { action: 'COLLECT', params: opts.params },
         encoderOpts: {
             pubkey: source.publicKey,
             ...(opts.fee !== undefined && { fee: opts.fee }),

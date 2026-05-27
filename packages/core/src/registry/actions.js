@@ -27,15 +27,14 @@ export const COMMON_ACTIONS = /** @type {const} */ ([
 ]);
 
 // Actions available only on Bitcoin at launch: staking (STAKE/UNSTAKE/
-// DELEGATE/REVOKE_DELEGATION/CLAIM_REWARDS) and smart contracts
+// DELEGATE for rotate+revoke / COLLECT) and smart contracts
 // (DEPLOY/EXECUTE/DEPOSIT/WITHDRAW). Per §Phase 4 and SPEC §1.
 export const BTC_EXCLUSIVE_ACTIONS = /** @type {const} */ ([
-    'CLAIM_REWARDS',
+    'COLLECT',
     'DELEGATE',
     'DEPLOY',
     'DEPOSIT',
     'EXECUTE',
-    'REVOKE_DELEGATION',
     'STAKE',
     'UNSTAKE',
     'WITHDRAW',

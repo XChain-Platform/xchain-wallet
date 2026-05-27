@@ -943,18 +943,18 @@ export function contractStakeActionHw(opts) {
 }
 
 /**
- * Build, sign, and broadcast a CLAIM_REWARDS action (§42.7.3). One-click
+ * Build, sign, and broadcast a COLLECT action (§42.7.3). One-click
  * from the Staking dashboard — protocol format is just VERSION.
  *
  * @param {object} opts
  */
-export function claimRewardsAction(opts) {
-    return /** @type {any} */ (sendMessage('action.claimRewards', opts));
+export function collectAction(opts) {
+    return /** @type {any} */ (sendMessage('action.collect', opts));
 }
 
 /** @param {object} opts */
-export function claimRewardsActionHw(opts) {
-    return /** @type {any} */ (sendMessage('action.claimRewards.hw', opts));
+export function collectActionHw(opts) {
+    return /** @type {any} */ (sendMessage('action.collect.hw', opts));
 }
 
 /**
@@ -975,9 +975,9 @@ export function delegateActionHw(opts) {
 }
 
 /**
- * Build, sign, and broadcast a REVOKE_DELEGATION action (§42.7.2
- * delegation-lane). Removes a previously-delegated signing pubkey.
- * Protocol format: VERSION|SIGNING_PUBKEY.
+ * Build, sign, and broadcast a DELEGATE v2 (capability revoke) action —
+ * §42.7.2 delegation-lane. Removes a previously-delegated signing pubkey
+ * without replacing it. Protocol format: VERSION|SIGNING_PUBKEY.
  *
  * @param {object} opts
  */

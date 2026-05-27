@@ -16,7 +16,7 @@ import styles from './IssueTokenForm.module.css';
 const chainRegistry = registryLib.defaultRegistry();
 
 /**
- * DELEGATE + REVOKE_DELEGATION combined form — §42.7.2 delegation-lane.
+ * DELEGATE combined form (rotate v0 + revoke v2) — §42.7.2 delegation-lane.
  *
  * One component, two modes via the `mode` prop. Both actions share a
  * chassis (address load / SignCredentials / HW branch / review / done)
@@ -175,11 +175,12 @@ export function DelegationActionForm({ mode, walletId, chainId, onBack }) {
             };
             let res;
             if (isWatcherMode) {
-                const action = isDelegate ? 'DELEGATE' : 'REVOKE_DELEGATION';
+                // Both rotate and revoke share the DELEGATE wire action; revoke is v2
+                const wireParams = isDelegate ? actionParams : { VERSION: '2', ...actionParams };
                 res = await messaging.buildActionPsbtRequest({
                     chainId,
                     from: base.from,
-                    actionData: { action, params: actionParams },
+                    actionData: { action: 'DELEGATE', params: wireParams },
                 });
             } else {
                 const fn = isDelegate

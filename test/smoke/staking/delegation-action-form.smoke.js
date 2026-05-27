@@ -1,4 +1,4 @@
-// Smoke for Phase 4 — Step 10 of 23 — DELEGATE + REVOKE_DELEGATION
+// Smoke for Phase 4 — Step 10 of 23 — DELEGATE (rotate + revoke)
 // forms (§42.7.2 delegation-lane).
 
 import { strict as assert } from 'node:assert';

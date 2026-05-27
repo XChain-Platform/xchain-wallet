@@ -1,5 +1,5 @@
 // Smoke for §20 / Cluster X Step 17 — DelegationActionForm watcher-mode
-// branch (DELEGATE / REVOKE_DELEGATION depending on mode).
+// branch (DELEGATE rotate vs DELEGATE v2 revoke depending on mode; both wire to DELEGATE).
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
@@ -16,7 +16,7 @@ const formSrc = readFileSync(
 assert.match(formSrc, /import \{ useWalletMode \} from '\.\.\/hooks\/useWalletMode\.js';/);
 assert.match(formSrc, /import \{ WatcherResultPanel \} from '\.\.\/components\/WatcherResultPanel\.jsx';/);
 assert.match(formSrc, /const \{ isWatcherMode \} = useWalletMode\(\);/);
-assert.match(formSrc, /const action = isDelegate \? 'DELEGATE' : 'REVOKE_DELEGATION';/);
+assert.match(formSrc, /actionData: \{ action: 'DELEGATE'/);
 assert.match(formSrc, /messaging\.buildActionPsbtRequest\(\{[\s\S]+?action, params: actionParams/);
 assert.match(formSrc, /Build unsigned PSBT/);
 console.log('delegation-watcher-mode smoke OK');

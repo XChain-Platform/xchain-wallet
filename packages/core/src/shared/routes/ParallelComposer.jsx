@@ -93,8 +93,8 @@ export function ParallelComposer({ walletId, onBack, initialRows }) {
                         'SEND', 'ISSUE', 'MINT', 'DESTROY', 'BROADCAST',
                         'DISPENSER', 'DIVIDEND', 'AIRDROP', 'LIST',
                         'ORDER', 'SWAP', 'COINPAY', 'MESSAGE',
-                        'LINK', 'STAKE', 'UNSTAKE', 'CLAIM_REWARDS',
-                        'DELEGATE', 'REVOKE_DELEGATION',
+                        'LINK', 'STAKE', 'UNSTAKE', 'COLLECT',
+                        'DELEGATE',
                         'DEPLOY', 'EXECUTE', 'DEPOSIT', 'WITHDRAW',
                     ]);
                 }

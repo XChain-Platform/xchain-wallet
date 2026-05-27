@@ -1,4 +1,4 @@
-// Smoke for Phase 4 — Step 9 of 23 — UNSTAKE + CLAIM_REWARDS forms
+// Smoke for Phase 4 — Step 9 of 23 — UNSTAKE + COLLECT forms
 // (§42.7.2 unstake-lane + §42.7.3).
 
 import { strict as assert } from 'node:assert';
@@ -57,8 +57,8 @@ assert.ok(/full active balance/.test(formSrc),
 for (const call of [
     'messaging.unstakeAction',
     'messaging.unstakeActionHw',
-    'messaging.claimRewardsAction',
-    'messaging.claimRewardsActionHw',
+    'messaging.collectAction',
+    'messaging.collectActionHw',
     'messaging.getAddressesByChain',
     'messaging.getSignerStatus',
 ]) {
@@ -72,7 +72,7 @@ assert.ok(/InvalidPasswordError/.test(formSrc),
 // --- Core flow guards ---
 
 assert.equal(typeof flows.unstakeAction, 'function', 'flows.unstakeAction re-exported');
-assert.equal(typeof flows.claimRewardsAction, 'function', 'flows.claimRewardsAction re-exported');
+assert.equal(typeof flows.collectAction, 'function', 'flows.collectAction re-exported');
 
 await assert.rejects(
     async () => flows.unstakeAction({}),
@@ -91,21 +91,21 @@ await assert.rejects(
 );
 
 await assert.rejects(
-    async () => flows.claimRewardsAction({}),
-    /claimRewardsAction: params is required/,
-    'claimRewardsAction guards params',
+    async () => flows.collectAction({}),
+    /collectAction: params is required/,
+    'collectAction guards params',
 );
 
 // --- Background host + shell messaging helpers ---
 
 const bg = readFileSync(join(ext, 'src', 'background', 'createBackgroundHost.js'), 'utf8');
-for (const h of ["'action.unstake'", "'action.claimRewards'"]) {
+for (const h of ["'action.unstake'", "'action.collect'"]) {
     assert.ok(bg.includes(h), `background host registers ${h}`);
 }
 assert.ok(/registerHwHandler\('action\.unstake\.hw', unstakeAction\)/.test(bg),
     'background host registers action.unstake.hw');
-assert.ok(/registerHwHandler\('action\.claimRewards\.hw', claimRewardsAction\)/.test(bg),
-    'background host registers action.claimRewards.hw');
+assert.ok(/registerHwHandler\('action\.claimRewards\.hw', collectAction\)/.test(bg),
+    'background host registers action.collect.hw');
 
 for (const [shell, msgPath] of [
     ['popup', join(ext, 'src', 'popup', 'messaging.js')],
@@ -113,7 +113,7 @@ for (const [shell, msgPath] of [
     ['desktop', join(desktop, 'renderer', 'messaging.js')],
 ]) {
     const m = readFileSync(msgPath, 'utf8');
-    for (const fn of ['unstakeAction', 'unstakeActionHw', 'claimRewardsAction', 'claimRewardsActionHw']) {
+    for (const fn of ['unstakeAction', 'unstakeActionHw', 'collectAction', 'collectActionHw']) {
         assert.ok(
             new RegExp(`export function ${fn}\\b`).test(m),
             `${shell} messaging.js exports ${fn}`,

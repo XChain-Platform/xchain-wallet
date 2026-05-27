@@ -1,5 +1,5 @@
 // Smoke for §20 / Cluster X Step 16 — StakingActionForm watcher-mode
-// branch (UNSTAKE / CLAIM_REWARDS depending on mode).
+// branch (UNSTAKE / COLLECT depending on mode).
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
@@ -16,7 +16,7 @@ const formSrc = readFileSync(
 assert.match(formSrc, /import \{ useWalletMode \} from '\.\.\/hooks\/useWalletMode\.js';/);
 assert.match(formSrc, /import \{ WatcherResultPanel \} from '\.\.\/components\/WatcherResultPanel\.jsx';/);
 assert.match(formSrc, /const \{ isWatcherMode \} = useWalletMode\(\);/);
-assert.match(formSrc, /const action = isUnstake \? 'UNSTAKE' : 'CLAIM_REWARDS';/);
+assert.match(formSrc, /const action = isUnstake \? 'UNSTAKE' : 'COLLECT';/);
 assert.match(formSrc, /messaging\.buildActionPsbtRequest\(\{[\s\S]+?action, params: actionParams/);
 assert.match(formSrc, /if \(result\?\.psbtHex && !txid\) \{[\s\S]+?<WatcherResultPanel/);
 assert.match(formSrc, /Build unsigned PSBT/);

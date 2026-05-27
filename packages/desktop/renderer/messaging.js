@@ -426,13 +426,13 @@ export function contractStakeActionHw(opts) {
 }
 
 /** @param {object} opts */
-export function claimRewardsAction(opts) {
-    return /** @type {any} */ (sendMessage('action.claimRewards', opts));
+export function collectAction(opts) {
+    return /** @type {any} */ (sendMessage('action.collect', opts));
 }
 
 /** @param {object} opts */
-export function claimRewardsActionHw(opts) {
-    return /** @type {any} */ (sendMessage('action.claimRewards.hw', opts));
+export function collectActionHw(opts) {
+    return /** @type {any} */ (sendMessage('action.collect.hw', opts));
 }
 
 /** @param {object} opts */

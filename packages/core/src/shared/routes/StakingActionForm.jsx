@@ -17,8 +17,8 @@ import styles from './IssueTokenForm.module.css';
 const chainRegistry = registryLib.defaultRegistry();
 
 /**
- * UNSTAKE + CLAIM_REWARDS combined form — §42.7.2 unstake-lane +
- * §42.7.3 claim-rewards.
+ * UNSTAKE + COLLECT combined form — §42.7.2 unstake-lane +
+ * §42.7.3 collect-rewards.
  *
  * One component, two modes via the `mode` prop. Both actions share a
  * chassis (address load / SignCredentials / HW branch / review / done)
@@ -157,7 +157,7 @@ export function StakingActionForm({ mode, walletId, chainId, onBack }) {
             };
             let res;
             if (isWatcherMode) {
-                const action = isUnstake ? 'UNSTAKE' : 'CLAIM_REWARDS';
+                const action = isUnstake ? 'UNSTAKE' : 'COLLECT';
                 res = await messaging.buildActionPsbtRequest({
                     chainId,
                     from: base.from,
@@ -166,7 +166,7 @@ export function StakingActionForm({ mode, walletId, chainId, onBack }) {
             } else {
                 const fn = isUnstake
                     ? (isHwSource ? messaging.unstakeActionHw : messaging.unstakeAction)
-                    : (isHwSource ? messaging.claimRewardsActionHw : messaging.claimRewardsAction);
+                    : (isHwSource ? messaging.collectActionHw : messaging.collectAction);
                 const args = isHwSource
                     ? { ...base, signerId: fromAddress.signerId }
                     : { ...base, password };

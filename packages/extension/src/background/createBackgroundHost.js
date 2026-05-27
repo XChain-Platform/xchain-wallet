@@ -84,7 +84,7 @@ const {
     slashEventsForAddress,
     stakeAction,
     unstakeAction,
-    claimRewardsAction,
+    collectAction,
     delegateAction,
     revokeDelegationAction,
     contractStakeAction,
@@ -1613,7 +1613,7 @@ export function createBackgroundHost(deps) {
     registerHwHandler('action.withdraw.hw', withdrawAction);
     registerHwHandler('action.stake.hw', stakeAction);
     registerHwHandler('action.unstake.hw', unstakeAction);
-    registerHwHandler('action.claimRewards.hw', claimRewardsAction);
+    registerHwHandler('action.collect.hw', collectAction);
     registerHwHandler('action.delegate.hw', delegateAction);
     registerHwHandler('action.revokeDelegation.hw', revokeDelegationAction);
     registerHwHandler('action.contractStake.hw', contractStakeAction);
@@ -1853,8 +1853,8 @@ export function createBackgroundHost(deps) {
         return unstakeAction({ ...req, vault, chainRegistry, sdkRegistry });
     });
 
-    host.register('action.claimRewards', async (req, { vault, chainRegistry, sdkRegistry }) => {
-        return claimRewardsAction({ ...req, vault, chainRegistry, sdkRegistry });
+    host.register('action.collect', async (req, { vault, chainRegistry, sdkRegistry }) => {
+        return collectAction({ ...req, vault, chainRegistry, sdkRegistry });
     });
 
     host.register('action.delegate', async (req, { vault, chainRegistry, sdkRegistry }) => {

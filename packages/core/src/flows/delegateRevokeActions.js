@@ -1,12 +1,17 @@
-// DELEGATE + REVOKE_DELEGATION composers for the §42.7.2 delegation-
-// lane authoring surfaces. DELEGATE is `VERSION|NEW_SIGNING_PUBKEY` —
-// points the staker's hub-signing authority at a fresh key without
-// touching the stake amount. REVOKE_DELEGATION is
-// `VERSION|SIGNING_PUBKEY` — removes a previously-delegated key.
+// DELEGATE composers (rotate + revoke) for the §42.7.2 delegation-lane
+// authoring surfaces. The wire-level DELEGATE action has four versions:
+//   v0 — capability rotate     (VERSION|NEW_SIGNING_PUBKEY)
+//   v1 — contract rotate       (VERSION|NEW_SIGNING_PUBKEY|TARGET_CONTRACT_INDEX|TICK)
+//   v2 — capability revoke     (VERSION|SIGNING_PUBKEY)
+//   v3 — contract revoke       (VERSION|SIGNING_PUBKEY|TARGET_CONTRACT_INDEX|TICK)
+// The capability variants (v0/v2) are exposed here as `delegateAction`
+// and `revokeDelegationAction` (the UI label for v2 stays "Revoke
+// delegation" for clarity even though both share the DELEGATE wire
+// name). Contract-targeted variants live in contractStakeAction.js.
 //
-// Both fields are 64-hex Ed25519 pubkeys. The composers guard the
-// format up-front so a malformed input short-circuits before we hit
-// the SDK encoder. UI is in DelegationActionForm.jsx.
+// All signing pubkey fields are 64-hex Ed25519 pubkeys. The composers
+// guard the format up-front so a malformed input short-circuits before
+// we hit the SDK encoder. UI is in DelegationActionForm.jsx.
 
 import { submitAction } from './submitAction.js';
 import { normalizeSource } from './sendToken.js';
@@ -120,7 +125,8 @@ export async function revokeDelegationAction(opts) {
         chainRegistry: opts.chainRegistry,
         sdkRegistry: opts.sdkRegistry,
         chainId: opts.chainId,
-        actionData: { action: 'REVOKE_DELEGATION', params: opts.params },
+        // DELEGATE v2 = capability revoke (was its own REVOKE_DELEGATION action pre-consolidation)
+        actionData: { action: 'DELEGATE', params: { VERSION: '2', ...opts.params } },
         encoderOpts: {
             pubkey: source.publicKey,
             ...(opts.fee !== undefined && { fee: opts.fee }),
