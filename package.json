@@ -39,6 +39,11 @@
         "test:e2e:headed": "playwright test --config test/e2e/playwright.config.js --headed",
         "test:all": "pnpm test:unit && pnpm test:smoke && pnpm test:integration && pnpm test:boundary && pnpm test:chaos && pnpm test:fuzz && pnpm test:regression && pnpm test:security && pnpm test:a11y"
     },
+    "pnpm": {
+        "overrides": {
+            "tar": ">=7.5.7"
+        }
+    },
     "devDependencies": {
         "@testing-library/dom": "^10.4.0",
         "@testing-library/jest-dom": "^6.5.0",

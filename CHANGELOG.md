@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- Force transitive dependency `tar` to `>=7.5.7` (resolves to 7.5.15)
+  via a `pnpm.overrides` pin to clear the high-severity hardlink
+  path-traversal advisory (GHSA-34x7-hfp2-rc4v). `tar` is pulled in
+  solely by the desktop package's Electron native-rebuild toolchain
+  (`electron-builder` → `app-builder-lib` → `@electron/rebuild` →
+  `node-gyp`/`cacache`) at build time and is never bundled into any
+  shipped artifact, so there is no runtime exposure. The override is
+  needed because the 6.x line has no patched release (6.2.1 is its
+  latest); the patch ships only in 7.x. Lockfile + override change only.
 - Bump transitive dependency `tmp` from 0.2.5 to 0.2.7 to clear the
   path-traversal advisory (GHSA-ph9p-34f9-6g65). Lockfile-only change;
   `tmp` is pulled in solely by the desktop package's `electron-builder`
