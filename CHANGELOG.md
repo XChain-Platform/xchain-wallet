@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- Bump transitive dependency `tmp` from 0.2.5 to 0.2.7 to clear the
+  path-traversal advisory (GHSA-ph9p-34f9-6g65). Lockfile-only change;
+  `tmp` is pulled in solely by the desktop package's `electron-builder`
+  Flatpak packaging path (`@malept/flatpak-bundler` → `tmp-promise`) at
+  build time and is never bundled into any shipped artifact, so there is
+  no runtime exposure — this silences the advisory in audit scans.
+
 ## [0.333.0] - 2026-05-21
 
 Active-network mode + native-coin price oracle + TokenDetail visual
