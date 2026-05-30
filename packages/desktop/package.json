@@ -14,11 +14,11 @@
         "reproduce": "bash scripts/reproduce.sh"
     },
     "dependencies": {
-        "@xchain-wallet/core": "workspace:*",
-        "@xchain-wallet/extension": "workspace:*",
         "@ledgerhq/hw-app-btc": "^10.21.0",
         "@ledgerhq/hw-transport-webhid": "^6.35.0",
         "@trezor/connect-web": "^9.7.0",
+        "@xchain-wallet/core": "workspace:*",
+        "@xchain-wallet/extension": "workspace:*",
         "electron-updater": "^6.3.0",
         "lightweight-charts": "^4.2.0",
         "react": "^18.3.0",
@@ -28,6 +28,6 @@
         "@vitejs/plugin-react": "^4.3.0",
         "electron": "^41.3.0",
         "electron-builder": "^25.1.0",
-        "vite": "^5.4.0"
+        "vite": "^5.4.21"
     }
 }

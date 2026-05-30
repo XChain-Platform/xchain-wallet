@@ -58,7 +58,7 @@ const newRowId = () => `cosigner-${++_idCounter}`;
  *   - **external-xpub**: an xpub copied in from another wallet. The
  *     wallet can build PSBTs but cannot sign for this cosigner.
  *   - **external-hardware**: a HW device controlled by someone else.
- *     PSBT-exchange only.
+ *     Signs via file transfer.
  *
  * For Taproot-MuSig2 the bg handler aggregates the cosigner pubkeys
  * via `sdk.musig2.aggregateKeys` (BIP327) and stashes the resulting
@@ -404,7 +404,7 @@ function CosignerRow({ index, row, addresses, onChange, onRemove, canRemove, onL
                 >
                     <option value="local">Local — software account or paired HW signer</option>
                     <option value="external-xpub">External xpub — paste from another wallet</option>
-                    <option value="external-hardware">External hardware — PSBT-exchange only</option>
+                    <option value="external-hardware">External hardware — sign via file transfer</option>
                 </select>
             </label>
 
