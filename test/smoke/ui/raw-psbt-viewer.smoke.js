@@ -57,14 +57,14 @@ assert.match(
 
 // --- 2. Sections + copy button ------------------------------------------
 
-assert.match(compSrc, /aria-label="PSBT hex"/);
+assert.match(compSrc, /aria-label="Unsigned transaction hex"/);
 assert.match(compSrc, /aria-label="Action fields"/);
 assert.match(compSrc, /aria-label="Parsed inputs \/ outputs"/);
 assert.match(compSrc, /parser not wired yet/, 'placeholder is honest about the parser limit');
 assert.match(compSrc, /navigator\.clipboard\?\.writeText/);
 assert.match(
     compSrc,
-    /Copy \$\{hasPsbt \? 'PSBT hex' : 'action fields'\}/,
+    /Copy \$\{hasPsbt \? 'unsigned transaction hex' : 'action fields'\}/,
     'copy button labels what it copies',
 );
 

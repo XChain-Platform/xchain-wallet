@@ -705,7 +705,7 @@ export function PsbtSignForm({ walletId, onBack }) {
                         marginBottom: 4,
                     }}
                 >
-                    Transaction (hex or base64)
+                    Unsigned transaction (hex or base64)
                 </label>
                 <div
                     {...drop.rootProps}
@@ -723,7 +723,7 @@ export function PsbtSignForm({ walletId, onBack }) {
                         onChange={(e) => { setPasted(e.target.value); if (error) setError(null); }}
                         placeholder="Paste transaction hex (70736274ff…) or base64 (cHNid…) — or drop a .psbt file"
                         rows={6}
-                        aria-label="Transaction"
+                        aria-label="Unsigned transaction (hex or base64)"
                         style={{
                             width: '100%',
                             background: 'var(--xc-bg)',

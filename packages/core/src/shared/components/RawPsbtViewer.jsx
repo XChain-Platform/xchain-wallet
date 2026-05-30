@@ -58,8 +58,8 @@ export function RawPsbtViewer({ developerMode, psbtHex, actionFields }) {
 
             <div className={styles.body}>
                 {hasPsbt ? (
-                    <section className={styles.section} aria-label="PSBT hex">
-                        <p className={styles.label}>PSBT hex</p>
+                    <section className={styles.section} aria-label="Unsigned transaction hex">
+                        <p className={styles.label}>Unsigned transaction hex</p>
                         <textarea
                             className={styles.hex}
                             readOnly
@@ -89,7 +89,7 @@ export function RawPsbtViewer({ developerMode, psbtHex, actionFields }) {
                     className={styles.copyBtn}
                     onClick={handleCopy}
                 >
-                    {copied ? 'Copied' : `Copy ${hasPsbt ? 'PSBT hex' : 'action fields'}`}
+                    {copied ? 'Copied' : `Copy ${hasPsbt ? 'unsigned transaction hex' : 'action fields'}`}
                 </button>
             </div>
         </details>
