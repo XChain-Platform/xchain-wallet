@@ -127,7 +127,7 @@ assert.equal(happy.address, 'bc1q-fake-p2wsh-multisig');
 assert.equal(happy.threshold, 2);
 assert.equal(happy.cosignerCount, 3);
 assert.deepEqual(happy.cosignerNames, ['Alice', 'Bob', 'Carol']);
-assert.equal(happy.schemeLabel, '2-of-3 P2WSH multisig');
+assert.equal(happy.schemeLabel, '2-of-3 SegWit multi-signature (lower fees)');
 
 // --- Background host ---
 

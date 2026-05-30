@@ -661,7 +661,7 @@ function shortPk(pk) {
 
 function schemeLabel(s) {
     if (!s) return '';
-    if (s.scheme === 'p2sh-multisig') return `${s.threshold}-of-${s.cosignerPubkeys.length} P2SH multisig`;
-    if (s.scheme === 'p2wsh-multisig') return `${s.threshold}-of-${s.cosignerPubkeys.length} P2WSH multisig`;
+    if (s.scheme === 'p2sh-multisig') return `${s.threshold}-of-${s.cosignerPubkeys.length} Classic multi-signature`;
+    if (s.scheme === 'p2wsh-multisig') return `${s.threshold}-of-${s.cosignerPubkeys.length} SegWit multi-signature (lower fees)`;
     return `${s.threshold}-of-${s.cosignerPubkeys.length} Taproot-MuSig2`;
 }

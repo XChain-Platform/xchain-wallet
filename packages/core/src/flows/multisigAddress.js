@@ -29,7 +29,7 @@
  * @property {number} threshold
  * @property {number} cosignerCount
  * @property {string[]} cosignerNames
- * @property {string} schemeLabel              human-readable: "2-of-3 P2WSH multisig"
+ * @property {string} schemeLabel              human-readable: "2-of-3 SegWit multi-signature (lower fees)"
  * @property {string | null} redeemScript      hex; populated for p2sh-multisig
  * @property {string | null} witnessScript     hex; populated for p2wsh-multisig
  * @property {string | null} outputPubkey      hex; populated for taproot-musig2
@@ -147,7 +147,7 @@ export async function listMultisigReceiveAddresses(opts) {
 function formatSchemeLabel(config) {
     const t = config.threshold;
     const n = config.cosigners.length;
-    if (config.scheme === 'p2sh-multisig') return `${t}-of-${n} P2SH multisig`;
-    if (config.scheme === 'p2wsh-multisig') return `${t}-of-${n} P2WSH multisig`;
+    if (config.scheme === 'p2sh-multisig') return `${t}-of-${n} Classic multi-signature`;
+    if (config.scheme === 'p2wsh-multisig') return `${t}-of-${n} SegWit multi-signature (lower fees)`;
     return `${t}-of-${n} Taproot-MuSig2`;
 }

@@ -21,12 +21,12 @@ const MULTISIG_COIN = 'bitcoin';
 const SCHEMES = [
     {
         value: 'p2sh-multisig',
-        label: 'P2SH multisig',
+        label: 'Classic multi-signature',
         description: 'Classic N-of-M with a redeem script. Universally supported across signers and explorers; higher on-chain footprint.',
     },
     {
         value: 'p2wsh-multisig',
-        label: 'P2WSH multisig',
+        label: 'SegWit multi-signature (lower fees)',
         description: 'Same N-of-M semantics, native-segwit witness program. Cheaper fees than P2SH; broad signer support.',
     },
     {

@@ -57,8 +57,8 @@ const SCHEME_TAG = {
 };
 
 const SCHEME_DESCRIPTION = {
-    'p2sh-multisig':  'P2SH multisig',
-    'p2wsh-multisig': 'P2WSH multisig',
+    'p2sh-multisig':  'Classic multi-signature',
+    'p2wsh-multisig': 'SegWit multi-signature (lower fees)',
     'taproot-musig2': 'Taproot-MuSig2',
 };
 
