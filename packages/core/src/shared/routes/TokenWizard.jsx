@@ -177,11 +177,11 @@ export function TokenWizard({ walletId, onBack }) {
         }
         if (template === 'subtoken') {
             if (!parentToken.trim()) {
-                setFormError('Parent tick is required for subtokens.');
+                setFormError('Parent ticker is required for subtokens.');
                 return;
             }
             if (!/^[A-Za-z0-9]+$/.test(parentToken)) {
-                setFormError('Parent tick must be A–Z, 0–9.');
+                setFormError('Parent ticker must be A–Z, 0–9.');
                 return;
             }
         }
@@ -523,7 +523,7 @@ const TEMPLATES = [
     {
         id: 'subtoken',
         name: 'Subtoken',
-        tagline: 'Named sub-token under an tick you own.',
+        tagline: 'Named sub-token under a ticker you own.',
         interactive: true,
     },
     {
@@ -659,7 +659,7 @@ function renderDetailsStage({
             </p>
             {show.parentToken ? (
                 <Input
-                    label="Parent tick"
+                    label="Parent ticker"
                     hint="An existing token you own. The subtoken's full ticker will be PARENT.CHILD."
                     value={parentToken}
                     onChange={(e) => setParentToken(e.target.value.toUpperCase())}

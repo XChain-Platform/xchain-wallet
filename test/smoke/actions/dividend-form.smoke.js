@@ -107,7 +107,7 @@ assert.ok(
 // --- 6. Validation ----------------------------------------------------
 
 assert.ok(/Holder-of token is required/.test(src), 'validation: empty TICK');
-assert.ok(/Dividend tick is required/.test(src), 'validation: empty DIVIDEND_TICK');
+assert.ok(/Dividend ticker is required/.test(src), 'validation: empty DIVIDEND_TICK');
 assert.ok(
     /Per-unit amount must be a positive number/.test(src),
     'validation: zero amount',

@@ -811,7 +811,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
             return;
         }
         if (!tick.trim()) {
-            setFormError('Token tick is required.');
+            setFormError('Token ticker is required.');
             return;
         }
         const amt = String(amount).trim();

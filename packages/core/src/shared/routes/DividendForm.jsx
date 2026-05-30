@@ -228,7 +228,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
             return;
         }
         if (!dividendTick.trim()) {
-            setFormError('Dividend tick is required.');
+            setFormError('Dividend ticker is required.');
             return;
         }
         if (!/^[A-Za-z0-9.^]+$/.test(dividendTick.trim())) {
@@ -411,7 +411,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                 <p className={styles.hint}>
                     DIVIDEND charges an XChain fee based on the number of database
                     hits (§DIVIDEND.md). Make sure the source address holds enough
-                    DIVIDEND tick to cover the full payout.
+                    DIVIDEND ticker to cover the full payout.
                 </p>
                 {isWatcherMode ? (
                     <p className={styles.hint}>
@@ -503,7 +503,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                 />
             )}
             <Input
-                label="Dividend tick"
+                label="Dividend ticker"
                 hint="The token you are distributing."
                 value={dividendTick}
                 onChange={(e) => setDividendTick(e.target.value.toUpperCase())}
@@ -514,7 +514,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
             />
             <Input
                 label="Per-unit amount"
-                hint="Amount of dividend tick per 1 unit of holder-of token."
+                hint="Amount of dividend ticker per 1 unit of holder-of token."
                 inputMode="decimal"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}

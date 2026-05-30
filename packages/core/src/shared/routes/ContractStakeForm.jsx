@@ -163,7 +163,7 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, onBa
             return;
         }
         if (!actionParams.TICK) {
-            setFormError('Token tick is required.');
+            setFormError('Token ticker is required.');
             return;
         }
         if (mode === 'stake') {
@@ -443,7 +443,7 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, onBa
             </fieldset>
 
             <Input
-                label="Token tick"
+                label="Token ticker"
                 hint="Any registered token. XCHAIN is the platform default."
                 value={tick}
                 onChange={(e) => setTick(e.target.value.toUpperCase())}

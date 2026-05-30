@@ -81,7 +81,7 @@ export const en = {
     'send.review': 'Review & Send',
     'send.pickSourceFirst': 'Pick a source address first.',
     'send.destinationRequired': 'Destination address is required.',
-    'send.tickRequired': 'Token tick is required.',
+    'send.tickRequired': 'Token ticker is required.',
     'send.amountPositive': 'Amount must be a positive number.',
     'send.memoForbiddenChars': 'Memo cannot contain | or ; characters.',
     'send.passwordHint': 'Required to sign.',
