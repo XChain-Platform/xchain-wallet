@@ -20,7 +20,7 @@ const chainRegistry = registryLib.defaultRegistry();
 
 const KIND_TITLE = {
     signMessage: 'Sign message',
-    signPsbt: 'Sign PSBT',
+    signPsbt: 'Sign transaction',
     signAction: 'Sign action',
     signIn: 'Sign in',
 };
@@ -324,7 +324,7 @@ function SignSummary({ kind, payload }) {
         case 'signPsbt':
             return (
                 <div className={shared.summary}>
-                    <p className={shared.summaryLabel}>PSBT</p>
+                    <p className={shared.summaryLabel}>Transaction</p>
                     <pre className={shared.summaryValue}>
                         {truncate(inner.psbtHex, 96)}
                     </pre>

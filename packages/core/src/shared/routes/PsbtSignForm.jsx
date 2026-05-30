@@ -272,7 +272,7 @@ export function PsbtSignForm({ walletId, onBack }) {
                 setPasted(hex);
                 if (error) setError(null);
             } catch (_e) {
-                setError('Could not decode the dropped PSBT file.');
+                setError('Could not decode the dropped transaction file.');
             }
         },
     });
@@ -338,7 +338,7 @@ export function PsbtSignForm({ walletId, onBack }) {
             .catch((err) => {
                 if (cancelled) return;
                 setDecomposed(null);
-                setParseError(err?.message || 'Failed to parse PSBT.');
+                setParseError(err?.message || 'Failed to parse transaction.');
             })
             .finally(() => { if (!cancelled) setParsing(false); });
         return () => { cancelled = true; };
@@ -412,11 +412,11 @@ export function PsbtSignForm({ walletId, onBack }) {
         setError(null);
         if (!chainId) { setError('Pick a chain.'); return; }
         if (!addressId) { setError('Pick a signing address.'); return; }
-        if (!psbtHex) { setError('Paste a valid PSBT (hex or base64).'); return; }
-        if (!decomposed) { setError('PSBT could not be parsed for this chain.'); return; }
+        if (!psbtHex) { setError('Paste a valid transaction (hex or base64).'); return; }
+        if (!decomposed) { setError('Transaction could not be parsed for this chain.'); return; }
         if (ownedInputCount === 0) {
             setError(
-                `The chosen address signs none of this PSBT's inputs. Pick a different address or PSBT.`,
+                `The chosen address signs none of this transaction's inputs. Pick a different address or transaction.`,
             );
             return;
         }
@@ -479,7 +479,7 @@ export function PsbtSignForm({ walletId, onBack }) {
             >
                 <Icon.BackIcon />
             </button>
-            <span className={pickerStyles.title}>Sign PSBT</span>
+            <span className={pickerStyles.title}>Sign transaction</span>
             <span style={{ width: 28 }} />
         </div>
     );
@@ -514,9 +514,9 @@ export function PsbtSignForm({ walletId, onBack }) {
                         marginBottom: 4,
                     }}>
                         <span style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)' }}>
-                            Signed PSBT (hex)
+                            Signed transaction (hex)
                         </span>
-                        <CopyButton value={signedPsbtHex} label="Copy signed PSBT" />
+                        <CopyButton value={signedPsbtHex} label="Copy signed transaction" />
                     </div>
                     <pre style={{
                         background: 'var(--xc-surface)',
@@ -562,7 +562,7 @@ export function PsbtSignForm({ walletId, onBack }) {
                     </div>
                 ) : (
                     <p style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)' }}>
-                        Broadcast directly from this wallet, or hand the signed PSBT
+                        Broadcast directly from this wallet, or hand the signed transaction
                         off to a different broadcaster (or the next cosigner).
                     </p>
                 )}
@@ -612,7 +612,7 @@ export function PsbtSignForm({ walletId, onBack }) {
                             setParseError(null);
                         }}
                     >
-                        Sign another PSBT
+                        Sign another transaction
                     </Button>
                 </div>
             </div>
@@ -705,7 +705,7 @@ export function PsbtSignForm({ walletId, onBack }) {
                         marginBottom: 4,
                     }}
                 >
-                    PSBT (hex or base64)
+                    Transaction (hex or base64)
                 </label>
                 <div
                     {...drop.rootProps}
@@ -721,9 +721,9 @@ export function PsbtSignForm({ walletId, onBack }) {
                         id="psbt-sign-paste"
                         value={pasted}
                         onChange={(e) => { setPasted(e.target.value); if (error) setError(null); }}
-                        placeholder="Paste PSBT hex (70736274ff…) or base64 (cHNid…) — or drop a .psbt file"
+                        placeholder="Paste transaction hex (70736274ff…) or base64 (cHNid…) — or drop a .psbt file"
                         rows={6}
-                        aria-label="PSBT"
+                        aria-label="Transaction"
                         style={{
                             width: '100%',
                             background: 'var(--xc-bg)',
@@ -755,12 +755,12 @@ export function PsbtSignForm({ walletId, onBack }) {
                         onClick={() => { setScannerOpen((open) => !open); if (error) setError(null); }}
                         disabled={busy}
                     >
-                        {scannerOpen ? 'Close scanner' : 'Scan PSBT'}
+                        {scannerOpen ? 'Close scanner' : 'Scan transaction'}
                     </Button>
                 </div>
                 {scannerOpen ? (
                     <div style={{ marginTop: 'var(--xc-space-2)' }}>
-                        <QrScanner onFrame={handleScannerFrame} alt="PSBT QR scanner" />
+                        <QrScanner onFrame={handleScannerFrame} alt="Transaction QR scanner" />
                         {xcwCollector.total !== null ? (
                             <p style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)', marginTop: 4 }}>
                                 XCW frames received: {xcwCollector.receivedCount} of {xcwCollector.total}
@@ -774,12 +774,12 @@ export function PsbtSignForm({ walletId, onBack }) {
                         recovery={{ label: 'Clear', onAction: () => { setPasted(''); if (error) setError(null); } }}
                     >
                         {unsupportedFormatHint
-                            || "Doesn't look like hex, base64, or BBQr PSBT. Strip whitespace, paste the full blob."}
+                            || "Doesn't look like hex, base64, or BBQr transaction. Strip whitespace, paste the full blob."}
                     </StatusMessage>
                 ) : null}
                 {parsing ? (
                     <div style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)', marginTop: 4 }}>
-                        Parsing PSBT…
+                        Parsing transaction…
                     </div>
                 ) : null}
                 {parseError ? (
@@ -839,7 +839,7 @@ export function PsbtSignForm({ walletId, onBack }) {
             >
                 {isHwSource && selectedAddress
                     ? `Sign on ${selectedAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                    : 'Sign PSBT'}
+                    : 'Sign transaction'}
             </Button>
         </form>
     );

@@ -1898,8 +1898,8 @@ function buildActionEntries({
         },
         {
             id: 'sign-psbt',
-            label: 'Sign PSBT',
-            description: 'Paste an unsigned PSBT (hex / base64) and sign it with one of your keys (§30.4 / §20).',
+            label: 'Sign transaction',
+            description: 'Paste an unsigned transaction (hex / base64) and sign it with one of your keys (§30.4 / §20).',
             onSelect: onSignPsbt,
         },
         {
