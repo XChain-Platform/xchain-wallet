@@ -1035,6 +1035,46 @@ export function createBackgroundHost(deps) {
         }, 3_000);
     }
 
+    // §9.7 / G007 — periodic background refresh. The boot refresh above
+    // fires once; this keeps long-running instances current so they pick
+    // up fresh descriptors within a day of the hub endpoint going live,
+    // without a manual Settings → Network refresh. Gated by the same
+    // BOOT_REFRESH_ENABLED switch as the boot refresh — flipping that flag
+    // on (once `/api/v1/chain-registry` ships) activates both, so there is
+    // no separate "wire the periodic refresh" step left to do. Reuses the
+    // same refreshChainRegistry + status-update path, so the graceful
+    // bundled-descriptor fallback applies unchanged.
+    //
+    // Lifetime: in the MV3 service worker the interval lives only as long
+    // as the worker (Chrome tears it down when idle — chrome.alarms is the
+    // durable mechanism there, see background/index.js); the web shell
+    // (one host per tab) and desktop shell (one host per main process) are
+    // long-lived, so it fires there. `host.stopChainRegistryRefresh()`
+    // clears it for shells/tests that own a teardown path.
+    const PERIODIC_REFRESH_MS = 24 * 60 * 60 * 1_000;
+    let chainRegistryRefreshTimer = null;
+    if (BOOT_REFRESH_ENABLED && typeof setInterval === 'function') {
+        chainRegistryRefreshTimer = setInterval(async () => {
+            try {
+                const hubUrl = pickHubUrlFromRegistry(deps.chainRegistry);
+                if (!hubUrl) return;
+                const result = await refreshChainRegistry({ hubUrl });
+                chainRegistryStatus.update(result);
+            } catch { /* swallow — never crash on a refresh */ }
+        }, PERIODIC_REFRESH_MS);
+        // Don't let the refresh timer alone keep a Node main process
+        // (desktop) alive at exit.
+        if (chainRegistryRefreshTimer && typeof chainRegistryRefreshTimer.unref === 'function') {
+            chainRegistryRefreshTimer.unref();
+        }
+    }
+    host.stopChainRegistryRefresh = () => {
+        if (chainRegistryRefreshTimer !== null) {
+            clearInterval(chainRegistryRefreshTimer);
+            chainRegistryRefreshTimer = null;
+        }
+    };
+
     // §9.7 / Cluster Q FOLLOWUP 2 — custom (user-added) chain registry.
     // Persisted under settings.customChains; re-seeded into the running
     // ChainRegistry at boot via seedCustomChainsFromVault(). The three

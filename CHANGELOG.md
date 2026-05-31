@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Periodic chain-registry refresh** (§9.7 / G007). The background host
+  now schedules a 24-hour `setInterval` alongside the existing boot-time
+  refresh, so long-running wallet instances pick up updated chain
+  descriptors within a day of the hub's `/api/v1/chain-registry` endpoint
+  going live — no manual Settings → Network refresh required. It reuses
+  the same `refreshChainRegistry` + status path as the boot refresh, so
+  the graceful bundled-descriptor fallback is unchanged, and it is gated
+  by the same `BOOT_REFRESH_ENABLED` switch (flipping that flag on
+  activates both the boot and periodic refresh). The interval is
+  `unref()`-ed on Node (desktop) and clearable via
+  `host.stopChainRegistryRefresh()`; the durable mechanism for the MV3
+  service worker remains `chrome.alarms`.
+
 ### Security
 
 - Force transitive dependency `tar` to `>=7.5.7` (resolves to 7.5.15)
