@@ -430,7 +430,7 @@ export function CoinpayForm({
                             }
                         >
                             {isWatcherMode
-                                ? 'Build unsigned PSBT'
+                                ? 'Create unsigned transaction'
                                 : hw
                                     ? `Sign on ${selected.addr.source === 'trezor' ? 'Trezor' : 'Ledger'}`
                                     : 'Sign COINPAY'}

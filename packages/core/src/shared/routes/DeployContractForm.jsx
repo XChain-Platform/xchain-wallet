@@ -440,7 +440,7 @@ export function DeployContractForm({ walletId, onBack }) {
                         }
                     >
                         {isWatcherMode
-                            ? 'Build unsigned PSBT'
+                            ? 'Create unsigned transaction'
                             : isHwSource
                                 ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
                                 : (descriptor ? `Deploy on ${descriptor.displayName}` : 'Deploy')}

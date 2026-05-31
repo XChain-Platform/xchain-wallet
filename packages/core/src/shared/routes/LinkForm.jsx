@@ -460,7 +460,7 @@ export function LinkForm({ walletId, onBack }) {
                             : hw ? hwStatus !== 'available' : password.length === 0)}
                 >
                     {isWatcherMode
-                        ? 'Build unsigned PSBT'
+                        ? 'Create unsigned transaction'
                         : hw
                             ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
                             : 'Sign LINK'}

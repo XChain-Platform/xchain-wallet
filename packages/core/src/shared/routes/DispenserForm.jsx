@@ -516,7 +516,7 @@ export function DispenserForm({ walletId, onBack, initialChainId, initialTick, i
                         }
                     >
                         {isWatcherMode
-                            ? 'Build unsigned PSBT'
+                            ? 'Create unsigned transaction'
                             : hw
                                 ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
                                 : (descriptor ? `Sign on ${descriptor.displayName}` : 'Sign')}

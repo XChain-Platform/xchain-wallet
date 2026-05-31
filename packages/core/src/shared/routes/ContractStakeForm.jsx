@@ -382,7 +382,7 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, onBa
                         }
                     >
                         {isWatcherMode
-                            ? 'Build unsigned PSBT'
+                            ? 'Create unsigned transaction'
                             : isHwSource
                                 ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
                                 : `${verb}`}

@@ -344,7 +344,7 @@ export function StakeForm({ walletId, chainId, onBack }) {
                         }
                     >
                         {isWatcherMode
-                            ? 'Build unsigned PSBT'
+                            ? 'Create unsigned transaction'
                             : isHwSource
                                 ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
                                 : 'Stake on Bitcoin'}

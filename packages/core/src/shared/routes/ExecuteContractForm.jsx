@@ -337,7 +337,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, on
                         }
                     >
                         {isWatcherMode
-                            ? 'Build unsigned PSBT'
+                            ? 'Create unsigned transaction'
                             : isHwSource
                                 ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
                                 : (descriptor ? `Execute on ${descriptor.displayName}` : 'Execute')}

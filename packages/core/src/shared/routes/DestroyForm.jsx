@@ -362,7 +362,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                         }
                     >
                         {isWatcherMode
-                            ? 'Build unsigned PSBT'
+                            ? 'Create unsigned transaction'
                             : isHwSource
                                 ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
                                 : (descriptor ? `Destroy on ${descriptor.displayName}` : 'Destroy')}

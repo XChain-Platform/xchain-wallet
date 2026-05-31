@@ -352,7 +352,7 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                         }
                     >
                         {isWatcherMode
-                            ? 'Build unsigned PSBT'
+                            ? 'Create unsigned transaction'
                             : isHwSource
                                 ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
                                 : (descriptor ? `Sign on ${descriptor.displayName}` : 'Sign')}

@@ -384,7 +384,7 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
                         }
                     >
                         {isWatcherMode
-                            ? 'Build unsigned PSBT'
+                            ? 'Create unsigned transaction'
                             : isHwSource
                                 ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
                                 : (descriptor ? `Sign on ${descriptor.displayName}` : 'Sign')}

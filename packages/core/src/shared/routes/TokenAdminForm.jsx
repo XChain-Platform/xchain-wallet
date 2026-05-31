@@ -381,7 +381,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                         }
                     >
                         {isWatcherMode
-                            ? 'Build unsigned PSBT'
+                            ? 'Create unsigned transaction'
                             : isHwSource
                                 ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
                                 : (descriptor ? `Sign on ${descriptor.displayName}` : 'Sign')}
