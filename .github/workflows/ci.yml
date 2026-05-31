@@ -1,0 +1,27 @@
+name: CI
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # pnpm must be on PATH BEFORE setup-node, or its `cache: pnpm` step can't
+      # resolve the pnpm store and fails with "Unable to locate executable file: pnpm".
+      - name: Enable pnpm (corepack)
+        run: corepack enable
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Run test gate
+        run: pnpm run ci

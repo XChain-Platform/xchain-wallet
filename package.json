@@ -19,6 +19,7 @@
         "typecheck": "pnpm -r --if-present typecheck",
         "lint": "pnpm -r --if-present lint",
         "build": "pnpm -r --if-present build",
+        "ci": "pnpm test:unit",
         "test": "pnpm test:unit && pnpm test:smoke",
         "test:unit": "vitest run --config test/vitest/unit.config.js",
         "test:unit:watch": "vitest --config test/vitest/unit.config.js",
@@ -48,6 +49,7 @@
             "brace-expansion@5": "^5.0.6",
             "vite": ">=6.4.2 <7",
             "protobufjs": ">=7.5.8",
+            "@tootallnate/once": "^2.0.1",
             "axios": "^1.16.1"
         }
     },
