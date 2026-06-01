@@ -262,7 +262,7 @@ export function MultisigCreate({ walletId, onBack }) {
                     </dd>
                 </dl>
                 <p className={styles.hint}>
-                    Address derivation, PSBT construction, QR transport, and
+                    Address derivation, transaction construction, QR transport, and
                     HW MuSig2 wiring land in Steps 18–22. The persisted
                     `MultisigConfig` is the structural prerequisite; later
                     steps consume it.

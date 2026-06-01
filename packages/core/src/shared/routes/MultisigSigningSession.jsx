@@ -376,7 +376,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
                     <p className={styles.hint}>
                         No multisig signing sessions for this wallet. A session is
                         created when a multisig spend is composed (§22.3); Step 20
-                        wires the PSBT-QR transport that drives contributions.
+                        wires the transaction-QR transport that drives contributions.
                     </p>
                     <div className={styles.actions}>
                     </div>

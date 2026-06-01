@@ -22,6 +22,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `host.stopChainRegistryRefresh()`; the durable mechanism for the MV3
   service worker remains `chrome.alarms`.
 
+### Changed
+
+- **Plain-language transaction terminology.** User-facing copy across the
+  wallet UI (action-form buttons, output-field labels, copy-button
+  aria-labels, mode hints, and multisig flow text) now says
+  "transaction" instead of the `PSBT` acronym, matching the voice
+  guideline that flags unexplained jargon. The acronym is retained only
+  on the developer-mode raw-inspector surfaces, where the raw PSBT hex
+  itself is the subject and the technical term is appropriate for the
+  audience.
+
 ### Security
 
 - Force transitive dependency `tar` to `>=7.5.7` (resolves to 7.5.15)
