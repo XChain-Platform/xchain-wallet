@@ -50,7 +50,7 @@ assert.match(panelSrc, /onSendAnother/, 'accepts onSendAnother prop (Send.jsx le
 assert.match(panelSrc, /onDone/, 'accepts onDone prop');
 assert.match(
     panelSrc,
-    /title = 'Unsigned PSBT — ready for signing'/,
+    /title = 'Unsigned transaction — ready for signing'/,
     'title prop has a default heading',
 );
 

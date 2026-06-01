@@ -39,7 +39,7 @@ export function WatcherResultPanel({
     onBuildAnother,
     onSendAnother,
     onDone,
-    title = 'Unsigned PSBT — ready for signing',
+    title = 'Unsigned transaction — ready for signing',
 }) {
     const psbtHex = result?.psbtHex || '';
     const [qrFormat, setQrFormat] = useState('xcw');
@@ -64,9 +64,9 @@ export function WatcherResultPanel({
             <div className={styles.successCard} role="status" aria-live="polite">
                 <h2 className={styles.successTitle}>{title}</h2>
                 <p className={styles.successHint}>
-                    Take this PSBT to your Signer-mode wallet — paste the hex,
+                    Take this transaction to your Signer-mode wallet — paste the hex,
                     or scan the animated QR. Sign there, then paste the signed
-                    PSBT into a Full-mode wallet to broadcast.
+                    transaction into a Full-mode wallet to broadcast.
                 </p>
                 {result?.encoding ? (
                     <dl className={styles.successSummary}>
@@ -85,10 +85,10 @@ export function WatcherResultPanel({
                     </dl>
                 ) : null}
                 <div className={styles.successTxidBlock}>
-                    <p className={styles.successLabel}>Unsigned PSBT (hex)</p>
+                    <p className={styles.successLabel}>Unsigned transaction (hex)</p>
                     <textarea
                         readOnly
-                        aria-label="Unsigned PSBT hex"
+                        aria-label="Unsigned transaction hex"
                         value={psbtHex}
                         rows={6}
                         style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.75rem' }}
@@ -98,7 +98,7 @@ export function WatcherResultPanel({
                             type="button"
                             className={styles.successLink}
                             onClick={copyHex}
-                            aria-label="Copy unsigned PSBT hex"
+                            aria-label="Copy unsigned transaction hex"
                         >
                             Copy hex
                         </button>
@@ -136,13 +136,13 @@ export function WatcherResultPanel({
                         <p className={styles.successLabel}>Animated QR ({formatLabel})</p>
                         <AnimatedQrFrames
                             frames={exportFrames}
-                            alt="Unsigned PSBT animated QR"
+                            alt="Unsigned transaction animated QR"
                         />
                         <details>
                             <summary className={styles.hint}>Plain-text chunks</summary>
                             <textarea
                                 readOnly
-                                aria-label={`Unsigned PSBT ${formatLabel}`}
+                                aria-label={`Unsigned transaction ${formatLabel}`}
                                 value={exportFrames.join('\n')}
                                 rows={6}
                                 style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.75rem' }}

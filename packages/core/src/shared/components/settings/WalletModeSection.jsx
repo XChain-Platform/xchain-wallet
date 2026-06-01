@@ -23,12 +23,12 @@ const MODE_OPTIONS = /** @type {const} */ ([
     {
         value: 'watcher',
         label: 'Watcher (watch-only)',
-        hint: 'View balances and build unsigned PSBTs. Pair with a separate signer-mode wallet to sign.',
+        hint: 'View balances and build unsigned transactions. Pair with a separate signer-mode wallet to sign.',
     },
     {
         value: 'signer',
         label: 'Signer (air-gapped)',
-        hint: 'Sign PSBTs pasted in from a watcher wallet. Send / receive screens are hidden — this wallet does not broadcast.',
+        hint: 'Sign transactions pasted in from a watcher wallet. Send / receive screens are hidden — this wallet does not broadcast.',
     },
 ]);
 

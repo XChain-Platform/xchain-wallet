@@ -117,7 +117,7 @@ export const en = {
     'scan.scannerAlt': 'Scan a QR code',
     'scan.routing': 'Scanned — routing…',
     'scan.pasteLabel': 'Or paste a payload',
-    'scan.pastePlaceholder': 'xchain:… / bitcoin:… / address / PSBT hex',
+    'scan.pastePlaceholder': 'xchain:… / bitcoin:… / address / transaction hex',
     'scan.classifyPaste': 'Classify pasted payload',
     'scan.error.pasteEmpty': 'Paste a payload first.',
     'scan.error.unknownXchainIntent':
@@ -127,7 +127,7 @@ export const en = {
     'scan.error.mnemonic':
         'A recovery phrase was scanned. Use Import Wallet → Recovery phrase to add it deliberately.',
     'scan.error.xcwChunk':
-        'Multi-frame PSBT chunk {n}/{total} — open the Sign panel to capture every frame.',
+        'Multi-frame transaction chunk {n}/{total} — open the Sign panel to capture every frame.',
     'scan.error.unknown':
         'Scanned content was not recognized ({type}). Try a clearer code.',
 

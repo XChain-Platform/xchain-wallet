@@ -968,7 +968,7 @@ function SignerHomeBody({ onSignPsbt, onSignMessage, onVerifySignature }) {
                 }}
             >
                 <strong style={{ color: 'var(--xc-text)' }}>Signer mode</strong>
-                <span> — this wallet only signs PSBTs from a paired Watcher
+                <span> — this wallet only signs transactions from a paired Watcher
                 wallet. Send / Receive / balances are not available.
                 Switch the wallet's mode in Settings → Wallet Mode if you
                 want full-wallet behaviour back.</span>
@@ -985,7 +985,7 @@ function SignerHomeBody({ onSignPsbt, onSignMessage, onVerifySignature }) {
                     onClick={onSignPsbt}
                     disabled={!onSignPsbt}
                 >
-                    Sign a PSBT
+                    Sign a transaction
                 </Button>
                 <Button
                     variant="secondary"

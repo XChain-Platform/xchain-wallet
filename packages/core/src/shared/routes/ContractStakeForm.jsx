@@ -347,8 +347,8 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, onBa
                 </dl>
                 {isWatcherMode ? (
                     <p className={styles.hint}>
-                        Watcher mode — this wallet will build an unsigned PSBT. Sign it on
-                        your Signer-mode wallet, then bring the signed PSBT to a Full-mode
+                        Watcher mode — this wallet will build an unsigned transaction. Sign it on
+                        your Signer-mode wallet, then bring the signed transaction to a Full-mode
                         wallet to broadcast.
                     </p>
                 ) : (

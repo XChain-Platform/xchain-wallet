@@ -1171,7 +1171,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                 {isWatcherMode ? (
                     <>
                         <p className={styles.hint}>
-                            Watcher mode — this wallet will build an unsigned PSBT
+                            Watcher mode — this wallet will build an unsigned transaction
                             instead of signing and broadcasting. Bring the result
                             to your Signer-mode wallet to sign.
                         </p>
@@ -1180,7 +1180,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                                 Source address is paired to {fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'} on
                                 this wallet, but watcher mode does not sign here.
                                 Pair the same {fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'} on your
-                                Signer-mode wallet to sign the PSBT this step produces.
+                                Signer-mode wallet to sign the transaction this step produces.
                             </StatusMessage>
                         ) : null}
                     </>

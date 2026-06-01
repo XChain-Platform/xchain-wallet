@@ -415,9 +415,9 @@ export function LinkForm({ walletId, onBack }) {
 
                     {isWatcherMode ? (
                         <p className={styles.hint}>
-                            Watcher mode — this wallet will build an unsigned PSBT.
+                            Watcher mode — this wallet will build an unsigned transaction.
                             Sign it on your Signer-mode wallet, then bring the
-                            signed PSBT to a Full-mode wallet to broadcast.
+                            signed transaction to a Full-mode wallet to broadcast.
                         </p>
                     ) : (
                         <SignCredentials

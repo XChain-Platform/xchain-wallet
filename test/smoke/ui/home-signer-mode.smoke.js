@@ -92,7 +92,7 @@ assert.match(
     /function SignerHomeBody\(\{ onSignPsbt, onSignMessage, onVerifySignature \}\)/,
     'SignerHomeBody defined with the three sign / verify props',
 );
-assert.match(homeSrc, /Sign a PSBT/, 'marquee CTA label "Sign a PSBT"');
+assert.match(homeSrc, /Sign a transaction/, 'marquee CTA label "Sign a transaction"');
 assert.match(homeSrc, /Sign a message/, 'secondary CTA label "Sign a message"');
 assert.match(homeSrc, /Verify a signature/, 'tertiary CTA label "Verify a signature"');
 assert.match(

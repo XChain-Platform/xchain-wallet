@@ -453,7 +453,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
                 ) : exportFrames && Array.isArray(exportFrames) ? (
                     <AnimatedQrFrames
                         frames={exportFrames}
-                        alt="Multisig PSBT request envelope"
+                        alt="Multisig transaction request envelope"
                     />
                 ) : (
                     <p className={styles.hint}>
@@ -628,7 +628,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
                 ) : null}
                 {!isTerminal && Array.isArray(exportFrames) ? (
                     <Button variant="ghost" onClick={() => setView('export-qr')}>
-                        Export PSBT QR
+                        Export transaction QR
                     </Button>
                 ) : null}
                 {!isTerminal ? (

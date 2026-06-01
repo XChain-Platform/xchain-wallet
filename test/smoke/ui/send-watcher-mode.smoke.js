@@ -137,7 +137,7 @@ assert.match(
 );
 assert.match(
     sendSrc,
-    /Watcher mode — this wallet will build an unsigned PSBT/,
+    /Watcher mode — this wallet will build an unsigned transaction/,
     'review-stage hint copy explains watcher mode',
 );
 // §20 Cluster W FOLLOWUP 3 (closed at v0.239.0) — when the source address is
