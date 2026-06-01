@@ -23,5 +23,5 @@ assert.match(formSrc, /COIN1: String\(ticker1\)\.toUpperCase\(\)/);
 assert.match(formSrc, /COIN2: String\(ticker2\)\.toUpperCase\(\)/);
 assert.match(formSrc, /COIN1_ACTION_INDEX: actionIndex1/);
 assert.match(formSrc, /if \(result\?\.psbtHex && !txid\) \{[\s\S]+?<WatcherResultPanel/);
-assert.match(formSrc, /Build unsigned PSBT/);
+assert.match(formSrc, /Create unsigned transaction/);
 console.log('link-watcher-mode smoke OK');

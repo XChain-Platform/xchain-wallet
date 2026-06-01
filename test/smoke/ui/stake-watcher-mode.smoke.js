@@ -18,5 +18,5 @@ assert.match(formSrc, /const \{ isWatcherMode \} = useWalletMode\(\);/);
 assert.match(formSrc, /messaging\.buildActionPsbtRequest\(\{[\s\S]+?action: 'STAKE'/);
 assert.match(formSrc, /if \(!isWatcherMode && !isHwSource && password\.length === 0\) return;/);
 assert.match(formSrc, /if \(result\?\.psbtHex && !txid\) \{[\s\S]+?<WatcherResultPanel/);
-assert.match(formSrc, /Build unsigned PSBT/);
+assert.match(formSrc, /Create unsigned transaction/);
 console.log('stake-watcher-mode smoke OK');

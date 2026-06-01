@@ -22,5 +22,5 @@ assert.match(
 assert.match(formSrc, /if \(!isWatcherMode && !isHwSource && password\.length === 0\) return;/);
 assert.match(formSrc, /if \(result\?\.psbtHex && !txid\) \{[\s\S]+?<WatcherResultPanel/);
 assert.match(formSrc, /\{isWatcherMode \? \([\s\S]+?Watcher mode/);
-assert.match(formSrc, /Build unsigned PSBT/);
+assert.match(formSrc, /Create unsigned transaction/);
 console.log('destroy-watcher-mode smoke OK');

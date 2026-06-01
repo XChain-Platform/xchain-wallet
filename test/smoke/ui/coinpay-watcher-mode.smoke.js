@@ -25,5 +25,5 @@ assert.match(
     /encoderOpts: \{[\s\S]+?customOutputs: \[\{ address: summary\.payeeAddress, value: summary\.coinAmount \}\]/,
     'watcher-mode encoderOpts preserves the buyer-pays-seller customOutputs',
 );
-assert.match(formSrc, /Build unsigned PSBT/);
+assert.match(formSrc, /Create unsigned transaction/);
 console.log('coinpay-watcher-mode smoke OK');

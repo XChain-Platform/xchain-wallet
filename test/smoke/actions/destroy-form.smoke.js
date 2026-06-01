@@ -80,7 +80,7 @@ assert.ok(
 // --- 6. Danger variant on the sign button ------------------------------
 //
 // §20 Cluster X Step 7 — variant flips to 'primary' in watcher mode (the
-// "Build unsigned PSBT" CTA is not destructive — destruction happens at
+// "Create unsigned transaction" CTA is not destructive — destruction happens at
 // broadcast on a different wallet). Pin the conditional shape so a future
 // drop of the danger variant doesn't go unnoticed.
 

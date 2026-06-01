@@ -132,8 +132,8 @@ assert.match(
 );
 assert.match(
     sendSrc,
-    /Build unsigned PSBT/,
-    'submit button label changes to "Build unsigned PSBT" in watcher mode',
+    /Create unsigned transaction/,
+    'submit button label changes to "Create unsigned transaction" in watcher mode',
 );
 assert.match(
     sendSrc,

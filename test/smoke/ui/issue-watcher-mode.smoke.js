@@ -6,7 +6,7 @@
 //   - Shared <WatcherResultPanel> at the done stage when result.psbtHex
 //     is set and there's no txid
 //   - SignCredentials replaced by an explanatory hint at review stage
-//   - Submit button label flips to "Build unsigned PSBT"
+//   - Submit button label flips to "Create unsigned transaction"
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
@@ -88,8 +88,8 @@ assert.match(
 );
 assert.match(
     formSrc,
-    /Build unsigned PSBT/,
-    'submit button reads "Build unsigned PSBT" in watcher mode',
+    /Create unsigned transaction/,
+    'submit button reads "Create unsigned transaction" in watcher mode',
 );
 
 console.log('issue-watcher-mode smoke OK');
