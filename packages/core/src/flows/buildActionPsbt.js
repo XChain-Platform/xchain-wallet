@@ -22,6 +22,7 @@
 
 import { normalizeSource } from './sendToken.js';
 import { logConsole } from '../shared/utils/logConsole.js';
+import { applyNativeFeePreflight } from '../sdk/nativeFeePreflight.js';
 
 /**
  * @typedef {Object} BuildActionPsbtOpts
@@ -79,7 +80,16 @@ export async function buildActionPsbt(opts) {
 
     const createResult = sdk.actions.createAction(opts.actionData);
 
-    const encoderOpts = opts.encoderOpts || {};
+    // Native-coin fee pre-flight: size the FEE_DESTINATION output and refuse a doomed
+    // (unpriceable) native-fee tx. No-op unless encoderOpts.payFeeInNativeCoin is set.
+    const preflight = await applyNativeFeePreflight({
+        sdk,
+        actionData: opts.actionData,
+        encoderOpts: opts.encoderOpts || {},
+        source: source.address,
+    });
+    const encoderOpts = preflight.encoderOpts;
+
     logConsole.record({
         source: 'encoder',
         level: 'info',
@@ -104,5 +114,6 @@ export async function buildActionPsbt(opts) {
         version: createResult.version,
         chainId: opts.chainId,
         fromAddress: source.address,
+        nativeFeeQuote: preflight.quote,
     };
 }

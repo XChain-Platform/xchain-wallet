@@ -18,6 +18,7 @@
 // or skip the wait and poll separately.
 
 import { assertSigningAllowed } from '../flows/panicMode.js';
+import { applyNativeFeePreflight } from './nativeFeePreflight.js';
 
 /**
  * Thrown when a transaction was signed successfully but the broadcast
@@ -141,11 +142,24 @@ export async function submitWithSigner({
     onProgress('creating', { action: actionData.action });
     const createResult = sdk.actions.createAction(actionData);
 
+    // Step 1b — native-coin fee pre-flight. When the caller opted to pay the protocol fee in the
+    // native coin, this sizes the FEE_DESTINATION output and REFUSES (throws NativeFeeForfeitError)
+    // a transaction that can't be safely priced — a failed native-fee action forfeits the fee.
+    // No-op when payFeeInNativeCoin is not set.
+    const preflight = await applyNativeFeePreflight({
+        sdk,
+        actionData,
+        encoderOpts,
+        source: encoderOpts.change,
+        onProgress,
+    });
+    const effectiveEncoderOpts = preflight.encoderOpts;
+
     // Step 2 — encode to PSBT via the encoder service.
     onProgress('encoding', { actionString: createResult.actionString });
     const encoded = await encoder.createTx({
         data: createResult.actionString,
-        ...encoderOpts,
+        ...effectiveEncoderOpts,
     });
 
     // Step 3 — sign via the injected Signer.
@@ -182,12 +196,12 @@ export async function submitWithSigner({
     if (needsPhase2) {
         onProgress('p2sh_spending', { phase1Txid: signed.txid });
         const spendResult = await encoder.spendP2sh({
-            pubkey: encoderOpts.pubkey,
+            pubkey: effectiveEncoderOpts.pubkey,
             p2shHash: encoded.p2shHash ?? encoded.hash,
             p2shHex: signed.txHex,
-            change: encoderOpts.change,
-            fee: encoderOpts.fee,
-            feePerKb: encoderOpts.feePerKb,
+            change: effectiveEncoderOpts.change,
+            fee: effectiveEncoderOpts.fee,
+            feePerKb: effectiveEncoderOpts.feePerKb,
         });
         const phase2Signed = await signer.signPsbt({
             psbtHex: spendResult.psbt,
@@ -220,6 +234,7 @@ export async function submitWithSigner({
         encoding: encoded.encoding,
         signed: finalSigned,
         indexed: null,
+        nativeFeeQuote: preflight.quote,
     };
 
     // Step 5 — optional indexer confirmation.
