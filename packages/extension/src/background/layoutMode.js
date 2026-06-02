@@ -78,7 +78,7 @@ export async function applyLayoutMode(mode) {
     } catch (e) {
         // Surface in console without taking down the worker — bad mode
         // shouldn't break the popup flow, which is the safe default.
-        // eslint-disable-next-line no-console
+        // eslint-disable-next-line no-console -- background worker diagnostics: console is the only debug channel
         console.warn('[xchain-wallet/extension] applyLayoutMode failed:', e);
     }
 }
