@@ -39,7 +39,7 @@ export async function resolveSdkFactory({ devMockFactory }) {
     } catch (err) {
         if (!warned) {
             warned = true;
-            // eslint-disable-next-line no-console
+            // eslint-disable-next-line no-console -- intentional one-time diagnostic for dev-mock SDK fallback
             console.warn(
                 '[xchain-wallet/web] xchain-sdk unavailable — falling back to dev-mock SDK. '
                     + 'Signing + broadcast will fail. Reason: '
