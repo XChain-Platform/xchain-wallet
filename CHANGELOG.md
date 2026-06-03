@@ -35,6 +35,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Native-fee JSDoc typedef surface.** The native-coin fee feature added
+  three options/result fields that callers can pass and read at runtime but
+  that the typedefs did not advertise: `feeQuote` and `payFeeInNativeCoin`
+  on `SubmitEncoderOpts`, and `nativeFeeQuote` on both `SubmitResult` and
+  `BuildActionPsbtResult`. Documented all four so IDE/tooling consumers of
+  the package get correct autocomplete and type guidance. Documentation-only;
+  no runtime behaviour change.
 - **`SubmitEncoderOpts.rawData` JSDoc type.** The `rawData` property was
   annotated `{boolean}`, but it is a Latin-1-encoded binary string (the
   raw bytes the encoder consumes via `Buffer.from(rawData, 'binary')` for

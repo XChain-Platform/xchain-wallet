@@ -43,6 +43,7 @@ import { applyNativeFeePreflight } from '../sdk/nativeFeePreflight.js';
  * @property {number | string} [version] action version when known
  * @property {string} chainId            mirrored from input for downstream routing
  * @property {string} fromAddress        mirrored from input for downstream routing
+ * @property {{ address: string, amount: number }} [nativeFeeQuote]  native-coin fee quote used during pre-flight, if native-fee mode was active
  */
 
 /**

@@ -71,6 +71,8 @@ export class BroadcastFailedError extends Error {
  * @property {boolean} [unconfirmed]
  * @property {boolean} [compressedPubKey]
  * @property {unknown[]} [customOutputs]
+ * @property {{ address: string, amount: number }} [feeQuote]  protocol fee output to inject directly (address + amount in satoshis)
+ * @property {boolean} [payFeeInNativeCoin]  when true, native-coin fee pre-flight runs and the fee destination output is sized automatically
  */
 
 /**
@@ -99,6 +101,7 @@ export class BroadcastFailedError extends Error {
  * @property {string} encoding               chosen by the encoder
  * @property {{ signedPsbtHex: string, txHex: string, txid: string }} signed
  * @property {unknown} indexed               result from `waitForTxid` if supplied, else null
+ * @property {{ address: string, amount: number }} [nativeFeeQuote]  native-coin fee quote used during pre-flight, if native-fee mode was active
  */
 
 /**
