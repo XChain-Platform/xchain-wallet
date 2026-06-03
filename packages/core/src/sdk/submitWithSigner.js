@@ -197,7 +197,11 @@ export async function submitWithSigner({
         onProgress('p2sh_spending', { phase1Txid: signed.txid });
         const spendResult = await encoder.spendP2sh({
             pubkey: effectiveEncoderOpts.pubkey,
-            p2shHash: encoded.p2shHash ?? encoded.hash,
+            // Phase 2 spends the P2SH/P2WSH output created by phase 1. The encoder
+            // identifies that output from the phase-1 transaction itself, so p2shHash
+            // is the broadcast phase-1 txid (the create_tx response carries only
+            // { psbt, encoding } — there is no separate hash field).
+            p2shHash: signed.txid,
             p2shHex: signed.txHex,
             change: effectiveEncoderOpts.change,
             fee: effectiveEncoderOpts.fee,

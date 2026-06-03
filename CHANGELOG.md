@@ -33,6 +33,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   itself is the subject and the technical term is appropriate for the
   audience.
 
+### Fixed
+
+- **P2SH/P2WSH phase-2 spend on the online-signing path.** Large-payload
+  actions (DEPLOY, FILE, BATCH, multi-recipient airdrops, contract
+  executes, and any send/issue whose ACTION string exceeds 76 bytes) are
+  auto-encoded as two-phase P2SH/P2WSH transactions. On the
+  signer-driven submit path (`submitWithSigner`), the phase-2 spend call
+  passed `p2shHash` from a non-existent field on the encoder's `create_tx`
+  response (which carries only `{ psbt, encoding }`), so `p2shHash` was
+  always `undefined` and the encoder rejected the spend with
+  `MISSING_P2SH_HASH` after phase 1 had already been broadcast. It now
+  passes the broadcast phase-1 txid, matching the SDK lifecycle-manager
+  path, so phase 2 resolves its input correctly.
+
 ### Security
 
 - Force transitive dependency `tar` to `>=7.5.7` (resolves to 7.5.15)
