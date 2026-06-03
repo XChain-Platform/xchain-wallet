@@ -203,6 +203,15 @@ export async function submitWithSigner({
             // { psbt, encoding } — there is no separate hash field).
             p2shHash: signed.txid,
             p2shHex: signed.txHex,
+            // Phase 2 re-derives the P2SH/P2WSH reveal script chunks from the SAME
+            // action data + encoding used in phase 1. Omitting these makes the encoder
+            // default to empty data and auto-select OP_RETURN, producing reveal outputs
+            // that don't match the phase-1 script — the spend would be unspendable and
+            // lock funds in the script address. rawData is undefined-safe (the encoder
+            // client skips it when absent) and carries gated-FILE / ECIES MESSAGE v2 payloads.
+            data: createResult.actionString,
+            encoding: encoded.encoding,
+            rawData: effectiveEncoderOpts.rawData,
             change: effectiveEncoderOpts.change,
             fee: effectiveEncoderOpts.fee,
             feePerKb: effectiveEncoderOpts.feePerKb,

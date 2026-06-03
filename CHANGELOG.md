@@ -46,6 +46,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `MISSING_P2SH_HASH` after phase 1 had already been broadcast. It now
   passes the broadcast phase-1 txid, matching the SDK lifecycle-manager
   path, so phase 2 resolves its input correctly.
+- **P2SH/P2WSH phase-2 reveal-script derivation on the online-signing
+  path.** The same `submitWithSigner` phase-2 spend call also omitted the
+  `data`, `encoding`, and `rawData` fields the encoder needs to re-derive
+  the reveal-script chunks. Without them the encoder defaulted to empty
+  data and auto-selected OP_RETURN, so the phase-2 reveal outputs no
+  longer matched the script locked by phase 1 — the spend was
+  unspendable and the phase-1 funds were stranded in the P2SH/P2WSH
+  address until manual recovery. It now forwards the phase-1 action
+  string, chosen encoding, and binary payload (used by gated-FILE and
+  ECIES MESSAGE v2 actions), matching the SDK lifecycle-manager path so
+  the reveal scripts line up.
 
 ### Security
 
