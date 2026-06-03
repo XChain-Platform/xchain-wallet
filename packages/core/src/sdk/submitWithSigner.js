@@ -62,7 +62,7 @@ export class BroadcastFailedError extends Error {
  * @property {string} pubkey                 hex; caller-supplied — we do NOT derive from the signer
  * @property {string} [change]               change address
  * @property {unknown[]} [utxos]             hand-selected utxos (otherwise encoder selects)
- * @property {boolean} [rawData]
+ * @property {string} [rawData]            binary string (Latin-1) — gated-FILE ciphertext, ECIES envelopes
  * @property {string} [encoding]             'OP_RETURN' | 'P2SH' | 'P2WSH' | ... (encoder chooses if omitted)
  * @property {number} [fee]                  absolute fee in sats
  * @property {number} [feePerKb]

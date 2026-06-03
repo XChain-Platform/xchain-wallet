@@ -35,6 +35,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`SubmitEncoderOpts.rawData` JSDoc type.** The `rawData` property was
+  annotated `{boolean}`, but it is a Latin-1-encoded binary string (the
+  raw bytes the encoder consumes via `Buffer.from(rawData, 'binary')` for
+  gated-FILE ciphertext and ECIES envelopes). Corrected the type hint to
+  `{string}` so callers no longer mistake it for a flag.
 - **P2SH/P2WSH phase-2 spend on the online-signing path.** Large-payload
   actions (DEPLOY, FILE, BATCH, multi-recipient airdrops, contract
   executes, and any send/issue whose ACTION string exceeds 76 bytes) are
