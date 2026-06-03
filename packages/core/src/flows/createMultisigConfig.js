@@ -59,6 +59,19 @@ export async function createMultisigConfig(opts) {
     if (opts.threshold > opts.cosigners.length) {
         throw new Error('createMultisigConfig: threshold must be ≤ cosigners.length');
     }
+    // MuSig2 is n-of-n by construction: the single aggregated Schnorr signature
+    // requires a nonce + partial sig from EVERY cosigner whose key is in the
+    // key-agg context. A "T-of-N" taproot-musig2 with T<N derives an N-key
+    // address but can never be signed by fewer than N — the funds would be
+    // permanently unspendable. Real T-of-N belongs on p2wsh-multisig
+    // (OP_CHECKMULTISIG). Reject early with an actionable error.
+    if (opts.scheme === 'taproot-musig2' && opts.threshold !== opts.cosigners.length) {
+        throw new Error(
+            `createMultisigConfig: taproot-musig2 is n-of-n only — threshold (${opts.threshold}) ` +
+            `must equal cosigners.length (${opts.cosigners.length}). ` +
+            `For a true ${opts.threshold}-of-${opts.cosigners.length} policy use scheme "p2wsh-multisig".`,
+        );
+    }
 
     // Cosigner shape sanity — surface clear errors before we hit the
     // schema validator with a half-formed record.

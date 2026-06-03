@@ -86,6 +86,14 @@ export function validateMultisigConfig(record) {
         if (typeof r.threshold === 'number' && r.threshold > r.cosigners.length) {
             errors.push('threshold: must be ≤ cosigners.length');
         }
+        // MuSig2 is n-of-n: a T<N taproot-musig2 config derives an N-key
+        // aggregate address that can never be signed by fewer than N cosigners,
+        // so the funds would be permanently unspendable. Reject it.
+        if (r.scheme === 'taproot-musig2'
+            && typeof r.threshold === 'number'
+            && r.threshold !== r.cosigners.length) {
+            errors.push('threshold: taproot-musig2 is n-of-n — threshold must equal cosigners.length');
+        }
         const seenPubkeys = new Set();
         for (const c of r.cosigners) {
             if (c && typeof c.pubkey === 'string') {
@@ -143,6 +151,14 @@ export function buildMultisigConfig(input) {
     }
     if (input.threshold > input.cosigners.length) {
         throw new Error('buildMultisigConfig: threshold must be ≤ cosigners.length');
+    }
+    // MuSig2 is n-of-n by construction; a T<N taproot-musig2 address is
+    // unspendable. Real T-of-N policies must use p2wsh-multisig.
+    if (input.scheme === 'taproot-musig2' && input.threshold !== input.cosigners.length) {
+        throw new Error(
+            'buildMultisigConfig: taproot-musig2 is n-of-n only — threshold must equal cosigners.length '
+            + '(use scheme "p2wsh-multisig" for a true T-of-N policy)',
+        );
     }
 
     const addedAt = new Date().toISOString();

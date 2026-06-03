@@ -166,6 +166,12 @@ export function MultisigCreate({ walletId, onBack }) {
         const t = Number(threshold);
         if (!Number.isInteger(t) || t <= 0) return 'Threshold must be a positive integer.';
         if (t > rows.length) return 'Threshold must be ≤ cosigner count.';
+        // MuSig2 is n-of-n: a T<N Taproot-MuSig2 address can never be signed by
+        // fewer than N cosigners, so the funds would be permanently locked.
+        // Steer the user to P2WSH for a genuine T-of-N policy.
+        if (scheme === 'taproot-musig2' && t !== rows.length) {
+            return `Taproot-MuSig2 requires all ${rows.length} cosigners to sign (set threshold to ${rows.length}). For a ${t}-of-${rows.length} policy, choose P2WSH instead.`;
+        }
         for (let i = 0; i < rows.length; i += 1) {
             const r = rows[i];
             const tag = `Cosigner ${i + 1}`;
@@ -182,7 +188,7 @@ export function MultisigCreate({ walletId, onBack }) {
             seen.add(key);
         }
         return null;
-    }, [rows, threshold]);
+    }, [rows, threshold, scheme]);
 
     async function handleSubmit() {
         if (composeError) return;

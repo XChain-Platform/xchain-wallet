@@ -97,6 +97,30 @@ const cfgMusig2 = buildMultisigConfig({
 assert.ok(cfgMusig2.scriptTemplate.startsWith('musig2:'),
     'taproot-musig2 scriptTemplate is "musig2:<aggXOnly>"');
 
+// taproot-musig2 is n-of-n — a T<N config derives an N-key aggregate address
+// that can never be signed by fewer than N cosigners, so the funds are
+// permanently unspendable (proven on regtest). buildMultisigConfig must reject
+// it; true T-of-N belongs on p2wsh-multisig.
+const cosignerC = {
+    name: 'Carol',
+    pubkey: '02'.padEnd(66, 'c'),
+    fingerprint: '55667788',
+    origin: 'external-xpub',
+    localSignerId: null,
+    xpub: 'xpub6CUGRUonZSQ4F5678',
+    derivationPath: "m/48'/0'/0'/2'/0/0",
+};
+assert.throws(
+    () => buildMultisigConfig({
+        scheme: 'taproot-musig2',
+        threshold: 2,
+        cosigners: [cosignerA, cosignerB, cosignerC],
+        aggregatedXOnlyPubkey: 'cd'.padEnd(64, 'c'),
+    }),
+    /n-of-n/,
+    'taproot-musig2 with threshold < cosigners.length throws (unspendable-address guard)',
+);
+
 // Threshold > N rejected.
 assert.throws(
     () => buildMultisigConfig({
