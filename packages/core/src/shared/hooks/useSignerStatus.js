@@ -44,6 +44,13 @@ export function useSignerStatus({ getStatus, chainId }) {
     const [detail, setDetail] = useState(/** @type {string | null} */ (null));
     const aliveRef = useRef(true);
     const timerRef = useRef(/** @type {any} */ (null));
+    // Mirror the latest status into a ref so the long-lived polling
+    // loop below reads the *current* value when picking its cadence.
+    // The loop's effect intentionally does not re-run on status changes
+    // (doing so would tear down and immediately re-fire the poll), so a
+    // plain closure over `status` would go stale at the mount value.
+    const statusRef = useRef(status);
+    statusRef.current = status;
 
     const doPoll = useCallback(async () => {
         if (!getStatus || !aliveRef.current) return;
@@ -77,7 +84,7 @@ export function useSignerStatus({ getStatus, chainId }) {
         doPoll();
         const scheduleNext = () => {
             if (!aliveRef.current) return;
-            const interval = status === 'available'
+            const interval = statusRef.current === 'available'
                 ? STEADY_INTERVAL_MS
                 : FAST_INTERVAL_MS;
             timerRef.current = setTimeout(async () => {
@@ -94,7 +101,6 @@ export function useSignerStatus({ getStatus, chainId }) {
                 timerRef.current = null;
             }
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [doPoll, getStatus]);
 
     return { status, detail, refresh };

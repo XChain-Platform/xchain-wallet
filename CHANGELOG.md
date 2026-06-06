@@ -35,6 +35,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Hardware-signer status poll never slowed to steady state.** The
+  `useSignerStatus` hook reads the current status to choose its polling
+  cadence (fast at 2s while connecting, slow at 10s once the device
+  reports `available`). The status was captured in a stale closure inside
+  the long-lived `setTimeout` loop, so after the device became available
+  the loop kept reading the mount-time `idle` value and stayed on the
+  fast 2s cadence indefinitely — extra device chatter and wasted polls.
+  The hook now mirrors the latest status through a ref the loop reads, so
+  it correctly switches to the 10s steady-state interval. Public API
+  (`{ status, detail, refresh }`) is unchanged.
 - **Native-fee JSDoc typedef surface.** The native-coin fee feature added
   three options/result fields that callers can pass and read at runtime but
   that the typedefs did not advertise: `feeQuote` and `payFeeInNativeCoin`
