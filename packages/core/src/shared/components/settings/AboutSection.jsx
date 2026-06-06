@@ -1,3 +1,13 @@
+// Copyright © 2025–2026 Dankest, LLC
+// Based on XChain Platform by Dankest, LLC – https://dankest.llc
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// This file is part of XChain Platform. Licensed under the GNU Affero
+// General Public License v3.0 or later; see LICENSE.md. A commercial
+// license (without AGPL source-disclosure terms) is available —
+// contact legal@dankest.llc.
+
 // AboutSection — §35.1 "About" + §51.3 release info. Read-only.
 // Surfaces wallet version, update channel, license, reproducible-build
 // link, release-signatures link, and the SECURITY.md disclosure link.
@@ -20,7 +30,7 @@ import {
     UPDATE_CHANNEL,
     WALLET_VERSION,
 } from '../../../buildInfo.js';
-import { LICENSE_TEXT } from '../../../license.js';
+import { LICENSE_TEXT, LICENSE_SUMMARY } from '../../../license.js';
 
 const ROW = {
     display: 'flex',
@@ -124,6 +134,20 @@ export function AboutSection() {
                     </Button>
                 </div>
             </Row>
+            {/* Plain-language summary shown by default for the wallet's
+                non-technical audience; the full AGPL text is one tap away
+                via the "Show full text" toggle above. */}
+            <p
+                style={{
+                    margin: 'var(--xc-space-1) 0 0',
+                    fontSize: 'var(--xc-text-xs)',
+                    color: 'var(--xc-text-muted, var(--xc-text))',
+                    whiteSpace: 'pre-line',
+                    lineHeight: 1.5,
+                }}
+            >
+                {LICENSE_SUMMARY}
+            </p>
             {licenseOpen ? (
                 <pre
                     id="full-license-text"

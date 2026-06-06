@@ -1,3 +1,13 @@
+// Copyright © 2025–2026 Dankest, LLC
+// Based on XChain Platform by Dankest, LLC – https://dankest.llc
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// This file is part of XChain Platform. Licensed under the GNU Affero
+// General Public License v3.0 or later; see LICENSE.md. A commercial
+// license (without AGPL source-disclosure terms) is available —
+// contact legal@dankest.llc.
+
 // Smoke for Phase 2 — Step 22b (piece 7b part 2) — DispenserExplorer
 // (§40.7.2 browse surface) + DispenserDetail buyer surface extensions.
 //

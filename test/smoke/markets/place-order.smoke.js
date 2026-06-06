@@ -1,3 +1,13 @@
+// Copyright © 2025–2026 Dankest, LLC
+// Based on XChain Platform by Dankest, LLC – https://dankest.llc
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// This file is part of XChain Platform. Licensed under the GNU Affero
+// General Public License v3.0 or later; see LICENSE.md. A commercial
+// license (without AGPL source-disclosure terms) is available —
+// contact legal@dankest.llc.
+
 // Phase 3 Step 6 smoke — Place Order form (§41.3.4) + ORDER action
 // flow + CANCEL helper (§41.3.5 prereq) + 3-shell messaging wiring +
 // HW branch wired through the shared SignCredentials path.

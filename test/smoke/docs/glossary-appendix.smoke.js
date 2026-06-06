@@ -1,3 +1,13 @@
+// Copyright © 2025–2026 Dankest, LLC
+// Based on XChain Platform by Dankest, LLC – https://dankest.llc
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// This file is part of XChain Platform. Licensed under the GNU Affero
+// General Public License v3.0 or later; see LICENSE.md. A commercial
+// license (without AGPL source-disclosure terms) is available —
+// contact legal@dankest.llc.
+
 // Smoke for §55 / Cluster T FOLLOWUP 3 — Glossary auto-appendix.
 // Pins the generator's existence + the in-sync state of docs/GLOSSARY.md
 // against canonical sources, so a maintainer who renames a BridgeErrorCode

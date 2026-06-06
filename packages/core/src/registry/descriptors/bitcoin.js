@@ -1,3 +1,13 @@
+// Copyright © 2025–2026 Dankest, LLC
+// Based on XChain Platform by Dankest, LLC – https://dankest.llc
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// This file is part of XChain Platform. Licensed under the GNU Affero
+// General Public License v3.0 or later; see LICENSE.md. A commercial
+// license (without AGPL source-disclosure terms) is available —
+// contact legal@dankest.llc.
+
 // Bitcoin chain descriptors — mainnet, testnet, regtest.
 // Derivation paths per §16.1. Address types p2pkh / p2sh-p2wpkh /
 // p2wpkh / p2tr; p2wpkh is the default. URLs are placeholders per §5.5

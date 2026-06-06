@@ -927,7 +927,7 @@ Closes Cluster J FOLLOWUP 1.
 
 ## [0.309.0] - 2026-04-29
 
-§25.2 / Cluster J FOLLOWUP 5 — full LICENSE.md text rendered inline in Settings → About. The panel previously linked to a repo path; users had to navigate to GitHub to read what they'd agreed to. v0.309.0 ships the full Dankest Community License text directly in the panel via a Show full text / Hide full text toggle.
+§25.2 / Cluster J FOLLOWUP 5 — full LICENSE.md text rendered inline in Settings → About. The panel previously linked to a repo path; users had to navigate to GitHub to read what they'd agreed to. v0.309.0 ships the full GNU Affero General Public License v3.0 (AGPL-3.0) text directly in the panel via a Show full text / Hide full text toggle.
 
 `packages/core/src/license.js` (new) exports `LICENSE_TEXT` — a `const` template literal carrying the canonical license body. The new licence-full-text smoke pins byte-for-byte equality with `LICENSE.md` (modulo trailing whitespace) so future edits to the canonical file flag a sync drift instead of silently desyncing.
 

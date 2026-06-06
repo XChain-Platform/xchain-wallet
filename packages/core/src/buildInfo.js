@@ -1,3 +1,13 @@
+// Copyright © 2025–2026 Dankest, LLC
+// Based on XChain Platform by Dankest, LLC – https://dankest.llc
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// This file is part of XChain Platform. Licensed under the GNU Affero
+// General Public License v3.0 or later; see LICENSE.md. A commercial
+// license (without AGPL source-disclosure terms) is available —
+// contact legal@dankest.llc.
+
 // Build-time wallet metadata used by user-facing surfaces (About panel,
 // diagnostic dump, threat-model link).
 //
@@ -8,16 +18,16 @@
 export const WALLET_VERSION = '0.333.0';
 
 // License identifiers matching repo metadata.
-export const LICENSE_NAME = 'Dankest Community License (Apache-2.0 + Additional Terms)';
+export const LICENSE_NAME = 'GNU Affero General Public License v3.0 (AGPL-3.0)';
 export const LICENSE_FILE = 'LICENSE.md';
 export const NOTICE_FILE = 'NOTICE.md';
 // Bump whenever the binding terms in LICENSE.md materially change. The
 // onboarding gate compares the user's persisted acceptance against this
 // constant and forces re-acceptance on mismatch (Cluster J FOLLOWUP 4).
-// Initial public value is '1' — pre-launch releases didn't track an
-// explicit version so any prior acceptance is treated as compatible
-// only with version '1'.
-export const LICENSE_VERSION = '1';
+// '1' was the pre-launch Dankest Community License. '2' marks the relicense
+// to the GNU Affero General Public License v3.0 (AGPL-3.0) — a material
+// change to the binding terms, so every prior acceptance must be re-collected.
+export const LICENSE_VERSION = '2';
 
 // Disclosure / security artifact paths. SECURITY.md ships at the repo
 // root and documents the private vulnerability disclosure path

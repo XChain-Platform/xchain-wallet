@@ -1,3 +1,13 @@
+// Copyright © 2025–2026 Dankest, LLC
+// Based on XChain Platform by Dankest, LLC – https://dankest.llc
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// This file is part of XChain Platform. Licensed under the GNU Affero
+// General Public License v3.0 or later; see LICENSE.md. A commercial
+// license (without AGPL source-disclosure terms) is available —
+// contact legal@dankest.llc.
+
 // Cluster P FOLLOWUP 3 — InfoTip placement-aware overflow. v0.210.0
 // shipped a center-anchored bubble (`inset-inline-start: 50%;
 // transform: translateX(-50%)`); in narrow contexts (extension popup

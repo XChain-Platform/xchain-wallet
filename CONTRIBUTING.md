@@ -12,7 +12,7 @@ If you're reporting a security issue, **stop here** and read `SECURITY.md` inste
 - Threat model: `docs/Threat_Model.md` (assets, in-scope vs out-of-scope, attacker scenarios)
 - Disclosure policy: `SECURITY.md` (private vulnerability reporting)
 - Code of Conduct: `CODE_OF_CONDUCT.md`
-- License: `LICENSE.md` + `NOTICE.md` (Dankest Community License)
+- License: `LICENSE.md` + `NOTICE.md` (GNU Affero General Public License v3.0 (AGPL-3.0))
 
 ---
 

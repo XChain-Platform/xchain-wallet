@@ -1,3 +1,13 @@
+// Copyright © 2025–2026 Dankest, LLC
+// Based on XChain Platform by Dankest, LLC – https://dankest.llc
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// This file is part of XChain Platform. Licensed under the GNU Affero
+// General Public License v3.0 or later; see LICENSE.md. A commercial
+// license (without AGPL source-disclosure terms) is available —
+// contact legal@dankest.llc.
+
 // contractStakeAction — STAKE v3 / UNSTAKE v1 / DELEGATE v1 composer for the
 // "Stake on a Contract" form. Mirrors stakeAction.js (capability staking v1/v2)
 // but routes to the contract-targeted protocol surface: any token, per-contract

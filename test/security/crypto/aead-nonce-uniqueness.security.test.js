@@ -1,3 +1,13 @@
+// Copyright © 2025–2026 Dankest, LLC
+// Based on XChain Platform by Dankest, LLC – https://dankest.llc
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// This file is part of XChain Platform. Licensed under the GNU Affero
+// General Public License v3.0 or later; see LICENSE.md. A commercial
+// license (without AGPL source-disclosure terms) is available —
+// contact legal@dankest.llc.
+
 // Security: AEAD nonce/IV uniqueness across many encrypt() calls with
 // the same key. Birthday-bound is 2^48 for 12-byte nonces; we sample
 // 10K and assert no collisions, which is overkill for unit-test scale

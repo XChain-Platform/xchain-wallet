@@ -1,3 +1,13 @@
+// Copyright © 2025–2026 Dankest, LLC
+// Based on XChain Platform by Dankest, LLC – https://dankest.llc
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// This file is part of XChain Platform. Licensed under the GNU Affero
+// General Public License v3.0 or later; see LICENSE.md. A commercial
+// license (without AGPL source-disclosure terms) is available —
+// contact legal@dankest.llc.
+
 // WatcherResultPanel — §20 / G040 + Cluster W FOLLOWUP 4 + Cluster X
 // Step 3. Renders the unsigned PSBT hex + animated QR (XCW or BBQr)
 // for cross-device transport when a watcher-mode wallet builds a PSBT.
