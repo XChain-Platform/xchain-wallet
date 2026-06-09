@@ -15,6 +15,10 @@
 import { describe, it, expect } from 'vitest';
 import {
     deriveMasterKey,
+    makeFreshKdfParams,
+    calibrateKdfParams,
+    bytesToBase64,
+    base64ToBytes,
     KDF_KEY_LENGTH,
     KDF_MIN_MEMORY_KIB,
     KDF_MIN_ITERATIONS,
@@ -64,6 +68,79 @@ describe('crypto/kdf', () => {
         it('rejects a salt shorter than the floor (< 8 bytes)', () => {
             const tiny = { ...PARAMS, salt: 'AA==' }; // 1 byte base64
             expect(() => deriveMasterKey('p', tiny)).toThrow();
+        });
+    });
+
+    describe('makeFreshKdfParams', () => {
+        it('returns floor params with a 16-byte random salt by default', () => {
+            const p = makeFreshKdfParams();
+            expect(p.algorithm).toBe('argon2id');
+            expect(p.iterations).toBe(KDF_MIN_ITERATIONS);
+            expect(p.memory).toBe(KDF_MIN_MEMORY_KIB);
+            expect(p.parallelism).toBe(KDF_DEFAULT_PARALLELISM);
+            expect(base64ToBytes(p.salt).length).toBe(16);
+        });
+
+        it('produces a fresh random salt on each call', () => {
+            expect(makeFreshKdfParams().salt).not.toBe(makeFreshKdfParams().salt);
+        });
+
+        it('honours iterations / memory / parallelism overrides', () => {
+            const p = makeFreshKdfParams({ iterations: 9, memory: 131072, parallelism: 4 });
+            expect(p.iterations).toBe(9);
+            expect(p.memory).toBe(131072);
+            expect(p.parallelism).toBe(4);
+        });
+
+        it('the fresh params are accepted by deriveMasterKey', () => {
+            const p = makeFreshKdfParams();
+            const key = deriveMasterKey('pw', p);
+            expect(key.length).toBe(KDF_KEY_LENGTH);
+        });
+    });
+
+    describe('calibrateKdfParams', () => {
+        // Use tiny memory + targetMs:0 so the very first probe satisfies the
+        // target and the loop breaks after a single (cheap) argon2id call.
+        const FAST = { targetMs: 0, memory: 8, minIterations: KDF_MIN_ITERATIONS };
+
+        it('returns argon2id params at the minimum iterations when the target is trivially met', () => {
+            const p = calibrateKdfParams(FAST);
+            expect(p.algorithm).toBe('argon2id');
+            expect(p.iterations).toBe(KDF_MIN_ITERATIONS);
+            expect(p.memory).toBe(8);
+            expect(p.parallelism).toBe(KDF_DEFAULT_PARALLELISM);
+            expect(base64ToBytes(p.salt).length).toBe(16);
+        });
+
+        it('defaults parallelism and minIterations when not supplied', () => {
+            const p = calibrateKdfParams({ targetMs: 0, memory: 8 });
+            expect(p.parallelism).toBe(KDF_DEFAULT_PARALLELISM);
+            expect(p.iterations).toBe(KDF_MIN_ITERATIONS);
+        });
+
+        it('caps iterations when the target is never reached', () => {
+            // targetMs huge + tiny memory → never hits target → the loop exhausts.
+            // NOTE: the loop returns `iterations` AFTER the post-increment that
+            // fails the `<= maxIterations` guard, so the capped value is
+            // maxIterations + 1 (here 3, not 2). This characterizes the current
+            // off-by-one; tighten to `maxIterations` if the loop is fixed.
+            const p = calibrateKdfParams({
+                targetMs: 1e9, memory: 8, minIterations: 1, maxIterations: 2,
+            });
+            expect(p.iterations).toBe(3);
+        });
+    });
+
+    describe('base64 helpers', () => {
+        it('round-trips arbitrary bytes through bytesToBase64 → base64ToBytes', () => {
+            const bytes = new Uint8Array([0, 1, 2, 127, 128, 200, 255]);
+            const round = base64ToBytes(bytesToBase64(bytes));
+            expect(Array.from(round)).toEqual(Array.from(bytes));
+        });
+
+        it('encodes empty input to an empty string', () => {
+            expect(bytesToBase64(new Uint8Array(0))).toBe('');
         });
     });
 });
