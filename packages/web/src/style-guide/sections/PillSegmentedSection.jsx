@@ -51,7 +51,7 @@ export function PillSegmentedSection() {
                 sizing={<>Pill: <code>padding: 2px</code>, 2px gap between segments. Segment: <code>padding: var(--xc-space-1) var(--xc-space-3)</code>, font-size <code>--xc-text-sm</code>, weight 600. Use <code>flex-shrink: 0</code> on the pill when it shares a row with a search input — keeps the segments at their natural width and lets the search flex.</>}
                 doRule={<>✓ Keep labels to one word ("All", "Coins", "Tokens") or short two-word phrases · order options by frequency-of-use (left to right) · animate via CSS transition on background-color + color (160ms) so the active state slide reads cleanly</>}
                 dontRule={<>✗ Use this for page-level tabs (different look — keep it scoped to inline switches) · expand to 5+ segments (the pill stops scanning as one unit) · skip the accent-primary active state for a subtle inverse</>}
-                supersedes={<>The inline kind-filter on Receive (<code>.kindSegments</code> in ReceivePicker.module.css) and the Media sub-tab strip on TokenDetail. Lift to <code>&lt;PillSegmented&gt;</code> in <code>@xchain-wallet/core/ui</code> when a third caller appears.</>}
+                supersedes={<>The inline kind-filter on the Send/Receive picker (<code>.kindSegments</code> in TokenPicker.module.css) and the Media sub-tab strip on TokenDetail. Lift to <code>&lt;PillSegmented&gt;</code> in <code>@xchain-wallet/core/ui</code> when a third caller appears.</>}
             />
 
             <Markup>

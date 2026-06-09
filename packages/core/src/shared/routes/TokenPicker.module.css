@@ -4,22 +4,41 @@
     font-size: var(--xc-text-sm);
 }
 
+/* Full-variant wrapper (desktop / wide web): a centered card around the
+   whole picker body. The small/popup variant renders the body directly. */
+.card {
+    max-width: 560px;
+    margin: var(--xc-space-6) auto 0;
+    padding: var(--xc-space-6);
+    background: var(--xc-surface-raised);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-lg);
+    box-shadow: var(--xc-shadow-md);
+}
+
+/* Inline filter toolbar: free-text search + the All/Coins/Tokens segments,
+   docked directly above the balance card. The toolbar and the balance card
+   are siblings in the same padded container, so they share the same width;
+   the search field shrinks (min-width:0) to keep search + segments on one
+   line within that shared right edge, even in the Chrome popup. */
 .toolbar {
     display: flex;
     flex-direction: row;
     align-items: center;
     gap: var(--xc-space-2);
+    width: 100%;
     margin-bottom: var(--xc-space-3);
+    flex-wrap: nowrap;
 }
 
 .kindSegments {
     display: flex;
+    flex: 0 0 auto;
     background: var(--xc-bg-muted);
     border: 1px solid var(--xc-border-strong);
     border-radius: 999px;
     padding: 2px;
     gap: 2px;
-    flex-shrink: 0;
 }
 
 .kindSegment {
@@ -48,8 +67,10 @@
 }
 
 .search {
-    flex: 1 1 200px;
-    min-width: 160px;
+    flex: 1 1 160px;
+    /* min-width:0 lets the search field shrink so the search + segments row
+       never overflows (global box-sizing:border-box keeps padding inside). */
+    min-width: 0;
     padding: var(--xc-space-2) var(--xc-space-3);
     font-family: var(--xc-font-sans);
     font-size: var(--xc-text-sm);
@@ -61,6 +82,15 @@
 
 .search::placeholder {
     color: var(--xc-text-muted);
+}
+
+/* Narrow shells (Chrome popup, slim mobile web): tighten the segment padding
+   so the search box keeps usable width while search + segments stay on one
+   line. The search field (min-width:0) absorbs the rest. */
+@media (max-width: 480px) {
+    .kindSegment {
+        padding: var(--xc-space-1) var(--xc-space-2);
+    }
 }
 
 .platformSection {
