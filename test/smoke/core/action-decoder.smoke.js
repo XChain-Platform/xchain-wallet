@@ -50,7 +50,7 @@ const chainRegistry = registryLib.defaultRegistry();
     assert.deepEqual(
         d.details,
         [
-            { label: 'Asset', value: 'MYTOKEN' },
+            { label: 'Token', value: 'MYTOKEN' },
             { label: 'Amount', value: '100' },
             { label: 'Destination', value: 'bc1qxyz' },
         ],
@@ -89,7 +89,7 @@ const chainRegistry = registryLib.defaultRegistry();
     assert.ok(d.warnings.some((w) => /destination is empty/i.test(w)), 'empty dest flagged');
 }
 
-// 1d. SWEEP always warns about moving every balance.
+// 1d. SWEEP summarises the swept categories and warns about the move.
 {
     const d = decoderLib.decodeAction({
         action: 'SWEEP',
@@ -97,10 +97,11 @@ const chainRegistry = registryLib.defaultRegistry();
         chainId: 'dogecoin-mainnet',
         chainRegistry,
     });
-    assert.equal(d.summary, 'Sweep all tokens on Dogecoin to bc1qrecip');
+    // No flags given → BALANCES/OWNERSHIPS default on, escrow flags off.
+    assert.equal(d.summary, 'Sweep balances, ownerships on Dogecoin to bc1qrecip');
     assert.ok(
-        d.warnings.some((w) => /sweep moves every balance/i.test(w)),
-        'SWEEP has the blanket-balance warning',
+        d.warnings.some((w) => /sweep moves the selected/i.test(w)),
+        'SWEEP has the selective-sweep warning',
     );
 }
 

@@ -14,7 +14,7 @@ import {
     ScreenHeader,
     Icon,
 } from '@xchain-wallet/core/ui';
-import { registry as registryLib, branding as brandingLib } from '@xchain-wallet/core';
+import { registry as registryLib, branding as brandingLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { DispenserBadge } from '../components/DispenserBadge.jsx';
 import { EmptyStateNudge } from '../components/EmptyStateNudge.jsx';
@@ -22,7 +22,7 @@ import { tickerColor } from '../components/BalanceList.jsx';
 import { TickerIcon } from '../components/TickerIcon.jsx';
 import styles from './IssueTokenForm.module.css';
 import receiveStyles from './Receive.module.css';
-import receivePickerStyles from './ReceivePicker.module.css';
+import receivePickerStyles from './TokenPicker.module.css';
 import marketsStyles from './MarketsList.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -96,12 +96,11 @@ export function MarketsList({
                 .map(normalizeMarket)
                 .filter(Boolean)
                 .filter((m) => m.tick1.toUpperCase() === tick || m.tick2.toUpperCase() === tick);
-            // TEMP: until real market feeds exist on every chain, fall back
-            // to a fixed sample list so designers can see the populated UI.
-            // Remove once getMarkets returns real data here.
-            if (filtered.length === 0) {
-                const samples = SAMPLE_MARKETS[tick] || [];
-                setMarkets(samples);
+            // Demo wallets fall back to a fixed sample list so the
+            // populated UI is visible without live liquidity. Real wallets
+            // show the live market set and the "No markets" empty state.
+            if (filtered.length === 0 && flowsLib.isDemoWallet(walletId)) {
+                setMarkets(SAMPLE_MARKETS[tick] || []);
             } else {
                 setMarkets(filtered);
             }
@@ -113,7 +112,7 @@ export function MarketsList({
                 if (!cancelled) setLoading(false);
             });
         return () => { cancelled = true; };
-    }, [selectedAsset, messaging]);
+    }, [selectedAsset, messaging, walletId]);
 
     const watchlistKeySet = useMemo(() => {
         const s = new Set();

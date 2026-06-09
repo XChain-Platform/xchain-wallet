@@ -9,13 +9,15 @@
 // contact legal@dankest.llc.
 
 // sweepToken — convenience wrapper for the SWEEP action (xchain-
-// documentation/protocol/actions/SWEEP.md). Transfers all TICK
-// balances, ownerships, and/or escrows from the source address to a
-// destination. Protocol defaults per the docs: balances=1, ownerships=1,
-// escrows=0 — we mirror those in JavaScript booleans.
+// documentation/protocol/actions/SWEEP.md). Sweeps token balances and/or
+// ownerships from the source address to a destination, and optionally
+// closes open ORDERs / SWAPs / DISPENSERs and routes their escrowed
+// balance/ownership to the destination. Protocol defaults per the docs:
+// balances=1, ownerships=1, orders=0, swaps=0, dispensers=0 — we mirror
+// those in JavaScript booleans.
 //
-// Only protocol format v0 is supported; if multi-parameter sweeps land
-// in a future version, callers can drop to submitAction directly.
+// Only protocol format v0 is supported; callers needing finer control
+// can drop to submitAction directly.
 
 import { submitAction } from './submitAction.js';
 import { normalizeSource } from './sendToken.js';
@@ -31,9 +33,11 @@ import { normalizeSource } from './sendToken.js';
  * @property {string} chainId
  * @property {import('./sendToken.js').SourceRef | import('../schemas/address.js').Address} from
  * @property {string} to                                DESTINATION
- * @property {boolean} [balances]                       default true
- * @property {boolean} [ownerships]                     default true
- * @property {boolean} [escrows]                        default false
+ * @property {boolean} [balances]                       default true — sweep TICK balances
+ * @property {boolean} [ownerships]                      default true — sweep TICK ownerships
+ * @property {boolean} [orders]                          default false — cancel open ORDERs, route escrow to destination
+ * @property {boolean} [swaps]                           default false — cancel open SWAPs, route escrow to destination
+ * @property {boolean} [dispensers]                      default false — close open DISPENSERs, route escrow to destination
  * @property {string} [memo]
  * @property {number} [fee]
  * @property {number} [feePerKb]
@@ -54,28 +58,36 @@ export async function sweepToken(opts) {
 
     const balances = opts.balances ?? true;
     const ownerships = opts.ownerships ?? true;
-    const escrows = opts.escrows ?? false;
-    if (!balances && !ownerships && !escrows) {
+    const orders = opts.orders ?? false;
+    const swaps = opts.swaps ?? false;
+    const dispensers = opts.dispensers ?? false;
+    if (!balances && !ownerships && !orders && !swaps && !dispensers) {
         throw new Error(
-            'sweepToken: at least one of balances / ownerships / escrows must be true — SWEEP with all three disabled is a no-op',
+            'sweepToken: at least one of balances / ownerships / orders / swaps / dispensers must be true — SWEEP with every flag disabled is a no-op',
         );
     }
 
     // Protocol encodes booleans as '1'/'0' strings in the action string;
-    // the SDK validator/formatter takes these as strings directly.
+    // the SDK validator/formatter takes these as strings directly. Field
+    // order follows SWEEP v0:
+    // DESTINATION|BALANCES|OWNERSHIPS|ORDERS|SWAPS|DISPENSERS|MEMO.
     /** @type {Record<string, string>} */
     const params = {
         DESTINATION: opts.to,
         BALANCES: balances ? '1' : '0',
         OWNERSHIPS: ownerships ? '1' : '0',
-        ESCROWS: escrows ? '1' : '0',
+        ORDERS: orders ? '1' : '0',
+        SWAPS: swaps ? '1' : '0',
+        DISPENSERS: dispensers ? '1' : '0',
     };
     if (opts.memo !== undefined) params.MEMO = opts.memo;
 
     const flags = [];
     if (balances) flags.push('balances');
     if (ownerships) flags.push('ownerships');
-    if (escrows) flags.push('escrows');
+    if (orders) flags.push('orders');
+    if (swaps) flags.push('swaps');
+    if (dispensers) flags.push('dispensers');
     const memoTail = opts.memo ? ` — "${opts.memo}"` : '';
     const pendingTxMeta = opts.trackPendingTx === false ? undefined : {
         fromAddress: source.address,

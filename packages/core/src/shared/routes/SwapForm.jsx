@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Screen,
+    ScreenHeader,
     Button,
     Input,
     ChainBadge,
@@ -50,14 +51,23 @@ const PROTOCOL_COIN_TICKER = {
  * what DISPENSER is for. The form rejects inputs where GIVE_TICK or
  * GET_TICK match the chain's native ticker.
  *
+ * Ownership trading: either side can trade the token's *ownership
+ * record* (the asset name) instead of a balance via the give/get
+ * ownership toggles (GIVE_OWNERSHIP / GET_OWNERSHIP). Ownership trades
+ * carry no amount and are single-fill; ownership-for-ownership swaps set
+ * both toggles.
+ *
  * Cancel (v1) and Edit (v2) share the same `swapAction` core flow
  * but route through a future "My swaps" surface; not built here.
  *
  * @param {object} props
  * @param {string} props.walletId
  * @param {() => void} props.onBack
+ * @param {string} [props.initialChainId]       seed the chain (e.g. launched from ManageToken)
+ * @param {string} [props.initialGiveTick]      prefill the give ticker
+ * @param {boolean} [props.initialGiveOwnership] open in give-ownership mode (sell a token name)
  */
-export function SwapForm({ walletId, onBack }) {
+export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, initialGiveOwnership }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -67,14 +77,16 @@ export function SwapForm({ walletId, onBack }) {
     );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
 
-    const [chainId, setChainId] = useState(/** @type {string | null} */ (null));
+    const [chainId, setChainId] = useState(/** @type {string | null} */ (initialChainId || null));
     const [fromAddressId, setFromAddressId] = useState(
         /** @type {string | null} */ (null),
     );
-    const [giveTick, setGiveTick] = useState('');
+    const [giveTick, setGiveTick] = useState((initialGiveTick || '').toUpperCase());
     const [giveAmount, setGiveAmount] = useState('');
+    const [giveOwnership, setGiveOwnership] = useState(!!initialGiveOwnership);
     const [getTick, setGetTick] = useState('');
     const [getAmount, setGetAmount] = useState('');
+    const [getOwnership, setGetOwnership] = useState(false);
     const [memo, setMemo] = useState('');
     const [password, setPassword] = useState('');
 
@@ -101,7 +113,8 @@ export function SwapForm({ walletId, onBack }) {
                     );
                     return;
                 }
-                setChainId(first);
+                // Don't clobber a caller-seeded chain (ManageToken sell flow).
+                setChainId((c) => c || first);
             })
             .catch((err) => {
                 if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
@@ -163,8 +176,10 @@ export function SwapForm({ walletId, onBack }) {
         if (stage === 'submitting') return;
         if (!fromAddress || !chainId) return;
         if (validationError) return;
-        if (!giveTick || !giveAmount || !getTick || !getAmount) {
-            setFormError('Fill give/get tickers and amounts before signing.');
+        if (!giveTick || !getTick
+            || (!giveOwnership && !giveAmount)
+            || (!getOwnership && !getAmount)) {
+            setFormError('Fill the give/get tickers and amounts before signing.');
             return;
         }
         if (!isWatcherMode && !hw && password.length === 0) return;
@@ -178,10 +193,16 @@ export function SwapForm({ walletId, onBack }) {
                 VERSION: '0',
                 GIVE_COIN: coinTicker,
                 GIVE_TICK: giveTick.trim(),
-                GIVE_AMOUNT: String(giveAmount).trim(),
+                // Ownership side escrows the token's ownership record — no
+                // amount; otherwise serialize the balance amount.
+                ...(giveOwnership
+                    ? { GIVE_OWNERSHIP: '1' }
+                    : { GIVE_AMOUNT: String(giveAmount).trim() }),
                 GET_COIN: coinTicker,
                 GET_TICK: getTick.trim(),
-                GET_AMOUNT: String(getAmount).trim(),
+                ...(getOwnership
+                    ? { GET_OWNERSHIP: '1' }
+                    : { GET_AMOUNT: String(getAmount).trim() }),
                 ...(memo.trim() ? { MEMO: memo.trim() } : {}),
             };
             const base = {
@@ -319,15 +340,30 @@ export function SwapForm({ walletId, onBack }) {
                     autoCapitalize="characters"
                     style={{ flex: 1 }}
                 />
-                <Input
-                    label="Give amount"
-                    type="text"
-                    inputMode="decimal"
-                    value={giveAmount}
-                    onChange={(e) => setGiveAmount(e.target.value)}
-                    style={{ flex: 1 }}
-                />
+                {giveOwnership ? null : (
+                    <Input
+                        label="Give amount"
+                        type="text"
+                        inputMode="decimal"
+                        value={giveAmount}
+                        onChange={(e) => setGiveAmount(e.target.value)}
+                        style={{ flex: 1 }}
+                    />
+                )}
             </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', margin: '0.25rem 0 0.5rem' }}>
+                <input
+                    type="checkbox"
+                    checked={giveOwnership}
+                    onChange={(e) => setGiveOwnership(e.target.checked)}
+                />
+                Give this token&apos;s ownership instead of an amount
+            </label>
+            {giveOwnership ? (
+                <p className={styles.hint} style={{ margin: '0 0 0.5rem' }}>
+                    Transfers the entire ownership of {giveTick.trim() ? giveTick.trim().toUpperCase() : 'this token'} — single-fill, no partial matches.
+                </p>
+            ) : null}
 
             <div style={{ display: 'flex', gap: '0.5rem' }}>
                 <Input
@@ -338,15 +374,30 @@ export function SwapForm({ walletId, onBack }) {
                     autoCapitalize="characters"
                     style={{ flex: 1 }}
                 />
-                <Input
-                    label="Get amount"
-                    type="text"
-                    inputMode="decimal"
-                    value={getAmount}
-                    onChange={(e) => setGetAmount(e.target.value)}
-                    style={{ flex: 1 }}
-                />
+                {getOwnership ? null : (
+                    <Input
+                        label="Get amount"
+                        type="text"
+                        inputMode="decimal"
+                        value={getAmount}
+                        onChange={(e) => setGetAmount(e.target.value)}
+                        style={{ flex: 1 }}
+                    />
+                )}
             </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', margin: '0.25rem 0 0.5rem' }}>
+                <input
+                    type="checkbox"
+                    checked={getOwnership}
+                    onChange={(e) => setGetOwnership(e.target.checked)}
+                />
+                Require the matcher to give that token&apos;s ownership instead of an amount
+            </label>
+            {getOwnership ? (
+                <p className={styles.hint} style={{ margin: '0 0 0.5rem' }}>
+                    The matcher must currently own {getTick.trim() ? getTick.trim().toUpperCase() : 'this token'}; on match its ownership transfers to you.
+                </p>
+            ) : null}
 
             <Input
                 label="Memo (optional)"
@@ -417,7 +468,9 @@ export function SwapForm({ walletId, onBack }) {
                     loading={stage === 'submitting'}
                     disabled={!!validationError
                         || !fromAddress
-                        || !giveTick || !giveAmount || !getTick || !getAmount
+                        || !giveTick || !getTick
+                        || (!giveOwnership && !giveAmount)
+                        || (!getOwnership && !getAmount)
                         || (isWatcherMode
                             ? false
                             : hw ? hwStatus !== 'available' : password.length === 0)}

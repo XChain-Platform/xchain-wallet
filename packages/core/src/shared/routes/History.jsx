@@ -9,7 +9,8 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Screen, Button, Icon, Skeleton } from '@xchain-wallet/core/ui';
+import { Screen,
+    ScreenHeader, Button, Icon, Skeleton } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import {

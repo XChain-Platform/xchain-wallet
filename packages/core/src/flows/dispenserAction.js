@@ -58,14 +58,20 @@ export async function dispenserAction(opts) {
     const version = typeof opts.params.VERSION === 'string' ? opts.params.VERSION : '0';
     const isIndexOp = typeof opts.params.DISPENSER_ACTION_INDEX === 'string'
         && opts.params.DISPENSER_ACTION_INDEX.length > 0;
+    // Ownership dispenser (vend a token's name, single-shot): GIVE_OWNERSHIP=1
+    // escrows the ownership record instead of a balance, so GIVE_AMOUNT /
+    // GIVE_ESCROW must be empty (the SDK validator enforces that) and
+    // GET_AMOUNT is the sale price.
+    const giveOwn = Number(opts.params.GIVE_OWNERSHIP || 0) === 1;
 
     if (!isIndexOp) {
         // Create mode — match the SDK validator's baseline: GIVE_TICK +
-        // GIVE_AMOUNT + GET_AMOUNT + one of (GET_TICK, GET_COIN).
+        // GIVE_AMOUNT + GET_AMOUNT + one of (GET_TICK, GET_COIN). GIVE_AMOUNT
+        // drops out for an ownership dispenser.
         if (typeof opts.params.GIVE_TICK !== 'string' || opts.params.GIVE_TICK.length === 0) {
             throw new Error('dispenserAction: params.GIVE_TICK is required for create');
         }
-        if (typeof opts.params.GIVE_AMOUNT !== 'string' || opts.params.GIVE_AMOUNT.length === 0) {
+        if (!giveOwn && (typeof opts.params.GIVE_AMOUNT !== 'string' || opts.params.GIVE_AMOUNT.length === 0)) {
             throw new Error('dispenserAction: params.GIVE_AMOUNT is required for create');
         }
         if (typeof opts.params.GET_AMOUNT !== 'string' || opts.params.GET_AMOUNT.length === 0) {
@@ -93,7 +99,9 @@ export async function dispenserAction(opts) {
             ? (version === '1'
                 ? `Cancel dispenser #${opts.params.DISPENSER_ACTION_INDEX}`
                 : `Edit dispenser #${opts.params.DISPENSER_ACTION_INDEX}`)
-            : `Open dispenser: ${giveAmount} ${giveTick} per fill (escrow ${giveEscrow || '?'})`,
+            : (giveOwn
+                ? `Open dispenser: sell ownership of ${giveTick} for ${opts.params.GET_AMOUNT || '?'} ${opts.params.GET_TICK || opts.params.GET_COIN || ''}`.trim()
+                : `Open dispenser: ${giveAmount} ${giveTick} per fill (escrow ${giveEscrow || '?'})`),
     };
 
     return submitAction({

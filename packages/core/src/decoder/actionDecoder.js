@@ -75,17 +75,26 @@ export function decodeAction({ action, params, chainId, chainRegistry }) {
 
     if (action === 'SWEEP') {
         const dest = str(p.DESTINATION);
-        const flags = p.FLAGS !== undefined && p.FLAGS !== null ? str(p.FLAGS) : '';
         const memo = str(p.MEMO);
+        // SWEEP v0 selective flags: BALANCES/OWNERSHIPS default on, the
+        // escrow-closing flags (ORDERS/SWAPS/DISPENSERS) default off.
+        const flagOn = (v, dflt) => (v === undefined || v === null || str(v) === '' ? dflt : str(v) === '1');
+        const swept = [];
+        if (flagOn(p.BALANCES, true)) swept.push('balances');
+        if (flagOn(p.OWNERSHIPS, true)) swept.push('ownerships');
+        if (flagOn(p.ORDERS, false)) swept.push('open orders');
+        if (flagOn(p.SWAPS, false)) swept.push('open swaps');
+        if (flagOn(p.DISPENSERS, false)) swept.push('open dispensers');
+        const sweptLabel = swept.length ? swept.join(', ') : 'nothing';
         return {
-            summary: `Sweep all tokens${chainSuffix} to ${dest || '?'}`,
+            summary: `Sweep ${sweptLabel}${chainSuffix} to ${dest || '?'}`,
             details: [
                 { label: 'Destination', value: dest },
-                ...(flags ? [{ label: 'Flags', value: flags }] : []),
+                { label: 'Sweeps', value: sweptLabel },
                 ...(memo ? [{ label: 'Memo', value: memo }] : []),
             ],
             warnings: [
-                'Sweep moves every balance at the source address. Double-check the destination.',
+                'Sweep moves the selected balances and ownerships from the source address. Double-check the destination.',
                 ...(!dest ? ['Destination is empty.'] : []),
             ],
         };

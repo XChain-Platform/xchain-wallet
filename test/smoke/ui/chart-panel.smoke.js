@@ -101,14 +101,14 @@ assert.ok(/export function MarketChart\b/.test(chartSrc),
     'MarketChart is a named export');
 assert.ok(/await import\('lightweight-charts'\)/.test(chartSrc),
     'MarketChart dynamically imports lightweight-charts (lazy, Node-safe)');
-assert.ok(/addCandlestickSeries/.test(chartSrc),
-    'MarketChart renders a candlestick series');
+assert.ok(/addLineSeries/.test(chartSrc),
+    'MarketChart renders a line series');
 assert.ok(/messaging\.getMarketHistory\(/.test(chartSrc),
     'MarketChart fetches via messaging.getMarketHistory');
 assert.ok(/bucketizeMatches/.test(chartSrc),
     'MarketChart aggregates via bucketizeMatches');
-assert.ok(/setPeriodId\(p\.id\)/.test(chartSrc),
-    'MarketChart exposes a period toggle row');
+assert.ok(/setPeriodId\(/.test(chartSrc),
+    'MarketChart exposes a period toggle');
 
 // --- 6. Dep declared in every shell -----------------------------
 
@@ -125,5 +125,5 @@ for (const [shell, pkgPath] of [
 }
 
 console.log(
-    'OK — chart-panel smoke (bucketizeMatches OHLCV orientation + volume aggregation + period boundary math + mismatched-pair rows dropped; PERIODS constant covers 7 granularities with 1h default; MarketChart dynamically imports lightweight-charts, fetches via messaging.getMarketHistory, renders candlestick series with period toggle row; lightweight-charts declared in extension + web + desktop package.json)',
+    'OK — chart-panel smoke (bucketizeMatches OHLCV orientation + volume aggregation + period boundary math + mismatched-pair rows dropped; PERIODS constant covers 7 granularities with 1h default; MarketChart dynamically imports lightweight-charts, fetches via messaging.getMarketHistory, renders line series with period toggle; lightweight-charts declared in extension + web + desktop package.json)',
 );

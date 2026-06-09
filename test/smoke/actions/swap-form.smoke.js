@@ -60,6 +60,16 @@ await assert.rejects(
     }),
     /GET_AMOUNT is required/,
 );
+// Ownership trading relaxes the amount requirement on the ownership side:
+// GIVE_OWNERSHIP=1 drops GIVE_AMOUNT, so the surfaced error advances to
+// GET_AMOUNT (proving GIVE_AMOUNT was no longer required).
+await assert.rejects(
+    async () => flows.swapAction({
+        params: { GIVE_TICK: 'A', GIVE_OWNERSHIP: '1', GET_TICK: 'B' },
+    }),
+    /GET_AMOUNT is required/,
+    'GIVE_OWNERSHIP=1 drops the GIVE_AMOUNT requirement',
+);
 
 // --- 2. SwapForm.jsx ---------------------------------------------------
 
@@ -78,6 +88,10 @@ assert.ok(/DISPENSER for token ↔ native coin|cannot give|cannot get/.test(src)
     'SwapForm rejects native-coin tickers with a DISPENSER hint');
 assert.ok(/Give and get tickers must differ/.test(src),
     'SwapForm rejects same-ticker swaps');
+assert.ok(/GIVE_OWNERSHIP/.test(src) && /GET_OWNERSHIP/.test(src),
+    'SwapForm composes GIVE_OWNERSHIP / GET_OWNERSHIP for token-name trades');
+assert.ok(/setGiveOwnership/.test(src) && /setGetOwnership/.test(src),
+    'SwapForm wires give/get ownership toggles');
 
 // --- 3. Background handlers -------------------------------------------
 
@@ -121,6 +135,39 @@ for (const [shell, appPath] of [
     assert.ok(/onSwap:/.test(app), `${shell} App.jsx wires onSwap`);
 }
 
+// --- 6. "Sell name" from ManageToken → ORDER-based SellOwnershipForm ----
+
+// ManageToken exposes the Sell-name entry.
+const manageSrc = readFileSync(join(sharedRoutes, 'ManageToken.jsx'), 'utf8');
+assert.ok(/onSellOwnership/.test(manageSrc), 'ManageToken accepts onSellOwnership');
+assert.ok(/id:\s*['"]sell-ownership['"]/.test(manageSrc), 'ManageToken renders the Sell-name action');
+
+// SellOwnershipForm builds an ownership ORDER (GIVE_OWNERSHIP=1) and submits
+// via orderAction — supports native-coin (GET_TICK omitted) + token prices.
+const sellSrc = readFileSync(join(sharedRoutes, 'SellOwnershipForm.jsx'), 'utf8');
+assert.ok(/export function SellOwnershipForm\b/.test(sellSrc), 'SellOwnershipForm is a named export');
+assert.ok(/GIVE_OWNERSHIP:\s*'1'/.test(sellSrc), 'SellOwnershipForm escrows ownership (GIVE_OWNERSHIP=1)');
+assert.ok(/messaging\.orderAction\b/.test(sellSrc), 'SellOwnershipForm submits via orderAction (ORDER, not SWAP)');
+assert.ok(/messaging\.dispenserAction\b/.test(sellSrc),
+    'SellOwnershipForm can also vend the name via dispenserAction (DISPENSER)');
+assert.ok(/setMechanism/.test(sellSrc) && /'dispenser'/.test(sellSrc),
+    'SellOwnershipForm offers an Order/Dispenser mechanism toggle');
+assert.ok(/GET_TICK:\s*getTick/.test(sellSrc) && /getMode === 'token'/.test(sellSrc),
+    'SellOwnershipForm only sets GET_TICK for token prices (native coin leaves it empty)');
+
+// Each shell wires ManageToken → SellOwnershipForm via the sell-name view.
+for (const [shell, appPath] of [
+    ['popup', join(ext, 'src', 'popup', 'App.jsx')],
+    ['web', join(web, 'src', 'App.jsx')],
+    ['desktop', join(desktop, 'renderer', 'App.jsx')],
+]) {
+    const app = readFileSync(appPath, 'utf8');
+    assert.ok(/onSellOwnership=\{/.test(app), `${shell} App.jsx wires ManageToken onSellOwnership`);
+    assert.ok(/setSellNameRef\(/.test(app), `${shell} App.jsx sets sellNameRef for the sell flow`);
+    assert.ok(/unlockedView === 'sell-name'/.test(app), `${shell} App.jsx renders the sell-name view`);
+    assert.ok(/<SellOwnershipForm/.test(app), `${shell} App.jsx renders SellOwnershipForm`);
+}
+
 console.log(
-    'OK — swap-form smoke (§41.5 SWAP: swapAction core flow + input guards; SwapForm rejects native-coin + same-ticker; branches swap/Hw behind SignCredentials; background handlers + 3-shell messaging + 3-shell App.jsx + ActionsMenu entry)',
+    'OK — swap-form smoke (§41.5 SWAP: swapAction core flow + input guards + ownership trading; SwapForm rejects native-coin + same-ticker; branches swap/Hw behind SignCredentials; background handlers + 3-shell messaging + 3-shell App.jsx + ActionsMenu entry; ManageToken "Sell name" → ORDER-based SellOwnershipForm (native coin + token) across 3 shells)',
 );

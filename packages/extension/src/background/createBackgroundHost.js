@@ -89,6 +89,7 @@ const {
     delegationsForAddress,
     rewardsForAddress,
     validatorsForChain,
+    capabilityThresholds,
     contractStakesForAddress,
     contractUnstakesForAddress,
     slashEventsForAddress,
@@ -1893,6 +1894,10 @@ export function createBackgroundHost(deps) {
 
     host.register('validators.forChain', async (req, { sdkRegistry }) => {
         return validatorsForChain({ ...req, sdkRegistry });
+    });
+
+    host.register('capabilities.thresholds', async (req, { sdkRegistry }) => {
+        return capabilityThresholds({ ...req, sdkRegistry });
     });
 
     host.register('action.stake', async (req, { vault, chainRegistry, sdkRegistry }) => {

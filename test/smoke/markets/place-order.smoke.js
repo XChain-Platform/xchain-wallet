@@ -47,6 +47,16 @@ await assert.rejects(
     }),
     /GET_AMOUNT is required/,
 );
+// Ownership orders relax the amount requirement: GIVE_OWNERSHIP=1 drops the
+// GIVE_AMOUNT requirement (so the surfaced error advances to GET_AMOUNT),
+// enabling sell-name orders (native coin leaves GET_TICK empty).
+await assert.rejects(
+    flows.orderAction({
+        params: { GIVE_TICK: 'JDOG', GIVE_OWNERSHIP: '1' },
+    }),
+    /GET_AMOUNT is required/,
+    'GIVE_OWNERSHIP=1 drops the GIVE_AMOUNT requirement',
+);
 
 // --- 3. cancelOrder guard rails ---------------------------------
 

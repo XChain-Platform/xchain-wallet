@@ -895,6 +895,11 @@ export function getValidatorsForChain(req) {
     return /** @type {any} */ (sendMessage('validators.forChain', req));
 }
 
+/** @param {{ chainId: string }} req */
+export function getCapabilityThresholds(req) {
+    return /** @type {any} */ (sendMessage('capabilities.thresholds', req));
+}
+
 /**
  * Build, sign, and broadcast a STAKE action (§42.7.1). Tier 1 +
  * Tier 2 authoring surfaces supported; Tier 3 (oracle publisher,

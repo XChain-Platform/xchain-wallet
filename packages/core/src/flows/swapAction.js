@@ -24,6 +24,14 @@
 // (per the SDK validator's `_validateSwap`). GIVE_COIN / GET_COIN are
 // the network tickers (BTC / LTC / DOGE) — set by the form from the
 // chain registry rather than user input.
+//
+// Ownership trading (token-name trades): when GIVE_OWNERSHIP=1 the swap
+// escrows the *ownership record* of GIVE_TICK instead of a balance, so
+// GIVE_AMOUNT must be empty; likewise GET_OWNERSHIP=1 requires the
+// matcher to own GET_TICK and GET_AMOUNT must be empty. Either or both
+// sides may be ownership (ownership-for-ownership swaps). The SDK
+// validator enforces the empty-amount rule; this wrapper just relaxes
+// the required-field check to match.
 
 import { submitAction } from './submitAction.js';
 import { normalizeSource } from './sendToken.js';
@@ -61,8 +69,16 @@ export async function swapAction(opts) {
         && opts.params.SWAP_ACTION_INDEX.length > 0;
 
     if (!isIndexOp) {
-        // v0 create — match the SDK validator's baseline.
-        const required = ['GIVE_TICK', 'GIVE_AMOUNT', 'GET_TICK', 'GET_AMOUNT'];
+        // v0 create — match the SDK validator's baseline. Amounts drop out
+        // of the required set when the matching side trades ownership (the
+        // SDK validator additionally enforces they're empty). Field order is
+        // preserved so the surfaced error matches the validator's.
+        const giveOwn = Number(opts.params.GIVE_OWNERSHIP || 0) === 1;
+        const getOwn = Number(opts.params.GET_OWNERSHIP || 0) === 1;
+        const required = ['GIVE_TICK'];
+        if (!giveOwn) required.push('GIVE_AMOUNT');
+        required.push('GET_TICK');
+        if (!getOwn) required.push('GET_AMOUNT');
         for (const field of required) {
             if (typeof opts.params[field] !== 'string' || opts.params[field].length === 0) {
                 throw new Error(`swapAction: params.${field} is required for create`);
@@ -72,6 +88,12 @@ export async function swapAction(opts) {
 
     const source = normalizeSource(opts.from, 'swapAction');
     const version = typeof opts.params.VERSION === 'string' ? opts.params.VERSION : '0';
+    const giveDesc = Number(opts.params.GIVE_OWNERSHIP || 0) === 1
+        ? `ownership of ${opts.params.GIVE_TICK}`
+        : `${opts.params.GIVE_AMOUNT} ${opts.params.GIVE_TICK}`;
+    const getDesc = Number(opts.params.GET_OWNERSHIP || 0) === 1
+        ? `ownership of ${opts.params.GET_TICK}`
+        : `${opts.params.GET_AMOUNT} ${opts.params.GET_TICK}`;
     const pendingTxMeta = opts.trackPendingTx === false ? undefined : {
         fromAddress: source.address,
         toAddress: opts.params.GET_ADDRESS || null,
@@ -79,7 +101,7 @@ export async function swapAction(opts) {
             ? (version === '1'
                 ? `Cancel swap #${opts.params.SWAP_ACTION_INDEX}`
                 : `Edit swap #${opts.params.SWAP_ACTION_INDEX}`)
-            : `Swap: give ${opts.params.GIVE_AMOUNT} ${opts.params.GIVE_TICK}, get ${opts.params.GET_AMOUNT} ${opts.params.GET_TICK}`,
+            : `Swap: give ${giveDesc}, get ${getDesc}`,
     };
 
     return submitAction({

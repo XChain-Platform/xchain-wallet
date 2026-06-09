@@ -70,6 +70,7 @@ import { MarketsList } from '@xchain-wallet/core/shared/routes/MarketsList.jsx';
 import { MarketView } from '@xchain-wallet/core/shared/routes/MarketView.jsx';
 import { CoinpayForm } from '@xchain-wallet/core/shared/routes/CoinpayForm.jsx';
 import { SwapForm } from '@xchain-wallet/core/shared/routes/SwapForm.jsx';
+import { SellOwnershipForm } from '@xchain-wallet/core/shared/routes/SellOwnershipForm.jsx';
 import { MessagingInbox } from '@xchain-wallet/core/shared/routes/MessagingInbox.jsx';
 import { ComposeMessage } from '@xchain-wallet/core/shared/routes/ComposeMessage.jsx';
 import { ContactsList } from '@xchain-wallet/core/shared/routes/ContactsList.jsx';
@@ -124,7 +125,7 @@ function AppInner() {
         /** @type {'welcome' | 'create' | 'import' | 'import-freewallet'} */ ('welcome'),
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'swap' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'staking-dashboard' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'addresses' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'scan'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'staking-dashboard' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'addresses' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'scan'} */ ('home'),
     );
     const [tokenDetailRef, setTokenDetailRef] = useState(
         /** @type {{ chainId: string, tick: string, kind: string, displayName: string, divisibility: number, fiatRate: number | null, quantity: string } | null} */ (null),
@@ -212,6 +213,13 @@ function AppInner() {
     );
     const [dispenserRef, setDispenserRef] = useState(
         /** @type {{ chainId: string, actionIndex: string } | null} */ (null),
+    );
+    // Preset for the SwapForm when launched as "Sell name" from ManageToken
+    // (give-ownership mode, ticker + chain prefilled). Null for a normal swap.
+    // Context for the "Sell name" flow (ORDER with GIVE_OWNERSHIP=1), set by
+    // ManageToken before opening the sell-name view.
+    const [sellNameRef, setSellNameRef] = useState(
+        /** @type {{ chainId: string, tick: string, fromAddress?: string } | null} */ (null),
     );
     const [contractRef, setContractRef] = useState(
         /** @type {{ chainId: string, contractActionIndex: string } | null} */ (null),
@@ -706,6 +714,17 @@ function AppInner() {
                     />
                 );
             }
+            if (unlockedView === 'sell-name' && activeWalletId && sellNameRef) {
+                return (
+                    <SellOwnershipForm
+                        walletId={activeWalletId}
+                        chainId={sellNameRef.chainId}
+                        tick={sellNameRef.tick}
+                        initialFromAddress={sellNameRef.fromAddress}
+                        onBack={() => setUnlockedView('manage-token')}
+                    />
+                );
+            }
             if (unlockedView === 'link-form' && activeWalletId) {
                 return (
                     <LinkForm
@@ -1108,6 +1127,7 @@ function AppInner() {
             if (unlockedView === 'market-activity') {
                 return (
                     <MarketActivity
+                        walletId={activeWalletId}
                         onBack={() => setUnlockedView('home')}
                         onOpenDispenser={(chainId, actionIndex) => {
                             setDispenserRef({ chainId, actionIndex, origin: 'explorer' });
@@ -1149,6 +1169,10 @@ function AppInner() {
                         onLock={() => openForm('lock')}
                         onUpdateDescription={() => openForm('description')}
                         onTransferOwnership={() => openForm('transfer')}
+                        onSellOwnership={() => {
+                            setSellNameRef({ chainId: tokenDetailRef.chainId, tick: tokenDetailRef.tick, fromAddress: tokenDetailRef.issuer || undefined });
+                            openForm('sell-name');
+                        }}
                         onCreateDispenser={() => openForm('dispenser')}
                         onPayDividend={() => openForm('dividend')}
                         onAirdrop={() => openForm('airdrop')}

@@ -96,6 +96,25 @@ assert.ok(/InvalidPasswordError/.test(formSrc),
 assert.ok(/6 BTC blocks/.test(formSrc),
     'StakeForm mentions the 6-BTC-block activation delay per STAKE.md');
 
+// --- Live capability-threshold readout (cross-repo: hub RPC →
+//     SDK → wallet flow → host → 3-shell messaging → form) ---
+assert.ok(formSrc.includes('messaging.getCapabilityThresholds'),
+    'StakeForm fetches live per-capability MIN_STAKE thresholds');
+assert.ok(/CAPABILITY_LABELS/.test(formSrc),
+    'StakeForm maps capability ids to plain-language labels');
+assert.ok(/qualifyReadout/.test(formSrc),
+    'StakeForm renders the per-capability qualify readout');
+assert.ok(/existingStake/.test(formSrc),
+    'StakeForm projects total stake (existing + amount) for top-up qualification');
+
+assert.equal(typeof flows.capabilityThresholds, 'function',
+    'flows.capabilityThresholds re-exported');
+await assert.rejects(
+    async () => flows.capabilityThresholds({ chainId: 'bitcoin-mainnet' }),
+    /capabilityThresholds: sdkRegistry is required/,
+    'capabilityThresholds guards sdkRegistry',
+);
+
 // --- Core flow guards ---
 
 assert.equal(typeof flows.stakeAction, 'function', 'flows.stakeAction re-exported');
@@ -142,6 +161,8 @@ const bg = readFileSync(join(ext, 'src', 'background', 'createBackgroundHost.js'
 assert.ok(bg.includes("'action.stake'"), 'background host registers action.stake');
 assert.ok(/registerHwHandler\('action\.stake\.hw', stakeAction\)/.test(bg),
     'background host registers action.stake.hw via registerHwHandler');
+assert.ok(bg.includes("'capabilities.thresholds'"),
+    'background host registers capabilities.thresholds');
 
 for (const [shell, msgPath] of [
     ['popup', join(ext, 'src', 'popup', 'messaging.js')],
@@ -149,7 +170,7 @@ for (const [shell, msgPath] of [
     ['desktop', join(desktop, 'renderer', 'messaging.js')],
 ]) {
     const m = readFileSync(msgPath, 'utf8');
-    for (const fn of ['stakeAction', 'stakeActionHw']) {
+    for (const fn of ['stakeAction', 'stakeActionHw', 'getCapabilityThresholds']) {
         assert.ok(
             new RegExp(`export function ${fn}\\b`).test(m),
             `${shell} messaging.js exports ${fn}`,

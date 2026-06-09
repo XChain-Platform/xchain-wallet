@@ -390,6 +390,11 @@ export function getValidatorsForChain(req) {
     return /** @type {any} */ (sendMessage('validators.forChain', req));
 }
 
+/** @param {{ chainId: string }} req */
+export function getCapabilityThresholds(req) {
+    return /** @type {any} */ (sendMessage('capabilities.thresholds', req));
+}
+
 /** @param {object} opts */
 export function stakeAction(opts) {
     return /** @type {any} */ (sendMessage('action.stake', opts));

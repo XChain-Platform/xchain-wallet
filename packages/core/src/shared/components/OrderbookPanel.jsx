@@ -34,9 +34,10 @@ const POLL_INTERVAL_MS = 5000;
  * @param {string} props.chainId
  * @param {string} props.tick1
  * @param {string} props.tick2
+ * @param {boolean} [props.demo]   demo wallet — render a sample book when the live book is empty
  * @param {(price: string) => void} [props.onPickPrice]
  */
-export function OrderbookPanel({ chainId, tick1, tick2, onPickPrice }) {
+export function OrderbookPanel({ chainId, tick1, tick2, demo = false, onPickPrice }) {
     const { messaging } = useMessaging();
     const [book, setBook] = useState(/** @type {any} */ ({ bids: [], asks: [], maxCumulative: 0 }));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
@@ -58,10 +59,10 @@ export function OrderbookPanel({ chainId, tick1, tick2, onPickPrice }) {
                 const resp = await messaging.getOrderbook({ chainId, tick1, tick2 });
                 if (cancelled) return;
                 let normalized = normalizeOrderbook(resp);
-                // TEMP — sample fallback so the panel renders something
-                // when the explorer has no live book yet. Remove with
-                // sampleMarketData.js once real feeds populate here.
-                if (normalized.bids.length === 0 && normalized.asks.length === 0) {
+                // Demo wallets render a sample book when the explorer has
+                // no live orders yet; real wallets keep the empty book and
+                // fall through to the "No open orders" empty state below.
+                if (demo && normalized.bids.length === 0 && normalized.asks.length === 0) {
                     normalized = normalizeOrderbook(sampleOrderbookFor(tick1, tick2));
                 }
                 setBook(normalized);
@@ -69,9 +70,10 @@ export function OrderbookPanel({ chainId, tick1, tick2, onPickPrice }) {
                 setLastRefreshed(Date.now());
             } catch (err) {
                 if (cancelled) return;
-                // TEMP — still show sample data even on error so the UI
-                // isn't dead during dev/CORS outages.
-                setBook(normalizeOrderbook(sampleOrderbookFor(tick1, tick2)));
+                // Demo wallets keep the UI populated through dev/CORS
+                // outages; real wallets surface the error instead of
+                // showing fabricated prices.
+                if (demo) setBook(normalizeOrderbook(sampleOrderbookFor(tick1, tick2)));
                 setLoadError(err?.message || String(err));
             }
         };
@@ -81,7 +83,7 @@ export function OrderbookPanel({ chainId, tick1, tick2, onPickPrice }) {
             cancelled = true;
             clearInterval(handle);
         };
-    }, [messaging, chainId, tick1, tick2]);
+    }, [messaging, chainId, tick1, tick2, demo]);
 
     return (
         <div

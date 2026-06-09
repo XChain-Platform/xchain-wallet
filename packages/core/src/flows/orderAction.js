@@ -52,7 +52,18 @@ export async function orderAction(opts) {
     if (!opts.params || typeof opts.params !== 'object') {
         throw new Error('orderAction: params is required');
     }
-    const required = ['GIVE_TICK', 'GIVE_AMOUNT', 'GET_TICK', 'GET_AMOUNT'];
+    // Amounts drop out of the required set when the matching side trades
+    // ownership (selling a token name escrows the ownership record, not a
+    // balance — GIVE_AMOUNT empty); the SDK validator additionally enforces
+    // they're empty. GET_TICK is not required — native-coin orders leave it
+    // empty (the coin is GET_COIN). Field order preserved so the surfaced
+    // error matches the SDK validator's. GIVE_TICK stays required: every
+    // wallet-composed order names the token it's giving.
+    const giveOwn = Number(opts.params.GIVE_OWNERSHIP || 0) === 1;
+    const getOwn = Number(opts.params.GET_OWNERSHIP || 0) === 1;
+    const required = ['GIVE_TICK'];
+    if (!giveOwn) required.push('GIVE_AMOUNT');
+    if (!getOwn) required.push('GET_AMOUNT');
     for (const field of required) {
         if (typeof opts.params[field] !== 'string' || opts.params[field].length === 0) {
             throw new Error(`orderAction: params.${field} is required`);
@@ -64,11 +75,14 @@ export async function orderAction(opts) {
     const giveAmount = opts.params.GIVE_AMOUNT;
     const getTick = opts.params.GET_TICK;
     const getAmount = opts.params.GET_AMOUNT;
+    // Native-coin get side leaves GET_TICK empty; show the coin instead.
+    const getLabel = getTick || opts.params.GET_COIN || '';
+    const giveDesc = giveOwn ? `ownership of ${giveTick}` : `${giveAmount} ${giveTick}`;
+    const getDesc = getOwn ? `ownership of ${getTick}` : `${getAmount} ${getLabel}`.trim();
     const pendingTxMeta = opts.trackPendingTx === false ? undefined : {
         fromAddress: source.address,
         toAddress: null,
-        actionSummary:
-            `Place order: give ${giveAmount} ${giveTick}, get ${getAmount} ${getTick}`,
+        actionSummary: `Place order: give ${giveDesc}, get ${getDesc}`,
     };
 
     return submitAction({

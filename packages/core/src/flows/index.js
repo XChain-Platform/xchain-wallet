@@ -124,6 +124,7 @@ export {
     delegationsForAddress,
     rewardsForAddress,
     validatorsForChain,
+    capabilityThresholds,
     contractStakesForAddress,
     contractUnstakesForAddress,
     slashEventsForAddress,
@@ -338,6 +339,7 @@ export {
     synthesizeDemoHistory,
     synthesizeDemoLinks,
     synthesizeDemoDefiPositions,
+    synthesizeDemoMarketActivity,
 } from './demoFixtures.js';
 export {
     discoverUsedAddresses,

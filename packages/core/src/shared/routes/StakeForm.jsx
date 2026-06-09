@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Screen,
+    ScreenHeader,
     Button,
     Input,
     ChainBadge,
@@ -24,6 +25,15 @@ import { useWalletMode } from '../hooks/useWalletMode.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+
+// Plain-language labels for the four capabilities (capability-staking-model.md
+// §3). Keyed by the protocol capability id the hub returns.
+const CAPABILITY_LABELS = {
+    price:          'Price feeds',
+    cross_chain:    'Cross-chain',
+    oracle_publish: 'Oracle publishing',
+    attestation:    'Attestation',
+};
 
 /**
  * STAKE authoring form — §42.7.1.
@@ -71,6 +81,15 @@ export function StakeForm({ walletId, chainId, onBack }) {
     // result as a hint. Auto-sets stakeMode but the radio remains editable
     // (user can override). 'idle' until a valid pubkey is entered.
     const [detectStatus, setDetectStatus] = useState(/** @type {'idle' | 'checking' | 'new' | 'topup' | 'error'} */ ('idle'));
+    // Aggregate of this source's existing valid stake for the entered pubkey
+    // (top-ups add to it). '0' when new / unknown. Feeds the qualify readout.
+    const [existingStake, setExistingStake] = useState('0');
+    // Live per-capability MIN_STAKE thresholds from the hub, or null when the
+    // hub is unreachable / not configured (regtest) / the SDK predates the
+    // getter — in which case the qualify readout is hidden.
+    const [thresholds, setThresholds] = useState(
+        /** @type {Array<{capability: string, min_stake: string, disabled?: boolean}> | null} */ (null),
+    );
 
     const [stage, setStage] = useState(
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
@@ -79,6 +98,15 @@ export function StakeForm({ walletId, chainId, onBack }) {
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+
+    // Declared before the effects below — the detection effect's dependency
+    // array references fromAddress, which would hit the temporal dead zone
+    // (ReferenceError at render) if these consts came after it.
+    const descriptor = chainRegistry.get(chainId);
+    const fromAddress = useMemo(() => {
+        if (!fromAddressId || !addressesByChain) return null;
+        return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
+    }, [chainId, fromAddressId, addressesByChain]);
 
     useEffect(() => {
         let cancelled = false;
@@ -110,15 +138,31 @@ export function StakeForm({ walletId, chainId, onBack }) {
         if (stage === 'review') setTimeout(() => passwordRef.current?.focus(), 0);
     }, [stage]);
 
+    // Fetch live per-capability MIN_STAKE thresholds from the hub so the
+    // form can show which capabilities the staked amount qualifies for.
+    // Null (no hub / regtest / older SDK) hides the readout and leaves the
+    // generic guidance standing.
+    useEffect(() => {
+        if (typeof messaging.getCapabilityThresholds !== 'function') return undefined;
+        let cancelled = false;
+        messaging.getCapabilityThresholds({ chainId })
+            .then((rows) => { if (!cancelled) setThresholds(Array.isArray(rows) ? rows : null); })
+            .catch(() => { if (!cancelled) setThresholds(null); });
+        return () => { cancelled = true; };
+    }, [messaging, chainId]);
+
     // Auto-detect new-vs-top-up by querying the indexer for existing
     // stakes from this source matching the entered pubkey. Fires once
     // the pubkey is a valid 64-hex string and the source address is
     // resolved. Cancels in-flight requests when inputs change so a
-    // stale response can't overwrite a newer detection.
+    // stale response can't overwrite a newer detection. Also captures the
+    // pubkey's existing valid stake so the qualify readout can project the
+    // post-top-up total.
     useEffect(() => {
         const pk = signingPubkey.trim().toLowerCase();
         if (!/^[0-9a-f]{64}$/.test(pk) || !fromAddress || !chainId) {
             setDetectStatus('idle');
+            setExistingStake('0');
             return;
         }
         let cancelled = false;
@@ -130,27 +174,29 @@ export function StakeForm({ walletId, chainId, onBack }) {
                     : Array.isArray(resp?.data) ? resp.data
                     : Array.isArray(resp?.rows) ? resp.rows
                     : [];
-                const match = rows.some((row) => {
+                let match = false;
+                let sum = 0;
+                for (const row of rows) {
                     const rowPk = String(row.signing_pubkey || row.SIGNING_PUBKEY || '').toLowerCase();
                     const rowStatus = String(row.status || row.STATUS || '').toLowerCase();
-                    return rowPk === pk && rowStatus === 'valid';
-                });
+                    if (rowPk === pk && rowStatus === 'valid') {
+                        match = true;
+                        const amt = Number(row.amount ?? row.AMOUNT ?? 0);
+                        if (Number.isFinite(amt)) sum += amt;
+                    }
+                }
+                setExistingStake(String(sum));
                 setDetectStatus(match ? 'topup' : 'new');
                 setStakeMode(match ? '2' : '1');
             })
             .catch(() => {
                 if (cancelled) return;
                 // Network/indexer failure — fall back to user's manual choice silently
+                setExistingStake('0');
                 setDetectStatus('error');
             });
         return () => { cancelled = true; };
     }, [signingPubkey, fromAddress, chainId, messaging]);
-
-    const descriptor = chainRegistry.get(chainId);
-    const fromAddress = useMemo(() => {
-        if (!fromAddressId || !addressesByChain) return null;
-        return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
-    }, [chainId, fromAddressId, addressesByChain]);
 
     const isHwSource = fromAddress?.source === 'trezor' || fromAddress?.source === 'ledger';
     const [hwStatus, setHwStatus] = useState('idle');
@@ -168,6 +214,36 @@ export function StakeForm({ walletId, chainId, onBack }) {
         };
         return p;
     }, [stakeMode, amount, signingPubkey]);
+
+    // Project which capabilities the post-submit total stake qualifies for.
+    // Total = the pubkey's existing valid stake (top-ups) + the entered
+    // amount. Comparison is Number-based and display-only — the indexer
+    // enforces the real on-chain qualification. Null when thresholds are
+    // unavailable (no hub / regtest / older SDK).
+    const qualifyReadout = useMemo(() => {
+        if (!thresholds || thresholds.length === 0) return null;
+        const amt = Number(amount.trim());
+        const base = Number(existingStake);
+        const projected = (Number.isFinite(amt) ? amt : 0) + (Number.isFinite(base) ? base : 0);
+        const rows = thresholds
+            .filter((t) => !t.disabled)
+            .map((t) => {
+                const min = Number(t.min_stake);
+                return {
+                    capability: t.capability,
+                    label:      CAPABILITY_LABELS[t.capability] || t.capability,
+                    minStake:   t.min_stake,
+                    min,
+                    qualifies:  projected > 0 && projected >= min,
+                };
+            })
+            // Drop capabilities the hub has no numeric threshold for
+            // (getMinStake returns null when unconfigured) — we can't claim
+            // qualified/not for those, and "null XCHAIN" would be nonsense.
+            .filter((r) => r.minStake != null && Number.isFinite(r.min));
+        if (rows.length === 0) return null;
+        return { projected, rows, hasTopup: Number(existingStake) > 0 };
+    }, [thresholds, amount, existingStake]);
 
     function handleReview(event) {
         event.preventDefault();
@@ -411,12 +487,63 @@ export function StakeForm({ walletId, chainId, onBack }) {
 
             <Input
                 label="Amount"
-                hint="How much XCHAIN to stake. More stake means more validator capabilities qualify (price, cross-chain, oracle publish, attestation)."
+                hint="How much XCHAIN to stake. You don't pick capabilities — each one activates automatically once your total stake reaches its threshold, so a larger stake can unlock more."
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 autoComplete="off"
                 inputMode="decimal"
             />
+
+            {qualifyReadout ? (
+                <div style={{
+                    border: '1px solid var(--border, #ccc)',
+                    borderRadius: '4px',
+                    padding: '0.5rem 0.75rem',
+                    marginBottom: '0.75rem',
+                    background: 'var(--xc-bg-muted, transparent)',
+                }}>
+                    <p style={{ fontSize: '0.85rem', fontWeight: 600, margin: '0 0 0.5rem' }}>
+                        Capabilities this stake unlocks
+                    </p>
+                    <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                        {qualifyReadout.rows.map((r) => (
+                            <li
+                                key={r.capability}
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'baseline',
+                                    gap: '0.5rem',
+                                    fontSize: '0.85rem',
+                                    padding: '0.15rem 0',
+                                }}
+                            >
+                                <span
+                                    aria-hidden="true"
+                                    style={{ color: r.qualifies ? 'var(--xc-success, #16a34a)' : 'var(--muted, #999)' }}
+                                >
+                                    {r.qualifies ? '✓' : '○'}
+                                </span>
+                                <span style={{
+                                    flex: 1,
+                                    color: r.qualifies ? 'var(--xc-text, inherit)' : 'var(--muted, #777)',
+                                }}>
+                                    {r.label}
+                                    <span className="sr-only">{r.qualifies ? ' — qualifies' : ' — not yet'}</span>
+                                </span>
+                                <span style={{ color: 'var(--muted, #777)', fontVariantNumeric: 'tabular-nums' }}>
+                                    {r.minStake} XCHAIN
+                                </span>
+                            </li>
+                        ))}
+                    </ul>
+                    <p style={{ fontSize: '0.75rem', color: 'var(--muted, #777)', margin: '0.5rem 0 0' }}>
+                        {qualifyReadout.hasTopup
+                            ? `Based on your total stake of ${qualifyReadout.projected} XCHAIN for this pubkey (existing + this top-up). `
+                            : ''}
+                        Thresholds are set by network governance and can change.
+                    </p>
+                </div>
+            ) : null}
 
             <Input
                 label="Signing pubkey"

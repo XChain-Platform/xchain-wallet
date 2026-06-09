@@ -178,6 +178,14 @@ await assert.rejects(
     /GET_TICK.*or params\.GET_COIN/,
     'dispenserAction rejects create without GET_TICK or GET_COIN',
 );
+// Ownership dispenser (vend a name): GIVE_OWNERSHIP=1 drops the GIVE_AMOUNT
+// requirement, so a name-for-coin dispenser validates (the surfaced error
+// advances past GIVE_AMOUNT to the GET_TICK/GET_COIN check).
+await assert.rejects(
+    async () => flows.dispenserAction({ params: { GIVE_TICK: 'JDOG', GIVE_OWNERSHIP: '1', GET_AMOUNT: '0.5' } }),
+    /GET_TICK.*or params\.GET_COIN/,
+    'dispenserAction with GIVE_OWNERSHIP=1 drops the GIVE_AMOUNT requirement',
+);
 await assert.rejects(
     async () => flows.dispenserAction({
         params: { VERSION: '0', DISPENSER_ACTION_INDEX: '99' },

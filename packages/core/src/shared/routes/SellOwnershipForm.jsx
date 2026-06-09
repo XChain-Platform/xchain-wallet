@@ -1,0 +1,433 @@
+// Copyright © 2025–2026 Dankest, LLC
+// Based on XChain Platform by Dankest, LLC – https://dankest.llc
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// This file is part of XChain Platform. Licensed under the GNU Affero
+// General Public License v3.0 or later; see LICENSE.md. A commercial
+// license (without AGPL source-disclosure terms) is available —
+// contact legal@dankest.llc.
+
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+    Screen,
+    ScreenHeader,
+    Button,
+    Input,
+    ChainBadge,
+    AddressText,
+ Icon,} from '@xchain-wallet/core/ui';
+import { registry as registryLib } from '@xchain-wallet/core';
+import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
+import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { useWalletMode } from '../hooks/useWalletMode.js';
+import { useSignerInfo } from '../hooks/useSignerInfo.js';
+import styles from './IssueTokenForm.module.css';
+import receivePickerStyles from './TokenPicker.module.css';
+
+const chainRegistry = registryLib.defaultRegistry();
+
+const PROTOCOL_COIN_TICKER = {
+    bitcoin: 'BTC',
+    litecoin: 'LTC',
+    dogecoin: 'DOGE',
+};
+
+/**
+ * Sell-ownership surface — lists a token's ownership (the asset name) for
+ * sale with GIVE_OWNERSHIP=1, via either mechanism:
+ *   - ORDER — an open offer matched by a counterparty; native-coin payment
+ *     settles via COINPAY, token payment settles atomically;
+ *   - DISPENSER — an instant fixed-price buy (single-shot for ownership).
+ * Both take the same fields here; only the action + submit handler differ.
+ * Either side of the price can be native coin (GET_TICK empty) or a token.
+ *
+ * Unlike SwapForm (SWAP-based, no native coin), this reaches native-coin
+ * sales. Ownership sales are single-fill/indivisible; escrowed ownership
+ * returns to SOURCE on cancel/expiry. Launched from ManageToken's "Sell
+ * name" action with the token + chain prefilled.
+ *
+ * @param {object} props
+ * @param {string} props.walletId
+ * @param {() => void} props.onBack
+ * @param {string} props.chainId           the token's chain
+ * @param {string} props.tick              the token whose ownership is for sale
+ * @param {string} [props.initialFromAddress]   preferred signing address (issuer)
+ */
+export function SellOwnershipForm({ walletId, onBack, chainId, tick, initialFromAddress }) {
+    const { messaging, shell } = useMessaging();
+    const variant = screenVariantFor(shell);
+    const isFull = variant === 'full';
+
+    const [addressesByChain, setAddressesByChain] = useState(
+        /** @type {Record<string, any[]> | null} */ (null),
+    );
+    const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
+    const [fromAddressId, setFromAddressId] = useState(/** @type {string | null} */ (null));
+
+    // 'order' → open ORDER (matched offer); 'dispenser' → DISPENSER (instant
+    // fixed-price buy). Both escrow the name via GIVE_OWNERSHIP=1.
+    const [mechanism, setMechanism] = useState(/** @type {'order' | 'dispenser'} */ ('order'));
+    // 'coin' → sell for native coin (GET_TICK empty); 'token' → sell for a token.
+    const [getMode, setGetMode] = useState(/** @type {'coin' | 'token'} */ ('coin'));
+    const [getTick, setGetTick] = useState('');
+    const [price, setPrice] = useState('');
+    const [expiration, setExpiration] = useState('');
+    const [memo, setMemo] = useState('');
+    const [password, setPassword] = useState('');
+
+    const [stage, setStage] = useState(/** @type {'form' | 'submitting' | 'done'} */ ('form'));
+    const [formError, setFormError] = useState(/** @type {string | null} */ (null));
+    const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
+    const [result, setResult] = useState(/** @type {any | null} */ (null));
+    const [hwStatus, setHwStatus] = useState('idle');
+    const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
+
+    useEffect(() => {
+        let cancelled = false;
+        messaging.getAddressesByChain(walletId)
+            .then((byChain) => {
+                if (cancelled) return;
+                setAddressesByChain(byChain || {});
+                const all = (byChain || {})[chainId] || [];
+                if (all.length === 0) {
+                    setLoadError(`No address on this chain to sign from. Use Receive to generate one first.`);
+                    return;
+                }
+                if (initialFromAddress) {
+                    const match = all.find((a) => a.address === initialFromAddress);
+                    if (match) { setFromAddressId(match.id); return; }
+                }
+                const hd = all.filter((a) => a.source === 'hd' && a.derivationPath?.split('/')?.[4] === '0');
+                const pick = (hd.length > 0 ? hd : all).slice().sort((a, b) => {
+                    const ai = Number(a.derivationPath?.split('/')?.[5] ?? -1);
+                    const bi = Number(b.derivationPath?.split('/')?.[5] ?? -1);
+                    return bi - ai;
+                })[0];
+                setFromAddressId(pick.id);
+            })
+            .catch((err) => {
+                if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
+            });
+        return () => { cancelled = true; };
+    }, [walletId, chainId, messaging, initialFromAddress]);
+
+    const descriptor = chainId ? chainRegistry.get(chainId) : null;
+    const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
+    const fromAddress = useMemo(() => {
+        if (!addressesByChain || !fromAddressId) return null;
+        return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
+    }, [addressesByChain, chainId, fromAddressId]);
+
+    const hw = isHwSource(fromAddress);
+    const hwSignerInfo = useSignerInfo({ walletId, signerId: hw ? fromAddress?.signerId : null });
+    const { isWatcherMode } = useWalletMode();
+
+    const tokenUpper = (tick || '').toUpperCase();
+    const wantLabel = getMode === 'coin' ? coinTicker : (getTick.trim().toUpperCase() || 'token');
+
+    const validationError = useMemo(() => {
+        if (getMode === 'token') {
+            const gt = getTick.trim().toUpperCase();
+            if (gt && gt === coinTicker) {
+                return `Pick "Native coin" to sell for ${coinTicker} — the token field is for selling against another token.`;
+            }
+            if (gt && gt === tokenUpper) {
+                return 'The price token must differ from the token being sold.';
+            }
+        }
+        if (expiration.trim() && !/^[0-9]+$/.test(expiration.trim())) {
+            return 'Expiration must be a whole number of blocks.';
+        }
+        return null;
+    }, [getMode, getTick, coinTicker, tokenUpper, expiration]);
+
+    const priceReady = /^[0-9]+(\.[0-9]+)?$/.test(price.trim()) && Number(price.trim()) > 0;
+    const getTickReady = getMode === 'coin' || getTick.trim().length > 0;
+
+    async function handleSubmit(event) {
+        event.preventDefault();
+        if (stage === 'submitting') return;
+        if (!fromAddress || !chainId) return;
+        if (validationError) return;
+        if (!priceReady || !getTickReady) {
+            setFormError(`Enter what you want in return and a price greater than 0.`);
+            return;
+        }
+        if (!isWatcherMode && !hw && password.length === 0) return;
+        if (!isWatcherMode && hw && hwStatus !== 'available') return;
+
+        setStage('submitting');
+        setFormError(null);
+        setSubmitError(null);
+        try {
+            // ORDER and DISPENSER ownership sales take the same fields; only
+            // the action name + submit handler differ. GIVE_ESCROW is omitted
+            // (must be empty for an ownership dispenser).
+            const action = mechanism === 'dispenser' ? 'DISPENSER' : 'ORDER';
+            const params = {
+                VERSION: '0',
+                GIVE_COIN: coinTicker,
+                GIVE_TICK: tokenUpper,
+                GIVE_OWNERSHIP: '1',
+                GET_COIN: coinTicker,
+                ...(getMode === 'token' ? { GET_TICK: getTick.trim().toUpperCase() } : {}),
+                GET_AMOUNT: String(price).trim(),
+                ...(expiration.trim() ? { EXPIRATION: expiration.trim() } : {}),
+                ...(memo.trim() ? { MEMO: memo.trim() } : {}),
+            };
+            const base = {
+                walletId,
+                chainId,
+                from: {
+                    address: fromAddress.address,
+                    publicKey: fromAddress.publicKey,
+                    derivationPath: fromAddress.derivationPath,
+                    addressId: fromAddress.id,
+                    source: fromAddress.source,
+                    signerId: fromAddress.signerId,
+                },
+                params,
+            };
+            let r;
+            if (isWatcherMode) {
+                r = await messaging.buildActionPsbtRequest({
+                    chainId,
+                    from: base.from,
+                    actionData: { action, params },
+                });
+            } else if (mechanism === 'dispenser') {
+                r = hw
+                    ? await messaging.dispenserActionHw({ ...base, signerId: fromAddress.signerId })
+                    : await messaging.dispenserAction({ ...base, password });
+            } else {
+                r = hw
+                    ? await messaging.orderActionHw({ ...base, signerId: fromAddress.signerId })
+                    : await messaging.orderAction({ ...base, password });
+            }
+            setResult(r);
+            setStage('done');
+        } catch (err) {
+            const bad = err?.name === 'InvalidPasswordError';
+            setSubmitError(bad ? 'Incorrect password.' : err?.message || 'Sign failed.');
+            setStage('form');
+            if (!isWatcherMode && !hw) {
+                passwordRef.current?.focus();
+                passwordRef.current?.select();
+            }
+        }
+    }
+
+    function handleBuildAnother() {
+        setResult(null);
+        setSubmitError(null);
+        setStage('form');
+    }
+
+    const header = (
+        <ScreenHeader onBack={onBack} title={`Sell ${tokenUpper} name`} />
+    );
+    const wrap = (children) => (
+        <Screen variant={variant} header={header}>
+            {isFull ? <div className={styles.card}>{children}</div> : children}
+        </Screen>
+    );
+
+    if (loadError) {
+        return wrap(<div role="alert" className={styles.error}>{loadError}</div>);
+    }
+    if (!addressesByChain) {
+        return wrap(<p className={styles.hint}>Loading wallet…</p>);
+    }
+
+    if (stage === 'done') {
+        const txid = result?.txid;
+        if (result?.psbtHex && !txid) {
+            return wrap(
+                <WatcherResultPanel result={result} onBuildAnother={handleBuildAnother} onDone={onBack} />,
+            );
+        }
+        return wrap(
+            <>
+                <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>Name listed for sale</p>
+                {txid ? <p style={{ margin: '0 0 0.5rem' }}>Transaction: <code>{txid}</code></p> : null}
+                <p className={styles.hint}>
+                    Your {mechanism === 'dispenser' ? 'dispenser' : 'offer'} to sell ownership of {tokenUpper} for {price} {wantLabel} is open.
+                    {mechanism === 'dispenser'
+                        ? ' A buyer can purchase it instantly at this price; close the dispenser to reclaim ownership.'
+                        : ' Ownership is escrowed until a buyer matches; cancel before then to reclaim it.'}
+                </p>
+                <div className={styles.actions}>
+                    <Button variant="primary" onClick={onBack}>Done</Button>
+                </div>
+            </>,
+        );
+    }
+
+    return wrap(
+        <form onSubmit={handleSubmit} noValidate>
+            <div className={styles.chainLine}>
+                {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
+            </div>
+
+            <dl className={styles.detailsList}>
+                <dt className={styles.detailsLabel}>Selling the name</dt>
+                <dd className={styles.detailsValue} style={{ fontWeight: 700 }}>{tokenUpper}</dd>
+                {fromAddress ? (
+                    <>
+                        <dt className={styles.detailsLabel}>From</dt>
+                        <dd className={styles.detailsValue}><AddressText address={fromAddress.address} /></dd>
+                    </>
+                ) : null}
+            </dl>
+
+            <p className={styles.hint} style={{ marginTop: 0 }}>
+                You're selling the entire ownership of {tokenUpper} — single sale, no partial fills.
+            </p>
+
+            <div
+                className={receivePickerStyles.kindSegments}
+                role="tablist"
+                aria-label="How to sell"
+                style={{ width: '100%', margin: 'var(--xc-space-2) 0' }}
+            >
+                {[
+                    { id: 'order', label: 'Open order' },
+                    { id: 'dispenser', label: 'Instant buy' },
+                ].map((opt) => (
+                    <button
+                        key={opt.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={mechanism === opt.id}
+                        className={`${receivePickerStyles.kindSegment} ${mechanism === opt.id ? receivePickerStyles.kindSegmentActive : ''}`}
+                        style={{ flex: 1 }}
+                        onClick={() => setMechanism(/** @type {'order' | 'dispenser'} */ (opt.id))}
+                    >
+                        {opt.label}
+                    </button>
+                ))}
+            </div>
+            <p className={styles.hint} style={{ marginTop: 0 }}>
+                {mechanism === 'order'
+                    ? 'Open order — anyone can take the offer at your price; cancel before it matches.'
+                    : 'Instant buy — a dispenser sells the name to the first buyer who pays your price.'}
+            </p>
+
+            <div
+                className={receivePickerStyles.kindSegments}
+                role="tablist"
+                aria-label="What you want in return"
+                style={{ width: '100%', margin: 'var(--xc-space-2) 0' }}
+            >
+                {[
+                    { id: 'coin', label: `Native coin (${coinTicker || 'coin'})` },
+                    { id: 'token', label: 'Another token' },
+                ].map((opt) => (
+                    <button
+                        key={opt.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={getMode === opt.id}
+                        className={`${receivePickerStyles.kindSegment} ${getMode === opt.id ? receivePickerStyles.kindSegmentActive : ''}`}
+                        style={{ flex: 1 }}
+                        onClick={() => setGetMode(/** @type {'coin' | 'token'} */ (opt.id))}
+                    >
+                        {opt.label}
+                    </button>
+                ))}
+            </div>
+
+            {getMode === 'token' ? (
+                <Input
+                    label="Price token"
+                    value={getTick}
+                    onChange={(e) => setGetTick(e.target.value)}
+                    placeholder="e.g. XCHAIN"
+                    autoCapitalize="characters"
+                    autoComplete="off"
+                />
+            ) : null}
+
+            <Input
+                label={`Price${wantLabel ? ` (in ${wantLabel})` : ''}`}
+                hint={getMode === 'coin'
+                    ? 'When a buyer matches, they pay this in coin via COINPAY and ownership is delivered on settlement.'
+                    : 'The buyer transfers this many tokens; ownership swaps atomically on match.'}
+                type="text"
+                inputMode="decimal"
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+                autoComplete="off"
+            />
+
+            <Input
+                label="Expires after (blocks, optional)"
+                hint="Leave blank for no expiry. The order stays open until matched or cancelled."
+                type="text"
+                inputMode="numeric"
+                value={expiration}
+                onChange={(e) => setExpiration(e.target.value)}
+                autoComplete="off"
+            />
+
+            <Input
+                label="Memo (optional)"
+                value={memo}
+                onChange={(e) => setMemo(e.target.value)}
+                autoComplete="off"
+            />
+
+            {validationError ? (
+                <p role="alert" className={styles.error} style={{ marginTop: '0.5rem' }}>{validationError}</p>
+            ) : null}
+
+            {fromAddress ? (
+                isWatcherMode ? (
+                    <p className={styles.hint}>
+                        Watcher mode — this wallet will build an unsigned transaction. Sign it on your
+                        Signer-mode wallet, then broadcast from a Full-mode wallet.
+                    </p>
+                ) : (
+                    <SignCredentials
+                        fromAddress={fromAddress}
+                        chainId={chainId}
+                        password={password}
+                        onPasswordChange={(v) => { setPassword(v); if (submitError) setSubmitError(null); }}
+                        onStatusChange={onHwStatusChange}
+                        passwordRef={passwordRef}
+                        submitError={submitError}
+                        disabled={stage === 'submitting'}
+                        getSignerStatus={messaging.getSignerStatus}
+                        signerInfo={hwSignerInfo}
+                    />
+                )
+            ) : null}
+            {(isWatcherMode || hw) && submitError ? (
+                <p role="alert" style={{ margin: '0.25rem 0 0', color: '#ef5350', fontSize: '0.75rem' }}>{submitError}</p>
+            ) : null}
+
+            {formError ? (
+                <p role="alert" className={styles.error} style={{ marginTop: '0.5rem' }}>{formError}</p>
+            ) : null}
+
+            <div className={styles.actions}>
+                <Button
+                    type="submit"
+                    variant="primary"
+                    loading={stage === 'submitting'}
+                    disabled={!!validationError || !fromAddress || !priceReady || !getTickReady
+                        || (isWatcherMode ? false : hw ? hwStatus !== 'available' : password.length === 0)}
+                >
+                    {isWatcherMode
+                        ? 'Create unsigned transaction'
+                        : hw
+                            ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                            : 'List name for sale'}
+                </Button>
+            </div>
+        </form>,
+    );
+}

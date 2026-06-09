@@ -39,9 +39,10 @@ import { sampleMatchesFor } from '../../market/sampleMarketData.js';
  * @param {string} props.chainId
  * @param {string} props.tick1
  * @param {string} props.tick2
+ * @param {boolean} [props.demo]   demo wallet — chart sample matches when there's no live history
  * @param {string} [props.height]   css value, default '240px'
  */
-export function MarketChart({ chainId, tick1, tick2, height = '120px' }) {
+export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120px' }) {
     const { messaging } = useMessaging();
     const containerRef = useRef(/** @type {HTMLDivElement | null} */ (null));
     const chartRef = useRef(/** @type {any} */ (null));
@@ -115,17 +116,18 @@ export function MarketChart({ chainId, tick1, tick2, height = '120px' }) {
             .then((resp) => {
                 if (cancelled) return;
                 const real = extractRows(resp);
-                // TEMP — fall back to sample matches so the chart draws
-                // something pre-real-feed.
-                setRawRows(real.length > 0 ? real : sampleMatchesFor(tick1, tick2));
+                // Demo wallets chart sample matches when there's no live
+                // history; real wallets chart real fills, or show the "No
+                // trades yet" empty state below.
+                setRawRows(real.length > 0 ? real : (demo ? sampleMatchesFor(tick1, tick2) : []));
             })
             .catch((err) => {
                 if (cancelled) return;
-                setRawRows(sampleMatchesFor(tick1, tick2));
+                setRawRows(demo ? sampleMatchesFor(tick1, tick2) : []);
                 setLoadError(err?.message || String(err));
             });
         return () => { cancelled = true; };
-    }, [messaging, chainId, tick1, tick2]);
+    }, [messaging, chainId, tick1, tick2, demo]);
 
     // Rebucket + push into the series whenever rows or period change.
     useEffect(() => {

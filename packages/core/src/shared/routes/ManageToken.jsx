@@ -56,6 +56,7 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {() => void} [props.onLock]
  * @param {() => void} [props.onUpdateDescription]
  * @param {() => void} [props.onTransferOwnership]
+ * @param {() => void} [props.onSellOwnership]       list this token's ownership (name) for sale via an ownership SWAP
  * @param {() => void} [props.onCreateDispenser]
  * @param {() => void} [props.onPayDividend]
  * @param {() => void} [props.onAirdrop]
@@ -76,6 +77,7 @@ export function ManageToken({
     onLock,
     onUpdateDescription,
     onTransferOwnership,
+    onSellOwnership,
     onCreateDispenser,
     onPayDividend,
     onAirdrop,
@@ -386,6 +388,7 @@ export function ManageToken({
         { id: 'airdrop', label: 'Airdrop', Icon: Icon.SendIcon, onSelect: onAirdrop },
         { id: 'description', label: 'Description', Icon: Icon.PencilIcon, onSelect: blockIssuerActions ? undefined : onUpdateDescription },
         { id: 'transfer', label: 'Transfer', Icon: Icon.HandshakeIcon, onSelect: blockIssuerActions ? undefined : onTransferOwnership },
+        { id: 'sell-ownership', label: 'Sell name', Icon: Icon.MarketIcon, onSelect: blockIssuerActions ? undefined : onSellOwnership },
         { id: 'broadcast', label: 'Broadcast', Icon: Icon.BroadcastIcon, onSelect: blockIssuerActions ? undefined : onBroadcast },
         { id: 'lock', label: 'Lock', Icon: Icon.LockIcon, onSelect: (locked || blockIssuerActions) ? undefined : onLock },
         { id: 'destroy', label: 'Destroy', Icon: Icon.TrashIcon, onSelect: onDestroy, danger: true },

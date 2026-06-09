@@ -114,7 +114,7 @@ for (const h of ["'action.unstake'", "'action.collect'"]) {
 }
 assert.ok(/registerHwHandler\('action\.unstake\.hw', unstakeAction\)/.test(bg),
     'background host registers action.unstake.hw');
-assert.ok(/registerHwHandler\('action\.claimRewards\.hw', collectAction\)/.test(bg),
+assert.ok(/registerHwHandler\('action\.collect\.hw', collectAction\)/.test(bg),
     'background host registers action.collect.hw');
 
 for (const [shell, msgPath] of [

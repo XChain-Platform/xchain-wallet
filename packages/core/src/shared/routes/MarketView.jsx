@@ -15,7 +15,7 @@ import {
     Button,
     ChainBadge,
  Icon,} from '@xchain-wallet/core/ui';
-import { registry as registryLib } from '@xchain-wallet/core';
+import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { MarketChart } from '../components/MarketChart.jsx';
 import { OrderbookPanel } from '../components/OrderbookPanel.jsx';
@@ -26,7 +26,7 @@ import { TradeHistoryPanel } from '../components/TradeHistoryPanel.jsx';
 import { TickerIcon } from '../components/TickerIcon.jsx';
 import { sampleMatchesFor } from '../../market/sampleMarketData.js';
 import styles from './IssueTokenForm.module.css';
-import receivePickerStyles from './ReceivePicker.module.css';
+import receivePickerStyles from './TokenPicker.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -63,6 +63,10 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
+    // Demo wallets get sample feeds so the trading surface is fully
+    // populated without live liquidity. Real wallets show live data and
+    // the panels' own empty states — never fabricated prices/trades.
+    const demo = flowsLib.isDemoWallet(walletId);
 
     const [summary, setSummary] = useState(/** @type {any | null} */ (null));
     const [summaryError, setSummaryError] = useState(/** @type {string | null} */ (null));
@@ -83,10 +87,26 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
 
     const descriptor = chainRegistry.get(chainId);
 
-    // TEMP — derive 24h high / low / volume / last from the same sample
-    // matches that feed the chart, so the header tells a consistent
-    // story until real getMarketHistory data lands here.
-    const stats = useMemo(() => derive24hStats(sampleMatchesFor(tick1, tick2), tick1, tick2), [tick1, tick2]);
+    // Header 24h stats (last / change / high / low / volume) derive from
+    // the live getMarketHistory feed — the same data the chart + trades
+    // panel render. Demo wallets fall back to sample matches; real wallets
+    // show real stats, or blanks ("—") when the market has no fills yet.
+    const [historyRows, setHistoryRows] = useState(/** @type {any[]} */ ([]));
+    useEffect(() => {
+        let cancelled = false;
+        setHistoryRows([]);
+        messaging.getMarketHistory({ chainId, tick1, tick2 })
+            .then((resp) => {
+                if (cancelled) return;
+                const real = extractHistoryRows(resp);
+                setHistoryRows(real.length > 0 ? real : (demo ? sampleMatchesFor(tick1, tick2) : []));
+            })
+            .catch(() => {
+                if (!cancelled) setHistoryRows(demo ? sampleMatchesFor(tick1, tick2) : []);
+            });
+        return () => { cancelled = true; };
+    }, [messaging, chainId, tick1, tick2, demo]);
+    const stats = useMemo(() => derive24hStats(historyRows, tick1, tick2), [historyRows, tick1, tick2]);
     const lastPrice = stats.lastPrice;
     const changePct = stats.changePct;
     const changeColor = Number.isFinite(changePct)
@@ -184,7 +204,7 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
             {headerCard}
 
             <div style={{ marginTop: 'var(--xc-space-3)' }}>
-                <MarketChart chainId={chainId} tick1={tick1} tick2={tick2} />
+                <MarketChart chainId={chainId} tick1={tick1} tick2={tick2} demo={demo} />
             </div>
 
             <div
@@ -222,11 +242,12 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                     chainId={chainId}
                     tick1={tick1}
                     tick2={tick2}
+                    demo={demo}
                     onPickPrice={(price) => { setPrefillPrice(price); setTab('place'); }}
                 />
             ) : null}
             {tab === 'trades' ? (
-                <RecentTradesPanel chainId={chainId} tick1={tick1} tick2={tick2} />
+                <RecentTradesPanel chainId={chainId} tick1={tick1} tick2={tick2} demo={demo} />
             ) : null}
             {tab === 'place' ? (
                 <PlaceOrderPanel
@@ -258,6 +279,16 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
             </div>
         </>,
     );
+}
+
+/** Normalize the explorer's getMarketHistory response into a row array. */
+function extractHistoryRows(resp) {
+    if (!resp) return [];
+    if (Array.isArray(resp)) return resp;
+    if (Array.isArray(resp.data)) return resp.data;
+    if (Array.isArray(resp.rows)) return resp.rows;
+    if (Array.isArray(resp.history)) return resp.history;
+    return [];
 }
 
 /**

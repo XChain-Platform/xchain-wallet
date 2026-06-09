@@ -75,23 +75,26 @@ describe('decodeAction', () => {
     });
 
     describe('SWEEP', () => {
-        it('summarises the sweep destination and attaches the blanket warning', () => {
+        it('summarises the swept categories and attaches the warning', () => {
             const d = decodeAction({
                 action: 'SWEEP',
                 params: { DESTINATION: 'bc1qrecip' },
                 chainId: 'dogecoin-mainnet',
                 chainRegistry,
             });
-            expect(d.summary).toBe('Sweep all tokens on Dogecoin to bc1qrecip');
-            expect(d.warnings.some((w) => /sweep moves every balance/i.test(w))).toBe(true);
+            // No flags given → BALANCES/OWNERSHIPS default on, escrow flags off.
+            expect(d.summary).toBe('Sweep balances, ownerships on Dogecoin to bc1qrecip');
+            expect(d.warnings.some((w) => /sweep moves the selected/i.test(w))).toBe(true);
         });
 
-        it('includes flags + memo rows when provided', () => {
+        it('reflects the selective flags + memo rows', () => {
             const d = decodeAction({
                 action: 'SWEEP',
-                params: { DESTINATION: 'x', FLAGS: '3', MEMO: 'cleanup' },
+                params: { DESTINATION: 'x', BALANCES: '1', OWNERSHIPS: '0', ORDERS: '1', MEMO: 'cleanup' },
             });
-            expect(d.details.map((r) => r.label)).toEqual(['Destination', 'Flags', 'Memo']);
+            expect(d.details.map((r) => r.label)).toEqual(['Destination', 'Sweeps', 'Memo']);
+            const sweeps = d.details.find((r) => r.label === 'Sweeps');
+            expect(sweeps.value).toBe('balances, open orders');
         });
     });
 

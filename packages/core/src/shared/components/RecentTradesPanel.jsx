@@ -26,9 +26,10 @@ const MAX_ROWS = 30;
  * @param {string} props.chainId
  * @param {string} props.tick1
  * @param {string} props.tick2
+ * @param {boolean} [props.demo]   demo wallet — render sample trades when there's no live history
  * @param {(txid: string) => void} [props.onOpenTx]   navigate to the tx detail (future)
  */
-export function RecentTradesPanel({ chainId, tick1, tick2, onOpenTx }) {
+export function RecentTradesPanel({ chainId, tick1, tick2, demo = false, onOpenTx }) {
     const { messaging } = useMessaging();
     const [rows, setRows] = useState(/** @type {any[]} */ ([]));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
@@ -41,17 +42,19 @@ export function RecentTradesPanel({ chainId, tick1, tick2, onOpenTx }) {
             .then((resp) => {
                 if (cancelled) return;
                 const real = extractRows(resp);
-                // TEMP — sample fallback when no real history exists.
-                const next = real.length > 0 ? real : sampleMatchesFor(tick1, tick2);
+                // Demo wallets show sample trades when there's no live
+                // history; real wallets show real fills or the "No trades
+                // yet" empty state — never fabricated trades.
+                const next = real.length > 0 ? real : (demo ? sampleMatchesFor(tick1, tick2) : []);
                 setRows(next.slice(0, MAX_ROWS));
             })
             .catch((err) => {
                 if (cancelled) return;
-                setRows(sampleMatchesFor(tick1, tick2).slice(0, MAX_ROWS));
+                setRows(demo ? sampleMatchesFor(tick1, tick2).slice(0, MAX_ROWS) : []);
                 setLoadError(err?.message || String(err));
             });
         return () => { cancelled = true; };
-    }, [messaging, chainId, tick1, tick2]);
+    }, [messaging, chainId, tick1, tick2, demo]);
 
     return (
         <div

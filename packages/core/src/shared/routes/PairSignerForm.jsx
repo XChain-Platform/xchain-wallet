@@ -11,6 +11,7 @@
 import { useState } from 'react';
 import {
     Screen,
+    ScreenHeader,
     Button,
     Input,
  Icon, StatusMessage,} from '@xchain-wallet/core/ui';

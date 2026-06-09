@@ -85,6 +85,24 @@ export async function validatorsForChain({ sdkRegistry, chainId, opts }) {
 }
 
 /**
+ * Per-capability MIN_STAKE thresholds for capability staking, read live
+ * from the hub. Returns an array of { capability, min_stake, disabled }
+ * rows, or null when the hub is unreachable / not configured (e.g. regtest)
+ * or the linked SDK predates the getter. Backs StakeForm's live "which
+ * capabilities does this stake qualify for" readout. Capabilities are
+ * global governance config; chainId only selects which SDK's hub to ask.
+ *
+ * @param {{ sdkRegistry: any, chainId: string }} params
+ */
+export async function capabilityThresholds({ sdkRegistry, chainId }) {
+    if (!sdkRegistry) throw new Error('capabilityThresholds: sdkRegistry is required');
+    if (!chainId) throw new Error('capabilityThresholds: chainId is required');
+    const sdk = sdkRegistry.get(chainId);
+    if (typeof sdk.getCapabilityThresholds !== 'function') return null;
+    return sdk.getCapabilityThresholds();
+}
+
+/**
  * Contract-targeted staking queries — parallel to the capability staking ones above.
  * Backs the §42.7.x ContractStakedPositions dashboard surface.
  *
