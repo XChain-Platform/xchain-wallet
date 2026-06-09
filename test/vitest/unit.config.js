@@ -47,9 +47,20 @@ export default defineConfig({
         coverage: {
             provider: 'v8',
             reporter: ['text', 'html'],
-            include: ['packages/core/src/**/*.{js,jsx}'],
+            // Lens covers the whole logic surface of the wallet, not just `core`,
+            // so the coverage number is honest about what the unit suite reaches.
+            // The UI-heavy packages (extension/web) are primarily exercised by the
+            // integration + Playwright e2e suites and will read low here until
+            // Phase 1 adds unit tests (or a combined all-suite coverage run lands).
+            include: [
+                'packages/core/src/**/*.{js,jsx}',
+                'packages/extension/src/**/*.{js,jsx}',
+                'packages/web/src/**/*.{js,jsx}',
+                'packages/signers-ledger/src/**/*.{js,jsx}',
+                'packages/signers-trezor/src/**/*.{js,jsx}',
+            ],
             exclude: [
-                'packages/core/src/**/index.js',
+                '**/index.js',
                 'packages/core/src/branding/images/**',
                 'packages/core/src/ui/tokens.css',
             ],
