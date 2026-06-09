@@ -10,7 +10,7 @@
 
 import { useMemo, useState } from 'react';
 import { Screen, ScreenHeader, Input, Icon, Skeleton } from '@xchain-wallet/core/ui';
-import { registry as registryLib } from '@xchain-wallet/core';
+import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { TickerIcon } from '../components/TickerIcon.jsx';
 import styles from './MarketActivity.module.css';
@@ -38,10 +38,13 @@ function extractRows(resp) {
  * parallel, merging results.
  *
  * @param {object} props
+ * @param {string} [props.walletId]  active wallet; when it's the demo
+ *        wallet, feeds come from {@link flowsLib.synthesizeDemoMarketActivity}
+ *        instead of the live explorer.
  * @param {() => void} props.onBack
  * @param {(chainId: string, actionIndex: string) => void} [props.onOpenDispenser]
  */
-export function MarketActivity({ onBack, onOpenDispenser }) {
+export function MarketActivity({ walletId, onBack, onOpenDispenser }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
 
@@ -72,6 +75,19 @@ export function MarketActivity({ onBack, onOpenDispenser }) {
         setSales(null);
         setDexOrders(null);
         setDexSwaps(null);
+
+        // Demo wallet: the explorer-backed feeds have no backend, so
+        // fabricate the four feeds locally (mirrors how balances/history
+        // are synthesized) rather than firing live cross-chain calls.
+        if (walletId && flowsLib.isDemoWallet(walletId)) {
+            const demo = flowsLib.synthesizeDemoMarketActivity(q);
+            setOffers(demo.offers);
+            setSales(demo.sales);
+            setDexOrders(demo.dexOrders);
+            setDexSwaps(demo.dexSwaps);
+            setSearching(false);
+            return;
+        }
 
         const offersByChain = chains.map((cid) =>
             messaging.getDispensersForToken({ chainId: cid, token: q })

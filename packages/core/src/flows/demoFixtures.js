@@ -598,3 +598,83 @@ export function synthesizeDemoDefiPositions() {
 export function synthesizeDemoLinks() {
     return [];
 }
+
+// Illustrative per-token coin price (native-coin units per 1 token) used
+// only to make the demo Marketplace numbers look plausible. Keyed by the
+// chain's native ticker; arbitrary round values, not market data.
+const DEMO_COIN_UNIT_PRICE = { BTC: 0.00002, LTC: 0.004, DOGE: 0.6 };
+
+/**
+ * Synthesize the four feeds the §41 Marketplace (MarketActivity) page
+ * renders for a searched token: open dispensers, recent dispenses,
+ * open DEX orders, and recent DEX swaps. Mirrors the demo pattern used
+ * by {@link synthesizeDemoHistory} so the demo wallet shows a populated
+ * Marketplace instead of hitting a live explorer it has no backend for.
+ *
+ * The token is matched against the mainnet balance fixtures — searching
+ * any token the demo wallet can hold (e.g. PEPECASH, RAREPEPE, XCP on
+ * Bitcoin; OMNILITE, MWEB on Litecoin; DOGI, WOW on Dogecoin) returns
+ * activity on that token's home chain. An unrecognized ticker returns
+ * empty feeds, exactly as a real explorer would for a token with no
+ * market.
+ *
+ * Each feed entry is already wrapped as `{ chainId, row }` — the shape
+ * MarketActivity builds per-chain — so the caller can set state directly.
+ *
+ * @param {string} token  ticker the user searched for
+ * @param {{ now?: number }} [opts]
+ * @returns {{ offers: Array<{chainId: string, row: any}>, sales: Array<{chainId: string, row: any}>, dexOrders: Array<{chainId: string, row: any}>, dexSwaps: Array<{chainId: string, row: any}> }}
+ */
+export function synthesizeDemoMarketActivity(token, opts = {}) {
+    const tick = String(token || '').trim().toUpperCase();
+    const empty = { offers: [], sales: [], dexOrders: [], dexSwaps: [] };
+    if (!tick) return empty;
+
+    const now = typeof opts.now === 'number' ? opts.now : Date.now();
+    const sec = (deltaSec) => Math.floor(now / 1000) - deltaSec;
+
+    // Locate the mainnet chain whose fixture lists this token. Mainnet
+    // only — that's the network the demo balances (and the chain badge
+    // the user is looking at) are on.
+    let chainId = null;
+    for (const [cid, fix] of Object.entries(PER_CHAIN_DEFAULTS)) {
+        if (!cid.endsWith('-mainnet')) continue;
+        if ((fix.tokens || []).some((t) => t.tick.toUpperCase() === tick)) {
+            chainId = cid;
+            break;
+        }
+    }
+    if (!chainId) return empty;
+
+    const coinTick = PER_CHAIN_DEFAULTS[chainId].native.tick; // BTC / LTC / DOGE
+    const unit = DEMO_COIN_UNIT_PRICE[coinTick] ?? 0.00002;
+    // Coin amount that `qty` of the token is priced at, trimmed to a
+    // clean 8-dp value so toLocaleString() reads nicely.
+    const px = (qty) => Number((unit * qty).toFixed(8));
+    const wrap = (row) => ({ chainId, row });
+
+    const offers = [
+        { action_index: 900101, status: 0, give_quantity: 1000, get_tick: coinTick, get_quantity: px(1000), give_remaining: 7500 },
+        { action_index: 900102, status: 0, give_quantity: 500, get_tick: coinTick, get_quantity: px(500), give_remaining: 2000 },
+    ].map(wrap);
+
+    const sales = [
+        { tx_hash: `demo-${chainId}-dispense-1`, give_quantity: 1000, get_tick: coinTick, get_quantity: px(1000), timestamp: sec(3_600) },
+        { tx_hash: `demo-${chainId}-dispense-2`, give_quantity: 250, get_tick: coinTick, get_quantity: px(250), timestamp: sec(14_400) },
+        { tx_hash: `demo-${chainId}-dispense-3`, give_quantity: 2000, get_tick: coinTick, get_quantity: px(2000), timestamp: sec(86_400) },
+    ].map(wrap);
+
+    const dexOrders = [
+        // A sell (give the token, get coin) and a buy (give coin, get the token).
+        { action_index: 900201, give_tick: tick, give_quantity: 5000, get_tick: coinTick, get_quantity: px(5000) },
+        { action_index: 900202, give_tick: coinTick, give_quantity: px(3000), get_tick: tick, get_quantity: 3000 },
+    ].map(wrap);
+
+    const dexSwaps = [
+        { tx_hash: `demo-${chainId}-swap-1`, give_tick: tick, give_quantity: 1500, get_tick: coinTick, get_quantity: px(1500), timestamp: sec(7_200) },
+        { tx_hash: `demo-${chainId}-swap-2`, give_tick: coinTick, give_quantity: px(800), get_tick: tick, get_quantity: 800, timestamp: sec(18_000) },
+        { tx_hash: `demo-${chainId}-swap-3`, give_tick: tick, give_quantity: 4200, get_tick: coinTick, get_quantity: px(4200), timestamp: sec(90_000) },
+    ].map(wrap);
+
+    return { offers, sales, dexOrders, dexSwaps };
+}
