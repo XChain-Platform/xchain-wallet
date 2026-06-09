@@ -370,7 +370,7 @@ function classifySource(address) {
 }
 
 function findDescriptor(address) {
-    for (const descriptor of chainRegistry.all()) {
+    for (const descriptor of chainRegistry.supportedChains()) {
         if (descriptor.coin === address.chain && descriptor.networkKind === address.network) {
             return descriptor;
         }

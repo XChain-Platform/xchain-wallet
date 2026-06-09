@@ -45,7 +45,7 @@ export function VerifySignatureForm({ onBack }) {
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
 
-    const chains = useMemo(() => chainRegistry.list().map((c) => ({
+    const chains = useMemo(() => chainRegistry.supportedChains().map((c) => ({
         id: c.id,
         label: c.displayName || c.id,
     })), []);
