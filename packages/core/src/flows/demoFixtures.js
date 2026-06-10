@@ -644,6 +644,14 @@ export function synthesizeDemoMarketActivity(token, opts = {}) {
             break;
         }
     }
+    // Featured / platform tokens (e.g. XCHAIN) and anything the demo wallet
+    // doesn't hold still get a demo market, homed on Bitcoin — so the
+    // Marketplace landing page is never empty in the demo.
+    if (!chainId) {
+        chainId = PER_CHAIN_DEFAULTS['bitcoin-mainnet']
+            ? 'bitcoin-mainnet'
+            : Object.keys(PER_CHAIN_DEFAULTS).find((cid) => cid.endsWith('-mainnet'));
+    }
     if (!chainId) return empty;
 
     const coinTick = PER_CHAIN_DEFAULTS[chainId].native.tick; // BTC / LTC / DOGE

@@ -8,14 +8,21 @@
 // license (without AGPL source-disclosure terms) is available —
 // contact legal@dankest.llc.
 
-import { useMemo, useState } from 'react';
-import { Screen, ScreenHeader, Input, Icon, Skeleton } from '@xchain-wallet/core/ui';
+import { useEffect, useMemo, useState } from 'react';
+import { Screen, ScreenHeader, Icon, Skeleton } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
+import { coinFromChainId } from '../components/BalanceList.jsx';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { TickerIcon } from '../components/TickerIcon.jsx';
+import { TokenPicker } from './TokenPicker.jsx';
 import styles from './MarketActivity.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+
+// Featured market shown on landing (same for everyone, independent of
+// holdings) — XChain's own token. Tapping the header swaps it for any
+// other coin/token via the shared picker.
+const FEATURED_MARKET = { tick: 'XCHAIN', displayName: 'XChain', chainId: null, imageUrl: null };
 
 function extractRows(resp) {
     if (Array.isArray(resp)) return resp;
@@ -23,74 +30,80 @@ function extractRows(resp) {
     return [];
 }
 
+const byTimeDesc = (a, b) => {
+    const ta = Number(a.row?.timestamp || a.row?.block_time || 0);
+    const tb = Number(b.row?.timestamp || b.row?.block_time || 0);
+    return tb - ta;
+};
+
 /**
- * §41/§42 — Marketplace activity feed.
+ * §41/§42 — Marketplace.
  *
- * Distinct from §40.7.2 DispenserExplorer (buyer-facing browse, open
- * dispenser offers only): MarketActivity covers both trading venues
- * for the searched token — fixed-price dispensers AND the DEX —
- * surfacing both open offers and recent fills so users can answer
- * "what's been bought and sold lately?"
+ * Mirrors the Decentralized Exchange shape: you land on a pre-selected
+ * market (the featured XChain token) and tap the token header to pull up
+ * the full coin/token list (the shared {@link TokenPicker}) and switch
+ * which market you're viewing. For the selected token it surfaces both
+ * trading venues across every supported chain — fixed-price dispensers
+ * AND the DEX — with open offers/orders and recent fills.
  *
- * The explorer backend has no "all platform" wildcard for any of
- * these queries; they are always scoped. This page therefore centers
- * on a token search and fans out across every supported chain in
- * parallel, merging results.
+ * Distinct from §40.7.2 DispenserExplorer (open dispenser offers only):
+ * this covers dispensers + DEX, open + filled.
  *
  * @param {object} props
  * @param {string} [props.walletId]  active wallet; when it's the demo
  *        wallet, feeds come from {@link flowsLib.synthesizeDemoMarketActivity}
  *        instead of the live explorer.
+ * @param {string} [props.accountId]
  * @param {() => void} props.onBack
  * @param {(chainId: string, actionIndex: string) => void} [props.onOpenDispenser]
  */
-export function MarketActivity({ walletId, onBack, onOpenDispenser }) {
+export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
 
     const chains = useMemo(() => chainRegistry.supportedChains().map((d) => d.id), []);
+    // A representative chain for the featured-token icon (prefer Bitcoin).
+    const defaultChainId = useMemo(
+        () => chains.find((id) => coinFromChainId(id) === 'bitcoin') || chains[0] || null,
+        [chains],
+    );
 
-    const [query, setQuery] = useState('');
-    const [lastQuery, setLastQuery] = useState(/** @type {string | null} */ (null));
-    const [searching, setSearching] = useState(false);
+    const [selected, setSelected] = useState(FEATURED_MARKET);
+    const [picking, setPicking] = useState(false);
+    const [loading, setLoading] = useState(true);
     const [offers, setOffers] = useState(/** @type {Array<{chainId: string, row: any}> | null} */ (null));
     const [sales, setSales] = useState(/** @type {Array<{chainId: string, row: any}> | null} */ (null));
     const [dexOrders, setDexOrders] = useState(/** @type {Array<{chainId: string, row: any}> | null} */ (null));
     const [dexSwaps, setDexSwaps] = useState(/** @type {Array<{chainId: string, row: any}> | null} */ (null));
-    const [error, setError] = useState(/** @type {string | null} */ (null));
 
-    function handleSearch(event) {
-        event.preventDefault();
-        const q = query.trim().toUpperCase();
-        if (!q) return;
-        if (!/^[A-Za-z0-9.^]+$/.test(q)) {
-            setError('Token search accepts A–Z, 0–9, period, or ^TICK_ID.');
-            setLastQuery(q);
-            return;
-        }
-        setError(null);
-        setLastQuery(q);
-        setSearching(true);
+    const tick = (selected.tick || '').toUpperCase();
+
+    // Load the selected market — on landing and whenever the user picks a
+    // different coin/token. Demo wallets are served fabricated feeds; real
+    // wallets fan out across every supported chain in parallel.
+    useEffect(() => {
+        if (!tick) return undefined;
+        let cancelled = false;
+        setLoading(true);
         setOffers(null);
         setSales(null);
         setDexOrders(null);
         setDexSwaps(null);
 
-        // Demo wallet: the explorer-backed feeds have no backend, so
-        // fabricate the four feeds locally (mirrors how balances/history
-        // are synthesized) rather than firing live cross-chain calls.
         if (walletId && flowsLib.isDemoWallet(walletId)) {
-            const demo = flowsLib.synthesizeDemoMarketActivity(q);
-            setOffers(demo.offers);
-            setSales(demo.sales);
-            setDexOrders(demo.dexOrders);
-            setDexSwaps(demo.dexSwaps);
-            setSearching(false);
-            return;
+            const demo = flowsLib.synthesizeDemoMarketActivity(tick);
+            if (!cancelled) {
+                setOffers(demo.offers);
+                setSales(demo.sales);
+                setDexOrders(demo.dexOrders);
+                setDexSwaps(demo.dexSwaps);
+                setLoading(false);
+            }
+            return () => { cancelled = true; };
         }
 
         const offersByChain = chains.map((cid) =>
-            messaging.getDispensersForToken({ chainId: cid, token: q })
+            messaging.getDispensersForToken({ chainId: cid, token: tick })
                 .then((resp) => extractRows(resp)
                     .filter((d) => d && (d.status === undefined || Number(d.status) === 0))
                     .map((row) => ({ chainId: cid, row })))
@@ -98,14 +111,14 @@ export function MarketActivity({ walletId, onBack, onOpenDispenser }) {
         );
         const salesByChain = chains.map((cid) =>
             typeof messaging.getDispenses === 'function'
-                ? messaging.getDispenses({ chainId: cid, query: q, type: 'token' })
+                ? messaging.getDispenses({ chainId: cid, query: tick, type: 'token' })
                     .then((resp) => extractRows(resp).map((row) => ({ chainId: cid, row })))
                     .catch(() => [])
                 : Promise.resolve([]),
         );
         const ordersByChain = chains.map((cid) =>
             typeof messaging.getOrdersForToken === 'function'
-                ? messaging.getOrdersForToken({ chainId: cid, tick: q })
+                ? messaging.getOrdersForToken({ chainId: cid, tick })
                     .then((resp) => extractRows(resp)
                         .filter((o) => o && (o.status === undefined || o.status === 'open' || Number(o.status) === 0))
                         .map((row) => ({ chainId: cid, row })))
@@ -114,17 +127,11 @@ export function MarketActivity({ walletId, onBack, onOpenDispenser }) {
         );
         const swapsByChain = chains.map((cid) =>
             typeof messaging.getSwapsForToken === 'function'
-                ? messaging.getSwapsForToken({ chainId: cid, tick: q })
+                ? messaging.getSwapsForToken({ chainId: cid, tick })
                     .then((resp) => extractRows(resp).map((row) => ({ chainId: cid, row })))
                     .catch(() => [])
                 : Promise.resolve([]),
         );
-
-        const byTimeDesc = (a, b) => {
-            const ta = Number(a.row?.timestamp || a.row?.block_time || 0);
-            const tb = Number(b.row?.timestamp || b.row?.block_time || 0);
-            return tb - ta;
-        };
 
         Promise.all([
             Promise.all(offersByChain),
@@ -132,12 +139,40 @@ export function MarketActivity({ walletId, onBack, onOpenDispenser }) {
             Promise.all(ordersByChain),
             Promise.all(swapsByChain),
         ]).then(([offersBatches, salesBatches, ordersBatches, swapsBatches]) => {
+            if (cancelled) return;
             setOffers(offersBatches.flat());
             setSales(salesBatches.flat().sort(byTimeDesc));
             setDexOrders(ordersBatches.flat());
             setDexSwaps(swapsBatches.flat().sort(byTimeDesc));
-            setSearching(false);
+            setLoading(false);
         });
+        return () => { cancelled = true; };
+    }, [tick, walletId, messaging, chains]);
+
+    // Sub-view: tapping the token header opens the shared picker to switch
+    // markets. 'receive' purpose enables cross-chain token discovery so the
+    // user can view a market for a token they don't hold.
+    if (picking) {
+        return (
+            <TokenPicker
+                purpose="receive"
+                walletId={walletId}
+                accountId={accountId}
+                title="Select a market"
+                titleIcon={<Icon.MarketIcon />}
+                backLabel="Back to marketplace"
+                onBack={() => setPicking(false)}
+                onSelect={(sel) => {
+                    setSelected({
+                        tick: sel.tick,
+                        chainId: sel.chainId,
+                        displayName: sel.displayName,
+                        imageUrl: sel.imageUrl,
+                    });
+                    setPicking(false);
+                }}
+            />
+        );
     }
 
     const header = (
@@ -149,36 +184,25 @@ export function MarketActivity({ walletId, onBack, onOpenDispenser }) {
         />
     );
 
+    const iconChainId = selected.chainId || defaultChainId;
+
     return (
         <Screen variant={variant} header={header}>
-            <form className={styles.searchRow} onSubmit={handleSearch} noValidate>
-                <Input
-                    type="search"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    placeholder="Search by token (e.g. PEPECASH)"
-                    aria-label="Search marketplace by token"
-                />
-                <button
-                    type="submit"
-                    className={styles.searchButton}
-                    disabled={!query.trim() || searching}
-                >
-                    <Icon.SearchIcon />
-                    Search
-                </button>
-            </form>
+            <button
+                type="button"
+                className={styles.marketSelector}
+                onClick={() => setPicking(true)}
+                aria-label={`Change market (currently ${selected.displayName || tick})`}
+            >
+                <TickerIcon chainId={iconChainId} tick={tick} size={40} />
+                <span className={styles.marketSelectorText}>
+                    <span className={styles.marketSelectorName}>{selected.displayName || tick}</span>
+                    <span className={styles.marketSelectorSub}>{tick}</span>
+                </span>
+                <span className={styles.marketSelectorChevron} aria-hidden="true">›</span>
+            </button>
 
-            {error ? <p className={styles.error}>{error}</p> : null}
-
-            {!lastQuery ? (
-                <p className={styles.empty}>
-                    Enter a ticker to see dispensers, DEX orders, and
-                    recent trades across every supported chain.
-                </p>
-            ) : null}
-
-            {lastQuery && searching && offers === null ? (
+            {loading && offers === null ? (
                 <div className={styles.list}>
                     <Skeleton height={56} />
                     <Skeleton height={56} />
@@ -194,7 +218,7 @@ export function MarketActivity({ walletId, onBack, onOpenDispenser }) {
                         </h3>
                     </header>
                     {offers.length === 0 ? (
-                        <p className={styles.empty}>No open dispensers selling {lastQuery}.</p>
+                        <p className={styles.empty}>No open dispensers selling {tick}.</p>
                     ) : (
                         <ul className={styles.list} role="list">
                             {offers.map(({ chainId, row }) => {
@@ -214,13 +238,13 @@ export function MarketActivity({ walletId, onBack, onOpenDispenser }) {
                                             onClick={onClick}
                                             disabled={!onClick}
                                         >
-                                            <TickerIcon chainId={chainId} tick={lastQuery} size={32} />
+                                            <TickerIcon chainId={chainId} tick={tick} size={32} />
                                             <span className={styles.rowText}>
                                                 <span className={styles.rowTitle}>
-                                                    {give && get ? `${Number(get).toLocaleString()} ${getTick} per ${Number(give).toLocaleString()} ${lastQuery}` : 'Open dispenser'}
+                                                    {give && get ? `${Number(get).toLocaleString()} ${getTick} per ${Number(give).toLocaleString()} ${tick}` : 'Open dispenser'}
                                                 </span>
                                                 <span className={styles.rowSub}>
-                                                    {remaining != null ? `${Number(remaining).toLocaleString()} ${lastQuery} remaining` : ''}
+                                                    {remaining != null ? `${Number(remaining).toLocaleString()} ${tick} remaining` : ''}
                                                 </span>
                                             </span>
                                             {onClick ? <Icon.ForwardIcon /> : null}
@@ -241,7 +265,7 @@ export function MarketActivity({ walletId, onBack, onOpenDispenser }) {
                         </h3>
                     </header>
                     {dexOrders.length === 0 ? (
-                        <p className={styles.empty}>No open DEX orders involving {lastQuery}.</p>
+                        <p className={styles.empty}>No open DEX orders involving {tick}.</p>
                     ) : (
                         <ul className={styles.list} role="list">
                             {dexOrders.slice(0, 50).map(({ chainId, row }, i) => {
@@ -249,19 +273,19 @@ export function MarketActivity({ walletId, onBack, onOpenDispenser }) {
                                 const getTick = row.get_tick || row.getTick || '';
                                 const giveQty = row.give_quantity ?? row.give_remaining;
                                 const getQty = row.get_quantity ?? row.get_remaining;
-                                const isSell = giveTick.toUpperCase() === lastQuery;
+                                const isSell = giveTick.toUpperCase() === tick;
                                 const title = isSell
                                     ? (giveQty != null && getQty != null
-                                        ? `Sell ${Number(giveQty).toLocaleString()} ${lastQuery} for ${Number(getQty).toLocaleString()} ${getTick}`
-                                        : `Sell ${lastQuery}`)
+                                        ? `Sell ${Number(giveQty).toLocaleString()} ${tick} for ${Number(getQty).toLocaleString()} ${getTick}`
+                                        : `Sell ${tick}`)
                                     : (giveQty != null && getQty != null
-                                        ? `Buy ${Number(getQty).toLocaleString()} ${lastQuery} for ${Number(giveQty).toLocaleString()} ${giveTick}`
-                                        : `Buy ${lastQuery}`);
+                                        ? `Buy ${Number(getQty).toLocaleString()} ${tick} for ${Number(giveQty).toLocaleString()} ${giveTick}`
+                                        : `Buy ${tick}`);
                                 const key = row.action_index || row.actionIndex || row.tx_hash || `${chainId}:${i}`;
                                 return (
                                     <li key={String(key)}>
                                         <div className={styles.row}>
-                                            <TickerIcon chainId={chainId} tick={lastQuery} size={32} />
+                                            <TickerIcon chainId={chainId} tick={tick} size={32} />
                                             <span className={styles.rowText}>
                                                 <span className={styles.rowTitle}>{title}</span>
                                             </span>
@@ -282,7 +306,7 @@ export function MarketActivity({ walletId, onBack, onOpenDispenser }) {
                         </h3>
                     </header>
                     {sales.length === 0 ? (
-                        <p className={styles.empty}>No recent dispenses of {lastQuery}.</p>
+                        <p className={styles.empty}>No recent dispenses of {tick}.</p>
                     ) : (
                         <ul className={styles.list} role="list">
                             {sales.slice(0, 50).map(({ chainId, row }, i) => {
@@ -296,10 +320,10 @@ export function MarketActivity({ walletId, onBack, onOpenDispenser }) {
                                 return (
                                     <li key={`${chainId}:${i}`}>
                                         <div className={styles.row}>
-                                            <TickerIcon chainId={chainId} tick={lastQuery} size={32} />
+                                            <TickerIcon chainId={chainId} tick={tick} size={32} />
                                             <span className={styles.rowText}>
                                                 <span className={styles.rowTitle}>
-                                                    {give ? `Sold ${Number(give).toLocaleString()} ${lastQuery}` : `Sold ${lastQuery}`}
+                                                    {give ? `Sold ${Number(give).toLocaleString()} ${tick}` : `Sold ${tick}`}
                                                     {give && get ? ` for ${Number(get).toLocaleString()} ${getTick}` : ''}
                                                 </span>
                                                 <span className={styles.rowSub}>
@@ -323,7 +347,7 @@ export function MarketActivity({ walletId, onBack, onOpenDispenser }) {
                         </h3>
                     </header>
                     {dexSwaps.length === 0 ? (
-                        <p className={styles.empty}>No recent DEX swaps involving {lastQuery}.</p>
+                        <p className={styles.empty}>No recent DEX swaps involving {tick}.</p>
                     ) : (
                         <ul className={styles.list} role="list">
                             {dexSwaps.slice(0, 50).map(({ chainId, row }, i) => {
@@ -335,19 +359,19 @@ export function MarketActivity({ walletId, onBack, onOpenDispenser }) {
                                 const dateLabel = ts > 0
                                     ? new Date(ts * (ts > 1e12 ? 1 : 1000)).toLocaleString()
                                     : '';
-                                const isSell = giveTick.toUpperCase() === lastQuery;
+                                const isSell = giveTick.toUpperCase() === tick;
                                 const title = isSell
                                     ? (giveQty != null && getQty != null
-                                        ? `Sold ${Number(giveQty).toLocaleString()} ${lastQuery} for ${Number(getQty).toLocaleString()} ${getTick}`
-                                        : `Sold ${lastQuery}`)
+                                        ? `Sold ${Number(giveQty).toLocaleString()} ${tick} for ${Number(getQty).toLocaleString()} ${getTick}`
+                                        : `Sold ${tick}`)
                                     : (giveQty != null && getQty != null
-                                        ? `Bought ${Number(getQty).toLocaleString()} ${lastQuery} for ${Number(giveQty).toLocaleString()} ${giveTick}`
-                                        : `Bought ${lastQuery}`);
+                                        ? `Bought ${Number(getQty).toLocaleString()} ${tick} for ${Number(giveQty).toLocaleString()} ${giveTick}`
+                                        : `Bought ${tick}`);
                                 const key = row.action_index || row.actionIndex || row.tx_hash || `${chainId}:${i}`;
                                 return (
                                     <li key={String(key)}>
                                         <div className={styles.row}>
-                                            <TickerIcon chainId={chainId} tick={lastQuery} size={32} />
+                                            <TickerIcon chainId={chainId} tick={tick} size={32} />
                                             <span className={styles.rowText}>
                                                 <span className={styles.rowTitle}>{title}</span>
                                                 <span className={styles.rowSub}>{dateLabel}</span>
