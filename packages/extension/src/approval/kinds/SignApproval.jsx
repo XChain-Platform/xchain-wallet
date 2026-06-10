@@ -22,6 +22,7 @@ import {
     getAddressBalances,
     getAddressesByChain,
     getSettings,
+    parsePsbt,
 } from '../messaging.js';
 import shared from '../approval.module.css';
 import styles from './SignApproval.module.css';
@@ -159,6 +160,69 @@ export function SignApproval({ id, kind, payload, onReject }) {
         });
     }, [kind, payload, previewBalances, chainId]);
 
+    // §21.2 / §48 signPsbt intent cross-check. A truncated hex string is
+    // not something a user can verify — a compromised dApp could swap in a
+    // drain PSBT and the displayed prefix would look unremarkable. Decode
+    // the PSBT into destinations + amounts (via the same psbt.parse host
+    // route the in-wallet sign form uses) and mark which outputs return to
+    // the user's own addresses, so "how much leaves, and to where" is
+    // legible before the password is entered. Degrades gracefully: a parse
+    // failure shows an explicit warning rather than silently falling back
+    // to the opaque hex.
+    const psbtHexForSign = kind === 'signPsbt' ? payload?.payload?.psbtHex : null;
+    const [psbtIntent, setPsbtIntent] = useState(
+        /** @type {{ loading: boolean, error: string | null, decomposed: any | null, ownAddresses: Set<string> }} */
+        ({ loading: false, error: null, decomposed: null, ownAddresses: new Set() }),
+    );
+    useEffect(() => {
+        if (kind !== 'signPsbt') return undefined;
+        if (!chainId || !psbtHexForSign) {
+            setPsbtIntent({
+                loading: false,
+                error: !chainId ? 'No chain specified — cannot decode this transaction.' : null,
+                decomposed: null,
+                ownAddresses: new Set(),
+            });
+            return undefined;
+        }
+        let cancelled = false;
+        setPsbtIntent({ loading: true, error: null, decomposed: null, ownAddresses: new Set() });
+        async function loadIntent() {
+            try {
+                // Own-address set is best-effort: it only labels change vs
+                // external recipients, so a failure here must not block the
+                // decode itself.
+                let ownAddresses = new Set();
+                if (walletId) {
+                    try {
+                        const byChain = await getAddressesByChain(walletId);
+                        ownAddresses = new Set(
+                            (byChain?.[chainId] || []).map((a) => a.address).filter(Boolean),
+                        );
+                    } catch { /* leave ownAddresses empty */ }
+                }
+                const res = await parsePsbt({ chainId, psbtHex: psbtHexForSign });
+                if (cancelled) return;
+                setPsbtIntent({
+                    loading: false,
+                    error: null,
+                    decomposed: res?.decomposed || null,
+                    ownAddresses,
+                });
+            } catch (err) {
+                if (cancelled) return;
+                setPsbtIntent({
+                    loading: false,
+                    error: err?.message || 'Failed to decode transaction.',
+                    decomposed: null,
+                    ownAddresses: new Set(),
+                });
+            }
+        }
+        loadIntent();
+        return () => { cancelled = true; };
+    }, [kind, chainId, psbtHexForSign, walletId]);
+
     const title = KIND_TITLE[kind] ?? 'Approval required';
     const showSavePermanent =
         kind === 'signAction' ||
@@ -259,6 +323,15 @@ export function SignApproval({ id, kind, payload, onReject }) {
 
             <SignSummary kind={kind} payload={payload} />
 
+            {kind === 'signPsbt' ? (
+                <PsbtIntentSummary
+                    loading={psbtIntent.loading}
+                    error={psbtIntent.error}
+                    decomposed={psbtIntent.decomposed}
+                    ownAddresses={psbtIntent.ownAddresses}
+                />
+            ) : null}
+
             {kind === 'signAction' ? (
                 <BalanceChanges
                     result={previewResult}
@@ -332,24 +405,18 @@ function SignSummary({ kind, payload }) {
                 </div>
             );
         case 'signPsbt':
-            return (
+            // The decoded destinations/amounts/fee render in
+            // <PsbtIntentSummary> below; the raw hex stays available in the
+            // developer-mode RawPsbtViewer. Here we surface only the signing
+            // paths (when the dApp scoped the request to specific inputs).
+            return Array.isArray(inner.signingPaths) && inner.signingPaths.length > 0 ? (
                 <div className={shared.summary}>
-                    <p className={shared.summaryLabel}>Transaction</p>
+                    <p className={shared.summaryLabel}>Signing paths</p>
                     <pre className={shared.summaryValue}>
-                        {truncate(inner.psbtHex, 96)}
+                        {inner.signingPaths.join('\n')}
                     </pre>
-                    {Array.isArray(inner.signingPaths) && inner.signingPaths.length > 0 ? (
-                        <>
-                            <p className={shared.summaryLabel} style={{ marginTop: 8 }}>
-                                Signing paths
-                            </p>
-                            <pre className={shared.summaryValue}>
-                                {inner.signingPaths.join('\n')}
-                            </pre>
-                        </>
-                    ) : null}
                 </div>
-            );
+            ) : null;
         case 'signAction': {
             const decoded = decoderLib.decodeAction({
                 action: payload?.action,
@@ -407,15 +474,121 @@ function SignSummary({ kind, payload }) {
     }
 }
 
-function truncate(s, max) {
-    const str = String(s ?? '');
-    return str.length > max ? `${str.slice(0, max)}…` : str;
+/**
+ * §21.2 / §48 — decoded signPsbt intent. Renders the transaction's real
+ * destinations and amounts so the user can cross-check what they're
+ * signing against the dApp's stated intent, instead of trusting an opaque
+ * hex string. Outputs paying the user's own addresses are labelled as
+ * change; everything else is money leaving the wallet.
+ */
+function PsbtIntentSummary({ loading, error, decomposed, ownAddresses }) {
+    if (loading) {
+        return (
+            <div className={shared.summary}>
+                <p className={shared.summaryLabel}>Transaction</p>
+                <p className={shared.summaryValue} style={{ whiteSpace: 'normal' }}>
+                    Decoding transaction…
+                </p>
+            </div>
+        );
+    }
+
+    if (error || !decomposed) {
+        // Fail loud: a transaction we can't decode is exactly the case
+        // where the user most needs to be cautious. Never silently fall
+        // back to an unreadable hex blob.
+        return (
+            <ul className={styles.warnings} role="alert">
+                <li>
+                    {error
+                        ? `This transaction could not be decoded (${error}). `
+                        : 'This transaction could not be decoded. '}
+                    Only approve it if you trust the source. The raw transaction
+                    is viewable in developer mode.
+                </li>
+            </ul>
+        );
+    }
+
+    const own = ownAddresses instanceof Set ? ownAddresses : new Set();
+    const outputs = Array.isArray(decomposed.outputs) ? decomposed.outputs : [];
+    const inputs = Array.isArray(decomposed.inputs) ? decomposed.inputs : [];
+
+    const external = outputs.filter((o) => !o.address || !own.has(o.address));
+    const change = outputs.filter((o) => o.address && own.has(o.address));
+
+    const sending = external.reduce((acc, o) => acc + (o.value || 0), 0);
+    const changeTotal = change.reduce((acc, o) => acc + (o.value || 0), 0);
+
+    const totalOut = outputs.reduce((acc, o) => acc + (o.value || 0), 0);
+    const inputsHaveValue = inputs.length > 0 && inputs.every((i) => typeof i.value === 'number');
+    const totalIn = inputsHaveValue
+        ? inputs.reduce((acc, i) => acc + (i.value || 0), 0)
+        : null;
+    const fee = totalIn != null ? totalIn - totalOut : null;
+
+    return (
+        <div className={shared.summary}>
+            <p className={shared.summaryLabel}>This transaction</p>
+
+            {external.length === 0 ? (
+                <p className={shared.summaryValue} style={{ whiteSpace: 'normal' }}>
+                    All outputs return to your own addresses (no funds leave this wallet).
+                </p>
+            ) : (
+                <dl className={styles.detailsList} style={{ marginTop: 4 }}>
+                    {external.map((o, i) => (
+                        <div className={styles.detailsRow} key={`ext-${i}`}>
+                            <dt className={styles.detailsLabel}>
+                                {o.address ? 'To' : 'To (unrecognized script)'}
+                            </dt>
+                            <dd className={styles.detailsValue}>
+                                {formatSats(o.value)}
+                                {o.address ? (
+                                    <>
+                                        <br />
+                                        <span style={{ fontFamily: 'var(--xc-font-mono)', fontSize: 12 }}>
+                                            {ellipsizeMiddle(o.address)}
+                                        </span>
+                                    </>
+                                ) : null}
+                            </dd>
+                        </div>
+                    ))}
+                </dl>
+            )}
+
+            <dl className={styles.detailsList} style={{ marginTop: 6 }}>
+                <div className={styles.detailsRow}>
+                    <dt className={styles.detailsLabel}>Leaving wallet</dt>
+                    <dd className={styles.detailsValue}>{formatSats(sending)}</dd>
+                </div>
+                {changeTotal > 0 ? (
+                    <div className={styles.detailsRow}>
+                        <dt className={styles.detailsLabel}>Change (back to you)</dt>
+                        <dd className={styles.detailsValue}>{formatSats(changeTotal)}</dd>
+                    </div>
+                ) : null}
+                <div className={styles.detailsRow}>
+                    <dt className={styles.detailsLabel}>Network fee</dt>
+                    <dd className={styles.detailsValue}>
+                        {fee != null ? formatSats(fee) : 'unavailable'}
+                    </dd>
+                </div>
+            </dl>
+        </div>
+    );
 }
 
-function safeJson(v) {
-    try {
-        return JSON.stringify(v, null, 2);
-    } catch (_err) {
-        return String(v);
-    }
+function formatSats(value) {
+    const n = Number(value || 0);
+    return `${n.toLocaleString()} sats`;
 }
+
+function ellipsizeMiddle(s, head = 12, tail = 8) {
+    const str = String(s ?? '');
+    return str.length > head + tail + 1
+        ? `${str.slice(0, head)}…${str.slice(-tail)}`
+        : str;
+}
+

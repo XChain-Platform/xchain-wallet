@@ -86,3 +86,19 @@ export function getAddressesByChain(walletId) {
 export function getSettings() {
     return /** @type {any} */ (sendMessage('settings.get'));
 }
+
+/**
+ * Decompose a PSBT into its inputs and outputs (addresses + values)
+ * for the §21.2 / §48 intent cross-check on the signPsbt approval
+ * screen. Routes to the same `psbt.parse` host handler the in-wallet
+ * PSBT sign form uses, so the dApp-bridge approval shows the same
+ * decoded destinations/amounts the user would see signing locally —
+ * instead of an opaque truncated hex string a malicious dApp could
+ * swap for a drain transaction.
+ *
+ * @param {{ chainId: string, psbtHex: string }} opts
+ * @returns {Promise<{ decomposed: import('@xchain-wallet/core/signers/types').DecomposedPsbt }>}
+ */
+export function parsePsbt(opts) {
+    return /** @type {any} */ (sendMessage('psbt.parse', opts));
+}

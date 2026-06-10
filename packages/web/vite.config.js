@@ -26,6 +26,7 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
+import { CONTENT_SECURITY_POLICY } from './src/csp.js';
 // HTTPS is OPT-IN via the `VITE_HTTPS=1` env var. The wallet's crypto
 // surfaces (`crypto.subtle.*` for KDF + AEAD, `navigator.clipboard.*`,
 // `getUserMedia` for the camera scanner, WebUSB / WebHID for hardware
@@ -61,6 +62,29 @@ const styleGuidePlugin = {
     apply: 'serve',
     configureServer(server) { server.middlewares.use(styleGuideRewrite()); },
     configurePreviewServer(server) { server.middlewares.use(styleGuideRewrite()); },
+};
+
+// Inject the app-controlled Content-Security-Policy meta tag into the built
+// index.html. Build-only (`apply: 'build'`): the dev server relies on inline
+// scripts + eval + a websocket back to Vite for HMR, which a strict
+// script-src would break — and dev is not the deployed threat surface. The
+// production bundle that ships to wallet.xchain.io carries the policy so it
+// no longer depends on a server header someone has to remember to set.
+const cspPlugin = {
+    name: 'xchain-csp',
+    apply: 'build',
+    transformIndexHtml() {
+        return [
+            {
+                tag: 'meta',
+                attrs: {
+                    'http-equiv': 'Content-Security-Policy',
+                    content: CONTENT_SECURITY_POLICY,
+                },
+                injectTo: 'head-prepend',
+            },
+        ];
+    },
 };
 
 // Absolute paths to workspace-local Node shims that xchain-sdk pulls
@@ -120,5 +144,6 @@ export default defineConfig({
             protocolImports: true,
         }),
         styleGuidePlugin,
+        cspPlugin,
     ],
 });
