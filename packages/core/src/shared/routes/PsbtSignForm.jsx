@@ -57,6 +57,7 @@ import {
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useDropZone } from '../hooks/useDropZone.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { HwSignBlock } from '../components/HwSignBlock.jsx';
@@ -146,6 +147,7 @@ export function normalizePsbtInput(raw) {
  */
 export function PsbtSignForm({ walletId, onBack }) {
     const { messaging, shell } = useMessaging();
+    const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
 
@@ -440,7 +442,7 @@ export function PsbtSignForm({ walletId, onBack }) {
                 return;
             }
         } else {
-            if (password.length === 0) { setError('Enter your wallet password.'); return; }
+            if ((!signerReady && password.length === 0)) { setError('Enter your wallet password.'); return; }
             if (typeof messaging.signPsbtUserInitiated !== 'function') {
                 setError('messaging.signPsbtUserInitiated is not available in this shell.');
                 return;
@@ -823,6 +825,10 @@ export function PsbtSignForm({ walletId, onBack }) {
                         <StatusMessage variant="error">{error}</StatusMessage>
                     ) : null}
                 </div>
+            ) : signerReady ? (
+                <p style={{ margin: 'var(--xc-space-2) 0 0', display: 'flex', alignItems: 'center', gap: 'var(--xc-space-1)', fontSize: 'var(--xc-text-sm)', color: 'var(--xc-text-muted)' }}>
+                    <span aria-hidden="true">🔓</span> Wallet unlocked — no password needed.
+                </p>
             ) : (
                 <Input
                     type="password"
@@ -844,7 +850,7 @@ export function PsbtSignForm({ walletId, onBack }) {
                     || !decomposed
                     || ownedInputCount === 0
                     || !addressId
-                    || (isHwSource ? hwStatus !== 'available' : password.length === 0)
+                    || (isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0))
                 }
             >
                 {isHwSource && selectedAddress

@@ -17,8 +17,9 @@ import {
     ChainBadge,
     AddressText,
  Icon,} from '@xchain-wallet/core/ui';
-import { registry as registryLib } from '@xchain-wallet/core';
+import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useSignerReady } from '../hooks/useSignerReady.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -46,6 +47,9 @@ export function MessagingInbox({ walletId, onCompose, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
+    // Unlocked session → read the inbox without a password (the background
+    // derives the WIF from the pooled signer). Locked → password prompt.
+    const signerReady = useSignerReady(walletId);
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -130,17 +134,28 @@ export function MessagingInbox({ walletId, onCompose, onBack }) {
         return null;
     }, [addressesByChain, selectedAddrId]);
 
-    async function handleUnlock(event) {
-        event.preventDefault();
-        if (stage === 'submitting' || password.length === 0 || !selectedAddrId) return;
+    // Load the inbox. `pw` is null on the unlocked-session path (the
+    // background uses the pooled signer); a string on the password path.
+    async function fetchInbox(pw) {
+        if (!selectedAddrId) return;
         setStage('submitting');
         setUnlockError(null);
+
+        // Demo wallet: no on-chain message history to decrypt, so fabricate
+        // a couple of conversations locally.
+        if (flowsLib.isDemoWallet(walletId)) {
+            setMessages(flowsLib.synthesizeDemoMessages(ownerAddress?.address));
+            setStage('inbox');
+            setPassword('');
+            return;
+        }
+
         try {
             const result = await messaging.getMessagingInbox({
                 walletId,
-                password,
                 addressId: selectedAddrId,
                 type: 'all',
+                ...(pw ? { password: pw } : {}),
             });
             setMessages(Array.isArray(result?.messages) ? result.messages : []);
             setStage('inbox');
@@ -154,10 +169,25 @@ export function MessagingInbox({ walletId, onCompose, onBack }) {
             } else {
                 setUnlockError(err?.message || 'Failed to load messages.');
             }
+            // Fall back to the password prompt (covers the rare unlocked-but-
+            // empty-pool case where the no-password read failed).
             setStage('password');
-            passwordRef.current?.focus();
-            passwordRef.current?.select();
+            setTimeout(() => { passwordRef.current?.focus(); passwordRef.current?.select(); }, 0);
         }
+    }
+
+    function handleUnlock(event) {
+        event.preventDefault();
+        if (stage === 'submitting' || password.length === 0) return;
+        fetchInbox(password);
+    }
+
+    // From the address-picker "Continue": skip the password step entirely
+    // when the session can read without one.
+    function handleContinue() {
+        if (!selectedAddrId) return;
+        if (signerReady) fetchInbox(null);
+        else setStage('password');
     }
 
     const conversations = useMemo(() => buildConversations(messages, ownerAddress?.address), [messages, ownerAddress]);
@@ -219,7 +249,7 @@ export function MessagingInbox({ walletId, onCompose, onBack }) {
                 <div className={styles.actions}>
                     <Button
                         variant="primary"
-                        onClick={() => setStage('password')}
+                        onClick={handleContinue}
                         disabled={!selectedAddrId}
                     >
                         Continue

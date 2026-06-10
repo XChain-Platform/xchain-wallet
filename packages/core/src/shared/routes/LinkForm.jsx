@@ -21,6 +21,7 @@ import {
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
+import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import styles from './IssueTokenForm.module.css';
@@ -61,6 +62,7 @@ const PROTOCOL_COIN_TICKER = {
  */
 export function LinkForm({ walletId, onBack }) {
     const { messaging, shell } = useMessaging();
+    const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
 
@@ -213,7 +215,7 @@ export function LinkForm({ walletId, onBack }) {
             setFormError('Provide both action indices before signing.');
             return;
         }
-        if (!isWatcherMode && !hw && password.length === 0) return;
+        if (!isWatcherMode && !hw && (!signerReady && password.length === 0)) return;
         if (!isWatcherMode && hw && hwStatus !== 'available') return;
 
         setStage('submitting');
@@ -432,6 +434,7 @@ export function LinkForm({ walletId, onBack }) {
                         </p>
                     ) : (
                         <SignCredentials
+                        unlocked={signerReady}
                             fromAddress={fromAddress}
                             chainId={submitChainId}
                             password={password}
@@ -468,7 +471,7 @@ export function LinkForm({ walletId, onBack }) {
                         || !actionIndex1 || !actionIndex2
                         || (isWatcherMode
                             ? false
-                            : hw ? hwStatus !== 'available' : password.length === 0)}
+                            : hw ? hwStatus !== 'available' : (!signerReady && password.length === 0))}
                 >
                     {isWatcherMode
                         ? 'Create unsigned transaction'

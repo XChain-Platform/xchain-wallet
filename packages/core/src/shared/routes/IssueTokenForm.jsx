@@ -23,6 +23,7 @@ import {
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials } from '../components/SignCredentials.jsx';
+import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useFormDraft } from '../hooks/useFormDraft.js';
@@ -51,6 +52,7 @@ const chainRegistry = registryLib.defaultRegistry();
  */
 export function IssueTokenForm({ walletId, onBack }) {
     const { messaging, shell } = useMessaging();
+    const signerReady = useSignerReady(walletId);
     const { settings } = useSettings();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -237,7 +239,7 @@ export function IssueTokenForm({ walletId, onBack }) {
     async function handleSubmit(event) {
         event.preventDefault();
         if (stage === 'submitting') return;
-        if (!isWatcherMode && !isHwSource && password.length === 0) return;
+        if (!isWatcherMode && !isHwSource && (!signerReady && password.length === 0)) return;
         if (!isWatcherMode && isHwSource && hwStatus !== 'available') return;
         setStage('submitting');
         setSubmitError(null);
@@ -382,6 +384,7 @@ export function IssueTokenForm({ walletId, onBack }) {
                     </p>
                 ) : (
                     <SignCredentials
+                        unlocked={signerReady}
                         fromAddress={fromAddress}
                         chainId={chainId}
                         password={password}
@@ -425,7 +428,7 @@ export function IssueTokenForm({ walletId, onBack }) {
                                 ? false
                                 : isHwSource
                                     ? hwStatus !== 'available'
-                                    : password.length === 0
+                                    : (!signerReady && password.length === 0)
                         }
                     >
                         {isWatcherMode

@@ -24,6 +24,7 @@ import {
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
+import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useFormDraft } from '../hooks/useFormDraft.js';
@@ -74,6 +75,7 @@ const FIAT_CODES = ['USD', 'CAD', 'AUD', 'MXN', 'GBP', 'JPY', 'CNY', 'CHF', 'BRL
  */
 export function DispenserForm({ walletId, onBack, initialChainId, initialTick, initialFromAddress }) {
     const { messaging, shell } = useMessaging();
+    const signerReady = useSignerReady(walletId);
     const { settings } = useSettings();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -341,7 +343,7 @@ export function DispenserForm({ walletId, onBack, initialChainId, initialTick, i
     async function handleSubmit(event) {
         event.preventDefault();
         if (stage === 'submitting') return;
-        if (!isWatcherMode && !hw && password.length === 0) return;
+        if (!isWatcherMode && !hw && (!signerReady && password.length === 0)) return;
         if (!isWatcherMode && hw && hwStatus !== 'available') return;
         setStage('submitting');
         setSubmitError(null);
@@ -482,6 +484,7 @@ export function DispenserForm({ walletId, onBack, initialChainId, initialTick, i
                     </p>
                 ) : (
                     <SignCredentials
+                        unlocked={signerReady}
                         fromAddress={fromAddress}
                         chainId={chainId}
                         password={password}
@@ -523,7 +526,7 @@ export function DispenserForm({ walletId, onBack, initialChainId, initialTick, i
                                 ? false
                                 : hw
                                     ? hwStatus !== 'available'
-                                    : password.length === 0
+                                    : (!signerReady && password.length === 0)
                         }
                     >
                         {isWatcherMode

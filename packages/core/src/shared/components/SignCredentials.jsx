@@ -48,6 +48,7 @@ import { HwSignBlock } from './HwSignBlock.jsx';
  * @param {boolean} [props.disabled]
  * @param {(opts: { signerId: string, chainId?: string }) => Promise<any>} [props.getSignerStatus]
  * @param {{ vendor: string, model: string, firmwareVersion: string | null } | null} [props.signerInfo]   firmware metadata; passed through to HwSignBlock so the firmware-update warning banner renders. Optional — when omitted, no banner shows (callers that haven't yet looked up the SignerRecord render gracefully).
+ * @param {boolean} [props.unlocked]   when true for a software wallet, the password input is hidden — the unlocked session signs without it ("password only at unlock"). HW signing is unaffected (still confirms on-device).
  */
 export function SignCredentials({
     fromAddress,
@@ -60,6 +61,7 @@ export function SignCredentials({
     disabled,
     getSignerStatus,
     signerInfo,
+    unlocked,
 }) {
     const src = fromAddress?.source;
     const isHw = src === 'trezor' || src === 'ledger';
@@ -81,6 +83,25 @@ export function SignCredentials({
                 onStatusChange={onStatusChange}
                 signerInfo={signerInfo}
             />
+        );
+    }
+    // Unlocked software session — no password needed ("password only at
+    // unlock"). Show a brief note instead of the input; the form's submit
+    // gate is relaxed in parallel (see useSignerReady).
+    if (unlocked) {
+        return (
+            <p
+                style={{
+                    margin: 'var(--xc-space-2) 0 0',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 'var(--xc-space-1)',
+                    fontSize: 'var(--xc-text-sm)',
+                    color: 'var(--xc-text-muted)',
+                }}
+            >
+                <span aria-hidden="true">🔓</span> Wallet unlocked — no password needed.
+            </p>
         );
     }
     return (

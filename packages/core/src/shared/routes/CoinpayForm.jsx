@@ -19,6 +19,7 @@ import {
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
+import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import styles from './IssueTokenForm.module.css';
@@ -61,6 +62,7 @@ export function CoinpayForm({
     onBack,
 }) {
     const { messaging, shell } = useMessaging();
+    const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
 
@@ -174,7 +176,7 @@ export function CoinpayForm({
     async function handleSubmit(event) {
         event.preventDefault();
         if (!selected || !summary || stage === 'submitting') return;
-        if (!isWatcherMode && !hw && password.length === 0) return;
+        if (!isWatcherMode && !hw && (!signerReady && password.length === 0)) return;
         if (!isWatcherMode && hw && hwStatus !== 'available') return;
         if (summary.coinAmount == null || !summary.payeeAddress) {
             setSubmitError('Obligation is missing payee or coin amount.');
@@ -409,6 +411,7 @@ export function CoinpayForm({
                         </p>
                     ) : (
                         <SignCredentials
+                        unlocked={signerReady}
                             fromAddress={selected.addr}
                             chainId={selected.chainId}
                             password={password}
@@ -437,7 +440,7 @@ export function CoinpayForm({
                             disabled={
                                 isWatcherMode
                                     ? false
-                                    : hw ? hwStatus !== 'available' : password.length === 0
+                                    : hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)
                             }
                         >
                             {isWatcherMode

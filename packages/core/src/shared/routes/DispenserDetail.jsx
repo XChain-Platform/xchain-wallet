@@ -23,6 +23,7 @@ import {
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
+import { useSignerReady } from '../hooks/useSignerReady.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -54,6 +55,7 @@ const chainRegistry = registryLib.defaultRegistry();
  */
 export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanceled }) {
     const { messaging, shell } = useMessaging();
+    const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
 
@@ -258,7 +260,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     async function handleBuy(event) {
         event.preventDefault();
         if (buyStage === 'submitting' || !buyerAddress) return;
-        if (!buyHw && buyPassword.length === 0) return;
+        if (!buyHw && (!signerReady && buyPassword.length === 0)) return;
         if (buyHw && buyHwStatus !== 'available') return;
         if (!isTokenPaid || !dispAddr || !totalPayAmount) return;
         setBuyStage('submitting');
@@ -303,7 +305,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     async function handleCancel(event) {
         event.preventDefault();
         if (cancelStage === 'submitting' || !ownerAddress) return;
-        if (!cancelHw && password.length === 0) return;
+        if (!cancelHw && (!signerReady && password.length === 0)) return;
         if (cancelHw && cancelHwStatus !== 'available') return;
         setCancelStage('submitting');
         setCancelError(null);
@@ -436,6 +438,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     no {giveTick} is released — an inherent risk of UTXO-chain buys.
                 </p>
                 <SignCredentials
+                        unlocked={signerReady}
                     fromAddress={buyerAddress}
                     chainId={chainId}
                     password={buyPassword}
@@ -457,7 +460,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                         type="submit"
                         variant="primary"
                         loading={buyStage === 'submitting'}
-                        disabled={buyHw ? buyHwStatus !== 'available' : buyPassword.length === 0}
+                        disabled={buyHw ? buyHwStatus !== 'available' : (!signerReady && buyPassword.length === 0)}
                     >
                         {buyHw
                             ? `Sign buy on ${buyerAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
@@ -493,6 +496,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     </div>
                 ) : null}
                 <SignCredentials
+                        unlocked={signerReady}
                     fromAddress={ownerAddress}
                     chainId={chainId}
                     password={password}
@@ -514,7 +518,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                         type="submit"
                         variant="danger"
                         loading={cancelStage === 'submitting'}
-                        disabled={cancelHw ? cancelHwStatus !== 'available' : password.length === 0}
+                        disabled={cancelHw ? cancelHwStatus !== 'available' : (!signerReady && password.length === 0)}
                     >
                         {cancelHw
                             ? `Sign cancel on ${ownerAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`

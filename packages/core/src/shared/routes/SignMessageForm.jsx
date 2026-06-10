@@ -36,6 +36,7 @@ import {
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useFormDraft } from '../hooks/useFormDraft.js';
 import { useSettings } from '../hooks/useSettings.js';
 import pickerStyles from './WalletPicker.module.css';
@@ -50,6 +51,7 @@ const chainRegistry = registryLib.defaultRegistry();
  */
 export function SignMessageForm({ walletId, onBack }) {
     const { messaging, shell } = useMessaging();
+    const signerReady = useSignerReady(walletId);
     const { settings } = useSettings();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -160,7 +162,7 @@ export function SignMessageForm({ walletId, onBack }) {
         if (!chainId) { setError('Pick a chain.'); return; }
         if (!addressId) { setError('Pick an address.'); return; }
         if (message.length === 0) { setError('Type a message to sign.'); return; }
-        if (password.length === 0) { setError('Enter your wallet password.'); return; }
+        if ((!signerReady && password.length === 0)) { setError('Enter your wallet password.'); return; }
         if (typeof messaging.signMessageRequest !== 'function') {
             setError('messaging.signMessageRequest is not available in this shell.');
             return;
@@ -386,20 +388,26 @@ export function SignMessageForm({ walletId, onBack }) {
                     }}
                 />
             </div>
-            <Input
-                type="password"
-                label="Wallet password"
-                value={password}
-                onChange={(e) => { setPassword(e.target.value); if (error) setError(null); }}
-                autoComplete="current-password"
-                error={error || undefined}
-            />
+            {signerReady ? (
+                <p style={{ margin: 'var(--xc-space-2) 0 0', display: 'flex', alignItems: 'center', gap: 'var(--xc-space-1)', fontSize: 'var(--xc-text-sm)', color: 'var(--xc-text-muted)' }}>
+                    <span aria-hidden="true">🔓</span> Wallet unlocked — no password needed.
+                </p>
+            ) : (
+                <Input
+                    type="password"
+                    label="Wallet password"
+                    value={password}
+                    onChange={(e) => { setPassword(e.target.value); if (error) setError(null); }}
+                    autoComplete="current-password"
+                    error={error || undefined}
+                />
+            )}
             <Button
                 type="submit"
                 variant="primary"
                 block
                 loading={busy}
-                disabled={busy || message.length === 0 || password.length === 0 || !addressId}
+                disabled={busy || message.length === 0 || (!signerReady && password.length === 0) || !addressId}
             >
                 Sign message
             </Button>

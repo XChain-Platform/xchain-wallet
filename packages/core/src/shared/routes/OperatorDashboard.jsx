@@ -19,6 +19,7 @@ import {
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials } from '../components/SignCredentials.jsx';
+import { useSignerReady } from '../hooks/useSignerReady.js';
 import dashStyles from './ActionsMenu.module.css';
 import formStyles from './IssueTokenForm.module.css';
 
@@ -45,6 +46,7 @@ const chainRegistry = registryLib.defaultRegistry();
  */
 export function OperatorDashboard({ walletId, chainId, address, onBack }) {
     const { messaging, shell } = useMessaging();
+    const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
 
@@ -313,7 +315,7 @@ function PublisherMode({ walletId, chainId, address, feed, messaging }) {
         if (!fromAddress) { setError('Source address not loaded yet.'); return; }
         if (!feedActionIndex.trim()) { setError('Feed action index is required.'); return; }
         if (!value.trim()) { setError('Value is required.'); return; }
-        if (!isHwSource && password.length === 0) { setError('Password is required.'); return; }
+        if (!isHwSource && (!signerReady && password.length === 0)) { setError('Password is required.'); return; }
         if (isHwSource && hwStatus !== 'available') { setError('Hardware signer is not ready.'); return; }
         setSubmitState('submitting');
         setError(null);
@@ -388,6 +390,7 @@ function PublisherMode({ walletId, chainId, address, feed, messaging }) {
                     />
                     {fromAddress ? (
                         <SignCredentials
+                        unlocked={signerReady}
                             fromAddress={fromAddress}
                             chainId={chainId}
                             password={password}
@@ -419,7 +422,7 @@ function PublisherMode({ walletId, chainId, address, feed, messaging }) {
                                 !fromAddress
                                 || !feedActionIndex.trim()
                                 || !value.trim()
-                                || (isHwSource ? hwStatus !== 'available' : password.length === 0)
+                                || (isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0))
                             }
                         >
                             {isHwSource ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}` : 'Publish value'}

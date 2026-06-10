@@ -20,6 +20,7 @@ import {
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
+import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import styles from './IssueTokenForm.module.css';
@@ -65,6 +66,7 @@ const PROTOCOL_COIN_TICKER = {
  */
 export function CrossChainSwapForm({ walletId, onBack }) {
     const { messaging, shell } = useMessaging();
+    const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
 
@@ -208,7 +210,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
             setFormError('Receiver address on the get-chain is required.');
             return;
         }
-        if (!isWatcherMode && !hw && password.length === 0) return;
+        if (!isWatcherMode && !hw && (!signerReady && password.length === 0)) return;
         if (!isWatcherMode && hw && hwStatus !== 'available') return;
 
         setStage('submitting');
@@ -489,6 +491,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                         </p>
                     ) : (
                         <SignCredentials
+                        unlocked={signerReady}
                             fromAddress={fromAddress}
                             chainId={giveChainId}
                             password={password}
@@ -525,7 +528,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                         || !giveTick || !giveAmount || !getTick || !getAmount || !getAddress
                         || (isWatcherMode
                             ? false
-                            : hw ? hwStatus !== 'available' : password.length === 0)}
+                            : hw ? hwStatus !== 'available' : (!signerReady && password.length === 0))}
                 >
                     {isWatcherMode
                         ? 'Create unsigned transaction'

@@ -20,6 +20,7 @@ import {
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials } from '../components/SignCredentials.jsx';
+import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import styles from './IssueTokenForm.module.css';
@@ -48,6 +49,7 @@ const chainRegistry = registryLib.defaultRegistry();
  */
 export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex, onBack }) {
     const { messaging, shell } = useMessaging();
+    const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
     const isDeposit = mode === 'deposit';
@@ -144,7 +146,7 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
     async function handleSubmit(event) {
         event.preventDefault();
         if (stage === 'submitting') return;
-        if (!isWatcherMode && !isHwSource && password.length === 0) return;
+        if (!isWatcherMode && !isHwSource && (!signerReady && password.length === 0)) return;
         if (!isWatcherMode && isHwSource && hwStatus !== 'available') return;
         setStage('submitting');
         setSubmitError(null);
@@ -284,6 +286,7 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
                     </p>
                 ) : (
                     <SignCredentials
+                        unlocked={signerReady}
                         fromAddress={fromAddress}
                         chainId={chainId}
                         password={password}
@@ -309,7 +312,7 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
                         disabled={
                             isWatcherMode
                                 ? false
-                                : isHwSource ? hwStatus !== 'available' : password.length === 0
+                                : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)
                         }
                     >
                         {isWatcherMode

@@ -20,6 +20,7 @@ import {
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
+import { useSignerReady } from '../hooks/useSignerReady.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -66,6 +67,7 @@ const newRowId = () => `row-${++nextRowId}`;
  */
 export function ParallelComposer({ walletId, onBack, initialRows }) {
     const { messaging, shell } = useMessaging();
+    const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
 
@@ -197,7 +199,7 @@ export function ParallelComposer({ walletId, onBack, initialRows }) {
 
     async function signActiveRow() {
         if (!activeRow || !activeFromAddress) return;
-        if (!activeHw && password.length === 0) return;
+        if (!activeHw && (!signerReady && password.length === 0)) return;
         if (activeHw && hwStatus !== 'available') return;
 
         updateRow(activeRowIndex, { status: 'submitting', error: null });
@@ -317,6 +319,7 @@ export function ParallelComposer({ walletId, onBack, initialRows }) {
                 />
                 {activeFromAddress ? (
                     <SignCredentials
+                        unlocked={signerReady}
                         fromAddress={activeFromAddress}
                         chainId={activeRow.chainId}
                         password={password}
@@ -354,7 +357,7 @@ export function ParallelComposer({ walletId, onBack, initialRows }) {
                         variant="primary"
                         loading={activeRow.status === 'submitting'}
                         disabled={!activeFromAddress
-                            || (activeHw ? hwStatus !== 'available' : password.length === 0)}
+                            || (activeHw ? hwStatus !== 'available' : (!signerReady && password.length === 0))}
                         onClick={signActiveRow}
                     >
                         {activeHw

@@ -26,6 +26,7 @@ import {
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
+import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useDropZone } from '../hooks/useDropZone.js';
 import styles from './IssueTokenForm.module.css';
@@ -65,6 +66,7 @@ const POLL_INTERVAL_MS = 10_000;
  */
 export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId, initialTick, initialFromAddress }) {
     const { messaging, shell } = useMessaging();
+    const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
 
@@ -372,7 +374,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     async function handleSignList(event) {
         event.preventDefault();
         if (submitting) return;
-        if (!hw && password.length === 0) return;
+        if (!hw && (!signerReady && password.length === 0)) return;
         if (hw && hwStatus !== 'available') return;
         setSubmitting(true);
         setSubmitError(null);
@@ -429,7 +431,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     async function handleSignAirdrop(event) {
         event.preventDefault();
         if (submitting) return;
-        if (!hw && password.length === 0) return;
+        if (!hw && (!signerReady && password.length === 0)) return;
         if (hw && hwStatus !== 'available') return;
         setSubmitting(true);
         setSubmitError(null);
@@ -619,6 +621,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                         : 'You will enter your password twice.'}
                 </p>
                 <SignCredentials
+                        unlocked={signerReady}
                     fromAddress={fromAddress}
                     chainId={chainId}
                     password={password}
@@ -640,7 +643,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                         type="submit"
                         variant="primary"
                         loading={submitting}
-                        disabled={hw ? hwStatus !== 'available' : password.length === 0}
+                        disabled={hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
                     >
                         {hw
                             ? `Sign LIST on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
@@ -693,6 +696,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     fee tick to cover the full distribution.
                 </p>
                 <SignCredentials
+                        unlocked={signerReady}
                     fromAddress={fromAddress}
                     chainId={chainId}
                     password={password}
@@ -719,7 +723,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                         loading={submitting}
                         disabled={
                             !listActionIndex
-                            || (hw ? hwStatus !== 'available' : password.length === 0)
+                            || (hw ? hwStatus !== 'available' : (!signerReady && password.length === 0))
                         }
                     >
                         {hw

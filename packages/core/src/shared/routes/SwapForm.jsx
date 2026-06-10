@@ -21,6 +21,7 @@ import {
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
+import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
@@ -69,6 +70,7 @@ const PROTOCOL_COIN_TICKER = {
  */
 export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, initialGiveOwnership }) {
     const { messaging, shell } = useMessaging();
+    const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
 
@@ -182,7 +184,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
             setFormError('Fill the give/get tickers and amounts before signing.');
             return;
         }
-        if (!isWatcherMode && !hw && password.length === 0) return;
+        if (!isWatcherMode && !hw && (!signerReady && password.length === 0)) return;
         if (!isWatcherMode && hw && hwStatus !== 'available') return;
 
         setStage('submitting');
@@ -432,6 +434,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                         </p>
                     ) : (
                         <SignCredentials
+                        unlocked={signerReady}
                             fromAddress={fromAddress}
                             chainId={chainId}
                             password={password}
@@ -473,7 +476,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                         || (!getOwnership && !getAmount)
                         || (isWatcherMode
                             ? false
-                            : hw ? hwStatus !== 'available' : password.length === 0)}
+                            : hw ? hwStatus !== 'available' : (!signerReady && password.length === 0))}
                 >
                     {isWatcherMode
                         ? 'Create unsigned transaction'

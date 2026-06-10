@@ -23,6 +23,7 @@ import {
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials } from '../components/SignCredentials.jsx';
+import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import styles from './IssueTokenForm.module.css';
@@ -67,6 +68,7 @@ const ACTIONS_WITH_DEDICATED_FORMS = new Set([
  */
 export function AdvancedActionsForm({ walletId, onBack }) {
     const { messaging, shell } = useMessaging();
+    const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
 
@@ -278,7 +280,7 @@ export function AdvancedActionsForm({ walletId, onBack }) {
     async function handleSubmit(event) {
         event.preventDefault();
         if (stage === 'submitting') return;
-        if (!isWatcherMode && !isHwSource && password.length === 0) return;
+        if (!isWatcherMode && !isHwSource && (!signerReady && password.length === 0)) return;
         if (!isWatcherMode && isHwSource && hwStatus !== 'available') return;
         setStage('submitting');
         setSubmitError(null);
@@ -415,6 +417,7 @@ export function AdvancedActionsForm({ walletId, onBack }) {
                     </p>
                 ) : (
                     <SignCredentials
+                        unlocked={signerReady}
                         fromAddress={fromAddress}
                         chainId={chainId}
                         password={password}
@@ -442,7 +445,7 @@ export function AdvancedActionsForm({ walletId, onBack }) {
                                 ? false
                                 : isHwSource
                                     ? hwStatus !== 'available'
-                                    : password.length === 0
+                                    : (!signerReady && password.length === 0)
                         }
                     >
                         {isWatcherMode

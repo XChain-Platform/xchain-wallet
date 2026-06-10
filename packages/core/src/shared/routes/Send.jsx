@@ -32,6 +32,7 @@ import { buildRecentDestinations } from '../../flows/recentDestinations.js';
 import { findLookalike } from '../utils/lookalike.js';
 import { checkPasteIntegrity } from '../utils/pasteIntegrity.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useDeveloperMode } from '../hooks/useDeveloperMode.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { checkRecipientNovelty } from '../../flows/recipientNovelty.js';
@@ -116,6 +117,8 @@ function nativeTickerFor(descriptor) {
  */
 export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
     const { messaging, shell } = useMessaging();
+    // Unlocked software session signs without a password.
+    const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
     const { developerMode } = useDeveloperMode();
@@ -897,7 +900,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
         event.preventDefault();
         if (stage === 'submitting') return;
         if (!isWatcherMode) {
-            if (!isHwSource && password.length === 0) return;
+            if (!isHwSource && !signerReady && password.length === 0) return;
             if (isHwSource && hwStatus !== 'available') return;
             // Cluster N FOLLOWUP 3 — block submit if the risk classifier
             // demands an explicit cross-check confirm and the user
@@ -1211,6 +1214,19 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                         requireExplicitConfirmReason={signRisk.reason}
                         onConfirmedChange={setHwExplicitConfirmed}
                     />
+                ) : signerReady ? (
+                    <p
+                        style={{
+                            margin: 'var(--xc-space-2) 0 0',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 'var(--xc-space-1)',
+                            fontSize: 'var(--xc-text-sm)',
+                            color: 'var(--xc-text-muted)',
+                        }}
+                    >
+                        <span aria-hidden="true">🔓</span> Wallet unlocked — no password needed.
+                    </p>
                 ) : (
                     <Input
                         ref={passwordRef}
@@ -1251,7 +1267,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                                 : isHwSource
                                     ? (hwStatus !== 'available'
                                         || (signRisk.requireExplicitConfirm && !hwExplicitConfirmed))
-                                    : password.length === 0)
+                                    : (!signerReady && password.length === 0))
                         }
                     >
                         {isWatcherMode

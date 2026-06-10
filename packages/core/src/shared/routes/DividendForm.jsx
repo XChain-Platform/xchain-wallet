@@ -24,6 +24,7 @@ import {
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
 import { SignCredentials } from '../components/SignCredentials.jsx';
+import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
@@ -54,6 +55,7 @@ const chainRegistry = registryLib.defaultRegistry();
  */
 export function DividendForm({ walletId, onBack, initialChainId, initialTick, initialFromAddress }) {
     const { messaging, shell } = useMessaging();
+    const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
 
@@ -273,7 +275,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
     async function handleSubmit(event) {
         event.preventDefault();
         if (stage === 'submitting') return;
-        if (!isWatcherMode && !isHwSource && password.length === 0) return;
+        if (!isWatcherMode && !isHwSource && (!signerReady && password.length === 0)) return;
         if (!isWatcherMode && isHwSource && hwStatus !== 'available') return;
         setStage('submitting');
         setSubmitError(null);
@@ -432,6 +434,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                     </p>
                 ) : (
                     <SignCredentials
+                        unlocked={signerReady}
                         fromAddress={fromAddress}
                         chainId={chainId}
                         password={password}
@@ -460,7 +463,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                                 ? false
                                 : isHwSource
                                     ? hwStatus !== 'available'
-                                    : password.length === 0
+                                    : (!signerReady && password.length === 0)
                         }
                     >
                         {isWatcherMode

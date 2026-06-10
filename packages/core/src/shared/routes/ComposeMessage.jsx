@@ -20,6 +20,7 @@ import {
  Icon,} from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useSignerReady } from '../hooks/useSignerReady.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import styles from './IssueTokenForm.module.css';
@@ -66,6 +67,8 @@ export function ComposeMessage({
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
+    // Unlocked software session signs without a password.
+    const signerReady = useSignerReady(walletId);
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -158,7 +161,7 @@ export function ComposeMessage({
         if (stage === 'submitting') return;
         if (!fromAddress || !chainId || !toAddress.trim() || !message.trim()) return;
         if (pubkeyState === 'missing' && !sendUnencrypted) return;
-        if (!hw && password.length === 0) return;
+        if (!hw && !signerReady && password.length === 0) return;
         if (hw && hwStatus !== 'available') return;
 
         setStage('submitting');
@@ -343,6 +346,7 @@ export function ComposeMessage({
                     <SignCredentials
                         fromAddress={fromAddress}
                         chainId={chainId}
+                        unlocked={signerReady}
                         password={password}
                         onPasswordChange={(v) => {
                             setPassword(v);
@@ -373,7 +377,7 @@ export function ComposeMessage({
                         || !message.trim()
                         || (pubkeyState === 'missing' && !sendUnencrypted)
                         || pubkeyState === 'checking'
-                        || (hw ? hwStatus !== 'available' : password.length === 0)}
+                        || (hw ? hwStatus !== 'available' : (!signerReady && password.length === 0))}
                 >
                     {hw
                         ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
