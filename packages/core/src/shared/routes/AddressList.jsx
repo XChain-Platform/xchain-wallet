@@ -259,7 +259,7 @@ export function AddressList({
         .filter(([, addrs]) => Array.isArray(addrs) && addrs.length > 0)
         .map(([cid]) => cid);
 
-    if (activeChainIds.length === 0 && !multisig) {
+    if (activeChainIds.length === 0 && multisigs.length === 0) {
         return wrap(
             <EmptyStateNudge
                 title="No addresses yet"
