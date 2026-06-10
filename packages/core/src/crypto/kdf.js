@@ -107,9 +107,12 @@ export function calibrateKdfParams(opts = {}) {
     crypto.getRandomValues(probeSalt);
     const probePassword = new TextEncoder().encode('calibration-probe');
 
+    // Increment only when we're going to probe again, so on exit `iterations`
+    // holds the value actually measured — capped at maxIterations rather than
+    // the post-increment maxIterations+1 a `for (; i <= max; i++)` would leave.
     let iterations = minIterations;
     let lastMs = 0;
-    for (; iterations <= maxIterations; iterations++) {
+    for (;;) {
         const start = performance.now();
         argon2id(probePassword, probeSalt, {
             t: iterations,
@@ -118,7 +121,8 @@ export function calibrateKdfParams(opts = {}) {
             dkLen: KDF_KEY_LENGTH,
         });
         lastMs = performance.now() - start;
-        if (lastMs >= targetMs) break;
+        if (lastMs >= targetMs || iterations >= maxIterations) break;
+        iterations++;
     }
 
     const saltOut = new Uint8Array(16);

@@ -119,16 +119,14 @@ describe('crypto/kdf', () => {
             expect(p.iterations).toBe(KDF_MIN_ITERATIONS);
         });
 
-        it('caps iterations when the target is never reached', () => {
-            // targetMs huge + tiny memory → never hits target → the loop exhausts.
-            // NOTE: the loop returns `iterations` AFTER the post-increment that
-            // fails the `<= maxIterations` guard, so the capped value is
-            // maxIterations + 1 (here 3, not 2). This characterizes the current
-            // off-by-one; tighten to `maxIterations` if the loop is fixed.
+        it('caps iterations at maxIterations when the target is never reached', () => {
+            // targetMs huge + tiny memory → never hits target → the loop exhausts
+            // and returns exactly maxIterations (the last value actually probed),
+            // not maxIterations + 1.
             const p = calibrateKdfParams({
                 targetMs: 1e9, memory: 8, minIterations: 1, maxIterations: 2,
             });
-            expect(p.iterations).toBe(3);
+            expect(p.iterations).toBe(2);
         });
     });
 
