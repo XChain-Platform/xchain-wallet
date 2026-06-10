@@ -686,3 +686,55 @@ export function synthesizeDemoMarketActivity(token, opts = {}) {
 
     return { offers, sales, dexOrders, dexSwaps };
 }
+
+/**
+ * Synthesize the message list the §41.7.2 inbox renders for a demo
+ * wallet — a couple of conversations against the owner's address, mixing
+ * incoming/outgoing ECIES (decrypted) messages plus one ECDH message that
+ * stays encrypted (exercises the 🔒 placeholder path). Mirrors the demo
+ * pattern used elsewhere so the inbox shows something instead of being
+ * empty (the demo wallet has no on-chain message history to decrypt).
+ *
+ * Each row matches `getMessagingInbox`'s message shape — from / to /
+ * timestamp / method / text / txid — so the inbox's conversation grouping
+ * and thread view accept them unchanged.
+ *
+ * @param {string} ownerAddress  the address whose inbox is being read
+ * @param {{ now?: number }} [opts]
+ * @returns {Array<{ txid: string, from: string, to: string, timestamp: number, method: number, text: string | null }>}
+ */
+export function synthesizeDemoMessages(ownerAddress, opts = {}) {
+    if (typeof ownerAddress !== 'string' || !ownerAddress) return [];
+    const now = typeof opts.now === 'number' ? opts.now : Date.now();
+    const sec = (deltaSec) => Math.floor(now / 1000) - deltaSec;
+
+    // Illustrative counterparty addresses — AddressText truncates them in
+    // the UI, so the exact value only needs to be stable + distinct.
+    const alice = 'demo1alicexchaincounterpartyaddr00000000001';
+    const bob = 'demo1bobxchaincounterpartyaddr000000000002';
+
+    let n = 0;
+    const mk = (from, to, deltaSec, method, text) => ({
+        txid: `demo-msg-${++n}`,
+        from,
+        to,
+        timestamp: sec(deltaSec),
+        method,
+        text,
+    });
+
+    return [
+        // Conversation with Alice — most recent, ECIES (decrypts to text).
+        mk(alice, ownerAddress, 600, 1, 'Hey! Did you get the tokens I sent over?'),
+        mk(ownerAddress, alice, 540, 1, 'Yes, just received them — thank you!'),
+        mk(alice, ownerAddress, 480, 1, 'Perfect. Ping me if you want to swap some on the DEX.'),
+
+        // Conversation with Bob — one in, one out, ECIES.
+        mk(bob, ownerAddress, 7_200, 1, 'gm — are you joining the XChain call later?'),
+        mk(ownerAddress, bob, 7_000, 1, 'gm! yeah, I will be there.'),
+
+        // An ECDH message we cannot decrypt without a session key — shows
+        // the encrypted placeholder rather than text.
+        mk(bob, ownerAddress, 3_600, 2, null),
+    ];
+}
