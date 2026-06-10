@@ -82,13 +82,34 @@
 //   node_modules/.bin/vitest run test/unit/routes-render.test.jsx \
 //     --config test/vitest/unit.config.js
 
-import { describe, it, beforeAll, afterAll } from 'vitest';
+import { describe, it, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import { render, act as domAct, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../packages/core/src/shared/MessagingProvider.jsx';
 
 // `domAct` (Testing Library's `act`, bound to the installed React) flushes
 // React effects/state in Layer 2.
+
+// Run every test under fake timers. Some routes (e.g. MarketChart) schedule
+// a setTimeout / rAF on mount — chart init, animations — that fires AFTER
+// our microtask-only flush and throws in jsdom (`Cannot parse color:
+// canvastext`, canvas not implemented, …) as an UNHANDLED exception. Vitest
+// flags those as "might cause false positive tests", a flakiness vector for
+// a kept guard. Fake timers capture those callbacks so they never execute;
+// the global afterEach's `vi.useRealTimers()` (test/setup.js) discards them.
+// We fake only timer APIs — NOT queueMicrotask/promises — so the effects-
+// flush drain and React's scheduler keep working. This also hardens the
+// "real timers deliberately never fire" guarantee Layers 2–3 rely on.
+beforeEach(() => {
+    vi.useFakeTimers({
+        toFake: [
+            'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval',
+            'setImmediate', 'clearImmediate', 'requestAnimationFrame',
+            'cancelAnimationFrame', 'requestIdleCallback', 'cancelIdleCallback',
+            'Date',
+        ],
+    });
+});
 
 // Discover every route module via vite's compile-time glob. Resolved
 // relative to THIS file, so the suite works regardless of cwd — and it

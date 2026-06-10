@@ -44,6 +44,14 @@ export default defineConfig({
         exclude: ['test/**/*.smoke.js', 'node_modules/**'],
         setupFiles: ['./test/unit/setup.js'],
         globals: false,
+        // Most unit tests finish in milliseconds, but three crash-class
+        // guards under test/unit/ are heavier: routes-render.test.jsx mounts
+        // every route across three layers, and jsx-imports/import-exports
+        // run Babel-AST scans over the whole wallet source tree. They land
+        // well under this ceiling locally, but the Parallels share adds
+        // variance — a generous timeout keeps them from flaking the suite
+        // while still catching a genuine hang.
+        testTimeout: 20000,
         coverage: {
             provider: 'v8',
             reporter: ['text', 'html'],
