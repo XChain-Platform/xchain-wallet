@@ -70,6 +70,7 @@ export async function deployAction(opts) {
         vault: opts.vault,
         walletId: opts.walletId,
         password: opts.password,
+        signer: opts.signer,
         bip39Passphrase: opts.bip39Passphrase,
         chainRegistry: opts.chainRegistry,
         sdkRegistry: opts.sdkRegistry,

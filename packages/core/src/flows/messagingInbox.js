@@ -77,13 +77,14 @@ export async function getMessagingInbox({
     addressId,
     type = 'all',
     opts: passthroughOpts,
+    signer: injectedSigner,
 }) {
     if (!vault) throw new Error('getMessagingInbox: vault is required');
     if (typeof walletId !== 'string' || walletId.length === 0) {
         throw new Error('getMessagingInbox: walletId is required');
     }
-    if (typeof password !== 'string' || password.length === 0) {
-        throw new Error('getMessagingInbox: password is required');
+    if (!injectedSigner && (typeof password !== 'string' || password.length === 0)) {
+        throw new Error('getMessagingInbox: either `password` or `signer` is required');
     }
     if (!chainRegistry) throw new Error('getMessagingInbox: chainRegistry is required');
     if (!sdkRegistry) throw new Error('getMessagingInbox: sdkRegistry is required');
@@ -91,15 +92,34 @@ export async function getMessagingInbox({
         throw new Error('getMessagingInbox: addressId is required');
     }
 
-    const { wif, address, chainId } = await exportPrivateKey({
-        vault,
-        walletId,
-        password,
-        bip39Passphrase,
-        chainRegistry,
-        sdkRegistry,
-        addressId,
-    });
+    // Unlocked session: derive the address WIF straight from the pooled
+    // SoftwareSigner (no password / no Argon2id). Falls back to the
+    // password-gated exportPrivateKey when no signer was supplied.
+    let wif; let address; let chainId;
+    if (injectedSigner) {
+        const addressRecord = await vault.addresses.get(addressId);
+        if (!addressRecord) throw new Error(`getMessagingInbox: address "${addressId}" not found`);
+        chainId = chainRegistry.chainIdFor(addressRecord.chain, addressRecord.network);
+        if (!chainId) {
+            throw new Error(
+                `getMessagingInbox: no registered chain for ${addressRecord.chain}/${addressRecord.network}`,
+            );
+        }
+        address = addressRecord.address;
+        wif = addressRecord.source === 'imported-wif'
+            ? injectedSigner.exportWifForAddressId(addressId)
+            : injectedSigner.exportWifForPath({ chainId, path: addressRecord.derivationPath });
+    } else {
+        ({ wif, address, chainId } = await exportPrivateKey({
+            vault,
+            walletId,
+            password,
+            bip39Passphrase,
+            chainRegistry,
+            sdkRegistry,
+            addressId,
+        }));
+    }
 
     const sdk = sdkRegistry.get(chainId);
     const messages = await sdk.getMessagesForAddress(

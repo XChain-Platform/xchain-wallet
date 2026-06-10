@@ -19,9 +19,12 @@
 // belt-and-braces step that releases the closed-over vault reference
 // so a later re-unlock doesn't race against stale state.
 
+import { clearSigningSecret } from './signingSecretSession.js';
+
 /**
  * @typedef {Object} WalletLockDeps
  * @property {import('../storage/ChromeSessionBackend.js').ChromeSessionBackend} sessionBackend
+ * @property {import('../storage/ChromeSessionBackend.js').ChromeSessionBackend} [signingSecretBackend]   cleared alongside the session key so no signing secret outlives the lock
  * @property {() => Promise<void> | void} [onLocked]
  */
 
@@ -32,6 +35,7 @@
  */
 export async function handleWalletLock(_request, deps) {
     await deps.sessionBackend.clear();
+    await clearSigningSecret(deps.signingSecretBackend);
     if (typeof deps.onLocked === 'function') {
         await deps.onLocked();
     }

@@ -20,6 +20,7 @@
 // vault-backed handlers aren't registered until a session key exists.
 
 import { crypto as cryptoLib, flows, storage as storageLib } from '@xchain-wallet/core';
+import { saveSigningSecret } from './signingSecretSession.js';
 
 export const DEFAULT_ACTIVE_CHAIN_IDS = [
     'bitcoin-mainnet',
@@ -31,6 +32,7 @@ export const DEFAULT_ACTIVE_CHAIN_IDS = [
  * @typedef {Object} WalletCreateDeps
  * @property {import('../storage/ChromeStorageBackend.js').ChromeStorageBackend} storageBackend
  * @property {import('../storage/ChromeSessionBackend.js').ChromeSessionBackend} sessionBackend
+ * @property {import('../storage/ChromeSessionBackend.js').ChromeSessionBackend} [signingSecretBackend]   session slot for the cached password; lets ensureHost re-populate the SignerPool after a service-worker restart
  * @property {import('../storage/ChromeMetaBackend.js').ChromeMetaBackend} metaBackend
  * @property {import('@xchain-wallet/core').registry.ChainRegistry} chainRegistry
  * @property {import('@xchain-wallet/core').sdk.SDKRegistry} sdkRegistry
@@ -74,6 +76,7 @@ export async function handleWalletCreate(request, deps) {
 
         await deps.metaBackend.save({ kdfParams });
         await deps.sessionBackend.save(masterKey);
+        await saveSigningSecret(deps.signingSecretBackend, password);
     } finally {
         masterKey.fill(0);
     }
@@ -130,6 +133,7 @@ export async function handleWalletCreateWithMnemonic(request, deps) {
 
         await deps.metaBackend.save({ kdfParams });
         await deps.sessionBackend.save(masterKey);
+        await saveSigningSecret(deps.signingSecretBackend, password);
     } finally {
         masterKey.fill(0);
     }
@@ -181,6 +185,7 @@ export async function handleWalletImport(request, deps) {
 
         await deps.metaBackend.save({ kdfParams });
         await deps.sessionBackend.save(masterKey);
+        await saveSigningSecret(deps.signingSecretBackend, password);
     } finally {
         masterKey.fill(0);
     }

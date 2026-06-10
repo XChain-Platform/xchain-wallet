@@ -38,6 +38,7 @@ import {
     createDevMockSdk,
     resolveSdkFactory,
 } from './background/index.js';
+import { SIGNING_SECRET_SESSION_KEY, loadSigningSecret } from './background/signingSecretSession.js';
 import { createBridgeEventBroadcaster } from './bridge/bridgeEvents.js';
 import {
     applyLayoutMode,
@@ -111,6 +112,32 @@ async function ensureHost() {
         masterKey,
     });
     await vault.open();
+
+    // Re-populate the SignerPool after a service-worker restart. On the
+    // normal unlock path the pre-host handler already filled the pool while
+    // the password was in scope, so this only fires when Chrome killed and
+    // restarted the worker mid-session (the pool is module state and didn't
+    // survive). The master key can't decrypt seeds, so we use the password
+    // cached in the signing-secret session slot. Best-effort: a failure just
+    // leaves the per-op password prompt as the fallback.
+    if (signerPool.size() === 0) {
+        try {
+            const cachedPassword = await loadSigningSecret(
+                new ChromeSessionBackend({ key: SIGNING_SECRET_SESSION_KEY }),
+            );
+            if (cachedPassword) {
+                await signerPool.populate({
+                    vault,
+                    password: cachedPassword,
+                    chainRegistry,
+                    sdkRegistry,
+                });
+            }
+        } catch (err) {
+            console.error('[xchain] SignerPool rehydrate failed:', err);
+        }
+    }
+
     host = createBackgroundHost({
         vault,
         chainRegistry,

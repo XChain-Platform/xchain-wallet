@@ -326,6 +326,30 @@ async function pickSignerFromRequest({ vault, walletId, signerId, signerPool }) 
 }
 
 /**
+ * Resolve the signer to pass into a signing/decrypt action flow:
+ *   - HW request (req.signerId) → the paired RemoteSigner.
+ *   - Unlocked software session → the pre-unlocked pooled SoftwareSigner,
+ *     so the flow skips the password prompt ("password only at unlock").
+ *   - Otherwise `undefined` → the flow falls back to its `req.password`
+ *     path (locked, passphrase wallet, or a worker restart that couldn't
+ *     rehydrate the pool).
+ *
+ * @param {any} req
+ * @param {import('@xchain-wallet/core').storage.Vault} vault
+ * @param {import('@xchain-wallet/core').signers.SignerPool} [signerPool]
+ * @returns {Promise<import('@xchain-wallet/core').signers.Signer | undefined>}
+ */
+async function sessionSigner(req, vault, signerPool) {
+    const signer = await pickSignerFromRequest({
+        vault,
+        walletId: req?.walletId,
+        signerId: req?.signerId,
+        signerPool,
+    });
+    return signer || undefined;
+}
+
+/**
  * Return the newest (highest external index) HD address for a wallet +
  * chain, or `null` if no address exists. External = change = 0 in the
  * BIP44-style derivation path. Skips imported WIFs — those aren't a
@@ -694,6 +718,21 @@ export function createBackgroundHost(deps) {
         const signer = await unlockWallet({ ...req, vault, chainRegistry, sdkRegistry });
         signer.lock();
         return { ok: true };
+    });
+
+    // Can this wallet sign WITHOUT a password right now? True iff the
+    // unlocked session has a pre-unlocked SoftwareSigner for it in the
+    // pool. The UI uses this to hide the per-action password input
+    // ("password only at unlock") — and correctly keeps prompting in the
+    // rare empty-pool cases (passphrase wallet, or a worker restart that
+    // couldn't rehydrate the pool).
+    host.register('wallet.signerReady', async (req, { signerPool }) => {
+        const walletId = req?.walletId;
+        const ready = typeof walletId === 'string'
+            && !!signerPool
+            && typeof signerPool.has === 'function'
+            && signerPool.has(walletId);
+        return { ready };
     });
 
     // §48.3 / G149 — runtime chain activation. Seeds settings.fees +
@@ -1164,10 +1203,11 @@ export function createBackgroundHost(deps) {
 
     // --- Actions -------------------------------------------------------------
 
-    host.register('action.send', async (req, { vault, chainRegistry, sdkRegistry }) => {
+    host.register('action.send', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
         const walletId = req?.walletId;
         return sendToken({
             ...req,
+            signer: await sessionSigner(req, vault, signerPool),
             vault,
             chainRegistry,
             sdkRegistry,
@@ -1234,7 +1274,7 @@ export function createBackgroundHost(deps) {
     // §17.4 / §30.1 / G024 — user-initiated message signing. Caller
     // supplies the addressId (HD or imported-WIF) and the wallet
     // resolves it to either `path` (HD) or `addressId` (imported).
-    host.register('auth.signMessage', async (req, { vault, chainRegistry, sdkRegistry }) => {
+    host.register('auth.signMessage', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
         const walletId = req?.walletId;
         const addressId = req?.addressId;
         const password = req?.password;
@@ -1245,11 +1285,14 @@ export function createBackgroundHost(deps) {
         if (typeof addressId !== 'string' || !addressId) {
             throw new Error('auth.signMessage: addressId is required');
         }
-        if (typeof password !== 'string' || password.length === 0) {
-            throw new Error('auth.signMessage: password is required');
-        }
         if (typeof message !== 'string') {
             throw new Error('auth.signMessage: message must be a string');
+        }
+        // Unlocked session → pooled signer (no password). Locked / restart
+        // without rehydration → fall back to the supplied password.
+        const signer = await sessionSigner(req, vault, signerPool);
+        if (!signer && (typeof password !== 'string' || password.length === 0)) {
+            throw new Error('auth.signMessage: password is required');
         }
         const address = await vault.addresses.get(addressId);
         if (!address) {
@@ -1260,6 +1303,7 @@ export function createBackgroundHost(deps) {
             vault,
             walletId,
             password,
+            signer,
             bip39Passphrase: req?.bip39Passphrase,
             chainRegistry,
             sdkRegistry,
@@ -1493,7 +1537,7 @@ export function createBackgroundHost(deps) {
     // address PSBTs are partially-signed (only inputs the chosen address
     // owns) and the unsigned remainder stays in the returned PSBT for the
     // next signer in the chain.
-    host.register('auth.signPsbt', async (req, { vault, chainRegistry, sdkRegistry }) => {
+    host.register('auth.signPsbt', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
         const walletId = req?.walletId;
         const addressId = req?.addressId;
         const password = req?.password;
@@ -1504,7 +1548,10 @@ export function createBackgroundHost(deps) {
         if (typeof addressId !== 'string' || !addressId) {
             throw new Error('auth.signPsbt: addressId is required');
         }
-        if (typeof password !== 'string' || password.length === 0) {
+        // Unlocked session → pooled signer (no password). Locked / restart
+        // without rehydration → fall back to the supplied password.
+        const signer = await sessionSigner(req, vault, signerPool);
+        if (!signer && (typeof password !== 'string' || password.length === 0)) {
             throw new Error('auth.signPsbt: password is required');
         }
         if (typeof psbtHex !== 'string' || psbtHex.length === 0) {
@@ -1535,6 +1582,7 @@ export function createBackgroundHost(deps) {
             vault,
             walletId,
             password,
+            signer,
             bip39Passphrase: req?.bip39Passphrase,
             chainRegistry,
             sdkRegistry,
@@ -1695,41 +1743,41 @@ export function createBackgroundHost(deps) {
         }
     });
 
-    host.register('action.sweep', async (req, { vault, chainRegistry, sdkRegistry }) => {
-        return sweepToken({ ...req, vault, chainRegistry, sdkRegistry });
+    host.register('action.sweep', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        return sweepToken({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
     });
 
-    host.register('action.issue', async (req, { vault, chainRegistry, sdkRegistry }) => {
-        return issueToken({ ...req, vault, chainRegistry, sdkRegistry });
+    host.register('action.issue', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        return issueToken({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
     });
 
-    host.register('action.mint', async (req, { vault, chainRegistry, sdkRegistry }) => {
-        return mintToken({ ...req, vault, chainRegistry, sdkRegistry });
+    host.register('action.mint', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        return mintToken({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
     });
 
-    host.register('action.destroy', async (req, { vault, chainRegistry, sdkRegistry }) => {
-        return destroyToken({ ...req, vault, chainRegistry, sdkRegistry });
+    host.register('action.destroy', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        return destroyToken({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
     });
 
-    host.register('action.broadcast', async (req, { vault, chainRegistry, sdkRegistry }) => {
-        return broadcastAction({ ...req, vault, chainRegistry, sdkRegistry });
+    host.register('action.broadcast', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        return broadcastAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
     });
 
-    host.register('action.dispenser', async (req, { vault, chainRegistry, sdkRegistry }) => {
-        return dispenserAction({ ...req, vault, chainRegistry, sdkRegistry });
+    host.register('action.dispenser', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        return dispenserAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
     });
 
     // §41.3.4 ORDER / §41.3.5 CANCEL — DEX signing lanes.
-    host.register('action.order', async (req, { vault, chainRegistry, sdkRegistry }) => {
-        return orderAction({ ...req, vault, chainRegistry, sdkRegistry });
+    host.register('action.order', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        return orderAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
     });
-    host.register('action.cancelOrder', async (req, { vault, chainRegistry, sdkRegistry }) => {
-        return cancelOrder({ ...req, vault, chainRegistry, sdkRegistry });
+    host.register('action.cancelOrder', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        return cancelOrder({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
     });
 
     // §41.4 COINPAY — buyer-side settlement for token/native-coin matches.
-    host.register('action.coinpay', async (req, { vault, chainRegistry, sdkRegistry }) => {
-        return coinpayAction({ ...req, vault, chainRegistry, sdkRegistry });
+    host.register('action.coinpay', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        return coinpayAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
     });
     host.register('coinpays.obligationsForAddress', async (req, { sdkRegistry }) => {
         return getCoinpayObligationsForAddress({ ...req, sdkRegistry });
@@ -1739,19 +1787,19 @@ export function createBackgroundHost(deps) {
     });
 
     // §41.5 SWAP — atomic token-pair swap (no COINPAY follow-up).
-    host.register('action.swap', async (req, { vault, chainRegistry, sdkRegistry }) => {
-        return swapAction({ ...req, vault, chainRegistry, sdkRegistry });
+    host.register('action.swap', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        return swapAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
     });
 
     // §42.8.1 LINK — anchor two existing actions across chains.
-    host.register('action.link', async (req, { vault, chainRegistry, sdkRegistry }) => {
-        return linkAction({ ...req, vault, chainRegistry, sdkRegistry });
+    host.register('action.link', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        return linkAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
     });
 
     // §41.7.2 Messaging inbox — password-gated decrypt of MESSAGE
     // actions for one of the wallet's own addresses.
-    host.register('messaging.inbox', async (req, { vault, chainRegistry, sdkRegistry }) => {
-        return getMessagingInbox({ ...req, vault, chainRegistry, sdkRegistry });
+    host.register('messaging.inbox', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        return getMessagingInbox({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
     });
 
     // Token-gated content — list and unlock.
@@ -1760,13 +1808,13 @@ export function createBackgroundHost(deps) {
         const sdk = sdkRegistry.get(req.chainId);
         return listGatedFiles({ sdk, tick: req.tick });
     });
-    host.register('gatedContent.unlock', async (req, { vault, chainRegistry, sdkRegistry }) => {
-        return unlockGatedFileForAddress({ ...req, vault, chainRegistry, sdkRegistry });
+    host.register('gatedContent.unlock', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        return unlockGatedFileForAddress({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
     });
 
     // §41.7.3 Compose — MESSAGE action signing + recipient pubkey lookup.
-    host.register('action.message', async (req, { vault, chainRegistry, sdkRegistry }) => {
-        return messageAction({ ...req, vault, chainRegistry, sdkRegistry });
+    host.register('action.message', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        return messageAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
     });
     host.register('messaging.pubkey', async (req, { sdkRegistry }) => {
         return getRecipientPubkey({ ...req, sdkRegistry });
@@ -1861,20 +1909,20 @@ export function createBackgroundHost(deps) {
     // passthroughs over sdk.contracts.* for the validate / size /
     // suggest-gas buttons.
 
-    host.register('action.deploy', async (req, { vault, chainRegistry, sdkRegistry }) => {
-        return deployAction({ ...req, vault, chainRegistry, sdkRegistry });
+    host.register('action.deploy', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        return deployAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
     });
 
-    host.register('action.execute', async (req, { vault, chainRegistry, sdkRegistry }) => {
-        return executeAction({ ...req, vault, chainRegistry, sdkRegistry });
+    host.register('action.execute', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        return executeAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
     });
 
-    host.register('action.deposit', async (req, { vault, chainRegistry, sdkRegistry }) => {
-        return depositAction({ ...req, vault, chainRegistry, sdkRegistry });
+    host.register('action.deposit', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        return depositAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
     });
 
-    host.register('action.withdraw', async (req, { vault, chainRegistry, sdkRegistry }) => {
-        return withdrawAction({ ...req, vault, chainRegistry, sdkRegistry });
+    host.register('action.withdraw', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        return withdrawAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
     });
 
     // §42.7 Staking — four read-only explorer passthroughs backing
@@ -1900,24 +1948,24 @@ export function createBackgroundHost(deps) {
         return capabilityThresholds({ ...req, sdkRegistry });
     });
 
-    host.register('action.stake', async (req, { vault, chainRegistry, sdkRegistry }) => {
-        return stakeAction({ ...req, vault, chainRegistry, sdkRegistry });
+    host.register('action.stake', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        return stakeAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
     });
 
-    host.register('action.unstake', async (req, { vault, chainRegistry, sdkRegistry }) => {
-        return unstakeAction({ ...req, vault, chainRegistry, sdkRegistry });
+    host.register('action.unstake', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        return unstakeAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
     });
 
-    host.register('action.collect', async (req, { vault, chainRegistry, sdkRegistry }) => {
-        return collectAction({ ...req, vault, chainRegistry, sdkRegistry });
+    host.register('action.collect', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        return collectAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
     });
 
-    host.register('action.delegate', async (req, { vault, chainRegistry, sdkRegistry }) => {
-        return delegateAction({ ...req, vault, chainRegistry, sdkRegistry });
+    host.register('action.delegate', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        return delegateAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
     });
 
-    host.register('action.revokeDelegation', async (req, { vault, chainRegistry, sdkRegistry }) => {
-        return revokeDelegationAction({ ...req, vault, chainRegistry, sdkRegistry });
+    host.register('action.revokeDelegation', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        return revokeDelegationAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
     });
 
     // Contract-targeted staking — parallel to the capability staking passthroughs above.
@@ -1935,8 +1983,8 @@ export function createBackgroundHost(deps) {
         return slashEventsForAddress({ ...req, sdkRegistry });
     });
 
-    host.register('action.contractStake', async (req, { vault, chainRegistry, sdkRegistry }) => {
-        return contractStakeAction({ ...req, vault, chainRegistry, sdkRegistry });
+    host.register('action.contractStake', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        return contractStakeAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
     });
 
     host.register('broadcasts.forAddress', async (req, { sdkRegistry }) => {
@@ -2037,8 +2085,8 @@ export function createBackgroundHost(deps) {
     // the wallet's software signer, dispatches to the right round
     // based on session.scheme + session.status, and pipes the
     // contribution through the Step 19 contribute APIs.
-    host.register('multisigSign.signLocally', async (req, { vault, chainRegistry, sdkRegistry }) => {
-        return signMultisigLocally({ ...req, vault, chainRegistry, sdkRegistry });
+    host.register('multisigSign.signLocally', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        return signMultisigLocally({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
     });
 
     host.register('contracts.validate', async (req, { sdkRegistry }) => {
@@ -2053,8 +2101,8 @@ export function createBackgroundHost(deps) {
         return contractSuggestGasLimit({ ...req, sdkRegistry });
     });
 
-    host.register('action.dividend', async (req, { vault, chainRegistry, sdkRegistry }) => {
-        return dividendAction({ ...req, vault, chainRegistry, sdkRegistry });
+    host.register('action.dividend', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        return dividendAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
     });
 
     host.register('holders.forTick', async (req, { sdkRegistry }) => {
@@ -2066,12 +2114,12 @@ export function createBackgroundHost(deps) {
     // to (a) resolve the LIST's ACTION_INDEX after it's indexed and
     // (b) confirm the LIST on the AIRDROP review screen.
 
-    host.register('action.createList', async (req, { vault, chainRegistry, sdkRegistry }) => {
-        return createList({ ...req, vault, chainRegistry, sdkRegistry });
+    host.register('action.createList', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        return createList({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
     });
 
-    host.register('action.airdrop', async (req, { vault, chainRegistry, sdkRegistry }) => {
-        return airdropAction({ ...req, vault, chainRegistry, sdkRegistry });
+    host.register('action.airdrop', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        return airdropAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
     });
 
     host.register('actions.byTxid', async (req, { sdkRegistry }) => {
@@ -2156,8 +2204,8 @@ export function createBackgroundHost(deps) {
     // accepts any (action, params) pair and forwards to submitAction,
     // which runs the SDK's validator before signing.
 
-    host.register('action.advanced', async (req, { vault, chainRegistry, sdkRegistry }) => {
-        return advancedAction({ ...req, vault, chainRegistry, sdkRegistry });
+    host.register('action.advanced', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        return advancedAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
     });
 
     host.register('sdk.listActions', async (req, { sdkRegistry }) => {
@@ -2211,8 +2259,8 @@ export function createBackgroundHost(deps) {
     // (ViewPrivateKey.jsx) already gates on `Address.source`, but the
     // flow's guard is the authoritative line.
 
-    host.register('wallet.exportPrivateKey', async (req, { vault, chainRegistry, sdkRegistry }) => {
-        return exportPrivateKey({ ...req, vault, chainRegistry, sdkRegistry });
+    host.register('wallet.exportPrivateKey', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        return exportPrivateKey({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
     });
 
     // --- Reads ---------------------------------------------------------------

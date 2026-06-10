@@ -28,7 +28,7 @@ import { assertSigningAllowed } from './panicMode.js';
  * @typedef {Object} SignMessageFlowOpts
  * @property {import('../storage/Vault.js').Vault} vault
  * @property {string} walletId
- * @property {string} password
+ * @property {string} [password]                    required for software-wallet signing; skipped when `signer` is supplied
  * @property {string} [bip39Passphrase]
  * @property {import('../registry/index.js').ChainRegistry} chainRegistry
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
@@ -36,6 +36,7 @@ import { assertSigningAllowed } from './panicMode.js';
  * @property {string} [path]        BIP32 path — HD key
  * @property {string} [addressId]   Address record id — imported-WIF key
  * @property {string} message
+ * @property {import('../signers/Signer.js').Signer} [signer]   pre-built signer (pooled SoftwareSigner for an unlocked session, or RemoteSigner for HW). When supplied, the flow skips unlockWallet — no password KDF — and does not call `.lock()` (signer lifecycle is the caller's responsibility).
  */
 
 /**
@@ -53,6 +54,7 @@ export async function signMessageFlow({
     path,
     addressId,
     message,
+    signer: injectedSigner,
 }) {
     if (!vault) throw new Error('signMessageFlow: vault is required');
     if (typeof chainId !== 'string' || chainId.length === 0) {
@@ -68,20 +70,26 @@ export async function signMessageFlow({
     if (typeof message !== 'string') {
         throw new Error('signMessageFlow: message must be a string');
     }
+    if (!injectedSigner && (typeof password !== 'string' || password.length === 0)) {
+        throw new Error('signMessageFlow: either `password` or `signer` is required');
+    }
     // §26.5 panic-mode freeze.
     assertSigningAllowed();
-    const signer = await unlockWallet({
-        vault,
-        walletId,
-        password,
-        bip39Passphrase,
-        chainRegistry,
-        sdkRegistry,
-    });
+    const signer = injectedSigner
+        || await unlockWallet({
+            vault,
+            walletId,
+            password,
+            bip39Passphrase,
+            chainRegistry,
+            sdkRegistry,
+        });
     try {
         return await signer.signMessage({ message, chainId, path, addressId });
     } finally {
-        signer.lock();
+        if (!injectedSigner && typeof signer.lock === 'function') {
+            signer.lock();
+        }
     }
 }
 

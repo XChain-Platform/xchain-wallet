@@ -22,14 +22,20 @@
 //   3. Open a Vault against the encrypted blob with that key. A bad
 //      password auth-fails inside AES-GCM; `Vault.open()` throws. We
 //      translate that into `InvalidPasswordError` for the popup.
-//   4. Persist the master key to the session backend (not the password).
-//   5. Fire `onUnlocked()` so background.js can call `ensureHost()` and
+//   4. Persist the master key to the session backend.
+//   5. Cache the password in the signing-secret session slot (when a
+//      `signingSecretBackend` is supplied) so `ensureHost()` can rebuild
+//      the SignerPool after an MV3 service-worker restart — the master key
+//      alone can't (the seed is password-encrypted). See
+//      `signingSecretSession.js` for the security rationale.
+//   6. Fire `onUnlocked()` so background.js can call `ensureHost()` and
 //      attach the full MessageHost to chrome.runtime.onMessage.
 //
-// Never returns the master key to the popup — the session backend is the
-// only place it lives outside the service worker.
+// Never returns the master key or password to the popup — the session
+// backends are the only place they live outside the service worker.
 
 import { crypto as cryptoLib, storage as storageLib } from '@xchain-wallet/core';
+import { saveSigningSecret } from './signingSecretSession.js';
 
 export class InvalidPasswordError extends Error {
     constructor() {
@@ -49,6 +55,7 @@ export class NoVaultError extends Error {
  * @typedef {Object} WalletUnlockDeps
  * @property {import('../storage/ChromeStorageBackend.js').ChromeStorageBackend} storageBackend
  * @property {import('../storage/ChromeSessionBackend.js').ChromeSessionBackend} sessionBackend
+ * @property {import('../storage/ChromeSessionBackend.js').ChromeSessionBackend} [signingSecretBackend]   session slot for the cached password; when supplied, lets ensureHost re-populate the SignerPool after a service-worker restart
  * @property {import('../storage/ChromeMetaBackend.js').ChromeMetaBackend} metaBackend
  * @property {import('@xchain-wallet/core').signers.SignerPool} [signerPool]   when supplied, every Wallet record's signer is unlocked into the pool while the password is in scope; lets account.create / receive.getAddress (etc.) skip the per-op password prompt
  * @property {import('@xchain-wallet/core').registry.ChainRegistry} [chainRegistry]   required iff `signerPool` is supplied
@@ -112,6 +119,9 @@ export async function handleWalletUnlock(request, deps) {
         // Password was correct. Persist the master key to the session
         // backend — that's what `ensureHost()` reads to build the host.
         await deps.sessionBackend.save(masterKey);
+        // Cache the password so the SignerPool can be rebuilt after a
+        // service-worker restart (the master key can't decrypt seeds).
+        await saveSigningSecret(deps.signingSecretBackend, password);
     } finally {
         masterKey.fill(0);
     }

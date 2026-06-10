@@ -39,11 +39,13 @@ import {
     handleWalletCreateWithMnemonic,
     handleWalletImport,
 } from './walletCreate.js';
+import { SIGNING_SECRET_SESSION_KEY } from './signingSecretSession.js';
 
 /**
  * @typedef {Object} PreHostBackends
  * @property {{ load: () => Promise<Uint8Array | null>, save: (blob: Uint8Array) => Promise<void>, clear: () => Promise<void> }} storageBackend
  * @property {{ load: () => Promise<Uint8Array | null>, save: (blob: Uint8Array) => Promise<void>, clear: () => Promise<void> }} sessionBackend
+ * @property {{ load: () => Promise<Uint8Array | null>, save: (blob: Uint8Array) => Promise<void>, clear: () => Promise<void> }} [signingSecretBackend]   extension-only session slot for the cached password (SignerPool rehydration after a service-worker restart); absent on desktop
  * @property {{ load: () => Promise<unknown | null>, save: (obj: unknown) => Promise<void>, clear: () => Promise<void> }} metaBackend
  *
  * @typedef {PreHostBackends & {
@@ -92,6 +94,7 @@ export function attachSessionMetaListener(deps = {}, chromeRuntime) {
                 const result = await dispatchPreHost(type, message.request, {
                     storageBackend: new ChromeStorageBackend(),
                     sessionBackend: new ChromeSessionBackend(),
+                    signingSecretBackend: new ChromeSessionBackend({ key: SIGNING_SECRET_SESSION_KEY }),
                     metaBackend: new ChromeMetaBackend(),
                     chainRegistry: deps.chainRegistry,
                     sdkRegistry: deps.sdkRegistry,
@@ -149,6 +152,7 @@ export async function dispatchPreHost(type, request, deps) {
             return handleWalletUnlock(request, {
                 storageBackend: deps.storageBackend,
                 sessionBackend: deps.sessionBackend,
+                signingSecretBackend: deps.signingSecretBackend,
                 metaBackend: deps.metaBackend,
                 signerPool: deps.signerPool,
                 chainRegistry: deps.chainRegistry,
@@ -158,12 +162,14 @@ export async function dispatchPreHost(type, request, deps) {
         case 'wallet.lock':
             return handleWalletLock(request, {
                 sessionBackend: deps.sessionBackend,
+                signingSecretBackend: deps.signingSecretBackend,
                 onLocked: deps.onLocked,
             });
         case 'wallet.create':
             return handleWalletCreateWithMnemonic(request, {
                 storageBackend: deps.storageBackend,
                 sessionBackend: deps.sessionBackend,
+                signingSecretBackend: deps.signingSecretBackend,
                 metaBackend: deps.metaBackend,
                 chainRegistry: deps.chainRegistry,
                 sdkRegistry: deps.sdkRegistry,
@@ -173,6 +179,7 @@ export async function dispatchPreHost(type, request, deps) {
             return handleWalletImport(request, {
                 storageBackend: deps.storageBackend,
                 sessionBackend: deps.sessionBackend,
+                signingSecretBackend: deps.signingSecretBackend,
                 metaBackend: deps.metaBackend,
                 chainRegistry: deps.chainRegistry,
                 sdkRegistry: deps.sdkRegistry,
