@@ -1478,6 +1478,16 @@ export function linkActionHw(opts) {
     return /** @type {any} */ (sendMessage('action.link.hw', opts));
 }
 
+// FILE — public on-chain file upload (NFT artwork attachment).
+/** @param {object} opts */
+export function fileAction(opts) {
+    return /** @type {any} */ (sendMessage('action.file', opts));
+}
+/** @param {object} opts */
+export function fileActionHw(opts) {
+    return /** @type {any} */ (sendMessage('action.file.hw', opts));
+}
+
 // §41.7.2 Messaging inbox — password-gated decrypt.
 /** @param {object} opts */
 export function getMessagingInbox(opts) {

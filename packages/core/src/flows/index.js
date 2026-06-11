@@ -40,6 +40,7 @@ export { orderAction, cancelOrder } from './orderAction.js';
 export { coinpayAction } from './coinpayAction.js';
 export { swapAction } from './swapAction.js';
 export { linkAction } from './linkAction.js';
+export { fileAction } from './fileAction.js';
 export { getMessagingInbox } from './messagingInbox.js';
 export {
     unlockGatedFile,

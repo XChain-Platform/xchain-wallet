@@ -105,6 +105,7 @@ import { OperatorDashboard } from '@xchain-wallet/core/shared/routes/OperatorDas
 import { History } from '@xchain-wallet/core/shared/routes/History.jsx';
 import { ActionDetail } from '@xchain-wallet/core/shared/routes/ActionDetail.jsx';
 import { LinkForm } from '@xchain-wallet/core/shared/routes/LinkForm.jsx';
+import { AttachContentForm } from '@xchain-wallet/core/shared/routes/AttachContentForm.jsx';
 import { SignMessageForm } from '@xchain-wallet/core/shared/routes/SignMessageForm.jsx';
 import { VerifySignatureForm } from '@xchain-wallet/core/shared/routes/VerifySignatureForm.jsx';
 import { PsbtSignForm } from '@xchain-wallet/core/shared/routes/PsbtSignForm.jsx';
@@ -168,7 +169,7 @@ function AppInner() {
         /** @type {'welcome' | 'create' | 'import' | 'import-freewallet'} */ ('welcome'),
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'markets-picker' | 'market' | 'coinpay' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'staking-dashboard' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'addresses' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'scan'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'markets-picker' | 'market' | 'coinpay' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'staking-dashboard' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'attach-content' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'addresses' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'scan'} */ ('home'),
     );
     const [tokenDetailRef, setTokenDetailRef] = useState(
         /** @type {{ chainId: string, tick: string, kind: string, displayName: string, divisibility: number, fiatRate: number | null, quantity: string } | null} */ (null),
@@ -893,6 +894,17 @@ function AppInner() {
                     />
                 );
             }
+            if (unlockedView === 'attach-content' && activeWalletId && tokenDetailRef) {
+                return (
+                    <AttachContentForm
+                        walletId={activeWalletId}
+                        chainId={tokenDetailRef.chainId}
+                        tick={tokenDetailRef.tick}
+                        issuerAddress={tokenDetailRef.issuer || null}
+                        onBack={formBack}
+                    />
+                );
+            }
             if (unlockedView === 'sign-message' && activeWalletId) {
                 return (
                     <SignMessageForm
@@ -1336,6 +1348,7 @@ function AppInner() {
                         onDestroy={() => openForm('destroy')}
                         onLock={() => openForm('lock')}
                         onUpdateDescription={() => openForm('description')}
+                        onAttachContent={() => openForm('attach-content')}
                         onTransferOwnership={() => openForm('transfer')}
                         onSellOwnership={() => {
                             setSellNameRef({ chainId: tokenDetailRef.chainId, tick: tokenDetailRef.tick, fromAddress: tokenDetailRef.issuer || undefined });

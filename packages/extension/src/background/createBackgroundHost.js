@@ -55,6 +55,7 @@ const {
     coinpayAction,
     swapAction,
     linkAction,
+    fileAction,
     getCoinpayObligationsForAddress,
     getCoinpaysForAddress,
     getMessagingInbox,
@@ -1705,6 +1706,7 @@ export function createBackgroundHost(deps) {
     registerHwHandler('action.coinpay.hw', coinpayAction);
     registerHwHandler('action.swap.hw', swapAction);
     registerHwHandler('action.link.hw', linkAction);
+    registerHwHandler('action.file.hw', fileAction);
     registerHwHandler('action.message.hw', messageAction);
     registerHwHandler('action.deploy.hw', deployAction);
     registerHwHandler('action.execute.hw', executeAction);
@@ -1794,6 +1796,12 @@ export function createBackgroundHost(deps) {
     // §42.8.1 LINK — anchor two existing actions across chains.
     host.register('action.link', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
         return linkAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+    });
+
+    // FILE — public on-chain file upload (NFT artwork attachment;
+    // the AttachContentForm pairs it with an owner-validated LINK).
+    host.register('action.file', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        return fileAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
     });
 
     // §41.7.2 Messaging inbox — password-gated decrypt of MESSAGE

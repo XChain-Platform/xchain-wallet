@@ -55,6 +55,7 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {() => void} [props.onDestroy]
  * @param {() => void} [props.onLock]
  * @param {() => void} [props.onUpdateDescription]
+ * @param {() => void} [props.onAttachContent]       attach on-chain artwork (FILE + owner-validated LINK)
  * @param {() => void} [props.onTransferOwnership]
  * @param {() => void} [props.onSellOwnership]       list this token's ownership (name) for sale via an ownership SWAP
  * @param {() => void} [props.onCreateDispenser]
@@ -76,6 +77,7 @@ export function ManageToken({
     onDestroy,
     onLock,
     onUpdateDescription,
+    onAttachContent,
     onTransferOwnership,
     onSellOwnership,
     onCreateDispenser,
@@ -387,6 +389,7 @@ export function ManageToken({
         { id: 'dividend', label: 'Dividends', Icon: Icon.TokenIcon, onSelect: blockIssuerActions ? undefined : onPayDividend },
         { id: 'airdrop', label: 'Airdrop', Icon: Icon.SendIcon, onSelect: onAirdrop },
         { id: 'description', label: 'Description', Icon: Icon.PencilIcon, onSelect: blockIssuerActions ? undefined : onUpdateDescription },
+        { id: 'attach-content', label: 'Artwork', Icon: Icon.DocumentIcon, onSelect: blockIssuerActions ? undefined : onAttachContent },
         { id: 'transfer', label: 'Transfer', Icon: Icon.HandshakeIcon, onSelect: blockIssuerActions ? undefined : onTransferOwnership },
         { id: 'sell-ownership', label: 'Sell name', Icon: Icon.MarketIcon, onSelect: blockIssuerActions ? undefined : onSellOwnership },
         { id: 'broadcast', label: 'Broadcast', Icon: Icon.BroadcastIcon, onSelect: blockIssuerActions ? undefined : onBroadcast },
@@ -567,8 +570,8 @@ export function ManageToken({
                 {isOwner === false ? (
                     <p className={styles.ownerWarning} role="status">
                         This wallet doesn't hold the token's issuer address.
-                        Mint, Lock, Description, Transfer, Broadcast, and
-                        Dividend require signing from {shortAddress(owner)}.
+                        Mint, Lock, Description, Artwork, Transfer,
+                        Broadcast, and Dividend require signing from {shortAddress(owner)}.
                     </p>
                 ) : null}
 
