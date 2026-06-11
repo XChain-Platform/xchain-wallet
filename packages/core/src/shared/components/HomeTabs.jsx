@@ -28,6 +28,7 @@ import {
     synthesizeDemoDefiPositions,
 } from '@xchain-wallet/core/flows';
 import { classifyEntryAction, classifyEntryStatus } from '../utils/historyFilter.js';
+import { useCollectibleKeys } from '../hooks/useCollectibleKeys.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import styles from './HomeTabs.module.css';
 
@@ -87,17 +88,19 @@ export function HomeTabs({ chainRegistry, balances, balancesFetchedAt, walletId,
             return tick.includes(tokenQueryTrim) || name.includes(tokenQueryTrim);
         });
     }, [tokens, tokenQueryTrim]);
-    // NFTs = subset of Tokens that has a non-empty imageUrl. Purely a
-    // visual gallery view — an tick can appear in BOTH Tokens (as a
-    // row with balance) and NFTs (as a tile with the image), e.g. a
-    // divisible token like PEPECASH that has an tick image.
+    // NFTs = tokens matching the canonical NFT pattern (NFT_Standard.md:
+    // DECIMALS=0 AND LOCK_MAX_SUPPLY=1 — indivisible, supply can never
+    // inflate). Classification, not decoration: a divisible token with a
+    // pretty icon (e.g. PEPECASH) belongs in Tokens, not here, and a true
+    // collectible with no artwork still earns its tile (letter fallback).
+    // A tick can appear in BOTH Tokens (balance row) and NFTs (tile).
+    const collectibleKeys = useCollectibleKeys(filteredRows);
     const nfts = useMemo(
         () => sortByChainThenAsset(filteredRows.filter(
             (r) => r.kind !== 'native'
-                && typeof r.imageUrl === 'string'
-                && r.imageUrl.length > 0,
+                && collectibleKeys.has(`${r.chainId}:${r.tick}`),
         )),
-        [filteredRows],
+        [filteredRows, collectibleKeys],
     );
 
     const tabs = [

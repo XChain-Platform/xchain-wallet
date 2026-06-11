@@ -67,6 +67,30 @@ export function useTokenInfo({ chainId, tick, skip = false }) {
 }
 
 /**
+ * Promise-shaped sibling of the hook, sharing the same module cache —
+ * for callers that classify SETS of rows (e.g. the Collectibles tab)
+ * rather than rendering one tick. Resolves null on any failure or when
+ * `messaging.getTokenInfo` isn't wired, mirroring the hook's silence.
+ *
+ * @param {object | null} messaging
+ * @param {string | null | undefined} chainId
+ * @param {string | null | undefined} tick
+ * @returns {Promise<any | null>}
+ */
+export function fetchTokenInfo(messaging, chainId, tick) {
+    const key = chainId && tick ? `${chainId}:${tick}` : null;
+    if (!key) return Promise.resolve(null);
+    if (cache.has(key)) return Promise.resolve(cache.get(key));
+    if (typeof messaging?.getTokenInfo !== 'function') return Promise.resolve(null);
+    return messaging.getTokenInfo({ chainId, tick })
+        .then((next) => {
+            cache.set(key, next);
+            return next;
+        })
+        .catch(() => null);
+}
+
+/**
  * Test helper — clears the module-level tick-info cache between spec
  * runs so a stale mock doesn't leak across cases.
  */
