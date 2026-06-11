@@ -736,6 +736,9 @@ function decodeIssue(p, chainName, chainSuffix) {
     const mintSupply = str(p.MINT_SUPPLY);
     const transfer = str(p.TRANSFER);
     const transferSupply = str(p.TRANSFER_SUPPLY);
+    const mintAddressMax = str(p.MINT_ADDRESS_MAX);
+    const mintStart = str(p.MINT_START_BLOCK);
+    const mintStop = str(p.MINT_STOP_BLOCK);
     const lockFlags = collectLockFlags(p);
 
     const isCreate = maxSupply !== '' || mintSupply !== '';
@@ -756,6 +759,9 @@ function decodeIssue(p, chainName, chainSuffix) {
         { label: 'Token', value: tick },
         ...(maxSupply ? [{ label: 'Max supply', value: maxSupply }] : []),
         ...(maxMint ? [{ label: 'Max mint per tx', value: maxMint }] : []),
+        ...(mintAddressMax ? [{ label: 'Max mint per address', value: mintAddressMax }] : []),
+        ...(mintStart ? [{ label: 'Mint start block', value: mintStart }] : []),
+        ...(mintStop ? [{ label: 'Mint stop block', value: mintStop }] : []),
         ...(decimals ? [{ label: 'Decimals', value: decimals }] : []),
         ...(description ? [{ label: 'Description', value: description }] : []),
         ...(mintSupply ? [{ label: 'Initial mint', value: mintSupply }] : []),

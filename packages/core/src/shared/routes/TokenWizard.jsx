@@ -66,7 +66,7 @@ export function TokenWizard({ walletId, onBack }) {
         /** @type {'template' | 'chain' | 'details' | 'preview' | 'sign' | 'done' | 'error'} */ ('template'),
     );
     const [template, setTemplate] = useState(
-        /** @type {null | 'meme' | 'utility' | 'collectible' | 'community' | 'subtoken' | 'custom'} */ (null),
+        /** @type {null | 'meme' | 'utility' | 'collectible' | 'edition' | 'community' | 'subtoken' | 'custom'} */ (null),
     );
     const [chainId, setChainId] = useState(/** @type {string | null} */ (null));
     const [fromAddressId, setFromAddressId] = useState(
@@ -84,8 +84,12 @@ export function TokenWizard({ walletId, onBack }) {
     const [maxMint, setMaxMint] = useState('');
     const [lockOnCreate, setLockOnCreate] = useState(false);
     const [transferTo, setTransferTo] = useState('');
-    const [imageUrl, setImageUrl] = useState('');         // collectible only
+    const [imageUrl, setImageUrl] = useState('');         // collectible + edition
     const [parentToken, setParentToken] = useState('');   // subtoken only
+    // Edition-only public-mint window fields.
+    const [perAddressMax, setPerAddressMax] = useState('');
+    const [mintStartBlock, setMintStartBlock] = useState('');
+    const [mintStopBlock, setMintStopBlock] = useState('');
 
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
     const [password, setPassword] = useState('');
@@ -161,9 +165,13 @@ export function TokenWizard({ walletId, onBack }) {
             transferTo,
             imageUrl,
             parentToken,
+            perAddressMax,
+            mintStartBlock,
+            mintStopBlock,
         }),
         [template, name, supply, maxMint, divisible, description,
-         lockOnCreate, transferTo, imageUrl, parentToken],
+         lockOnCreate, transferTo, imageUrl, parentToken,
+         perAddressMax, mintStartBlock, mintStopBlock],
     );
 
     const decoded = useMemo(() => {
@@ -201,6 +209,17 @@ export function TokenWizard({ walletId, onBack }) {
         if (template !== 'collectible') {
             if (!supply.trim() || Number(supply) <= 0) {
                 setFormError('Supply must be a positive number.');
+                return;
+            }
+        }
+        if (template === 'edition') {
+            if (!maxMint.trim() || Number(maxMint) <= 0) {
+                setFormError('Copies per mint must be a positive number.');
+                return;
+            }
+            if (mintStartBlock && mintStopBlock
+                && Number(mintStopBlock) <= Number(mintStartBlock)) {
+                setFormError('Minting must close after it opens — check the block numbers.');
                 return;
             }
         }
@@ -297,6 +316,9 @@ export function TokenWizard({ walletId, onBack }) {
             transferTo, setTransferTo,
             imageUrl, setImageUrl,
             parentToken, setParentToken,
+            perAddressMax, setPerAddressMax,
+            mintStartBlock, setMintStartBlock,
+            mintStopBlock, setMintStopBlock,
             formError,
             onBack: () => setStage('chain'),
             onSubmit: handleDetailsSubmit,
@@ -403,6 +425,14 @@ export function TokenWizard({ walletId, onBack }) {
  *               FILE + BATCH path is deferred past Phase 2 (BATCH bans
  *               FILE per protocol §BATCH; the FILE-action pipeline is
  *               its own feature).
+ * - **edition** — fair-mint set of N identical prints (mirrors
+ *               `sdk.nft.edition({mint})`): MAX_SUPPLY=N + DECIMALS=0 +
+ *               LOCK_MAX_SUPPLY + MAX_MINT (+ optional MINT_ADDRESS_MAX /
+ *               MINT_START_BLOCK / MINT_STOP_BLOCK). Deliberately **no
+ *               MINT_SUPPLY and no LOCK_MINT** — the cap locks at
+ *               issuance with zero minted supply (LOCK_MAX_SUPPLY
+ *               validates the declared cap) so every print stays
+ *               publicly mintable through the MINT window.
  * - **subtoken** — TICK = "PARENT.CHILD"; supply + decimals + optional
  *               description. Parent-ownership check is runtime at the
  *               protocol layer; the wizard doesn't verify pre-flight.
@@ -451,6 +481,22 @@ const TEMPLATE_COMPOSERS = {
         // The image URL lives in DESCRIPTION — decoder + indexer treat
         // it as-is; the explorer chooses to render linked URLs as <img>
         // when the DESCRIPTION looks like an image URI.
+        if (form.imageUrl) p.DESCRIPTION = form.imageUrl.trim();
+        else if (form.description) p.DESCRIPTION = form.description.trim();
+        return p;
+    },
+
+    edition(form) {
+        const p = baseParams(form);
+        p.DECIMALS = '0';
+        if (form.supply) p.MAX_SUPPLY = String(form.supply).trim();
+        p.LOCK_MAX_SUPPLY = '1';
+        if (form.maxMint) p.MAX_MINT = String(form.maxMint).trim();
+        if (form.perAddressMax) p.MINT_ADDRESS_MAX = String(form.perAddressMax).trim();
+        if (form.mintStartBlock) p.MINT_START_BLOCK = String(form.mintStartBlock).trim();
+        if (form.mintStopBlock) p.MINT_STOP_BLOCK = String(form.mintStopBlock).trim();
+        // Same DESCRIPTION convention as collectible — the shared
+        // artwork URL, falling back to a plain description.
         if (form.imageUrl) p.DESCRIPTION = form.imageUrl.trim();
         else if (form.description) p.DESCRIPTION = form.description.trim();
         return p;
@@ -523,6 +569,12 @@ const TEMPLATES = [
         id: 'collectible',
         name: 'Collectible',
         tagline: 'Single-edition NFT via FILE action.',
+        interactive: true,
+    },
+    {
+        id: 'edition',
+        name: 'Limited edition',
+        tagline: 'A fixed set of identical collectibles that anyone can mint.',
         interactive: true,
     },
     {
@@ -638,6 +690,11 @@ const TEMPLATE_FIELDS = {
     collectible: {
         name: true, displayName: true, imageUrl: true,
     },
+    edition: {
+        name: true, displayName: true, supply: true, imageUrl: true,
+        maxMint: true, perAddressMax: true, mintStartBlock: true,
+        mintStopBlock: true,
+    },
     subtoken: {
         parentToken: true, name: true, displayName: true, supply: true,
         divisible: true, description: true,
@@ -660,9 +717,13 @@ function renderDetailsStage({
     transferTo, setTransferTo,
     imageUrl, setImageUrl,
     parentToken, setParentToken,
+    perAddressMax, setPerAddressMax,
+    mintStartBlock, setMintStartBlock,
+    mintStopBlock, setMintStopBlock,
     formError, onBack, onSubmit,
 }) {
     const show = TEMPLATE_FIELDS[template] || TEMPLATE_FIELDS.custom;
+    const isEdition = template === 'edition';
     return (
         <form onSubmit={onSubmit} noValidate>
             <p className={styles.stageHint}>
@@ -703,7 +764,10 @@ function renderDetailsStage({
             ) : null}
             {show.supply ? (
                 <Input
-                    label="Supply"
+                    label={isEdition ? 'Edition size' : 'Supply'}
+                    hint={isEdition
+                        ? 'How many copies will ever exist. This number is locked permanently when the edition is created.'
+                        : undefined}
                     inputMode="decimal"
                     value={supply}
                     onChange={(e) => setSupply(e.target.value)}
@@ -733,7 +797,9 @@ function renderDetailsStage({
             {show.imageUrl ? (
                 <Input
                     label="Image URL"
-                    hint="The collectible's image — stored in DESCRIPTION. Use a stable URL (IPFS, your own host)."
+                    hint={isEdition
+                        ? 'The artwork every copy shares — stored on-chain in the description. Use a stable URL (IPFS, your own host).'
+                        : "The collectible's image — stored in DESCRIPTION. Use a stable URL (IPFS, your own host)."}
                     value={imageUrl}
                     onChange={(e) => setImageUrl(e.target.value)}
                     autoComplete="off"
@@ -744,11 +810,43 @@ function renderDetailsStage({
             ) : null}
             {show.maxMint ? (
                 <Input
-                    label="Max mint per transaction (optional)"
-                    hint="Caps how much can be minted in one MINT action."
+                    label={isEdition ? 'Copies per mint' : 'Max mint per transaction (optional)'}
+                    hint={isEdition
+                        ? 'How many copies one mint claims. Anyone can mint until the edition sells out.'
+                        : 'Caps how much can be minted in one MINT action.'}
                     inputMode="decimal"
                     value={maxMint}
                     onChange={(e) => setMaxMint(e.target.value)}
+                    autoComplete="off"
+                />
+            ) : null}
+            {show.perAddressMax ? (
+                <Input
+                    label="Limit per address (optional)"
+                    hint="The most copies any single address can mint in total. Leave blank for no limit."
+                    inputMode="decimal"
+                    value={perAddressMax}
+                    onChange={(e) => setPerAddressMax(e.target.value)}
+                    autoComplete="off"
+                />
+            ) : null}
+            {show.mintStartBlock ? (
+                <Input
+                    label="Minting opens at block (optional)"
+                    hint="Block height when public minting starts. Leave blank to open immediately."
+                    inputMode="decimal"
+                    value={mintStartBlock}
+                    onChange={(e) => setMintStartBlock(e.target.value)}
+                    autoComplete="off"
+                />
+            ) : null}
+            {show.mintStopBlock ? (
+                <Input
+                    label="Minting closes at block (optional)"
+                    hint="Block height when public minting ends. Leave blank to keep it open until sold out."
+                    inputMode="decimal"
+                    value={mintStopBlock}
+                    onChange={(e) => setMintStopBlock(e.target.value)}
                     autoComplete="off"
                 />
             ) : null}

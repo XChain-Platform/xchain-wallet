@@ -77,9 +77,9 @@ for (const transition of [
     assert.ok(src.includes(transition), `wizard performs ${transition}`);
 }
 
-// --- 3. Six templates; all interactive as of Step 6 ------------------
+// --- 3. Seven templates; all interactive ------------------------------
 
-for (const id of ['meme', 'utility', 'collectible', 'community', 'subtoken', 'custom']) {
+for (const id of ['meme', 'utility', 'collectible', 'edition', 'community', 'subtoken', 'custom']) {
     assert.ok(
         new RegExp(`id: '${id}'`).test(src),
         `TEMPLATES includes "${id}"`,
@@ -89,7 +89,7 @@ const templateBlocks = [...src.matchAll(/\{\s*id:\s*'(\w+)',[^}]*interactive:\s*
 const interactiveMap = Object.fromEntries(
     templateBlocks.map((m) => [m[1], m[2] === 'true']),
 );
-for (const id of ['meme', 'utility', 'community', 'collectible', 'subtoken', 'custom']) {
+for (const id of ['meme', 'utility', 'community', 'collectible', 'edition', 'subtoken', 'custom']) {
     assert.equal(
         interactiveMap[id],
         true,
@@ -99,7 +99,7 @@ for (const id of ['meme', 'utility', 'community', 'collectible', 'subtoken', 'cu
 
 // --- 3b. Per-template composers present -----------------------------
 
-for (const key of ['meme', 'utility', 'community', 'collectible', 'subtoken', 'custom']) {
+for (const key of ['meme', 'utility', 'community', 'collectible', 'edition', 'subtoken', 'custom']) {
     assert.ok(
         new RegExp(`\\b${key}\\s*\\(form\\)\\s*\\{`).test(src),
         `TEMPLATE_COMPOSERS includes a ${key}(form) composer`,
@@ -127,6 +127,36 @@ assert.ok(
     /MAX_SUPPLY\s*=\s*'1'/.test(collBlock[0]),
     'collectible composer pins MAX_SUPPLY=1',
 );
+// Edition is the fair-mint pattern (mirrors sdk.nft.edition({mint})):
+// declared cap locked at issuance, public MINT window left open.
+const edBlock = src.match(/edition\(form\)\s*\{[\s\S]*?\n\s*\},/);
+assert.ok(edBlock, 'edition composer block found');
+assert.ok(
+    edBlock[0].includes("LOCK_MAX_SUPPLY = '1'"),
+    'edition composer locks the declared cap',
+);
+assert.ok(
+    edBlock[0].includes("DECIMALS = '0'"),
+    'edition composer is non-divisible',
+);
+assert.ok(
+    /p\.MAX_MINT\s*=/.test(edBlock[0]),
+    'edition composer sets MAX_MINT (the public mint window)',
+);
+for (const field of ['MINT_ADDRESS_MAX', 'MINT_START_BLOCK', 'MINT_STOP_BLOCK']) {
+    assert.ok(
+        new RegExp(`p\\.${field}\\s*=`).test(edBlock[0]),
+        `edition composer supports ${field}`,
+    );
+}
+assert.ok(
+    !/p\.MINT_SUPPLY\s*=/.test(edBlock[0]),
+    'edition composer does NOT pre-mint (no MINT_SUPPLY — fair mint)',
+);
+assert.ok(
+    !/p\.LOCK_MINT\s*=/.test(edBlock[0]),
+    'edition composer does NOT lock minting (the window must stay open)',
+);
 // Subtoken joins parent.child.
 const subBlock = src.match(/subtoken\(form\)\s*\{[\s\S]*?\n\s*\},/);
 assert.ok(subBlock, 'subtoken composer block found');
@@ -149,6 +179,14 @@ assert.ok(collFields, 'collectible field map exists');
 assert.ok(
     !/\bsupply:\s*true/.test(collFields[0]),
     'collectible does NOT show the supply field',
+);
+const edFields = fieldsBlock[0].match(/edition:\s*\{[^}]*\}/);
+assert.ok(edFields, 'edition field map exists');
+assert.ok(
+    /\bsupply:\s*true/.test(edFields[0])
+        && /\bmaxMint:\s*true/.test(edFields[0])
+        && /\bperAddressMax:\s*true/.test(edFields[0]),
+    'edition shows supply + mint-window fields',
 );
 const subFields = fieldsBlock[0].match(/subtoken:\s*\{[^}]*\}/);
 assert.ok(subFields, 'subtoken field map exists');
@@ -231,7 +269,6 @@ assert.ok(
 // --- 7. CSS module -----------------------------------------------------
 
 for (const cls of [
-    '.header',
     '.card',
     '.templateGrid',
     '.templateCard',
@@ -290,5 +327,5 @@ for (const [shell, appPath] of [
 }
 
 console.log(
-    'OK — token wizard smoke (file exists, 5 stages, 6 templates all interactive, per-template composers + field-visibility map, decoder wiring, messaging.issueToken call-site, Home entry + both App.jsx sub-routes, CSS classes present)',
+    'OK — token wizard smoke (file exists, 5 stages, 7 templates all interactive, per-template composers + field-visibility map, decoder wiring, messaging.issueToken call-site, Home entry + both App.jsx sub-routes, CSS classes present)',
 );

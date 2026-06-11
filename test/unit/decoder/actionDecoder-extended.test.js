@@ -105,6 +105,29 @@ describe('decodeAction — extended', () => {
             expect(d.summary).toBe('Create token NEWTOKEN');
         });
 
+        it('v0 fair-mint edition shows the mint-window fields', () => {
+            const d = decodeAction({
+                action: 'ISSUE',
+                params: {
+                    TICK: 'PRINTS',
+                    MAX_SUPPLY: '100',
+                    DECIMALS: '0',
+                    LOCK_MAX_SUPPLY: '1',
+                    MAX_MINT: '1',
+                    MINT_ADDRESS_MAX: '2',
+                    MINT_START_BLOCK: '900000',
+                    MINT_STOP_BLOCK: '910000',
+                    VERSION: '0',
+                },
+            });
+            expect(d.summary).toContain('Create token PRINTS');
+            const labels = d.details.map((x) => x.label);
+            expect(labels).toContain('Max mint per address');
+            expect(labels).toContain('Mint start block');
+            expect(labels).toContain('Mint stop block');
+            expect(d.warnings.some((w) => /locking is permanent/i.test(w))).toBe(true);
+        });
+
         it('v0 transfer-only summary', () => {
             const d = decodeAction({
                 action: 'ISSUE',
