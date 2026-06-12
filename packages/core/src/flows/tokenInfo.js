@@ -334,10 +334,18 @@ function classifyByExtension(url) {
 function tisEntryToMedia(entry) {
     if (!entry) return null;
     const data = typeof entry === 'string' ? entry : entry.data;
-    const url = normalizeMediaUrl(data);
-    if (!url) return null;
+    // On-chain media reference — "action:<index>" of a FILE action,
+    // preferred over `data` when both are present (TIS File Entry
+    // Fields). Carried as `dataRef`; tokenInfoFor resolves it to the
+    // configured explorer's raw FILE URL.
+    const dataRef = (entry && typeof entry === 'object'
+        && typeof entry.data_ref === 'string' && entry.data_ref)
+        ? entry.data_ref : null;
+    const url = dataRef ? null : normalizeMediaUrl(data);
+    if (!url && !dataRef) return null;
     return {
         url,
+        dataRef,
         type: (entry && typeof entry === 'object' && entry.type) ? String(entry.type) : null,
         name: (entry && typeof entry === 'object' && entry.name) ? String(entry.name) : null,
     };
@@ -671,18 +679,57 @@ export async function fetchTisBundle({ description, fetch: fetchImpl, signal }) 
         const resp = await fetchImpl(jsonUrl, { signal, redirect: 'follow' });
         if (!resp || !resp.ok) return null;
         const text = await resp.text();
-        const trimmed = text.trim();
-        if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return null;
-        let parsed;
-        try { parsed = JSON.parse(trimmed); } catch { return null; }
-        // The legacy adapter is idempotent for native TIS docs (already
-        // has images[]/audio[]/video[]/social[]), so we run it
-        // unconditionally to handle both shapes.
-        const tis = legacyJsonToTis(parsed);
-        return tisToMediaBundle(tis);
+        return parseTisText(text);
     } catch {
         return null;
     }
+}
+
+// On-chain TIS document pointer: DESCRIPTION = "action:<index>" names a
+// same-chain FILE action whose raw bytes are the TIS JSON
+// (Token_Information_Standard.md — On-Chain Format). Same syntax as a
+// file entry's `data_ref`, one level up.
+export const TIS_ACTION_REF_RE = /^action:([0-9]+)$/i;
+
+/**
+ * Fetch + parse an on-chain TIS document via the explorer's raw FILE
+ * endpoint. Never raises — resolves null on any miss so the renderer
+ * falls back to the plain description string.
+ *
+ * @param {object} args
+ * @param {any} args.sdk                     per-chain SDK (explorer client configured)
+ * @param {string | number} args.actionIndex FILE action index holding the TIS JSON
+ * @returns {Promise<ReturnType<typeof tisToMediaBundle> | null>}
+ */
+export async function fetchOnChainTisBundle({ sdk, actionIndex }) {
+    if (typeof sdk?.getGatedFileRaw !== 'function') return null;
+    try {
+        // The raw endpoint serves non-gated FILE bytes too — for a JSON
+        // document those bytes ARE the TIS text.
+        const bytes = await sdk.getGatedFileRaw(String(actionIndex));
+        if (!bytes || !bytes.length) return null;
+        const u8 = bytes instanceof Uint8Array
+            ? bytes
+            : new Uint8Array(/** @type {any} */ (bytes));
+        const text = new TextDecoder().decode(u8);
+        return parseTisText(text);
+    } catch {
+        return null;
+    }
+}
+
+// Shared TIS text → media-bundle path for the off-chain (URL fetch) and
+// on-chain (raw FILE bytes) document sources.
+function parseTisText(text) {
+    const trimmed = String(text || '').trim();
+    if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return null;
+    let parsed;
+    try { parsed = JSON.parse(trimmed); } catch { return null; }
+    // The legacy adapter is idempotent for native TIS docs (already
+    // has images[]/audio[]/video[]/social[]), so we run it
+    // unconditionally to handle both shapes.
+    const tis = legacyJsonToTis(parsed);
+    return tisToMediaBundle(tis);
 }
 
 /**
@@ -738,9 +785,16 @@ export async function tokenInfoFor({
     if (metadataFetchEnabled) {
         const row = Array.isArray(raw) ? raw[0] : raw;
         const description = row?.info?.description;
+        const actionRef = typeof description === 'string'
+            ? description.trim().match(TIS_ACTION_REF_RE)
+            : null;
         const resolvedFetch = fetchImpl
             || (typeof fetch === 'function' ? fetch : null);
-        if (description && resolvedFetch) {
+        if (actionRef) {
+            // On-chain TIS document — resolve through the same explorer
+            // the token row came from (no external fetch).
+            tisBundle = await fetchOnChainTisBundle({ sdk, actionIndex: actionRef[1] });
+        } else if (description && resolvedFetch) {
             tisBundle = await fetchTisBundle({
                 description,
                 fetch: resolvedFetch,
@@ -754,7 +808,26 @@ export async function tokenInfoFor({
         const demo = DEMO_TIS_BY_TICK[String(tick || '').toUpperCase()];
         if (demo?.tis) tisBundle = tisToMediaBundle(demo.tis);
     }
+    resolveMediaDataRefs(tisBundle, sdk);
     return normalizeTokenInfo(chainId, tick, raw, tisBundle);
+}
+
+// Resolve on-chain media references (dataRef = "action:<index>") across a
+// bundle's media arrays to the configured explorer's raw FILE URL so the
+// renderers get a plain `src`. Entries stay dataRef-annotated either way.
+export function resolveMediaDataRefs(bundle, sdk) {
+    if (!bundle || typeof sdk?.fileRawUrl !== 'function') return bundle;
+    for (const key of ['images', 'audio', 'video', 'files']) {
+        const arr = bundle[key];
+        if (!Array.isArray(arr)) continue;
+        for (const entry of arr) {
+            if (!entry || entry.url || !(entry.dataRef)) continue;
+            const m = String(entry.dataRef).match(TIS_ACTION_REF_RE);
+            if (!m) continue;
+            try { entry.url = sdk.fileRawUrl(m[1]); } catch { /* leave unresolved */ }
+        }
+    }
+    return bundle;
 }
 
 // Build a synthetic indexer-row for a demo ticker so the rest of the

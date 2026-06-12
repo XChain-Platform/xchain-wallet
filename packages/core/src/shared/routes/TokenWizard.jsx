@@ -478,9 +478,13 @@ const TEMPLATE_COMPOSERS = {
         p.MINT_SUPPLY = '1';
         p.LOCK_MAX_SUPPLY = '1';
         p.LOCK_MINT = '1';
-        // The image URL lives in DESCRIPTION — decoder + indexer treat
-        // it as-is; the explorer chooses to render linked URLs as <img>
-        // when the DESCRIPTION looks like an image URI.
+        // The image URL lives in DESCRIPTION (the TIS IMAGE format) —
+        // the lightweight path. For fully ON-CHAIN artwork + metadata,
+        // create the token here, then use Manage Token → Artwork with
+        // "make this the token's picture everywhere": it uploads the
+        // image and a TIS document as FILE actions and re-points
+        // DESCRIPTION at the document (action:<index> — TIS On-Chain
+        // Format).
         if (form.imageUrl) p.DESCRIPTION = form.imageUrl.trim();
         else if (form.description) p.DESCRIPTION = form.description.trim();
         return p;

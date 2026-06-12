@@ -100,9 +100,16 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     const [password, setPassword] = useState('');
 
     const [stage, setStage] = useState(
-        /** @type {'compose' | 'review-file' | 'wait-index' | 'review-link' | 'done'} */
+        /** @type {'compose' | 'review-file' | 'wait-index' | 'review-link' | 'review-tis' | 'wait-tis' | 'review-desc' | 'done'} */
         ('compose'),
     );
+    // Optional continuation: also author the token's information document
+    // on-chain (TIS On-Chain Format) and point DESCRIPTION at it — two
+    // more signatures (FILE for the JSON doc, then an ISSUE v1 update).
+    const [setAsTokenInfo, setSetAsTokenInfo] = useState(false);
+    const [tisTxid, setTisTxid] = useState(/** @type {string | null} */ (null));
+    const [tisActionIndex, setTisActionIndex] = useState(/** @type {string | null} */ (null));
+    const [descTxid, setDescTxid] = useState(/** @type {string | null} */ (null));
     const [submitting, setSubmitting] = useState(false);
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
@@ -169,7 +176,8 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     }, [addressesByChain, chainId, fromAddressId, issuerAddress]);
 
     useEffect(() => {
-        if (stage === 'review-file' || stage === 'review-link') {
+        if (stage === 'review-file' || stage === 'review-link'
+            || stage === 'review-tis' || stage === 'review-desc') {
             setTimeout(() => passwordRef.current?.focus(), 0);
         }
     }, [stage]);
@@ -200,6 +208,34 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         const handle = setInterval(tick_, POLL_INTERVAL_MS);
         return () => { cancelled = true; clearInterval(handle); };
     }, [stage, fileTxid, chainId, messaging]);
+
+    // Second wait — the TIS document FILE's action index, needed by the
+    // ISSUE v1 description update.
+    useEffect(() => {
+        if (stage !== 'wait-tis' || !tisTxid) return undefined;
+        let cancelled = false;
+        const started = Date.now();
+        const tick_ = async () => {
+            if (cancelled) return;
+            setWaitElapsed(Math.floor((Date.now() - started) / 1000));
+            if (typeof document !== 'undefined'
+                && document.visibilityState === 'hidden') return;
+            try {
+                const resp = await messaging.getActionByTxid({ chainId, txid: tisTxid });
+                if (cancelled) return;
+                const idx = extractActionIndex(resp);
+                if (idx) {
+                    setTisActionIndex(idx);
+                    setStage('review-desc');
+                }
+            } catch (err) {
+                // Keep polling through transient network errors.
+            }
+        };
+        tick_();
+        const handle = setInterval(tick_, POLL_INTERVAL_MS);
+        return () => { cancelled = true; clearInterval(handle); };
+    }, [stage, tisTxid, chainId, messaging]);
 
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] || '' : '';
@@ -383,13 +419,137 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
             if (!txid) throw new Error('LINK broadcast did not return a txid.');
             setLinkTxid(txid);
             setPassword('');
-            setStage('done');
+            setStage(setAsTokenInfo ? 'review-tis' : 'done');
         } catch (err) {
             const isBadPassword = err?.name === 'InvalidPasswordError';
             setSubmitError(
                 isBadPassword
                     ? 'Incorrect password.'
                     : err?.message || 'LINK broadcast failed.',
+            );
+            if (!hw) {
+                passwordRef.current?.focus();
+                passwordRef.current?.select();
+            }
+        } finally {
+            setSubmitting(false);
+        }
+    }
+
+    // The token's information document — minimal TIS JSON (same shape as
+    // sdk.nft.tisDocument; Token_Information_Standard.md On-Chain Format):
+    // NFT intent + the artwork referenced by its on-chain action index.
+    const tisJson = useMemo(() => {
+        if (!fileMeta || !fileActionIndex) return null;
+        const doc = {
+            tick: String(tick).toUpperCase(),
+            categories: [{ type: 'main', data: 'NFT' }],
+            images: [{
+                data_ref: 'action:' + String(fileActionIndex),
+                type: fileMeta.type,
+                name: fileMeta.name,
+            }],
+        };
+        if (title.trim()) doc.name = title.trim();
+        return JSON.stringify(doc);
+    }, [fileMeta, fileActionIndex, tick, title]);
+
+    async function handleSignTis(event) {
+        event.preventDefault();
+        if (submitting || !tisJson) return;
+        if (!hw && (!signerReady && password.length === 0)) return;
+        if (hw && hwStatus !== 'available') return;
+        setSubmitting(true);
+        setSubmitError(null);
+        try {
+            // JSON.stringify output may contain non-ASCII (title) — encode
+            // to UTF-8 bytes first, then to the Latin-1 binary string the
+            // encoder expects.
+            const utf8 = new TextEncoder().encode(tisJson);
+            let rawData = '';
+            for (let i = 0; i < utf8.length; i += 1) {
+                rawData += String.fromCharCode(utf8[i]);
+            }
+            const base = {
+                walletId,
+                chainId,
+                from: {
+                    address: fromAddress.address,
+                    publicKey: fromAddress.publicKey,
+                    derivationPath: fromAddress.derivationPath,
+                    addressId: fromAddress.id,
+                    source: fromAddress.source,
+                    signerId: fromAddress.signerId,
+                },
+                name: String(tick).toUpperCase() + '.json',
+                type: 'application/json',
+                title: 'Token information',
+                rawData,
+            };
+            const res = hw
+                ? await messaging.fileActionHw({ ...base, signerId: fromAddress.signerId })
+                : await messaging.fileAction({ ...base, password });
+            const txid = res?.txid || res?.broadcast?.txid;
+            if (!txid) throw new Error('Token-info upload did not return a txid.');
+            setTisTxid(txid);
+            setPassword('');
+            setStage('wait-tis');
+        } catch (err) {
+            const isBadPassword = err?.name === 'InvalidPasswordError';
+            setSubmitError(
+                isBadPassword
+                    ? 'Incorrect password.'
+                    : err?.message || 'Token-info upload failed.',
+            );
+            if (!hw) {
+                passwordRef.current?.focus();
+                passwordRef.current?.select();
+            }
+        } finally {
+            setSubmitting(false);
+        }
+    }
+
+    async function handleSignDescribe(event) {
+        event.preventDefault();
+        if (submitting || !tisActionIndex) return;
+        if (!hw && (!signerReady && password.length === 0)) return;
+        if (hw && hwStatus !== 'available') return;
+        setSubmitting(true);
+        setSubmitError(null);
+        try {
+            const base = {
+                walletId,
+                chainId,
+                from: {
+                    address: fromAddress.address,
+                    publicKey: fromAddress.publicKey,
+                    derivationPath: fromAddress.derivationPath,
+                    addressId: fromAddress.id,
+                    source: fromAddress.source,
+                    signerId: fromAddress.signerId,
+                },
+                // ISSUE v1 — edit description (owner-only at the indexer).
+                params: {
+                    VERSION: '1',
+                    TICK: String(tick).toUpperCase(),
+                    DESCRIPTION: 'action:' + String(tisActionIndex),
+                },
+            };
+            const res = hw
+                ? await messaging.issueTokenHw({ ...base, signerId: fromAddress.signerId })
+                : await messaging.issueToken({ ...base, password });
+            const txid = res?.txid || res?.broadcast?.txid;
+            if (!txid) throw new Error('Description update did not return a txid.');
+            setDescTxid(txid);
+            setPassword('');
+            setStage('done');
+        } catch (err) {
+            const isBadPassword = err?.name === 'InvalidPasswordError';
+            setSubmitError(
+                isBadPassword
+                    ? 'Incorrect password.'
+                    : err?.message || 'Description update failed.',
             );
             if (!hw) {
                 passwordRef.current?.focus();
@@ -447,10 +607,22 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 <code className={styles.txid}>{fileTxid}</code>
                 <p className={styles.successLabel}>Link transaction</p>
                 <code className={styles.txid}>{linkTxid}</code>
+                {tisTxid ? (
+                    <>
+                        <p className={styles.successLabel}>Token-info transaction</p>
+                        <code className={styles.txid}>{tisTxid}</code>
+                    </>
+                ) : null}
+                {descTxid ? (
+                    <>
+                        <p className={styles.successLabel}>Description update</p>
+                        <code className={styles.txid}>{descTxid}</code>
+                    </>
+                ) : null}
                 <p className={styles.hint}>
-                    Once the link confirms, the artwork shows up wherever
-                    {' '}{tick} is displayed — the explorer and wallets read
-                    it straight from the chain.
+                    {descTxid
+                        ? `Once everything confirms, ${tick}'s picture and info live entirely on the chain — the explorer and wallets read them with no website involved.`
+                        : `Once the link confirms, the artwork shows up wherever ${tick} is displayed — the explorer and wallets read it straight from the chain.`}
                 </p>
                 <div className={styles.actions}>
                     <Button variant="primary" onClick={onBack}>Done</Button>
@@ -494,6 +666,144 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         );
     }
 
+    if (stage === 'wait-tis') {
+        const minutes = Math.floor(waitElapsed / 60);
+        return wrap(
+            <>
+                <h2 className={styles.successTitle}>Token info is on its way</h2>
+                <dl className={styles.detailsList}>
+                    <dt className={styles.detailsLabel}>Token-info transaction</dt>
+                    <dd className={styles.detailsValue}>
+                        <code className={styles.txid}>{tisTxid}</code>
+                    </dd>
+                    <dt className={styles.detailsLabel}>Elapsed</dt>
+                    <dd className={styles.detailsValue}>
+                        {minutes > 0 ? `${minutes} min ${waitElapsed % 60}s` : `${waitElapsed}s`}
+                    </dd>
+                </dl>
+                <p className={styles.hint}>
+                    Waiting for the token-info document to be confirmed and
+                    indexed. Then one final signature points {tick}'s
+                    description at it.
+                </p>
+                <div className={styles.actions}>
+                    <Button variant="ghost" onClick={onBack}>Close (keep waiting)</Button>
+                </div>
+            </>,
+        );
+    }
+
+    if (stage === 'review-tis' && fileMeta && fromAddress) {
+        return wrap(
+            <form onSubmit={handleSignTis} noValidate>
+                <p className={styles.summary}>
+                    Store {tick}'s information on the chain — a small document
+                    naming the token and pointing at the artwork you just
+                    attached.
+                </p>
+                <dl className={styles.detailsList}>
+                    <dt className={styles.detailsLabel}>Document</dt>
+                    <dd className={styles.detailsValue}>{String(tick).toUpperCase()}.json</dd>
+                    <dt className={styles.detailsLabel}>Artwork referenced</dt>
+                    <dd className={styles.detailsValue}>#{fileActionIndex} ({fileMeta.name})</dd>
+                    <dt className={styles.detailsLabel}>From</dt>
+                    <dd className={styles.detailsValue}>
+                        <AddressText address={fromAddress.address} />
+                    </dd>
+                </dl>
+                <p className={styles.hint}>
+                    Step 3 of 4. After this uploads, one final signature points
+                    {' '}{tick}'s description at it.
+                </p>
+                <SignCredentials
+                    unlocked={signerReady}
+                    fromAddress={fromAddress}
+                    chainId={chainId}
+                    password={password}
+                    onPasswordChange={(v) => {
+                        setPassword(v);
+                        if (submitError) setSubmitError(null);
+                    }}
+                    onStatusChange={onHwStatusChange}
+                    passwordRef={passwordRef}
+                    submitError={submitError}
+                    disabled={submitting}
+                    getSignerStatus={messaging.getSignerStatus}
+                />
+                {hw && submitError ? (
+                    <div role="alert" className={styles.error}>{submitError}</div>
+                ) : null}
+                <div className={styles.actions}>
+                    <Button variant="ghost" type="button" onClick={() => setStage('done')} disabled={submitting}>
+                        Skip (artwork only)
+                    </Button>
+                    <Button
+                        type="submit"
+                        variant="primary"
+                        loading={submitting}
+                        disabled={hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
+                    >
+                        Upload token info
+                    </Button>
+                </div>
+            </form>,
+        );
+    }
+
+    if (stage === 'review-desc' && fromAddress) {
+        return wrap(
+            <form onSubmit={handleSignDescribe} noValidate>
+                <p className={styles.summary}>
+                    Point {tick}'s description at the on-chain token info —
+                    this is what the explorer and wallets will read.
+                </p>
+                <dl className={styles.detailsList}>
+                    <dt className={styles.detailsLabel}>New description</dt>
+                    <dd className={styles.detailsValue}>action:{tisActionIndex}</dd>
+                    <dt className={styles.detailsLabel}>From</dt>
+                    <dd className={styles.detailsValue}>
+                        <AddressText address={fromAddress.address} />
+                    </dd>
+                </dl>
+                <p className={styles.hint}>
+                    Final step. This replaces the token's current description.
+                    Only the token's owner can do this.
+                </p>
+                <SignCredentials
+                    unlocked={signerReady}
+                    fromAddress={fromAddress}
+                    chainId={chainId}
+                    password={password}
+                    onPasswordChange={(v) => {
+                        setPassword(v);
+                        if (submitError) setSubmitError(null);
+                    }}
+                    onStatusChange={onHwStatusChange}
+                    passwordRef={passwordRef}
+                    submitError={submitError}
+                    disabled={submitting}
+                    getSignerStatus={messaging.getSignerStatus}
+                />
+                {hw && submitError ? (
+                    <div role="alert" className={styles.error}>{submitError}</div>
+                ) : null}
+                <div className={styles.actions}>
+                    <Button variant="ghost" type="button" onClick={() => setStage('done')} disabled={submitting}>
+                        Skip
+                    </Button>
+                    <Button
+                        type="submit"
+                        variant="primary"
+                        loading={submitting}
+                        disabled={hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
+                    >
+                        Update description
+                    </Button>
+                </div>
+            </form>,
+        );
+    }
+
     if (stage === 'review-file' && fileMeta && fromAddress) {
         return wrap(
             <form onSubmit={handleSignFile} noValidate>
@@ -530,11 +840,14 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                     ) : null}
                 </dl>
                 <p className={styles.hint}>
-                    This is step 1 of 2. The file goes on-chain first; once
-                    it's indexed you'll sign one more transaction linking it
-                    to {tick}. {hw
-                        ? 'You will confirm on your hardware device twice.'
-                        : 'You will enter your password twice.'}
+                    This is step 1 of {setAsTokenInfo ? 4 : 2}. The file goes
+                    on-chain first; once it's indexed you'll sign
+                    {setAsTokenInfo
+                        ? ` three more transactions: the link to ${tick}, the token-info document, and the description update.`
+                        : ` one more transaction linking it to ${tick}.`}
+                    {' '}{hw
+                        ? 'Each step confirms on your hardware device.'
+                        : 'Each step asks for your password.'}
                 </p>
                 <SignCredentials
                     unlocked={signerReady}
@@ -701,6 +1014,18 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 onChange={(e) => setMemo(e.target.value)}
                 autoComplete="off"
             />
+            <label className={styles.checkRow}>
+                <input
+                    type="checkbox"
+                    checked={setAsTokenInfo}
+                    onChange={(e) => setSetAsTokenInfo(e.target.checked)}
+                />
+                <span>
+                    Also make this {tick}'s picture everywhere — stores the
+                    token's info on the chain and points its description at
+                    it (two more signatures)
+                </span>
+            </label>
             {ownerMismatch ? (
                 <div role="alert" className={styles.warnings}>
                     <p className={styles.warning}>
