@@ -56,6 +56,7 @@ const {
     swapAction,
     linkAction,
     fileAction,
+    getProjectForTick,
     getCoinpayObligationsForAddress,
     getCoinpaysForAddress,
     getMessagingInbox,
@@ -1802,6 +1803,11 @@ export function createBackgroundHost(deps) {
     // the AttachContentForm pairs it with an owner-validated LINK).
     host.register('action.file', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
         return fileAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+    });
+
+    // Project registry — current roster lookup (ProjectRosterForm prefill).
+    host.register('projects.byTick', async (req, { sdkRegistry }) => {
+        return getProjectForTick({ ...req, sdkRegistry });
     });
 
     // §41.7.2 Messaging inbox — password-gated decrypt of MESSAGE

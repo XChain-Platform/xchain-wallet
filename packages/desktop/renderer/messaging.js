@@ -717,6 +717,10 @@ export function fileAction(opts) { return /** @type {any} */ (sendMessage('actio
 /** @param {object} opts */
 export function fileActionHw(opts) { return /** @type {any} */ (sendMessage('action.file.hw', opts)); }
 
+// Project registry — current roster lookup
+/** @param {object} opts */
+export function getProjectForToken(opts) { return /** @type {any} */ (sendMessage('projects.byTick', opts)); }
+
 // §41.7.2 Messaging inbox
 /** @param {object} opts */
 export function getMessagingInbox(opts) { return /** @type {any} */ (sendMessage('messaging.inbox', opts)); }
