@@ -692,3 +692,20 @@ button.row:hover:not(:disabled) {
     letter-spacing: 0.03em;
     text-transform: uppercase;
 }
+
+/* ───── "Official token" banner — same treatment as TokenDetail's:
+   green = on a project registry's owner-attested current roster. ───── */
+
+.officialBanner {
+    margin: 0;
+    padding: var(--xc-space-2) var(--xc-space-3);
+    background: color-mix(in srgb, var(--xc-success, #14b86c) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--xc-success, #14b86c) 40%, transparent);
+    color: var(--xc-text);
+    border-radius: var(--xc-radius-md);
+    font-size: var(--xc-text-sm);
+    line-height: 1.4;
+}
+.officialBannerProject {
+    font-weight: 600;
+}

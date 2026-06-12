@@ -91,6 +91,7 @@
  * @property {number | null} marketPrice                 coin-denominated price, null if unset
  * @property {number | null} marketFloor                 coin-denominated floor, null if unset
  * @property {number | null} divisibility                token decimals (0-8); null when the explorer doesn't expose this field
+ * @property {string[]} projects                         project ticks whose CURRENT roster includes this token (the "Official" banner data)
  * @property {string | null} imageUrl                    best-effort hero image URL (TIS images[0] if present, else regex from description)
  * @property {TisMediaEntry[]} images                    full image gallery (icon / standard / large / hires)
  * @property {TisMediaEntry[]} audio                     audio tracks
@@ -581,6 +582,15 @@ export function normalizeTokenInfo(chainId, tick, raw, tisBundle = null) {
     const divisibility = (divisibilityRaw != null && Number.isFinite(Number(divisibilityRaw)))
         ? Number(divisibilityRaw)
         : null;
+    // Project registry memberships (explorer getToken `projects[]`) — each
+    // entry names a project tick whose CURRENT roster includes this token.
+    // Backs the "Official" banner; the registry's display policy is
+    // "just show it" (Project_Registry.md), so no extra filtering here.
+    const projects = Array.isArray(row?.projects)
+        ? row.projects
+            .map((p) => (p && typeof p.project === 'string' && p.project ? p.project.toUpperCase() : null))
+            .filter((p) => p !== null)
+        : [];
     // TIS bundle (when fetched) supplies the richer description body and
     // media arrays. We keep the on-chain description string as a fallback
     // for the description text, but prefer the TIS body when available
@@ -618,6 +628,7 @@ export function normalizeTokenInfo(chainId, tick, raw, tisBundle = null) {
         marketPrice,
         marketFloor,
         divisibility,
+        projects,
         imageUrl,
         images,
         audio,

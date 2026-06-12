@@ -382,6 +382,21 @@ export function TokenDetail({
                     </div>
                 </section>
 
+                {/* "Official token" banner — the token is on a project
+                    registry's current roster (owner-attested on-chain;
+                    Project_Registry.md). Display policy is "just show
+                    it" — every attesting project is listed. */}
+                {Array.isArray(assetInfo?.projects) && assetInfo.projects.length > 0 ? (
+                    <p className={styles.officialBanner} role="status">
+                        Official token of{' '}
+                        {assetInfo.projects.map((p, i) => (
+                            <span key={p} className={styles.officialBannerProject}>
+                                {i > 0 ? ', ' : ''}{p}
+                            </span>
+                        ))}
+                    </p>
+                ) : null}
+
                 {/* Market section — stats strip + sparkline. Sits above
                     the quick actions and is collapsible via the chart-icon
                     button in the balance hero (same hook the Home portfolio

@@ -474,6 +474,19 @@ export function ManageToken({
                     </div>
                 </section>
 
+                {/* "Official token" banner — on a project registry's
+                    current roster (owner-attested; Project_Registry.md). */}
+                {Array.isArray(assetInfo?.projects) && assetInfo.projects.length > 0 ? (
+                    <p className={styles.officialBanner} role="status">
+                        Official token of{' '}
+                        {assetInfo.projects.map((p, i) => (
+                            <span key={p} className={styles.officialBannerProject}>
+                                {i > 0 ? ', ' : ''}{p}
+                            </span>
+                        ))}
+                    </p>
+                ) : null}
+
                 {/* Market panel — stats strip + chart placeholder. The
                     chart slot is reserved for future supply / dispense-
                     price history; today it shows an empty-state hint so
