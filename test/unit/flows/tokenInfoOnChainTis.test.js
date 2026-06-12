@@ -32,12 +32,21 @@ function sdkReturning(bytes) {
 }
 
 describe('TIS_ACTION_REF_RE', () => {
-    it('matches the on-chain pointer form only', () => {
-        expect('action:123'.match(TIS_ACTION_REF_RE)?.[1]).toBe('123');
-        expect('ACTION:9'.match(TIS_ACTION_REF_RE)?.[1]).toBe('9');
+    it('matches the same-chain pointer form', () => {
+        expect('action:123'.match(TIS_ACTION_REF_RE)?.[2]).toBe('123');
+        expect('ACTION:9'.match(TIS_ACTION_REF_RE)?.[2]).toBe('9');
         expect('action:'.match(TIS_ACTION_REF_RE)).toBeNull();
         expect('action:12x'.match(TIS_ACTION_REF_RE)).toBeNull();
         expect('https://a/b.json'.match(TIS_ACTION_REF_RE)).toBeNull();
+    });
+
+    it('matches the sibling-chain pointer form with a base coin ticker', () => {
+        const m = 'action:DOGE:55'.match(TIS_ACTION_REF_RE);
+        expect(m?.[1]).toBe('DOGE');
+        expect(m?.[2]).toBe('55');
+        expect('action:doge:55'.match(TIS_ACTION_REF_RE)?.[2]).toBe('55');
+        expect('action:ETH:55'.match(TIS_ACTION_REF_RE)).toBeNull();
+        expect('action:RDOGE:55'.match(TIS_ACTION_REF_RE)).toBeNull();
     });
 });
 
@@ -56,7 +65,7 @@ describe('fetchOnChainTisBundle', () => {
         const bytes = new TextEncoder().encode(TIS_JSON);
         const sdk = {
             ...sdkReturning(bytes),
-            fileRawUrl: (idx) => `https://explorer.example/RBTC/api/file/${idx}/raw`,
+            fileRawUrl: (idx, coin) => `https://explorer.example/${coin || 'RBTC'}/api/file/${idx}/raw`,
         };
         const bundle = await fetchOnChainTisBundle({ sdk, actionIndex: '102' });
         resolveMediaDataRefs(bundle, sdk);
@@ -64,6 +73,15 @@ describe('fetchOnChainTisBundle', () => {
         // Already-resolved or non-ref entries are untouched
         const noop = resolveMediaDataRefs({ images: [{ url: 'https://a/b.png', dataRef: null }] }, sdk);
         expect(noop.images[0].url).toBe('https://a/b.png');
+    });
+
+    it('resolveMediaDataRefs passes the base coin for sibling-chain refs', () => {
+        const sdk = {
+            fileRawUrl: (idx, coin) => `https://explorer.example/${coin || 'SAME'}/api/file/${idx}/raw`,
+        };
+        const bundle = { images: [{ url: null, dataRef: 'action:DOGE:55' }] };
+        resolveMediaDataRefs(bundle, sdk);
+        expect(bundle.images[0].url).toBe('https://explorer.example/DOGE/api/file/55/raw');
     });
 
     it('returns null for non-JSON bytes', async () => {

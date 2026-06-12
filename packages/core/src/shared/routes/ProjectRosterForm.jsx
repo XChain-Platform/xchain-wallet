@@ -424,9 +424,9 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                 <p className={styles.successLabel}>Link transaction</p>
                 <code className={styles.txid}>{linkTxid}</code>
                 <p className={styles.hint}>
-                    Once the link confirms, every token on the list shows an
-                    "Official token of {tick}" badge in the explorer and
-                    wallets. Publishing a new list later replaces this one.
+                    Once the link confirms, every token on the list is marked
+                    as an official token of the {tick} project in the explorer
+                    and wallets. Publishing a new list later replaces this one.
                 </p>
                 <div className={styles.actions}>
                     <Button variant="primary" onClick={onBack}>Done</Button>

@@ -685,11 +685,13 @@ export async function fetchTisBundle({ description, fetch: fetchImpl, signal }) 
     }
 }
 
-// On-chain TIS document pointer: DESCRIPTION = "action:<index>" names a
-// same-chain FILE action whose raw bytes are the TIS JSON
-// (Token_Information_Standard.md — On-Chain Format). Same syntax as a
-// file entry's `data_ref`, one level up.
-export const TIS_ACTION_REF_RE = /^action:([0-9]+)$/i;
+// On-chain TIS document pointer: DESCRIPTION = "action:<index>" (same
+// chain) or "action:<COIN>:<index>" (sibling chain — base ticker, network
+// tier implied by the token's network) naming a FILE action whose raw
+// bytes are the TIS JSON (Token_Information_Standard.md — On-Chain
+// Format). Same syntax as a file entry's `data_ref`, one level up.
+// Match groups: [1] = optional base coin, [2] = action index.
+export const TIS_ACTION_REF_RE = /^action:(?:(BTC|LTC|DOGE):)?([0-9]+)$/i;
 
 /**
  * Fetch + parse an on-chain TIS document via the explorer's raw FILE
@@ -699,14 +701,15 @@ export const TIS_ACTION_REF_RE = /^action:([0-9]+)$/i;
  * @param {object} args
  * @param {any} args.sdk                     per-chain SDK (explorer client configured)
  * @param {string | number} args.actionIndex FILE action index holding the TIS JSON
+ * @param {string | null} [args.coin]        base coin ticker for a sibling-chain ref (null = same chain)
  * @returns {Promise<ReturnType<typeof tisToMediaBundle> | null>}
  */
-export async function fetchOnChainTisBundle({ sdk, actionIndex }) {
+export async function fetchOnChainTisBundle({ sdk, actionIndex, coin = null }) {
     if (typeof sdk?.getGatedFileRaw !== 'function') return null;
     try {
         // The raw endpoint serves non-gated FILE bytes too — for a JSON
         // document those bytes ARE the TIS text.
-        const bytes = await sdk.getGatedFileRaw(String(actionIndex));
+        const bytes = await sdk.getGatedFileRaw(String(actionIndex), coin);
         if (!bytes || !bytes.length) return null;
         const u8 = bytes instanceof Uint8Array
             ? bytes
@@ -793,7 +796,7 @@ export async function tokenInfoFor({
         if (actionRef) {
             // On-chain TIS document — resolve through the same explorer
             // the token row came from (no external fetch).
-            tisBundle = await fetchOnChainTisBundle({ sdk, actionIndex: actionRef[1] });
+            tisBundle = await fetchOnChainTisBundle({ sdk, actionIndex: actionRef[2], coin: actionRef[1] || null });
         } else if (description && resolvedFetch) {
             tisBundle = await fetchTisBundle({
                 description,
@@ -824,7 +827,7 @@ export function resolveMediaDataRefs(bundle, sdk) {
             if (!entry || entry.url || !(entry.dataRef)) continue;
             const m = String(entry.dataRef).match(TIS_ACTION_REF_RE);
             if (!m) continue;
-            try { entry.url = sdk.fileRawUrl(m[1]); } catch { /* leave unresolved */ }
+            try { entry.url = sdk.fileRawUrl(m[2], m[1] || null); } catch { /* leave unresolved */ }
         }
     }
     return bundle;

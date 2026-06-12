@@ -388,12 +388,13 @@ export function TokenDetail({
                     it" — every attesting project is listed. */}
                 {Array.isArray(assetInfo?.projects) && assetInfo.projects.length > 0 ? (
                     <p className={styles.officialBanner} role="status">
-                        Official token of{' '}
+                        This token is an official token in the{' '}
                         {assetInfo.projects.map((p, i) => (
                             <span key={p} className={styles.officialBannerProject}>
                                 {i > 0 ? ', ' : ''}{p}
                             </span>
                         ))}
+                        {' '}project{assetInfo.projects.length === 1 ? '' : 's'}.
                     </p>
                 ) : null}
 
