@@ -21,24 +21,20 @@ import {
     createWalletLocal,
     importMnemonicLocal,
 } from './hostBridge.js';
-import { savePassword, clearPassword } from './sessionPasswordCache.js';
 
 export { sendMessage, getSessionStatus };
 
 /** @param {string} password */
 export async function unlockWallet(password) {
-    const result = await unlockWalletLocal({ password });
-    // Cache the password in sessionStorage so a page reload inside
-    // the same tab skips straight to Home instead of the unlock
-    // screen. Cleared on lock or tab close.
-    savePassword(password);
-    return result;
+    // The password is passed straight to the in-page host for this one
+    // unlock operation and never written to any Web API storage
+    // (sessionStorage / localStorage). A page reload re-locks the
+    // wallet and the user re-enters their password — that re-prompt is
+    // the intended posture (see docs/Threat_Model.md §1, §2.1).
+    return unlockWalletLocal({ password });
 }
 
 export async function lockWallet() {
-    // Explicit lock invalidates the cached password — next reload
-    // sends the user back through the unlock form.
-    clearPassword();
     return lockWalletLocal();
 }
 
@@ -54,9 +50,7 @@ export async function lockWallet() {
  * @returns {Promise<{ mnemonic: string, walletName: string }>}
  */
 export async function createWallet(opts) {
-    const result = await createWalletLocal(opts);
-    if (opts && typeof opts.password === 'string') savePassword(opts.password);
-    return result;
+    return createWalletLocal(opts);
 }
 
 /**
@@ -70,9 +64,7 @@ export async function createWallet(opts) {
  * @returns {Promise<{ format: 'bip39' | 'counterwallet-legacy', walletName: string }>}
  */
 export async function importMnemonic(opts) {
-    const result = await importMnemonicLocal(opts);
-    if (opts && typeof opts.password === 'string') savePassword(opts.password);
-    return result;
+    return importMnemonicLocal(opts);
 }
 
 export function listWallets() {

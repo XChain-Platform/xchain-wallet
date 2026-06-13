@@ -124,8 +124,7 @@ import { pairTrezorSigner } from './signers/trezorFactory.js';
 import { pairLedgerSigner } from './signers/ledgerFactory.js';
 import { registerSigner as registerLocalSigner } from './signerBridge.js';
 import * as messaging from './messaging.js';
-import { getSessionStatus, listWallets, unlockWallet, lockWallet, listAccounts } from './messaging.js';
-import { readPassword, clearPassword } from './sessionPasswordCache.js';
+import { getSessionStatus, listWallets, lockWallet, listAccounts } from './messaging.js';
 import { ExtensionBanner } from './components/ExtensionBanner.jsx';
 import { useActiveVariant, shellForVariant } from './devVariant.js';
 import { DevVariantBadge } from './DevVariantBadge.jsx';
@@ -372,19 +371,9 @@ function AppInner() {
         }
     }, []);
 
-    // Auto-unlock from the session cache: if the user unlocked
-    // earlier in this tab session, the password sits in sessionStorage
-    // and a reload skips straight back to Home. A failure (vault
-    // rotated, password changed in another tab) clears the cache and
-    // falls back to the unlock form.
-    useEffect(() => {
-        if (status.state !== 'locked') return;
-        const cached = readPassword();
-        if (!cached) return;
-        unlockWallet(cached)
-            .then(() => refresh())
-            .catch(() => clearPassword());
-    }, [status.state, refresh]);
+    // No auto-unlock: the password is never persisted to Web API
+    // storage, so a page reload always re-locks the wallet and the
+    // user re-enters their password (docs/Threat_Model.md §1, §2.1).
 
     useEffect(() => {
         if (status.state !== 'unlocked') {

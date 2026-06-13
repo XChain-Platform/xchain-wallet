@@ -14,7 +14,7 @@ This document names what the wallet defends against, what it deliberately doesn'
 | Wallet master key | Derived from password via Argon2id, held in memory while unlocked. | Decryption of the persisted vault → access to all private keys. |
 | Vault blob (encryptedSeed, per-wallet keys, contacts, settings) | `chrome.storage.local` (extension) or IndexedDB (web). AES-256-GCM with the master key. | Offline access to the ciphertext. Still requires the password to decrypt. |
 | Session master key | `chrome.storage.session` (extension) or in-memory (web). Cleared on browser close / tab close. | Skips the Argon2id cost of re-unlocking. Not the raw password. |
-| User password | Never persisted. In memory only during unlock / sign operations, zeroed after use. | Full access to every locked vault on the device. |
+| User password | Never persisted. Held in JavaScript memory only for the duration of a single unlock / sign operation and never written to `sessionStorage`, `localStorage`, or any other Web API storage. A page reload re-locks the wallet and the user re-enters their password. | Full access to every locked vault on the device. |
 | Connected-site permissions | Persisted in the vault's `connectedSites` collection. | Silent approval of dApp requests the user previously granted. |
 
 ## 2. Explicitly in scope
@@ -22,7 +22,7 @@ This document names what the wallet defends against, what it deliberately doesn'
 ### 2.1 Browser-execution threats
 
 - **XSS against the dApp bridge.** Mitigated by content-script isolation (extension) and CSP on the web app. `origin` is stamped by the content script, never read from the page. Handled by `packages/extension/src/content/contentScript.js` and the bridge handler's `requireSite` check.
-- **Malicious same-origin scripts in the web app.** Acknowledged as a gap — §9.3.3 spells out that the web app cannot match the extension's key isolation. Mitigations: short session lifetime (in-memory only; refresh = re-locked), no master key in sessionStorage, no third-party script tags on `wallet.xchain.io`.
+- **Malicious same-origin scripts in the web app.** Acknowledged as a gap — §9.3.3 spells out that the web app cannot match the extension's key isolation. Mitigations: short session lifetime (in-memory only; a page reload re-locks the wallet and the user re-enters their password), neither the password nor the master key is ever written to `sessionStorage`, `localStorage`, or any other Web API storage, and no third-party script tags on `wallet.xchain.io`.
 - **Compromised extension page chrome (content + page isolation).** The popup and approval window run in the extension's origin, isolated from page content. Password never leaves the approval window.
 
 ### 2.2 Storage threats

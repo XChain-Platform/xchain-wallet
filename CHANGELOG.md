@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- **Web shell no longer caches the wallet password in `sessionStorage`.**
+  The web shell previously wrote the user's plaintext wallet password to
+  `sessionStorage` under `xc.session.pw` so a page reload could
+  auto-unlock the wallet. That contradicted the threat model
+  (`docs/Threat_Model.md` §1, §2.1: "never persisted, in memory only")
+  and handed any same-origin script — an XSS sink, a compromised bundled
+  dependency — a reusable credential that decrypts the entire vault. The
+  cache (`packages/web/src/sessionPasswordCache.js`) and its call sites in
+  `App.jsx` and `messaging.js` are removed; the password is now held in
+  JavaScript memory only for the duration of a single unlock / sign
+  operation and never written to any Web API storage. **UX change:** a
+  page reload re-locks the wallet and the user re-enters their password —
+  the auto-unlock-on-reload behaviour is gone. A new security regression
+  test asserts the password never lands in `sessionStorage` across the
+  unlock, create-wallet, and import-mnemonic flows. The Chrome extension
+  and Electron shells were never affected.
+
 - **SIWX challenge now binds the wallet-stamped page origin (v2 wire
   format — breaking).** The Sign-In with XChain challenge previously
   signed only the page-supplied `appId`, so a look-alike site could pass
