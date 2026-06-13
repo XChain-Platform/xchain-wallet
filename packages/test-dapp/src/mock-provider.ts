@@ -300,8 +300,11 @@ export class MockXChainProvider implements XChainProvider {
         const now = Date.now();
         const expiresAt = now + (params.expiresInMs ?? SIGN_IN_DEFAULT_EXPIRY_MS);
         const parts = {
-            version: SIGN_IN_CHALLENGE_VERSION as 1,
+            version: SIGN_IN_CHALLENGE_VERSION as 2,
             appId: params.appId,
+            // A real wallet stamps the requesting page's origin at the
+            // content-script boundary; the mock uses the page it runs in.
+            origin: globalThis.location?.origin ?? 'https://mock-dapp.example',
             address: firstAddress.address,
             nonce: params.nonce ?? `mock-nonce-${now.toString(16)}`,
             timestamp: now,

@@ -35,6 +35,7 @@ import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
 import {
     BRIDGE_SPEC_VERSION,
     BRIDGE_SUPPORTED_VERSIONS,
+    SIGN_IN_CHALLENGE_PREFIX,
     isBridgeVersionSupported,
 } from '@xchain-wallet/bridge-spec';
 import { rejectAllApprovals, UserRejectedError } from './Approvals.js';
@@ -442,9 +443,16 @@ export function registerBridgeHandlers(host, opts = {}) {
         const nonce = typeof req.nonce === 'string' && req.nonce.length > 0
             ? req.nonce
             : randomNonce();
+        // req.origin is stamped by the content script (location.origin),
+        // never by the page — requireSite above has already asserted it.
+        // Embedding it in the signed bytes binds the sign-in to the site
+        // the user was actually on: relying backends verify the origin
+        // field, so a look-alike site passing a legitimate appId can no
+        // longer obtain a signature indistinguishable from the real app's.
         const challenge = [
-            'XChain Sign-In',
+            SIGN_IN_CHALLENGE_PREFIX,
             req.appId,
+            req.origin,
             decision.address,
             nonce,
             new Date(now).toISOString(),

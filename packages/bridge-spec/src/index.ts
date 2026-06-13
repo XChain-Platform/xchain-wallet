@@ -48,7 +48,17 @@ export function isBridgeVersionSupported(requested: unknown): boolean {
 }
 
 // Version of the Sign-in with XChain challenge format (§43.6).
-export const SIGN_IN_CHALLENGE_VERSION = 1;
+//
+// v2 (breaking): the wallet-stamped page origin is embedded in the
+// signed bytes between appId and address. appId is supplied by the
+// requesting page, so by itself it proves nothing about *where* the
+// sign-in happened; origin is recorded by the wallet from the page
+// that made the request and cannot be chosen by the dApp. Relying
+// backends MUST verify the origin field — it is what lets them reject
+// a challenge signed on a look-alike site that passed a legitimate
+// app's appId. v1 challenges (no origin field) fail to parse and
+// should be rejected.
+export const SIGN_IN_CHALLENGE_VERSION = 2;
 
 // Default expiry window for a Sign-in challenge. Wallets refuse to sign a
 // challenge whose expiresAt is in the past.
@@ -327,11 +337,16 @@ export interface SignInParams {
     chains?: CoinId[];
 }
 
-// Structured form of the v1 challenge. The signed bytes are the string
+// Structured form of the v2 challenge. The signed bytes are the string
 // produced by formatSignInChallenge() below.
-export interface SignInChallengeV1 {
-    version: 1;
+export interface SignInChallengeV2 {
+    version: 2;
     appId: string;
+    // Page origin as stamped by the wallet (the requesting page's
+    // location.origin recorded at the trust boundary) — NOT supplied by
+    // the dApp. Relying backends MUST check this equals the origin they
+    // serve the dApp from; appId alone is attacker-chosen.
+    origin: string;
     address: string;
     nonce: string;
     // Unix epoch milliseconds.
@@ -344,24 +359,26 @@ export interface SignInSuccess {
     address: string;
     chainId: ChainId;
     challenge: string;
-    challengeParts: SignInChallengeV1;
+    challengeParts: SignInChallengeV2;
     signature: string;
 }
 
 export type SignInResult = SignInSuccess | BridgeErrorResult;
 
-// Fixed pieces of the v1 challenge wire format.
+// Fixed pieces of the v2 challenge wire format.
 //
 // Wire format:
-//   `XChain Sign-In | <appId> | <address> | <nonce> | <timestamp> | <expiresAt>`
+//   `XChain Sign-In v2 | <appId> | <origin> | <address> | <nonce> | <timestamp> | <expiresAt>`
 //
 // All fields are string-serialized, separated by " | ". Pipes inside any
 // field are rejected at format time — dApps must supply appId/nonce values
-// that do not contain the separator.
-export const SIGN_IN_CHALLENGE_PREFIX = 'XChain Sign-In';
+// that do not contain the separator. The versioned prefix lets validators
+// detect the format on the wire; v1 challenges ("XChain Sign-In", no
+// origin field) fail parseSignInChallenge and must be rejected.
+export const SIGN_IN_CHALLENGE_PREFIX = 'XChain Sign-In v2';
 export const SIGN_IN_CHALLENGE_SEPARATOR = ' | ';
 
-export function formatSignInChallenge(parts: SignInChallengeV1): string {
+export function formatSignInChallenge(parts: SignInChallengeV2): string {
     if (parts.version !== SIGN_IN_CHALLENGE_VERSION) {
         throw new Error(
             `Unsupported sign-in challenge version: ${parts.version}`,
@@ -369,6 +386,7 @@ export function formatSignInChallenge(parts: SignInChallengeV1): string {
     }
     const fields = [
         parts.appId,
+        parts.origin,
         parts.address,
         parts.nonce,
         String(parts.timestamp),
@@ -391,10 +409,10 @@ export function formatSignInChallenge(parts: SignInChallengeV1): string {
 
 export function parseSignInChallenge(
     challenge: string,
-): SignInChallengeV1 | null {
+): SignInChallengeV2 | null {
     const segments = challenge.split(SIGN_IN_CHALLENGE_SEPARATOR);
-    if (segments.length !== 6) return null;
-    const [prefix, appId, address, nonce, timestampStr, expiresAtStr] =
+    if (segments.length !== 7) return null;
+    const [prefix, appId, origin, address, nonce, timestampStr, expiresAtStr] =
         segments;
     if (prefix !== SIGN_IN_CHALLENGE_PREFIX) return null;
     const timestamp = Number(timestampStr);
@@ -402,8 +420,9 @@ export function parseSignInChallenge(
     if (!Number.isFinite(timestamp) || !Number.isFinite(expiresAt))
         return null;
     return {
-        version: 1,
+        version: 2,
         appId,
+        origin,
         address,
         nonce,
         timestamp,

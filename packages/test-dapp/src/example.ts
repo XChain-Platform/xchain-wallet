@@ -87,6 +87,10 @@ export async function runExample(): Promise<ExampleReport> {
             reparsed &&
             validateSignInChallenge(reparsed, {
                 appId: APP_ID,
+                // The origin your backend expects the sign-in to come
+                // from — here the page the example runs on. A challenge
+                // stamped with any other origin must be rejected.
+                origin: globalThis.location?.origin ?? '',
                 nonce: signInParams.nonce,
             });
         report.signInOk = invalid === null;

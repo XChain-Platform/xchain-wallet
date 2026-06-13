@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **SIWX challenge now binds the wallet-stamped page origin (v2 wire
+  format — breaking).** The Sign-In with XChain challenge previously
+  signed only the page-supplied `appId`, so a look-alike site could pass
+  a legitimate app's identifier and obtain a signature byte-identical to
+  one the real app would produce — a relying backend could not tell the
+  two apart. The v2 challenge embeds the origin stamped by the wallet at
+  the content-script trust boundary between `appId` and `address`
+  (`XChain Sign-In v2 | <appId> | <origin> | <address> | <nonce> |
+  <timestamp> | <expiresAt>`). In `@xchain-wallet/bridge-spec`,
+  `SignInChallengeV2` replaces `SignInChallengeV1`,
+  `parseSignInChallenge` rejects v1-shaped challenges, and
+  `validateSignInChallenge` now requires the relying backend's expected
+  `origin` and rejects mismatches. **Integrators must update their
+  server-side verification** — see the `signIn` section of
+  `docs/BRIDGE.md` for the corrected snippet; backends that keep
+  accepting v1-shaped challenges remain open to appId spoofing.
+
 ### Added
 
 - **Periodic chain-registry refresh** (§9.7 / G007). The background host

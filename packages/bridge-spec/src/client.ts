@@ -21,7 +21,7 @@ import {
 } from './index.ts';
 import type {
     XChainProvider,
-    SignInChallengeV1,
+    SignInChallengeV2,
     SignInParams,
 } from './index.ts';
 
@@ -116,15 +116,24 @@ export function makeSignInParams(
 // Verify a parsed sign-in challenge is current and well-formed. Does NOT
 // verify the signature — callers use `sdk.auth.verifyMessage` for that.
 // Returns null on success or a human-readable reason string on failure.
+//
+// `expected.origin` is mandatory: it is the origin the relying backend
+// serves its dApp from (e.g. 'https://app.example'). The challenge's
+// origin field was stamped by the wallet from the requesting page, so a
+// mismatch means the user signed this challenge on some other site —
+// reject it even when appId and nonce match.
 export function validateSignInChallenge(
-    parts: SignInChallengeV1,
-    expected: { appId: string; nonce?: string; now?: number },
+    parts: SignInChallengeV2,
+    expected: { appId: string; origin: string; nonce?: string; now?: number },
 ): string | null {
     if (parts.version !== SIGN_IN_CHALLENGE_VERSION) {
         return `Unsupported challenge version: ${parts.version}`;
     }
     if (parts.appId !== expected.appId) {
         return `Challenge appId mismatch: expected ${expected.appId}, got ${parts.appId}`;
+    }
+    if (parts.origin !== expected.origin) {
+        return `Challenge origin mismatch: expected ${expected.origin}, got ${parts.origin}`;
     }
     if (expected.nonce !== undefined && parts.nonce !== expected.nonce) {
         return 'Challenge nonce mismatch';

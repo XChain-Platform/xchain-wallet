@@ -161,33 +161,40 @@ If `broadcast: false` (default for multisig flows where the dApp combines partia
 
 ### `signIn(params: SignInParams) → Promise<SignInResult>`
 
-Sign-In with XChain (SIWX). The wallet asks the user to pick an address, builds a v1 challenge, signs it, and returns both the structured challenge and the signature so the dApp can verify server-side.
+Sign-In with XChain (SIWX). The wallet asks the user to pick an address, builds a v2 challenge, signs it, and returns both the structured challenge and the signature so the dApp can verify server-side.
 
 ```ts
 { appId: string; nonce?: string; expiresInMs?: number; chains?: CoinId[] }
 → { ok: true; address; chainId; challenge; challengeParts; signature } | BridgeErrorResult
 ```
 
-Wire format of the v1 challenge:
+Wire format of the v2 challenge:
 
 ```
-XChain Sign-In | <appId> | <address> | <nonce> | <timestamp> | <expiresAt>
+XChain Sign-In v2 | <appId> | <origin> | <address> | <nonce> | <timestamp> | <expiresAt>
 ```
 
 All fields string-serialized, separated by ` | `. Pipes inside any field are rejected at format time. The `challenge` string is exactly what was signed; verify with `parseSignInChallenge(challenge)` and any sigtools your stack uses for the chain in question.
 
-```js
-import { generateNonce, makeSignInParams, validateSignInChallenge } from '@xchain-wallet/bridge-spec';
+`<origin>` is the requesting page's origin as stamped by the **wallet** (at the content-script trust boundary) — the page cannot choose it. `appId` is supplied by the page, so by itself it proves nothing about where the sign-in happened. Your backend MUST verify the challenge's origin equals the origin you serve your dApp from; that check is what prevents a look-alike site from passing your appId and obtaining a sign-in your backend would accept.
 
-const params = makeSignInParams({ appId: 'mydapp.example' });
+> **Breaking change (v1 → v2):** v1 challenges (`XChain Sign-In | <appId> | <address> | …`, no origin field) are no longer produced. `parseSignInChallenge` returns `null` for them, and `validateSignInChallenge` now requires an `origin` in its `expected` argument. Integrators verifying against the v1 format must update to the snippet below — in particular, add the origin check; backends that keep accepting v1-shaped challenges remain open to appId spoofing.
+
+```js
+import { makeSignInParams, parseSignInChallenge, validateSignInChallenge } from '@xchain-wallet/bridge-spec';
+
+const params = makeSignInParams('mydapp.example');
 const result = await provider.signIn(params);
 if (!result.ok) { /* handle error */ return; }
 
-const validation = validateSignInChallenge(result.challenge, {
+// Server side: parse the signed bytes, then validate.
+const parts = parseSignInChallenge(result.challenge);
+const failure = parts && validateSignInChallenge(parts, {
   appId: 'mydapp.example',
-  expectedNonce: params.nonce,
+  origin: 'https://mydapp.example',   // the origin you serve the dApp from
+  nonce: params.nonce,
 });
-if (!validation.ok) { /* reject — challenge tampered */ return; }
+if (!parts || failure !== null) { /* reject — challenge tampered, expired, or signed on another site */ return; }
 // Now verify result.signature against result.address per the chain's signature scheme.
 ```
 
