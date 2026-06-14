@@ -115,7 +115,7 @@ assert.ok(extPkg.dependencies?.['xchain-sdk'], 'extension depends on xchain-sdk'
 // Node test harness, so the import fails and we should land on the dev
 // mock. Capture the console.warn to verify the diagnostic hint fires.
 const { resolveSdkFactory } = await import(
-    '../../web/src/sdkFactory.js'
+    '../../../packages/web/src/sdkFactory.js'
 );
 const warnings = [];
 const originalWarn = console.warn;

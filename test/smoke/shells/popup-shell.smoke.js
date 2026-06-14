@@ -166,7 +166,7 @@ assert.ok(
 // --- 5. Behavioural: session-meta listener drives 3 real states -------
 
 const { attachSessionMetaListener } = await import(
-    '../../extension/src/background/sessionMeta.js'
+    '../../../packages/extension/src/background/sessionMeta.js'
 );
 
 /**

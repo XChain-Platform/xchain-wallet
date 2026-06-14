@@ -132,7 +132,7 @@ IndexedDBStorageBackend.prototype._openStore = function _openStore() {
     return Promise.resolve(fakeKv);
 };
 
-const hostBridge = await import('../../web/src/hostBridge.js');
+const hostBridge = await import('../../../packages/web/src/hostBridge.js');
 
 // 2a. Fresh page — no wallet.
 {

@@ -124,8 +124,8 @@ assert.ok(
     'shared Home.jsx drives Screen variant from shell',
 );
 assert.ok(
-    app.includes('shell="web"'),
-    'web App.jsx wraps in MessagingProvider shell="web"',
+    /shell=\{shell\}/.test(app) && /shellForVariant\(/.test(app),
+    'web App.jsx wraps in MessagingProvider with the resolved shell',
 );
 
 const banner = readFileSync(
@@ -189,7 +189,7 @@ IndexedDBStorageBackend.prototype._openStore = function _openStore() {
 
 // Import the hostBridge only AFTER the stubs are in place so its
 // module-scoped registries / SDK never touches real IDB.
-const hostBridge = await import('../../web/src/hostBridge.js');
+const hostBridge = await import('../../../packages/web/src/hostBridge.js');
 
 // 2a. Fresh page → no-wallet.
 {

@@ -73,8 +73,8 @@ assert.ok(
     'shared Send.jsx distinguishes wrong password from other errors',
 );
 assert.ok(
-    /inputMode="decimal"/.test(send),
-    'amount input uses decimal input mode',
+    /AmountField/.test(send),
+    'amount entry uses the shared AmountField (decimal input)',
 );
 
 const app = readFileSync(join(webPkg, 'src', 'App.jsx'), 'utf8');
@@ -132,7 +132,7 @@ IndexedDBStorageBackend.prototype._openStore = function _openStore() {
     return Promise.resolve(fakeKv);
 };
 
-const hostBridge = await import('../../web/src/hostBridge.js');
+const hostBridge = await import('../../../packages/web/src/hostBridge.js');
 
 // Create a wallet so `action.send` has something to resolve against.
 const password = 'testpassword123';

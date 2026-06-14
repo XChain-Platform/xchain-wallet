@@ -1720,7 +1720,7 @@ function AppInner() {
                                     }}
                                     onScan={() => setGlobalScannerOpen(true)}
                                     onLock={handleNavLock}
-                                    showNetworkFilter={unlockedView === 'home' || unlockedView === 'send-picker' || unlockedView === 'addresses'}
+                                    showNetworkFilter={unlockedView === 'home' || unlockedView === 'addresses'}
                                 />
                                 {/* Cluster J FOLLOWUP 2 — DemoBanner persists across every
                                     unlocked view via the shared layout header slot, not

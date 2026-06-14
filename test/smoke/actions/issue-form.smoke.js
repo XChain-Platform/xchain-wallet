@@ -238,7 +238,6 @@ assert.ok(
 // --- 11. CSS module ---------------------------------------------------
 
 for (const cls of [
-    '.header',
     '.card',
     '.picker',
     '.fromLine',

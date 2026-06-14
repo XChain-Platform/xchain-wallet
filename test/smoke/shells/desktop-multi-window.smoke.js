@@ -49,7 +49,7 @@ assert.ok(!/^let mainWindow\b/m.test(src),
 
 // --- 2. createWindow factory --------------------------------------------
 
-assert.ok(/function createWindow\(\)\s*\{[\s\S]*?new BrowserWindow/.test(src),
+assert.ok(/function createWindow\([^)]*\)\s*\{[\s\S]*?new BrowserWindow/.test(src),
     'createWindow() factory creates fresh BrowserWindow instances');
 assert.ok(/windows\.add\(win\)/.test(src),
     'createWindow registers the new window with the windows Set');
