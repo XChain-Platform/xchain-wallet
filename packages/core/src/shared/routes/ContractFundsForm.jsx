@@ -23,6 +23,8 @@ import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
+import { useContractManifest } from '../hooks/useContractManifest.js';
+import { ContractConsentPanel } from '../components/ContractConsentPanel.jsx';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -116,6 +118,15 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
 
     // §20 / Cluster W FOLLOWUP 5 — watcher-mode encode-only branch.
     const { isWatcherMode } = useWalletMode();
+
+    // Phase F — permissions-manifest consent disclosure, shown inline in
+    // the review `<dl>` for both deposit and withdraw. Deferred via
+    // `skip` until the user reaches the review stage.
+    const manifest = useContractManifest({
+        chainId,
+        contractActionIndex,
+        skip: stage !== 'review' && stage !== 'submitting',
+    });
 
     const actionParams = useMemo(() => ({
         VERSION: '0',
@@ -277,6 +288,11 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
                     <dd className={styles.detailsValue}>{actionParams.TICK}</dd>
                     <dt className={styles.detailsLabel}>Quantity</dt>
                     <dd className={styles.detailsValue}>{actionParams.QUANTITY}</dd>
+                    <ContractConsentPanel
+                        manifest={manifest}
+                        labelClassName={styles.detailsLabel}
+                        valueClassName={styles.detailsValue}
+                    />
                 </dl>
                 {isWatcherMode ? (
                     <p className={styles.hint}>

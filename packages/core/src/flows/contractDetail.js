@@ -101,3 +101,48 @@ export async function executionsForContract({ sdkRegistry, chainId, contractActi
     const sdk = sdkRegistry.get(chainId);
     return sdk.getExecutions(contractActionIndex, opts);
 }
+
+/**
+ * @typedef {Object} ContractManifest
+ * @property {string[] | null} permissions  action types the contract may emit; null = unrestricted/undeclared
+ * @property {number | null}   maxTakeBps    max fee the contract may take, in basis points; null = undeclared
+ */
+
+const NULL_MANIFEST = /** @type {ContractManifest} */ ({ permissions: null, maxTakeBps: null });
+
+/**
+ * Phase F — read a contract's permissions manifest for the inline
+ * consent disclosure shown before EXECUTE / DEPOSIT / WITHDRAW.
+ *
+ * Defensive by design: this flow **never throws**. It returns the
+ * normalized `{ permissions, maxTakeBps }` shape the SDK reader
+ * produces, and degrades to `{ permissions: null, maxTakeBps: null }`
+ * on ANY gap — a missing chainId/contractActionIndex, an SDK instance
+ * that predates `getContractManifest` (the SDK reader ships in
+ * parallel under Phase F Part 2), or a network/parse error. A consent
+ * panel must always render; an undeclared manifest is a soft caution,
+ * not a hard failure.
+ *
+ * @param {ContractRefOpts} params
+ * @returns {Promise<ContractManifest>}
+ */
+export async function contractManifestFor({ sdkRegistry, chainId, contractActionIndex }) {
+    if (!sdkRegistry || !chainId || !contractActionIndex) return NULL_MANIFEST;
+    let sdk;
+    try {
+        sdk = sdkRegistry.get(chainId);
+    } catch {
+        return NULL_MANIFEST;
+    }
+    if (!sdk || typeof sdk.getContractManifest !== 'function') return NULL_MANIFEST;
+    try {
+        const res = await sdk.getContractManifest(contractActionIndex);
+        if (!res || typeof res !== 'object') return NULL_MANIFEST;
+        return {
+            permissions: Array.isArray(res.permissions) ? res.permissions : null,
+            maxTakeBps: Number.isFinite(res.maxTakeBps) ? res.maxTakeBps : null,
+        };
+    } catch {
+        return NULL_MANIFEST;
+    }
+}

@@ -23,38 +23,39 @@ import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
-import { useSignerInfo } from '../hooks/useSignerInfo.js';
-import { useContractManifest } from '../hooks/useContractManifest.js';
-import { ContractConsentPanel } from '../components/ContractConsentPanel.jsx';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 
+const FALLBACK_ACTION_CLASSES = ['transfer', 'trade', 'burn', 'mint', 'stake'];
+
 /**
- * EXECUTE contract method form — §42.4.
+ * Controller-bind authoring form — Phase F (Part 3b).
  *
- * Manual authoring lane only: method name + pipe-delimited params.
- * The spec's ABI-driven lane ("if a contract publishes an ABI, the
- * wallet populates a method selector and typed parameter inputs") is
- * deferred until the platform defines the ABI publishing convention
- * (FOLLOWUP 2 in claude/reports/specs/2026-04-24_phase4-monaco-editor.md).
+ * Binds (or unbinds) a guard contract over a SUBJECT: either a token
+ * the user issued (TICK → ISSUE v6) or the signing address itself
+ * (ADDRESS v1). The guard `controller` is the action_index of a
+ * deployed contract; `actionClass` ∈ {transfer, trade, burn, mint,
+ * stake} names which native actions the guard gates; `cooldownBlocks`
+ * delays an unbind taking effect (bind only).
  *
- * Inputs split the pipe-delimited parameter string into an array on
- * submit — the SDK validator expects PARAMS as an array, not a single
- * string, and enforces no-pipe-or-semicolon inside each element.
- *
- * Gas limit defaults to 50000 if the user leaves the field blank —
- * contracts.suggestGasLimit is a source-code heuristic, not available
- * from the contract row alone, so an execute-time estimate isn't
- * automatic. Users override freely.
+ * Stage machine mirrors the other contract forms: form → review →
+ * submitting → done. Params are built host-side via the SDK's
+ * `controller.*` helper (core can't import the SDK), then submitted
+ * through the same `advancedAction` (createAction → sign → broadcast)
+ * path every other action form uses. The SDK controller helper ships
+ * under Phase F Part 2 and may not exist yet — the form degrades
+ * gracefully: the action-class dropdown falls back to the locked-fact
+ * list, and a build/submit against a too-old SDK surfaces a clear error
+ * and keeps the user on the review screen.
  *
  * @param {object} props
  * @param {string} props.walletId
  * @param {string} props.chainId
- * @param {string} props.contractActionIndex
+ * @param {string} [props.tick]    when present, defaults the target to this token
  * @param {() => void} props.onBack
  */
-export function ExecuteContractForm({ walletId, chainId, contractActionIndex, onBack }) {
+export function ControllerBindForm({ walletId, chainId, tick, onBack }) {
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
@@ -66,10 +67,16 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, on
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
 
     const [fromAddressId, setFromAddressId] = useState(/** @type {string | null} */ (null));
-    const [method, setMethod] = useState('');
-    const [paramsText, setParamsText] = useState('');
-    const [gasLimit, setGasLimit] = useState('');
+    // 'token' → ISSUE v6 (gate a TICK); 'address' → ADDRESS v1 (gate the signer).
+    const [target, setTarget] = useState(/** @type {'token' | 'address'} */ (tick ? 'token' : 'address'));
+    const [unbind, setUnbind] = useState(false);
+    const [controller, setController] = useState('');
+    const [actionClass, setActionClass] = useState('transfer');
+    const [cooldownBlocks, setCooldownBlocks] = useState('');
+    const [memo, setMemo] = useState('');
     const [password, setPassword] = useState('');
+
+    const [actionClasses, setActionClasses] = useState(/** @type {string[]} */ (FALLBACK_ACTION_CLASSES));
 
     const [stage, setStage] = useState(
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
@@ -89,7 +96,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, on
                     (a) => a.source === 'hd' && a.derivationPath?.split('/')?.[4] === '0',
                 );
                 if (addrs.length === 0) {
-                    setLoadError('No address on this chain to execute from. Use Receive to generate one first.');
+                    setLoadError('No address on this chain to sign from. Use Receive to generate one first.');
                     return;
                 }
                 const sorted = [...addrs].sort((a, b) => {
@@ -105,6 +112,24 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, on
         return () => { cancelled = true; };
     }, [walletId, chainId, messaging]);
 
+    // Action-class list from the SDK (degrades to the locked-fact list).
+    useEffect(() => {
+        if (!chainId) return undefined;
+        if (typeof messaging?.getControllerActionClasses !== 'function') return undefined;
+        let cancelled = false;
+        messaging.getControllerActionClasses({ chainId })
+            .then((res) => {
+                if (cancelled) return;
+                const list = Array.isArray(res?.actionClasses) ? res.actionClasses : null;
+                if (list && list.length > 0) {
+                    setActionClasses(list);
+                    if (!list.includes(actionClass)) setActionClass(list[0]);
+                }
+            })
+            .catch(() => { /* keep the fallback list */ });
+        return () => { cancelled = true; };
+    }, [chainId, messaging]);
+
     useEffect(() => {
         if (stage === 'review') setTimeout(() => passwordRef.current?.focus(), 0);
     }, [stage]);
@@ -116,41 +141,10 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, on
     }, [chainId, fromAddressId, addressesByChain]);
 
     const isHwSource = fromAddress?.source === 'trezor' || fromAddress?.source === 'ledger';
-    const hwSignerInfo = useSignerInfo({
-        walletId,
-        signerId: isHwSource ? fromAddress?.signerId : null,
-    });
     const [hwStatus, setHwStatus] = useState('idle');
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
 
-    // §20 / Cluster W FOLLOWUP 5 — watcher-mode encode-only branch.
     const { isWatcherMode } = useWalletMode();
-
-    // Phase F — permissions-manifest consent disclosure, shown inline in
-    // the review `<dl>`. Deferred via `skip` until the user reaches the
-    // review stage so we don't fetch a manifest the user may never see.
-    const manifest = useContractManifest({
-        chainId,
-        contractActionIndex,
-        skip: stage !== 'review' && stage !== 'submitting',
-    });
-
-    const paramsArray = useMemo(
-        () => paramsText.split('|').map((s) => s.trim()).filter((s) => s !== ''),
-        [paramsText],
-    );
-
-    const actionParams = useMemo(() => {
-        /** @type {Record<string, any>} */
-        const p = {
-            VERSION: '0',
-            CONTRACT_ACTION_INDEX: String(contractActionIndex),
-            METHOD: method.trim(),
-            GAS_LIMIT: String(gasLimit || '50000'),
-        };
-        if (paramsArray.length > 0) p.PARAMS = paramsArray;
-        return p;
-    }, [contractActionIndex, method, gasLimit, paramsArray]);
 
     function handleReview(event) {
         event.preventDefault();
@@ -158,22 +152,26 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, on
             setFormError('No source address available.');
             return;
         }
-        if (!method.trim()) {
-            setFormError('Method name is required.');
+        if (target === 'token' && (!tick || !String(tick).trim())) {
+            setFormError('No token selected to bind. Open this form from a token you issued.');
             return;
         }
-        const gas = String(gasLimit).trim() || '50000';
-        if (Number.isNaN(Number(gas)) || Number(gas) <= 0) {
-            setFormError('Gas limit must be a positive number.');
+        if (!String(controller).trim()) {
+            setFormError('Guard contract is required (the action_index of a deployed contract).');
             return;
         }
-        // Validator forbids pipes/semicolons inside each PARAM, which
-        // our split eliminates; it also forbids them at the field
-        // boundaries — nothing we can do about those except surface
-        // clearly below.
-        for (const p of paramsArray) {
-            if (p.includes(';')) {
-                setFormError(`Parameter "${p}" contains a semicolon — not allowed in PARAMS.`);
+        if (Number.isNaN(Number(controller)) || Number(controller) < 0 || !Number.isInteger(Number(controller))) {
+            setFormError('Guard contract must be a non-negative whole number (an action_index).');
+            return;
+        }
+        if (!actionClass) {
+            setFormError('Pick an action class to gate.');
+            return;
+        }
+        if (!unbind && cooldownBlocks.trim() !== '') {
+            const cb = Number(cooldownBlocks.trim());
+            if (!Number.isInteger(cb) || cb < 0) {
+                setFormError('Cooldown blocks must be a non-negative whole number.');
                 return;
             }
         }
@@ -189,6 +187,17 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, on
         setStage('submitting');
         setSubmitError(null);
         try {
+            // Build params host-side via the SDK's controller helper.
+            const { action, params } = await messaging.buildControllerBindParams({
+                chainId,
+                target,
+                unbind,
+                tick: target === 'token' ? String(tick).trim() : undefined,
+                controller: String(controller).trim(),
+                actionClass,
+                ...(!unbind && cooldownBlocks.trim() !== '' && { cooldownBlocks: cooldownBlocks.trim() }),
+                ...(memo.trim() !== '' && { memo: memo.trim() }),
+            });
             const base = {
                 walletId,
                 chainId,
@@ -200,19 +209,20 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, on
                     source: fromAddress.source,
                     signerId: fromAddress.signerId,
                 },
-                params: actionParams,
+                action,
+                params,
             };
             let res;
             if (isWatcherMode) {
                 res = await messaging.buildActionPsbtRequest({
                     chainId,
                     from: base.from,
-                    actionData: { action: 'EXECUTE', params: actionParams },
+                    actionData: { action, params },
                 });
             } else if (isHwSource) {
-                res = await messaging.executeActionHw({ ...base, signerId: fromAddress.signerId });
+                res = await messaging.advancedActionHw({ ...base, signerId: fromAddress.signerId });
             } else {
-                res = await messaging.executeAction({ ...base, password });
+                res = await messaging.advancedAction({ ...base, password });
             }
             setResult(res);
             setPassword('');
@@ -222,7 +232,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, on
             setSubmitError(
                 isBadPassword
                     ? 'Incorrect password.'
-                    : err?.message || 'Execute failed.',
+                    : err?.message || `${unbind ? 'Unbind' : 'Bind'} failed.`,
             );
             setStage('review');
             if (!isWatcherMode && !isHwSource) {
@@ -238,12 +248,17 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, on
         setStage('form');
     }
 
+    const verb = unbind ? 'Unbind' : 'Bind';
+    const subjectLabel = target === 'token'
+        ? `token ${tick || ''}`.trim()
+        : 'this address';
+
         const header = (
         <ScreenHeader
             onBack={onBack}
             title="{stage === 'review' || stage === 'submitting'
-                    ? 'Review execute'
-                    : `Execute on contract #${contractActionIndex}`}"
+                    ? `Review ${verb.toLowerCase()} controller`
+                    : `${verb} controller`}"
         />
     );
     const wrap = (children) => (
@@ -275,7 +290,9 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, on
         }
         return wrap(
             <>
-                <p className={styles.summary}>Method call broadcast.</p>
+                <p className={styles.summary}>
+                    {verb} broadcast. The indexer will apply the controller change shortly.
+                </p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Txid</dt>
                     <dd className={styles.detailsValue}>{String(txid || '—')}</dd>
@@ -291,42 +308,37 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, on
         return wrap(
             <form onSubmit={handleSubmit} noValidate>
                 <p className={styles.summary}>
-                    Call {actionParams.METHOD}
-                    {paramsArray.length > 0 ? ` with ${paramsArray.length} arg${paramsArray.length === 1 ? '' : 's'}` : ''}
-                    {' '}on contract #{actionParams.CONTRACT_ACTION_INDEX}.
+                    {verb} guard contract #{String(controller).trim()} over the {actionClass} actions of {subjectLabel}.
                 </p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Chain</dt>
                     <dd className={styles.detailsValue}>
                         {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
                     </dd>
-                    <dt className={styles.detailsLabel}>From</dt>
+                    <dt className={styles.detailsLabel}>Signing from</dt>
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />
                     </dd>
-                    <dt className={styles.detailsLabel}>Contract</dt>
-                    <dd className={styles.detailsValue}>#{actionParams.CONTRACT_ACTION_INDEX}</dd>
-                    <dt className={styles.detailsLabel}>Method</dt>
-                    <dd className={styles.detailsValue}>{actionParams.METHOD}</dd>
-                    {paramsArray.length > 0 ? (
+                    <dt className={styles.detailsLabel}>Subject</dt>
+                    <dd className={styles.detailsValue}>{subjectLabel}</dd>
+                    <dt className={styles.detailsLabel}>Guard contract</dt>
+                    <dd className={styles.detailsValue}>#{String(controller).trim()}</dd>
+                    <dt className={styles.detailsLabel}>Action class</dt>
+                    <dd className={styles.detailsValue}>{actionClass}</dd>
+                    <dt className={styles.detailsLabel}>Operation</dt>
+                    <dd className={styles.detailsValue}>{unbind ? 'Unbind' : 'Bind'}</dd>
+                    {!unbind && cooldownBlocks.trim() !== '' ? (
                         <>
-                            <dt className={styles.detailsLabel}>Params</dt>
-                            <dd className={styles.detailsValue}>
-                                <ol style={{ margin: 0, paddingLeft: '1.25rem' }}>
-                                    {paramsArray.map((p, i) => (
-                                        <li key={i} style={{ fontFamily: 'monospace' }}>{p}</li>
-                                    ))}
-                                </ol>
-                            </dd>
+                            <dt className={styles.detailsLabel}>Cooldown</dt>
+                            <dd className={styles.detailsValue}>{cooldownBlocks.trim()} blocks</dd>
                         </>
                     ) : null}
-                    <dt className={styles.detailsLabel}>Gas limit</dt>
-                    <dd className={styles.detailsValue}>{actionParams.GAS_LIMIT}</dd>
-                    <ContractConsentPanel
-                        manifest={manifest}
-                        labelClassName={styles.detailsLabel}
-                        valueClassName={styles.detailsValue}
-                    />
+                    {memo.trim() !== '' ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Memo</dt>
+                            <dd className={styles.detailsValue}>{memo.trim()}</dd>
+                        </>
+                    ) : null}
                 </dl>
                 {isWatcherMode ? (
                     <p className={styles.hint}>
@@ -349,7 +361,6 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, on
                         submitError={submitError}
                         disabled={stage === 'submitting'}
                         getSignerStatus={messaging.getSignerStatus}
-                        signerInfo={hwSignerInfo}
                     />
                 )}
                 {(isWatcherMode || isHwSource) && submitError ? (
@@ -370,7 +381,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, on
                             ? 'Create unsigned transaction'
                             : isHwSource
                                 ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : (descriptor ? `Execute on ${descriptor.displayName}` : 'Execute')}
+                                : (descriptor ? `${verb} on ${descriptor.displayName}` : verb)}
                     </Button>
                 </div>
             </form>,
@@ -381,42 +392,82 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, on
         <form onSubmit={handleReview} noValidate>
             <div className={styles.chainLine}>
                 {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
-                {' '}Contract #{contractActionIndex}
             </div>
             {fromAddress ? (
                 <div className={styles.fromLine}>
-                    <span className={styles.fromLabel}>Caller</span>
+                    <span className={styles.fromLabel}>Signing from</span>
                     <AddressText address={fromAddress.address} />
                 </div>
             ) : null}
+
+            <label className={styles.pickerLabel}>
+                What to protect
+                <select
+                    className={styles.picker}
+                    value={target}
+                    onChange={(e) => setTarget(/** @type {any} */ (e.target.value))}
+                >
+                    {tick ? <option value="token">Token {tick}</option> : null}
+                    <option value="address">This address</option>
+                </select>
+            </label>
+
             <Input
-                label="Method"
-                hint="Name of the contract method to call."
-                value={method}
-                onChange={(e) => setMethod(e.target.value)}
-                autoComplete="off"
-                autoCapitalize="none"
-                autoCorrect="off"
-                spellCheck={false}
-            />
-            <Input
-                label="Params (optional)"
-                hint="Pipe-delimited arguments, e.g. foo|42|bc1q… — leave blank for no-arg methods."
-                value={paramsText}
-                onChange={(e) => setParamsText(e.target.value)}
-                autoComplete="off"
-                autoCapitalize="none"
-                autoCorrect="off"
-                spellCheck={false}
-            />
-            <Input
-                label="Gas limit"
-                hint="Upper bound of VM gas this call may consume. Default 50000."
+                label="Guard contract"
+                hint="Action_index of the deployed contract that will gate the selected actions."
                 inputMode="numeric"
-                value={gasLimit}
-                onChange={(e) => setGasLimit(e.target.value)}
+                value={controller}
+                onChange={(e) => setController(e.target.value)}
                 autoComplete="off"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
             />
+
+            <label className={styles.pickerLabel}>
+                Action class
+                <select
+                    className={styles.picker}
+                    value={actionClass}
+                    onChange={(e) => setActionClass(e.target.value)}
+                >
+                    {actionClasses.map((ac) => (
+                        <option key={ac} value={ac}>{ac}</option>
+                    ))}
+                </select>
+            </label>
+
+            <label className={styles.pickerLabel} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <input
+                    type="checkbox"
+                    checked={unbind}
+                    onChange={(e) => setUnbind(e.target.checked)}
+                />
+                Unbind (remove the controller) instead of binding
+            </label>
+
+            {!unbind ? (
+                <Input
+                    label="Cooldown blocks (optional)"
+                    hint="Blocks a later unbind must wait before it takes effect. Leave blank for none."
+                    inputMode="numeric"
+                    value={cooldownBlocks}
+                    onChange={(e) => setCooldownBlocks(e.target.value)}
+                    autoComplete="off"
+                />
+            ) : null}
+
+            <Input
+                label="Memo (optional)"
+                hint="Free-text note recorded with the bind/unbind event."
+                value={memo}
+                onChange={(e) => setMemo(e.target.value)}
+                autoComplete="off"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+            />
+
             {formError ? (
                 <div role="alert" className={styles.error}>{formError}</div>
             ) : null}
@@ -424,7 +475,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, on
                 <Button
                     type="submit"
                     variant="primary"
-                    disabled={!fromAddress || !method.trim()}
+                    disabled={!fromAddress || !String(controller).trim()}
                 >
                     Preview
                 </Button>

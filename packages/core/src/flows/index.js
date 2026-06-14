@@ -117,9 +117,11 @@ export {
     contractState,
     contractBalance,
     executionsForContract,
+    contractManifestFor,
 } from './contractDetail.js';
 export { deployAction } from './deployAction.js';
 export { executeAction } from './executeAction.js';
+export { controllerBindParams, controllerActionClasses } from './controllerBind.js';
 export { depositAction, withdrawAction } from './contractFundsActions.js';
 export {
     stakesForAddress,

@@ -63,6 +63,7 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {() => void} [props.onPayDividend]
  * @param {() => void} [props.onAirdrop]
  * @param {() => void} [props.onBroadcast]
+ * @param {() => void} [props.onBindController]      bind/unbind a guard contract over this token (Phase F)
  * @param {() => void} [props.onViewActivity]       drill into History pre-filtered to this tick
  * @param {() => void} [props.onViewHolders]        drill into the full holders list (optional)
  * @param {(chainId: string, actionIndex: string | number) => void} [props.onOpenDispenser]   drill into a dispenser's detail page
@@ -86,6 +87,7 @@ export function ManageToken({
     onPayDividend,
     onAirdrop,
     onBroadcast,
+    onBindController,
     onViewActivity,
     onViewHolders,
     onOpenDispenser,
@@ -396,6 +398,7 @@ export function ManageToken({
         { id: 'transfer', label: 'Transfer', Icon: Icon.HandshakeIcon, onSelect: blockIssuerActions ? undefined : onTransferOwnership },
         { id: 'sell-ownership', label: 'Sell name', Icon: Icon.MarketIcon, onSelect: blockIssuerActions ? undefined : onSellOwnership },
         { id: 'broadcast', label: 'Broadcast', Icon: Icon.BroadcastIcon, onSelect: blockIssuerActions ? undefined : onBroadcast },
+        { id: 'bind-controller', label: 'Controller', Icon: Icon.LockIcon, onSelect: blockIssuerActions ? undefined : onBindController },
         { id: 'lock', label: 'Lock', Icon: Icon.LockIcon, onSelect: (locked || blockIssuerActions) ? undefined : onLock },
         { id: 'destroy', label: 'Destroy', Icon: Icon.TrashIcon, onSelect: onDestroy, danger: true },
     ];

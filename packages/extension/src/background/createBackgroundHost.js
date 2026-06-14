@@ -83,6 +83,9 @@ const {
     contractState,
     contractBalance,
     executionsForContract,
+    contractManifestFor,
+    controllerBindParams,
+    controllerActionClasses,
     deployAction,
     executeAction,
     depositAction,
@@ -1901,6 +1904,25 @@ export function createBackgroundHost(deps) {
 
     host.register('contracts.byActionIndex', async (req, { sdkRegistry }) => {
         return contractByActionIndex({ ...req, sdkRegistry });
+    });
+
+    // Phase F — permissions-manifest read for the inline consent
+    // disclosure. Never throws (the flow degrades to a null manifest);
+    // the SDK reader (Part 2) may not exist in the installed SDK yet.
+    host.register('contracts.manifest', async (req, { sdkRegistry }) => {
+        return contractManifestFor({ ...req, sdkRegistry });
+    });
+
+    // Phase F — controller-bind authoring helpers. `controller.actionClasses`
+    // populates the form dropdown (degrades to the locked-fact list when the
+    // SDK's controller helper is absent); `controller.buildParams` runs the
+    // right sdk.controller.* builder host-side (core can't import the SDK)
+    // and returns the `{ action, params }` the form submits via advancedAction.
+    host.register('controller.actionClasses', async (req, { sdkRegistry }) => {
+        return { actionClasses: controllerActionClasses(sdkRegistry, req?.chainId) };
+    });
+    host.register('controller.buildParams', async (req, { sdkRegistry }) => {
+        return controllerBindParams({ ...req, sdkRegistry });
     });
 
     host.register('actions.byIndex', async (req, { sdkRegistry }) => {

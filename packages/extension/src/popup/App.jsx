@@ -79,6 +79,7 @@ import { ContractDetail } from '@xchain-wallet/core/shared/routes/ContractDetail
 import { DeployContractForm } from '@xchain-wallet/core/shared/routes/DeployContractForm.jsx';
 import { ExecuteContractForm } from '@xchain-wallet/core/shared/routes/ExecuteContractForm.jsx';
 import { ContractFundsForm } from '@xchain-wallet/core/shared/routes/ContractFundsForm.jsx';
+import { ControllerBindForm } from '@xchain-wallet/core/shared/routes/ControllerBindForm.jsx';
 import { ContractStakeForm } from '@xchain-wallet/core/shared/routes/ContractStakeForm.jsx';
 import { ContractStakedPositions } from '@xchain-wallet/core/shared/routes/ContractStakedPositions.jsx';
 import { StakingDashboard } from '@xchain-wallet/core/shared/routes/StakingDashboard.jsx';
@@ -127,7 +128,7 @@ function AppInner() {
         /** @type {'welcome' | 'create' | 'import' | 'import-freewallet'} */ ('welcome'),
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'staking-dashboard' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'attach-content' | 'project-roster' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'addresses' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'scan'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'attach-content' | 'project-roster' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'addresses' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'scan'} */ ('home'),
     );
     const [tokenDetailRef, setTokenDetailRef] = useState(
         /** @type {{ chainId: string, tick: string, kind: string, displayName: string, divisibility: number, fiatRate: number | null, quantity: string } | null} */ (null),
@@ -559,6 +560,16 @@ function AppInner() {
                         initialChainId={prefillChainId}
                         initialTick={prefillTick}
                         initialFromAddress={prefillFromAddress}
+                        onBack={formBack}
+                    />
+                );
+            }
+            if (unlockedView === 'controller-bind' && activeWalletId && tokenDetailRef) {
+                return (
+                    <ControllerBindForm
+                        walletId={activeWalletId}
+                        chainId={tokenDetailRef.chainId}
+                        tick={tokenDetailRef.tick}
                         onBack={formBack}
                     />
                 );
@@ -1203,6 +1214,7 @@ function AppInner() {
                         onPayDividend={() => openForm('dividend')}
                         onAirdrop={() => openForm('airdrop')}
                         onBroadcast={() => openForm('broadcast')}
+                        onBindController={() => openForm('controller-bind')}
                         onOpenDispenser={(chainId, actionIndex) => {
                             setDispenserRef({ chainId, actionIndex, origin: 'manage-token' });
                             setUnlockedView('dispenser-detail');

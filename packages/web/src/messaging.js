@@ -496,6 +496,38 @@ export function getContractByActionIndex(req) {
     return /** @type {any} */ (sendMessage('contracts.byActionIndex', req));
 }
 
+/**
+ * Phase F — a contract's permissions manifest for the inline consent
+ * disclosure. Resolves `{ permissions, maxTakeBps }`; never rejects on
+ * a missing/undeclared manifest (host flow degrades to nulls).
+ *
+ * @param {{ chainId: string, contractActionIndex: string }} req
+ */
+export function getContractManifest(req) {
+    return /** @type {any} */ (sendMessage('contracts.manifest', req));
+}
+
+/**
+ * Phase F — canonical controller action-class list for the bind form's
+ * dropdown. Resolves `{ actionClasses: string[] }`.
+ *
+ * @param {{ chainId: string }} req
+ */
+export function getControllerActionClasses(req) {
+    return /** @type {any} */ (sendMessage('controller.actionClasses', req));
+}
+
+/**
+ * Phase F — build the `{ action, params }` for a controller bind/unbind
+ * via the SDK's controller helper (host-side). Rejects with a clear
+ * message when the installed SDK lacks the controller helper.
+ *
+ * @param {object} req
+ */
+export function buildControllerBindParams(req) {
+    return /** @type {any} */ (sendMessage('controller.buildParams', req));
+}
+
 /** @param {object} req */
 export function getActionByIndex(req) {
     return /** @type {any} */ (sendMessage('actions.byIndex', req));
