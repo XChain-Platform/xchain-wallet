@@ -42,7 +42,7 @@
             "matches": ["http://*/*", "https://*/*"]
         }
     ],
-    "permissions": ["storage", "sidePanel"],
+    "permissions": ["storage", "sidePanel", "notifications", "alarms"],
     "host_permissions": [],
     "protocol_handlers": [
         {

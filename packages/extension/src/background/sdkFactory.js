@@ -79,5 +79,14 @@ export function createDevMockSdk(constructorOpts) {
             verifyMessage() { return false; },
             generateChallenge() { return ''; },
         },
+        // §46 — no-op WebSocket surface so the notification watcher can
+        // "connect" against the dev mock without the real explorer WS. It
+        // never emits, so no notifications fire in dev-mock mode.
+        connectWs() { return Promise.resolve(); },
+        disconnectWs() {},
+        onAddress() { return () => {}; },
+        onOrderMatch() { return () => {}; },
+        onDispenser() { return () => {}; },
+        onCoinpayRequired() { return () => {}; },
     };
 }

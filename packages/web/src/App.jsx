@@ -44,7 +44,8 @@ import { Locked } from '@xchain-wallet/core/shared/routes/Locked.jsx';
 import { Home } from '@xchain-wallet/core/shared/routes/Home.jsx';
 import { Settings } from '@xchain-wallet/core/shared/routes/Settings.jsx';
 import { TokenDetail } from '@xchain-wallet/core/shared/routes/TokenDetail.jsx';
-import { ToastHost } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
+import { ToastHost, useToast } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
+import { NOTIFICATION_EVENT } from './notifications/webNotifyAdapter.js';
 import { ReachabilityBanner } from '@xchain-wallet/core/shared/components/ReachabilityBanner.jsx';
 import { isDemoWallet } from '@xchain-wallet/core/flows';
 import { QueuedBroadcastBanner } from '@xchain-wallet/core/shared/components/QueuedBroadcastBanner.jsx';
@@ -165,6 +166,7 @@ export function App() {
 function AppInner() {
     const { variant } = useActiveVariant();
     const isFull = variant === 'full';
+    const { showToast } = useToast();
     const [status, setStatus] = useState(/** @type {any} */ ({ state: 'loading' }));
     const [onboardingStep, setOnboardingStep] = useState(
         /** @type {'welcome' | 'create' | 'import' | 'import-freewallet'} */ ('welcome'),
@@ -396,6 +398,24 @@ function AppInner() {
             .catch(() => { /* Home surfaces load errors */ });
         return () => { cancelled = true; };
     }, [status.state]);
+
+    // §46 — surface live notifications as an in-app toast while the wallet is
+    // open and focused. The hostBridge NotificationService fires a window
+    // CustomEvent for every notification; when the tab is backgrounded the
+    // adapter shows an OS notification instead, so we skip the toast then.
+    useEffect(() => {
+        if (status.state !== 'unlocked') return undefined;
+        const onNotify = (event) => {
+            if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+            const detail = (event && event.detail) || {};
+            const message = detail.title && detail.body
+                ? `${detail.title} — ${detail.body}`
+                : (detail.title || detail.body || 'Notification');
+            showToast({ message, variant: 'default' });
+        };
+        window.addEventListener(NOTIFICATION_EVENT, onNotify);
+        return () => window.removeEventListener(NOTIFICATION_EVENT, onNotify);
+    }, [status.state, showToast]);
 
     // Mirror of popup App: load accounts for the active wallet and
     // auto-select the first (lowest-index) one. Reset on wallet switch.

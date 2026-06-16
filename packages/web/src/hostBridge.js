@@ -35,7 +35,9 @@ import {
     sdk as sdkLib,
     signers as signersLib,
     storage as storageLib,
+    notifications as notificationsLib,
 } from '@xchain-wallet/core';
+import { createWebNotifyAdapter } from './notifications/webNotifyAdapter.js';
 // Cross-package relative path rather than `@xchain-wallet/extension` so
 // this module resolves under Node without the pnpm workspace symlink
 // (needed for smoke tests) while still bundling cleanly through Vite
@@ -203,6 +205,15 @@ const createDevMockSdk = (constructorOpts) => {
             verifyMessage() { return false; },
             generateChallenge() { return ''; },
         },
+        // §46 — no-op WebSocket surface so the notification watcher can
+        // "connect" against the dev mock without a real explorer WS. It
+        // never emits, so no notifications fire in dev-mock mode.
+        connectWs() { return Promise.resolve(); },
+        disconnectWs() {},
+        onAddress() { return () => {}; },
+        onOrderMatch() { return () => {}; },
+        onDispenser() { return () => {}; },
+        onCoinpayRequired() { return () => {}; },
     };
     // Compose: explicit fields (wallet/auth) win; everything else falls
     // through to the read stub so any sdk.getXxx() call resolves to [].
@@ -247,6 +258,43 @@ export const DEFAULT_ACTIVE_CHAIN_IDS = [
 let host = null;
 let vault = null;
 let signerPool = null;
+let notificationService = null;
+
+// §46 — start the live notification watcher once a vault + host exist. All
+// three host-creation paths (create / import / unlock) call this; lock stops
+// it. Idempotent: a second call while already running is a no-op. `getFlows`
+// is hoisted (a function declaration below), so referencing it here is safe.
+function startNotifications() {
+    if (notificationService || !vault) return;
+    notificationService = new notificationsLib.NotificationService({
+        getActiveAddresses: async () => {
+            const flowsNs = await getFlows();
+            const settings = await flowsNs.getSettings(vault);
+            return notificationsLib.getActiveAddresses(vault, chainRegistry, {
+                activeNetwork: settings.activeNetwork,
+            });
+        },
+        getSdkForChain: (chainId) => sdkRegistry.get(chainId),
+        getSettings: async () => {
+            const flowsNs = await getFlows();
+            return flowsNs.getSettings(vault);
+        },
+        notify: createWebNotifyAdapter(),
+        getPendingTxids: () => notificationsLib.getBroadcastTxids(vault),
+        onTxConfirmed: (txid) => notificationsLib.markPendingTxIndexed(vault, txid),
+        logger: console,
+    });
+    notificationService.start().catch((err) => {
+        console.error('[xchain] notification watcher start failed:', err);
+    });
+}
+
+function stopNotifications() {
+    if (notificationService) {
+        try { notificationService.stop(); } catch (_err) { /* best-effort */ }
+        notificationService = null;
+    }
+}
 
 /**
  * Classify the current wallet-session state — matches the extension's
@@ -341,6 +389,7 @@ export async function createWalletLocal(req) {
             signerPool,
             getDiagnosticContext: webDiagnosticContext,
         });
+        startNotifications();
         await meta.save({ kdfParams });
         return { mnemonic: result.mnemonic, walletName: result.wallet.name };
     } finally {
@@ -411,6 +460,7 @@ export async function importMnemonicLocal(req) {
             signerPool,
             getDiagnosticContext: webDiagnosticContext,
         });
+        startNotifications();
         await meta.save({ kdfParams });
         return { format: result.format, walletName: result.wallet.name };
     } finally {
@@ -477,6 +527,7 @@ export async function unlockWalletLocal(req) {
             signerPool,
             getDiagnosticContext: webDiagnosticContext,
         });
+        startNotifications();
         return { unlocked: true };
     } finally {
         masterKey.fill(0);
@@ -490,6 +541,7 @@ export async function unlockWalletLocal(req) {
  * @returns {Promise<{ locked: true }>}
  */
 export async function lockWalletLocal() {
+    stopNotifications();
     if (signerPool) {
         try { signerPool.lockAll(); } catch (_err) { /* best-effort */ }
     }
@@ -523,6 +575,7 @@ export async function sendMessage(type, request) {
 
 /** Test hook — expose module state without touching real IDB/localStorage. */
 export function __resetForTests() {
+    stopNotifications();
     vault = null;
     host = null;
 }

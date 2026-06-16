@@ -31,6 +31,14 @@ assert.match(
     'writes through nested notifications patch',
 );
 
+// §46 — the permission affordance reads the live browser permission and
+// offers a request button (web + desktop renderer; hidden where the
+// Notification API is absent).
+assert.match(src, /Notification\.permission/, 'reads live Notification.permission');
+assert.match(src, /Notification\.requestPermission\(\)/, 'requests notification permission');
+assert.match(src, /Request permission/, 'renders a Request permission control');
+assert.match(src, /<PermissionRow \/>/, 'mounts the permission row above the toggles');
+
 // Every notification flag the schema defines is wired in the section.
 const schemaFlagsBlock = schemaSrc.match(/notifications:\s*\{[\s\S]*?\}\s*,/);
 assert.ok(schemaFlagsBlock, 'extract notifications object from schema source');

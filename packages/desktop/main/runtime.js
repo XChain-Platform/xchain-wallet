@@ -50,7 +50,11 @@
 // `@xchain-wallet/*` specifiers work at build time, but the core smoke
 // harness runs files via Node directly (no workspace setup) and
 // resolves these paths instead. Same convention as messageHost.js.
-import { storage as storageLib } from '../../core/src/index.js';
+import {
+    storage as storageLib,
+    flows as flowsLib,
+    notifications as notificationsLib,
+} from '../../core/src/index.js';
 import {
     dispatchPreHost,
     PRE_HOST_MESSAGE_TYPES,
@@ -68,10 +72,15 @@ import { createDesktopMessageHost } from './messageHost.js';
  * @property {() => Promise<{env?: object, build?: object}>} [getDiagnosticContext]
  *        §50 / Cluster L FOLLOWUP 4 — supplied by main/index.js so the
  *        diagnostic dump records electron version + OS + walletVersion.
+ * @property {(n: { kind: string, title: string, body: string }) => void} [notify]
+ *        §46 — OS-notification adapter, injected by main/index.js (which
+ *        owns the `electron` import). When absent (unit tests / headless),
+ *        the notification watcher is not started.
  *
  * @typedef {DesktopRuntimeDeps & {
  *   vault: import('@xchain-wallet/core').storage.Vault | null,
  *   host: ReturnType<typeof createDesktopMessageHost> | null,
+ *   notificationService: import('@xchain-wallet/core').notifications.NotificationService | null,
  * }} DesktopRuntime
  */
 
@@ -92,8 +101,10 @@ export function createRuntime(deps) {
         chainRegistry: deps.chainRegistry,
         sdkRegistry: deps.sdkRegistry,
         getDiagnosticContext: deps.getDiagnosticContext,
+        notify: deps.notify || null,
         vault: null,
         host: null,
+        notificationService: null,
     };
 }
 
@@ -123,6 +134,29 @@ export async function ensureHost(runtime) {
             sdkRegistry: runtime.sdkRegistry,
             getDiagnosticContext: runtime.getDiagnosticContext,
         });
+
+        // §46 — start the live notification watcher. main/index.js injects the
+        // electron.Notification adapter; without it (unit tests) we skip.
+        if (runtime.notify && !runtime.notificationService) {
+            runtime.notificationService = new notificationsLib.NotificationService({
+                getActiveAddresses: async () => {
+                    const settings = await flowsLib.getSettings(vault);
+                    return notificationsLib.getActiveAddresses(vault, runtime.chainRegistry, {
+                        activeNetwork: settings.activeNetwork,
+                    });
+                },
+                getSdkForChain: (chainId) => runtime.sdkRegistry.get(chainId),
+                getSettings: () => flowsLib.getSettings(vault),
+                notify: runtime.notify,
+                getPendingTxids: () => notificationsLib.getBroadcastTxids(vault),
+                onTxConfirmed: (txid) => notificationsLib.markPendingTxIndexed(vault, txid),
+                logger: console,
+            });
+            runtime.notificationService.start().catch((err) => {
+                console.error('[xchain] notification watcher start failed:', err);
+            });
+        }
+
         return runtime.host;
     } catch (err) {
         // Cached key doesn't decrypt the vault — most likely the user
@@ -147,6 +181,10 @@ export async function ensureHost(runtime) {
  * @param {DesktopRuntime} runtime
  */
 export function tearDownHost(runtime) {
+    if (runtime.notificationService) {
+        try { runtime.notificationService.stop(); } catch (_err) { /* best-effort */ }
+        runtime.notificationService = null;
+    }
     if (runtime.vault) {
         try { runtime.vault.close(); } catch (_err) { /* already closed */ }
         runtime.vault = null;

@@ -41,6 +41,12 @@
  * @property {(address: string, opts?: { message?: string }) => string} auth.generateChallenge
  * @property {() => Promise<void>} [init]
  * @property {() => void} [close]
+ * @property {() => Promise<any>} [connectWs]                                                       §46 — open the explorer WebSocket
+ * @property {() => void} [disconnectWs]
+ * @property {(address: string, callback: (msg: any) => void, opts?: object) => (() => void)} [onAddress]   subscribe to an address; returns unsubscribe
+ * @property {(address: string, callback: (msg: any) => void, opts?: object) => (() => void)} [onOrderMatch]
+ * @property {(actionIndex: number|string, callback: (msg: any) => void) => (() => void)} [onDispenser]
+ * @property {(address: string, callback: (msg: any) => void) => (() => void)} [onCoinpayRequired]
  */
 
 /**

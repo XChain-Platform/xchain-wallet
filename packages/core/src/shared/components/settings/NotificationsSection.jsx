@@ -10,14 +10,77 @@
 
 // NotificationsSection — §35.1 Notifications panel + §46.
 //
-// Five toggles backed by `settings.notifications.*` (all on the v1
-// schema). Toggling these flags is independent of how notifications
-// are *delivered* — the delivery layer (browser Notification API,
-// extension service-worker, OS toast on desktop) lives in §46 and is
-// wired separately. Here we own only the user preference.
+// Five toggles backed by `settings.notifications.*`. Toggling these flags
+// is the user *preference*; delivery is the §46 NotificationService
+// (`packages/core/src/notifications/`), hosted per-shell (extension SW,
+// web in-page host, Electron main) and gated by exactly these flags.
+//
+// The permission row owns the one piece of delivery the user must grant:
+// the browser/OS notification permission (web + desktop renderer). It reads
+// `Notification.permission` live and is hidden where that API is absent
+// (e.g. the extension popup, whose delivery uses `chrome.notifications`,
+// granted via the manifest, no runtime prompt).
 
+import { useState } from 'react';
 import { useSettings } from '../../hooks/useSettings.js';
-import { STACK, Status, ToggleRow } from './_settingsPrimitives.jsx';
+import { ROW, ROW_HINT, STACK, Status, ToggleRow } from './_settingsPrimitives.jsx';
+
+const PERMISSION_BUTTON = {
+    background: 'var(--xc-accent, #3a7afe)',
+    color: '#fff',
+    border: 'none',
+    borderRadius: 'var(--xc-radius-sm)',
+    padding: 'var(--xc-space-1) var(--xc-space-3)',
+    fontSize: 'var(--xc-text-sm)',
+    fontFamily: 'inherit',
+    cursor: 'pointer',
+    whiteSpace: 'nowrap',
+};
+
+/**
+ * Browser/OS notification-permission affordance. Renders nothing when the
+ * Notification API is unavailable (extension popup) so the toggles still show.
+ */
+function PermissionRow() {
+    const supported = typeof Notification !== 'undefined';
+    const [permission, setPermission] = useState(supported ? Notification.permission : 'unsupported');
+
+    if (!supported) return null;
+
+    const request = async () => {
+        try {
+            const result = await Notification.requestPermission();
+            setPermission(result);
+        } catch {
+            // Some browsers throw if requestPermission() is called outside a
+            // user gesture; the click handler is a gesture, but stay defensive.
+        }
+    };
+
+    let hint = 'Not enabled';
+    let action = null;
+    if (permission === 'granted') {
+        hint = 'Enabled';
+    } else if (permission === 'denied') {
+        hint = 'Blocked — turn notifications back on for this app in your browser or system settings.';
+    } else {
+        action = (
+            <button type="button" onClick={request} style={PERMISSION_BUTTON}>
+                Request permission
+            </button>
+        );
+    }
+
+    return (
+        <div style={ROW}>
+            <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+                <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>Desktop notifications</span>
+                <span style={ROW_HINT}>{hint}</span>
+            </div>
+            {action}
+        </div>
+    );
+}
 
 const NOTIFICATION_FLAGS = /** @type {const} */ ([
     {
@@ -65,6 +128,7 @@ export function NotificationsSection() {
 
     return (
         <div style={STACK}>
+            <PermissionRow />
             {NOTIFICATION_FLAGS.map((f) => (
                 <ToggleRow
                     key={f.key}

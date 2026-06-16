@@ -28,6 +28,7 @@ export * as branding from './branding/index.js';
 export * as decoder from './decoder/index.js';
 export * as i18n from './i18n/index.js';
 export * as airdrop from './airdrop/index.js';
+export * as notifications from './notifications/index.js';
 
 // NOTE: the `shared` surface (React routes, provider, hooks) is
 // deliberately NOT re-exported here. Its entry pulls `.jsx` files

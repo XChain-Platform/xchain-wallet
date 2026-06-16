@@ -23,7 +23,14 @@
 // (wallet-session state machine, approval popup wiring, event fan-out
 // to content scripts) without reworking the entry.
 
-import { registry as registryLib, sdk as sdkLib, signers as signersLib, storage as storageLib } from '@xchain-wallet/core';
+import {
+    registry as registryLib,
+    sdk as sdkLib,
+    signers as signersLib,
+    storage as storageLib,
+    flows as flowsLib,
+    notifications as notificationsLib,
+} from '@xchain-wallet/core';
 import { WALLET_VERSION } from '@xchain-wallet/core/buildInfo.js';
 import {
     ChromeSessionBackend,
@@ -92,6 +99,27 @@ const approvalBroker = new ApprovalBroker();
 let host = null;
 let vault = null;
 let detachHost = null;
+// §46 — live notification watcher. Module-scoped so it survives across the
+// keepalive's repeated ensureHost() calls; recreated from scratch when the MV3
+// worker is evicted and cold-restarts.
+let notificationService = null;
+
+// §46 delivery adapter for the extension: chrome.notifications works with the
+// popup closed (it's the service worker firing, not a page). type 'basic'
+// requires an iconUrl — reuse the packaged action icon.
+function chromeNotify({ kind, title, body }) {
+    try {
+        if (typeof chrome === 'undefined' || !chrome.notifications || !chrome.notifications.create) return;
+        chrome.notifications.create(`xchain-${kind}-${Date.now()}`, {
+            type: 'basic',
+            iconUrl: chrome.runtime.getURL('icons/icon-128.png'),
+            title,
+            message: body,
+        });
+    } catch (err) {
+        console.error('[xchain] chrome.notifications failed:', err);
+    }
+}
 // SignerPool persists across the unlocked session. Populated by the
 // pre-host `wallet.unlock` handler while the password is in scope, so
 // account.create / receive.getAddress (etc.) can derive without a
@@ -170,6 +198,31 @@ async function ensureHost() {
         }),
     });
     detachHost = attachChromeRuntime(host);
+
+    // §46 — start the live notification watcher once a vault is open. Guarded
+    // so the keepalive's repeat ensureHost() calls don't double-start; a cold
+    // worker restart rebuilds it (module state was lost) and the SDK WS client
+    // reconnects + replays its subscriptions.
+    if (!notificationService) {
+        notificationService = new notificationsLib.NotificationService({
+            getActiveAddresses: async () => {
+                const settings = await flowsLib.getSettings(vault);
+                return notificationsLib.getActiveAddresses(vault, chainRegistry, {
+                    activeNetwork: settings.activeNetwork,
+                });
+            },
+            getSdkForChain: (chainId) => sdkRegistry.get(chainId),
+            getSettings: () => flowsLib.getSettings(vault),
+            notify: chromeNotify,
+            getPendingTxids: () => notificationsLib.getBroadcastTxids(vault),
+            onTxConfirmed: (txid) => notificationsLib.markPendingTxIndexed(vault, txid),
+            logger: console,
+        });
+        notificationService.start().catch((err) => {
+            console.error('[xchain] notification watcher start failed:', err);
+        });
+    }
+
     return host;
 }
 
@@ -179,6 +232,10 @@ async function ensureHost() {
  * callback; also safe to call from any cleanup path (e.g. panic mode).
  */
 function tearDownHost() {
+    if (notificationService) {
+        try { notificationService.stop(); } catch (_err) { /* best-effort */ }
+        notificationService = null;
+    }
     if (detachHost) {
         try { detachHost(); } catch (_err) { /* best-effort */ }
         detachHost = null;
@@ -224,6 +281,21 @@ attachSessionMetaListener({
 // `signerBridge` so `action.send.hw` / `signer.status` handlers can
 // route sign requests to the renderer-hosted signer.
 attachSignerBridgeListener();
+
+// §46 — MV3 keepalive. Chrome evicts an idle service worker after ~30s, which
+// would silently tear down the notification WebSocket. A periodic alarm wakes
+// the worker; the wake re-runs this module (rebuilding the host + watcher) and,
+// on an already-warm worker, ensureHost() re-subscribes any addresses the WS
+// dropped. ~24s period stays under the eviction window.
+if (typeof chrome !== 'undefined' && chrome.alarms) {
+    chrome.alarms.create('xchain-ws-keepalive', { periodInMinutes: 0.4 });
+    chrome.alarms.onAlarm.addListener((alarm) => {
+        if (alarm.name !== 'xchain-ws-keepalive') return;
+        ensureHost()
+            .then(() => notificationService && notificationService.refresh())
+            .catch((err) => console.error('[xchain] keepalive ensureHost failed:', err));
+    });
+}
 
 // Kick ensureHost on startup — no-ops when there's no session.
 ensureHost().catch((err) => {

@@ -38,7 +38,7 @@
 //     cache is silently disabled — the user re-enters their password
 //     every launch rather than having the key written insecurely.
 
-import { app, BrowserWindow, Menu, ipcMain, safeStorage, session } from 'electron';
+import { app, BrowserWindow, Menu, ipcMain, safeStorage, session, Notification } from 'electron';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -124,6 +124,17 @@ function buildRuntime() {
             chainRegistry,
             sdkFactory: createDevMockSdk,
         }),
+        // §46 — OS-notification adapter (main process owns the `electron`
+        // import; the runtime stays Electron-free for unit testing).
+        notify: ({ title, body }) => {
+            try {
+                if (Notification.isSupported && Notification.isSupported()) {
+                    new Notification({ title, body }).show();
+                }
+            } catch (err) {
+                console.error('[xchain] desktop notification failed:', err);
+            }
+        },
         // §50 / Cluster L FOLLOWUP 4 — desktop diagnostic env + build.
         // Electron version + OS + Chromium UA help support narrow down
         // whether a bug is shell-specific.
