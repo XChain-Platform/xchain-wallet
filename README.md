@@ -157,10 +157,10 @@ Per-package scripts (run with `pnpm --filter <pkg> <script>`):
 
 | Package | Command | Description |
 |---|---|---|
-| `@xchain-wallet/core` | `test` | Vitest smoke suite (92 smokes) |
-| `@xchain-wallet/core` | `test:watch` | Vitest in watch mode |
-| `@xchain-wallet/core` | `test:coverage` | Vitest with v8 coverage |
-| `@xchain-wallet/core` | `test:smoke` | Direct node runner for headless smokes |
+| root | `pnpm test:unit` | Vitest unit suite (92 smokes) |
+| root | `pnpm test:unit:watch` | Vitest in watch mode |
+| root | `pnpm test:unit:coverage` | Vitest with v8 coverage |
+| root | `pnpm test:smoke` | Direct node runner for headless smokes |
 | `@xchain-wallet/web` | `dev` | Vite dev server at `http://localhost:5173` |
 | `@xchain-wallet/web` | `build` | Production SPA bundle to `dist/` |
 | `@xchain-wallet/web` | `preview` | Serve the production bundle locally |
@@ -210,7 +210,7 @@ Licensed under the **GNU Affero General Public License v3.0** (AGPL-3.0-or-later
 | [LICENSE](./LICENSE.md) | Full license text |
 | [NOTICE](./NOTICE.md) | Required attribution, license summary, and third-party notices |
 
-Any redistribution or modification must include the attribution notice specified in [NOTICE.md](./NOTICE.md). Commercial use requires prior written consent from Dankest, LLC — see [LICENSE.md](./LICENSE.md) for details.
+Any redistribution or modification must include the attribution notice specified in [NOTICE.md](./NOTICE.md). Commercial use requires prior written consent from Dankest, LLC. See [LICENSE.md](./LICENSE.md) for details.
 
 ---
 
@@ -229,9 +229,9 @@ See the [licensing overview](https://docs.xchain.io/legal/licensing).
 
 XChain Platform is **open source**, dual-licensed under:
 
-- the **[GNU Affero General Public License v3.0](./LICENSE.md)** (`AGPL-3.0-or-later`) — free for everyone, and
+- the **[GNU Affero General Public License v3.0](./LICENSE.md)** (`AGPL-3.0-or-later`), free for everyone, and
 - a **[commercial license](https://docs.xchain.io/legal/commercial-license)** for companies that need to keep modifications private.
 
-See the **[licensing overview](https://docs.xchain.io/legal/licensing)** for which one applies to you. "XChain" is a trademark of Dankest, LLC — see the **[Trademark Policy](https://docs.xchain.io/legal/trademark)**.
+See the **[licensing overview](https://docs.xchain.io/legal/licensing)** for which one applies to you. "XChain" is a trademark of Dankest, LLC. See the **[Trademark Policy](https://docs.xchain.io/legal/trademark)**.
 
-Copyright © 2025–2026 Dankest, LLC.
+Copyright © 2025-2026 Dankest, LLC.
