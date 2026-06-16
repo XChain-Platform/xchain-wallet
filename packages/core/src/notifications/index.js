@@ -14,5 +14,6 @@
 // long-lived process (extension SW / web in-page host / Electron main).
 
 export { NotificationService } from './NotificationService.js';
+export { PriceAlertWatcher } from './PriceAlertWatcher.js';
 export { getActiveAddresses } from './getActiveAddresses.js';
 export { getBroadcastTxids, markPendingTxIndexed } from './pendingTxBridge.js';

@@ -20,6 +20,8 @@ import { RANGES as CHART_RANGES, resampleTo as resampleSeriesTo } from '../compo
 import portfolioChartStyles from '../components/PortfolioChart.module.css';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { useNativePrice } from '../hooks/useNativePrice.js';
+import { usePriceAlerts } from '../hooks/usePriceAlerts.js';
+import { PriceAlertForm } from '../components/PriceAlertForm.jsx';
 import { useSettings } from '../hooks/useSettings.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { usePortfolioChartVisible } from '../hooks/usePortfolioChartVisible.js';
@@ -419,6 +421,15 @@ export function TokenDetail({
                     </div>
                 ) : null}
 
+                {isNative && !nativePrice.disabled && nativePrice.entry?.priceFiat != null ? (
+                    <NativePriceAlertEntry
+                        walletId={walletId}
+                        chainId={chainId}
+                        currentPrice={nativePrice.entry.priceFiat}
+                        fiatCurrency={fiatCurrency}
+                    />
+                ) : null}
+
                 {/* Quick actions — Send / Receive / Swap / Buy, matching
                     Home's 4-up grid. */}
                 <div className={styles.quickActions} role="group" aria-label="Quick actions">
@@ -552,6 +563,64 @@ export function TokenDetail({
 
             </div>
         </Screen>
+    );
+}
+
+/**
+ * §46 — context-first "Set price alert" entry on the native-coin detail
+ * page. Collapsed to a single button; expands to the shared PriceAlertForm
+ * pinned to this coin and prefilled with the live price. Renders nothing
+ * when the shell doesn't expose the price-alert routes.
+ *
+ * @param {object} props
+ * @param {string} props.walletId
+ * @param {string} props.chainId
+ * @param {number} props.currentPrice
+ * @param {string} props.fiatCurrency
+ */
+function NativePriceAlertEntry({ walletId, chainId, currentPrice, fiatCurrency }) {
+    const { supported, addAlert } = usePriceAlerts(walletId);
+    const [open, setOpen] = useState(false);
+    const [done, setDone] = useState(false);
+
+    if (!supported || !walletId) return null;
+
+    const onCreate = async (input) => {
+        await addAlert(input);
+        setDone(true);
+        setOpen(false);
+    };
+
+    return (
+        <div className={styles.infoCard} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-2)' }}>
+            {open ? (
+                <PriceAlertForm
+                    onCreate={onCreate}
+                    fiatCurrency={fiatCurrency}
+                    lockedChainId={chainId}
+                    currentPrice={currentPrice}
+                    onCancel={() => setOpen(false)}
+                />
+            ) : (
+                <button
+                    type="button"
+                    onClick={() => { setOpen(true); setDone(false); }}
+                    style={{
+                        background: 'transparent',
+                        border: '1px solid var(--xc-border)',
+                        borderRadius: 'var(--xc-radius-sm)',
+                        color: 'var(--xc-text)',
+                        cursor: 'pointer',
+                        fontFamily: 'inherit',
+                        fontSize: 'var(--xc-text-sm)',
+                        padding: 'var(--xc-space-1) var(--xc-space-3)',
+                        alignSelf: 'flex-start',
+                    }}
+                >
+                    {done ? 'Price alert set ✓ · Add another' : 'Set price alert'}
+                </button>
+            )}
+        </div>
     );
 }
 

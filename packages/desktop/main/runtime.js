@@ -81,6 +81,7 @@ import { createDesktopMessageHost } from './messageHost.js';
  *   vault: import('@xchain-wallet/core').storage.Vault | null,
  *   host: ReturnType<typeof createDesktopMessageHost> | null,
  *   notificationService: import('@xchain-wallet/core').notifications.NotificationService | null,
+ *   priceAlertWatcher: import('@xchain-wallet/core').notifications.PriceAlertWatcher | null,
  * }} DesktopRuntime
  */
 
@@ -105,6 +106,7 @@ export function createRuntime(deps) {
         vault: null,
         host: null,
         notificationService: null,
+        priceAlertWatcher: null,
     };
 }
 
@@ -157,6 +159,20 @@ export async function ensureHost(runtime) {
             });
         }
 
+        // §46 price-alert poll watcher — same lifecycle + adapter as above.
+        if (runtime.notify && !runtime.priceAlertWatcher && typeof globalThis.fetch === 'function') {
+            const priceOracle = flowsLib.createPriceOracle({ fetch: globalThis.fetch.bind(globalThis) });
+            runtime.priceAlertWatcher = new notificationsLib.PriceAlertWatcher({
+                getNativePrices: ({ chainIds, fiatCurrency }) => priceOracle.getNativePrices({ chainIds, fiatCurrency }),
+                listArmedAlerts: () => vault.priceAlerts.list(),
+                getSettings: () => flowsLib.getSettings(vault),
+                notify: runtime.notify,
+                markTriggered: (id) => flowsLib.markAlertTriggered({ vault, id }),
+                logger: console,
+            });
+            runtime.priceAlertWatcher.start();
+        }
+
         return runtime.host;
     } catch (err) {
         // Cached key doesn't decrypt the vault — most likely the user
@@ -184,6 +200,10 @@ export function tearDownHost(runtime) {
     if (runtime.notificationService) {
         try { runtime.notificationService.stop(); } catch (_err) { /* best-effort */ }
         runtime.notificationService = null;
+    }
+    if (runtime.priceAlertWatcher) {
+        try { runtime.priceAlertWatcher.stop(); } catch (_err) { /* best-effort */ }
+        runtime.priceAlertWatcher = null;
     }
     if (runtime.vault) {
         try { runtime.vault.close(); } catch (_err) { /* already closed */ }

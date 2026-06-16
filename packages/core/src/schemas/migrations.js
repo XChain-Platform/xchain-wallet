@@ -26,6 +26,7 @@ import { CURRENT_VERSION as MULTISIG_SIGNING_SESSION_VERSION } from './multisigS
 import { CURRENT_VERSION as SIGNER_VERSION } from './signer.js';
 import { CURRENT_VERSION as PENDING_AIRDROP_VERSION } from './pendingAirdrop.js';
 import { CURRENT_VERSION as WATCHLIST_VERSION } from './watchlistEntry.js';
+import { CURRENT_VERSION as PRICE_ALERT_VERSION } from './priceAlert.js';
 import { randomUUID } from '../util/uuid.js';
 
 /**
@@ -131,6 +132,8 @@ export const signerMigrations = {};
 export const pendingAirdropMigrations = {};
 /** @type {MigrationMap} */
 export const watchlistEntryMigrations = {};
+/** @type {MigrationMap} */
+export const priceAlertMigrations = {};
 
 /**
  * Walk `record` forward through `migrations` until it reaches `target`.
@@ -188,3 +191,5 @@ export const migratePendingAirdrop = (r) =>
     migrate(r, pendingAirdropMigrations, PENDING_AIRDROP_VERSION);
 export const migrateWatchlistEntry = (r) =>
     migrate(r, watchlistEntryMigrations, WATCHLIST_VERSION);
+export const migratePriceAlert = (r) =>
+    migrate(r, priceAlertMigrations, PRICE_ALERT_VERSION);

@@ -23,6 +23,8 @@
 
 import { useState } from 'react';
 import { useSettings } from '../../hooks/useSettings.js';
+import { usePriceAlerts } from '../../hooks/usePriceAlerts.js';
+import { PriceAlertForm, coinLabelForChain } from '../PriceAlertForm.jsx';
 import { ROW, ROW_HINT, STACK, Status, ToggleRow } from './_settingsPrimitives.jsx';
 
 const PERMISSION_BUTTON = {
@@ -110,7 +112,11 @@ const NOTIFICATION_FLAGS = /** @type {const} */ ([
     },
 ]);
 
-export function NotificationsSection() {
+/**
+ * @param {object} props
+ * @param {string | null | undefined} [props.walletId]  active wallet — scopes the price-alert manager
+ */
+export function NotificationsSection({ walletId } = {}) {
     const { settings, loading, error, update } = useSettings();
 
     if (loading) return <Status text="Loading…" />;
@@ -130,14 +136,119 @@ export function NotificationsSection() {
         <div style={STACK}>
             <PermissionRow />
             {NOTIFICATION_FLAGS.map((f) => (
-                <ToggleRow
-                    key={f.key}
-                    label={f.label}
-                    hint={f.hint}
-                    checked={Boolean(settings.notifications[f.key])}
-                    onChange={(v) => onToggle(f.key, v)}
-                />
+                <div key={f.key} style={STACK}>
+                    <ToggleRow
+                        label={f.label}
+                        hint={f.hint}
+                        checked={Boolean(settings.notifications[f.key])}
+                        onChange={(v) => onToggle(f.key, v)}
+                    />
+                    {f.key === 'priceAlerts' ? (
+                        <PriceAlertsManager
+                            walletId={walletId}
+                            settings={settings}
+                            enabled={Boolean(settings.notifications.priceAlerts)}
+                        />
+                    ) : null}
+                </div>
             ))}
         </div>
     );
+}
+
+const MANAGER = {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 'var(--xc-space-2)',
+    padding: 'var(--xc-space-2) var(--xc-space-3)',
+    marginLeft: 'var(--xc-space-3)',
+    borderLeft: '2px solid var(--xc-border)',
+};
+const ALERT_ROW = {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 'var(--xc-space-2)',
+    fontSize: 'var(--xc-text-sm)',
+};
+const LINK_BTN = {
+    background: 'transparent',
+    border: 'none',
+    color: 'var(--xc-accent, #3a7afe)',
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    fontSize: 'var(--xc-text-xs)',
+    padding: 0,
+};
+
+/**
+ * Price-alert manager rendered under the priceAlerts toggle: the saved
+ * alerts + an inline add form. Surfaces the two dependencies that keep an
+ * alert from firing — the toggle being off, and (the key one) the privacy
+ * opt-out for native-coin price data, which the watcher hard-gates on.
+ *
+ * @param {object} props
+ * @param {string | null | undefined} props.walletId
+ * @param {import('../../../schemas/settings.js').Settings} props.settings
+ * @param {boolean} props.enabled
+ */
+function PriceAlertsManager({ walletId, settings, enabled }) {
+    const { alerts, supported, addAlert, removeAlert, rearm } = usePriceAlerts(walletId);
+    const priceDataOff = settings?.privacy?.priceDataEnabled === false;
+    const fiatCurrency = (typeof settings?.fiatCurrency === 'string' && settings.fiatCurrency) || 'usd';
+
+    if (!walletId || !supported) {
+        return (
+            <div style={MANAGER}>
+                <span style={ROW_HINT}>Price alerts aren’t available in this view.</span>
+            </div>
+        );
+    }
+
+    return (
+        <div style={MANAGER}>
+            {priceDataOff ? (
+                <span style={ROW_HINT}>
+                    Price alerts need <strong>Native coin price data</strong>, which is off. Turn it on in
+                    Settings → Privacy — until then, alerts won’t fire.
+                </span>
+            ) : !enabled ? (
+                <span style={ROW_HINT}>Turn on Price alerts above to start receiving these.</span>
+            ) : null}
+
+            {alerts.length === 0 ? (
+                <span style={ROW_HINT}>No price alerts yet. Add one below.</span>
+            ) : (
+                alerts.map((a) => (
+                    <div key={a.id} style={ALERT_ROW}>
+                        <span>
+                            {coinLabelForChain(a.chainId)}{' '}
+                            {a.direction === 'above' ? 'rises above' : 'falls below'}{' '}
+                            {formatThreshold(a.targetFiat, a.fiatCurrency)}
+                            {a.status === 'triggered' ? <span style={ROW_HINT}> · triggered</span> : null}
+                        </span>
+                        <span style={{ display: 'flex', gap: 'var(--xc-space-2)' }}>
+                            {a.status === 'triggered' ? (
+                                <button type="button" style={LINK_BTN} onClick={() => rearm(a.id)}>Re-arm</button>
+                            ) : null}
+                            <button type="button" style={LINK_BTN} onClick={() => removeAlert(a.id)}>Delete</button>
+                        </span>
+                    </div>
+                ))
+            )}
+
+            <PriceAlertForm onCreate={addAlert} fiatCurrency={fiatCurrency} />
+        </div>
+    );
+}
+
+/** Compact, locale-free threshold label, e.g. 70000/usd → "$70,000". */
+function formatThreshold(value, fiatCurrency) {
+    const cur = String(fiatCurrency || 'usd').toLowerCase();
+    const n = Number(value);
+    const grouped = Number.isFinite(n)
+        ? String(Math.abs(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+        : String(value);
+    const body = (n < 0 ? '-' : '') + grouped;
+    return cur === 'usd' ? `$${body}` : `${body} ${cur.toUpperCase()}`;
 }

@@ -198,6 +198,13 @@ export {
     clearWatchlistEntry,
 } from './watchlist.js';
 export {
+    listAlertsForWallet,
+    saveAlert,
+    clearAlert,
+    markAlertTriggered,
+    rearmAlert,
+} from './priceAlerts.js';
+export {
     listActions,
     getActionFormats,
     getActionFields,

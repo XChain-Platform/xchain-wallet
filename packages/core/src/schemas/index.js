@@ -26,6 +26,7 @@ export * as pendingTx from './pendingTx.js';
 export * as signer from './signer.js';
 export * as pendingAirdrop from './pendingAirdrop.js';
 export * as watchlistEntry from './watchlistEntry.js';
+export * as priceAlert from './priceAlert.js';
 export * as migrations from './migrations.js';
 
 export { createWallet, validateWallet } from './wallet.js';
@@ -60,6 +61,13 @@ export {
     watchlistEntryKey,
 } from './watchlistEntry.js';
 export {
+    createPriceAlert,
+    validatePriceAlert,
+    priceAlertKey,
+    PRICE_ALERT_DIRECTIONS,
+    PRICE_ALERT_STATUSES,
+} from './priceAlert.js';
+export {
     migrate,
     migrateWallet,
     migrateAccount,
@@ -73,4 +81,5 @@ export {
     migrateSigner,
     migratePendingAirdrop,
     migrateWatchlistEntry,
+    migratePriceAlert,
 } from './migrations.js';

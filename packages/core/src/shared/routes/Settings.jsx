@@ -204,6 +204,7 @@ export function Settings({
             keywords: 'notifications confirmations receipts dispenser order price alert',
             kind: 'panel',
             Component: NotificationsSection,
+            props: { walletId: activeWallet?.id },
         },
         {
             id: 'connected-sites',

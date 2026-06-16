@@ -259,6 +259,8 @@ let host = null;
 let vault = null;
 let signerPool = null;
 let notificationService = null;
+let priceAlertWatcher = null;
+let priceOracleInstance = null;
 
 // §46 — start the live notification watcher once a vault + host exist. All
 // three host-creation paths (create / import / unlock) call this; lock stops
@@ -287,12 +289,41 @@ function startNotifications() {
     notificationService.start().catch((err) => {
         console.error('[xchain] notification watcher start failed:', err);
     });
+
+    // §46 price-alert poll watcher — same lifecycle, same notify adapter.
+    if (!priceAlertWatcher && typeof globalThis.fetch === 'function') {
+        priceAlertWatcher = new notificationsLib.PriceAlertWatcher({
+            getNativePrices: async ({ chainIds, fiatCurrency }) => {
+                if (!priceOracleInstance) {
+                    const flowsNs = await getFlows();
+                    priceOracleInstance = flowsNs.createPriceOracle({ fetch: globalThis.fetch.bind(globalThis) });
+                }
+                return priceOracleInstance.getNativePrices({ chainIds, fiatCurrency });
+            },
+            listArmedAlerts: () => vault.priceAlerts.list(),
+            getSettings: async () => {
+                const flowsNs = await getFlows();
+                return flowsNs.getSettings(vault);
+            },
+            notify: createWebNotifyAdapter(),
+            markTriggered: async (id) => {
+                const flowsNs = await getFlows();
+                return flowsNs.markAlertTriggered({ vault, id });
+            },
+            logger: console,
+        });
+        priceAlertWatcher.start();
+    }
 }
 
 function stopNotifications() {
     if (notificationService) {
         try { notificationService.stop(); } catch (_err) { /* best-effort */ }
         notificationService = null;
+    }
+    if (priceAlertWatcher) {
+        try { priceAlertWatcher.stop(); } catch (_err) { /* best-effort */ }
+        priceAlertWatcher = null;
     }
 }
 

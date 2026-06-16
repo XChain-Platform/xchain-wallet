@@ -58,5 +58,15 @@ const idx = settingsSrc.indexOf("id: 'notifications'");
 const block = settingsSrc.slice(idx, idx + 600);
 assert.match(block, /kind:\s*'panel'/);
 assert.match(block, /Component:\s*NotificationsSection/);
+assert.match(block, /props:\s*\{\s*walletId:\s*activeWallet\?\.id\s*\}/, 'threads the active walletId into the section');
+
+// §46 price-alert manager — the toggle now has a real CRUD surface under
+// it, hard-gated on the privacy price-data opt-out.
+assert.match(src, /import \{ usePriceAlerts \}/, 'imports the usePriceAlerts hook');
+assert.match(src, /PriceAlertForm/, 'renders the shared PriceAlertForm');
+assert.match(src, /PriceAlertsManager/, 'renders the price-alert manager under the toggle');
+assert.match(src, /priceDataEnabled === false/, 'gates on the price-data privacy opt-out');
+assert.match(src, /Native coin price data/, 'surfaces the price-data dependency to the user');
+assert.match(src, /Re-arm/, 'offers re-arm on a triggered alert');
 
 console.log('settings-notifications smoke OK');

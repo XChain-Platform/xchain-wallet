@@ -11,7 +11,7 @@
 // removeWallet — destructive flow that deletes a Wallet record and all
 // records linked to it: accounts, addresses (HD-derived + imported-WIF),
 // signers, pendingTxs, pendingAirdrops, multisigSigningSessions,
-// watchlistEntries.
+// watchlistEntries, priceAlerts.
 //
 // Vault-level singletons (settings) and shared collections (contacts,
 // connectedSites) survive — they aren't owned by a single wallet.
@@ -26,7 +26,7 @@ import { WalletNotFoundError } from './unlockWallet.js';
 
 /**
  * @param {{ vault: import('../storage/Vault.js').Vault, walletId: string }} opts
- * @returns {Promise<{ removed: { wallet: 1, accounts: number, addresses: number, signers: number, pendingTxs: number, pendingAirdrops: number, multisigSigningSessions: number, watchlistEntries: number } }>}
+ * @returns {Promise<{ removed: { wallet: 1, accounts: number, addresses: number, signers: number, pendingTxs: number, pendingAirdrops: number, multisigSigningSessions: number, watchlistEntries: number, priceAlerts: number } }>}
  */
 export async function removeWallet({ vault, walletId }) {
     if (!vault) throw new Error('removeWallet: vault is required');
@@ -55,6 +55,7 @@ export async function removeWallet({ vault, walletId }) {
     const pendingAirdrops = await vault.pendingAirdrops.findBy('walletId', walletId);
     const multisigSessions = await vault.multisigSigningSessions.findBy('walletId', walletId);
     const watchlistEntries = await vault.watchlistEntries.findBy('walletId', walletId);
+    const priceAlerts = await vault.priceAlerts.findBy('walletId', walletId);
     const signers = await vault.signers.findBy('walletId', walletId);
 
     // Delete in dependency order: leaves first, root last.
@@ -65,6 +66,7 @@ export async function removeWallet({ vault, walletId }) {
     await Promise.all(pendingAirdrops.map((p) => vault.pendingAirdrops.delete(p.id)));
     await Promise.all(multisigSessions.map((s) => vault.multisigSigningSessions.delete(s.id)));
     await Promise.all(watchlistEntries.map((w) => vault.watchlistEntries.delete(w.id)));
+    await Promise.all(priceAlerts.map((p) => vault.priceAlerts.delete(p.id)));
     await vault.wallets.delete(walletId);
 
     return {
@@ -77,6 +79,7 @@ export async function removeWallet({ vault, walletId }) {
             pendingAirdrops: pendingAirdrops.length,
             multisigSigningSessions: multisigSessions.length,
             watchlistEntries: watchlistEntries.length,
+            priceAlerts: priceAlerts.length,
         },
     };
 }

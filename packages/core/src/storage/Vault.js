@@ -46,6 +46,7 @@ import {
     migrateSigner,
     migrateWallet,
     migrateWatchlistEntry,
+    migratePriceAlert,
 } from '../schemas/migrations.js';
 import { validateAccount } from '../schemas/account.js';
 import { validateAddress } from '../schemas/address.js';
@@ -58,6 +59,7 @@ import { validateSettings } from '../schemas/settings.js';
 import { validateSignerRecord } from '../schemas/signer.js';
 import { validateWallet } from '../schemas/wallet.js';
 import { validateWatchlistEntry } from '../schemas/watchlistEntry.js';
+import { validatePriceAlert } from '../schemas/priceAlert.js';
 import { logConsole } from '../shared/utils/logConsole.js';
 
 export class VaultStateError extends Error {
@@ -132,6 +134,12 @@ export class Vault {
             'watchlistEntries',
             migrateWatchlistEntry,
             validateWatchlistEntry,
+        );
+        this.priceAlerts = makeCollection(
+            this,
+            'priceAlerts',
+            migratePriceAlert,
+            validatePriceAlert,
         );
         this.multisigSigningSessions = makeCollection(
             this,

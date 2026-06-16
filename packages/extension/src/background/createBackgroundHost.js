@@ -163,6 +163,10 @@ const {
     listWatchlistForWallet,
     saveWatchlistEntry,
     clearWatchlistEntry,
+    listAlertsForWallet,
+    saveAlert,
+    clearAlert,
+    rearmAlert,
     getSettings,
     updateSettings,
     exportBackupFile,
@@ -2232,6 +2236,22 @@ export function createBackgroundHost(deps) {
     });
     host.register('watchlist.clear', async (req, { vault }) => {
         return clearWatchlistEntry({ ...req, vault });
+    });
+
+    // §46 price-alert CRUD — per-wallet "notify me at price X" thresholds.
+    // No signing; vault-local state only. The background PriceAlertWatcher
+    // reads/disarms these directly via the flows (not over a route).
+    host.register('priceAlert.listForWallet', async (req, { vault }) => {
+        return listAlertsForWallet({ ...req, vault });
+    });
+    host.register('priceAlert.save', async (req, { vault }) => {
+        return saveAlert({ ...req, vault });
+    });
+    host.register('priceAlert.clear', async (req, { vault }) => {
+        return clearAlert({ ...req, vault });
+    });
+    host.register('priceAlert.rearm', async (req, { vault }) => {
+        return rearmAlert({ ...req, vault });
     });
 
     // §40.10 Advanced Actions Form — generic "submit any action"

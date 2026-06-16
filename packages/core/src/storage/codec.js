@@ -23,6 +23,7 @@
 //     signers: SignerRecord[],
 //     pendingAirdrops: PendingAirdrop[],
 //     watchlistEntries: WatchlistEntry[],
+//     priceAlerts: PriceAlert[],
 //     settings: Settings | null,      // singleton slot
 //   }
 //
@@ -47,6 +48,7 @@ export function emptyDocument() {
         signers: [],
         pendingAirdrops: [],
         watchlistEntries: [],
+        priceAlerts: [],
         multisigSigningSessions: [],
         settings: null,
     };
@@ -64,6 +66,7 @@ export function emptyDocument() {
  * @property {import('../schemas/signer.js').SignerRecord[]} signers
  * @property {import('../schemas/pendingAirdrop.js').PendingAirdrop[]} pendingAirdrops
  * @property {import('../schemas/watchlistEntry.js').WatchlistEntry[]} watchlistEntries
+ * @property {import('../schemas/priceAlert.js').PriceAlert[]} priceAlerts
  * @property {import('../schemas/multisigSigningSession.js').MultisigSigningSession[]} multisigSigningSessions
  * @property {import('../schemas/settings.js').Settings | null} settings
  */
@@ -127,6 +130,7 @@ export async function decodeDocument(masterKey, blob, aad) {
         signers: parsed.signers ?? empty.signers,
         pendingAirdrops: parsed.pendingAirdrops ?? empty.pendingAirdrops,
         watchlistEntries: parsed.watchlistEntries ?? empty.watchlistEntries,
+        priceAlerts: parsed.priceAlerts ?? empty.priceAlerts,
         multisigSigningSessions: parsed.multisigSigningSessions ?? empty.multisigSigningSessions,
         settings: parsed.settings ?? empty.settings,
     };

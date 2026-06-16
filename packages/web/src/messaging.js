@@ -896,6 +896,15 @@ export function listWatchlistForWallet(req) { return /** @type {any} */ (sendMes
 export function saveWatchlistEntry(req) { return /** @type {any} */ (sendMessage('watchlist.save', req)); }
 /** @param {{ id: string }} req */
 export function clearWatchlistEntry(req) { return /** @type {any} */ (sendMessage('watchlist.clear', req)); }
+// §46 price-alert CRUD
+/** @param {{ walletId: string }} req */
+export function listPriceAlertsForWallet(req) { return /** @type {any} */ (sendMessage('priceAlert.listForWallet', req)); }
+/** @param {{ walletId: string, chainId: string, direction: 'above'|'below', targetFiat: number, fiatCurrency: string }} req */
+export function savePriceAlert(req) { return /** @type {any} */ (sendMessage('priceAlert.save', req)); }
+/** @param {{ id: string }} req */
+export function clearPriceAlert(req) { return /** @type {any} */ (sendMessage('priceAlert.clear', req)); }
+/** @param {{ id: string }} req */
+export function rearmPriceAlert(req) { return /** @type {any} */ (sendMessage('priceAlert.rearm', req)); }
 
 // §41.3.4 ORDER + §41.3.5 CANCEL
 /** @param {object} opts */

@@ -103,6 +103,9 @@ let detachHost = null;
 // keepalive's repeated ensureHost() calls; recreated from scratch when the MV3
 // worker is evicted and cold-restarts.
 let notificationService = null;
+// §46 price-alert poll watcher — paired with notificationService, same
+// guard + cold-restart semantics.
+let priceAlertWatcher = null;
 
 // §46 delivery adapter for the extension: chrome.notifications works with the
 // popup closed (it's the service worker firing, not a page). type 'basic'
@@ -223,6 +226,23 @@ async function ensureHost() {
         });
     }
 
+    // §46 — start the price-alert poll watcher. Its own oracle instance
+    // (in-memory cache, 5-min cadence ≈ the oracle's spot TTL). The watcher
+    // hard-gates on settings.privacy.priceDataEnabled + notifications.priceAlerts
+    // and makes zero network calls when no alert is armed.
+    if (!priceAlertWatcher && typeof globalThis.fetch === 'function') {
+        const priceOracle = flowsLib.createPriceOracle({ fetch: globalThis.fetch.bind(globalThis) });
+        priceAlertWatcher = new notificationsLib.PriceAlertWatcher({
+            getNativePrices: ({ chainIds, fiatCurrency }) => priceOracle.getNativePrices({ chainIds, fiatCurrency }),
+            listArmedAlerts: () => vault.priceAlerts.list(),
+            getSettings: () => flowsLib.getSettings(vault),
+            notify: chromeNotify,
+            markTriggered: (id) => flowsLib.markAlertTriggered({ vault, id }),
+            logger: console,
+        });
+        priceAlertWatcher.start();
+    }
+
     return host;
 }
 
@@ -235,6 +255,10 @@ function tearDownHost() {
     if (notificationService) {
         try { notificationService.stop(); } catch (_err) { /* best-effort */ }
         notificationService = null;
+    }
+    if (priceAlertWatcher) {
+        try { priceAlertWatcher.stop(); } catch (_err) { /* best-effort */ }
+        priceAlertWatcher = null;
     }
     if (detachHost) {
         try { detachHost(); } catch (_err) { /* best-effort */ }
