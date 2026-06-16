@@ -5,7 +5,7 @@
 //
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md. A commercial
-// license (without AGPL source-disclosure terms) is available —
+// license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
 // MultisigConfig — §11.3.6 + §22.2. Reserved in Phase 1; implemented in

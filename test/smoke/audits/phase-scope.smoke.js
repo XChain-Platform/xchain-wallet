@@ -5,7 +5,7 @@
 //
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md. A commercial
-// license (without AGPL source-disclosure terms) is available —
+// license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
 // Smoke test for the v0.34.0 Phase-2 scope change (Batch 1 piece 3).

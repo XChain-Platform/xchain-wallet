@@ -5,7 +5,7 @@
 //
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md. A commercial
-// license (without AGPL source-disclosure terms) is available —
+// license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
 // Recent-destinations join — §29.4 + §21 FOLLOWUP 4 source data.
