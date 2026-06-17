@@ -8,7 +8,7 @@ If you've found a security issue, please **do not open a public issue or pull re
 
 ## How to report
 
-### Preferred — GitHub Private Vulnerability Reporting
+### Preferred: GitHub Private Vulnerability Reporting
 
 Open a draft advisory at:
 
@@ -16,7 +16,7 @@ Open a draft advisory at:
 
 This is the fastest path. The advisory is private until we publish it.
 
-### Alternative — Email
+### Alternative: Email
 
 Email **security@dankest.llc** with:
 
@@ -91,7 +91,7 @@ If you are unsure, send the report anyway and we will tell you whether it falls 
 
 ## Threat model
 
-The architectural threat model — assets we protect, threats explicitly in scope, threats explicitly out of scope, attacker scenarios, and known open items — lives at:
+The architectural threat model (assets we protect, threats explicitly in scope, threats explicitly out of scope, attacker scenarios, and known open items) lives at:
 
 - `docs/Threat_Model.md`
 

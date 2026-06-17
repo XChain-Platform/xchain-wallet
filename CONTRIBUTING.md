@@ -2,7 +2,7 @@
 
 Thanks for considering a contribution. This wallet holds real keys for real users; we trade speed for safety on every commit.
 
-If you're reporting a security issue, **stop here** and read `SECURITY.md` instead — security reports go through a private channel.
+If you're reporting a security issue, **stop here** and read `SECURITY.md` instead. Security reports go through a private channel.
 
 ---
 
@@ -30,7 +30,7 @@ xchain-wallet/                  pnpm monorepo (workspace root)
 ├── test/                       cross-package test runners (smoke entry + e2e)
 ├── tools/build-reproduce/      reproducible-build helpers
 ├── docs/                       in-repo architecture / threat-model / dependency notes
-├── CHANGELOG.md                authoritative — sub-packages do not maintain their own
+├── CHANGELOG.md                authoritative; sub-packages do not maintain their own
 ├── SECURITY.md                 private vulnerability disclosure
 └── package.json                workspace root; version = single source of truth
 ```
@@ -91,7 +91,7 @@ The wallet runs a layered test suite. Pick the right tier for the change you're 
 | Vitest a11y | `pnpm test:a11y` | When you change a route, a primitive, or a CSS token |
 | Playwright E2E | `pnpm test:e2e` | When you change onboarding, send, or any cross-screen flow |
 
-**Smoke baseline (as of v0.194.0): 24 of 171 smokes fail.** All 24 are unrelated to current work and are tracked separately. New work must preserve this exact count — do not "fix" the baseline failures as part of a feature commit, and do not let a new failure slip through. If your change drifts the baseline, diff before vs. after to find the new entry, then either fix it or back out the change that introduced it.
+**Smoke baseline (as of v0.194.0): 24 of 171 smokes fail.** All 24 are unrelated to current work and are tracked separately. New work must preserve this exact count: do not "fix" the baseline failures as part of a feature commit, and do not let a new failure slip through. If your change drifts the baseline, diff before vs. after to find the new entry, then either fix it or back out the change that introduced it.
 
 ```bash
 node test/smoke/_run-smokes.js > /tmp/before.txt   # before your change
@@ -100,13 +100,13 @@ node test/smoke/_run-smokes.js > /tmp/after.txt    # after
 grep -E "^FAIL " /tmp/before.txt /tmp/after.txt | sed 's/ ([0-9].*//' | sort  # diff
 ```
 
-Smokes pin specific call shapes (e.g. `messaging.importMnemonic({ password, mnemonic, name })`). When the legitimate API evolves, update the smoke — do not undo the API change.
+Smokes pin specific call shapes (e.g. `messaging.importMnemonic({ password, mnemonic, name })`). When the legitimate API evolves, update the smoke; do not undo the API change.
 
 ---
 
 ## Versioning
 
-All packages in this repository — root, `packages/core`, `packages/extension`, `packages/web`, `packages/desktop`, `packages/bridge-spec`, `packages/test-dapp` — **ship at the same version number**. Sub-package `package.json` files track the root in lockstep. The `WALLET_VERSION` constant in `packages/core/src/buildInfo.js` is bumped alongside every release.
+All packages in this repository (root, `packages/core`, `packages/extension`, `packages/web`, `packages/desktop`, `packages/bridge-spec`, `packages/test-dapp`) **ship at the same version number**. Sub-package `package.json` files track the root in lockstep. The `WALLET_VERSION` constant in `packages/core/src/buildInfo.js` is bumped alongside every release.
 
 When you ship a change worth a version bump:
 
@@ -120,7 +120,7 @@ done
 sed -i "s/WALLET_VERSION = '0\.OLD\.0'/WALLET_VERSION = '0.NEW.0'/" packages/core/src/buildInfo.js
 ```
 
-Skip `test/e2e/package.json` — it does not participate in the release version.
+Skip `test/e2e/package.json`; it does not participate in the release version.
 
 `CHANGELOG.md` at the repo root is authoritative. Sub-packages do not maintain their own changelogs.
 
@@ -128,20 +128,20 @@ Skip `test/e2e/package.json` — it does not participate in the release version.
 
 ## Changelog
 
-Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Each release gets its own `## [x.y.z] - YYYY-MM-DD` section above the previous one. Keep entries terse — one short paragraph describing what changed and why, then a bullet list of touched files / surfaces. Avoid "behavior preserved" filler; if the entry is about preserving behavior, the version bump is wrong.
+Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Each release gets its own `## [x.y.z] - YYYY-MM-DD` section above the previous one. Keep entries terse: one short paragraph describing what changed and why, then a bullet list of touched files / surfaces. Avoid "behavior preserved" filler; if the entry is about preserving behavior, the version bump is wrong.
 
 Pattern that works well in this repo:
 
 ```markdown
 ## [0.X.Y] - YYYY-MM-DD
 
-§NN — Cluster Z Step N of M — <one-line title> (<gap-id>).
+§NN, Cluster Z Step N of M: <one-line title> (<gap-id>).
 
 <one-paragraph rationale>.
 
 ### Added | Changed | Fixed | Removed
 
-- **`path/to/file.js`** — terse one-line description.
+- **`path/to/file.js`**: terse one-line description.
 - ...
 
 Closes G<NNN>.
@@ -154,7 +154,7 @@ Closes G<NNN>.
 Match the existing log style:
 
 ```
-v0.X.Y — §NN Cluster Z — Step N of M — <short title>
+v0.X.Y §NN Cluster Z, Step N of M: <short title>
 
 <two-or-three-paragraph rationale>
 
@@ -173,7 +173,7 @@ Branch off `master`, keep history linear (rebase, don't merge). One commit per r
 
 - **JS + JSDoc** throughout. No TypeScript files; types live in `.d.ts` for the bridge-spec package only.
 - **No ESLint configured globally.** Each package may run its own lint; the root `pnpm lint` runs whatever exists.
-- **Comments are rare on purpose.** Don't comment what well-named code already says. Do comment a *why* that isn't obvious — a hidden invariant, a workaround for a bug with a ticket reference, a constraint that would surprise the next reader.
+- **Comments are rare on purpose.** Don't comment what well-named code already says. Do comment a *why* that isn't obvious: a hidden invariant, a workaround for a bug with a ticket reference, a constraint that would surprise the next reader.
 - **No emojis** in code or docs unless the user / spec asks for one.
 - **Trailing two-spaces** on consecutive bold-label markdown lines (e.g. `**Status:** open  `) so CommonMark renders the line break instead of collapsing.
 - **Logical CSS properties** (`margin-inline-start`, not `margin-left`) so RTL works without per-locale forks.
@@ -182,7 +182,7 @@ Branch off `master`, keep history linear (rebase, don't merge). One commit per r
 
 ## Pull requests
 
-CI is intentionally not configured against `master` during the active build phase — the smoke suite is the gate. Before opening a PR:
+CI is intentionally not configured against `master` during the active build phase; the smoke suite is the gate. Before opening a PR:
 
 1. Run the smoke suite. Confirm 24 / 171 baseline preserved.
 2. Bump versions + update `CHANGELOG.md`.
@@ -201,7 +201,7 @@ For non-security bugs, open an issue at:
 
 Include: shell (extension / web / desktop), wallet version (visible in the About panel and machine-readable as `packages/core/src/buildInfo.js → WALLET_VERSION`), reproduction steps, expected vs. actual behavior, and a screenshot if the bug is visual.
 
-For security bugs, see `SECURITY.md` — these go through a private channel.
+For security bugs, see `SECURITY.md`; these go through a private channel.
 
 ---
 
@@ -213,7 +213,7 @@ The fastest channel today is the Issues tab with the `question` label. We're a s
 
 ## Code of Conduct
 
-We follow the [Contributor Covenant 2.1](./CODE_OF_CONDUCT.md). Be kind, assume good faith, and disagree without being a jerk.
+We follow our [Code of Conduct](./CODE_OF_CONDUCT.md), adapted from the Contributor Covenant 2.1. Be kind, assume good faith, and disagree without being a jerk.
 
 ---
 
@@ -227,7 +227,7 @@ The wallet is currently led by a single maintainer. See [`MAINTAINERS.md`](./MAI
 - How decisions are made today (lazy consensus + lead-maintainer tiebreak) and how that's expected to evolve as the project grows
 - Cross-project relationships with `xchain-platform`, `xchain-sdk`, and `xchain-documentation`
 
-If you're proposing a change that's larger than a bug fix or a single-feature PR — anything that touches the architecture, the public bridge API, the build pipeline, the threat model, the legal text, or the protocol — please open an issue first to align on direction before opening the PR. The maintainers will weigh in within a few days.
+If you're proposing a change that's larger than a bug fix or a single-feature PR (anything that touches the architecture, the public bridge API, the build pipeline, the threat model, the legal text, or the protocol), please open an issue first to align on direction before opening the PR. The maintainers will weigh in within a few days.
 
 For everything smaller (a bug fix, a new test, a docs tweak, a single self-contained feature) feel free to open a PR directly.
 
