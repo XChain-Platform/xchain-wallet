@@ -22,6 +22,7 @@
 // piece of intentional cross-shell reuse; a later refactor extracts
 // host wiring to a lower-level package once a third shell appears.
 
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
@@ -99,6 +100,16 @@ const replBrowserShim = fileURLToPath(
     new URL('../core/src/shims/repl-browser.js', import.meta.url),
 );
 
+// xchain-sdk's musig2.js does `require('@brandonblack/musig/base_crypto')`.
+// Node resolves that subpath to lib/base_crypto.js, but esbuild's dep
+// scanner rejects the package's exports map and aborts `vite optimize`,
+// which would 504 the SDK in the browser. Resolve the real file from the
+// SDK's own context (works on Mac and the VM share alike) and alias the
+// bare subpath to it below.
+const musigBaseCrypto = createRequire(
+    fileURLToPath(new URL('../../../xchain-sdk/package.json', import.meta.url)),
+).resolve('@brandonblack/musig/base_crypto');
+
 export default defineConfig({
     // xchain-sdk is CJS and pulls in `ws` + Node `crypto` + Buffer at
     // module load. `ws` is aliased to our browser shim
@@ -117,6 +128,8 @@ export default defineConfig({
             // src/repl.js. The wallet never calls startREPL, so the
             // shim throws loudly if anything does.
             repl: replBrowserShim,
+            // Point the bare musig subpath at its real file (see note above).
+            '@brandonblack/musig/base_crypto': musigBaseCrypto,
         },
     },
     build: {
