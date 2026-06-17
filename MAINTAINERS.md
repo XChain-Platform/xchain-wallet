@@ -4,7 +4,7 @@ This file lists the people responsible for XChain Wallet, what each
 of them owns, and how to escalate issues that need a human's attention
 beyond what `CONTRIBUTING.md` and `SECURITY.md` cover.
 
-XChain Wallet is in pre-launch development — the project ships under
+XChain Wallet is in pre-launch development and ships under
 a single primary maintainer today. As contributors take on durable
 responsibility for areas of the codebase, they will be added here.
 This is a conventional MAINTAINERS file (open-source norm, used by
@@ -16,7 +16,7 @@ distros and downstream packagers), not an aspirational org chart.
 
 | Role | Name | GitHub | Areas |
 |---|---|---|---|
-| Lead | J-Dog | [@J-Dog](https://github.com/J-Dog) | Everything — core, three shells (extension / web / desktop), bridge, signers, releases |
+| Lead | J-Dog | [@J-Dog](https://github.com/J-Dog) | Everything: core, three shells (extension / web / desktop), bridge, signers, releases |
 
 Contact:
 
@@ -35,13 +35,13 @@ what each area entails when scoping a contribution.
 
 | Area | What it covers |
 |---|---|
-| Core flows | `packages/core/src/flows/` — encode + sign pipelines, vault read/write, settings, multisig, contracts, dispensers, orders, swaps, links, messaging |
-| Schemas | `packages/core/src/schemas/` — Wallet / Address / Account / Settings / ConnectedSite record shapes + validators |
-| Signers | `packages/core/src/signers/` — software signer, Trezor, Ledger; firmware-manifest advisory data |
-| Bridge | `packages/extension/src/bridge/` + `packages/bridge-spec/` — `window.xchain` provider surface, approvals broker, error codes, throttle, blocklist |
-| Extension shell | `packages/extension/src/{popup,background}/` — Manifest V3 service worker, popup React app, content script |
-| Web shell | `packages/web/src/` — SPA entry, routing, messaging adapter |
-| Desktop shell | `packages/desktop/{main,renderer,scripts,Dockerfile,electron-builder.config.cjs}/` — Electron main + renderer, reproducible-build pipeline, packaging, auto-updater |
+| Core flows | `packages/core/src/flows/`: encode + sign pipelines, vault read/write, settings, multisig, contracts, dispensers, orders, swaps, links, messaging |
+| Schemas | `packages/core/src/schemas/`: Wallet / Address / Account / Settings / ConnectedSite record shapes + validators |
+| Signers | `packages/core/src/signers/`: software signer, Trezor, Ledger; firmware-manifest advisory data |
+| Bridge | `packages/extension/src/bridge/` + `packages/bridge-spec/`: `window.xchain` provider surface, approvals broker, error codes, throttle, blocklist |
+| Extension shell | `packages/extension/src/{popup,background}/`: Manifest V3 service worker, popup React app, content script |
+| Web shell | `packages/web/src/`: SPA entry, routing, messaging adapter |
+| Desktop shell | `packages/desktop/{main,renderer,scripts,Dockerfile,electron-builder.config.cjs}/`: Electron main + renderer, reproducible-build pipeline, packaging, auto-updater |
 | Documentation | `docs/`, root markdown files (`README`, `SECURITY`, `CODE_OF_CONDUCT`, `CONTRIBUTING`, `MAINTAINERS`), `claude/reports/specs/` |
 | Release engineering | Tag cuts, `RELEASE_HASHES.txt` publication, GPG signing (pending G158 / G180), reproducible-build verification |
 | Smokes + tests | `test/smoke/`, `test/integration/`, `test/e2e/` |
@@ -53,9 +53,9 @@ what each area entails when scoping a contribution.
 A contributor becomes a maintainer when they have:
 
 1. Sustained contribution in a specific area for at least one minor
-   version cycle (typically 2–3 weeks of active work).
+   version cycle (typically 2 to 3 weeks of active work).
 2. Reviewed and merged at least three PRs from outside contributors.
-3. Demonstrated awareness of the project's conventions — synchronized
+3. Demonstrated awareness of the project's conventions: synchronized
    versioning across packages, smoke baseline preservation,
    `claude/reports/xchain-wallet/SPEC_GAPS.md` as the canonical gap
    ledger, no-CI-during-build-phase, the `Keep a Changelog` format.
@@ -83,7 +83,7 @@ window:
 | Situation | Escalate to |
 |---|---|
 | Active security incident | `security@dankest.llc` (per `SECURITY.md`) |
-| Suspected compromise of the release key | Open a public issue marked `[KEY-COMPROMISE]` AND email `security@dankest.llc` — public visibility is the point |
+| Suspected compromise of the release key | Open a public issue marked `[KEY-COMPROMISE]` AND email `security@dankest.llc`: public visibility is the point |
 | Code-of-conduct concern | `conduct@dankest.llc` (per `CODE_OF_CONDUCT.md`) |
 | PR has been open without review for 14+ days | Comment `@J-Dog` on the PR; if no response within 7 more days, open an issue tagged `governance` with the PR link |
 
@@ -100,8 +100,8 @@ The lead makes final calls on:
 - Code-of-conduct enforcement.
 - Maintainer additions / removals.
 
-Smaller calls — bug fixes, feature additions in an existing area,
-documentation, dependency bumps inside an existing minor — go through
+Smaller calls (bug fixes, feature additions in an existing area,
+documentation, dependency bumps inside an existing minor) go through
 PR review by the area maintainer.
 
 ---
@@ -110,9 +110,9 @@ PR review by the area maintainer.
 
 | Project | Relationship |
 |---|---|
-| [`xchain-sdk`](https://github.com/XChain-platform/xchain-sdk) | Wallet depends on SDK for encoder, action shapes, broadcast. Versioned independently — wallet's `package.json` pins a specific SDK semver |
+| [`xchain-sdk`](https://github.com/XChain-platform/xchain-sdk) | Wallet depends on SDK for encoder, action shapes, broadcast. Versioned independently: wallet's `package.json` pins a specific SDK semver |
 | [`xchain-platform`](https://github.com/XChain-platform/xchain-platform) | Hosts the regtest stack the wallet uses for integration testing (`docker compose up` in that repo provides nodes, indexers, mempool miner) |
-| [`xchain-documentation`](https://github.com/XChain-platform/xchain-documentation) | Protocol spec — ACTION definitions, database naming, Token Information Standard. Wallet UI and bridge type definitions cite specific sections |
+| [`xchain-documentation`](https://github.com/XChain-platform/xchain-documentation) | Protocol spec: ACTION definitions, database naming, Token Information Standard. Wallet UI and bridge type definitions cite specific sections |
 
 The wallet maintainer is not automatically a maintainer of those
 sibling projects. Cross-project changes go through each project's own
