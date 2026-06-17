@@ -339,6 +339,7 @@ export {
 export {
     markDemoWallet,
     getDemoWalletId,
+    getDemoWalletPassword,
     getDemoWalletExpiry,
     clearDemoWalletId,
     isDemoWallet,

@@ -21,6 +21,8 @@ import {
     unlockWithBiometric,
     tripDuressIfMatch,
     getDemoWalletId,
+    getDemoWalletPassword,
+    isDemoWalletExpired,
     clearDemoWalletId,
 } from '@xchain-wallet/core/flows';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -168,6 +170,34 @@ export function Locked({ onUnlocked }) {
         }, 1000);
         return () => window.clearInterval(handle);
     }, [lockout, remainingMs]);
+
+    // Demo wallets persist their auto-generated password (a throwaway
+    // wallet holding only synthetic data), so a reload can silently
+    // re-unlock instead of stranding the user on a password screen for a
+    // key they never typed. Try it once on mount; on any failure fall
+    // through to the normal unlock UI.
+    const demoAutoUnlockTriedRef = useRef(false);
+    useEffect(() => {
+        if (demoAutoUnlockTriedRef.current) return undefined;
+        if (!demoWalletId || isDemoWalletExpired()) return undefined;
+        if (typeof messaging?.unlockWallet !== 'function') return undefined;
+        const pw = getDemoWalletPassword();
+        if (!pw) return undefined;
+        demoAutoUnlockTriedRef.current = true;
+        let cancelled = false;
+        setBusy(true);
+        (async () => {
+            try {
+                await messaging.unlockWallet(pw);
+                if (cancelled) return;
+                recordLockoutSuccess();
+                onUnlocked?.();
+            } catch {
+                if (!cancelled) setBusy(false);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [demoWalletId, messaging, onUnlocked]);
 
     const isLockedOut = remainingMs > 0;
 

@@ -169,7 +169,10 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onDemoE
                     }
                 } catch { /* best-effort */ }
             }
-            if (walletId) flowsLib.markDemoWallet(walletId);
+            // Persist the auto-password so a reload can silently re-unlock
+            // this throwaway demo wallet instead of stranding the user on
+            // the password screen with a key they never typed.
+            if (walletId) flowsLib.markDemoWallet(walletId, { password });
             if (typeof onDemoEntered === 'function') onDemoEntered();
         } catch (err) {
             setDemoError(err?.message || 'Could not start demo mode.');

@@ -29,13 +29,21 @@
 const STORAGE_KEY = 'xc:demoWalletId';
 const TIMESTAMP_KEY = 'xc:demoWalletCreatedAt';
 const TTL_KEY = 'xc:demoWalletTtlMs';
+const PASSWORD_KEY = 'xc:demoWalletPassword';
 export const DEMO_DEFAULT_TTL_MS = 24 * 60 * 60 * 1000;
 
 /**
  * @param {string} walletId
  * @param {object} [opts]
- * @param {number} [opts.ttlMs]   Override the default 24-hour expiry.
- * @param {number} [opts.now]     Clock injection for tests.
+ * @param {number} [opts.ttlMs]      Override the default 24-hour expiry.
+ * @param {number} [opts.now]        Clock injection for tests.
+ * @param {string} [opts.password]   The demo wallet's auto-generated password. Persisted
+ *                                    (only for demo wallets) so the shell can silently
+ *                                    re-unlock after a reload instead of stranding the user
+ *                                    on the password screen with a key they never typed. The
+ *                                    demo wallet is throwaway and holds only zero-balance
+ *                                    synthetic data, so persisting it is an acceptable
+ *                                    trade-off; it is cleared on demo exit / wipe.
  */
 export function markDemoWallet(walletId, opts = {}) {
     if (typeof walletId !== 'string' || !walletId) return;
@@ -47,7 +55,26 @@ export function markDemoWallet(walletId, opts = {}) {
         globalThis.localStorage?.setItem(STORAGE_KEY, walletId);
         globalThis.localStorage?.setItem(TIMESTAMP_KEY, String(now));
         globalThis.localStorage?.setItem(TTL_KEY, String(ttlMs));
+        if (typeof opts.password === 'string' && opts.password) {
+            globalThis.localStorage?.setItem(PASSWORD_KEY, opts.password);
+        }
     } catch { /* best-effort */ }
+}
+
+/**
+ * The persisted demo-wallet password, or null. Only ever populated for a
+ * demo wallet (see {@link markDemoWallet}); real wallets never store a
+ * password. Used by the Locked screen to auto-unlock a demo wallet.
+ *
+ * @returns {string | null}
+ */
+export function getDemoWalletPassword() {
+    try {
+        const v = globalThis.localStorage?.getItem(PASSWORD_KEY);
+        return typeof v === 'string' && v.length > 0 ? v : null;
+    } catch {
+        return null;
+    }
 }
 
 /** @returns {string | null} */
@@ -99,6 +126,7 @@ export function clearDemoWalletId() {
         globalThis.localStorage?.removeItem(STORAGE_KEY);
         globalThis.localStorage?.removeItem(TIMESTAMP_KEY);
         globalThis.localStorage?.removeItem(TTL_KEY);
+        globalThis.localStorage?.removeItem(PASSWORD_KEY);
     } catch { /* best-effort */ }
 }
 
