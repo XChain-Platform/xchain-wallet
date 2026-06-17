@@ -74,6 +74,13 @@ export function DeveloperModeSection() {
                 checked={Boolean(settings.learnMode)}
                 onChange={(v) => onToggle('learnMode', v)}
             />
+            <ToggleRow
+                label="Show variant popover"
+                hint="Web app only. Shows the floating layout-variant switcher (small / full / sidebar / extension preview) for previewing shells. Requires Developer Mode."
+                checked={Boolean(settings.showVariantBadge)}
+                disabled={!settings.developerMode}
+                onChange={(v) => onToggle('showVariantBadge', v)}
+            />
             <RegtestNetworksRow developerMode={Boolean(settings.developerMode)} fees={settings.fees} />
             <CustomChainsRow developerMode={Boolean(settings.developerMode)} />
             <ToggleRow

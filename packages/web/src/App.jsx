@@ -31,6 +31,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useLastView } from '@xchain-wallet/core/shared/hooks/useLastView.js';
 import { MessagingProvider } from '@xchain-wallet/core/shared/MessagingProvider.jsx';
+import { useSettings } from '@xchain-wallet/core/shared/hooks/useSettings.js';
 import { Loading } from '@xchain-wallet/core/shared/routes/Loading.jsx';
 import { Onboarding } from '@xchain-wallet/core/shared/routes/Onboarding.jsx';
 import { CreateWallet } from '@xchain-wallet/core/shared/routes/CreateWallet.jsx';
@@ -149,18 +150,28 @@ export function App() {
                 ? { page: devShellStyles.smallPage, frame: devShellStyles.smallFrame }
                 : { page: devShellStyles.fullPage, frame: devShellStyles.fullFrame };
     return (
-        <div className={wrapper.page}>
-            <div className={wrapper.frame}>
-                <MessagingProvider shell={shell} messaging={messaging}>
+        <MessagingProvider shell={shell} messaging={messaging}>
+            <div className={wrapper.page}>
+                <div className={wrapper.frame}>
                     <ToastHost>
                         <ExtensionBanner />
                         <AppInner />
                     </ToastHost>
-                </MessagingProvider>
+                </div>
+                <GatedDevVariantBadge state={variantState} />
             </div>
-            <DevVariantBadge state={variantState} />
-        </div>
+        </MessagingProvider>
     );
+}
+
+// The dev variant switcher is a developer-only preview tool. Gate it
+// behind Developer Mode plus its own "Show variant popover" toggle
+// (`settings.showVariantBadge`); both default off, so it never shows in
+// production unless a developer explicitly opts in.
+function GatedDevVariantBadge({ state }) {
+    const { settings } = useSettings();
+    if (!settings?.developerMode || !settings?.showVariantBadge) return null;
+    return <DevVariantBadge state={state} />;
 }
 
 function AppInner() {

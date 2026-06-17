@@ -111,6 +111,7 @@ export const CLIPBOARD_AUTO_CLEAR_DEFAULT = 60;
  * @property {string[]} [hiddenTokens]                                                                       v2-tolerant — list of `chainId:tick` keys the user hid (collapsed into the Hidden section at the bottom of each tab) (§27.4 / G073)
  * @property {boolean} [showPinAffordance]                                                                   v2-tolerant — when true, balance rows render a per-row star button to pin/unpin the token. Default false to keep the row UI clean; users who want quick pin access flip it in Settings → Display.
  * @property {boolean} [showHideAffordance]                                                                  v2-tolerant — when true, balance rows render a per-row hide affordance. Default false; the Settings → Display unhide list still works regardless.
+ * @property {boolean} [showVariantBadge]                                                                    v2-tolerant (web shell only). When true AND developerMode is on, the floating dev variant switcher (small / full / sidebar / extension preview) renders. Default false, so production never shows it.
  * @property {boolean} [autoApproveLocalhost]                                                                v2-tolerant — when developerMode is also on, bridge.connect from localhost / 127.0.0.1 / [::1] origins skips the approval prompt (§48.6 / G151). Sign requests still prompt.
  * @property {string[]} [blockedOrigins]                                                                     v2-tolerant — user-managed origin blocklist (§12 / G009). bridge.connect + the four sign methods reject with BLOCKED_BY_USER for matching origins. Stored as URL.origin strings or wildcard patterns (`*.example.com`, Cluster S FOLLOWUP 3).
  * @property {Array<{ at: number, action: 'add' | 'remove', entry: string, evictedSiteIds?: string[] }>} [blocklistAuditLog]   v2-tolerant — ring-buffer of recent blocklist mutations (Cluster S FOLLOWUP 4). Capped at 50 entries.
@@ -192,6 +193,7 @@ export function createDefaultSettings() {
         hiddenTokens: [],
         showPinAffordance: false,
         showHideAffordance: false,
+        showVariantBadge: false,
         walletMode: WALLET_MODE_DEFAULT,
         activeNetwork: NETWORK_DEFAULT,
     };
@@ -374,6 +376,14 @@ export function validateSettings(record) {
             errors,
             'autoApproveLocalhost',
             isBoolean(r.autoApproveLocalhost),
+            'must be a boolean when present',
+        );
+    }
+    if (r.showVariantBadge !== undefined) {
+        check(
+            errors,
+            'showVariantBadge',
+            isBoolean(r.showVariantBadge),
             'must be a boolean when present',
         );
     }

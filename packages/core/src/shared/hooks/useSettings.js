@@ -20,6 +20,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMessaging } from '../useMessaging.js';
 
+// Each useSettings() instance loads its own snapshot, so a write made by
+// one component (e.g. the Settings panel) would leave another component's
+// snapshot (e.g. a header badge gated on that flag) stale until it
+// remounts. update() broadcasts the new record on this window event and
+// every instance listens, so the whole UI reflects a settings change
+// immediately, no reload needed.
+const SETTINGS_CHANGED_EVENT = 'xc:settings-changed';
+
 /**
  * @returns {{
  *   settings: import('../../schemas/settings.js').Settings | null,
@@ -63,13 +71,29 @@ export function useSettings() {
         }
         const next = await messaging.updateSettings(patch);
         if (aliveRef.current) setSettings(next);
+        if (typeof window !== 'undefined') {
+            try {
+                window.dispatchEvent(new CustomEvent(SETTINGS_CHANGED_EVENT, { detail: next }));
+            } catch { /* CustomEvent unsupported: non-fatal */ }
+        }
         return next;
     }, [messaging]);
 
     useEffect(() => {
         aliveRef.current = true;
         refresh();
-        return () => { aliveRef.current = false; };
+        let onChanged;
+        if (typeof window !== 'undefined') {
+            onChanged = (e) => {
+                const next = e?.detail;
+                if (next && aliveRef.current) setSettings(next);
+            };
+            window.addEventListener(SETTINGS_CHANGED_EVENT, onChanged);
+        }
+        return () => {
+            aliveRef.current = false;
+            if (onChanged) window.removeEventListener(SETTINGS_CHANGED_EVENT, onChanged);
+        };
     }, [refresh]);
 
     return { settings, loading, error, refresh, update };
