@@ -5,7 +5,7 @@
 //
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md. A commercial
-// license (without AGPL source-disclosure terms) is available —
+// license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -1149,7 +1149,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                             First send to this address — test it first?
                         </p>
                         <p className={styles.testSendBody}>
-                            You're sending {testSendGate.amountSats.toLocaleString()} sats
+                            You're sending {(testSendGate.amountSats / 1e8).toFixed(8)} {nativeTickerFor(descriptor)}
                             to a new recipient. A small test send confirms the address
                             works before the full amount goes out.
                         </p>
