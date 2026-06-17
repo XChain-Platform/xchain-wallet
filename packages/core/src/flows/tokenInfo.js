@@ -30,6 +30,11 @@
 // is explicitly dropped — the wallet popup holds keys, so we don't
 // render author-supplied HTML even sandboxed.
 
+// Fully-populated reference TIS document for the demo EXAMPLE token.
+// Kept as a standalone JSON file (not inlined) so it doubles as a
+// readable, copy-pasteable sample of a maxed-out TIS v1.0.0 envelope.
+import exampleTis from './demoExampleTis.json' with { type: 'json' };
+
 /**
  * @typedef {Object} TisMediaEntry
  * @property {string} url                                full https URL after scheme rewrite
@@ -852,85 +857,68 @@ function demoRowFor(tick) {
 // publicly hosted, freely-redistributable media so an offline demo can
 // still showcase the gallery in a connected browser.
 const DEMO_TIS_BY_TICK = {
-    // PEPECREATURE — fully-populated TIS showcase. Exercises every field
-    // in token-information-standard-v1.0.0-schema.json (name, owner,
-    // contacts, categories, social, images of every type, audio, video,
-    // files, dns, pgpsig) so the wallet's small popup can be visually
-    // audited against a maxed-out token info document.
+    // EXAMPLE is the fully-populated reference token. Its TIS document is
+    // the standalone demoExampleTis.json file, which fills in every field
+    // the Token Information Standard v1.0.0 defines: name, owner, contacts,
+    // categories, social, images of every type, audio, video, files, dns,
+    // packs, html, and a PGP signature. Look at this entry to see what a
+    // maxed-out token info document renders like in the wallet.
+    EXAMPLE: {
+        // A description that is itself a JSON URL exercises the live
+        // fetch+parse path; offline (the usual demo case) the wallet falls
+        // back to the pre-built `tis` block below.
+        description: 'https://explorer.xchain.io/asset/EXAMPLE/tis.json',
+        owner: '1ExampLeTokenXChainDemoOwnerAddrXyz',
+        supply: { current: '1000', max: '1000' },
+        locks: { description: true, max_supply: true, mint: true, mint_supply: true },
+        market: { price: 0.00005, floor: 0.00004 },
+        tis: exampleTis,
+    },
+    // PEPECREATURE is a real Fake Rare card on Counterparty, reproduced here
+    // so the demo shows an authentic on-chain token rather than a synthetic
+    // one. The values mirror the live asset (issuer, supply 170, locked) and
+    // its on-chain description JSON (creature.json). It is intentionally only
+    // modestly populated, exactly like the real token; EXAMPLE above is the
+    // every-field showcase.
     PEPECREATURE: {
-        description: 'Showcase entry: a fully-populated TIS document for visual QA.',
-        owner: '1EbsYtUeLX2iFLwRLABUKLpNzKga',
+        description: 'PEPECREATURE is not just another card. It is a STAMP inscribed directly into Bitcoin, a Fake Rare born of the old traditions, and the vessel for a book unlike any other.\n\nThis card carries its own engine, hosted on Arweave, that pulls the image out of Bitcoin itself. No fragile indexer. No single point of failure. Push the button on Tokenscan and watch the engine awaken, the same way FAKEDUST revealed an album inside a card.\n\nThis is a STAMP. This is a Fake Rare. This is permanence, lore, and unity fused together. Nothing like it exists.',
+        owner: '1EbsYbJ8HcVtUeLX2iFLwRLABUKLpNzKga',
         supply: { current: '170', max: '170' },
         locks: { description: true, max_supply: true, mint: true, mint_supply: true },
-        market: { price: 0.012, floor: 0.008 },
+        market: { price: 0.00420690, floor: 0.00298061 },
         tis: {
             tick: 'PEPECREATURE',
-            name: 'Pepe Creature',
-            description: 'A fully-populated Token Information Standard document used to stress-test the wallet\'s token detail surface. Pepe Creature is a Fake Rare card minted with extensive metadata — owner identity, contact rows, social presence, layered imagery, audio + video media, attached files, DNS records, and a PGP signature for the whole envelope.',
+            name: 'PEPECREATURE',
+            description: 'PEPECREATURE is not just another card. It is a STAMP inscribed directly into Bitcoin, a Fake Rare born of the old traditions, and the vessel for a book unlike any other.\n\nThis card carries its own engine, hosted on Arweave, that pulls the image out of Bitcoin itself. No fragile indexer. No single point of failure. Push the button on Tokenscan and watch the engine awaken, the same way FAKEDUST revealed an album inside a card.\n\nThis is a STAMP. This is a Fake Rare. This is permanence, lore, and unity fused together. Nothing like it exists.',
             website: 'https://fakeraredirectory.com/fake-rares/',
             websites: [
                 'https://fakeraredirectory.com/fake-rares/',
-                'https://kanemayfield.example/',
-                'https://pepe-creature.example/',
+                'https://kanemayfield.com/',
+                'https://kanemayfield.com/FORGE/',
             ],
-            pgpsig: '-----BEGIN PGP SIGNATURE-----\nVersion: GnuPG v2\n\niQEcBAEBCgAGBQJabcDEFGAAoJEHbpb1f0F0EXAMPLE/SIGNATURE/BLOCK/HERE\nVjW8a3pVjNqYxqq4u8z2/EXAMPLE/SIGNATURE/BLOCK/HERE+1KZ5GzkXxRz3o5\n7y0qD5xOq5+1KZ5GzkXxRz3o57y0qD5xOq5+EXAMPLE+SIGNATURE+BLOCK+abc/\nlzqzqp4VjW8a3pVjNqYxqq4u8z2EXAMPLE-SIGNATURE-BLOCK-1234567890abcd\n=AbCd\n-----END PGP SIGNATURE-----',
+            // On-chain the `pgpsig` field carries only the artist's name.
+            pgpsig: 'KANE MAYFIELD',
             owner: {
                 name: 'Kane Mayfield',
                 title: 'Artist',
-                organization: 'Fake Rares Studio',
             },
-            contacts: [
-                { type: 'email', data: 'hello@fakeraredirectory.com' },
-                { type: 'phone', data: '+1 (555) 010-0123' },
-                { type: 'fax', data: '+1 (555) 010-0124' },
-                { type: 'url', data: 'https://kanemayfield.example/contact' },
-                { type: 'address', data: '123 Fake Rare Way, Suite 4, Brooklyn, NY 11201, USA' },
-            ],
             categories: [
-                { type: 'main', data: 'Art & Literature' },
-                { type: 'sub', data: 'Digital Collectibles' },
-                { type: 'other', data: 'Fake Rares' },
+                { type: 'main', data: 'Artist, Band or Public Figure' },
+                { type: 'sub', data: 'Art / Literature' },
             ],
             social: [
                 { type: 'twitter', data: 'https://twitter.com/KaneMayfield' },
-                { type: 'github', data: 'https://github.com/fakerares' },
-                { type: 'reddit', data: 'https://www.reddit.com/r/rarepepe/' },
-                { type: 'facebook', data: 'https://facebook.com/fakerares' },
-                { type: 'linkedin', data: 'https://linkedin.com/in/kanemayfield' },
-                { type: 'discord', data: 'https://discord.gg/fakerares' },
-                { type: 'telegram', data: 'https://t.me/fakerares' },
-                { type: 'youtube', data: 'https://youtube.com/@fakerares' },
-                { type: 'instagram', data: 'https://instagram.com/fakerares' },
             ],
             images: [
-                { type: 'icon', data: 'https://gousue3rn3uppml5r5hloc4wqmojl2cqxyhvhnceairxkccnw7vq.ar.io/M6kqE3Fu6PexfY9OtwuWgxyV6FC-D1O0RAIjdQhNt-s/pepecreature_thumb.png', name: 'Pepe Creature Icon' },
-                { type: 'standard', data: 'https://gousue3rn3uppml5r5hloc4wqmojl2cqxyhvhnceairxkccnw7vq.ar.io/M6kqE3Fu6PexfY9OtwuWgxyV6FC-D1O0RAIjdQhNt-s/pepecreature_thumb.png', name: 'Pepe Creature' },
-                { type: 'large', data: 'https://gousue3rn3uppml5r5hloc4wqmojl2cqxyhvhnceairxkccnw7vq.ar.io/jDEXyFCLp7mv3IozMQ2WL_L-vgoYYWg6_EpKD_62pw4/pepecreature_full.jpg', name: 'Pepe Creature (full)' },
-                { type: 'hires', data: 'https://gousue3rn3uppml5r5hloc4wqmojl2cqxyhvhnceairxkccnw7vq.ar.io/jDEXyFCLp7mv3IozMQ2WL_L-vgoYYWg6_EpKD_62pw4/pepecreature_full.jpg', name: 'Pepe Creature (hi-res)' },
+                { type: 'icon', data: 'https://gousue3rn3uppml5r5hloc4wqmojl2cqxyhvhnceairxkccnw7vq.ar.io/M6kqE3Fu6PexfY9OtwuWgxyV6FC-D1O0RAIjdQhNt-s/pepecreature_thumb.png', name: 'PEPECREATURE' },
+                { type: 'standard', data: 'https://gousue3rn3uppml5r5hloc4wqmojl2cqxyhvhnceairxkccnw7vq.ar.io/M6kqE3Fu6PexfY9OtwuWgxyV6FC-D1O0RAIjdQhNt-s/pepecreature_thumb.png', name: 'PEPECREATURE' },
+                { type: 'large', data: 'https://gousue3rn3uppml5r5hloc4wqmojl2cqxyhvhnceairxkccnw7vq.ar.io/jDEXyFCLp7mv3IozMQ2WL_L-vgoYYWg6_EpKD_62pw4/pepecreature_full.jpg', name: 'PEPECREATURE (full)' },
             ],
-            audio: [
-                { type: 'mp3', data: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3', name: 'Theme song' },
-            ],
+            // Canonical on-chain media, matching the live asset. The ar.io
+            // gateway can paywall (HTTP 402), so the player may not render
+            // in the demo; the URL is kept faithful to Counterparty.
             video: [
-                // Canonical PEPECREATURE video lives at
-                //   https://2ouj…ar.io/06idTprqf…?/16tonspepe.mp4
-                // but that ar.io gateway returns HTTP 402 (paywalled) and
-                // the file isn't replicated to free Arweave gateways. We
-                // substitute a publicly-hosted MP4 so the wallet's video
-                // player actually renders — purely a demo stub.
-                { type: 'mp4', data: 'https://www.w3schools.com/html/mov_bbb.mp4', name: '16 Tons Pepe (demo substitute)' },
-            ],
-            files: [
-                { type: 'pdf', data: 'https://example.com/pepecreature-whitepaper.pdf', name: 'Pepe Creature Whitepaper' },
-                { type: 'doc', data: 'https://example.com/pepecreature-lore.docx', name: 'Lore document' },
-                { type: 'xls', data: 'https://example.com/pepecreature-traits.xlsx', name: 'Trait spreadsheet' },
-            ],
-            dns: [
-                { type: 'A', host: 'pepecreature.example', value: '192.0.2.42' },
-                { type: 'AAAA', host: 'pepecreature.example', value: '2001:db8::42' },
-                { type: 'CNAME', host: 'www.pepecreature.example', value: 'pepecreature.example' },
-                { type: 'TXT', host: 'pepecreature.example', value: 'v=spf1 include:_spf.example.com ~all' },
-                { type: 'MX', host: 'pepecreature.example', value: 'mail.pepecreature.example', priority: 10 },
+                { type: 'mp4', data: 'https://2ouj2tu25j76b6ashak5jmpejzljqr4dyvpptdyk6tkoabu65mxq.ar.io/06idTprqf-D4EjgV1LHkTlaYR4PFXvmPCvTU4Aae6y8?/16tonspepe.mp4', name: '16 Tons Pepe' },
             ],
         },
     },

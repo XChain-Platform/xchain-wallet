@@ -1,0 +1,77 @@
+{
+    "tick": "EXAMPLE",
+    "name": "Example Token",
+    "description": "EXAMPLE is a reference token whose information document fills in every field defined by the XChain Token Information Standard v1.0.0. It exists so the wallet, explorer, and any other TIS reader can be checked against a maxed-out document: owner identity, contact rows, categories, social links, layered imagery, audio, video, attached files, DNS records, content packs, an embedded HTML widget, and a PGP signature over the whole envelope. Nothing here points at a real product; the values are illustrative placeholders chosen to exercise each renderer.",
+    "website": "https://www.xchain.io",
+    "websites": [
+        "https://www.xchain.io",
+        "https://docs.xchain.io",
+        "https://explorer.xchain.io/asset/EXAMPLE"
+    ],
+    "html": "<iframe src=\"https://www.xchain.io/embed/example\" style=\"width:100%;height:600px\" frameborder=\"0\" allowfullscreen></iframe>",
+    "pgpsig": "-----BEGIN PGP SIGNATURE-----\nVersion: GnuPG v2\n\niQEcBAEBCgAGBQJabcDEFGAAoJEHbpb1f0F0EXAMPLE/SIGNATURE/BLOCK/HERE\nVjW8a3pVjNqYxqq4u8z2/EXAMPLE/SIGNATURE/BLOCK/HERE+1KZ5GzkXxRz3o5\n7y0qD5xOq5+1KZ5GzkXxRz3o57y0qD5xOq5+EXAMPLE+SIGNATURE+BLOCK+abc/\nlzqzqp4VjW8a3pVjNqYxqq4u8z2EXAMPLE-SIGNATURE-BLOCK-1234567890abcd\n=AbCd\n-----END PGP SIGNATURE-----",
+    "owner": {
+        "name": "Jane Doe",
+        "title": "Chief Technology Officer (CTO)",
+        "organization": "Example Labs, Inc."
+    },
+    "contacts": [
+        { "type": "address", "data": "1234 Main Street, Suite 4, Seattle, WA 98104, USA" },
+        { "type": "email", "data": "hello@example.com" },
+        { "type": "phone", "data": "+1 (555) 010-0123" },
+        { "type": "fax", "data": "+1 (555) 010-0124" },
+        { "type": "url", "data": "https://example.com/contact" }
+    ],
+    "categories": [
+        { "type": "main", "data": "Art & Literature" },
+        { "type": "sub", "data": "Digital Collectibles" },
+        { "type": "other", "data": "Reference / Showcase" }
+    ],
+    "social": [
+        { "type": "github", "data": "https://github.com/XChain-Platform" },
+        { "type": "facebook", "data": "https://facebook.com/xchain" },
+        { "type": "twitter", "data": "https://twitter.com/xchain_io" },
+        { "type": "linkedin", "data": "https://linkedin.com/company/xchain" },
+        { "type": "reddit", "data": "https://www.reddit.com/r/xchain/" },
+        { "type": "telegram", "data": "https://t.me/xchain_io" },
+        { "type": "discord", "data": "https://discord.gg/xchain" },
+        { "type": "youtube", "data": "https://youtube.com/@xchain" },
+        { "type": "instagram", "data": "https://instagram.com/xchain" }
+    ],
+    "images": [
+        { "type": "icon", "size": "48x48", "data": "https://placehold.co/48x48/1E90C7/FFFFFF/png?text=EX", "name": "Example icon (small)", "hash": "8031025a667824a188dd5479ca5cb20c5306be06ed01875f7bcc11ecb48251be" },
+        { "type": "icon", "size": "128x128", "data": "https://placehold.co/128x128/1E90C7/FFFFFF/png?text=EX", "name": "Example icon" },
+        { "type": "standard", "data": "https://placehold.co/512x512/1E90C7/FFFFFF/png?text=EXAMPLE", "name": "Example standard image" },
+        { "type": "large", "data": "https://placehold.co/1024x1024/7B2C8F/FFFFFF/png?text=EXAMPLE", "name": "Example (large)" },
+        { "type": "hires", "data": "https://placehold.co/2048x2048/7B2C8F/FFFFFF/png?text=EXAMPLE", "name": "Example (hi-res)" }
+    ],
+    "audio": [
+        { "type": "mp3", "data": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3", "name": "Theme (MP3)", "hash": "8031025a667824a188dd5479ca5cb20c5306be06ed01875f7bcc11ecb48251be" },
+        { "type": "m4a", "data": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3", "name": "Alternate cut (M4A)" },
+        { "type": "wav", "data": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3", "name": "Stems (WAV)" }
+    ],
+    "video": [
+        { "type": "mp4", "data": "https://www.w3schools.com/html/mov_bbb.mp4", "name": "Trailer (MP4)", "hash": "8031025a667824a188dd5479ca5cb20c5306be06ed01875f7bcc11ecb48251be" },
+        { "type": "mov", "data": "https://www.w3schools.com/html/movie.mp4", "name": "Behind the scenes (MOV)" },
+        { "type": "wmv", "data": "https://www.w3schools.com/html/mov_bbb.mp4", "name": "Archive copy (WMV)" }
+    ],
+    "files": [
+        { "type": "pdf", "data": "https://example.com/example-whitepaper.pdf", "name": "Whitepaper", "hash": "8031025a667824a188dd5479ca5cb20c5306be06ed01875f7bcc11ecb48251be" },
+        { "type": "doc", "data": "https://example.com/example-lore.docx", "name": "Lore document" },
+        { "type": "xls", "data": "https://example.com/example-traits.xlsx", "name": "Trait spreadsheet" },
+        { "type": "other", "data": "https://example.com/example-bundle.zip", "name": "Asset bundle" }
+    ],
+    "dns": [
+        { "type": "A", "host": "@", "value": "192.0.2.42" },
+        { "type": "AAAA", "host": "@", "value": "2001:db8::42" },
+        { "type": "CNAME", "host": "www", "value": "example.com" },
+        { "type": "TXT", "host": "@", "value": "v=spf1 include:_spf.example.com ~all" },
+        { "type": "MX", "host": "@", "priority": 10, "value": "aspmx.l.example.com" }
+    ],
+    "packs": {
+        "pack-genesis": {
+            "name": "Genesis Pack",
+            "description": "A sample token-gated content pack. Holding even one EXAMPLE unlocks it."
+        }
+    }
+}

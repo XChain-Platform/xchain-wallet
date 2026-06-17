@@ -29,6 +29,9 @@ function nftImg(label, bgFrom, bgTo, fg = '#FFFFFF') {
 // instead of the colored-letter placeholder. Tickers that don't appear
 // here fall back to `nftImg(...)`.
 const DEMO_TOKEN_ICONS = {
+    // Matches the icon in demoExampleTis.json so the holdings tile and the
+    // token-info gallery show the same artwork.
+    EXAMPLE: 'https://placehold.co/128x128/1E90C7/FFFFFF/png?text=EX',
     PEPECREATURE: 'https://gousue3rn3uppml5r5hloc4wqmojl2cqxyhvhnceairxkccnw7vq.ar.io/M6kqE3Fu6PexfY9OtwuWgxyV6FC-D1O0RAIjdQhNt-s/pepecreature_thumb.png',
     RAREPEPE: 'https://rarepepedirectory.com/pepe/NAKAMOTOCARD.png',
     PEPECASH: 'https://rarepepedirectory.com/pepe/PEPECASH.png',
@@ -57,6 +60,10 @@ const PER_CHAIN_DEFAULTS = /** @type {Record<string, BalanceFixture>} */ ({
     'bitcoin-mainnet': {
         native: { tick: 'BTC', divisibility: 8, quantity: '12345678', fiatRate: 95000 }, // 0.12345678 BTC ≈ $11.7k
         tokens: [
+            // Featured reference token. Its full TIS document (every field
+            // populated) lives in demoExampleTis.json; holding it lets the
+            // demo show a maxed-out token info surface.
+            { tick: 'EXAMPLE', displayName: 'Example Token', divisibility: 8, quantity: '10000000000', fiatRate: 0.5, imageUrl: DEMO_TOKEN_ICONS.EXAMPLE }, // 100 EXAMPLE
             // Divisible mainnet tokens
             { tick: 'XCP', displayName: 'Counterparty', divisibility: 8, quantity: '500000000', fiatRate: 35 }, // 5 XCP
             { tick: 'PEPECASH', displayName: 'PepeCash', divisibility: 8, quantity: '10000000000', fiatRate: 0.0012, imageUrl: DEMO_TOKEN_ICONS.PEPECASH }, // 100 PEPECASH
@@ -77,6 +84,10 @@ const PER_CHAIN_DEFAULTS = /** @type {Record<string, BalanceFixture>} */ ({
     'bitcoin-regtest': {
         native: { tick: 'BTC', divisibility: 8, quantity: '10000000000', fiatRate: 70000 }, // 100 rBTC @ $70k
         tokens: [
+            // Featured reference token. Its full TIS document (every field
+            // populated) lives in demoExampleTis.json; holding it lets the
+            // demo show a maxed-out token info surface.
+            { tick: 'EXAMPLE', displayName: 'Example Token', divisibility: 8, quantity: '10000000000', fiatRate: 0.5, imageUrl: DEMO_TOKEN_ICONS.EXAMPLE }, // 100 EXAMPLE
             // Divisible tokens — appear in Tokens tab
             { tick: 'XCP', displayName: 'Counterparty', divisibility: 8, quantity: '500000000', fiatRate: 30 },
             // PEPECASH carries an image, so it appears in BOTH Tokens (row) and NFTs (tile)
@@ -87,6 +98,9 @@ const PER_CHAIN_DEFAULTS = /** @type {Record<string, BalanceFixture>} */ ({
             { tick: 'RAREPEPE', displayName: 'Rare Pepe', divisibility: 0, quantity: '1', fiatRate: 500, imageUrl: DEMO_TOKEN_ICONS.RAREPEPE },
             { tick: 'BITCRYSTAL', displayName: 'Bitcrystals', divisibility: 0, quantity: '1', fiatRate: 200, imageUrl: nftImg('BIT', '#1565C0', '#00838F') },
             { tick: 'XCHAINLOGO', displayName: 'XChain Logo NFT', divisibility: 0, quantity: '1', fiatRate: 50, imageUrl: nftImg('XC', '#1E90C7', '#7B2C8F') },
+            // Showcase NFT. Demo wallets always hold a Pepe Creature so the
+            // featured-token / gated-content path has something to land on.
+            { tick: 'PEPECREATURE', displayName: 'Pepe Creature', divisibility: 0, quantity: '1', fiatRate: 800, imageUrl: DEMO_TOKEN_ICONS.PEPECREATURE },
         ],
     },
     'litecoin-mainnet': {
