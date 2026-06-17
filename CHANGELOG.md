@@ -4878,7 +4878,7 @@ Version demoted from `1.0.0-rc.6` → `0.102.0` (then bumped here to `0.103.0`) 
 
 - **Home header** — brand block (logo + "XChain Wallet" + optional wallet-name subtitle when it differs from the product name) replaces the previous wallet-name-only title.
 
-- **`packages/web/vite.config.js`** — `host: '0.0.0.0'` so the Mac side of Parallels can reach the dev server. `allowedHosts: ['devhost', 'localhost', '127.0.0.1']` to bypass Vite 5's host check.
+- **`packages/web/vite.config.js`** — `host: '0.0.0.0'` so a remote dev host can reach the dev server. `allowedHosts: ['localhost', '127.0.0.1']` to bypass Vite 5's host check.
 
 - **`packages/extension/package.json`** + **`packages/web/package.json`** — `xchain-sdk` switched from `^1.13.0` (npm — only published 1.2.5 available) to `link:../../../xchain-sdk` (sibling repo).
 

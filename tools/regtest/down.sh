@@ -8,7 +8,7 @@
 
 set -euo pipefail
 
-PLATFORM_DIR="${XCHAIN_PLATFORM_DIR:-REDACTED-LOCAL-PATH}"
+PLATFORM_DIR="${XCHAIN_PLATFORM_DIR:-$HOME/Sites/XChain-Platform/xchain-node}"
 
 if [[ ! -d "$PLATFORM_DIR" ]]; then
     cat >&2 <<EOF

@@ -36,4 +36,4 @@ in person; doc the path in the runbook at
 `packages/extension/docs/TEST_DAPP_RUNBOOK.md`.
 
 Cross-chain real-broadcast: needs the regtest stack at
-`REDACTED-LOCAL-PATH`. Tracked separately.
+`~/Sites/XChain-Platform/xchain-node`. Tracked separately.

@@ -117,7 +117,7 @@ assert.strictEqual(pluginRule.meta.type, 'suggestion',
 const reports = [];
 const fakeContext = {
     options: [{ allow: [] }],
-    getFilename() { return 'REDACTED-LOCAL-PATH'; },
+    getFilename() { return '/repo/xchain-wallet/packages/core/src/Demo.jsx'; },
     report(r) { reports.push(r); },
 };
 const visitors = pluginRule.create(fakeContext);

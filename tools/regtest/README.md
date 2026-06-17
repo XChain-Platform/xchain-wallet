@@ -10,7 +10,7 @@ backend, all auto-mined by `xchain-regtest-miner` for instant block
 confirmations.
 
 The actual stack is **upstream**, not vendored here. It lives at
-`REDACTED-LOCAL-PATH` — the platform's CLI
+`~/Sites/XChain-Platform/xchain-node` — the platform's CLI
 orchestrator. The scripts here are the thin glue that lets the
 wallet's smoke / E2E tests target it without re-implementing
 docker-compose orchestration.
@@ -94,7 +94,7 @@ have run `xchain-node start` first."
 
 ```bash
 # Bring the upstream stack up — once per dev session.
-cd REDACTED-LOCAL-PATH
+cd ~/Sites/XChain-Platform/xchain-node
 ./xchain-node.sh start
 
 # From the wallet repo:

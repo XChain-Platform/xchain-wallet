@@ -59,7 +59,7 @@ bootstrap.sh: $failures service(s) not responding.
 The wallet's regtest tests need the upstream platform stack running.
 Bring it up:
 
-  cd REDACTED-LOCAL-PATH
+  cd $HOME/Sites/XChain-Platform/xchain-node
   ./xchain-node.sh start
 
 Then re-run this script. If you've changed default ports, override
