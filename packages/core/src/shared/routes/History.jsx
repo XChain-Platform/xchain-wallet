@@ -69,7 +69,7 @@ const COIN_TICKER_TO_NAME = {
 };
 
 /**
- * History route — §23 unified timeline + §23.5 cross-chain thread
+ * History route: §23 unified timeline + §23.5 cross-chain thread
  * rendering.
  *
  * Read-only view that aggregates `getHistory(addr, 'address')` across
@@ -85,13 +85,13 @@ const COIN_TICKER_TO_NAME = {
  *
  * Filters:
  *   - Chain chips (toggle each chainId on/off)
- *   - "Cross-chain only" — keep only entries that are part of a LINK
+ *   - "Cross-chain only": keep only entries that are part of a LINK
  *     pairing (regardless of whether both peers are in the result set)
  *
  * Wallet addresses are resolved up-front via
  * `messaging.getAddressesByChain(walletId)`. Per (chain, address) we
- * fan out two parallel reads — `getAddressHistory` + `getLinksForAddress`
- * — and merge into a flat `entries` list with `linkIdx` pointing at
+ * fan out two parallel reads (`getAddressHistory` + `getLinksForAddress`)
+ * and merge into a flat `entries` list with `linkIdx` pointing at
  * matching entries when both sides happen to be in the wallet's
  * history (typical case: cross-chain LINK between two addresses owned
  * by the same wallet).
@@ -104,7 +104,7 @@ const COIN_TICKER_TO_NAME = {
  * @param {string} [props.initialSearchQuery]   pre-populates the search box on mount; lets TokenDetail open History scoped to one tick (G071)
  * @param {{ chainId?: string, actionIndex?: string, txHash?: string } | null} [props.initialFocus]
  *        when set, the matching entry is auto-selected and scrolled into
- *        view as soon as it loads. §24.6 / Cluster Y FOLLOWUP 4 — used
+ *        view as soon as it loads. §24.6 / Cluster Y FOLLOWUP 4; used
  *        by the desktop detach-pending-tx path.
  */
 export function History({ walletId, accountId, onBack, onReceive, onSelectEntry, initialSearchQuery = '', initialChainCoin = '', initialFocus = null }) {
@@ -118,7 +118,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [entries, setEntries] = useState(/** @type {HistoryEntry[]} */ ([]));
-    // Cluster G FOLLOWUP 5 — Unix ms of the last successful per-chain
+    // Cluster G FOLLOWUP 5: Unix ms of the last successful per-chain
     // history+links fan-out completion. Surfaces as a "Last synced …"
     // hint in the filter bar so the user can spot stale views.
     const [historyFetchedAt, setHistoryFetchedAt] = useState(
@@ -144,7 +144,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     const [dateFrom, setDateFrom] = useState(() => isoDateDaysAgo(30));
     const [dateTo, setDateTo] = useState(() => isoDateDaysAgo(0));
     const [moreFiltersOpen, setMoreFiltersOpen] = useState(false);
-    // Cluster I FOLLOWUP 5 — single-modal export. Holds the modal's
+    // Cluster I FOLLOWUP 5: single-modal export. Holds the modal's
     // open state + the field choices (format / column set / date-range
     // override). Initial column set = every field; date range defaults
     // to the active filter when the modal opens.
@@ -160,12 +160,12 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     const [peerCache, setPeerCache] = useState(
         /** @type {Record<string, { loading: boolean, action: any | null, error: string | null }>} */ ({}),
     );
-    // §24.6 / Cluster Y FOLLOWUP 4 — once a detached-window's initial
+    // §24.6 / Cluster Y FOLLOWUP 4; once a detached-window's initial
     // route resolves, ref-flag this so we don't re-select on every
     // re-render or after the user manually navigates away from the row.
     const initialFocusFiredRef = useRef(false);
 
-    // Step 1 — resolve the wallet's addresses grouped by chainId.
+    // Step 1: resolve the wallet's addresses grouped by chainId.
     useEffect(() => {
         let cancelled = false;
         messaging.getAddressesByChain(walletId, accountId)
@@ -180,7 +180,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 // When the caller asked us to scope to a specific coin
                 // family (e.g. arrived from the Bitcoin TokenDetail's
                 // History button), narrow enabledChains to only those
-                // chains. One-shot override — we deliberately skip the
+                // chains. One-shot override: we deliberately skip the
                 // remembered-set restore and don't persist this scope,
                 // so revisiting History via the menu reverts to the
                 // user's last manually-chosen filter.
@@ -191,7 +191,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                     setEnabledChains(scoped.size > 0 ? scoped : all);
                     return;
                 }
-                // §23.5 / G052 — restore the user's last chain-filter
+                // §23.5 / G052: restore the user's last chain-filter
                 // choice if one is stored, intersected with the wallet's
                 // currently-active chains so a removed chain doesn't
                 // leave a stale entry. Falls back to "all enabled".
@@ -207,7 +207,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     // §22 Multisig-only filter (Step 22). Resolve the wallet's
     // multisig receive address up-front so the chip can filter
     // entries by exact match without re-running deriveMultisigAddress
-    // on every render. Best-effort — silently leaves the chip
+    // on every render. Best-effort: silently leaves the chip
     // disabled when no multisig is configured or when the BTC chain
     // isn't in the registry.
     useEffect(() => {
@@ -219,11 +219,11 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 if (cancelled) return;
                 if (r && typeof r.address === 'string') setMultisigAddress(r.address);
             })
-            .catch(() => { /* no multisig configured — chip stays disabled */ });
+            .catch(() => { /* no multisig configured; chip stays disabled */ });
         return () => { cancelled = true; };
     }, [walletId, messaging]);
 
-    // Step 2 — fan out history + links per (chain, address). Merge
+    // Step 2: fan out history + links per (chain, address). Merge
     // results into a single sorted list.
     useEffect(() => {
         if (!addressesByChain) return;
@@ -238,7 +238,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         let cancelled = false;
         setLoadingChains(new Set(chainsToLoad));
 
-        // Cluster J FOLLOWUP 1 — for the demo wallet, replace the SDK
+        // Cluster J FOLLOWUP 1: for the demo wallet, replace the SDK
         // fetch with synthesized fixture data so the History view
         // isn't an empty wasteland during the demo. Real history rows
         // arrive once the user exits demo mode + funds the wallet.
@@ -265,7 +265,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                             .then((r) => extractRows(r))
                             .catch(() => []),
                     ]).then(([history, links]) => {
-                        // TEMP visual-design preview — fall back to
+                        // TEMP visual-design preview; fall back to
                         // the demo-mode synthesizer when a real wallet
                         // has zero history for this address, so the
                         // populated UI can be evaluated. Remove once
@@ -351,10 +351,10 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         return s;
     }, [addressesByChain]);
 
-    // Cluster I FOLLOWUP 6 — Per-chain tip used to compute confirmation
+    // Cluster I FOLLOWUP 6: Per-chain tip used to compute confirmation
     // counts on confirmed rows. Derived from the highest blockIndex
     // seen across loaded history rows (lower bound for the chain tip,
-    // since the wallet has no dedicated tip endpoint yet — explorer's
+    // since the wallet has no dedicated tip endpoint yet; explorer's
     // /network is still a placeholder, see FOLLOWUPS.md). A user with
     // any confirmed activity sees a meaningful count; a user with one
     // freshly-confirmed row gets "1 confirmation" (the tip is at the
@@ -474,7 +474,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         [visibleEntries, groupingMode],
     );
 
-    // §24.6 / Cluster Y FOLLOWUP 4 — auto-select the entry matching
+    // §24.6 / Cluster Y FOLLOWUP 4: auto-select the entry matching
     // `initialFocus` once entries have loaded, then scroll it into
     // view. Fires at most once per History mount so a user who
     // explicitly de-selects the row doesn't get the row re-selected
@@ -517,7 +517,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     };
 
     const toggleChain = (cid) => {
-        // §23.5 / G052 — persist the new filter set so the user's
+        // §23.5 / G052: persist the new filter set so the user's
         // choice survives navigation. Capture the post-toggle Set
         // inside the updater so the write reflects the new state
         // even if React batches multiple toggles.
@@ -613,7 +613,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
 
     return wrap(
         <>
-            {/* Unified filter card — search, chain picker, and the
+            {/* Unified filter card: search, chain picker, and the
                 collapsible Filters section all in one container. */}
             <div className={styles.filterCard} role="group" aria-label="History filters">
                 <input
@@ -920,12 +920,12 @@ export function DetailCard({ entry, peerCache, chainTip, walletId }) {
         : null;
     const peer = peerKey ? peerCache[peerKey] : null;
     const replaceable = isEntryReplaceable(entry);
-    // §24.6 / Cluster Y FOLLOWUP 4 — desktop-only "Open in new window"
+    // §24.6 / Cluster Y FOLLOWUP 4: desktop-only "Open in new window"
     // affordance for pending (mempool-only) entries. The detached
     // window opens directly on this row via the History `initialFocus`
     // prop and keeps its own auto-lock + last-view memory because the
     // shared MessageHost stays singleton across windows. Surfaces on
-    // desktop only — extension popup + web SPA have no equivalent
+    // desktop only; extension popup + web SPA have no equivalent
     // multi-window primitive.
     const isPending = !entry.blockIndex;
     const detachAvailable = shell === 'desktop'
@@ -1011,12 +1011,11 @@ export function DetailCard({ entry, peerCache, chainTip, walletId }) {
             onClick: () => runRbf('cancel'),
         });
     }
-    // Universal option — every entry can have a sharable link copied,
+    // Universal option: every entry can have a sharable link copied,
     // so the menu is never empty (DeFi rows, in particular, hit this
     // path since they don't have a peer or replaceable state).
-    const shareXchainCoin = xchainCoinForChainId(entry?.chainId);
-    if (shareXchainCoin && entry?.actionIndex) {
-        const shareUrl = `https://explorer.xchain.io/${shareXchainCoin}/action/${entry.actionIndex}`;
+    const shareUrl = xchainActionUrl(entry?.chainId, entry?.actionIndex);
+    if (shareUrl) {
         moreOptions.push({
             id: 'copy-link',
             label: 'Copy action link',
@@ -1056,7 +1055,7 @@ export function DetailCard({ entry, peerCache, chainTip, walletId }) {
 
     return (
         <div className={styles.detailContainer} role="region" aria-label="Action detail">
-            {/* Basic details hero — concise summary at the top of the
+            {/* Basic details hero: concise summary at the top of the
                 page. Flush variant: zero card padding so the table's
                 row-divider lines run all the way to the card edges,
                 with horizontal cell padding restoring the inner gutter
@@ -1074,7 +1073,7 @@ export function DetailCard({ entry, peerCache, chainTip, walletId }) {
                 </table>
             </section>
 
-            {/* Action row — explorer links followed by a "More" button
+            {/* Action row: explorer links followed by a "More" button
                 that drops down a list of follow-up actions (e.g. Save
                 as contact, Speed up, Cancel). The More button always
                 renders so users get a consistent place to look across
@@ -1150,7 +1149,7 @@ export function DetailCard({ entry, peerCache, chainTip, walletId }) {
                 </div>
             ) : null}
 
-            {/* RBF status — surfaces the outcome of Speed up / Cancel
+            {/* RBF status: surfaces the outcome of Speed up / Cancel
                 picked from the More menu. Sits between the action row
                 and the tab strip so the user sees the result without
                 scrolling, mirroring the inline save-contact form. */}
@@ -1162,7 +1161,7 @@ export function DetailCard({ entry, peerCache, chainTip, walletId }) {
             ) : null}
 
             {/* Inline Save-as-contact form. Shown when the user picks
-                "Save as contact" from the More menu — sits between the
+                "Save as contact" from the More menu, sits between the
                 action buttons and the tab strip so the user doesn't
                 lose the page context the way the bottom-of-card prompt
                 did. */}
@@ -1209,7 +1208,7 @@ export function DetailCard({ entry, peerCache, chainTip, walletId }) {
                 </form>
             ) : null}
 
-            {/* Tab strip — matches Home's HomeTabs visual rhythm. */}
+            {/* Tab strip: matches Home's HomeTabs visual rhythm. */}
             <div className={styles.detailTabs} role="tablist" aria-label="Action detail view">
                 {detailTabs.map((t) => (
                     <button
@@ -1229,7 +1228,7 @@ export function DetailCard({ entry, peerCache, chainTip, walletId }) {
                 className={`${styles.detailSection} ${activeDetailTab === 'details' ? styles.detailSectionFlush : ''}`}
                 role="tabpanel"
             >
-                {/* Details tab — full field dump (every value associated
+                {/* Details tab: full field dump (every value associated
                     with the action), as opposed to the curated hero
                     table at the top. */}
                 {activeDetailTab === 'details' ? (
@@ -1285,7 +1284,7 @@ export function DetailCard({ entry, peerCache, chainTip, walletId }) {
                                     </div>
                                 ) : (
                                     <p className={styles.empty}>
-                                        Peer chain not bundled in this wallet — open the
+                                        Peer chain not bundled in this wallet; open the
                                         block explorer for {entry.link.peerCoinTicker} to
                                         view {entry.link.peerCoinTicker} #{entry.link.peerActionIndex}.
                                     </p>
@@ -1340,13 +1339,13 @@ function basicDetailRows(entry, chainTip) {
     if (!entry) return [];
     const rows = [];
 
-    // Action — just the colored bubble. The action number now lives
+    // Action: just the colored bubble. The action number now lives
     // on its own "Index" row below Block.
     rows.push(['Action', (
-        <span className={styles.actionTag}>{entry.action || '—'}</span>
+        <span className={styles.actionTag}>{entry.action || '-'}</span>
     )]);
 
-    // Status — second, so success / failure is visible immediately.
+    // Status: second, so success / failure is visible immediately.
     const status = classifyEntryStatus(entry);
     const statusLabel = status === 'confirmed' ? 'VALID'
         : status === 'failed' ? 'INVALID'
@@ -1358,7 +1357,7 @@ function basicDetailRows(entry, chainTip) {
         <span className={`${styles.statusBubble} ${statusColorClass}`}>{statusLabel}</span>
     )]);
 
-    // Network — coin icon + full chain name (e.g. "Dogecoin Mainnet").
+    // Network: coin icon + full chain name (e.g. "Dogecoin Mainnet").
     if (entry.chainId) {
         const [coin = '', network = 'mainnet'] = String(entry.chainId).split('-');
         const label = `${capitalize(coin)} ${capitalize(network)}`.trim();
@@ -1376,7 +1375,7 @@ function basicDetailRows(entry, chainTip) {
             </span>
         )]);
     }
-    // Hero stays minimal — Action, Status, Network, Time only. Block,
+    // Hero stays minimal: Action, Status, Network, Time only. Block,
     // Index, Tx hash, Source, Destination, Amount, Memo, and every
     // per-action field live in the Details tab below.
     if (entry.timestamp) rows.push(['Time', formatRelativeTime(entry.timestamp) || formatTimestamp(entry.timestamp)]);
@@ -1406,7 +1405,7 @@ function CopyIconButton({ value, label = 'Copy to clipboard' }) {
             if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
                 await navigator.clipboard.writeText(text);
             } else if (typeof document !== 'undefined') {
-                // Fallback for non-secure contexts — hidden textarea + execCommand.
+                // Fallback for non-secure contexts; hidden textarea + execCommand.
                 const ta = document.createElement('textarea');
                 ta.value = text;
                 ta.setAttribute('readonly', '');
@@ -1496,11 +1495,11 @@ function fullDetailRows(entry, balancesHidden = false) {
         )]);
     }
 
-    // Every other raw key — sorted alphabetically. Skip the
+    // Every other raw key, sorted alphabetically. Skip the
     // entry-level fields we already surfaced above so we don't print
     // the same datum twice (matched by snake_case and camelCase).
     // `params` is also skipped because the synth fixtures nest the
-    // same fields there as at the top level — would render twice.
+    // same fields there as at the top level; would render twice.
     const skipKeys = new Set([
         'action', 'ACTION',
         'action_index', 'actionIndex', 'ACTION_INDEX',
@@ -1519,7 +1518,7 @@ function fullDetailRows(entry, balancesHidden = false) {
         let display;
         if (balancesHidden && AMOUNT_KEY_RE.test(k)) {
             display = '•••••';
-        } else if (v === null || v === undefined) display = '—';
+        } else if (v === null || v === undefined) display = '-';
         else if (typeof v === 'number' || (typeof v === 'string' && /^-?\d+$/.test(v))) {
             display = formatNumberWithCommas(v);
         }
@@ -1562,7 +1561,7 @@ function formatNumberWithCommas(value) {
  *   - regtest   → RBTC, RLTC, RDOGE
  *
  * Returns null when the chainId is malformed or the coin family isn't
- * in the XChain explorer's recognized list — the caller skips the
+ * in the XChain explorer's recognized list; the caller skips the
  * XChain button in that case.
  */
 function xchainCoinForChainId(chainId) {
@@ -1577,6 +1576,30 @@ function xchainCoinForChainId(chainId) {
 }
 
 /**
+ * Build a full XChain explorer action URL from the chain descriptor.
+ * Mainnet/testnet descriptors embed the coin path in `defaultUrl`
+ * (e.g. `https://explorer.xchain.io/BTC`), so we append just
+ * `/action/<index>`. For non-standard ports (regtest localhost) the
+ * descriptor carries only the host, so we append the coin ticker path
+ * and the port before `/action/<index>`.
+ * Returns null when the descriptor or coin ticker is unavailable.
+ */
+function xchainActionUrl(chainId, actionIndex) {
+    const desc = chainRegistry.get(chainId);
+    const ex = desc?.explorer;
+    if (!ex || !actionIndex) return null;
+    const standardPort = ex.defaultPort === 80 || ex.defaultPort === 443;
+    if (standardPort) {
+        // defaultUrl already includes the coin path.
+        return `${ex.defaultUrl}/action/${actionIndex}`;
+    }
+    // Non-standard port: descriptor URL is just the host; append coin path.
+    const coin = xchainCoinForChainId(chainId);
+    if (!coin) return null;
+    return `${ex.defaultUrl}:${ex.defaultPort}/${coin}/action/${actionIndex}`;
+}
+
+/**
  * Per-chain block-explorer link list. Demo entries (synthesized
  * tx hashes) get no links since they wouldn't resolve. Always
  * surfaces the XChain explorer when an action_index is available.
@@ -1587,25 +1610,25 @@ function explorerLinksFor(entry) {
     const txHash = entry.txHash;
     const [coin = '', network = 'mainnet'] = String(entry.chainId || '').split('-');
 
-    // XChain explorer first — addresses ACTIONs by `coin/action/index`
+    // XChain explorer first: addresses ACTIONs by `coin/action/index`
     // where `coin` is the XChain ticker code for the (chain, network)
     // pair: BTC/LTC/DOGE for mainnet, T-prefix for testnet, R-prefix
     // for regtest. Works for demo / regtest data too. Naked favicon
     // (no circular icon-wrap), just the chain-link glyph above the
     // label.
     if (entry.actionIndex) {
-        const xchainCoin = xchainCoinForChainId(entry.chainId);
-        if (xchainCoin) {
+        const xchainUrl = xchainActionUrl(entry.chainId, entry.actionIndex);
+        if (xchainUrl) {
             links.push({
                 id: 'xchain',
                 label: 'XChain',
                 iconImg: branding.faviconUrl(),
-                url: `https://explorer.xchain.io/${xchainCoin}/action/${entry.actionIndex}`,
+                url: xchainUrl,
             });
         }
     }
 
-    // External chain explorers — only mainnet and testnet have
+    // External chain explorers: only mainnet and testnet have
     // working third-party coverage. Regtest is local-only; suppress
     // external links so they don't render mainnet URLs that 404.
     if (!txHash) return links;
@@ -1615,7 +1638,7 @@ function explorerLinksFor(entry) {
         // Mempool.space serves Bitcoin testnet under `/testnet4/`
         // (current testnet variant). Blockstream.info still indexes
         // the legacy `/testnet/` (testnet3) endpoint, so testnet
-        // links there may not resolve for testnet4 hashes — kept
+        // links there may not resolve for testnet4 hashes; kept
         // anyway as a second affordance.
         const mempoolPath = network === 'testnet' ? 'testnet4/' : '';
         const blockstreamPath = network === 'testnet' ? 'testnet/' : '';
@@ -1652,7 +1675,7 @@ function explorerLinksFor(entry) {
         }
     } else if (coin === 'dogecoin') {
         // No reliable third-party DOGE testnet explorer at time of
-        // writing — show external links on mainnet only.
+        // writing; show external links on mainnet only.
         if (network === 'mainnet') {
             links.push({
                 id: 'blockchair',
@@ -1672,12 +1695,12 @@ function explorerLinksFor(entry) {
 }
 
 /**
- * §31.4 / Cluster O FOLLOWUP 2 — recipient list for DIVIDEND / AIRDROP
+ * §31.4 / Cluster O FOLLOWUP 2: recipient list for DIVIDEND / AIRDROP
  * rows. The recipient set is derived (holders of TICK for DIVIDEND, the
  * referenced LIST's ITEM array for AIRDROP), so the user has to opt in
  * to the fetch by clicking Show recipients. Once loaded, a "Save N as
  * one contact" affordance bulk-saves the addresses into a single
- * Contact record with N entries — the address-book grouping that
+ * Contact record with N entries; the address-book grouping that
  * matches the data model best (one DIVIDEND / AIRDROP = one address
  * book).
  *
@@ -1699,7 +1722,7 @@ function RecipientsBlock({ entry }) {
     if (!supported) return null;
     if (typeof messaging?.getDividendRecipients !== 'function'
         && typeof messaging?.getAirdropRecipients !== 'function') {
-        // No host wiring — degrade silently.
+        // No host wiring; degrade silently.
         return null;
     }
 
@@ -1871,17 +1894,17 @@ function RecipientsBlock({ entry }) {
 
 /**
  * Pull the peer-side address out of a history entry. Cluster O
- * FOLLOWUP 2 — extended to action-kind-aware extractors so MESSAGE
+ * FOLLOWUP 2: extended to action-kind-aware extractors so MESSAGE
  * incoming rows and ORDER_MATCH fill rows surface a usable counterparty
- * (the v0.207.0 implementation only handled the SEND case cleanly —
+ * (the v0.207.0 implementation only handled the SEND case cleanly;
  * RECEIVE / MESSAGE-incoming / fill rows fell through to either a
  * self-address or null).
  *
- * Returns null when no salient peer address is on the row payload —
+ * Returns null when no salient peer address is on the row payload;
  * the caller suppresses the single-peer "Save as contact" prompt.
  *
  * DIVIDEND / AIRDROP rows have their *derived* recipient lists handled
- * by `<RecipientsBlock>` instead — those need an SDK round-trip
+ * by `<RecipientsBlock>` instead; those need an SDK round-trip
  * (holdersFor / listByActionIndex) to materialize the peer set.
  *
  * @param {any} entry
@@ -1895,7 +1918,7 @@ function peerAddressOfEntry(entry) {
 
     // ORDER_MATCH / fill rows carry both sides of the trade. The peer
     // is whichever address isn't the wallet's own. Different explorer
-    // shapes use different field names — try them in priority order.
+    // shapes use different field names; try them in priority order.
     if (action === 'ORDER_MATCH' || action === 'ORDER_FILL' || action === 'ORDERFILL') {
         const candidates = [
             raw.tx0_address, raw.TX0_ADDRESS,
@@ -1911,7 +1934,7 @@ function peerAddressOfEntry(entry) {
         return null;
     }
 
-    // SEND / RECEIVE / MESSAGE / generic — destination if it isn't
+    // SEND / RECEIVE / MESSAGE / generic: destination if it isn't
     // the wallet's own address (we received), otherwise source if
     // that isn't ours either (we sent).
     const dest = raw.destination ?? raw.DESTINATION ?? raw.recipient ?? raw.RECIPIENT;
@@ -1975,7 +1998,7 @@ export function EntryRow({ entry, selected, showConnector, onClick, peerCache, i
                     <StatusPill status={classifyEntryStatus(entry)} />
                 </span>
                 <span className={styles.rowSourceAddress}>
-                    {entry.source || '—'}
+                    {entry.source || '-'}
                 </span>
                 <span className={styles.rowMeta}>
                     {entry.blockIndex ? (
@@ -2009,7 +2032,7 @@ export function EntryRow({ entry, selected, showConnector, onClick, peerCache, i
 function GroupCard({ item, expanded, onToggle }) {
     const [balancesHidden] = useBalancesHidden();
     const d = chainRegistry.get(item.leader.chainId);
-    // §28.3 — link-pair groups span two chains; surface both badges so
+    // §28.3: link-pair groups span two chains; surface both badges so
     // the user sees the cross-chain relationship without expanding.
     // Other subkinds keep their single-chain header.
     const isLinkPair = item.subkind === 'link-pair';
@@ -2061,7 +2084,7 @@ function GroupCard({ item, expanded, onToggle }) {
             </span>
             <span className={styles.rowSummary}>{displaySummary}</span>
             <span className={styles.rowMeta}>
-                {newest?.timestamp ? `Latest ${formatRelativeTime(newest.timestamp)}` : '—'}
+                {newest?.timestamp ? `Latest ${formatRelativeTime(newest.timestamp)}` : '-'}
                 <span className={styles.groupChevron} aria-hidden="true">
                     <DoubleChevron direction={expanded ? 'up' : 'down'} />
                 </span>
@@ -2156,7 +2179,7 @@ function keyFor(chainId, actionIndex) {
     return `${chainId}:${actionIndex}`;
 }
 
-// Bare-bones CSS.escape replacement — we control the input shape (a
+// Bare-bones CSS.escape replacement; we control the input shape (a
 // chainId + ':' + actionIndex + ':' + address triple), so the only
 // reliably-problematic chars are `:` and quotes; escape every non-
 // alphanumeric to a backslash form rather than depending on
@@ -2199,10 +2222,10 @@ function StatusPill({ status }) {
 }
 
 function formatTimestamp(ts) {
-    if (!ts) return '—';
+    if (!ts) return '-';
     const ms = ts < 1e12 ? ts * 1000 : ts;
     const d = new Date(ms);
-    if (Number.isNaN(d.getTime())) return '—';
+    if (Number.isNaN(d.getTime())) return '-';
     return d.toISOString().replace('T', ' ').replace(/\..*/, ' UTC');
 }
 
@@ -2254,13 +2277,13 @@ function summarizeRow(row, action) {
 
 // Field names whose values are financial amounts the privacy toggle
 // should opaque. Matched case-insensitively against both snake_case and
-// camelCase variants. Keep this conservative — only known amount-bearing
+// camelCase variants. Keep this conservative: only known amount-bearing
 // keys, not address / index / status fields.
 const AMOUNT_KEY_RE = /^(amount|quantity|supply|max_supply|maxSupply|give_amount|giveAmount|get_amount|getAmount|give_remaining|giveRemaining|get_remaining|getRemaining|escrow_quantity|escrowQuantity|mainchainrate|dispense_quantity|dispenseQuantity|dispense_count|dispenseCount|fee|fee_per_kb|feePerKb)$/i;
 
 // Drop the "(supply 12345)" tail from an issue-mint group summary when
 // privacy mode is on. Matches the format emitted by historyGrouping's
-// `summarizeGroup` — anything else is returned unchanged.
+// `summarizeGroup`: anything else is returned unchanged.
 function stripSupplyParenthetical(summary) {
     if (typeof summary !== 'string') return summary;
     return summary.replace(/\s*\(supply [^)]+\)\s*$/, '');
@@ -2299,7 +2322,7 @@ function decodeActionToText(row) {
 /* ───── §28.5 / G081 history export ───────────────────────────────── */
 
 /**
- * Multi-select dropdown — same trigger button as ChainPicker but the
+ * Multi-select dropdown: same trigger button as ChainPicker but the
  * popover contains a checkbox per option. The button summary shows
  * "All <label>" when nothing's filtered (everything passes), a single
  * option's label when one is selected, or "N selected" otherwise.
@@ -2407,7 +2430,7 @@ function CheckboxPicker({ options, selected, onToggle, allLabel, summaryNoun, ic
     );
 }
 
-/** Single chevron — render via SVG so the line weight matches the
+/** Single chevron: render via SVG so the line weight matches the
  * surrounding text and stays crisp at any size. */
 function SingleChevron({ direction = 'down' }) {
     const points = direction === 'up' ? '3,8 6,5 9,8' : '3,5 6,8 9,5';
@@ -2470,7 +2493,7 @@ function chainScopeLabel(enabledChains, activeChainIds) {
 }
 
 /**
- * Custom chain picker — full-width button that opens a popover with
+ * Custom chain picker: full-width button that opens a popover with
  * each option rendered as its chain logo + display name. Used instead
  * of a native <select> because browsers don't render HTML / images
  * inside <option> elements.
@@ -2592,7 +2615,7 @@ function runExport({ entries, scope, format, columns }) {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-/* ───── Cluster I FOLLOWUP 5 — export modal ───────────────────────── */
+/* ───── Cluster I FOLLOWUP 5 - export modal ───────────────────────── */
 
 const MODAL_SCRIM = {
     position: 'fixed',
