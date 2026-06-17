@@ -120,6 +120,11 @@ export function generateReceiveAddress(opts) {
     return /** @type {any} */ (sendMessage('receive.getAddress', opts));
 }
 
+/** Derive the next dispenser sub-address (change=2) under an account (§16). @param {object} opts */
+export function generateDispenserAddress(opts) {
+    return /** @type {any} */ (sendMessage('dispenser.getAddress', opts));
+}
+
 /** @param {object} opts */
 export function sendToken(opts) {
     return /** @type {any} */ (sendMessage('action.send', opts));

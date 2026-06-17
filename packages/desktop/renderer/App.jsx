@@ -549,6 +549,7 @@ function AppInner() {
                 return (
                     <DispenserForm
                         walletId={activeWalletId}
+                        activeAccountId={activeAccountId}
                         initialChainId={prefillChainId}
                         initialTick={prefillTick}
                         initialFromAddress={prefillFromAddress}

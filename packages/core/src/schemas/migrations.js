@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Migration harness — §11.6. Migrations are forward-only. Each schema
+// Migration harness (§11.6). Migrations are forward-only. Each schema
 // owns a sparse { fromVersion: (record) => record } map; `migrate()`
 // walks the record from its current version up to the target, applying
 // each step in sequence. When the first schema change ships, add the
@@ -39,7 +39,7 @@ export const walletMigrations = {
     // v1 → v2: §56.3 pre-launch Step 4. Single-slot `multisig` becomes
     // a `multisigs` array so a wallet can carry multiple multisig
     // configurations (different N-of-M groups, different schemes,
-    // different cosigner sets). Existing wallets keep their config —
+    // different cosigner sets). Existing wallets keep their config:
     // we synthesize an `id` if the v1 record didn't carry one (it
     // didn't, since v1 MultisigConfig had no `id` field), wrap in an
     // array, and strip the legacy `multisig` slot. Legacy null →
@@ -67,12 +67,26 @@ export const walletMigrations = {
 export const accountMigrations = {};
 /** @type {MigrationMap} */
 export const addressMigrations = {
-    // v1 → v2: §17.6. Signer routing. Existing v1 records predate
+    // v1 -> v2: §17.6. Signer routing. Existing v1 records predate
     // address-to-signer linkage; fill signerId as null ("unresolved").
-    // Runtime reconciliation — the next time the wallet is unlocked,
+    // Runtime reconciliation: the next time the wallet is unlocked,
     // the shell can match addresses by (publicKey, derivationPath)
     // against available signers and write signerId back.
     1: (r) => ({ ...r, schemaVersion: 2, signerId: null }),
+    // v2 -> v3: §16. Dispenser sub-addresses. Backfill `role` from the
+    // BIP44 change segment of derivationPath (1 -> change, 2 -> dispenser,
+    // 0/other -> receive). Watch-only / imported keys (null path) have no
+    // branch and default to receive.
+    2: (r) => {
+        let role = 'receive';
+        if (typeof r.derivationPath === 'string') {
+            const parts = r.derivationPath.split('/');
+            const change = parts[parts.length - 2];
+            if (change === '1') role = 'change';
+            else if (change === '2') role = 'dispenser';
+        }
+        return { ...r, schemaVersion: 3, role };
+    },
 };
 /** @type {MigrationMap} */
 export const contactMigrations = {};
@@ -84,7 +98,7 @@ export const settingsMigrations = {
     // panel surfaces deferred: reducedMotion override (Appearance),
     // privacy.blurOnBlur + privacy.labelsSurviveRestore (Privacy),
     // grace.testSendThresholdSats + panicMode.enabled + backupReminders
-    // (Safety). Defaults preserve v1 behavior — every field starts in
+    // (Safety). Defaults preserve v1 behavior: every field starts in
     // its "no-op" state so existing wallets see no behavior change.
     1: (r) => ({
         ...r,
@@ -137,7 +151,7 @@ export const priceAlertMigrations = {};
 
 /**
  * Walk `record` forward through `migrations` until it reaches `target`.
- * Throws if a step is missing — the caller must fall back to read-only
+ * Throws if a step is missing; the caller must fall back to read-only
  * mode per §11.6.
  *
  * @param {{ schemaVersion: number }} record

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// ChainRegistry — the chain set as data, not code. UI surfaces enumerate
+// ChainRegistry: the chain set as data, not code. UI surfaces enumerate
 // `registry.supportedChains()` and render from descriptor metadata (§9.7).
 // Adding a chain means adding a descriptor; no code changes to pickers,
 // filters, or forms.
@@ -87,7 +87,7 @@ export class ChainRegistry {
 
     /**
      * Reverse lookup: given (coin, networkKind) from an Address record,
-     * return the matching chainId — or `null` if no descriptor matches.
+     * return the matching chainId, or `null` if no descriptor matches.
      *
      * @param {string} coin          e.g. 'bitcoin'
      * @param {'mainnet' | 'testnet' | 'regtest'} networkKind
@@ -108,7 +108,7 @@ export class ChainRegistry {
      * @param {string} chainId
      * @param {string} addressType
      * @param {number} accountIndex
-     * @param {0 | 1} change
+     * @param {0 | 1 | 2} change   0 receive, 1 change, 2 dispenser (§16)
      * @param {number} index
      */
     derivationPathFor(chainId, addressType, accountIndex, change, index) {

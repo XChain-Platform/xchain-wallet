@@ -22,3 +22,12 @@ export const ADDRESS_SOURCES = /** @type {const} */ ([
     'trezor',
     'ledger',
 ]);
+
+// Derivation role of an HD address, mirroring the BIP44 change branch
+// (§16): 0 receive, 1 change, 2 dispenser. Watch-only / imported keys
+// have no branch and default to 'receive'.
+export const ADDRESS_ROLES = /** @type {const} */ ([
+    'receive',
+    'change',
+    'dispenser',
+]);

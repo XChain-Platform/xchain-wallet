@@ -1155,6 +1155,16 @@ export function generateReceiveAddress(opts) {
 }
 
 /**
+ * Derive the next dispenser sub-address (change=2) under an account (§16).
+ * Same shape as generateReceiveAddress; pass `accountId` to scope it.
+ * @param {object} opts
+ * @returns {Promise<{ id: string, address: string, label: string, addressType: string, derivationPath: string | null }>}
+ */
+export function generateDispenserAddress(opts) {
+    return /** @type {any} */ (sendMessage('dispenser.getAddress', opts));
+}
+
+/**
  * Native-coin price oracle — third-party fetch for BTC/LTC/DOGE
  * mainnet price + market cap + 24h change (+ optional 7-day sparkline).
  * Gated by `settings.privacy.priceDataEnabled`; returns `{ disabled: true }`

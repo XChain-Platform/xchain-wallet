@@ -41,6 +41,7 @@ const {
     importMnemonic,
     unlockWallet,
     receiveAddress,
+    dispenserAddress,
     sendToken,
     buildSendPsbt,
     buildActionPsbt,
@@ -1194,6 +1195,25 @@ export function createBackgroundHost(deps) {
             signerPool,
         });
         return receiveAddress({
+            ...req,
+            signer: signer || undefined,
+            vault,
+            chainRegistry,
+            sdkRegistry,
+        });
+    });
+
+    // §16 dispenser sub-address. Same signer-resolution path as
+    // receive.getAddress; derives the next change=2 address under the
+    // active account so dispenser inventory stays off the receive branch.
+    host.register('dispenser.getAddress', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        const signer = await pickSignerFromRequest({
+            vault,
+            walletId: req?.walletId,
+            signerId: req?.signerId,
+            signerPool,
+        });
+        return dispenserAddress({
             ...req,
             signer: signer || undefined,
             vault,

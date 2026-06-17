@@ -69,11 +69,19 @@ const FIAT_CODES = ['USD', 'CAD', 'AUD', 'MXN', 'GBP', 'JPY', 'CNY', 'CHF', 'BRL
  * Cancel + Edit (v1 / v2) are not exposed here; those land alongside
  * a dispenser-detail surface in a later step.
  *
+ * §16: each dispenser is opened on its own dedicated address. SOURCE
+ * stays the token-holding main address (it signs and the escrow debits
+ * from it); GET_ADDRESS is a fresh change=2 dispenser sub-address under
+ * the active account. This is a single DISPENSER action: it debits
+ * SOURCE and escrows into the dispenser at GET_ADDRESS in one tx
+ * (DISPENSER.md fresh-address exception; SOURCE keeps cancel authority).
+ *
  * @param {object} props
  * @param {string} props.walletId
+ * @param {string} [props.activeAccountId]   account the dispenser sub-address is derived under
  * @param {() => void} props.onBack
  */
-export function DispenserForm({ walletId, onBack, initialChainId, initialTick, initialFromAddress }) {
+export function DispenserForm({ walletId, activeAccountId, onBack, initialChainId, initialTick, initialFromAddress }) {
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const { settings } = useSettings();
@@ -90,6 +98,13 @@ export function DispenserForm({ walletId, onBack, initialChainId, initialTick, i
     const [fromAddressId, setFromAddressId] = useState(
         /** @type {string | null} */ (null),
     );
+    // §16: the fresh change=2 dispenser sub-address used as GET_ADDRESS.
+    // Derived once per (chain, account) at review time, so an abandoned
+    // form consumes no dispenser index.
+    const [dispenserGetAddress, setDispenserGetAddress] = useState(
+        /** @type {any | null} */ (null),
+    );
+    const [derivingGetAddress, setDerivingGetAddress] = useState(false);
 
     const [ticker, setTicker] = useState((initialTick || '').toUpperCase());
     const [giveAmount, setGiveAmount] = useState('');
@@ -152,7 +167,7 @@ export function DispenserForm({ walletId, onBack, initialChainId, initialTick, i
 
     useEffect(() => {
         let cancelled = false;
-        messaging.getAddressesByChain(walletId)
+        messaging.getAddressesByChain(walletId, activeAccountId)
             .then((byChain) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain);
@@ -169,7 +184,13 @@ export function DispenserForm({ walletId, onBack, initialChainId, initialTick, i
                 if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
             });
         return () => { cancelled = true; };
-    }, [walletId, messaging]);
+    }, [walletId, messaging, activeAccountId]);
+
+    // §16: drop a previously derived dispenser sub-address when the chain
+    // or account changes so review derives a fresh one for the selection.
+    useEffect(() => {
+        setDispenserGetAddress(null);
+    }, [chainId, activeAccountId]);
 
     useEffect(() => {
         if (!chainId || !addressesByChain) return;
@@ -250,6 +271,11 @@ export function DispenserForm({ walletId, onBack, initialChainId, initialTick, i
         // Coin-paid lane: GET_COIN = chain coin, GET_TICK empty.
         if (coinTicker) p.GET_COIN = coinTicker;
 
+        // §16: open the dispenser on its dedicated fresh sub-address (the
+        // change=2 GET_ADDRESS). SOURCE stays the token-holding signer and
+        // the escrow debits from it; this is still a single DISPENSER tx.
+        if (dispenserGetAddress?.address) p.GET_ADDRESS = dispenserGetAddress.address;
+
         if (oracle) {
             // Oracle pricing: validator path (fiatAmount + code) or user-
             // oracle path (oracle + code, fiatAmount empty). GET_AMOUNT
@@ -270,7 +296,7 @@ export function DispenserForm({ walletId, onBack, initialChainId, initialTick, i
         }
 
         return p;
-    }, [ticker, giveAmount, escrow, triggerPrice, oracleAddress, fiatCode, fiatAmount, coinTicker]);
+    }, [ticker, giveAmount, escrow, triggerPrice, oracleAddress, fiatCode, fiatAmount, coinTicker, dispenserGetAddress]);
 
     const decoded = useMemo(() => {
         if (stage !== 'review' && stage !== 'submitting') return null;
@@ -282,8 +308,9 @@ export function DispenserForm({ walletId, onBack, initialChainId, initialTick, i
         });
     }, [stage, actionParams, chainId]);
 
-    function handleReview(event) {
+    async function handleReview(event) {
         event.preventDefault();
+        if (derivingGetAddress) return;
         if (!chainId || !fromAddress) {
             setFormError('Pick a source address first.');
             return;
@@ -330,6 +357,26 @@ export function DispenserForm({ walletId, onBack, initialChainId, initialTick, i
             return;
         }
         setFormError(null);
+        // §16: derive the dedicated dispenser sub-address (GET_ADDRESS) once
+        // per chain/account, after validation so an invalid form consumes no
+        // index. SOURCE (fromAddress) is unchanged. If the wallet build has
+        // no derivation handler, fall back to opening on SOURCE.
+        if (!dispenserGetAddress && typeof messaging.generateDispenserAddress === 'function') {
+            try {
+                setDerivingGetAddress(true);
+                const addr = await messaging.generateDispenserAddress({
+                    walletId,
+                    accountId: activeAccountId,
+                    chainId,
+                });
+                setDispenserGetAddress(addr);
+            } catch (err) {
+                setFormError(err?.message || 'Could not derive a dispenser address.');
+                return;
+            } finally {
+                setDerivingGetAddress(false);
+            }
+        }
         setStage('review');
     }
 
@@ -465,6 +512,14 @@ export function DispenserForm({ walletId, onBack, initialChainId, initialTick, i
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />
                     </dd>
+                    {dispenserGetAddress ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Dispenser address</dt>
+                            <dd className={styles.detailsValue}>
+                                <AddressText address={dispenserGetAddress.address} />
+                            </dd>
+                        </>
+                    ) : null}
                     {(decoded?.details || []).map((d) => (
                         <DetailRow key={d.label} label={d.label} value={d.value} />
                     ))}
@@ -686,9 +741,9 @@ export function DispenserForm({ walletId, onBack, initialChainId, initialTick, i
                 <Button
                     type="submit"
                     variant="primary"
-                    disabled={!fromAddress || !ticker || !giveAmount || !escrow}
+                    disabled={!fromAddress || derivingGetAddress || !ticker || !giveAmount || !escrow}
                 >
-                    Preview
+                    {derivingGetAddress ? 'Preparing…' : 'Preview'}
                 </Button>
             </div>
         </form>,

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Abstract Signer contract — §17.1. Every wallet flow that needs to sign
+// Abstract Signer contract (§17.1). Every wallet flow that needs to sign
 // something goes through a Signer. Implementations: SoftwareSigner
 // (§17.2, here in `core`), TrezorSigner / LedgerSigner (§17.3–4, separate
 // workspace packages), MultisigSigner (§17.5, Phase 4+).
@@ -56,7 +56,7 @@ export class NotImplementedError extends Error {
  * @typedef {Object} GetAddressesParams
  * @property {string} chainId
  * @property {number} accountIndex
- * @property {0 | 1} change
+ * @property {0 | 1 | 2} change   0 receive, 1 change, 2 dispenser (§16)
  * @property {number} startIndex
  * @property {number} count
  * @property {string} [addressType]  defaults to the chain's defaultAddressType
@@ -77,8 +77,8 @@ export class NotImplementedError extends Error {
  *
  * @typedef {Object} SigningPathEntry
  * @property {number} inputIndex
- * @property {string} [path]         BIP32 path — HD-derived key
- * @property {string} [addressId]    Address record id — imported-WIF key (SoftwareSigner only)
+ * @property {string} [path]         BIP32 path, HD-derived key
+ * @property {string} [addressId]    Address record id, imported-WIF key (SoftwareSigner only)
  * @property {number} [sighashType]
  */
 
@@ -175,7 +175,7 @@ export class NotImplementedError extends Error {
 
 /**
  * §22.3 P2SH / P2WSH multisig PSBT signing (pre-launch Step 3). This
- * is the HW-friendly variant of `signMultisigClassical` — takes a
+ * is the HW-friendly variant of `signMultisigClassical`: takes a
  * full PSBT and returns the signed-but-unfinalized PSBT. Hardware
  * signers that don't yet support multisig surface a clear error.
  *
@@ -256,7 +256,7 @@ export class Signer {
     }
 
     /**
-     * §22.3 MuSig2 round 1 — generate this signer's 66-byte publicNonce
+     * §22.3 MuSig2 round 1: generate this signer's 66-byte publicNonce
      * for the given multisig session. The secret nonce is bound to the
      * (signer instance + sessionRef.fingerprint) tuple so round 2 can
      * deterministically re-derive it without persisting secret material.
@@ -273,7 +273,7 @@ export class Signer {
     }
 
     /**
-     * §22.3 MuSig2 round 2 — produce a 32-byte partial signature given
+     * §22.3 MuSig2 round 2: produce a 32-byte partial signature given
      * the aggregated public nonce. Re-derives the secret nonce from the
      * same deterministic sessionId used in round 1 (so the public
      * nonce returned matches round 1's output bit-for-bit).
@@ -286,7 +286,7 @@ export class Signer {
     }
 
     /**
-     * §22.3 P2SH / P2WSH single-round contribution — produce a
+     * §22.3 P2SH / P2WSH single-round contribution: produce a
      * DER-encoded ECDSA signature on the input's sighash under the
      * redeem / witness script. No sighash flag byte is appended; the
      * caller's PSBT finalizer adds it.
@@ -299,7 +299,7 @@ export class Signer {
     }
 
     /**
-     * §22.3 P2SH / P2WSH multisig PSBT signing — full-PSBT variant.
+     * §22.3 P2SH / P2WSH multisig PSBT signing: full-PSBT variant.
      * Returns the PSBT with this signer's partial sigs added but NOT
      * finalized; the coordinator merges + finalizes once threshold is
      * met. Hardware signers that lack multisig support throw a clear

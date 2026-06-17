@@ -213,6 +213,11 @@ export function generateReceiveAddress(opts) {
     return /** @type {any} */ (sendMessage('receive.getAddress', opts));
 }
 
+/** Derive the next dispenser sub-address (change=2) under an account (§16). */
+export function generateDispenserAddress(opts) {
+    return /** @type {any} */ (sendMessage('dispenser.getAddress', opts));
+}
+
 /**
  * Build, sign, and broadcast a SEND action via the host's `action.send`
  * handler. Pass-through to core's `sendToken` flow — fails loudly

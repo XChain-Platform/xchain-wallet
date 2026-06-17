@@ -1,0 +1,167 @@
+// Copyright © 2025-2026 Dankest, LLC
+// Based on XChain Platform by Dankest, LLC - https://dankest.llc
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// This file is part of XChain Platform. Licensed under the GNU Affero
+// General Public License v3.0 or later; see LICENSE.md. A commercial
+// license (without AGPL source-disclosure terms) is available -
+// contact legal@dankest.llc.
+
+// dispenserAddress (§16). Derive and persist the next dispenser
+// sub-address for a wallet/account/chain/addressType tuple. Dispensers
+// live on their own derivation branch (change=2), separate from the
+// account's receive (change=0) and change (change=1) addresses, so an
+// account's dispenser inventory addresses never mix into its Receive
+// list. Each call advances the index by one.
+//
+// Allocation is CONTIGUOUS: "next index" is computed as one past the
+// highest persisted dispenser index for the tuple, and we never skip.
+// That contiguity is what makes gap-limit restore (§15.4, change=2 pass)
+// rediscover the whole dispenser sequence.
+//
+// Structurally a twin of receiveAddress.js; the only differences are the
+// change branch (2 vs 0), the role tag, and the default label.
+
+import { createAddress } from '../schemas/address.js';
+import { NoMatchingAccountError } from './receiveAddress.js';
+import { unlockWallet } from './unlockWallet.js';
+
+/**
+ * @typedef {Object} DispenserAddressOpts
+ * @property {import('../storage/Vault.js').Vault} vault
+ * @property {string} walletId
+ * @property {string} [password]                required only when `signer` is omitted and the resolved signer is software
+ * @property {string} [bip39Passphrase]
+ * @property {import('../signers/Signer.js').Signer} [signer]   pre-supplied signer (SoftwareSigner from pool, or RemoteSigner for HW). Skips password when present.
+ * @property {import('../registry/index.js').ChainRegistry} chainRegistry
+ * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
+ * @property {string} chainId
+ * @property {string} [accountId]               preferred, pick the Account by id
+ * @property {number} [accountIndex]            fallback, pick by BIP44 index (default 0). Ignored when `accountId` is supplied.
+ * @property {string} [addressType]             defaults to descriptor.defaultAddressType
+ * @property {string} [label]                   defaults to "Dispenser #N+1"
+ */
+
+/**
+ * @param {DispenserAddressOpts} opts
+ * @returns {Promise<import('../schemas/address.js').Address>}
+ */
+export async function dispenserAddress({
+    vault,
+    walletId,
+    password,
+    bip39Passphrase,
+    signer: providedSigner,
+    chainRegistry,
+    sdkRegistry,
+    chainId,
+    accountId,
+    accountIndex = 0,
+    addressType,
+    label,
+}) {
+    if (!vault) throw new Error('dispenserAddress: vault is required');
+    if (typeof walletId !== 'string' || walletId.length === 0) {
+        throw new Error('dispenserAddress: walletId is required');
+    }
+    if (!providedSigner && (typeof password !== 'string' || password.length === 0)) {
+        throw new Error('dispenserAddress: either `signer` or `password` is required');
+    }
+    if (!chainRegistry) throw new Error('dispenserAddress: chainRegistry is required');
+    if (!sdkRegistry) throw new Error('dispenserAddress: sdkRegistry is required');
+    if (typeof chainId !== 'string' || chainId.length === 0) {
+        throw new Error('dispenserAddress: chainId is required');
+    }
+
+    const descriptor = chainRegistry.get(chainId);
+    if (!descriptor) {
+        throw new Error(`dispenserAddress: unknown chain "${chainId}"`);
+    }
+    const type = addressType ?? descriptor.defaultAddressType;
+    if (!descriptor.addressTypes.includes(type)) {
+        throw new Error(
+            `dispenserAddress: addressType "${type}" not supported on ${chainId}`,
+        );
+    }
+
+    // Find the matching Account. Prefer `accountId` when supplied; fall
+    // back to (walletId, index) lookup so legacy callers still work.
+    const accounts = await vault.accounts.findBy('walletId', walletId);
+    let account;
+    let resolvedAccountIndex;
+    if (typeof accountId === 'string' && accountId.length > 0) {
+        account = accounts.find((a) => a.id === accountId);
+        if (!account) throw new NoMatchingAccountError(walletId, accountId);
+        resolvedAccountIndex = account.index;
+    } else {
+        account = accounts.find((a) => a.index === accountIndex);
+        if (!account) throw new NoMatchingAccountError(walletId, accountIndex);
+        resolvedAccountIndex = accountIndex;
+    }
+
+    // Find the highest dispenser (change=2) index for this
+    // (account, chain, network, addressType) combination. -1 means "no
+    // dispenser addresses yet"; nextIndex starts at 0. Contiguous by
+    // construction: always one past the max, never a gap.
+    const allAddresses = await vault.addresses.list();
+    let highest = -1;
+    for (const a of allAddresses) {
+        if (a.accountId !== account.id) continue;
+        if (a.chain !== descriptor.coin) continue;
+        if (a.network !== descriptor.networkKind) continue;
+        if (a.addressType !== type) continue;
+        if (a.source !== 'hd') continue;
+        if (typeof a.derivationPath !== 'string') continue;
+        const parts = a.derivationPath.split('/');
+        // BIP44-style path: m / purpose' / coin' / account' / change / index
+        if (parts.length < 2) continue;
+        const change = parts[parts.length - 2];
+        if (change !== '2') continue;
+        const idx = Number(parts[parts.length - 1]);
+        if (Number.isFinite(idx) && idx > highest) highest = idx;
+    }
+    const nextIndex = highest + 1;
+
+    const signer = providedSigner
+        ? providedSigner
+        : await unlockWallet({
+            vault,
+            walletId,
+            password,
+            bip39Passphrase,
+            chainRegistry,
+            sdkRegistry,
+        });
+    const ownsSigner = !providedSigner;
+    const signerKind = signer.kind;
+    const addressSource = signerKind === 'software' ? 'hd' : signerKind;
+
+    try {
+        const [derived] = await signer.getAddresses({
+            chainId,
+            accountIndex: resolvedAccountIndex,
+            change: 2,
+            startIndex: nextIndex,
+            count: 1,
+            addressType: type,
+        });
+        const record = createAddress({
+            accountId: account.id,
+            chain: descriptor.coin,
+            network: descriptor.networkKind,
+            source: addressSource,
+            addressType: type,
+            derivationPath: derived.path,
+            address: derived.address,
+            publicKey: derived.publicKey,
+            label: label ?? `Dispenser #${nextIndex + 1}`,
+            role: 'dispenser',
+            signerId: signer.id,
+        });
+        await vault.addresses.put(record);
+        return record;
+    } finally {
+        if (ownsSigner && typeof signer.lock === 'function') signer.lock();
+    }
+}

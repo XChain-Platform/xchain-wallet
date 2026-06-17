@@ -8,15 +8,20 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Address record — §11.3.3.
+// Address record (§11.3.3).
 //
-// v2 (current) adds `signerId` per §17.6 — addresses are tied to a
-// signer by stable id, so switching signers (e.g. pairing a new Trezor)
-// re-associates addresses by path+pubkey match. v1 records migrate
-// forward with `signerId: null`, signaling "needs reconciliation"; the
-// runtime resolver fills this in on first load.
+// v2 adds `signerId` per §17.6: addresses are tied to a signer by stable
+// id, so switching signers (e.g. pairing a new Trezor) re-associates
+// addresses by path+pubkey match. v1 records migrate forward with
+// `signerId: null`, signaling "needs reconciliation"; the runtime
+// resolver fills this in on first load.
+//
+// v3 (current) adds `role` per §16: 'receive' | 'change' | 'dispenser',
+// mirroring the BIP44 change branch (0/1/2). It separates dispenser
+// inventory addresses from personal receive addresses. v2 records migrate
+// forward by parsing the change segment of `derivationPath`.
 
-import { ADDRESS_SOURCES, NETWORKS } from './constants.js';
+import { ADDRESS_ROLES, ADDRESS_SOURCES, NETWORKS } from './constants.js';
 import {
     check,
     isBoolean,
@@ -29,11 +34,11 @@ import {
 } from './validate.js';
 import { randomUUID } from '../util/uuid.js';
 
-export const CURRENT_VERSION = 2;
+export const CURRENT_VERSION = 3;
 
 /**
  * @typedef {Object} Address
- * @property {2} schemaVersion
+ * @property {3} schemaVersion
  * @property {string} id
  * @property {string | null} accountId        null for watch-only / imported-WIF
  * @property {string} chain                   coin identifier
@@ -47,6 +52,7 @@ export const CURRENT_VERSION = 2;
  * @property {boolean} pinned
  * @property {boolean} hidden
  * @property {string | null} signerId         owning signer id (§17.6); null = needs reconciliation
+ * @property {typeof ADDRESS_ROLES[number]} role   'receive' | 'change' | 'dispenser' (§16)
  * @property {string} createdAt
  */
 
@@ -64,6 +70,7 @@ export const CURRENT_VERSION = 2;
  * @param {string} [input.label]
  * @param {boolean} [input.pinned]
  * @param {boolean} [input.hidden]
+ * @param {typeof ADDRESS_ROLES[number]} [input.role]   defaults to 'receive'
  * @returns {Address}
  */
 export function createAddress(input) {
@@ -82,6 +89,7 @@ export function createAddress(input) {
         pinned: input.pinned ?? false,
         hidden: input.hidden ?? false,
         signerId: input.signerId ?? null,
+        role: input.role ?? 'receive',
         createdAt: new Date().toISOString(),
     };
 }
@@ -120,6 +128,7 @@ export function validateAddress(record) {
         r.signerId === null || isNonEmptyString(r.signerId),
         'must be null or a non-empty string',
     );
+    check(errors, 'role', isOneOf(r.role, ADDRESS_ROLES), `must be one of ${ADDRESS_ROLES.join(', ')}`);
     check(errors, 'createdAt', isIsoTimestamp(r.createdAt), 'must be an ISO timestamp');
     return result(errors);
 }

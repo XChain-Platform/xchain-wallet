@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Dry-run restore — §19.6. Derives the first N addresses per active
+// Dry-run restore (§19.6). Derives the first N addresses per active
 // chain from a caller-supplied mnemonic (+ optional BIP39 passphrase)
 // and compares them against the current wallet's persisted addresses.
 // Nothing persists. Seed material is zeroed on exit.
@@ -36,6 +36,9 @@ import {
 import { InvalidMnemonicError, normalizeMnemonic } from './importMnemonic.js';
 
 export const DEFAULT_DRY_RUN_GAP = 10;
+// Dispenser branch (change=2) is contiguous and short; deriving a few
+// addresses is enough to confirm the branch restores (§16).
+export const DEFAULT_DRY_RUN_DISPENSER_GAP = 5;
 
 /**
  * @typedef {Object} DryRunDerivedAddress
@@ -55,6 +58,8 @@ export const DEFAULT_DRY_RUN_GAP = 10;
  * @property {number} matchedCount               matches across indices where current wallet has an address
  * @property {number} divergentCount             same indices, different address (this is the "red X" signal)
  * @property {number} missingCount               derived something but current wallet has nothing at this (path, type)
+ * @property {Array<{ index: number, expected: string | null, derived: string, match: boolean }>} [dispenserComparisons]   change=2 branch, present only when scanDispenserBranch is set (§16)
+ * @property {DryRunDerivedAddress[]} [dispenserDerived]   change=2 derived addresses, present only when scanDispenserBranch is set
  */
 
 /**
@@ -75,7 +80,9 @@ export const DEFAULT_DRY_RUN_GAP = 10;
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
  * @property {number} [gapLimit]                  per-chain address count; default 10
  * @property {number} [accountIndex]              default 0
- * @property {0 | 1} [change]                     default 0 (external chain)
+ * @property {0 | 1 | 2} [change]                 default 0; 1 change, 2 dispenser (§16)
+ * @property {boolean} [scanDispenserBranch]      also compare the change=2 dispenser branch (§16); default false
+ * @property {number} [dispenserGapLimit]         dispenser-branch address count; default 5
  */
 
 /**
@@ -94,6 +101,8 @@ export async function dryRunRestore({
     gapLimit = DEFAULT_DRY_RUN_GAP,
     accountIndex = 0,
     change = 0,
+    scanDispenserBranch = false,
+    dispenserGapLimit = DEFAULT_DRY_RUN_DISPENSER_GAP,
 }) {
     if (!vault) throw new Error('dryRunRestore: vault is required');
     if (typeof walletId !== 'string' || walletId.length === 0) {
@@ -141,21 +150,17 @@ export async function dryRunRestore({
         const perChain = [];
         let overallMatch = true;
 
-        for (const chainId of chainIds) {
-            const descriptor = chainRegistry.get(chainId);
-            if (!descriptor) {
-                throw new Error(`dryRunRestore: unknown chainId "${chainId}"`);
-            }
-            const addressType = descriptor.defaultAddressType;
-            const sdk = sdkRegistry.get(chainId);
-
-            const derivedList = /** @type {DryRunDerivedAddress[]} */ ([]);
-            for (let index = 0; index < gapLimit; index++) {
+        // Derive `count` addresses on one change branch and compare each
+        // against the wallet's persisted records. Shared by the primary
+        // (change=0) pass and the optional dispenser (change=2) pass.
+        const deriveAndCompare = (chainId, descriptor, sdk, addressType, branchChange, count) => {
+            const derived = /** @type {DryRunDerivedAddress[]} */ ([]);
+            for (let index = 0; index < count; index++) {
                 const path = chainRegistry.derivationPathFor(
                     chainId,
                     addressType,
                     accountIndex,
-                    change,
+                    branchChange,
                     index,
                 );
                 if (!path) {
@@ -166,7 +171,7 @@ export async function dryRunRestore({
                 const dk = derive(hdRoot, path);
                 try {
                     const addr = sdk.wallet.deriveAddress(dk.publicKeyHex, { type: addressType });
-                    derivedList.push({
+                    derived.push({
                         index,
                         path,
                         addressType,
@@ -182,7 +187,7 @@ export async function dryRunRestore({
             let matchedCount = 0;
             let divergentCount = 0;
             let missingCount = 0;
-            for (const entry of derivedList) {
+            for (const entry of derived) {
                 const existing = allAddresses.find(
                     (a) =>
                         a.derivationPath === entry.path &&
@@ -201,21 +206,47 @@ export async function dryRunRestore({
                     match,
                 });
             }
-            if (divergentCount > 0) overallMatch = false;
+            return { derived, comparisons, matchedCount, divergentCount, missingCount };
+        };
 
-            perChain.push({
+        for (const chainId of chainIds) {
+            const descriptor = chainRegistry.get(chainId);
+            if (!descriptor) {
+                throw new Error(`dryRunRestore: unknown chainId "${chainId}"`);
+            }
+            const addressType = descriptor.defaultAddressType;
+            const sdk = sdkRegistry.get(chainId);
+
+            const main = deriveAndCompare(chainId, descriptor, sdk, addressType, change, gapLimit);
+            if (main.divergentCount > 0) overallMatch = false;
+
+            /** @type {DryRunChainMatch} */
+            const chainMatch = {
                 chainId,
                 addressType,
-                derived: derivedList,
-                comparisons,
-                matchedCount,
-                divergentCount,
-                missingCount,
-            });
+                derived: main.derived,
+                comparisons: main.comparisons,
+                matchedCount: main.matchedCount,
+                divergentCount: main.divergentCount,
+                missingCount: main.missingCount,
+            };
+
+            // §16: optionally confirm the dispenser branch restores too.
+            // Its divergences also fail the overall match, but its matches
+            // do NOT feed the "seed corresponds to wallet" heuristic below
+            // (that stays anchored on the primary branch).
+            if (scanDispenserBranch) {
+                const disp = deriveAndCompare(chainId, descriptor, sdk, addressType, 2, dispenserGapLimit);
+                if (disp.divergentCount > 0) overallMatch = false;
+                chainMatch.dispenserDerived = disp.derived;
+                chainMatch.dispenserComparisons = disp.comparisons;
+            }
+
+            perChain.push(chainMatch);
         }
 
         // If the wallet has addresses but NONE matched, the seed does
-        // not correspond to this wallet — flip overallMatch to false.
+        // not correspond to this wallet, so flip overallMatch to false.
         const anyWalletAddressExists = allAddresses.some(
             (a) => a.derivationPath !== null,
         );

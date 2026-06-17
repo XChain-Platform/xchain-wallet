@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Gap-limit address scan — §15.4 "restore from seed" completeness.
+// Gap-limit address scan (§15.4): "restore from seed" completeness.
 //
 // After an import, the wallet knows the seed but not which addresses
 // the user has actually used. This flow walks each chain's default
@@ -24,19 +24,19 @@
 // `{ incomplete: true, error }`, and continues to the NEXT chain.
 // Callers can resume by re-calling with `startIndex = lastScannedIndex + 1`.
 //
-// Progress reporting: synchronous `onProgress(event)` — same pattern
+// Progress reporting: synchronous `onProgress(event)`, same pattern
 // createWallet + submitAction use. Events: `chain-start`, `scan-progress`
 // (per-address), `chain-complete`, `chain-failed`. Callbacks that throw
 // are isolated from the scan.
 //
 // Timeouts: two tiers. `perQueryTimeoutMs` bounds a single explorer
 // call; exceeded → that address counts as "unknown" and CANNOT be used
-// to reset the gap counter (conservative — don't let a flaky response
+// to reset the gap counter (conservative: don't let a flaky response
 // mask a used address). `chainTimeoutMs` bounds the whole per-chain
 // scan; exceeded → the chain result is `incomplete`.
 //
 // Persistence: the flow DOES NOT write to the vault. It returns a
-// discovery report. Callers decide what to do with the result —
+// discovery report. Callers decide what to do with the result:
 // persist via receiveAddress, present a review screen, drop, whatever.
 // This keeps the flow composable across the "dry-run restore" (§19.6)
 // and "real restore" paths.
@@ -59,6 +59,9 @@ import {
 import { InvalidMnemonicError, normalizeMnemonic } from './importMnemonic.js';
 
 export const DEFAULT_GAP_LIMIT = 20;
+// Dispenser branch (change=2) is contiguous from index 0 and typically
+// short; a smaller gap is ample and bounds restore work (§16).
+export const DEFAULT_DISPENSER_GAP_LIMIT = 5;
 export const DEFAULT_PER_QUERY_TIMEOUT_MS = 5000;
 export const DEFAULT_CHAIN_TIMEOUT_MS = 60000;
 
@@ -102,7 +105,7 @@ export const DEFAULT_CHAIN_TIMEOUT_MS = 60000;
  * @property {string[]} [chainIds]            default: every registered chain
  * @property {'default' | 'all' | string[]} [addressTypes]  default 'default'
  * @property {number} [accountIndex]          default 0
- * @property {0 | 1} [change]                 default 0 (external chain)
+ * @property {0 | 1 | 2} [change]             default 0; 1 change, 2 dispenser (§16)
  * @property {number} [gapLimit]              default {@link DEFAULT_GAP_LIMIT}
  * @property {number} [startIndex]            default 0 (for resume semantics)
  * @property {number} [perQueryTimeoutMs]     default {@link DEFAULT_PER_QUERY_TIMEOUT_MS}
@@ -149,7 +152,7 @@ export async function discoverUsedAddresses(opts) {
         throw new Error('discoverUsedAddresses: gapLimit must be an integer in [1, 200]');
     }
 
-    // Seed derivation — mirrors dryRunRestore.
+    // Seed derivation, mirrors dryRunRestore.
     const normalized = normalizeMnemonic(mnemonic);
     let seed;
     if (format === 'bip39') {
@@ -302,7 +305,7 @@ async function scanChainType({
             used = !!probeResult?.used;
         } catch (e) {
             unknown = true;
-            // A single probe failure doesn't fail the whole chain —
+            // A single probe failure doesn't fail the whole chain:
             // record the address as `unknown` (doesn't reset gap count
             // but doesn't advance it either, so gap-limit stop is
             // conservative). If the failures are persistent the
@@ -320,7 +323,7 @@ async function scanChainType({
             consecutiveUnused += 1;
         }
         // `unknown` addresses hold the position without advancing or
-        // resetting — conservative.
+        // resetting; conservative.
 
         safeCallback(onProgress, {
             phase: 'scan-progress',
@@ -351,7 +354,7 @@ async function scanChainType({
         highestUsedIndex,
         scannedCount,
         incomplete,
-        // Preserve a non-fatal error even when the scan completed — a
+        // Preserve a non-fatal error even when the scan completed: a
         // caller that sees `error != null && incomplete === false` knows
         // individual probes hiccuped but the gap-limit was still reached.
         error,
