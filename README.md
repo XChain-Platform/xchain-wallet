@@ -4,9 +4,9 @@
 # XChain Platform Wallet
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.0.0--rc.6-blue" alt="Version">
+  <img src="https://img.shields.io/badge/version-0.333.0-blue" alt="Version">
   <img src="https://img.shields.io/badge/tests-92%20smokes%20%2B%20Playwright%20E2E-brightgreen" alt="Tests">
-  <img src="https://img.shields.io/badge/node-%3E%3D18-green" alt="Node">
+  <img src="https://img.shields.io/badge/node-%3E%3D22-green" alt="Node">
   <img src="https://img.shields.io/badge/license-Dankest%20Community-orange" alt="License">
 </p>
 
@@ -16,32 +16,32 @@
   <img src="https://img.shields.io/badge/coverage-unit%20%7C%20smoke%20%7C%20a11y%20%7C%20e2e%20%7C%20bridge%20%7C%20repro--build-brightgreen" alt="Coverage">
 </p>
 
-Self-custodial multi-chain wallet for the XChain Platform. Runs as a browser web app, a Chrome MV3 extension (popup + full-screen), and a desktop application (Windows / macOS / Linux) — all from a single React codebase. Bitcoin, Dogecoin, and Litecoin at launch; additional chains added as the platform adds them. The wallet consumes [xchain-sdk](https://github.com/XChain-platform/xchain-sdk) as its only data and signing layer and never duplicates SDK functionality.
+Self-custodial multi-chain wallet for the XChain Platform. Runs as a browser web app, a Chrome MV3 extension (popup + full-screen), and a desktop application (Windows / macOS / Linux), all from a single React codebase. Bitcoin, Dogecoin, and Litecoin at launch; additional chains added as the platform adds them. The wallet consumes [xchain-sdk](https://github.com/XChain-platform/xchain-sdk) as its only data and signing layer and never duplicates SDK functionality.
 
 ## Features
 
-- **Three shells, one codebase** — `@xchain-wallet/web` (Vite SPA), `@xchain-wallet/extension` (Chrome MV3 popup + full-screen + service worker), `@xchain-wallet/desktop` (Electron with main-process signing isolation); all share `@xchain-wallet/core` for routes, components, flows, and signers
-- **All 27 XChain ACTIONs** — SEND, ISSUE, MINT, DESTROY, ORDER, DISPENSER, DIVIDEND, SWEEP, SWAP, AIRDROP, MESSAGE, LIST, LINK, BROADCAST, ADDRESS, BATCH, DEPLOY, EXECUTE, DEPOSIT, WITHDRAW, COINPAY, STAKE, UNSTAKE, DELEGATE, COLLECT, CALLBACK, SLEEP, FILE
-- **Self-custodial key management** — BIP39 mnemonic + optional 25th-word passphrase, BIP32 HD derivation per chain, AES-256-GCM vault encrypted with an Argon2id-derived master key (calibrated per device), Counterwallet legacy mnemonic import
-- **Pluggable signer interface** — `SoftwareSigner` (in-vault keys), `TrezorSigner` (Trezor Connect, all current models), `LedgerSigner` (WebHID, all current models), `RemoteSigner` (cross-shell pairing), `MultisigSigner` (classical n-of-m + MuSig2 sessions)
-- **Full token issuance suite** — issue, mint, destroy, distribute, dividend, dispenser create + buy + close, broadcast, airdrop with parsed-recipients preview, sweep
-- **Built-in DEX surface** — token markets list, market view with lightweight-charts price chart, place-order panel, orderbook, recent trades, open orders, trade history
-- **Encrypted messaging inbox** — ECIES (multi-device default), ECDH (session), and AES (pre-shared) — full inbox + compose flow over the SDK MessageManager
-- **Smart contracts** — deploy from source, execute methods, deposit + withdraw, contracts-list / contract-detail explorer views, gas estimation, ContractClient bindings
-- **BTC staking + delegation** — STAKE (VERSION 1 new / VERSION 2 top-up, auto-detected from existing stakes for the entered pubkey), pubkey-based UNSTAKE, DELEGATE (v0/v1 rotate; v2/v3 revoke), COLLECT; staking dashboard, delegation form, operator dashboard. Capability-based model — a pubkey's aggregate stake auto-qualifies it for each of four independent capabilities (`price`, `cross_chain`, `oracle_publish`, `attestation`)
-- **My Tokens & Manage Token** — issuer dashboard listing all tokens owned by active addresses; per-token admin surface with Mint / Destroy / Lock supply / Update description / Transfer ownership / Create dispenser / Pay dividend / Airdrop / Broadcast
-- **Privacy mode** — masks amounts in history detail, activity rows, open orders, and group summaries; per-account toggle persisted across sessions
-- **Cross-chain flows** — cross-chain swap form, cross-chain templates (parallel composer for atomic multi-chain submission), per-chain SDK registry, link/swap coordinators
-- **Multisig coordinator** — create n-of-m configs, paste-inbox for partial PSBTs, AnimatedQrFrames PSBT-QR transport, multisig session state machine, MuSig2 session round labels, schema-v2 multi-config-per-address support, camera scanner
-- **dApp bridge (`window.xchain`)** — typed bridge spec at `@xchain-wallet/bridge-spec`: connect, getAccounts, getBalances, signMessage, signPsbt, signAction, signIn (Sign-In with XChain), event subscriptions; per-origin permission grants enforced in the extension service worker and desktop main process
-- **Air-gapped PSBT signing** — BIP21 / multisig PSBT envelope / chunked PSBT-QR encoding; QR scanner + AnimatedQrFrames for offline cosigner round-trips; `prefers-reduced-motion` honored with manual frame stepping
-- **Sign-screen safety rails** — plain-English action decoder shows `to` / `amount` / `asset` as you typed them, even if the encoder fabricates output; multi-step approval requires explicit user confirmation; per-action expectation summaries
-- **Onboarding and recovery** — create / import / Counterwallet-migrate / dry-run-restore / discover-used-addresses (gap-limit scan); view-private-key + export-WIF gated behind password re-entry
-- **Lock / unlock / auto-lock** — Argon2id-derived session key cached in `chrome.storage.session` (extension) or in-memory (web/desktop); foreground auto-lock on idle; manual lock action; OS keychain auto-unlock on desktop
-- **i18n + a11y** — string registry under `core/src/i18n`; static a11y audit gate (button label / img alt / input label / textarea label / div-onclick role+tabIndex) blocks regressions in CI; WCAG 2.2 AA target for the external audit
-- **Reproducible builds** — Level-2 reproducibility of the pre-signing Linux desktop bundle: digest-pinned base image, frozen lockfile, `SOURCE_DATE_EPOCH` from `git log`, `RELEASE_HASHES.txt` SHA-256 manifest, 18-rule static repro-build audit gate
-- **URI scheme handling** — registered handlers for `bitcoin:`, `dogecoin:`, `litecoin:`, and `xchain:` URIs across all three shells
-- **Connected sites + permissions** — per-origin grant store, revocable from Settings, surfaced in the approval popup before every privileged action
+- **Three shells, one codebase:** `@xchain-wallet/web` (Vite SPA), `@xchain-wallet/extension` (Chrome MV3 popup + full-screen + service worker), `@xchain-wallet/desktop` (Electron with main-process signing isolation); all share `@xchain-wallet/core` for routes, components, flows, and signers
+- **All 27 XChain ACTIONs:** SEND, ISSUE, MINT, DESTROY, ORDER, DISPENSER, DIVIDEND, SWEEP, SWAP, AIRDROP, MESSAGE, LIST, LINK, BROADCAST, ADDRESS, BATCH, DEPLOY, EXECUTE, DEPOSIT, WITHDRAW, COINPAY, STAKE, UNSTAKE, DELEGATE, COLLECT, CALLBACK, SLEEP, FILE
+- **Self-custodial key management:** BIP39 mnemonic + optional 25th-word passphrase, BIP32 HD derivation per chain, AES-256-GCM vault encrypted with an Argon2id-derived master key (calibrated per device), Counterwallet legacy mnemonic import
+- **Pluggable signer interface:** `SoftwareSigner` (in-vault keys), `TrezorSigner` (Trezor Connect, all current models), `LedgerSigner` (WebHID, all current models), `RemoteSigner` (cross-shell pairing), `MultisigSigner` (classical n-of-m + MuSig2 sessions)
+- **Full token issuance suite:** issue, mint, destroy, distribute, dividend, dispenser create + buy + close, broadcast, airdrop with parsed-recipients preview, sweep
+- **Built-in DEX surface:** token markets list, market view with lightweight-charts price chart, place-order panel, orderbook, recent trades, open orders, trade history
+- **Encrypted messaging inbox:** ECIES (multi-device default), ECDH (session), and AES (pre-shared); full inbox + compose flow over the SDK MessageManager
+- **Smart contracts:** deploy from source, execute methods, deposit + withdraw, contracts-list / contract-detail explorer views, gas estimation, ContractClient bindings
+- **BTC staking + delegation:** STAKE (VERSION 1 new / VERSION 2 top-up, auto-detected from existing stakes for the entered pubkey), pubkey-based UNSTAKE, DELEGATE (v0/v1 rotate; v2/v3 revoke), COLLECT; staking dashboard, delegation form, operator dashboard. Capability-based model: a pubkey's aggregate stake auto-qualifies it for each of four independent capabilities (`price`, `cross_chain`, `oracle_publish`, `attestation`)
+- **My Tokens & Manage Token:** issuer dashboard listing all tokens owned by active addresses; per-token admin surface with Mint / Destroy / Lock supply / Update description / Transfer ownership / Create dispenser / Pay dividend / Airdrop / Broadcast
+- **Privacy mode:** masks amounts in history detail, activity rows, open orders, and group summaries; per-account toggle persisted across sessions
+- **Cross-chain flows:** cross-chain swap form, cross-chain templates (parallel composer for atomic multi-chain submission), per-chain SDK registry, link/swap coordinators
+- **Multisig coordinator:** create n-of-m configs, paste-inbox for partial PSBTs, AnimatedQrFrames PSBT-QR transport, multisig session state machine, MuSig2 session round labels, schema-v2 multi-config-per-address support, camera scanner
+- **dApp bridge (`window.xchain`):** typed bridge spec at `@xchain-wallet/bridge-spec`: connect, getAccounts, getBalances, signMessage, signPsbt, signAction, signIn (Sign-In with XChain), event subscriptions; per-origin permission grants enforced in the extension service worker and desktop main process
+- **Air-gapped PSBT signing:** BIP21 / multisig PSBT envelope / chunked PSBT-QR encoding; QR scanner + AnimatedQrFrames for offline cosigner round-trips; `prefers-reduced-motion` honored with manual frame stepping
+- **Sign-screen safety rails:** plain-English action decoder shows `to` / `amount` / `asset` as you typed them, even if the encoder fabricates output; multi-step approval requires explicit user confirmation; per-action expectation summaries
+- **Onboarding and recovery:** create / import / Counterwallet-migrate / dry-run-restore / discover-used-addresses (gap-limit scan); view-private-key + export-WIF gated behind password re-entry
+- **Lock / unlock / auto-lock:** Argon2id-derived session key cached in `chrome.storage.session` (extension) or in-memory (web/desktop); foreground auto-lock on idle; manual lock action; OS keychain auto-unlock on desktop
+- **i18n + a11y:** string registry under `core/src/i18n`; static a11y audit gate (button label / img alt / input label / textarea label / div-onclick role+tabIndex) blocks regressions in CI; WCAG 2.2 AA target for the external audit
+- **Reproducible builds:** Level-2 reproducibility of the pre-signing Linux desktop bundle: digest-pinned base image, frozen lockfile, `SOURCE_DATE_EPOCH` from `git log`, `RELEASE_HASHES.txt` SHA-256 manifest, 18-rule static repro-build audit gate
+- **URI scheme handling:** registered handlers for `bitcoin:`, `dogecoin:`, `litecoin:`, and `xchain:` URIs across all three shells
+- **Connected sites + permissions:** per-origin grant store, revocable from Settings, surfaced in the approval popup before every privileged action
 
 ## Documentation
 
@@ -54,13 +54,13 @@ Full wallet documentation lives in the [xchain-documentation](https://github.com
 | [Keys & Signing](https://github.com/XChain-platform/xchain-documentation/blob/master/components/wallet/Keys_Signing.md) | BIP39 + passphrase, HD derivation, vault encryption, signer interface, software / Trezor / Ledger / Remote / Multisig |
 | [Security & Threat Model](https://github.com/XChain-platform/xchain-documentation/blob/master/components/wallet/SECURITY.md) | Protected assets, in-scope and out-of-scope threats, sign-screen safety rails, audit posture |
 | [UX Surfaces](https://github.com/XChain-platform/xchain-documentation/blob/master/components/wallet/UX.md) | Onboarding, lock/unlock, balances, history, send/receive, sign screens, contacts, QR scanner, command palette, settings |
-| [Features](https://github.com/XChain-platform/xchain-documentation/blob/master/components/wallet/FEATURES.md) | Token issuance, DEX, messaging, dispensers, contracts, staking, multisig, cross-chain — surface-by-surface |
+| [Features](https://github.com/XChain-platform/xchain-documentation/blob/master/components/wallet/FEATURES.md) | Token issuance, DEX, messaging, dispensers, contracts, staking, multisig, cross-chain; surface-by-surface |
 | [Bridge](https://github.com/XChain-platform/xchain-documentation/blob/master/components/wallet/BRIDGE.md) | `window.xchain` dApp bridge: connect, signMessage, signPsbt, signAction, signIn, events, error codes |
 | [URI Schemes](https://github.com/XChain-platform/xchain-documentation/blob/master/components/wallet/URI_Schemes.md) | BIP21 + chain URIs + multisig PSBT envelope + chunked PSBT-QR transport |
 | [Multisig](https://github.com/XChain-platform/xchain-documentation/blob/master/components/wallet/MULTISIG.md) | Classical n-of-m + MuSig2: create flow, paste inbox, session state machine, PSBT-QR cosigner round-trips |
-| [Shell — Extension](https://github.com/XChain-platform/xchain-documentation/blob/master/components/wallet/Shell_Extension.md) | Chrome MV3 architecture, manifest, service worker, content script, injected provider, approval popup |
-| [Shell — Desktop](https://github.com/XChain-platform/xchain-documentation/blob/master/components/wallet/Shell_Desktop.md) | Electron main / renderer split, OS keychain, WebHID hardware transports, electron-builder packaging, auto-updater |
-| [Shell — Web](https://github.com/XChain-platform/xchain-documentation/blob/master/components/wallet/Shell_Web.md) | Vite SPA, mobile responsiveness, extension-detect banner, session-only key handling |
+| [Shell - Extension](https://github.com/XChain-platform/xchain-documentation/blob/master/components/wallet/Shell_Extension.md) | Chrome MV3 architecture, manifest, service worker, content script, injected provider, approval popup |
+| [Shell - Desktop](https://github.com/XChain-platform/xchain-documentation/blob/master/components/wallet/Shell_Desktop.md) | Electron main / renderer split, OS keychain, WebHID hardware transports, electron-builder packaging, auto-updater |
+| [Shell - Web](https://github.com/XChain-platform/xchain-documentation/blob/master/components/wallet/Shell_Web.md) | Vite SPA, mobile responsiveness, extension-detect banner, session-only key handling |
 | [Build & Release](https://github.com/XChain-platform/xchain-documentation/blob/master/components/wallet/Build_Release.md) | Synchronized versioning, Chrome Web Store submission, electron-builder, signing, release-hashes |
 | [Reproducible Builds](https://github.com/XChain-platform/xchain-documentation/blob/master/components/wallet/Reproducible_Builds.md) | Level-2 reproducibility: scope, scaffolding audit, run-twice verification, drift sources |
 | [Testing](https://github.com/XChain-platform/xchain-documentation/blob/master/components/wallet/TESTING.md) | Smoke gates, Playwright E2E, a11y audit, repro-build audit, manifest audit, bridge-e2e, hw-sign-e2e |
@@ -68,7 +68,7 @@ Full wallet documentation lives in the [xchain-documentation](https://github.com
 
 ## Status
 
-Pre-v1.0 release-candidate (`1.0.0-rc.6`). All four implementation phases — Phase 1 (framework), Phase 2 (issuance + hardware), Phase 3 (DEX + messaging), Phase 4 (contracts + staking + cross-chain + multisig) — are closed. The autonomous portion of the §56.3 pre-launch track is also closed; three user-driven items remain before v1.0.0 GA: external security audit, external accessibility audit, and Chrome Web Store submission. Audit-readiness packets ship with the repo.
+Pre-v1.0 (current version: `0.333.0`). All four implementation phases (Phase 1: framework; Phase 2: issuance + hardware; Phase 3: DEX + messaging; Phase 4: contracts + staking + cross-chain + multisig) are closed. The autonomous portion of the §56.3 pre-launch track is also closed; three user-driven items remain before v1.0.0 GA: external security audit, external accessibility audit, and Chrome Web Store submission. Audit-readiness packets ship with the repo.
 
 ## Quick Start
 
@@ -78,7 +78,7 @@ cd xchain-wallet
 pnpm install
 ```
 
-The repository depends on a sibling `xchain-sdk` checkout — both `packages/web/package.json` and `packages/extension/package.json` link `xchain-sdk` from `../../../xchain-sdk`. Clone [xchain-sdk](https://github.com/XChain-platform/xchain-sdk) next to `xchain-wallet` before installing.
+The repository depends on a sibling `xchain-sdk` checkout. Both `packages/web/package.json` and `packages/extension/package.json` link `xchain-sdk` from `../../../xchain-sdk`. Clone [xchain-sdk](https://github.com/XChain-platform/xchain-sdk) next to `xchain-wallet` before installing.
 
 ### Run the web SPA
 
@@ -86,7 +86,7 @@ The repository depends on a sibling `xchain-sdk` checkout — both `packages/web
 pnpm --filter @xchain-wallet/web dev
 ```
 
-Vite serves the wallet at `http://localhost:5173`. The web shell is mobile-responsive — open it on a phone for the mobile UX while native iOS / Android apps are on the post-launch roadmap.
+Vite serves the wallet at `http://localhost:5173`. The web shell is mobile-responsive; open it on a phone for the mobile UX while native iOS / Android apps are on the post-launch roadmap.
 
 ### Build the Chrome extension
 
@@ -140,7 +140,7 @@ xchain-wallet/
 └── README.md                    this file
 ```
 
-All packages ship at the **same version**. Every shell's About screen surfaces its own `package.json.version` so users can confirm `1.0.0-rc.6-extension`, `1.0.0-rc.6-web`, and `1.0.0-rc.6-desktop` came from the same codebase.
+All packages ship at the **same version**. Every shell's About screen surfaces its own `package.json.version` so users can confirm the extension, web, and desktop builds came from the same codebase.
 
 ## Scripts
 
@@ -178,24 +178,24 @@ Per-package scripts (run with `pnpm --filter <pkg> <script>`):
 
 | Type | Tests | Description |
 |---|---|---|
-| Smoke — UI surfaces | 64 routes | Onboarding, Home, Send, Receive, History, Issue, Mint, Destroy, Dispenser, Dividend, Airdrop, Broadcast, Compose, Markets, Place-Order, Orderbook, Recent-Trades, Open-Orders, Trade-History, Multisig-Create, Multisig-Signing, Cross-Chain, Parallel, Stake, Delegation, Operator, Contracts, Contract-Detail, Execute, Deploy, Funds, Messaging-Inbox, Address-List, Token-Wizard, Token-Admin, Migrate-to-BIP39, Pair-Signer, View-Private-Key |
-| Smoke — UI primitives | 9 | Button, Input, Screen, ChainBadge, AddressText, CopyButton, MultisigBadge, AnimatedQrFrames, QrScanner |
-| Smoke — Signers | 8 | Software, Trezor, Ledger, Remote, Multisig, hw-factories, hw-sign-e2e, signer-port-protocol |
-| Smoke — Bridge & approval | 5 | bridge-e2e, approval-broker, approval-screens, popup-shell, web-shell |
-| Smoke — Flows & decoder | 6 | sdk-wiring, sdk-bundle, action-decoder, decoder, freewallet-migration, unlock-flow |
-| Smoke — Audits | 4 | a11y-audit, repro-build-audit, extension-manifest-audit, release-gates |
-| Smoke — Other | ~6 | i18n, branding, phase-scope, shared-routes, ui-surface, vitest-setup |
+| Smoke - UI surfaces | 64 routes | Onboarding, Home, Send, Receive, History, Issue, Mint, Destroy, Dispenser, Dividend, Airdrop, Broadcast, Compose, Markets, Place-Order, Orderbook, Recent-Trades, Open-Orders, Trade-History, Multisig-Create, Multisig-Signing, Cross-Chain, Parallel, Stake, Delegation, Operator, Contracts, Contract-Detail, Execute, Deploy, Funds, Messaging-Inbox, Address-List, Token-Wizard, Token-Admin, Migrate-to-BIP39, Pair-Signer, View-Private-Key |
+| Smoke - UI primitives | 9 | Button, Input, Screen, ChainBadge, AddressText, CopyButton, MultisigBadge, AnimatedQrFrames, QrScanner |
+| Smoke - Signers | 8 | Software, Trezor, Ledger, Remote, Multisig, hw-factories, hw-sign-e2e, signer-port-protocol |
+| Smoke - Bridge & approval | 5 | bridge-e2e, approval-broker, approval-screens, popup-shell, web-shell |
+| Smoke - Flows & decoder | 6 | sdk-wiring, sdk-bundle, action-decoder, decoder, freewallet-migration, unlock-flow |
+| Smoke - Audits | 4 | a11y-audit, repro-build-audit, extension-manifest-audit, release-gates |
+| Smoke - Other | ~6 | i18n, branding, phase-scope, shared-routes, ui-surface, vitest-setup |
 | **Smoke total** | **92** | All run on every commit; CI fails on any regression |
 | Playwright E2E | 3 specs | Onboarding round-trip, Send-form review, axe-core a11y scan of every Phase-1 screen |
 | Repro-build verification | Manual | Run `packages/desktop/scripts/reproduce.sh <tag>` twice on a clean dev machine; diff `RELEASE_HASHES.txt` |
 
 ## Versioning
 
-All packages in this repository — root, `packages/core`, `packages/extension`, `packages/web`, `packages/desktop`, `packages/bridge-spec`, `packages/test-dapp`, and `e2e` — **ship at the same version number**. The root `package.json` version is the single source of truth; every sub-package's `package.json` tracks the root in lockstep. `CHANGELOG.md` at the repo root is authoritative; sub-packages do not maintain their own changelogs.
+All packages in this repository (root, `packages/core`, `packages/extension`, `packages/web`, `packages/desktop`, `packages/bridge-spec`, `packages/test-dapp`, and `e2e`) **ship at the same version number**. The root `package.json` version is the single source of truth; every sub-package's `package.json` tracks the root in lockstep. `CHANGELOG.md` at the repo root is authoritative; sub-packages do not maintain their own changelogs.
 
 ## Parent Platform
 
-XChain Wallet is the reference client for the [XChain Platform](https://github.com/XChain-platform). The platform is a blockchain-agnostic token protocol running on Bitcoin, Dogecoin, and Litecoin, with a built-in DEX, sandboxed JavaScript smart contracts, encrypted messaging, and cross-chain swaps — all encoded directly into standard blockchain transactions. See the platform [README](https://github.com/XChain-platform/xchain-documentation/blob/master/README.md) for a list of every component and how they connect.
+XChain Wallet is the reference client for the [XChain Platform](https://github.com/XChain-platform). The platform is a blockchain-agnostic token protocol running on Bitcoin, Dogecoin, and Litecoin, with a built-in DEX, sandboxed JavaScript smart contracts, encrypted messaging, and cross-chain swaps, all encoded directly into standard blockchain transactions. See the platform [README](https://github.com/XChain-platform/xchain-documentation/blob/master/README.md) for a list of every component and how they connect.
 
 ## Contributing
 
