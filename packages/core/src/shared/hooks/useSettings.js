@@ -8,13 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// useSettings — §35 read + patch hook for the Settings record. Loads
+// useSettings. §35 read + patch hook for the Settings record. Loads
 // once on mount via `messaging.getSettings()`, exposes `update(patch)`
 // for deep-merge writes, and `refresh()` for an explicit re-read.
 //
 // Shells that don't expose `getSettings` / `updateSettings` (older
 // builds, future shells under construction) report an error string in
-// the returned state rather than throwing — keeps the consuming
+// the returned state rather than throwing; this keeps the consuming
 // settings page renderable in a degraded mode.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -27,6 +27,15 @@ import { useMessaging } from '../useMessaging.js';
 // every instance listens, so the whole UI reflects a settings change
 // immediately, no reload needed.
 const SETTINGS_CHANGED_EVENT = 'xc:settings-changed';
+
+// Settings live in the encrypted vault, so they are unreadable while
+// the wallet is locked: the first read on a fresh page load (locked)
+// fails and leaves `settings` null. Instances mounted above the unlock
+// boundary (e.g. the web dev-variant badge gated on `showVariantBadge`)
+// never remount on unlock, so they would stay stale for the whole
+// session. The shell dispatches this event when the session unlocks;
+// every instance listens and re-reads so gated UI reappears post-unlock.
+const SESSION_CHANGED_EVENT = 'xc:session-changed';
 
 /**
  * @returns {{
@@ -83,16 +92,22 @@ export function useSettings() {
         aliveRef.current = true;
         refresh();
         let onChanged;
+        let onSession;
         if (typeof window !== 'undefined') {
             onChanged = (e) => {
                 const next = e?.detail;
                 if (next && aliveRef.current) setSettings(next);
             };
             window.addEventListener(SETTINGS_CHANGED_EVENT, onChanged);
+            // Re-read on unlock: the locked-state read failed, so pull the
+            // now-decryptable record without waiting for a settings write.
+            onSession = () => { if (aliveRef.current) refresh(); };
+            window.addEventListener(SESSION_CHANGED_EVENT, onSession);
         }
         return () => {
             aliveRef.current = false;
             if (onChanged) window.removeEventListener(SETTINGS_CHANGED_EVENT, onChanged);
+            if (onSession) window.removeEventListener(SESSION_CHANGED_EVENT, onSession);
         };
     }, [refresh]);
 

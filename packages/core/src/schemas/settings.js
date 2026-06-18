@@ -159,7 +159,7 @@ export function createDefaultSettings() {
         fees: {},
         privacy: {
             torRouting: false,
-            changeAddressRotation: true,
+            changeAddressRotation: false,
             hideSmallBalances: false,
             blurOnBlur: false,
             labelsSurviveRestore: false,

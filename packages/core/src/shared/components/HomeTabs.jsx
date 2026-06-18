@@ -22,6 +22,7 @@ import balanceStyles from './BalanceList.module.css';
 import { CollectiblesView } from './CollectiblesView.jsx';
 import { TotalBalanceHero } from './TotalBalanceHero.jsx';
 import { PortfolioChart } from './PortfolioChart.jsx';
+import { HomeFilterBar } from './HomeFilterBar.jsx';
 import {
     isDemoWallet,
     synthesizeDemoHistory,
@@ -55,8 +56,13 @@ import styles from './HomeTabs.module.css';
  * @param {import('react').ReactNode} [props.actions]   slot rendered between the total-balance hero and the tab strip; used by Home for the Send / Receive / Swap / Buy quick-action row
  * @param {() => void} [props.onReceive]   forwarded to empty-state nudges so the "No balances yet" cards can render a one-tap Receive CTA (G077)
  */
-export function HomeTabs({ chainRegistry, balances, balancesFetchedAt, walletId, networkFilter, tokenQuery = '', multisig, multisigChainId, actions, onReceive, onSelectToken, onSelectEntry, pinnedKeys, onTogglePin, hiddenKeys, onToggleHide }) {
+export function HomeTabs({ chainRegistry, balances, balancesFetchedAt, walletId, networkFilter, tokenQuery = '', coinFamilies, onNetworkFilterChange, onTokenQueryChange, multisig, multisigChainId, actions, onReceive, onSelectToken, onSelectEntry, pinnedKeys, onTogglePin, hiddenKeys, onToggleHide }) {
     const [active, setActive] = useState('coins');
+    // Inline filter row (search + network dropdown) is collapsed by
+    // default and revealed by the filter button in the hero. State lives
+    // here so it persists across tab switches.
+    const [filterOpen, setFilterOpen] = useState(false);
+    const canFilter = typeof onNetworkFilterChange === 'function' && typeof onTokenQueryChange === 'function';
 
     const allRows = useMemo(
         () => buildBalanceRows(balances, chainRegistry),
@@ -121,6 +127,8 @@ export function HomeTabs({ chainRegistry, balances, balancesFetchedAt, walletId,
                 rows={filteredRows}
                 networkFilter={networkFilter}
                 lastSyncedAt={balancesFetchedAt}
+                filterOpen={filterOpen}
+                onToggleFilter={canFilter ? () => setFilterOpen((v) => !v) : undefined}
             />
 
             <PortfolioChart
@@ -129,6 +137,17 @@ export function HomeTabs({ chainRegistry, balances, balancesFetchedAt, walletId,
             />
 
             {actions}
+
+            {canFilter && filterOpen ? (
+                <HomeFilterBar
+                    chainRegistry={chainRegistry}
+                    coinFamilies={coinFamilies || []}
+                    networkFilter={networkFilter}
+                    onNetworkFilterChange={onNetworkFilterChange}
+                    tokenQuery={tokenQuery}
+                    onTokenQueryChange={onTokenQueryChange}
+                />
+            ) : null}
 
             <div className={styles.tabs} role="tablist" aria-label="Wallet view">
                 {tabs.map((t) => (

@@ -20,9 +20,6 @@ import { buildBalanceRows, detectSpamCandidates } from '../components/BalanceLis
 import { useToast } from '../components/ToastHost.jsx';
 import { BackupReminderCard } from '../components/BackupReminderCard.jsx';
 import { DemoBanner } from '../components/DemoBanner.jsx';
-import { HeaderActionMenu } from '../components/HeaderActionMenu.jsx';
-import { HeaderSettingsButton } from '../components/HeaderSettingsButton.jsx';
-import { HeaderNetworkButton } from '../components/HeaderNetworkButton.jsx';
 import { AlertsOverlay } from '../components/AlertsOverlay.jsx';
 import { Settings } from './Settings.jsx';
 import { WALLET_MODE_DEFAULT } from '../../schemas/settings.js';
@@ -74,7 +71,7 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {(accountId: string) => void} [props.onSwitchAccount]   App-level setter for the active account (still used internally if a future inline picker lands)
  * @param {Array<{ id: string, label: string, description?: string, onSelect?: () => void }>} [props.extraActions]   §40+ entries surfaced in the small-mode pancake drawer; in full mode the host renders these via the dedicated ActionsMenu route
  */
-export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreateToken, onActions, onMyTokens, onMarketActivity, onMarkets, onResumeAirdrop, onResumeCoinpay, onMessaging, onContracts, onStaking, onHistory, onAddresses, onMigrateToBip39, onOpenWalletPicker, onOpenAccountPicker, onCrossChain, onContacts, onMultisig, onSignPsbt, onSignMessage, onVerifySignature, activeAccountId: activeAccountIdProp, onSwitchAccount, extraActions, onSelectToken, onSelectEntry, networkFilter: networkFilterProp, onNetworkFilterChange: onNetworkFilterChangeProp, tokenQuery: tokenQueryProp, onTokenQueryChange: onTokenQueryChangeProp }) {
+export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreateToken, onActions, onMyTokens, onMarketActivity, onMarkets, onDispensers, onResumeAirdrop, onResumeCoinpay, onMessaging, onContracts, onStaking, onHistory, onAddresses, onMigrateToBip39, onOpenWalletPicker, onOpenAccountPicker, onCrossChain, onContacts, onMultisig, onSignPsbt, onSignMessage, onVerifySignature, activeAccountId: activeAccountIdProp, onSwitchAccount, extraActions, onSelectToken, onSelectEntry, networkFilter: networkFilterProp, onNetworkFilterChange: onNetworkFilterChangeProp, tokenQuery: tokenQueryProp, onTokenQueryChange: onTokenQueryChangeProp }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -116,7 +113,6 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
         /** @type {string | null} */ (null),
     );
     const [locking, setLocking] = useState(false);
-    const [menuOpen, setMenuOpen] = useState(false);
     const [alertsOpen, setAlertsOpen] = useState(false);
     // Network filter can be controlled by the parent shell (web AppHeader
     // owns the toolbar filter button) or self-managed when the parent
@@ -488,14 +484,6 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
         });
     }
 
-    const brandBlock = (
-        <img
-            src={branding.logoUrl()}
-            alt={branding.PRODUCT_NAME}
-            className={isFull ? styles.brandLogoFull : styles.brandLogoPopup}
-        />
-    );
-
     // Coin families surfaced in the dataset, in canonical order.
     // Drives both the network filter and the per-tab "no balances on
     // this network" empty messages.
@@ -521,77 +509,6 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
         && activeAccountId
         && activeAccountId !== accountList[0].id;
 
-    const settingsButton = (
-        <HeaderSettingsButton
-            activeWallet={activeWallet}
-            activeAccount={activeAccount}
-            walletNonDefault={walletNonDefault}
-            accountNonDefault={accountNonDefault}
-            onOpenWalletPicker={onOpenWalletPicker}
-            onOpenAccountPicker={onOpenAccountPicker}
-            chainRegistry={chainRegistry}
-            coinFamilies={coinFamilies}
-            networkFilter={networkFilter}
-            onNetworkFilterChange={setNetworkFilter}
-        />
-    );
-
-    // One-tap account switcher: the active account label opens the full
-    // AccountPicker directly, instead of going through the gear popover.
-    const accountButton = (onOpenAccountPicker && activeAccount) ? (
-        <Button
-            variant="ghost"
-            size="sm"
-            onClick={onOpenAccountPicker}
-            title="Switch account"
-        >
-            {(activeAccount.name || `Account ${activeAccount.index + 1}`) + ' ▾'}
-        </Button>
-    ) : null;
-
-    const headerInner = isFull ? (
-        <div className={styles.headerFull}>
-            {brandBlock}
-            <div className={styles.headerRight}>
-                {accountButton}
-                {settingsButton}
-                <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleLock}
-                    loading={locking}
-                    icon={<Icon.LockIcon />}
-                >
-                    Lock
-                </Button>
-            </div>
-        </div>
-    ) : (
-        <div className={styles.headerPopup}>
-            {brandBlock}
-            <div className={styles.headerRight}>
-                {accountButton}
-                <HeaderNetworkButton
-                    chainRegistry={chainRegistry}
-                    coinFamilies={coinFamilies}
-                    networkFilter={networkFilter}
-                    onNetworkFilterChange={setNetworkFilter}
-                    tokenQuery={tokenQuery}
-                    onTokenQueryChange={setTokenQuery}
-                />
-                <button
-                    type="button"
-                    className={styles.menuBtn}
-                    onClick={() => setMenuOpen((v) => !v)}
-                    aria-label={menuOpen ? 'Close menu' : 'Open menu'}
-                    aria-haspopup="dialog"
-                    aria-expanded={menuOpen ? 'true' : 'false'}
-                >
-                    <Icon.MenuIcon />
-                </button>
-            </div>
-        </div>
-    );
 
     if (settingsOpen) {
         return (
@@ -723,6 +640,9 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
                         walletId={activeWalletId}
                         networkFilter={networkFilter}
                         tokenQuery={tokenQuery}
+                        coinFamilies={coinFamilies}
+                        onNetworkFilterChange={setNetworkFilter}
+                        onTokenQueryChange={setTokenQuery}
                         multisig={multisig}
                         multisigChainId={chainRegistry.byCoin('bitcoin')[0]?.id}
                         onReceive={onReceive}
@@ -911,29 +831,6 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
                 </div>
                 ) : null}
             </div>
-            {/* Pancake menu lives at the route level (not inside Screen)
-                so it overlays the entire viewport. */}
-            {!isFull && menuOpen ? (
-                <HeaderActionMenu
-                    onClose={() => setMenuOpen(false)}
-                    onAlerts={() => setAlertsOpen(true)}
-                    alertCount={alerts.length}
-                    onMarkets={onMarkets}
-                    onMarketActivity={onMarketActivity}
-                    onTokens={onMyTokens}
-                    onMoreActions={onActions}
-                    onMessaging={onMessaging}
-                    onCrossChain={onCrossChain}
-                    onContacts={onContacts}
-                    onAddresses={onAddresses}
-                    onContracts={onContracts}
-                    onStaking={onStaking}
-                    onMultisig={onMultisig}
-                    onLock={handleLock}
-                    locking={locking}
-                    onSettings={() => setSettingsOpen(true)}
-                />
-            ) : null}
             {alertsOpen ? (
                 <AlertsOverlay
                     alerts={alerts}

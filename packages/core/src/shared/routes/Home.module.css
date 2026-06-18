@@ -108,7 +108,7 @@
     margin-top: var(--xc-space-3);
 }
 
-/* Quick-actions row — sits between the total-balance hero and the
+/* Quick-actions row sits between the total-balance hero and the
    tab strip. Send / Receive / Swap / Buy. Always 4 equal columns
    regardless of shell. The HomeTabs wrap is a flex column with
    `gap: var(--xc-space-3)`; negative top-margin shrinks the hero→

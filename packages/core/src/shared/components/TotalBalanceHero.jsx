@@ -31,8 +31,10 @@ import styles from './TotalBalanceHero.module.css';
  * @param {Array<any>} props.rows                rows from `buildBalanceRows`, already filtered
  * @param {'all' | string} props.networkFilter
  * @param {number | null} [props.lastSyncedAt]   Unix ms of the last successful balance fetch. Drives the staleness label rendered on the right of the note row.
+ * @param {boolean} [props.filterOpen]           whether the inline filter row is currently shown; drives the filter button's pressed state
+ * @param {() => void} [props.onToggleFilter]    when provided, renders a filter toggle button next to the chart toggle
  */
-export function TotalBalanceHero({ rows, networkFilter, lastSyncedAt }) {
+export function TotalBalanceHero({ rows, networkFilter, lastSyncedAt, filterOpen, onToggleFilter }) {
     const { total, unpriced } = useMemo(() => sumFiatValue(rows), [rows]);
     const { settings } = useSettings();
     const { messaging } = useMessaging();
@@ -119,6 +121,18 @@ export function TotalBalanceHero({ rows, networkFilter, lastSyncedAt }) {
                     ) : null}
                 </span>
                 <div className={styles.actions}>
+                    {typeof onToggleFilter === 'function' ? (
+                        <button
+                            type="button"
+                            className={`${styles.eye} ${filterOpen ? styles.eyeActive : ''}`}
+                            onClick={onToggleFilter}
+                            aria-pressed={filterOpen ? 'true' : 'false'}
+                            aria-label={filterOpen ? 'Hide filters' : 'Show filters'}
+                            title={filterOpen ? 'Hide filters' : 'Show filters'}
+                        >
+                            <Icon.FilterIcon />
+                        </button>
+                    ) : null}
                     <button
                         type="button"
                         className={`${styles.eye} ${chartVisible ? styles.eyeActive : ''}`}

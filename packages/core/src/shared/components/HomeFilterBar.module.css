@@ -1,0 +1,67 @@
+/* Inline filter row above the Home asset tabs: a flex-growing search
+   box on the left, a fixed-width network dropdown on the right. */
+.bar {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    /* HomeTabs' .wrap puts a 12px column gap above and below every
+       child. Trim it with negative margins so the filter row sits snug
+       above the tab strip. The top keeps an 8px gap to the quick-action
+       buttons (12px wrap gap minus 4px) to match the chart-to-buttons
+       spacing; the bottom stays tighter at 4px. */
+    margin-top: calc(-1 * var(--xc-space-1));
+    margin-bottom: calc(-1 * var(--xc-space-2));
+}
+
+.searchWrap {
+    position: relative;
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+}
+
+.searchIcon {
+    position: absolute;
+    inset-inline-start: 10px;
+    display: inline-flex;
+    align-items: center;
+    color: var(--xc-text-muted);
+    pointer-events: none;
+}
+
+.search {
+    appearance: none;
+    width: 100%;
+    height: 38px;
+    box-sizing: border-box;
+    padding: 8px 10px 8px 32px;
+    border: 1px solid var(--xc-border-strong);
+    border-radius: var(--xc-radius-sm);
+    background: var(--xc-bg);
+    color: var(--xc-text);
+    font-family: inherit;
+    font-size: var(--xc-text-sm);
+}
+
+/* Pin the reused network dropdown to the same height as the search
+   input so the two controls line up. The dropdown otherwise sizes to
+   its 20px coin icon and ends up a few px taller. 38px matches the
+   standard header control height. */
+.netSelect {
+    height: 38px;
+}
+
+/* No focus ring on the search box: the user wants it to look identical
+   whether focused or not (still focusable for typing). */
+.search:focus,
+.search:focus-visible {
+    outline: none;
+}
+
+/* Equal-width columns: search and network dropdown each take ~50% of
+   the row (minus the gap between them). */
+.networkWrap {
+    flex: 1 1 0;
+    min-width: 0;
+}

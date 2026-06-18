@@ -27,7 +27,7 @@
 }
 
 /* Logo is 750×464 (≈1.617:1). Width-only sizing preserves aspect
-   ratio. Matches `.brandLogoPopup` in Home.module.css — ~36px tall. */
+   ratio. Matches `.brandLogoPopup` in Home.module.css (about 36px tall). */
 .logo {
     width: 58px;
     height: auto;
@@ -35,7 +35,7 @@
     display: block;
 }
 
-/* Outline pancake button — matches `.menuBtn` in Home.module.css
+/* Outline pancake button; matches `.menuBtn` in Home.module.css
    exactly. */
 .menuBtn {
     appearance: none;
@@ -59,4 +59,60 @@
 .menuBtn:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
     outline-offset: 2px;
+}
+
+/* Scan / addresses dropdown anchored under the QR button. */
+.scanWrap {
+    position: relative;
+    display: inline-flex;
+    flex: 0 0 auto;
+}
+
+.scanMenu {
+    position: absolute;
+    top: calc(100% + 4px);
+    inset-inline-end: 0;
+    z-index: 20;
+    min-width: 184px;
+    padding: 4px;
+    background: var(--xc-surface);
+    border: 1px solid var(--xc-border-strong);
+    border-radius: var(--xc-radius-md);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.scanItem {
+    appearance: none;
+    background: transparent;
+    border: none;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    padding: 8px 10px;
+    border-radius: var(--xc-radius-sm);
+    color: var(--xc-text);
+    font-family: inherit;
+    font-size: var(--xc-text-sm);
+    text-align: start;
+    cursor: pointer;
+}
+
+.scanItem:hover {
+    background: var(--xc-bg-muted);
+}
+
+.scanItem:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: -2px;
+}
+
+.scanItemIcon {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    color: var(--xc-text-muted);
 }

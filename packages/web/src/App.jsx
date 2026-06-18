@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Web SPA state machine — mirrors the extension popup's App.jsx but
+// Web SPA state machine. Mirrors the extension popup's App.jsx but
 // reads state from the in-page host bridge rather than chrome.runtime.
 //
 // Primary state (from getSessionStatus):
@@ -20,7 +20,7 @@
 // Sub-routes inside `no-wallet`:  welcome | create | import
 // Sub-routes inside `unlocked`:   home | send | receive
 //
-// A successful create/import leaves the host live — the next
+// A successful create/import leaves the host live; the next
 // `getSessionStatus()` returns `unlocked` and the app transitions to
 // Home without a separate unlock step.
 //
@@ -55,8 +55,8 @@ import { QueuedBroadcastBanner } from '@xchain-wallet/core/shared/components/Que
 import { DemoBanner } from '@xchain-wallet/core/shared/components/DemoBanner.jsx';
 import { LeftNav, FullLayoutWithNav } from '@xchain-wallet/core/shared/components/LeftNav.jsx';
 import { AppHeader } from '@xchain-wallet/core/shared/components/AppHeader.jsx';
-import { HeaderActionMenu } from '@xchain-wallet/core/shared/components/HeaderActionMenu.jsx';
 import { MenuRoute } from '@xchain-wallet/core/shared/routes/MenuRoute.jsx';
+import { AlertsRoute } from '@xchain-wallet/core/shared/routes/AlertsRoute.jsx';
 import { registry as registryLib } from '@xchain-wallet/core';
 
 const APP_CHAIN_REGISTRY = registryLib.defaultRegistry();
@@ -228,7 +228,7 @@ function AppInner() {
     const [selectedHistoryEntry, setSelectedHistoryEntry] = useState(
         /** @type {any | null} */ (null),
     );
-    // Where ActionDetail's Back returns to — 'history' when opened from
+    // Where ActionDetail's Back returns to: 'history' when opened from
     // the History timeline, 'home' when opened from Home's Activity tab.
     const [actionDetailReturnTo, setActionDetailReturnTo] = useState(
         /** @type {'history' | 'home'} */ ('history'),
@@ -241,15 +241,15 @@ function AppInner() {
         /** @type {{ id: string, name: string } | null} */ (null),
     );
     const [migrateLegacyWalletId, setMigrateLegacyWalletId] = useState(/** @type {string | null} */ (null));
-    // Global header state — lifted up so the AppHeader in the layout
+    // Global header state: lifted up so the AppHeader in the layout
     // header slot can render the same filter + pancake the Home page
     // historically owned, and so flipping the filter on TokenDetail
     // affects Home and vice-versa.
     const [globalNetworkFilter, setGlobalNetworkFilter] = useState('all');
-    // Free-text token filter — lifted alongside the network filter so the
+    // Free-text token filter: lifted alongside the network filter so the
     // AppHeader popover and Home's HomeTabs share one source of truth.
     const [globalTokenQuery, setGlobalTokenQuery] = useState('');
-    // Asset-kind filter — surfaced via the global filter popover on the
+    // Asset-kind filter: surfaced via the global filter popover on the
     // send-picker route so the user can narrow the spendable list to
     // all / coins / tokens. Lifted here so the popover and SendPicker
     // share one source of truth.
@@ -258,7 +258,7 @@ function AppInner() {
     // pancake. The back-button on MenuRoute returns to it; tapping the
     // pancake again from inside Menu does the same.
     const [menuBackTo, setMenuBackTo] = useState('home');
-    // QR scanner overlay — available from any unlocked view via the
+    // QR scanner overlay: available from any unlocked view via the
     // AppHeader scan button. On a `send` outcome we populate the
     // sendPrefill and navigate into Send; receive jumps to the Receive
     // route; psbt opens the PSBT-sign route. Mirrors the existing
@@ -267,7 +267,7 @@ function AppInner() {
     const [resumeAirdropId, setResumeAirdropId] = useState(
         /** @type {string | null} */ (null),
     );
-    // §17.7 / G027 — staged address handed to <ViewPrivateKey> when the
+    // §17.7 / G027: staged address handed to <ViewPrivateKey> when the
     // user picks "Show key" from the addresses list.
     const [privateKeyAddress, setPrivateKeyAddress] = useState(
         /** @type {any | null} */ (null),
@@ -284,7 +284,7 @@ function AppInner() {
     const [activeAccountId, setActiveAccountId] = useState(
         /** @type {string | null} */ (null),
     );
-    // §24 Cluster Y FOLLOWUP 3 — track the resolved active-wallet record
+    // §24 Cluster Y FOLLOWUP 3: track the resolved active-wallet record
     // so LeftNav / BottomTabBar can label the wallet switcher and so
     // the new 'settings' top-level view can pass `activeWallet` through
     // to the Settings drilldown the same way Home does.
@@ -321,7 +321,7 @@ function AppInner() {
             kind: 'native',
         }),
     );
-    // §47 / Cluster L FOLLOWUP 1 — deep-link prefill for Send. Populated
+    // §47 / Cluster L FOLLOWUP 1: deep-link prefill for Send. Populated
     // once on mount from `?uri=` in `location.search`; consumed by the
     // 'send' route below and cleared after the user submits or backs out.
     const [sendPrefill, setSendPrefill] = useState(
@@ -344,7 +344,19 @@ function AppInner() {
         setOnboardingStep('welcome');
         setUnlockedView('home');
         getSessionStatus()
-            .then((next) => setStatus(next))
+            .then((next) => {
+                setStatus(next);
+                // Settings are only decryptable once unlocked. Notify
+                // useSettings instances mounted above this boundary (e.g.
+                // GatedDevVariantBadge) so they re-read now that the vault
+                // is open, instead of staying stuck on the locked-state
+                // read failure until the next settings write.
+                if (next?.state === 'unlocked' && typeof window !== 'undefined') {
+                    try {
+                        window.dispatchEvent(new CustomEvent('xc:session-changed'));
+                    } catch { /* CustomEvent unsupported: non-fatal */ }
+                }
+            })
             .catch((err) =>
                 setStatus({ state: 'error', error: err?.message || String(err) }),
             );
@@ -352,7 +364,7 @@ function AppInner() {
 
     useEffect(() => { refresh(); }, [refresh]);
 
-    // §47 / Cluster L FOLLOWUP 1 — consume `?uri=` from location.search
+    // §47 / Cluster L FOLLOWUP 1: consume `?uri=` from location.search
     // when the SPA boots (e.g. after the user clicked an `xchain:` link
     // and the browser routed it through the protocol-handler we
     // registered at v0.191.0). Strip the param via history.replaceState
@@ -415,7 +427,7 @@ function AppInner() {
         return () => { cancelled = true; };
     }, [status.state]);
 
-    // §46 — surface live notifications as an in-app toast while the wallet is
+    // §46: surface live notifications as an in-app toast while the wallet is
     // open and focused. The hostBridge NotificationService fires a window
     // CustomEvent for every notification; when the tab is backgrounded the
     // adapter shows an OS notification instead, so we skip the toast then.
@@ -425,7 +437,7 @@ function AppInner() {
             if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
             const detail = (event && event.detail) || {};
             const message = detail.title && detail.body
-                ? `${detail.title} — ${detail.body}`
+                ? `${detail.title}: ${detail.body}`
                 : (detail.title || detail.body || 'Notification');
             showToast({ message, variant: 'default' });
         };
@@ -466,11 +478,30 @@ function AppInner() {
         if (activeWalletId && id) writeActiveAccount(activeWalletId, id);
     };
 
-    // §42.2 Contracts nav — show only when a BTC wallet address exists
+    // §42.2 Contracts nav: show only when a BTC wallet address exists
     // (VM actions are BTC-only at launch per BITCOIN_ACTIONS).
     const hasBtcAddress = useBtcAddressesPresent(activeWalletId);
 
-    // §24 / G055 — resume the user's last view on unlock (persisted
+    // Wallet-level alerts surfaced in the pancake menu's Alerts panel.
+    // Mirrors Home.jsx's `alerts` array so the web MenuRoute shows the
+    // same signals (the menu lives at the App level here, not in Home).
+    // Computed each render from walletList; future alerts append here.
+    const activeWallet = walletList.find((w) => w.id === activeWalletId) || null;
+    const menuAlerts = [];
+    if (activeWallet?.format === 'counterwallet-legacy') {
+        menuAlerts.push({
+            id: 'legacy-format',
+            severity: 'info',
+            title: 'Legacy FreeWallet format',
+            message: 'This wallet uses the 12-word Counterwallet format. Migrate to BIP39 for broader interop and stronger derivation.',
+            action: {
+                label: 'Migrate to BIP39',
+                onSelect: () => setUnlockedView('migrate-bip39'),
+            },
+        });
+    }
+
+    // §24 / G055: resume the user's last view on unlock (persisted
     // per-wallet in localStorage). Restricted to context-free views;
     // anything that needs a prefilled state object falls through to
     // Home. See `lastViewMemory.RESUMABLE_VIEWS` for the set.
@@ -522,7 +553,7 @@ function AppInner() {
         case 'locked':
             return <Locked onUnlocked={refresh} />;
         case 'unlocked': {
-            // §24.2 / G053 — wrap the unlocked-route render tree in
+            // §24.2 / G053: wrap the unlocked-route render tree in
             // <FullLayoutWithNav> so the left nav is always visible at
             // ≥900px viewports. Existing route returns are captured by
             // the IIFE so the surrounding switch case stays readable.
@@ -531,8 +562,10 @@ function AppInner() {
                 return (
                     <MenuRoute
                         onBack={() => setUnlockedView(menuBackTo)}
+                        onAlerts={() => setUnlockedView('alerts')}
                         onMarkets={() => setUnlockedView('markets')}
                         onMarketActivity={() => setUnlockedView('market-activity')}
+                        onDispensers={() => setUnlockedView('dispensers-list')}
                         onTokens={() => setUnlockedView('my-tokens')}
                         onMoreActions={() => setUnlockedView('actions')}
                         onMessaging={() => setUnlockedView('messaging')}
@@ -542,8 +575,17 @@ function AppInner() {
                         onContracts={() => setUnlockedView('contracts')}
                         onStaking={() => setUnlockedView('staking')}
                         onMultisig={() => setUnlockedView('multisig')}
+                        onSwitchWallet={() => setUnlockedView('wallet-picker')}
                         onLock={() => { lockWallet().then(refresh).catch(() => refresh()); }}
                         onSettings={() => setUnlockedView('settings')}
+                    />
+                );
+            }
+            if (unlockedView === 'alerts' && activeWalletId) {
+                return (
+                    <AlertsRoute
+                        onBack={() => setUnlockedView('menu')}
+                        alerts={menuAlerts}
                     />
                 );
             }
@@ -1501,7 +1543,7 @@ function AppInner() {
                 );
             }
             if (unlockedView === 'settings' || unlockedView === 'connected-sites') {
-                // §24 Cluster Y FOLLOWUP 2 — Settings is reachable as a
+                // §24 Cluster Y FOLLOWUP 2: Settings is reachable as a
                 // top-level route from LeftNav / BottomTabBar. The
                 // 'connected-sites' alias deep-links straight into the
                 // Connected Sites drilldown (§35.9 / G108) so the spec's
@@ -1638,7 +1680,7 @@ function AppInner() {
                     />
                 );
             }
-            // §49 / Cluster G FOLLOWUP 4 — QueuedBroadcastBanner is now
+            // §49 / Cluster G FOLLOWUP 4: QueuedBroadcastBanner is now
             // mounted in FullLayoutWithNav.header below so it persists
             // across every unlocked view, not only Home.
             return (
@@ -1664,6 +1706,7 @@ function AppInner() {
                         onMyTokens={activeWalletId ? () => setUnlockedView('my-tokens') : undefined}
                         onMarketActivity={() => setUnlockedView('market-activity')}
                         onMarkets={activeWalletId ? () => setUnlockedView('markets') : undefined}
+                        onDispensers={activeWalletId ? () => setUnlockedView('dispensers-list') : undefined}
                         onMessaging={activeWalletId ? () => setUnlockedView('messaging') : undefined}
                         onContracts={activeWalletId && hasBtcAddress ? () => setUnlockedView('contracts-list') : undefined}
                         onStaking={activeWalletId && hasBtcAddress ? () => setUnlockedView('staking-dashboard') : undefined}
@@ -1779,21 +1822,13 @@ function AppInner() {
                     header={
                         activeWalletId ? (
                             <>
-                                {/* Persistent global header — brand + menu /
+                                {/* Persistent global header: brand + menu /
                                     lock affordances. Mounted here so every
                                     route (Home, TokenDetail, Send, History,
                                     Settings, etc.) keeps the wallet's top-
                                     level controls visible without each route
                                     re-rendering its own copy. */}
                                 <AppHeader
-                                    chainRegistry={APP_CHAIN_REGISTRY}
-                                    coinFamilies={APP_COIN_FAMILIES}
-                                    networkFilter={globalNetworkFilter}
-                                    onNetworkFilterChange={setGlobalNetworkFilter}
-                                    tokenQuery={globalTokenQuery}
-                                    onTokenQueryChange={setGlobalTokenQuery}
-                                    kindFilter={unlockedView === 'send-picker' ? globalKindFilter : undefined}
-                                    onKindFilterChange={unlockedView === 'send-picker' ? setGlobalKindFilter : undefined}
                                     onMenuOpen={() => {
                                         if (unlockedView === 'menu') {
                                             setUnlockedView(menuBackTo);
@@ -1803,10 +1838,11 @@ function AppInner() {
                                         }
                                     }}
                                     onScan={() => setGlobalScannerOpen(true)}
+                                    onManageAddresses={activeWalletId ? () => setUnlockedView('addresses') : undefined}
+                                    onViewAddress={activeWalletId ? () => { setReceivePrefill(null); setUnlockedView('receive'); } : undefined}
                                     onLock={handleNavLock}
-                                    showNetworkFilter={unlockedView === 'home' || unlockedView === 'addresses'}
                                 />
-                                {/* Cluster J FOLLOWUP 2 — DemoBanner persists across every
+                                {/* Cluster J FOLLOWUP 2: DemoBanner persists across every
                                     unlocked view via the shared layout header slot, not
                                     just Home. */}
                                 <DemoBanner activeWalletId={activeWalletId} onExited={refresh} />
@@ -1906,13 +1942,13 @@ function buildActionEntries({
         {
             id: 'destroy',
             label: 'Destroy',
-            description: 'Burn part of your balance — irreversible.',
+            description: 'Burn part of your balance. This is irreversible.',
             onSelect: onDestroy,
         },
         {
             id: 'lock',
             label: 'Lock supply',
-            description: 'Freeze supply + minting for a token you own — permanent.',
+            description: 'Freeze supply + minting for a token you own. This is permanent.',
             onSelect: onLock,
         },
         {
@@ -1942,7 +1978,7 @@ function buildActionEntries({
         {
             id: 'dispensers-list',
             label: 'My dispensers',
-            description: 'Manage dispensers you have opened — view + cancel.',
+            description: 'Manage dispensers you have opened: view and cancel.',
             onSelect: onMyDispensers,
         },
         {
@@ -1972,7 +2008,7 @@ function buildActionEntries({
         {
             id: 'swap',
             label: 'Swap tokens',
-            description: 'Atomic token-pair swap — no native coin, no follow-up payment needed.',
+            description: 'Atomic token-pair swap: no native coin, no follow-up payment needed.',
             onSelect: onSwap,
         },
         {
@@ -1984,7 +2020,7 @@ function buildActionEntries({
         {
             id: 'parallel',
             label: 'Parallel cross-chain actions',
-            description: 'Compose multiple independent actions across any chains and sign them sequentially. Not atomic — failures do not roll back.',
+            description: 'Compose multiple independent actions across any chains and sign them sequentially. Not atomic; failures do not roll back.',
             onSelect: onParallel,
         },
         {
@@ -2014,7 +2050,7 @@ function buildActionEntries({
         {
             id: 'contacts',
             label: 'Contacts',
-            description: 'Local address book — label counterparties, quick-compose to saved recipients.',
+            description: 'Local address book: label counterparties, quick-compose to saved recipients.',
             onSelect: onContacts,
         },
         {

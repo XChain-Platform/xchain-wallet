@@ -9,50 +9,32 @@
 // contact legal@dankest.llc.
 
 // AppHeader: persistent top strip that stays mounted across every
-// unlocked route. Matches the layout used at the top of Home: brand on
-// the left, network-filter button + pancake-menu button on the right.
-// Living in the FullLayoutWithNav header slot means TokenDetail / Send
-// / Receive / Settings all keep the wallet's top-level affordances
-// visible without re-rendering their own copy.
-//
-// `chainRegistry` + `coinFamilies` + `networkFilter` + `onNetworkFilterChange`
-// drive the HeaderNetworkButton. `onMenuOpen` fires when the pancake
-// is tapped. The parent layout owns the menu drawer mount so it can
-// span the viewport.
+// unlocked route. Brand on the left; QR/address dropdown, lock, and the
+// pancake-menu button on the right. Living in the FullLayoutWithNav
+// header slot means TokenDetail / Send / Receive / Settings all keep the
+// wallet's top-level affordances visible without re-rendering their own
+// copy. `onMenuOpen` fires when the pancake is tapped; the parent layout
+// owns the menu drawer mount so it can span the viewport.
 
+import { useEffect, useRef, useState } from 'react';
 import * as branding from '../../branding/branding.js';
 import { Icon } from '../../ui/index.js';
-import { HeaderNetworkButton } from './HeaderNetworkButton.jsx';
 import styles from './AppHeader.module.css';
 
 /**
  * @param {object} props
- * @param {import('../../registry/index.js').ChainRegistry} props.chainRegistry
- * @param {string[]} props.coinFamilies                              ordered coin family list for the filter popover (e.g. ['bitcoin','litecoin','dogecoin'])
- * @param {string} props.networkFilter                               current filter value ('all' or a coin id)
- * @param {(coin: string) => void} props.onNetworkFilterChange
- * @param {string} [props.tokenQuery]                                free-text token filter forwarded to the popover; omitting `onTokenQueryChange` hides the text input
- * @param {(q: string) => void} [props.onTokenQueryChange]
  * @param {() => void} [props.onMenuOpen]                            pancake-tap handler
- * @param {boolean} [props.showNetworkFilter]                        when false, the network-filter button is hidden (used to scope the filter to the home view only)
- * @param {'all' | 'coins' | 'tokens'} [props.kindFilter]            optional asset-kind segmented control; only shown when `onKindFilterChange` is provided
- * @param {(kind: 'all' | 'coins' | 'tokens') => void} [props.onKindFilterChange]
- * @param {() => void} [props.onScan]                                when provided, renders a QR-scan icon button between the filter and the pancake menu
+ * @param {() => void} [props.onScan]                                when provided, the QR icon opens a dropdown with Scan plus the address options below
+ * @param {() => void} [props.onManageAddresses]                     dropdown option under the QR icon: opens the address list
+ * @param {() => void} [props.onViewAddress]                         dropdown option under the QR icon: opens the receive / view-address screen
  * @param {() => void} [props.onLock]                                when provided, renders a one-tap lock button; same action as the "Lock wallet" row in the pancake menu
  * @param {boolean} [props.locking]                                  disables the lock button while a lock is in flight
  */
 export function AppHeader({
-    chainRegistry,
-    coinFamilies,
-    networkFilter,
-    onNetworkFilterChange,
-    tokenQuery,
-    onTokenQueryChange,
     onMenuOpen,
-    showNetworkFilter = true,
-    kindFilter,
-    onKindFilterChange,
     onScan,
+    onManageAddresses,
+    onViewAddress,
     onLock,
     locking,
 }) {
@@ -66,29 +48,11 @@ export function AppHeader({
                 />
             </div>
             <div className={styles.right}>
-                {showNetworkFilter && chainRegistry && Array.isArray(coinFamilies) && coinFamilies.length > 0 ? (
-                    <HeaderNetworkButton
-                        chainRegistry={chainRegistry}
-                        coinFamilies={coinFamilies}
-                        networkFilter={networkFilter}
-                        onNetworkFilterChange={onNetworkFilterChange}
-                        tokenQuery={tokenQuery}
-                        onTokenQueryChange={onTokenQueryChange}
-                        kindFilter={kindFilter}
-                        onKindFilterChange={onKindFilterChange}
-                    />
-                ) : null}
-                {onScan ? (
-                    <button
-                        type="button"
-                        className={styles.menuBtn}
-                        onClick={onScan}
-                        aria-label="Scan a QR code"
-                        title="Scan a QR code"
-                    >
-                        <Icon.ScanIcon />
-                    </button>
-                ) : null}
+                <ScanMenu
+                    onScan={onScan}
+                    onManageAddresses={onManageAddresses}
+                    onViewAddress={onViewAddress}
+                />
                 {onLock ? (
                     <button
                         type="button"
@@ -114,5 +78,77 @@ export function AppHeader({
                 ) : null}
             </div>
         </header>
+    );
+}
+
+/**
+ * QR-icon button that opens a small dropdown: Scan, Manage addresses,
+ * View address. Only the options whose handler is supplied are shown.
+ * Renders nothing when no handler is provided.
+ *
+ * @param {object} props
+ * @param {() => void} [props.onScan]
+ * @param {() => void} [props.onManageAddresses]
+ * @param {() => void} [props.onViewAddress]
+ */
+function ScanMenu({ onScan, onManageAddresses, onViewAddress }) {
+    const [open, setOpen] = useState(false);
+    const wrapRef = useRef(null);
+
+    useEffect(() => {
+        if (!open) return undefined;
+        const onClick = (e) => {
+            if (wrapRef.current?.contains(e.target)) return;
+            setOpen(false);
+        };
+        const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+        window.addEventListener('mousedown', onClick);
+        window.addEventListener('keydown', onKey);
+        return () => {
+            window.removeEventListener('mousedown', onClick);
+            window.removeEventListener('keydown', onKey);
+        };
+    }, [open]);
+
+    const items = [
+        { id: 'scan', label: 'Scan', Icon: Icon.ScanIcon, handler: onScan },
+        { id: 'manage', label: 'Manage addresses', Icon: Icon.AddressIcon, handler: onManageAddresses },
+        { id: 'view', label: 'View address', Icon: Icon.EyeIcon, handler: onViewAddress },
+    ].filter((it) => typeof it.handler === 'function');
+
+    if (items.length === 0) return null;
+
+    return (
+        <div ref={wrapRef} className={styles.scanWrap}>
+            <button
+                type="button"
+                className={styles.menuBtn}
+                onClick={() => setOpen((v) => !v)}
+                aria-haspopup="menu"
+                aria-expanded={open ? 'true' : 'false'}
+                aria-label="Scan and addresses"
+                title="Scan and addresses"
+            >
+                <Icon.ScanIcon />
+            </button>
+            {open ? (
+                <div className={styles.scanMenu} role="menu" aria-label="Scan and addresses">
+                    {items.map(({ id, label, Icon: ItemIcon, handler }) => (
+                        <button
+                            key={id}
+                            type="button"
+                            role="menuitem"
+                            className={styles.scanItem}
+                            onClick={() => { setOpen(false); handler(); }}
+                        >
+                            <span className={styles.scanItemIcon} aria-hidden="true">
+                                <ItemIcon />
+                            </span>
+                            <span>{label}</span>
+                        </button>
+                    ))}
+                </div>
+            ) : null}
+        </div>
     );
 }

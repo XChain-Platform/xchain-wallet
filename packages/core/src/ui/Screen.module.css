@@ -3,7 +3,7 @@
    `--xc-screen-h` so different host environments can pin it without
    forking the component (the forced-small framed preview sets it
    to 600px; everything else defaults to 100dvh). `overflow: hidden`
-   on the screen is critical — it constrains the flex children so
+   on the screen is critical: it constrains the flex children so
    the body's `overflow-y: auto` actually triggers, leaving the
    header docked. */
 
@@ -17,7 +17,7 @@
     overflow: hidden;
 }
 
-/* Small variant fills its parent — the host (page wrapper, framed
+/* Small variant fills its parent: the host (page wrapper, framed
    preview, mobile viewport) is responsible for the outer width
    constraint. Letting Screen fill the parent avoids the gutter that
    a hard max-width creates inside a slightly-larger container (e.g.
@@ -40,7 +40,7 @@
 .body {
     flex: 1 1 auto;
     min-height: 0;
-    padding: var(--xc-space-4);
+    padding: var(--xc-space-2);
     overflow-y: auto;
     overflow-x: hidden;
 }
@@ -52,7 +52,7 @@
     background: var(--xc-surface-raised);
 }
 
-/* §53.1 / G167 — skip-to-main-content link. Visually hidden until it
+/* §53.1 / G167: skip-to-main-content link. Visually hidden until it
    receives focus (first Tab from any Screen surfaces it), at which point
    it pins to the top-left in high contrast for sighted keyboard users. */
 .skipLink {

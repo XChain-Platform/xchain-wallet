@@ -1447,6 +1447,7 @@ function AppInner() {
                         onMyTokens={activeWalletId ? () => setUnlockedView('my-tokens') : undefined}
                         onMarketActivity={activeWalletId ? () => setUnlockedView('market-activity') : undefined}
                         onMarkets={activeWalletId ? () => setUnlockedView('markets') : undefined}
+                        onDispensers={activeWalletId ? () => setUnlockedView('dispensers-list') : undefined}
                         onMessaging={activeWalletId ? () => setUnlockedView('messaging') : undefined}
                         onContracts={activeWalletId && hasBtcAddress ? () => setUnlockedView('contracts-list') : undefined}
                         onStaking={activeWalletId && hasBtcAddress ? () => setUnlockedView('staking-dashboard') : undefined}
