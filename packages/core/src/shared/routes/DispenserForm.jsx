@@ -214,6 +214,47 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         }
     }, [chainId, addressesByChain, initialFromAddress]);
 
+    // Balance-resolve SOURCE: the newest-receive default above is a guess
+    // at where the token inventory lives. Once a ticker is entered, prefer
+    // the account address (on the selected chain) that actually holds the
+    // most of that tick, since SOURCE is what the escrow debits. Debounced
+    // so typing the ticker doesn't fan out a balance query per keystroke;
+    // any failure leaves the newest-receive default untouched. Skipped when
+    // the source is pinned by an incoming `initialFromAddress`.
+    useEffect(() => {
+        const tick = ticker.trim().toUpperCase();
+        if (initialFromAddress) return undefined;
+        if (!chainId || !addressesByChain || !tick) return undefined;
+        if (typeof messaging.getWalletBalances !== 'function') return undefined;
+        let cancelled = false;
+        const timer = setTimeout(() => {
+            messaging.getWalletBalances(walletId, activeAccountId)
+                .then((byChain) => {
+                    if (cancelled || !byChain) return;
+                    const entries = byChain[chainId] || [];
+                    let bestAddress = null;
+                    let bestAmount = 0;
+                    for (const entry of entries) {
+                        if (!entry || !entry.balances) continue;
+                        const rows = decoderLib.balancesFromSdk(entry.balances) || [];
+                        const match = rows.find((b) => String(b.tick).toUpperCase() === tick);
+                        const amount = match ? Number(match.amount) : 0;
+                        if (Number.isFinite(amount) && amount > bestAmount) {
+                            bestAmount = amount;
+                            bestAddress = entry.address;
+                        }
+                    }
+                    if (bestAddress) {
+                        const holder = (addressesByChain[chainId] || [])
+                            .find((a) => a.address === bestAddress);
+                        if (holder) setFromAddressId(holder.id);
+                    }
+                })
+                .catch(() => { /* keep the newest-receive default on failure */ });
+        }, 400);
+        return () => { cancelled = true; clearTimeout(timer); };
+    }, [ticker, chainId, addressesByChain, activeAccountId, walletId, messaging, initialFromAddress]);
+
     useEffect(() => {
         if (stage === 'review') {
             setTimeout(() => passwordRef.current?.focus(), 0);

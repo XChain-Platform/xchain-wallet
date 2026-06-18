@@ -36,12 +36,17 @@ const chainRegistry = registryLib.defaultRegistry();
  * "remaining fills" inline; for now that detail waits for the detail
  * page.
  *
+ * Scoped to the active account: only that account's addresses are
+ * unioned over, so the list shows the dispensers opened under the
+ * account currently selected in the switcher.
+ *
  * @param {object} props
  * @param {string} props.walletId
+ * @param {string} [props.activeAccountId]   scope the address union to this account
  * @param {(chainId: string, actionIndex: string) => void} props.onOpenDispenser
  * @param {() => void} props.onBack
  */
-export function DispensersList({ walletId, onOpenDispenser, onBack }) {
+export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -60,7 +65,7 @@ export function DispensersList({ walletId, onOpenDispenser, onBack }) {
     // query and which source addresses to union over.
     useEffect(() => {
         let cancelled = false;
-        messaging.getAddressesByChain(walletId)
+        messaging.getAddressesByChain(walletId, activeAccountId)
             .then((byChain) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain);
@@ -69,7 +74,22 @@ export function DispensersList({ walletId, onOpenDispenser, onBack }) {
                 if (!cancelled) setAddressesError(err?.message || 'Failed to load addresses.');
             });
         return () => { cancelled = true; };
-    }, [walletId, messaging]);
+    }, [walletId, messaging, activeAccountId]);
+
+    // Local labels for this account's dispenser sub-addresses (role=2
+    // branch), keyed by address. A dispenser row whose on-chain dispenser
+    // address matches one of these shows the wallet's own label.
+    const dispenserLabels = useMemo(() => {
+        /** @type {Record<string, string>} */
+        const map = {};
+        if (!addressesByChain) return map;
+        for (const list of Object.values(addressesByChain)) {
+            for (const a of (list || [])) {
+                if (a.role === 'dispenser' && a.address && a.label) map[a.address] = a.label;
+            }
+        }
+        return map;
+    }, [addressesByChain]);
 
     // Phase 2 — for each chain with addresses, fan out one explorer
     // query per address and merge the results. A per-chain error
@@ -177,6 +197,7 @@ export function DispensersList({ walletId, onOpenDispenser, onBack }) {
                     descriptor={d}
                     chainId={cid}
                     state={state}
+                    labels={dispenserLabels}
                     onOpenDispenser={onOpenDispenser}
                 />
             );
@@ -184,7 +205,7 @@ export function DispensersList({ walletId, onOpenDispenser, onBack }) {
     );
 }
 
-function ChainGroup({ descriptor, chainId, state, onOpenDispenser }) {
+function ChainGroup({ descriptor, chainId, state, labels, onOpenDispenser }) {
     return (
         <section>
             <header style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
@@ -207,6 +228,7 @@ function ChainGroup({ descriptor, chainId, state, onOpenDispenser }) {
                     <DispenserRow
                         key={String(row.action_index)}
                         row={row}
+                        label={row.address ? (labels && labels[row.address]) : undefined}
                         onSelect={() => onOpenDispenser(chainId, String(row.action_index))}
                     />
                 ))
@@ -215,9 +237,9 @@ function ChainGroup({ descriptor, chainId, state, onOpenDispenser }) {
     );
 }
 
-function DispenserRow({ row, onSelect }) {
+function DispenserRow({ row, label, onSelect }) {
     const rate = rateLabel(row);
-    const status = String(row.status || '—');
+    const status = String(row.status || '?');
     return (
         <button
             type="button"
@@ -225,7 +247,7 @@ function DispenserRow({ row, onSelect }) {
             onClick={onSelect}
         >
             <span className={styles.entryLabel}>
-                {row.give_tick || '?'} dispenser — {rate}
+                {label ? `${label}: ` : ''}{row.give_tick || '?'} dispenser ({rate})
             </span>
             <span className={styles.entryDescription}>
                 #{row.action_index ?? '?'} · status {status}

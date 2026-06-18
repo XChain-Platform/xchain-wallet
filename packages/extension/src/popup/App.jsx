@@ -597,6 +597,7 @@ function AppInner() {
                 return (
                     <DispensersList
                         walletId={activeWalletId}
+                        activeAccountId={activeAccountId || undefined}
                         onOpenDispenser={(chainId, actionIndex) => {
                             setDispenserRef({ chainId, actionIndex, origin: 'list' });
                             setUnlockedView('dispenser-detail');
