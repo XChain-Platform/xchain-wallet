@@ -631,6 +631,11 @@ export function normalizeTokenInfo(chainId, tick, raw, tisBundle = null) {
     return {
         chainId,
         tick,
+        // The explorer's resolved canonical name for this token. Differs from
+        // `tick` only when the lookup key was a `^<id>` reference: then `tick`
+        // echoes `^<id>` while `canonicalTick` is the readable name. Used to
+        // show names (not `^1234`) on the dApp approval screen.
+        canonicalTick: row?.info?.tick ?? null,
         name,
         description,
         creator,

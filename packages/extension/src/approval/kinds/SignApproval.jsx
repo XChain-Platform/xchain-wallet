@@ -16,6 +16,7 @@ import {
 } from '@xchain-wallet/core';
 import { BalanceChanges } from '@xchain-wallet/core/shared/components/BalanceChanges.jsx';
 import { RawPsbtViewer } from '@xchain-wallet/core/shared/components/RawPsbtViewer.jsx';
+import { resolveDisplayTickers } from '@xchain-wallet/core/shared/utils/resolveDisplayTickers.js';
 import {
     listWallets,
     resolveApproval,
@@ -23,11 +24,32 @@ import {
     getAddressesByChain,
     getSettings,
     parsePsbt,
+    getTokenInfo,
 } from '../messaging.js';
 import shared from '../approval.module.css';
 import styles from './SignApproval.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+
+// Cache of `^id` -> resolved ticker name, keyed by chain. A ticker id is
+// immutable, so entries never expire. Resolves a single compaction reference
+// for display; returns null (caller keeps the `^id`) on any failure.
+const tickNameCache = new Map();
+async function resolveTickName(chainId, ref) {
+    const key = chainId + '|' + ref;
+    if (tickNameCache.has(key)) return tickNameCache.get(key);
+    try {
+        const info = await getTokenInfo(chainId, ref);
+        const name = (info && info.canonicalTick) || null;
+        if (name && name !== ref) {
+            tickNameCache.set(key, name);
+            return name;
+        }
+    } catch {
+        // fall through; caller keeps the ^id form
+    }
+    return null;
+}
 
 const KIND_TITLE = {
     signMessage: 'Sign message',
@@ -142,26 +164,51 @@ export function SignApproval({ id, kind, payload, onReject }) {
         return () => { cancelled = true; };
     }, [kind, chainId, walletId, payload]);
 
+    // Resolve any `^id` ticker references in a signAction's params back to
+    // readable names for display, so the approval summary, details, and balance
+    // preview show "JDOG" rather than "^1234" when a dApp built the action with
+    // the SDK's ticker compaction. Best-effort: starts from the raw payload and
+    // swaps in names as they resolve; unresolvable refs keep their `^id` form,
+    // and resolution never blocks the approval. The raw value still shows in the
+    // developer RawPsbtViewer below.
+    const [resolvedPayload, setResolvedPayload] = useState(payload);
+    useEffect(() => {
+        setResolvedPayload(payload);
+        if (kind !== 'signAction' || !payload?.payload) return undefined;
+        let cancelled = false;
+        (async () => {
+            const resolved = await resolveDisplayTickers(
+                payload.action,
+                payload.payload,
+                (ref) => resolveTickName(chainId, ref),
+            );
+            if (!cancelled && resolved !== payload.payload) {
+                setResolvedPayload({ ...payload, payload: resolved });
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [kind, payload, chainId]);
+
     const previewResult = useMemo(() => {
         if (kind !== 'signAction') return null;
         if (previewBalances.loading || previewBalances.error || !previewBalances.sdkShape) {
             return null;
         }
         return decoderLib.simulateAction({
-            action: payload?.action,
-            params: payload?.payload || {},
+            action: resolvedPayload?.action,
+            params: resolvedPayload?.payload || {},
             balances: decoderLib.balancesFromSdk(previewBalances.sdkShape),
-            // Fee defaults to '0' — the dApp request doesn't carry an
-            // estimate today; once the §44.2 fee selector lands the
+            // Fee defaults to '0'; the dApp request doesn't carry an
+            // estimate today. Once the §44.2 fee selector lands the
             // host can attach one alongside the bridge payload.
             feeEstimate: '0',
             chainId,
             chainRegistry,
         });
-    }, [kind, payload, previewBalances, chainId]);
+    }, [kind, resolvedPayload, previewBalances, chainId]);
 
     // §21.2 / §48 signPsbt intent cross-check. A truncated hex string is
-    // not something a user can verify — a compromised dApp could swap in a
+    // not something a user can verify; a compromised dApp could swap in a
     // drain PSBT and the displayed prefix would look unremarkable. Decode
     // the PSBT into destinations + amounts (via the same psbt.parse host
     // route the in-wallet sign form uses) and mark which outputs return to
@@ -321,7 +368,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
                 </section>
             ) : null}
 
-            <SignSummary kind={kind} payload={payload} />
+            <SignSummary kind={kind} payload={resolvedPayload} />
 
             {kind === 'signPsbt' ? (
                 <PsbtIntentSummary

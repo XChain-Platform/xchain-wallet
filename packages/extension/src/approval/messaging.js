@@ -64,6 +64,20 @@ export function getAddressBalances(chainId, address) {
 }
 
 /**
+ * Fetch normalized token info for a ticker reference (name or `^<id>`). Routes
+ * to the same `token.info` host handler the popup uses. The dApp approval
+ * screen uses the returned `canonicalTick` to display a readable token name in
+ * place of a `^<id>` compaction reference.
+ *
+ * @param {string} chainId
+ * @param {string} tick   ticker name or `^<id>` reference
+ * @returns {Promise<any>}
+ */
+export function getTokenInfo(chainId, tick) {
+    return /** @type {any} */ (sendMessage('token.info', { chainId, tick }));
+}
+
+/**
  * Fetch the persisted Address records for a wallet, grouped by chainId.
  * Used by SignApproval to resolve the signing source address when the
  * dApp request omits it (some dApps just say "sign on Bitcoin" and let
