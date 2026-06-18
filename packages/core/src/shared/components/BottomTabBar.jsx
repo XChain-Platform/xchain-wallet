@@ -46,7 +46,7 @@ import styles from './BottomTabBar.module.css';
  */
 
 const PRIMARY_TABS = [
-    { id: 'home', label: 'Home', Icon: Icon.HomeIcon, group: ['home', 'token-detail', 'addresses', 'wallet-picker', 'account-picker', 'wallet-details', 'wallet-rename', 'add-account', 'add-wallet'] },
+    { id: 'home', label: 'Home', Icon: Icon.HomeIcon, group: ['home', 'token-detail', 'addresses', 'wallet-picker', 'account-picker', 'wallet-details', 'wallet-rename', 'account-rename', 'add-account', 'add-wallet'] },
     { id: 'history', label: 'History', Icon: Icon.HistoryIcon, group: ['history'] },
     { id: 'send', label: 'Send', Icon: Icon.SendIcon, group: ['send'] },
     { id: 'scan', label: 'Scan', Icon: Icon.ScanIcon, group: ['scan'] },

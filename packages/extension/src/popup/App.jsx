@@ -37,6 +37,8 @@ import { WalletPicker } from '@xchain-wallet/core/shared/routes/WalletPicker.jsx
 import { AccountPicker } from '@xchain-wallet/core/shared/routes/AccountPicker.jsx';
 import { WalletDetails } from '@xchain-wallet/core/shared/routes/WalletDetails.jsx';
 import { RenameWalletForm } from '@xchain-wallet/core/shared/routes/RenameWalletForm.jsx';
+import { RenameAccountForm } from '@xchain-wallet/core/shared/routes/RenameAccountForm.jsx';
+import { readActiveAccount, writeActiveAccount } from '@xchain-wallet/core/shared/utils/activeAccountMemory.js';
 import { Locked } from '@xchain-wallet/core/shared/routes/Locked.jsx';
 import { Home } from '@xchain-wallet/core/shared/routes/Home.jsx';
 import { TokenDetail } from '@xchain-wallet/core/shared/routes/TokenDetail.jsx';
@@ -128,7 +130,7 @@ function AppInner() {
         /** @type {'welcome' | 'create' | 'import' | 'import-freewallet'} */ ('welcome'),
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'attach-content' | 'project-roster' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'addresses' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'scan'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'attach-content' | 'project-roster' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'addresses' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'scan'} */ ('home'),
     );
     const [tokenDetailRef, setTokenDetailRef] = useState(
         /** @type {{ chainId: string, tick: string, kind: string, displayName: string, divisibility: number, fiatRate: number | null, quantity: string } | null} */ (null),
@@ -173,6 +175,9 @@ function AppInner() {
     );
     const [walletDetailsId, setWalletDetailsId] = useState(/** @type {string | null} */ (null));
     const [walletRenameTarget, setWalletRenameTarget] = useState(
+        /** @type {{ id: string, name: string } | null} */ (null),
+    );
+    const [accountRenameTarget, setAccountRenameTarget] = useState(
         /** @type {{ id: string, name: string } | null} */ (null),
     );
     const [migrateLegacyWalletId, setMigrateLegacyWalletId] = useState(/** @type {string | null} */ (null));
@@ -326,11 +331,24 @@ function AppInner() {
                 const sorted = Array.isArray(list)
                     ? [...list].sort((a, b) => a.index - b.index)
                     : [];
-                setActiveAccountId(sorted[0]?.id || null);
+                // Restore the last selected account for this wallet if it
+                // still exists; otherwise fall back to the lowest index.
+                const persisted = readActiveAccount(activeWalletId);
+                const chosen = (persisted && sorted.some((a) => a.id === persisted))
+                    ? persisted
+                    : (sorted[0]?.id || null);
+                setActiveAccountId(chosen);
             })
             .catch(() => { if (!cancelled) setActiveAccountId(null); });
         return () => { cancelled = true; };
     }, [activeWalletId]);
+
+    // Switch the active account and remember it per wallet, so a reopen
+    // returns to it instead of snapping back to the lowest-index account.
+    const handleSwitchAccount = (id) => {
+        setActiveAccountId(id);
+        if (activeWalletId && id) writeActiveAccount(activeWalletId, id);
+    };
 
     // §42.2 Contracts nav — show only when a BTC wallet address exists
     // (VM actions are BTC-only at launch per BITCOIN_ACTIONS).
@@ -1331,9 +1349,29 @@ function AppInner() {
                     <AccountPicker
                         walletId={activeWalletId}
                         activeAccountId={activeAccountId}
-                        onSwitch={setActiveAccountId}
+                        onSwitch={handleSwitchAccount}
                         onAddAccount={() => setUnlockedView('add-account')}
+                        onRenameAccount={(id) => {
+                            setAccountRenameTarget({ id, name: '' });
+                            setUnlockedView('account-rename');
+                        }}
                         onBack={() => setUnlockedView('home')}
+                    />
+                );
+            }
+            if (unlockedView === 'account-rename' && accountRenameTarget) {
+                return (
+                    <RenameAccountForm
+                        accountId={accountRenameTarget.id}
+                        initialName={accountRenameTarget.name}
+                        onBack={() => {
+                            setAccountRenameTarget(null);
+                            setUnlockedView('account-picker');
+                        }}
+                        onRenamed={() => {
+                            setAccountRenameTarget(null);
+                            setUnlockedView('account-picker');
+                        }}
                     />
                 );
             }
@@ -1444,7 +1482,7 @@ function AppInner() {
                         onSignMessage={activeWalletId ? () => setUnlockedView('sign-message') : undefined}
                         onVerifySignature={activeWalletId ? () => setUnlockedView('verify-signature') : undefined}
                         activeAccountId={activeAccountId}
-                        onSwitchAccount={setActiveAccountId}
+                        onSwitchAccount={handleSwitchAccount}
                     />
                 </>
             );

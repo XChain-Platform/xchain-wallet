@@ -536,10 +536,24 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
         />
     );
 
+    // One-tap account switcher: the active account label opens the full
+    // AccountPicker directly, instead of going through the gear popover.
+    const accountButton = (onOpenAccountPicker && activeAccount) ? (
+        <Button
+            variant="ghost"
+            size="sm"
+            onClick={onOpenAccountPicker}
+            title="Switch account"
+        >
+            {(activeAccount.name || `Account ${activeAccount.index + 1}`) + ' ▾'}
+        </Button>
+    ) : null;
+
     const headerInner = isFull ? (
         <div className={styles.headerFull}>
             {brandBlock}
             <div className={styles.headerRight}>
+                {accountButton}
                 {settingsButton}
                 <Button
                     variant="ghost"
@@ -556,6 +570,7 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
         <div className={styles.headerPopup}>
             {brandBlock}
             <div className={styles.headerRight}>
+                {accountButton}
                 <HeaderNetworkButton
                     chainRegistry={chainRegistry}
                     coinFamilies={coinFamilies}

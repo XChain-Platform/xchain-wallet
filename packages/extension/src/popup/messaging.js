@@ -114,6 +114,17 @@ export function renameWallet(opts) {
 }
 
 /**
+ * Rename an account (Account record `name` field).
+ *
+ * @param {object} opts
+ * @param {string} opts.accountId
+ * @param {string} opts.name
+ */
+export function renameAccount(opts) {
+    return /** @type {any} */ (sendMessage('account.rename', opts));
+}
+
+/**
  * List BIP44 accounts under a wallet, sorted by index.
  *
  * @param {string} walletId

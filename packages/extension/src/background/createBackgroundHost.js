@@ -38,6 +38,7 @@ const {
     createAccount,
     activateChain,
     renameWallet,
+    renameAccount,
     importMnemonic,
     unlockWallet,
     receiveAddress,
@@ -681,6 +682,12 @@ export function createBackgroundHost(deps) {
     host.register('wallet.rename', async (req, { vault }) => {
         const updated = await renameWallet({ ...req, vault });
         return { wallet: toSafeWallet(updated) };
+    });
+
+    // Rename an account: updates the Account record's `name` field.
+    host.register('account.rename', async (req, { vault }) => {
+        const updated = await renameAccount({ ...req, vault });
+        return { account: updated };
     });
 
     // List BIP44 accounts under a wallet, sorted ascending by index.

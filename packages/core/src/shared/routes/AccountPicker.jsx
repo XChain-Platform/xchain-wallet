@@ -25,9 +25,10 @@ import pickerStyles from './WalletPicker.module.css';
  * @param {string | null} props.activeAccountId
  * @param {(accountId: string) => void} props.onSwitch
  * @param {() => void} props.onAddAccount
+ * @param {(accountId: string) => void} [props.onRenameAccount]
  * @param {() => void} props.onBack
  */
-export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccount, onBack }) {
+export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccount, onRenameAccount, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -90,22 +91,38 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
                     const active = a.id === activeAccountId;
                     const label = a.name || `Account ${a.index + 1}`;
                     return (
-                        <button
-                            key={a.id}
-                            type="button"
-                            className={styles.entry}
-                            onClick={() => {
-                                if (!active) onSwitch(a.id);
-                                onBack();
-                            }}
-                        >
-                            <span className={styles.entryLabel}>
-                                {active ? '● ' : '○ '}{label}
-                            </span>
-                            <span className={styles.entryDescription}>
-                                BIP44 account index {a.index}
-                            </span>
-                        </button>
+                        <div key={a.id} className={pickerStyles.rowWrap}>
+                            <button
+                                type="button"
+                                className={styles.entry}
+                                style={{ width: '100%', paddingRight: '56px' }}
+                                onClick={() => {
+                                    if (!active) onSwitch(a.id);
+                                    onBack();
+                                }}
+                            >
+                                <span className={styles.entryLabel}>
+                                    {active ? '● ' : '○ '}{label}
+                                </span>
+                                <span className={styles.entryDescription}>
+                                    BIP44 account index {a.index}
+                                </span>
+                            </button>
+                            {onRenameAccount ? (
+                                <button
+                                    type="button"
+                                    className={pickerStyles.rowMenuBtn}
+                                    aria-label={`Rename ${label}`}
+                                    title="Rename account"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        onRenameAccount(a.id);
+                                    }}
+                                >
+                                    <Icon.PencilIcon />
+                                </button>
+                            ) : null}
+                        </div>
                     );
                 })}
             </div>

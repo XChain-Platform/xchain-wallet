@@ -37,7 +37,7 @@ import styles from './LeftNav.module.css';
  */
 
 const VIEW_GROUPS = {
-    home: ['home', 'token-detail', 'addresses', 'wallet-picker', 'account-picker', 'wallet-details', 'wallet-rename', 'add-account', 'add-wallet'],
+    home: ['home', 'token-detail', 'addresses', 'wallet-picker', 'account-picker', 'wallet-details', 'wallet-rename', 'account-rename', 'add-account', 'add-wallet'],
     history: ['history'],
     send: ['send'],
     receive: ['receive'],

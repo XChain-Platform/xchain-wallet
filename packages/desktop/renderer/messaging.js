@@ -90,6 +90,11 @@ export function renameWallet(opts) {
     return /** @type {any} */ (sendMessage('wallet.rename', opts));
 }
 
+/** @param {{ accountId: string, name: string }} opts */
+export function renameAccount(opts) {
+    return /** @type {any} */ (sendMessage('account.rename', opts));
+}
+
 /** @param {string} walletId */
 export function listAccounts(walletId) {
     return /** @type {any} */ (sendMessage('account.list', { walletId }));
