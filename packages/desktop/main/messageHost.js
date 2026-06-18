@@ -17,7 +17,7 @@
 // dependency set (file-backed vault, `xchain-sdk` running in the
 // Node runtime rather than a service-worker polyfill).
 //
-// Renderer talks to main via the preload-exposed `sendMessage` —
+// Renderer talks to main via the preload-exposed `sendMessage`;
 // every call lands here and returns a `{ ok, result } | { ok, error }`
 // envelope, matching the extension shell's wire format so shared
 // `core/shared/routes/*` components work unchanged.

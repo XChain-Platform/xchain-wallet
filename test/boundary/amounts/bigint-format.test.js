@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 // Boundary: amount formatting works correctly at the tail of the BigInt
-// range — atomic-unit balances for high-supply tokens routinely hit
+// range; atomic-unit balances for high-supply tokens routinely hit
 // 10^18+ which JS Number can't represent exactly.
 
 import { describe, it, expect } from 'vitest';

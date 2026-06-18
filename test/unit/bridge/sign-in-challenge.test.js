@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Regression — §43.6 SIWX challenge origin binding.
+// Regression: §43.6 SIWX challenge origin binding.
 //
 // appId is supplied by the requesting page, so it must never be the only
 // app identity in the signed bytes: a look-alike site could pass a
@@ -27,7 +27,7 @@
 
 import { describe, it, expect } from 'vitest';
 // Compile-time raw import (same pattern as the other source-scanning
-// unit tests) — no fs/cwd fragility under the jsdom environment.
+// unit tests), with no fs/cwd fragility under the jsdom environment.
 import handlersSource from '../../../packages/extension/src/bridge/handlers.js?raw';
 import {
     SIGN_IN_CHALLENGE_PREFIX,

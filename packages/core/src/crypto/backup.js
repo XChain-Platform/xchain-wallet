@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Encrypted backup-file envelope — §19.4.
+// Encrypted backup-file envelope (§19.4).
 //
 // Envelope layout (the on-disk `.xchain-wallet` file):
 //

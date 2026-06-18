@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §56.3 Pre-launch Step 3 of 7 — Hardware-friendly
+// Smoke for §56.3 Pre-launch Step 3 of 7: Hardware-friendly
 // signMultisigPsbt abstract + SoftwareSigner impl + HW stubs
 // (closes FOLLOWUP 1 from 2026-04-24_phase4-close.md).
 
@@ -114,7 +114,7 @@ await assert.rejects(
 );
 
 // With a stub that DOES implement signMultisigPsbt we verify the
-// method completes and returns the expected shape — even with a
+// method completes and returns the expected shape (even with a
 // placeholder PSBT. The stub echoes back a mutated PSBT hex so we
 // can check the return plumbing.
 let capturedPsbt = null;
@@ -177,5 +177,5 @@ for (const [shell, pkgPath] of [
 }
 
 console.log(
-    'OK — multisig PSBT signing smoke (Signer.signMultisigPsbt abstract + Trezor envelope-deferral error + Ledger wallet-policy-deferral error + SoftwareSigner guards lock / empty psbtHex / empty signingPaths / SDK-too-old / sends PSBT+WIF through sdk.wallet.signMultisigPsbt + typedef additions + SDK pin ^1.13.0)',
+    'OK: multisig PSBT signing smoke (Signer.signMultisigPsbt abstract + Trezor envelope-deferral error + Ledger wallet-policy-deferral error + SoftwareSigner guards lock / empty psbtHex / empty signingPaths / SDK-too-old / sends PSBT+WIF through sdk.wallet.signMultisigPsbt + typedef additions + SDK pin ^1.13.0)',
 );

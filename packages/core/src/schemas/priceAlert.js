@@ -8,9 +8,9 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// PriceAlert record — §46 price-alert delivery. One row per "notify me
+// PriceAlert record (§46 price-alert delivery). One row per "notify me
 // when {chain} goes {above|below} {targetFiat}" the user armed. Per-wallet
-// (walletId), per-chain (chainId — a native-coin chain that has price data,
+// (walletId), per-chain (chainId, a native-coin chain that has price data,
 // i.e. a mainnet entry in priceOracle's COINGECKO_ID_BY_CHAIN).
 //
 // One-shot by design: an `armed` alert fires once when its threshold is
@@ -18,7 +18,7 @@
 // background PriceAlertWatcher never re-fires it. The user re-arms or
 // deletes a triggered alert from the manager UI.
 //
-// The record carries no price history — the watcher re-queries the live
+// The record carries no price history; the watcher re-queries the live
 // price each poll. `targetFiat` is the threshold in `fiatCurrency` (the
 // user's display currency at creation time).
 

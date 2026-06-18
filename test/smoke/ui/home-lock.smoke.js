@@ -14,7 +14,7 @@
 // pre-host dispatcher:
 //   1. With a populated session, wallet.lock clears the session backend,
 //      fires onLocked, and flips session.status back to `locked`.
-//   2. With no session, wallet.lock is still idempotent — returns
+//   2. With no session, wallet.lock is still idempotent. It returns
 //      `locked: true` without error.
 //
 // Static coverage asserts Home.jsx wires lockWallet + listWallets +
@@ -244,11 +244,11 @@ await withChrome(
         );
         const r = await fake.fire({ type: 'wallet.lock' });
         assert.deepEqual(r, { ok: true, result: { locked: true } });
-        // onLocked still fires — the callback shouldn't be gated on prior session.
+        // onLocked still fires; the callback shouldn't be gated on prior session.
         assert.equal(onLockedFired, 1, 'onLocked fires even without session');
     },
 );
 
 console.log(
-    'OK — home+lock smoke (static wiring, lock-from-unlocked, idempotent lock)',
+    'OK: home+lock smoke (static wiring, lock-from-unlocked, idempotent lock)',
 );

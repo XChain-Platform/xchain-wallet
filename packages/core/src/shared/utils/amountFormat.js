@@ -29,7 +29,7 @@ export function formatWithThousands(value) {
     return `${negative ? '-' : ''}${grouped}${fracPart}`;
 }
 
-// Count non-comma characters before `cursorPos` — used to map cursor
+// Count non-comma characters before `cursorPos`, used to map cursor
 // position across a reformat.
 export function countNonCommaBefore(value, cursorPos) {
     let count = 0;

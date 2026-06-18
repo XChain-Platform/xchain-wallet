@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// createWallet — §15.3. Generate a fresh BIP39 wallet, encrypt the
+// createWallet (§15.3): Generate a fresh BIP39 wallet, encrypt the
 // mnemonic, persist the initial records, and return the plaintext
 // mnemonic for the §19.2 seed-phrase display ceremony. Callers MUST
 // display it once and then drop the reference; this module does not

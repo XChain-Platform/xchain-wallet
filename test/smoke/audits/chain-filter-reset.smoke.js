@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §23.5 / G052 / Cluster O FOLLOWUP 3 — chain-filter memory
+// Smoke for §23.5 / G052 / Cluster O FOLLOWUP 3: chain-filter memory
 // reset UI in Settings → Display.
 //
 // Until v0.297.0 the per-list chain-filter memory persisted silently

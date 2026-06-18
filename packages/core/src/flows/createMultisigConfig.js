@@ -8,14 +8,14 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// createMultisigConfig — §22 + §42.9 wallet-creation coordinator core
+// createMultisigConfig: §22 + §42.9 wallet-creation coordinator core
 // flow. Step 17 of Phase 4. Takes a list of cosigners (one local +
 // N-1 external) plus a scheme + threshold, computes the
 // scriptTemplate (delegating to xchain-sdk's MuSig2 primitives for
 // taproot-musig2), and persists the resulting MultisigConfig onto
 // the chosen Wallet record's `multisig` slot (§11.3.6).
 //
-// This flow is platform-agnostic — no encoding, no signing, no PSBT
+// This flow is platform-agnostic: no encoding, no signing, no PSBT
 // construction. Address derivation (Step 18), PSBT construction
 // (Step 19), QR transport (Step 20), HW MuSig2 wiring (Step 21) and
 // surface-wide badging (Step 22) all build on the persisted
@@ -72,18 +72,18 @@ export async function createMultisigConfig(opts) {
     // MuSig2 is n-of-n by construction: the single aggregated Schnorr signature
     // requires a nonce + partial sig from EVERY cosigner whose key is in the
     // key-agg context. A "T-of-N" taproot-musig2 with T<N derives an N-key
-    // address but can never be signed by fewer than N — the funds would be
-    // permanently unspendable. Real T-of-N belongs on p2wsh-multisig
+    // address but can never be signed by fewer than N (the funds would be
+    // permanently unspendable). Real T-of-N belongs on p2wsh-multisig
     // (OP_CHECKMULTISIG). Reject early with an actionable error.
     if (opts.scheme === 'taproot-musig2' && opts.threshold !== opts.cosigners.length) {
         throw new Error(
-            `createMultisigConfig: taproot-musig2 is n-of-n only — threshold (${opts.threshold}) ` +
+            `createMultisigConfig: taproot-musig2 is n-of-n only; threshold (${opts.threshold}) ` +
             `must equal cosigners.length (${opts.cosigners.length}). ` +
             `For a true ${opts.threshold}-of-${opts.cosigners.length} policy use scheme "p2wsh-multisig".`,
         );
     }
 
-    // Cosigner shape sanity — surface clear errors before we hit the
+    // Cosigner shape sanity: surface clear errors before we hit the
     // schema validator with a half-formed record.
     opts.cosigners.forEach((c, i) => {
         const tag = `cosigners[${i}]`;
@@ -105,14 +105,14 @@ export async function createMultisigConfig(opts) {
 
     // For taproot-musig2 we aggregate keys via the SDK's BIP327 module
     // and stash the resulting x-only aggregate pubkey in the
-    // scriptTemplate. P2SH/P2WSH skip this step — the redeem script is
+    // scriptTemplate. P2SH/P2WSH skip this step; the redeem script is
     // computed from the cosigner pubkeys at PSBT-build time (Step 19).
     let aggregatedXOnlyPubkey;
     if (opts.scheme === 'taproot-musig2') {
         const sdk = opts.sdkRegistry.get(opts.chainId);
         if (!sdk) throw new Error(`createMultisigConfig: no SDK registered for chainId "${opts.chainId}"`);
         if (!sdk.musig2 || typeof sdk.musig2.aggregateKeys !== 'function') {
-            throw new Error('createMultisigConfig: sdk.musig2.aggregateKeys is unavailable — bump xchain-sdk to 1.10+');
+            throw new Error('createMultisigConfig: sdk.musig2.aggregateKeys is unavailable; bump xchain-sdk to 1.10+');
         }
         const pubkeyBytes = opts.cosigners.map((c) => hexToBytes(c.pubkey));
         const ctx = sdk.musig2.aggregateKeys(pubkeyBytes);

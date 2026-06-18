@@ -8,21 +8,21 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// contractDetail — single-contract read flows for the §42.3 detail
+// contractDetail: single-contract read flows for the §42.3 detail
 // page. Each wraps one SDK method on an sdkRegistry-scoped instance,
 // guards its required inputs, and returns the raw response shape for
 // the component to render.
 //
 // The SDK currently exposes:
-//   sdk.getContract(contractActionIndex)      — contract metadata
-//   sdk.getContractState(idx, key?)           — key/value state
-//   sdk.getContractBalance(idx, tick?)        — per-token balances
+//   sdk.getContract(contractActionIndex)      contract metadata
+//   sdk.getContractState(idx, key?)           key/value state
+//   sdk.getContractBalance(idx, tick?)        per-token balances
 //   sdk.getExecutions(contractActionIndex, opts?)
-//                                             — paginated call history
+//                                             paginated call history
 //
 // The detail page also needs the underlying DEPLOY action (for NAME,
 // CODE_HASH, GAS_LIMIT, CONSTRUCTOR_PARAMS that don't live on the
-// "contracts" table) — we reuse the existing listQueries.actionByTxid
+// "contracts" table). We reuse the existing listQueries.actionByTxid
 // wrapper's sibling method `sdk.getAction(actionIndex)` through a new
 // `actionByIndex` flow here, because it's Contracts-specific scope.
 
@@ -47,7 +47,7 @@ export async function contractByActionIndex({ sdkRegistry, chainId, contractActi
 }
 
 /**
- * Fetch the originating DEPLOY action — carries the NAME / CODE_HASH /
+ * Fetch the originating DEPLOY action, which carries the NAME / CODE_HASH /
  * CONSTRUCTOR_PARAMS fields that aren't on the contract row. Reuses
  * sdk.getAction which takes a generic action_index.
  */
@@ -111,13 +111,13 @@ export async function executionsForContract({ sdkRegistry, chainId, contractActi
 const NULL_MANIFEST = /** @type {ContractManifest} */ ({ permissions: null, maxTakeBps: null });
 
 /**
- * Phase F — read a contract's permissions manifest for the inline
+ * Phase F: read a contract's permissions manifest for the inline
  * consent disclosure shown before EXECUTE / DEPOSIT / WITHDRAW.
  *
  * Defensive by design: this flow **never throws**. It returns the
  * normalized `{ permissions, maxTakeBps }` shape the SDK reader
  * produces, and degrades to `{ permissions: null, maxTakeBps: null }`
- * on ANY gap — a missing chainId/contractActionIndex, an SDK instance
+ * on ANY gap: a missing chainId/contractActionIndex, an SDK instance
  * that predates `getContractManifest` (the SDK reader ships in
  * parallel under Phase F Part 2), or a network/parse error. A consent
  * panel must always render; an undeclared manifest is a soft caution,

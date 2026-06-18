@@ -143,7 +143,7 @@ function makeFakeWindows() {
     };
 }
 
-// 2a. Connect flow — simulate ConnectApproval's result envelope.
+// 2a. Connect flow: simulate ConnectApproval's result envelope.
 {
     const fw = makeFakeWindows();
     const broker = new ApprovalBroker({
@@ -179,7 +179,7 @@ function makeFakeWindows() {
     });
 }
 
-// 2b. Sign action flow — simulate SignApproval's result envelope with
+// 2b. Sign action flow: simulate SignApproval's result envelope with
 //     savePermanent.
 {
     const fw = makeFakeWindows();
@@ -211,7 +211,7 @@ function makeFakeWindows() {
     assert.equal(result.savePermanent, true);
 }
 
-// 2c. Sign message flow — alreadyGranted case, no savePermanent field.
+// 2c. Sign message flow: alreadyGranted case, no savePermanent field.
 {
     const fw = makeFakeWindows();
     const broker = new ApprovalBroker({
@@ -242,5 +242,5 @@ function makeFakeWindows() {
 }
 
 console.log(
-    'OK — approval screens smoke (static wiring + 3 broker round-trips matching popup result envelopes)',
+    'OK: approval screens smoke (static wiring + 3 broker round-trips matching popup result envelopes)',
 );

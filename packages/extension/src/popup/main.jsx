@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 // Popup React root. Loaded by popup.html (at the extension package
-// root) — Vite bundles this entry and rewrites the HTML's script tag
+// root); Vite bundles this entry and rewrites the HTML's script tag
 // to point at the hashed output.
 //
 // Loading tokens.css here (once, at the shell entry) installs the
@@ -21,7 +21,7 @@ import { App } from './App.jsx';
 
 const container = document.getElementById('xchain-popup-root');
 if (!container) {
-    throw new Error('popup: #xchain-popup-root missing — check popup.html');
+    throw new Error('popup: #xchain-popup-root missing; check popup.html');
 }
 
 createRoot(container).render(<App />);

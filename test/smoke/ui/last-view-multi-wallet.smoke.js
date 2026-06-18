@@ -8,15 +8,15 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §24 / Cluster U FOLLOWUPs 5 + 6 — last-view memory edge cases.
+// Smoke for §24 / Cluster U FOLLOWUPs 5 + 6: last-view memory edge cases.
 //
 // Pins:
-//   FU 5 — clear on remove-wallet:
+//   FU 5: clear on remove-wallet:
 //     - ThisWalletSection imports `clearLastView` and calls it after a
 //       successful messaging.removeWallet.
 //     - DemoBanner does the same when the user (or auto-expire) exits
 //       demo mode.
-//   FU 6 — multi-wallet threading:
+//   FU 6: multi-wallet threading:
 //     - useLastView guards the persist effect with a per-walletId
 //       lastResumedFor + lastPersistedFor pair so a wallet switch
 //       can't stomp the new wallet's key with the previous wallet's
@@ -43,7 +43,7 @@ const useLastViewSrc = readFileSync(
     'utf8',
 );
 
-// ─── FU 5 — clear on remove-wallet ─────────────────────────────────────
+// ─── FU 5: clear on remove-wallet ─────────────────────────────────────
 
 assert.match(
     thisWalletSrc,
@@ -67,7 +67,7 @@ assert.match(
     'DemoBanner clears last-view alongside the demo flag on exit',
 );
 
-// ─── FU 6 — multi-wallet last-view threading ──────────────────────────
+// ─── FU 6: multi-wallet last-view threading ──────────────────────────
 
 assert.match(
     useLastViewSrc,

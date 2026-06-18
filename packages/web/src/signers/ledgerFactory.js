@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Ledger transport factory — web-app target. Same WebHID pattern as
+// Ledger transport factory for the web-app target. Same WebHID pattern as
 // the extension (§18.2 treats them as one case). Cross-package
 // relative import keeps the implementation single-sourced.
 

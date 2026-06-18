@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Browser-capability detection for WebHID — used by PairSignerForm to warn
+// Browser-capability detection for WebHID, used by PairSignerForm to warn
 // before the user attempts to pair a Ledger in a browser that lacks the
 // API. Ledger's transport requires `navigator.hid`; Firefox and Safari do
 // not implement it as of 2026.
@@ -24,7 +24,7 @@ export function isWebHidSupported() {
 
 // Best-effort browser-family hint for messaging. We only branch into "we
 // know this browser doesn't support WebHID" vs. "switch to Chrome / Edge /
-// Brave" — anything else falls through to the generic switch-browser copy.
+// Brave"; anything else falls through to the generic switch-browser copy.
 //
 // UA sniffing is intentionally narrow: we identify Firefox and Safari
 // because those are the two desktop browsers that ship without WebHID. We

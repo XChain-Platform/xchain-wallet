@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// LanguageRegionSection — §35.1 Language & Region panel.
+// LanguageRegionSection: §35.1 Language & Region panel.
 //
 // Surfaces:
 //   - Language picker driven by `availableLocales()` so a registered
@@ -23,7 +23,7 @@
 import { useSettings } from '../../hooks/useSettings.js';
 import { availableLocales, setLocale as setI18nLocale } from '../../../i18n/index.js';
 
-// Friendly display names for known locales — we extend this map as
+// Friendly display names for known locales; we extend this map as
 // translations land. Unknown registered locales fall back to their
 // bcp47 code so a developer-registered pseudo locale still shows up.
 const LANGUAGE_LABELS = /** @type {Record<string, string>} */ ({
@@ -40,7 +40,7 @@ function buildLanguageOptions() {
 
 // Curated short list of widely-used quote currencies. The schema
 // stores any non-empty string, so a "Custom" entry is wired below for
-// users who want a less-common code. Keep the list short — long
+// users who want a less-common code. Keep the list short; long
 // dropdowns are noise for what is overwhelmingly USD / EUR / locale.
 const FIAT_CURRENCIES = /** @type {const} */ ([
     { value: 'USD', label: 'US Dollar (USD)' },
@@ -116,7 +116,7 @@ export function LanguageRegionSection() {
     const onLanguageChange = async (next) => {
         // Flip the live i18n locale first so the UI updates immediately;
         // the settings.update is the durable persistence that survives
-        // a restart. setLocale throws on unknown code — guard with the
+        // a restart. setLocale throws on unknown code; guard with the
         // current `availableLocales()` set so a stale settings record
         // can't crash the panel.
         try {

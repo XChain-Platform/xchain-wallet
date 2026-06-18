@@ -25,7 +25,7 @@ const chainRegistry = registryLib.defaultRegistry();
 
 // Multisig is BTC-only at launch (§22 + §10.3). The form gates the
 // chain picker to BTC chains only; staking + contracts use the same
-// gate but via useBtcAddressesPresent — here we filter inline because
+// gate but via useBtcAddressesPresent; here we filter inline because
 // the multisig flow needs the BTC chainId before any address picker.
 const MULTISIG_COIN = 'bitcoin';
 
@@ -58,7 +58,7 @@ const newRowId = () => `cosigner-${++_idCounter}`;
  * the chosen Wallet record's `multisig` slot via
  * `messaging.createMultisigConfig`.
  *
- * Multisig is BTC-only at launch per §22 + §10.3 — the chain
+ * Multisig is BTC-only at launch per §22 + §10.3; the chain
  * dropdown lists only the wallet's BTC chains.
  *
  * Cosigners come in three flavors per §22.2:
@@ -158,7 +158,7 @@ export function MultisigCreate({ walletId, onBack }) {
 
     const handleLocalAddressPick = (rowId, address) => {
         // Auto-fill pubkey + derivationPath from the picked address
-        // record. Fingerprint is left for the user — deriving the
+        // record. Fingerprint is left for the user to fill in; deriving the
         // BIP32 master fingerprint requires unlocking the seed, which
         // is out of Step 17's scope. The user can copy the value from
         // their wallet's "Show xpub" surface.
@@ -268,14 +268,14 @@ export function MultisigCreate({ walletId, onBack }) {
                 </p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Scheme</dt>
-                    <dd className={styles.detailsValue}>{config?.scheme || '—'}</dd>
+                    <dd className={styles.detailsValue}>{config?.scheme || 'N/A'}</dd>
                     <dt className={styles.detailsLabel}>Threshold</dt>
                     <dd className={styles.detailsValue}>
                         {config?.threshold} of {config?.cosigners?.length}
                     </dd>
                     <dt className={styles.detailsLabel}>scriptTemplate</dt>
                     <dd className={styles.detailsValue} style={{ fontFamily: 'var(--xc-font-mono, monospace)', fontSize: '0.75rem', wordBreak: 'break-all' }}>
-                        {config?.scriptTemplate || '—'}
+                        {config?.scriptTemplate || 'N/A'}
                     </dd>
                 </dl>
                 <p className={styles.hint}>
@@ -419,9 +419,9 @@ function CosignerRow({ index, row, addresses, onChange, onRemove, canRemove, onL
                         localSignerId: null,
                     })}
                 >
-                    <option value="local">Local — software account or paired HW signer</option>
-                    <option value="external-xpub">External xpub — paste from another wallet</option>
-                    <option value="external-hardware">External hardware — sign via file transfer</option>
+                    <option value="local">Local (software account or paired HW signer)</option>
+                    <option value="external-xpub">External xpub (paste from another wallet)</option>
+                    <option value="external-hardware">External hardware (sign via file transfer)</option>
                 </select>
             </label>
 
@@ -436,7 +436,7 @@ function CosignerRow({ index, row, addresses, onChange, onRemove, canRemove, onL
                             onLocalAddressPick(a || null);
                         }}
                     >
-                        <option value="">— Select address —</option>
+                        <option value="">Select address</option>
                         {addresses.map((a) => (
                             <option key={a.id} value={a.id}>
                                 {a.address} {a.label ? `· ${a.label}` : ''}

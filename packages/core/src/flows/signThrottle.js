@@ -16,15 +16,15 @@
 // `THROTTLED` shape and a `retryAfterMs` hint until the oldest entry
 // falls out of the window.
 //
-// The throttle is intentionally process-scoped — one instance per
-// background. State resets across service-worker restarts. That is
+// The throttle is intentionally process-scoped (one instance per
+// background). State resets across service-worker restarts. That is
 // acceptable for a rate limit: an attacker who can crash the SW also
 // cannot sign anything because the wallet never caches the password.
 //
 // Why this exists:
 //   1. A site granted `canSignMessage: true` (saved permanent) could
 //      otherwise rapid-fire signs without an approval prompt.
-//   2. UI denial-of-service — a malicious dApp spamming sign prompts
+//   2. UI denial-of-service: a malicious dApp spamming sign prompts
 //      can be slowed to a human cadence by the limiter.
 //
 // Defaults are generous enough that a normal dApp flow (one connect +
@@ -49,9 +49,9 @@ function coerceWindowMs(v) {
  * @param {object} [opts]
  * @param {number} [opts.burst]      Max requests per window. Static fallback when `getLimits` is not supplied.
  * @param {number} [opts.windowMs]   Sliding-window duration in ms. Static fallback when `getLimits` is not supplied.
- * @param {() => { burst?: number, windowMs?: number }} [opts.getLimits]   Cluster S FOLLOWUP 1 — live-reactive limits read on every `check()`. Lets the wallet update settings.signThrottle at runtime without rebuilding the throttle (state retained, in-flight buckets keep their timestamps).
- * @param {{ buckets?: Record<string, number[]> }} [opts.initialState]      Cluster S FOLLOWUP 2 — hydrate persisted bucket state on construction. Each entry is an ordered list of recent request timestamps.
- * @param {(snapshot: { buckets: Record<string, number[]> }) => void | Promise<void>} [opts.onPersist]   Cluster S FOLLOWUP 2 — fired on every mutation so the caller can persist the state across SW restarts. Called fire-and-forget from `check()` / `clear()`.
+ * @param {() => { burst?: number, windowMs?: number }} [opts.getLimits]   Cluster S FOLLOWUP 1. Live-reactive limits read on every `check()`. Lets the wallet update settings.signThrottle at runtime without rebuilding the throttle (state retained, in-flight buckets keep their timestamps).
+ * @param {{ buckets?: Record<string, number[]> }} [opts.initialState]      Cluster S FOLLOWUP 2. Hydrate persisted bucket state on construction. Each entry is an ordered list of recent request timestamps.
+ * @param {(snapshot: { buckets: Record<string, number[]> }) => void | Promise<void>} [opts.onPersist]   Cluster S FOLLOWUP 2. Fired on every mutation so the caller can persist the state across SW restarts. Called fire-and-forget from `check()` / `clear()`.
  * @param {() => number} [opts.now]  Clock injection for tests.
  */
 export function createSignThrottle(opts = {}) {
@@ -135,7 +135,7 @@ export function createSignThrottle(opts = {}) {
     }
 
     /**
-     * Cluster S FOLLOWUP 2 — splice persisted bucket timestamps into the
+     * Cluster S FOLLOWUP 2: splice persisted bucket timestamps into the
      * live map. Used by the background host when async hydration finishes
      * after construction. New timestamps from intervening live calls are
      * preserved; persisted timestamps merge into the existing list and
@@ -152,13 +152,13 @@ export function createSignThrottle(opts = {}) {
             if (fresh.length === 0) continue;
             const existing = buckets.get(origin) ?? [];
             // Merge + sort so the windowMs eviction in check() processes
-            // them in chronological order. No dedupe — distinct calls
+            // them in chronological order. No dedupe: distinct calls
             // in the same millisecond are legitimate and Set would
             // collapse them.
             const merged = [...existing, ...fresh].sort((a, b) => a - b);
             buckets.set(origin, merged);
         }
-        // Don't fire onPersist here — caller hydrated us from storage,
+        // Don't fire onPersist here; caller hydrated us from storage,
         // so re-persisting is redundant.
     }
 
@@ -167,7 +167,7 @@ export function createSignThrottle(opts = {}) {
         clear,
         snapshot,
         seed,
-        // Static fields kept for back-compat — callers reading these
+        // Static fields kept for back-compat. Callers reading these
         // get the construction-time fallback, NOT the latest live value.
         // Use `getLimits()` for live reads.
         burst: staticBurst,

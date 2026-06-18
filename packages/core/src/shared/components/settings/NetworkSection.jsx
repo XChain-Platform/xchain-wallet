@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// NetworkSection — active-network picker.
+// NetworkSection: active-network picker.
 //
 // Switches the wallet between Mainnet / Testnet / Regtest. Chains on
 // the inactive networks stay configured but go dormant: no balance

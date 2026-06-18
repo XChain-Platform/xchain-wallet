@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for Phase 2 — Step 17 (piece 5b) — OS keychain integration
+// Smoke for Phase 2, Step 17 (piece 5b): OS keychain integration
 // (§40.12).
 //
 // Coverage:
@@ -84,7 +84,7 @@ const desktop = join(wsRoot, 'packages', 'desktop');
 // --- Mocks ------------------------------------------------------------
 
 /**
- * Mock safeStorage — symmetric scramble over bytes (XOR with a fixed
+ * Mock safeStorage: symmetric scramble over bytes (XOR with a fixed
  * key). Not remotely secure, but round-trips faithfully and exposes the
  * isEncryptionAvailable / getSelectedStorageBackend knobs we care
  * about. Tests use this to pretend the OS keychain is present.
@@ -147,7 +147,7 @@ function buildRuntimeFor(userData, safeStorage) {
 
         assert.ok(existsSync(sessionKeyPathFor(tmp)), 'save creates session.bin');
 
-        // The ciphertext must not equal the plaintext — verify the scramble
+        // The ciphertext must not equal the plaintext. Verify the scramble
         // actually ran. (Not cryptographic, just a sanity check that the
         // wrapper hit safeStorage.encryptString.)
         const rawFile = readFileSync(sessionKeyPathFor(tmp));
@@ -207,7 +207,7 @@ function buildRuntimeFor(userData, safeStorage) {
     }
 }
 
-// load returns null (not throws) on decrypt failure — simulates OS
+// load returns null (not throws) on decrypt failure. Simulates OS
 // logout, keychain reset, or ciphertext corruption. Uses two separate
 // backend instances (one to plant the file, one to read it) so the
 // in-memory cache isn't populated when load runs.
@@ -267,7 +267,7 @@ function buildRuntimeFor(userData, safeStorage) {
     const password = 'correct horse battery staple';
 
     try {
-        // 3a. Fresh runtime — no wallet yet.
+        // 3a. Fresh runtime, no wallet yet.
         let runtime = buildRuntimeFor(tmp, safeStorage);
         const status0 = await handleIpcMessage(runtime, { type: 'session.status' });
         assert.deepEqual(
@@ -308,7 +308,7 @@ function buildRuntimeFor(userData, safeStorage) {
         assert.equal(listResp.result.length, 1, 'created wallet appears in wallet.list');
         assert.equal(listResp.result[0].name, 'Desktop Test');
 
-        // 3c. "Restart" — drop runtime, build a fresh one against the
+        // 3c. "Restart": drop runtime, build a fresh one against the
         // same userData. ensureHost should auto-unlock via the keychain
         // with no password prompt.
         tearDownHost(runtime);
@@ -343,7 +343,7 @@ function buildRuntimeFor(userData, safeStorage) {
         assert.equal(status3.result.hasWallet, true);
         assert.equal(status3.result.hasSession, false);
 
-        // 3e. wallet.unlock — wrong password → InvalidPasswordError.
+        // 3e. wallet.unlock: wrong password → InvalidPasswordError.
         const bad = await handleIpcMessage(runtime, {
             type: 'wallet.unlock',
             request: { password: 'nope' },
@@ -369,7 +369,7 @@ function buildRuntimeFor(userData, safeStorage) {
             'session.bin rewritten after unlock',
         );
     } finally {
-        if (false) { /* placeholder — no-op */ }
+        if (false) { /* placeholder, no-op */ }
         try { tearDownHost(buildRuntimeFor(tmp, safeStorage)); } catch (_e) { /* cleanup */ }
         rmSync(tmp, { recursive: true, force: true });
     }
@@ -390,14 +390,14 @@ function buildRuntimeFor(userData, safeStorage) {
         assert.equal(createResp.ok, true, 'wallet.create succeeds even without a keychain');
         assert.ok(runtime.host, 'host built in-memory');
 
-        // But session.bin is NOT on disk — keychain was unavailable.
+        // But session.bin is NOT on disk. Keychain was unavailable.
         assert.equal(
             existsSync(sessionKeyPathFor(tmp)),
             false,
             'session.bin NOT written when keychain unavailable (no insecure cache)',
         );
 
-        // "Restart" — fresh runtime can't auto-unlock; state stays locked.
+        // "Restart": fresh runtime can't auto-unlock; state stays locked.
         tearDownHost(runtime);
         runtime = buildRuntimeFor(tmp, safeStorage);
         await ensureHost(runtime);
@@ -472,5 +472,5 @@ assert.ok(
 );
 
 console.log(
-    'OK — desktop keychain smoke (Step 17 §40.12: KeychainSessionBackend round-trip + isAvailable guards, FileMetaBackend round-trip, end-to-end runtime lifecycle with create/auto-unlock/lock/unlock cycle, keychain-unavailable path forces per-launch unlock, static wiring check)',
+    'OK: desktop keychain smoke (Step 17 §40.12: KeychainSessionBackend round-trip + isAvailable guards, FileMetaBackend round-trip, end-to-end runtime lifecycle with create/auto-unlock/lock/unlock cycle, keychain-unavailable path forces per-launch unlock, static wiring check)',
 );

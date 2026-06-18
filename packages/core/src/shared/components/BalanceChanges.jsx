@@ -11,14 +11,14 @@
 import styles from './BalanceChanges.module.css';
 
 /**
- * Renders a §21.2 simulation result — balance deltas + side-effects +
- * notes — under a sign screen's headline. Dumb renderer; the caller
+ * Renders a §21.2 simulation result (balance deltas, side-effects, and
+ * notes) under a sign screen's headline. Dumb renderer; the caller
  * (Send.jsx review stage in Step 3, SignApproval in Step 4) is
  * responsible for fetching the source-address balances, calling
  * `decoder.simulateAction`, and passing the result here.
  *
  * Renders nothing when the result has no deltas, no side-effects, and
- * no notes — keeps fee-only fallbacks from showing an empty section.
+ * no notes; keeps fee-only fallbacks from showing an empty section.
  *
  * @param {object} props
  * @param {import('../../decoder/txSimulator.js').SimulationResult | null} [props.result]
@@ -40,7 +40,7 @@ export function BalanceChanges({ result, loading = false, error = null, title = 
         return (
             <section className={styles.root} data-state="error">
                 <h3 className={styles.heading}>{title}</h3>
-                <p className={styles.error}>(preview unavailable — {error})</p>
+                <p className={styles.error}>(preview unavailable: {error})</p>
             </section>
         );
     }
@@ -89,7 +89,7 @@ export function BalanceChanges({ result, loading = false, error = null, title = 
 
 function DeltaRow({ delta }) {
     if (delta.isFee) {
-        // Label-only row carries `feeAmount` and no before/after — paired
+        // Label-only row carries `feeAmount` and no before/after. Paired
         // with a coin-debit row above it. When emitted standalone (action
         // has no other coin row), the simulator gives this row a
         // before/after too; render the fee amount in either case.

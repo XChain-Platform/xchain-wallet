@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// BIP39 mnemonic helpers — §15.1 primary wallet format.
+// BIP39 mnemonic helpers (§15.1 primary wallet format).
 //
 // The wallet only generates BIP39 mnemonics. Legacy Counterwallet
 // mnemonics (§15.2) are import-only and live in counterwallet.js.

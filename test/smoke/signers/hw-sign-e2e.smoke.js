@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for HW Sign Step 5 — end-to-end hardware-signer chain.
+// Smoke for HW Sign Step 5: end-to-end hardware-signer chain.
 //
 // Proves the full primitives chain runs:
 //
@@ -580,7 +580,7 @@ for (const [shell, msgPath] of [
 }
 
 // ---------------------------------------------------------------
-// 11. Send.jsx HW branch — renders HwSignBlock, not password
+// 11. Send.jsx HW branch: renders HwSignBlock, not password
 // ---------------------------------------------------------------
 
 const sendSrc = readFileSync(
@@ -714,7 +714,7 @@ assert.ok(
 // 13. Slice-4 multi-stage form HW branches
 // ---------------------------------------------------------------
 
-// 13a. DispenserForm — create path.
+// 13a. DispenserForm: create path.
 const dispFormSrc = readFileSync(
     join(core, 'src', 'shared', 'routes', 'DispenserForm.jsx'), 'utf8',
 );
@@ -731,7 +731,7 @@ assert.ok(
     'DispenserForm gates submit on HW status=available',
 );
 
-// 13b. DispenserDetail — owner-cancel + non-owner-buy submit points.
+// 13b. DispenserDetail: owner-cancel + non-owner-buy submit points.
 const dispDetailSrc = readFileSync(
     join(core, 'src', 'shared', 'routes', 'DispenserDetail.jsx'), 'utf8',
 );
@@ -752,7 +752,7 @@ assert.ok(
     'DispenserDetail tracks buy + cancel HW statuses separately',
 );
 
-// 13c. AirdropForm — two independent sign points.
+// 13c. AirdropForm: two independent sign points.
 const airdropFormSrc = readFileSync(
     join(core, 'src', 'shared', 'routes', 'AirdropForm.jsx'), 'utf8',
 );
@@ -774,7 +774,7 @@ assert.ok(
 );
 
 // ---------------------------------------------------------------
-// 14. Desktop ipc port RPC — signerBridge + listener + App wiring
+// 14. Desktop ipc port RPC: signerBridge + listener + App wiring
 // ---------------------------------------------------------------
 
 const desktop = join(wsRoot, 'packages', 'desktop');
@@ -851,5 +851,5 @@ assert.ok(
 );
 
 console.log(
-    'OK — hw-sign-e2e smoke (resolveSigner descriptor branches; buildRemoteSigner; full RemoteSigner → TrezorSigner → sdk.decomposePsbt → trezorFormat → Connect chain; submitAction signer param bypass; normalizeSource admits HW; shared UI primitives; signerBridge registry; action.send.hw + signer.status handlers wired; sendAssetHw + getSignerStatus exposed in popup/web/desktop messaging; Send.jsx renders HwSignBlock for HW sources with "Sign on [device]" button; signerPortProtocol bridge both ends + popup bridge + background listener wired; PairSignerForm + popup App register live signer with the bridge; slice-4 HW branches on DispenserForm + DispenserDetail (cancel + buy) + AirdropForm (LIST + AIRDROP); desktop ipc port RPC — renderer signerBridge + main signerBridgeListener + preload duplex bridge + desktop App onSignerPaired)',
+    'OK: hw-sign-e2e smoke (resolveSigner descriptor branches; buildRemoteSigner; full RemoteSigner to TrezorSigner to sdk.decomposePsbt to trezorFormat to Connect chain; submitAction signer param bypass; normalizeSource admits HW; shared UI primitives; signerBridge registry; action.send.hw + signer.status handlers wired; sendAssetHw + getSignerStatus exposed in popup/web/desktop messaging; Send.jsx renders HwSignBlock for HW sources with "Sign on [device]" button; signerPortProtocol bridge both ends + popup bridge + background listener wired; PairSignerForm + popup App register live signer with the bridge; slice-4 HW branches on DispenserForm + DispenserDetail (cancel + buy) + AirdropForm (LIST + AIRDROP); desktop ipc port RPC: renderer signerBridge + main signerBridgeListener + preload duplex bridge + desktop App onSignerPaired)',
 );

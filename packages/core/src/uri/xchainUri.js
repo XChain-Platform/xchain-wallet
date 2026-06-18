@@ -8,14 +8,14 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// xchain: URI parser — §47.
+// xchain: URI parser, §47.
 //
 // Three URI shapes (the first is preferred for new QRs):
 //
 //   1. Coin-code form:  xchain:<COINCODE>/<action>?to=&amount=&tick=&memo=
 //      e.g. xchain:TBTC/send?to=tb1q…&amount=1&tick=PEPECREATURE
 //      Short single token combines coin + network (BTC / TBTC / RBTC,
-//      LTC / TLTC / RLTC, DOGE / TDOGE / RDOGE — same convention used
+//      LTC / TLTC / RLTC, DOGE / TDOGE / RDOGE; same convention used
 //      across explorer/encoder/hub URL paths). The action segment
 //      (send / receive / future routes) drives wallet routing.
 //
@@ -30,7 +30,7 @@
 //
 // Output is a normalized navigation intent that Send / Receive routes
 // consume directly. Returns `{ kind: 'unknown' }` for malformed input
-// rather than throwing — the caller already had a string from a QR scan
+// rather than throwing; the caller already had a string from a QR scan
 // or paste, so we don't want to abort their flow over a typo.
 
 import { parseBip21Uri, InvalidBip21Error } from './bip21.js';
@@ -73,7 +73,7 @@ function normalizeFeePriority(raw) {
  * @param {{ chainRegistry?: { chainIdFor: (coin: string, networkKind: string) => string | null } }} [deps]
  *        Registry is only needed to resolve coin codes (`xchain:TBTC/...`)
  *        back to chainIds. Without it, coin-code URIs still parse but
- *        intent.chainId will be undefined — the caller can resolve later.
+ *        intent.chainId will be undefined; the caller can resolve later.
  * @returns {XchainUriIntent}
  */
 export function parseXchainUri(uri, deps) {

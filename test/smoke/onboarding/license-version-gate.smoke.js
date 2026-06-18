@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// §25.1 / Cluster J FOLLOWUP 4 smoke — license re-acceptance gate
+// §25.1 / Cluster J FOLLOWUP 4 smoke: license re-acceptance gate
 // covers the unlocked Add-Wallet lane when the version bumps.
 //
 // v0.186.0 added a `licenseAcceptedAt` localStorage key + a one-shot
@@ -16,7 +16,7 @@
 // (the unlocked-vault "Add Wallet" entry point) on the assumption that
 // the user accepted at install. v0.281.0 introduces `LICENSE_VERSION`:
 // when the binding terms in LICENSE.md change, bumping the constant
-// forces every user — including those entering through Add Wallet —
+// forces every user (including those entering through Add Wallet)
 // to re-accept.
 //
 // Asserts:
@@ -25,7 +25,7 @@
 //   2. Onboarding.jsx imports LICENSE_VERSION + reads / writes the
 //      versioned acceptance key.
 //   3. The gate condition is `!licenseSatisfied` (no longer guards
-//      with `&& !onBack`) — i.e. version mismatch shows the gate even
+//      with `&& !onBack`): version mismatch shows the gate even
 //      from the Add-Wallet path.
 //   4. `markAccepted()` writes both the timestamp AND the current
 //      LICENSE_VERSION.
@@ -82,7 +82,7 @@ assert.ok(
 
 assert.ok(
     /if \(!licenseSatisfied\) \{/.test(onboarding),
-    'gate condition is `if (!licenseSatisfied)` — onBack no longer bypasses re-acceptance',
+    'gate condition is `if (!licenseSatisfied)`: onBack no longer bypasses re-acceptance',
 );
 // Make sure the original "&& !onBack" guard is gone from the gate
 // branch.
@@ -105,7 +105,7 @@ assert.ok(
 // --- 5. Smoke the helpers in isolation by re-implementing the bits --
 
 // Read the constants from source so the smoke isn't redundantly
-// hard-coded — when LICENSE_VERSION bumps, the smoke continues to pass.
+// hard-coded: when LICENSE_VERSION bumps, the smoke continues to pass.
 const fakeStore = new Map();
 const localStorage = {
     getItem(k) { return fakeStore.has(k) ? fakeStore.get(k) : null; },
@@ -147,5 +147,5 @@ markAccepted('1');
 assert.equal(isSatisfied('1'), true);
 
 console.log(
-    "OK — license-version-gate smoke (Cluster J FOLLOWUP 4 — buildInfo exports LICENSE_VERSION; Onboarding reads xc:licenseAcceptedVersion alongside xc:licenseAcceptedAt; gate fires whenever stored version != current — Add-Wallet's onBack shortcut no longer bypasses re-acceptance; markAccepted writes both keys atomically; pre-versioned acceptance is treated as stale)",
+    "OK: license-version-gate smoke (Cluster J FOLLOWUP 4) buildInfo exports LICENSE_VERSION; Onboarding reads xc:licenseAcceptedVersion alongside xc:licenseAcceptedAt; gate fires whenever stored version != current; Add-Wallet's onBack shortcut no longer bypasses re-acceptance; markAccepted writes both keys atomically; pre-versioned acceptance is treated as stale",
 );

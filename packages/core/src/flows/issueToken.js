@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// issueToken — convenience wrapper for the ISSUE action (§Phase 2
+// issueToken: convenience wrapper for the ISSUE action (§Phase 2
 // authoring surface; protocol docs: xchain-documentation/protocol/
 // actions/ISSUE.md). Mirrors sendToken's shape: takes the vault +
 // registries + chain + source address + params, forwards to
@@ -17,7 +17,7 @@
 //
 // Params are the ISSUE v0 / v1-v5 field map already composed by the
 // caller (the Token Creation Wizard's composeIssueParams). We don't
-// re-validate here — the SDK's Actions.createAction runs the
+// re-validate here; the SDK's Actions.createAction runs the
 // authoritative validator. Callers who need a dry-run should call
 // sdk.Actions.validateAction directly before submitting.
 

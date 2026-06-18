@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for Phase 2 — Step 25 (piece 10) — Advanced Actions form
+// Smoke for Phase 2 / Step 25 (piece 10): Advanced Actions form
 // (§40.10). Generic "submit any XChain action" surface driven by the
 // SDK's introspection API.
 //
@@ -20,11 +20,11 @@
 //   3. Messaging call-sites: listActions, getActionFields,
 //      getActionFormats, validateAction, advancedAction, and
 //      password-error handling.
-//   4. Rest-fields — form detects the '...' prefix and renders a
+//   4. Rest-fields: form detects the '...' prefix and renders a
 //      textarea; scalar fields render as Input. VERSION is auto-field
 //      (not rendered).
 //   5. Actions with dedicated forms are still listed but decorated.
-//   6. Core flows — advancedAction + the four introspection
+//   6. Core flows: advancedAction + the four introspection
 //      passthroughs are re-exported and guard required inputs.
 //   7. Validation is routed through messaging.validateAction; the
 //      `version` parameter, when non-empty, pins VERSION in the
@@ -253,5 +253,5 @@ for (const [shell, appPath] of [
 }
 
 console.log(
-    'OK — advanced actions form smoke (AdvancedActionsForm §40.10: 4-stage machine + SDK introspection wiring + rest/auto field rendering + dedicated-form decoration + 5 core flows guard-railed + mocked SDK introspection round-trips + 5 BG handlers + 5 messaging exports × 3 shells + ActionsMenu entry + App.jsx sub-route in popup/web/desktop)',
+    'OK: advanced actions form smoke (AdvancedActionsForm §40.10: 4-stage machine + SDK introspection wiring + rest/auto field rendering + dedicated-form decoration + 5 core flows guard-railed + mocked SDK introspection round-trips + 5 BG handlers + 5 messaging exports × 3 shells + ActionsMenu entry + App.jsx sub-route in popup/web/desktop)',
 );

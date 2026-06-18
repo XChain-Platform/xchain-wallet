@@ -33,22 +33,22 @@ import styles from './IssueTokenForm.module.css';
 const chainRegistry = registryLib.defaultRegistry();
 
 /**
- * Token admin surfaces — §40.5.
+ * Token admin surfaces (§40.5).
  *
  * Three thin one-field forms on top of the ISSUE mechanism, selected
  * via `mode`:
  *
- *   - `'lock'`        — permanently locks supply + minting
+ *   - `'lock'`:        permanently locks supply + minting
  *                       (ISSUE v3 with LOCK_MAX_SUPPLY + LOCK_MINT).
- *   - `'description'` — updates the on-chain DESCRIPTION
+ *   - `'description'`: updates the on-chain DESCRIPTION
  *                       (ISSUE v1 with a single DESCRIPTION field).
- *   - `'transfer'`    — transfers token ownership to another address
+ *   - `'transfer'`:    transfers token ownership to another address
  *                       (ISSUE v0 with the TRANSFER field set).
  *
  * Until the Token detail page (§40.5 home) exists, the ticker is
  * user-entered. Future prop: `initialTicker` so Token detail can
- * prefill. All three modes use `messaging.issueToken` — no new
- * background handlers or core flows.
+ * prefill. All three modes use `messaging.issueToken` (no new
+ * background handlers or core flows).
  *
  * @typedef {'lock' | 'description' | 'transfer'} AdminMode
  *
@@ -205,7 +205,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     const [hwStatus, setHwStatus] = useState('idle');
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
 
-    // §20 / Cluster W FOLLOWUP 5 — watcher-mode encode-only branch.
+    // §20 / Cluster W FOLLOWUP 5: watcher-mode encode-only branch.
     // Token admin uses the ISSUE action with admin-only field combinations.
     const { isWatcherMode } = useWalletMode();
 
@@ -343,7 +343,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>
-                        Watcher mode — this wallet will build an unsigned transaction.
+                        Watcher mode: this wallet will build an unsigned transaction.
                         Sign it on your Signer-mode wallet, then bring the
                         signed transaction to a Full-mode wallet to broadcast.
                     </p>
@@ -371,7 +371,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 {mode === 'lock' ? (
                     <Input
                         label="Type LOCK to confirm"
-                        hint="Locking is permanent — supply and minting freeze forever."
+                        hint="Locking is permanent. Supply and minting freeze forever."
                         value={typedConfirm}
                         onChange={(e) => setTypedConfirm(e.target.value)}
                         autoComplete="off"
@@ -499,11 +499,11 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
  * protocol ISSUE version that yields the cleanest decoded summary
  * (see action-decoder.smoke.js cases 2b–2d).
  *
- * - **lock**: ISSUE v3 with LOCK_MAX_SUPPLY + LOCK_MINT — "pure lock"
- *   on an existing token. Decoded as "Lock TICK max supply, minting…".
- * - **description**: ISSUE v1 with only DESCRIPTION set — decoded as
+ * - **lock**: ISSUE v3 with LOCK_MAX_SUPPLY + LOCK_MINT ("pure lock"
+ *   on an existing token). Decoded as "Lock TICK max supply, minting…".
+ * - **description**: ISSUE v1 with only DESCRIPTION set, decoded as
  *   "Update description of TICK…".
- * - **transfer**: ISSUE v0 with only TRANSFER set — decoded as
+ * - **transfer**: ISSUE v0 with only TRANSFER set, decoded as
  *   "Transfer ownership of TICK to ADDR…".
  */
 function composeAdminParams(mode, form) {

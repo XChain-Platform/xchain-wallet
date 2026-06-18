@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// §18.4 / Cluster N FOLLOWUP 2 smoke — useSignerInfo hook + Send.jsx
+// §18.4 / Cluster N FOLLOWUP 2 smoke: useSignerInfo hook + Send.jsx
 // adoption.
 //
 // Asserts:
@@ -73,7 +73,7 @@ const routes = join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes');
 // Two adoption shapes:
 //   A) `isHwSource` boolean: Send / BroadcastForm / DividendForm /
 //      DestroyForm / TokenAdminForm / ExecuteContractForm /
-//      StakingActionForm — gate via `isHwSource ? fromAddress?.signerId : null`.
+//      StakingActionForm: gate via `isHwSource ? fromAddress?.signerId : null`.
 //   B) `hw` from `isHwSource(fromAddress)` helper: SwapForm / ComposeMessage.
 const adoptersA = [
     ['Send.jsx', sendPath],
@@ -125,5 +125,5 @@ assert.ok(
 );
 
 console.log(
-    'OK — use-signer-info smoke (§18.4 / Cluster N FOLLOWUP 2 — useSignerInfo hook + walletId-keyed cache + Send.jsx canonical adopter; sweep continues with BroadcastForm + DividendForm + DestroyForm + TokenAdminForm threading signerInfo through SignCredentials; each form uses the same isHwSource-gated lookup shape)',
+    'OK: use-signer-info smoke (§18.4 / Cluster N FOLLOWUP 2: useSignerInfo hook + walletId-keyed cache + Send.jsx canonical adopter; sweep continues with BroadcastForm + DividendForm + DestroyForm + TokenAdminForm threading signerInfo through SignCredentials; each form uses the same isHwSource-gated lookup shape)',
 );

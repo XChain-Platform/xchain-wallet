@@ -19,7 +19,7 @@ import { usePortfolioChartVisible } from '../hooks/usePortfolioChartVisible.js';
 import styles from './TotalBalanceHero.module.css';
 
 /**
- * Hero block at the top of Home — total fiat value across every
+ * Hero block at the top of Home: total fiat value across every
  * priced row (coins + tokens + NFTs). Honours the active network
  * filter so flipping to BTC shows only BTC-side wealth.
  *
@@ -30,7 +30,7 @@ import styles from './TotalBalanceHero.module.css';
  * @param {object} props
  * @param {Array<any>} props.rows                rows from `buildBalanceRows`, already filtered
  * @param {'all' | string} props.networkFilter
- * @param {number | null} [props.lastSyncedAt]   Unix ms of the last successful balance fetch — drives the staleness label rendered on the right of the note row.
+ * @param {number | null} [props.lastSyncedAt]   Unix ms of the last successful balance fetch. Drives the staleness label rendered on the right of the note row.
  */
 export function TotalBalanceHero({ rows, networkFilter, lastSyncedAt }) {
     const { total, unpriced } = useMemo(() => sumFiatValue(rows), [rows]);
@@ -42,7 +42,7 @@ export function TotalBalanceHero({ rows, networkFilter, lastSyncedAt }) {
 
     // Fetch 24h change for every native chain that has a row in the
     // balance list. Tokens without a published 24h delta are treated as
-    // unchanged in the total — the figure still reads as "what's moved
+    // unchanged in the total; the figure still reads as "what's moved
     // in the last 24 hours" rather than a misleading whole-portfolio
     // weighted average. Skipped when the user has price data disabled
     // (the messaging route returns `{ disabled: true }`).
@@ -161,7 +161,7 @@ export function TotalBalanceHero({ rows, networkFilter, lastSyncedAt }) {
                                         : styles.changeNeutral
                                 }
                             >
-                                {change24h.delta > 0 ? '▲' : change24h.delta < 0 ? '▼' : '—'}{' '}
+                                {change24h.delta > 0 ? '▲' : change24h.delta < 0 ? '▼' : '-'}{' '}
                                 {formatFiatAmount(Math.abs(change24h.delta), fiatCurrency)}{' '}
                                 ({change24h.pct > 0 ? '+' : ''}{change24h.pct.toFixed(2)}%)
                             </span>
@@ -211,7 +211,7 @@ function fiatValueOf(row) {
 // the ISO code is rendered separately as a styled suffix span so it
 // can be sized down to ~half the amount text.
 function formatFiatAmount(value, currency) {
-    if (value === null || value === undefined) return '—';
+    if (value === null || value === undefined) return '-';
     const code = String(currency || 'USD').toUpperCase();
     try {
         const fmt = new Intl.NumberFormat('en-US', {

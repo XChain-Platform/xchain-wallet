@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// FeesSection — §35.1 Fees panel + §44 fee UX. Per-chain.
+// FeesSection. §35.1 Fees panel + §44 fee UX. Per-chain.
 //
 // Each row corresponds to one entry under `settings.fees`. The
 // `seedSettingsForChains` flow ensures every active chain has an
@@ -67,7 +67,7 @@ export function FeesSection() {
     if (chainIds.length === 0) {
         return (
             <Status
-                text="No chain fee profiles yet — they're seeded automatically when a chain is activated."
+                text="No chain fee profiles yet. They're seeded automatically when a chain is activated."
             />
         );
     }

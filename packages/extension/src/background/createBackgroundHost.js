@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// createBackgroundHost — factory that returns a MessageHost with the
+// createBackgroundHost: factory that returns a MessageHost with the
 // Phase 1 flow handlers registered. Shells instantiate this once at
 // service-worker startup.
 //
@@ -18,7 +18,7 @@
 //
 // Sensitive-field projection: `wallet.list` and flows that return
 // Wallet records strip the encryptedSeed / kdfParams / importedKeys
-// before returning — even though the popup is same-extension and
+// before returning: even though the popup is same-extension and
 // therefore trusted, keeping that data off the wire narrows the blast
 // radius of any future logging or telemetry bug in the popup layer.
 
@@ -199,7 +199,7 @@ const {
 } = flows;
 
 /**
- * Group a wallet's addresses by chainId. No SDK calls, no password —
+ * Group a wallet's addresses by chainId. No SDK calls, no password:
  * used by the Receive view to know which chains have existing addresses
  * before the user picks one. Returns `{}` when the wallet has no
  * accounts yet (fresh-import edge case).
@@ -278,7 +278,7 @@ async function loadAddressForHwSigning(vault, req) {
         // source + derivationPath inline on the request. Not used
         // today; keeps the resolver door open for future callers.
     }
-    // Fallback — find by address string within this wallet. Handles
+    // Fallback: find by address string within this wallet. Handles
     // edge cases where the form omits addressId.
     if (req?.from?.address && req?.walletId) {
         const all = await vault.addresses.list();
@@ -364,7 +364,7 @@ async function sessionSigner(req, vault, signerPool) {
 /**
  * Return the newest (highest external index) HD address for a wallet +
  * chain, or `null` if no address exists. External = change = 0 in the
- * BIP44-style derivation path. Skips imported WIFs — those aren't a
+ * BIP44-style derivation path. Skips imported WIFs: those aren't a
  * "receive next" concept.
  *
  * @param {{ walletId: string, chainId: string, addressType?: string }} req
@@ -488,28 +488,28 @@ export function createBackgroundHost(deps) {
         approvals,
         getDiagnosticContext,
         bridgeEvents,
-        // Cluster G FOLLOWUP 2 — pluggable broadcast-queue persistence.
+        // Cluster G FOLLOWUP 2: pluggable broadcast-queue persistence.
         // Default adapter picks chrome.storage.local (extension SW) or
         // localStorage (web/desktop renderers); pass `null` explicitly
         // to opt out (in-memory only, the v0.292.0 behaviour).
         broadcastQueueStorage = createBroadcastQueueStorage(),
-        // Cluster S FOLLOWUP 2 — pluggable sign-throttle persistence.
+        // Cluster S FOLLOWUP 2: pluggable sign-throttle persistence.
         // Same shape as the broadcast-queue adapter; pass null to opt
         // out (in-memory only, the v0.219.0 behavior).
         signThrottleStorage = createSignThrottleStorage(),
-        // Cluster Q FOLLOWUP 5 — pluggable logConsole mirror. Default
+        // Cluster Q FOLLOWUP 5: pluggable logConsole mirror. Default
         // adapter picks chrome.storage.local (extension SW) or
         // localStorage (web/desktop renderers); pass `null` explicitly
         // to opt out (in-memory only, the v0.321.0 behavior). The mirror
         // honors a strict source whitelist (vault / signer / encoder /
-        // bridge — never `console`) so arbitrary console.* args from
+        // bridge: never `console`) so arbitrary console.* args from
         // third-party content-script code can't reach disk.
         logConsoleStorage = createLogConsoleStorage(),
         ...hostDeps
     } = deps ?? {};
     const host = new MessageHost(hostDeps);
 
-    // Cluster Q FOLLOWUP 5 — hydrate + start mirroring as early as
+    // Cluster Q FOLLOWUP 5: hydrate + start mirroring as early as
     // possible so a worker crash mid-boot still leaves the next session
     // with whatever was buffered before the crash. Order matters:
     // restore() runs before attachMirror() so the first save() writes
@@ -525,7 +525,7 @@ export function createBackgroundHost(deps) {
                     logConsole.restore(persisted);
                 }
             } catch {
-                // Hydration failed — start fresh.
+                // Hydration failed: start fresh.
             }
             logConsole.attachMirror({
                 save: (entries) => logConsoleStorage.save(entries),
@@ -533,21 +533,21 @@ export function createBackgroundHost(deps) {
         })();
     }
 
-    // Cluster S FOLLOWUP 1 — sign-throttle limits read from settings.
+    // Cluster S FOLLOWUP 1: sign-throttle limits read from settings.
     // The throttle's `getLimits` returns from a closure cache so reads
     // are sync. The cache is hydrated asynchronously (vault.settings.get
     // is async) by `refreshThrottleLimitsFromVault()`, called both at
     // host construction and after every successful settings.update.
     // While the cache is null (first refresh hasn't completed yet), the
-    // throttle falls back to its defaults — fine for a short window.
+    // throttle falls back to its defaults: fine for a short window.
     let cachedThrottleLimits = /** @type {{ burst?: number, windowMs?: number } | null} */ (null);
     /** @type {import('@xchain-wallet/core').storage.Vault | null} */
     let throttleVault = null;
-    // Cluster Q FOLLOWUP 2 — track whether we've already seeded the
+    // Cluster Q FOLLOWUP 2: track whether we've already seeded the
     // chainRegistry instance with the persisted custom chains. The
     // registry is module-scoped in the shell entry (extension/web/
     // desktop) and survives host teardown across lock/unlock cycles,
-    // so we only seed once per registry instance — re-installing a
+    // so we only seed once per registry instance: re-installing a
     // descriptor would throw on the duplicate id.
     let customChainsSeeded = false;
     async function seedCustomChainsFromVault(vault, chainRegistry) {
@@ -566,12 +566,12 @@ export function createBackgroundHost(deps) {
                 } catch {
                     // Per-descriptor failures (corrupt persisted record,
                     // descriptor invalid against the current validator)
-                    // are skipped silently — the boot path must not crash
+                    // are skipped silently: the boot path must not crash
                     // on a single bad row.
                 }
             }
         } catch {
-            // Vault not open / read failed — boot continues.
+            // Vault not open / read failed: boot continues.
         }
     }
     async function refreshThrottleLimitsFromVault() {
@@ -580,16 +580,16 @@ export function createBackgroundHost(deps) {
             const settings = await throttleVault.settings.get();
             cachedThrottleLimits = settings?.signThrottle ?? null;
         } catch {
-            // Vault not open yet (boot race) or read failed — keep
+            // Vault not open yet (boot race) or read failed: keep
             // whatever was previously cached. The next refresh will
             // try again.
         }
     }
-    // Cluster S FOLLOWUP 2 — persist throttle state across SW restarts.
+    // Cluster S FOLLOWUP 2: persist throttle state across SW restarts.
     // The throttle is constructed with onPersist wired to the storage
     // adapter; bucket state is hydrated asynchronously via the throttle's
     // `seed()` method as soon as the load resolves. While hydration is
-    // pending, the throttle accepts requests against an empty bucket —
+    // pending, the throttle accepts requests against an empty bucket;
     // worst case a first-request-after-SW-restart slips through, no
     // worse than today's reset-on-restart behavior.
     const signThrottle = createSignThrottle({
@@ -604,7 +604,7 @@ export function createBackgroundHost(deps) {
                 const snapshot = await signThrottleStorage.load();
                 signThrottle.seed(snapshot?.buckets || {});
             } catch {
-                // Hydration failed — start fresh.
+                // Hydration failed: start fresh.
             }
         })();
     }
@@ -658,7 +658,7 @@ export function createBackgroundHost(deps) {
             sdkRegistry,
         });
         // Stash the new wallet's signer in the pool while the password
-        // is in scope — keeps "no password on accounts" working for
+        // is in scope: keeps "no password on accounts" working for
         // the wallet that was just added.
         if (signerPool && req?.password) {
             try {
@@ -669,7 +669,7 @@ export function createBackgroundHost(deps) {
                     chainRegistry,
                     sdkRegistry,
                 });
-            } catch { /* best-effort — fallback is per-op password prompt */ }
+            } catch { /* best-effort: fallback is per-op password prompt */ }
         }
         return {
             format: r.format,
@@ -679,7 +679,7 @@ export function createBackgroundHost(deps) {
         };
     });
 
-    // Rename a wallet — updates the Wallet record's `name` field.
+    // Rename a wallet: updates the Wallet record's `name` field.
     host.register('wallet.rename', async (req, { vault }) => {
         const updated = await renameWallet({ ...req, vault });
         return { wallet: toSafeWallet(updated) };
@@ -701,11 +701,11 @@ export function createBackgroundHost(deps) {
 
     // Create the next BIP44 account under a wallet (max(index)+1) +
     // first address per active chain. When the host has a SignerPool
-    // (populated at unlock time), no password is needed — the
+    // (populated at unlock time), no password is needed: the
     // pre-unlocked signer is reused. When `req.signerId` names a
     // paired hardware SignerRecord (§17.6 / G023), build a
     // RemoteSigner against the renderer-side device transport and use
-    // that instead — no password, addresses persist with
+    // that instead: no password, addresses persist with
     // `source: 'trezor' | 'ledger'`. Falls back to a password-based
     // unlock for shells/sessions that don't pre-populate the pool.
     host.register('account.create', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
@@ -741,7 +741,7 @@ export function createBackgroundHost(deps) {
     // Can this wallet sign WITHOUT a password right now? True iff the
     // unlocked session has a pre-unlocked SoftwareSigner for it in the
     // pool. The UI uses this to hide the per-action password input
-    // ("password only at unlock") — and correctly keeps prompting in the
+    // ("password only at unlock"): and correctly keeps prompting in the
     // rare empty-pool cases (passphrase wallet, or a worker restart that
     // couldn't rehydrate the pool).
     host.register('wallet.signerReady', async (req, { signerPool }) => {
@@ -753,11 +753,11 @@ export function createBackgroundHost(deps) {
         return { ready };
     });
 
-    // §48.3 / G149 — runtime chain activation. Seeds settings.fees +
+    // §48.3 / G149: runtime chain activation. Seeds settings.fees +
     // ads.perChain for the chainId, then derives the first address on
     // that chain for every existing account in the wallet. Idempotent:
     // re-activating a chain that already has fee + address records is
-    // a no-op. Software signers only — HW activation is FOLLOWUP work.
+    // a no-op. Software signers only: HW activation is FOLLOWUP work.
     host.register('wallet.activateChain', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
         const walletId = req?.walletId;
         const signer = await pickSignerFromRequest({
@@ -781,7 +781,7 @@ export function createBackgroundHost(deps) {
     // --- Settings ------------------------------------------------------------
 
     host.register('settings.get', async (_req, { vault, chainRegistry }) => {
-        // Cluster S FOLLOWUP 1 — opportunistic throttle-limits cache
+        // Cluster S FOLLOWUP 1: opportunistic throttle-limits cache
         // hydration. The bridge handlers don't await this, so the very
         // first sign request after SW restart may run on stale defaults
         // for one bucket; the second onward sees the user-configured
@@ -790,7 +790,7 @@ export function createBackgroundHost(deps) {
             throttleVault = vault;
             void refreshThrottleLimitsFromVault();
         }
-        // Cluster Q FOLLOWUP 2 — opportunistic custom-chain re-seed.
+        // Cluster Q FOLLOWUP 2: opportunistic custom-chain re-seed.
         // Single-flight per host instance via the customChainsSeeded
         // guard. Settings.get is the natural trigger because the popup
         // calls it shortly after unlock, before any chain-aware UI
@@ -804,7 +804,7 @@ export function createBackgroundHost(deps) {
             ? /** @type {Record<string, unknown>} */ (req.patch)
             : /** @type {Record<string, unknown>} */ (req ?? {});
         const result = await updateSettings(vault, patch);
-        // Cluster S FOLLOWUP 1 — refresh the sign-throttle limit cache
+        // Cluster S FOLLOWUP 1: refresh the sign-throttle limit cache
         // when the patch touches signThrottle so users see the change
         // take effect on the very next sign request.
         if (patch && Object.prototype.hasOwnProperty.call(patch, 'signThrottle')) {
@@ -814,7 +814,7 @@ export function createBackgroundHost(deps) {
         return result;
     });
 
-    // §19.6 — dry-run restore. Derive the first N addresses per active
+    // §19.6: dry-run restore. Derive the first N addresses per active
     // chain from a candidate mnemonic and compare against the current
     // wallet. Nothing persists. The flow zeroes the seed material on
     // exit; we forward the comparison report verbatim.
@@ -834,10 +834,10 @@ export function createBackgroundHost(deps) {
         });
     });
 
-    // §19.3 — reveal seed mnemonic. Decrypts the wallet's encrypted
+    // §19.3: reveal seed mnemonic. Decrypts the wallet's encrypted
     // seed blob (the AEAD tag check doubles as the password probe) and
     // returns the plaintext mnemonic for display. The shell UX owns
-    // tap-to-reveal, auto-hide on blur, no clipboard write — this
+    // tap-to-reveal, auto-hide on blur, no clipboard write: this
     // handler is the pure primitive.
     host.register('wallet.revealMnemonic', async (req, { vault }) => {
         return revealMnemonic({
@@ -847,20 +847,20 @@ export function createBackgroundHost(deps) {
         });
     });
 
-    // §19.5.2 / G037 — manual on-chain label publish. Encrypts the
+    // §19.5.2 / G037: manual on-chain label publish. Encrypts the
     // wallet's labels + contacts under the seed-derived commitment key
     // and broadcasts the ciphertext as a FILE action on the chosen
     // chain. Auto-sync (debounced on label change) and fetch-on-restore
     // are tracked in FOLLOWUPS.md; this handler powers the user-visible
     // "Publish now" button only.
-    // §50 / G156 — diagnostic dump. Returns a JSON-shaped support packet
+    // §50 / G156: diagnostic dump. Returns a JSON-shaped support packet
     // (wallet metadata + chain registry + endpoint config + record counts +
     // recent errors). The shell is responsible for surfacing it (Copy
     // button on About panel, etc.) so users can paste it into a bug
-    // report. No secrets included — this passes the diagnosticDump flow's
+    // report. No secrets included: this passes the diagnosticDump flow's
     // own redaction.
     host.register('diagnostic.dump', async (_req, { vault, chainRegistry }) => {
-        // §50 / Cluster L FOLLOWUP 4 — fill env / build / signers so the
+        // §50 / Cluster L FOLLOWUP 4: fill env / build / signers so the
         // dump tells support which shell + build + paired devices were
         // running. The shell-supplied callback contributes env + build
         // (it's the only place that knows shell / UA / manifest /
@@ -890,10 +890,10 @@ export function createBackgroundHost(deps) {
         } catch {
             signers = [];
         }
-        // Cluster Q FOLLOWUP 5 — surface the background process's
+        // Cluster Q FOLLOWUP 5: surface the background process's
         // logConsole entries in the dump. The SW process records vault
         // / signer / encoder / bridge events under typed `source` tags
-        // (Cluster Q FOLLOWUP 4) — no key material, no addresses, just
+        // (Cluster Q FOLLOWUP 4): no key material, no addresses, just
         // operational events. Capped at 100 entries; per-line copy
         // capped at 500 chars. logConsole is its own ESM singleton, so
         // a load failure here just yields an empty log array and never
@@ -915,7 +915,7 @@ export function createBackgroundHost(deps) {
         });
     });
 
-    // §15.5 / G020 — add a single imported WIF (private key) to an existing
+    // §15.5 / G020: add a single imported WIF (private key) to an existing
     // HD wallet. Caller (shell) is responsible for surfacing the
     // §15.5.3 backup-implications warning before invoking this handler.
     host.register('wallet.importWif', async (req, { vault, chainRegistry, sdkRegistry }) => {
@@ -947,7 +947,7 @@ export function createBackgroundHost(deps) {
         });
     });
 
-    // §19.4 encrypted backup — returns the pretty-printed JSON envelope
+    // §19.4 encrypted backup: returns the pretty-printed JSON envelope
     // string. The renderer is responsible for triggering the download.
     host.register('wallet.exportBackup', async (req, { vault }) => {
         const r = await exportBackupFile({
@@ -959,7 +959,7 @@ export function createBackgroundHost(deps) {
         return { fileContent: r.fileContent };
     });
 
-    // §19.4 / G036 — restore an encrypted backup envelope into the live
+    // §19.4 / G036: restore an encrypted backup envelope into the live
     // vault. The renderer hands the raw JSON string + decrypt password
     // + conflict policy. Returns the imported walletId + write/skip
     // counts so the shell can surface "Imported wallet 'X' with N
@@ -980,7 +980,7 @@ export function createBackgroundHost(deps) {
         };
     });
 
-    // §35.1 — destructively remove a wallet and all its descendants.
+    // §35.1: destructively remove a wallet and all its descendants.
     // The host clears the wallet's SignerPool entry too so a removed
     // wallet doesn't linger as an unlocked-key reference.
     host.register('wallet.remove', async (req, { vault, signerPool }) => {
@@ -1010,12 +1010,12 @@ export function createBackgroundHost(deps) {
         return { ok: true };
     });
 
-    // §37.2 / Cluster D FOLLOWUP 1 — restore a ConnectedSite from a
+    // §37.2 / Cluster D FOLLOWUP 1: restore a ConnectedSite from a
     // snapshot. Used by the Disconnect-site Undo toast: the renderer
     // hangs onto the full site record before calling sites.delete and
     // posts it back here when the user taps Undo. The handler is
-    // intentionally permissive about shape — it accepts the schema
-    // record verbatim — so a future edit to the ConnectedSite schema
+    // intentionally permissive about shape: it accepts the schema
+    // record verbatim: so a future edit to the ConnectedSite schema
     // won't silently break the undo round-trip.
     host.register('sites.restore', async (req, { vault }) => {
         const site = req?.site;
@@ -1032,7 +1032,7 @@ export function createBackgroundHost(deps) {
         return { ok: true };
     });
 
-    // §12 / G009 — origin blocklist. listBlockedOrigins reads from
+    // §12 / G009: origin blocklist. listBlockedOrigins reads from
     // settings.blockedOrigins; addBlockedOrigin also evicts any
     // ConnectedSite record on the same origin so an in-flight session
     // can't keep signing.
@@ -1054,7 +1054,7 @@ export function createBackgroundHost(deps) {
         return removeBlockedOrigin({ vault, origin });
     });
 
-    // Cluster S FOLLOWUP 4 — blocklist audit-log surface.
+    // Cluster S FOLLOWUP 4: blocklist audit-log surface.
     host.register('sites.auditLog.list', async (_req, { vault }) => {
         return listBlocklistAuditLog({ vault });
     });
@@ -1062,7 +1062,7 @@ export function createBackgroundHost(deps) {
         return clearBlocklistAuditLog({ vault });
     });
 
-    // §9.7 / G007 — runtime chain-registry refresh from hub. Wallet-side
+    // §9.7 / G007: runtime chain-registry refresh from hub. Wallet-side
     // scaffolding only today; the hub-side `/api/v1/chain-registry`
     // endpoint is pending (tracked as Cluster U FOLLOWUP). On boot we
     // try once with a short timeout; failures fall back silently to
@@ -1099,22 +1099,22 @@ export function createBackgroundHost(deps) {
                 if (!hubUrl) return;
                 const result = await refreshChainRegistry({ hubUrl });
                 chainRegistryStatus.update(result);
-            } catch { /* swallow — never crash boot on a refresh */ }
+            } catch { /* swallow: never crash boot on a refresh */ }
         }, 3_000);
     }
 
-    // §9.7 / G007 — periodic background refresh. The boot refresh above
+    // §9.7 / G007: periodic background refresh. The boot refresh above
     // fires once; this keeps long-running instances current so they pick
     // up fresh descriptors within a day of the hub endpoint going live,
     // without a manual Settings → Network refresh. Gated by the same
-    // BOOT_REFRESH_ENABLED switch as the boot refresh — flipping that flag
+    // BOOT_REFRESH_ENABLED switch as the boot refresh: flipping that flag
     // on (once `/api/v1/chain-registry` ships) activates both, so there is
     // no separate "wire the periodic refresh" step left to do. Reuses the
     // same refreshChainRegistry + status-update path, so the graceful
     // bundled-descriptor fallback applies unchanged.
     //
     // Lifetime: in the MV3 service worker the interval lives only as long
-    // as the worker (Chrome tears it down when idle — chrome.alarms is the
+    // as the worker (Chrome tears it down when idle: chrome.alarms is the
     // durable mechanism there, see background/index.js); the web shell
     // (one host per tab) and desktop shell (one host per main process) are
     // long-lived, so it fires there. `host.stopChainRegistryRefresh()`
@@ -1128,7 +1128,7 @@ export function createBackgroundHost(deps) {
                 if (!hubUrl) return;
                 const result = await refreshChainRegistry({ hubUrl });
                 chainRegistryStatus.update(result);
-            } catch { /* swallow — never crash on a refresh */ }
+            } catch { /* swallow: never crash on a refresh */ }
         }, PERIODIC_REFRESH_MS);
         // Don't let the refresh timer alone keep a Node main process
         // (desktop) alive at exit.
@@ -1143,10 +1143,10 @@ export function createBackgroundHost(deps) {
         }
     };
 
-    // §9.7 / Cluster Q FOLLOWUP 2 — custom (user-added) chain registry.
+    // §9.7 / Cluster Q FOLLOWUP 2: custom (user-added) chain registry.
     // Persisted under settings.customChains; re-seeded into the running
     // ChainRegistry at boot via seedCustomChainsFromVault(). The three
-    // routes below are the runtime mutation surface — Developer Mode UI
+    // routes below are the runtime mutation surface: Developer Mode UI
     // calls them.
     host.register('chainRegistry.listCustomChains', async (_req, { vault }) => {
         const descriptors = await listCustomChains({ vault });
@@ -1165,7 +1165,7 @@ export function createBackgroundHost(deps) {
         return removeCustomChain({ vault, chainRegistry, chainId: req.chainId });
     });
 
-    // §31.4 / Cluster O FOLLOWUP 2 — recipient resolution for DIVIDEND
+    // §31.4 / Cluster O FOLLOWUP 2: recipient resolution for DIVIDEND
     // and AIRDROP history rows. Both action kinds carry a *derived*
     // recipient set that History needs to surface for the §31.4
     // save-as-contact affordance. DIVIDEND walks holders of TICK at
@@ -1191,7 +1191,7 @@ export function createBackgroundHost(deps) {
     // --- Receive -------------------------------------------------------------
 
     host.register('receive.getAddress', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        // §17.6 / G023 — when `req.signerId` names a paired HW signer
+        // §17.6 / G023: when `req.signerId` names a paired HW signer
         // (or signerPool has a pre-unlocked software signer for this
         // wallet), pass it through and skip the password-based unlock
         // inside the flow. Without either, the flow falls back to a
@@ -1248,12 +1248,12 @@ export function createBackgroundHost(deps) {
             vault,
             chainRegistry,
             sdkRegistry,
-            // Cluster G FOLLOWUP 1 — auto-enqueue on broadcast failure.
+            // Cluster G FOLLOWUP 1: auto-enqueue on broadcast failure.
             // The signed hex would otherwise vanish; pushing it onto the
             // queue lets the user retry from the QueuedBroadcastBanner
             // once reachability returns. Await ensureQueueLoaded first
             // so the persisted queue (FOLLOWUP 2) has been rehydrated
-            // before this push lands — otherwise a fast Send after a
+            // before this push lands: otherwise a fast Send after a
             // worker restart would race the load and orphan prior items.
             onBroadcastFailure: walletId
                 ? async (entry) => { await ensureQueueLoaded(); pushQueueEntry(walletId, entry); }
@@ -1261,22 +1261,22 @@ export function createBackgroundHost(deps) {
         });
     });
 
-    // §20 / G040 — watcher-mode helper: encode-only path that returns
+    // §20 / G040: watcher-mode helper: encode-only path that returns
     // an unsigned PSBT for transport to a Signer-mode wallet. No vault
     // unlock, no signer, no broadcast.
     host.register('action.send.psbt', async (req, { chainRegistry, sdkRegistry }) => {
         return buildSendPsbt({ ...req, chainRegistry, sdkRegistry });
     });
 
-    // §20 / Cluster W FOLLOWUP 5 — generic watcher-mode helper for the
+    // §20 / Cluster W FOLLOWUP 5: generic watcher-mode helper for the
     // non-Send action surface (ISSUE / MINT / DESTROY / DISPENSER / etc.).
     // Same encode-only contract as `action.send.psbt`: no vault unlock,
-    // no signer, no broadcast — caller supplies `actionData` + `encoderOpts`.
+    // no signer, no broadcast: caller supplies `actionData` + `encoderOpts`.
     host.register('action.psbt', async (req, { chainRegistry, sdkRegistry }) => {
         return buildActionPsbt({ ...req, chainRegistry, sdkRegistry });
     });
 
-    // §17.5 / G025 — verify signature. Pure SDK call, no signer / no
+    // §17.5 / G025: verify signature. Pure SDK call, no signer / no
     // password. Caller supplies chainId + address + message + signature.
     host.register('auth.verifyMessage', async (req, { sdkRegistry }) => {
         const chainId = req?.chainId;
@@ -1308,7 +1308,7 @@ export function createBackgroundHost(deps) {
         return { valid };
     });
 
-    // §17.4 / §30.1 / G024 — user-initiated message signing. Caller
+    // §17.4 / §30.1 / G024: user-initiated message signing. Caller
     // supplies the addressId (HD or imported-WIF) and the wallet
     // resolves it to either `path` (HD) or `addressId` (imported).
     host.register('auth.signMessage', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
@@ -1351,7 +1351,7 @@ export function createBackgroundHost(deps) {
         });
     });
 
-    // §49.5 / G154 — queued broadcast surface. v0.170.0 shipped the UI
+    // §49.5 / G154: queued broadcast surface. v0.170.0 shipped the UI
     // + messaging + in-memory queue; v0.292.0 auto-enqueue from broadcast
     // failure (Cluster G FOLLOWUP 1); v0.293.0 persistence across reload
     // (Cluster G FOLLOWUP 2). The in-memory map remains the live source
@@ -1377,7 +1377,7 @@ export function createBackgroundHost(deps) {
                         }
                     }
                 } catch (_e) {
-                    // Tolerate storage failures — start fresh in-memory.
+                    // Tolerate storage failures: start fresh in-memory.
                 } finally {
                     queueLoaded = true;
                 }
@@ -1395,7 +1395,7 @@ export function createBackgroundHost(deps) {
         try {
             await broadcastQueueStorage.save(snapshot);
         } catch (_e) {
-            // Same tolerance as load — never block a queue mutation on
+            // Same tolerance as load: never block a queue mutation on
             // a storage failure.
         }
     }
@@ -1417,7 +1417,7 @@ export function createBackgroundHost(deps) {
     void ensureQueueLoaded();
     /**
      * Push a signed-but-unbroadcast tx onto the per-walletId queue.
-     * Cluster G FOLLOWUP 1 — used both by the action.* handlers' auto-
+     * Cluster G FOLLOWUP 1: used both by the action.* handlers' auto-
      * enqueue path (when `submitAction` reports a `BroadcastFailedError`)
      * and by the renderer's `enqueueBroadcastRequest` shim for callers
      * that want to enqueue directly (e.g. PsbtSignForm's broadcast leg).
@@ -1439,7 +1439,7 @@ export function createBackgroundHost(deps) {
             ...(entry.txid ? { txid: entry.txid } : {}),
         };
         getQueue(walletId).push(stored);
-        // Fire-and-forget — onBroadcastFailure callers (action.send /
+        // Fire-and-forget: onBroadcastFailure callers (action.send /
         // registerHwHandler) intentionally don't await pushQueueEntry,
         // so we can't make it a Promise. The persist runs in the
         // background; load + restart guarantees consistency on next boot.
@@ -1450,7 +1450,7 @@ export function createBackgroundHost(deps) {
         await ensureQueueLoaded();
         return [...getQueue(req?.walletId)];
     });
-    // Cluster G FOLLOWUP 1 — explicit enqueue endpoint. Renderer-side
+    // Cluster G FOLLOWUP 1: explicit enqueue endpoint. Renderer-side
     // callers (e.g. PsbtSignForm, future RBF replace lanes) can park a
     // signed hex on the queue without going through the action.* path.
     host.register('broadcast.queue.enqueue', async (req) => {
@@ -1500,12 +1500,12 @@ export function createBackgroundHost(deps) {
         return { discarded: idx >= 0 };
     });
 
-    // §49.1 / G153 — reachability probe across the supplied chains.
+    // §49.1 / G153: reachability probe across the supplied chains.
     // Read-only across SDK ping endpoints; no vault access required.
     host.register('reachability.check', async (req, { sdkRegistry }) => {
         const chainIds = Array.isArray(req?.chainIds) ? req.chainIds.filter((s) => typeof s === 'string' && s) : [];
         if (chainIds.length === 0) {
-            // No active chains — surface "offline" so the banner can
+            // No active chains: surface "offline" so the banner can
             // explain rather than silently treating it as healthy.
             return { overall: 'offline', perChain: [] };
         }
@@ -1516,10 +1516,10 @@ export function createBackgroundHost(deps) {
         });
     });
 
-    // §30.4 / G088 — read-only PSBT decompose. The form pastes hex/base64
-    // before any auth, so this handler doesn't touch vault — purely
+    // §30.4 / G088: read-only PSBT decompose. The form pastes hex/base64
+    // before any auth, so this handler doesn't touch vault: purely
     // sdkRegistry. Caller normalizes hex before sending.
-    // §20 / G040 FOLLOWUP 1 — broadcast a signed transaction (extracted
+    // §20 / G040 FOLLOWUP 1: broadcast a signed transaction (extracted
     // from a signed PSBT by the renderer-side `auth.signPsbt` flow). No
     // vault required; this is purely an SDK encoder call. The PsbtSignForm
     // result page wires this so a Full-mode wallet can broadcast PSBTs
@@ -1568,7 +1568,7 @@ export function createBackgroundHost(deps) {
         return { decomposed };
     });
 
-    // §30.4 / G088 — user-initiated PSBT signing. The caller supplies the
+    // §30.4 / G088: user-initiated PSBT signing. The caller supplies the
     // wallet address whose key should sign; the handler decomposes the
     // PSBT and matches inputs by address to build signingPaths. Mixed-
     // address PSBTs are partially-signed (only inputs the chosen address
@@ -1629,7 +1629,7 @@ export function createBackgroundHost(deps) {
         });
     });
 
-    // §30.4 / Cluster E FOLLOWUP 1 — HW variant of auth.signPsbt. Mirrors
+    // §30.4 / Cluster E FOLLOWUP 1: HW variant of auth.signPsbt. Mirrors
     // the registerHwHandler pattern but auth.signPsbt's request shape
     // carries `addressId` at the top level (not under `from`), so we
     // can't use the generic helper. Resolves the Address record, builds
@@ -1694,7 +1694,7 @@ export function createBackgroundHost(deps) {
         });
     });
 
-    // HW variants — no password. The renderer (popup / web / desktop)
+    // HW variants: no password. The renderer (popup / web / desktop)
     // owns the live TrezorSigner / LedgerSigner instance, registered
     // against `signerBridge` when the user paired. Each handler
     // resolves the address → HW descriptor → builds a RemoteSigner
@@ -1716,7 +1716,7 @@ export function createBackgroundHost(deps) {
             }
             const signer = buildRemoteSigner(descriptor, transport);
             const { password: _password, ...rest } = req;
-            // Cluster G FOLLOWUP 1 — auto-enqueue on broadcast failure
+            // Cluster G FOLLOWUP 1: auto-enqueue on broadcast failure
             // for HW lanes too. Same shape as the action.send path;
             // ensureQueueLoaded keeps the persisted queue intact.
             const walletId = req?.walletId;
@@ -1755,7 +1755,7 @@ export function createBackgroundHost(deps) {
     registerHwHandler('action.revokeDelegation.hw', revokeDelegationAction);
     registerHwHandler('action.contractStake.hw', contractStakeAction);
 
-    // Signer status probe — routes straight through the signer bridge
+    // Signer status probe: routes straight through the signer bridge
     // without touching vault/SDK. Returns `'idle'` when the bridge
     // isn't connected yet (renderer hasn't registered), giving the
     // UI a distinct state vs. the signer actively reporting
@@ -1805,7 +1805,7 @@ export function createBackgroundHost(deps) {
         return dispenserAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
     });
 
-    // §41.3.4 ORDER / §41.3.5 CANCEL — DEX signing lanes.
+    // §41.3.4 ORDER / §41.3.5 CANCEL: DEX signing lanes.
     host.register('action.order', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
         return orderAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
     });
@@ -1813,7 +1813,7 @@ export function createBackgroundHost(deps) {
         return cancelOrder({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
     });
 
-    // §41.4 COINPAY — buyer-side settlement for token/native-coin matches.
+    // §41.4 COINPAY: buyer-side settlement for token/native-coin matches.
     host.register('action.coinpay', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
         return coinpayAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
     });
@@ -1824,28 +1824,28 @@ export function createBackgroundHost(deps) {
         return getCoinpaysForAddress({ ...req, sdkRegistry });
     });
 
-    // §41.5 SWAP — atomic token-pair swap (no COINPAY follow-up).
+    // §41.5 SWAP: atomic token-pair swap (no COINPAY follow-up).
     host.register('action.swap', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
         return swapAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
     });
 
-    // §42.8.1 LINK — anchor two existing actions across chains.
+    // §42.8.1 LINK: anchor two existing actions across chains.
     host.register('action.link', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
         return linkAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
     });
 
-    // FILE — public on-chain file upload (NFT artwork attachment;
+    // FILE: public on-chain file upload (NFT artwork attachment;
     // the AttachContentForm pairs it with an owner-validated LINK).
     host.register('action.file', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
         return fileAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
     });
 
-    // Project registry — current roster lookup (ProjectRosterForm prefill).
+    // Project registry: current roster lookup (ProjectRosterForm prefill).
     host.register('projects.byTick', async (req, { sdkRegistry }) => {
         return getProjectForTick({ ...req, sdkRegistry });
     });
 
-    // §41.7.2 Messaging inbox — password-gated decrypt of MESSAGE
+    // §41.7.2 Messaging inbox: password-gated decrypt of MESSAGE
     // actions for one of the wallet's own addresses.
     host.register('messaging.inbox', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
         return getMessagingInbox({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
@@ -1857,7 +1857,7 @@ export function createBackgroundHost(deps) {
         return getMessagingInboxSweep({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
     });
 
-    // Token-gated content — list and unlock.
+    // Token-gated content: list and unlock.
     // See xchain-documentation/protocol/TOKEN_GATED_CONTENT.md.
     host.register('gatedContent.list', async (req, { sdkRegistry }) => {
         const sdk = sdkRegistry.get(req.chainId);
@@ -1867,7 +1867,7 @@ export function createBackgroundHost(deps) {
         return unlockGatedFileForAddress({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
     });
 
-    // §41.7.3 Compose — MESSAGE action signing + recipient pubkey lookup.
+    // §41.7.3 Compose: MESSAGE action signing + recipient pubkey lookup.
     host.register('action.message', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
         return messageAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
     });
@@ -1875,7 +1875,7 @@ export function createBackgroundHost(deps) {
         return getRecipientPubkey({ ...req, sdkRegistry });
     });
 
-    // §41.7.4 Contacts — local address book CRUD. Shared across wallets.
+    // §41.7.4 Contacts: local address book CRUD. Shared across wallets.
     host.register('contacts.list', async (_req, { vault }) => {
         return listContacts({ vault });
     });
@@ -1889,7 +1889,7 @@ export function createBackgroundHost(deps) {
         return deleteContact({ ...req, vault });
     });
 
-    // Dispenser discovery + detail — read-only explorer passthroughs
+    // Dispenser discovery + detail: read-only explorer passthroughs
     // behind the background so the popup / web / desktop renderers
     // don't need to know about sdkRegistry directly.
 
@@ -1913,7 +1913,7 @@ export function createBackgroundHost(deps) {
         return dispensesFor({ ...req, sdkRegistry });
     });
 
-    // VM / contract discovery — read-only explorer passthroughs for the
+    // VM / contract discovery: read-only explorer passthroughs for the
     // §42.2 Contracts browse surface (My contracts / My interactions /
     // Browse all) and §42.3 detail page.
 
@@ -1937,21 +1937,21 @@ export function createBackgroundHost(deps) {
         return withdrawalsForAddress({ ...req, sdkRegistry });
     });
 
-    // §42.3 Contract detail page — metadata / state / balances /
+    // §42.3 Contract detail page: metadata / state / balances /
     // executions + the originating DEPLOY action.
 
     host.register('contracts.byActionIndex', async (req, { sdkRegistry }) => {
         return contractByActionIndex({ ...req, sdkRegistry });
     });
 
-    // Phase F — permissions-manifest read for the inline consent
+    // Phase F: permissions-manifest read for the inline consent
     // disclosure. Never throws (the flow degrades to a null manifest);
     // the SDK reader (Part 2) may not exist in the installed SDK yet.
     host.register('contracts.manifest', async (req, { sdkRegistry }) => {
         return contractManifestFor({ ...req, sdkRegistry });
     });
 
-    // Phase F — controller-bind authoring helpers. `controller.actionClasses`
+    // Phase F: controller-bind authoring helpers. `controller.actionClasses`
     // populates the form dropdown (degrades to the locked-fact list when the
     // SDK's controller helper is absent); `controller.buildParams` runs the
     // right sdk.controller.* builder host-side (core can't import the SDK)
@@ -1979,7 +1979,7 @@ export function createBackgroundHost(deps) {
         return executionsForContract({ ...req, sdkRegistry });
     });
 
-    // §42.6 DEPLOY authoring — action composer + three pure-function
+    // §42.6 DEPLOY authoring: action composer + three pure-function
     // passthroughs over sdk.contracts.* for the validate / size /
     // suggest-gas buttons.
 
@@ -1999,7 +1999,7 @@ export function createBackgroundHost(deps) {
         return withdrawAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
     });
 
-    // §42.7 Staking — four read-only explorer passthroughs backing
+    // §42.7 Staking: four read-only explorer passthroughs backing
     // the dashboard + operator dashboard.
 
     host.register('stakes.forAddress', async (req, { sdkRegistry }) => {
@@ -2042,7 +2042,7 @@ export function createBackgroundHost(deps) {
         return revokeDelegationAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
     });
 
-    // Contract-targeted staking — parallel to the capability staking passthroughs above.
+    // Contract-targeted staking: parallel to the capability staking passthroughs above.
     // Backs ContractStakedPositions (reads) and ContractStakeForm (write).
 
     host.register('contract_stakes.forAddress', async (req, { sdkRegistry }) => {
@@ -2121,7 +2121,7 @@ export function createBackgroundHost(deps) {
 
     // §22.3 + §42.9 multisig sign-round persistence + state machine
     // (Step 19). One register per surface so each handler keeps a
-    // tight, single-responsibility shape — same pattern the staking
+    // tight, single-responsibility shape: same pattern the staking
     // handlers use.
     host.register('multisigSign.start', async (req, { vault }) => {
         return startMultisigSigningSession({ ...req, vault });
@@ -2183,7 +2183,7 @@ export function createBackgroundHost(deps) {
         return holdersFor({ ...req, sdkRegistry });
     });
 
-    // §40.9 AIRDROP two-transaction flow — LIST create + AIRDROP
+    // §40.9 AIRDROP two-transaction flow: LIST create + AIRDROP
     // reference, plus the two read-only passthroughs AirdropForm uses
     // to (a) resolve the LIST's ACTION_INDEX after it's indexed and
     // (b) confirm the LIST on the AIRDROP review screen.
@@ -2204,7 +2204,7 @@ export function createBackgroundHost(deps) {
         return listByActionIndex({ ...req, sdkRegistry });
     });
 
-    // Pending-airdrop CRUD — crash-safe state for the §40.9 stage
+    // Pending-airdrop CRUD: crash-safe state for the §40.9 stage
     // machine (LIST-broadcast → wait-for-index → AIRDROP-broadcast).
     // The renderer persists progress here so closing the wallet
     // between stages is recoverable.
@@ -2225,7 +2225,7 @@ export function createBackgroundHost(deps) {
         return clearPendingAirdrop({ ...req, vault });
     });
 
-    // §41.2–§41.3 DEX market queries — passthroughs to the SDK's
+    // §41.2–§41.3 DEX market queries: passthroughs to the SDK's
     // explorer client. Read-only; no vault, no signing.
 
     host.register('markets.list', async (req, { sdkRegistry }) => {
@@ -2259,7 +2259,7 @@ export function createBackgroundHost(deps) {
         return subtokensForTick({ ...req, sdkRegistry });
     });
 
-    // §41.2 watchlist CRUD — per-wallet pinned markets. No signing;
+    // §41.2 watchlist CRUD: per-wallet pinned markets. No signing;
     // vault-local state only.
 
     host.register('watchlist.listForWallet', async (req, { vault }) => {
@@ -2272,7 +2272,7 @@ export function createBackgroundHost(deps) {
         return clearWatchlistEntry({ ...req, vault });
     });
 
-    // §46 price-alert CRUD — per-wallet "notify me at price X" thresholds.
+    // §46 price-alert CRUD: per-wallet "notify me at price X" thresholds.
     // No signing; vault-local state only. The background PriceAlertWatcher
     // reads/disarms these directly via the flows (not over a route).
     host.register('priceAlert.listForWallet', async (req, { vault }) => {
@@ -2288,7 +2288,7 @@ export function createBackgroundHost(deps) {
         return rearmAlert({ ...req, vault });
     });
 
-    // §40.10 Advanced Actions Form — generic "submit any action"
+    // §40.10 Advanced Actions Form: generic "submit any action"
     // surface. Read-only SDK introspection handlers drive the form's
     // schema-based field list and live validation. The write path
     // accepts any (action, params) pair and forwards to submitAction,
@@ -2359,14 +2359,14 @@ export function createBackgroundHost(deps) {
         // Thread the user's active network into the aggregator so chains
         // on the inactive networks don't get fanned-out SDK calls. The
         // client doesn't pass `activeNetwork`; it's a server-side filter
-        // derived from settings — the source of truth for "which network
+        // derived from settings: the source of truth for "which network
         // is live" lives in one place.
         let activeNetwork;
         try {
             const settings = await vault.settings.get();
             activeNetwork = getActiveNetwork(settings);
         } catch {
-            // Vault unavailable / settings unreadable — fall through
+            // Vault unavailable / settings unreadable: fall through
             // without the filter; walletBalances() then defaults to its
             // pre-filter behavior (every chain with addresses).
         }
@@ -2383,7 +2383,7 @@ export function createBackgroundHost(deps) {
 
     // Native-coin price oracle. Single shared instance per host so the
     // in-memory cache survives across calls within a session. Gated on
-    // settings.privacy.priceDataEnabled — if the user has disabled it,
+    // settings.privacy.priceDataEnabled: if the user has disabled it,
     // the handler returns `{ disabled: true }` without invoking fetch,
     // so the third party never sees a request. globalThis.fetch is the
     // browser / SW fetch in production; tests pass a mock via
@@ -2415,7 +2415,7 @@ export function createBackgroundHost(deps) {
     // The approval window opens from chrome.windows.create and queries
     // the broker for its parked request, then reports the user's decision
     // back. Gated on `approvals.fetch` / `approvals.resolve` being
-    // present — the default `rejectAllApprovals` doesn't implement them,
+    // present: the default `rejectAllApprovals` doesn't implement them,
     // so callers that haven't wired a real broker (tests, early scaffolds)
     // get an `UnknownMessageTypeError` that's easy to spot.
     if (approvals && typeof approvals.fetch === 'function') {

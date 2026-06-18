@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// ApprovalBroker — the shell-side `Approvals` implementation (§43.4).
+// ApprovalBroker: the shell-side `Approvals` implementation (§43.4).
 //
 // The bridge handlers (§43.3) call `approvals.connect()`, `signMessage()`,
 // `signPsbt()`, `signAction()`, `signIn()` whenever they need a user
@@ -32,10 +32,10 @@
 //        |<-- promise resolves -------------|                                           |
 //
 // A user who closes the window without deciding is treated as a
-// rejection — the deferred resolves with `{ approved: false }`, which
+// rejection: the deferred resolves with `{ approved: false }`, which
 // the bridge surfaces as `USER_REJECTED` to the dApp.
 //
-// Multiple concurrent approvals are supported — each gets its own id
+// Multiple concurrent approvals are supported; each gets its own id
 // and its own popup window. The broker's map is keyed by id so a user
 // can triage them in any order.
 

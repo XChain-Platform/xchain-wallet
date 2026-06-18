@@ -8,11 +8,11 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// MarketChart — §41.3.1 candlestick/line chart for a single market.
+// MarketChart (§41.3.1): candlestick/line chart for a single market.
 //
 // `lightweight-charts` is imported lazily so the module loads clean
 // in Node (smoke tests, SSR) and only pulls the chart runtime when
-// the component mounts. Period toggles rebucket in memory — one
+// the component mounts. Period toggles rebucket in memory; one
 // getMarketHistory call feeds every period.
 //
 // Data flow:
@@ -39,7 +39,7 @@ import { sampleMatchesFor } from '../../market/sampleMarketData.js';
  * @param {string} props.chainId
  * @param {string} props.tick1
  * @param {string} props.tick2
- * @param {boolean} [props.demo]   demo wallet — chart sample matches when there's no live history
+ * @param {boolean} [props.demo]   demo wallet: chart sample matches when there's no live history
  * @param {string} [props.height]   css value, default '240px'
  */
 export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120px' }) {
@@ -67,7 +67,7 @@ export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120
                 const lw = await import('lightweight-charts');
                 if (disposed || !containerRef.current) return;
                 // lightweight-charts draws to canvas and can't parse CSS
-                // variables — resolve them off the container's computed
+                // variables; resolve them off the container's computed
                 // style so the chart follows the theme.
                 const cs = getComputedStyle(containerRef.current);
                 const textColor = (cs.getPropertyValue('--xc-text') || cs.color || '#ccc').trim() || '#ccc';
@@ -135,7 +135,7 @@ export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120
         const candles = bucketizeMatches(rawRows, {
             tick1, tick2, periodSeconds: period.seconds,
         });
-        // Line series wants { time, value } — use each candle's close.
+        // Line series wants { time, value }; use each candle's close.
         const points = candles.map((c) => ({ time: c.time, value: c.close }));
         try {
             seriesRef.current.setData(points);

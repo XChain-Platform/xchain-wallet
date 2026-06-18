@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §48.5 / Cluster Q FOLLOWUP 5 — logConsole persistent mirror.
+// Smoke for §48.5 / Cluster Q FOLLOWUP 5: logConsole persistent mirror.
 //
 // Pins:
 //   1. logConsole exports `restore` + `attachMirror` + `detachMirror` +
@@ -170,4 +170,4 @@ assert.match(hostSrc, /logConsole\.restore\(persisted\)/,
 assert.match(hostSrc, /logConsole\.attachMirror\(\{[\s\S]+?save: \(entries\) => logConsoleStorage\.save\(entries\)/,
     'host attaches the mirror with save = storage.save');
 
-console.log('OK — logConsole mirror surface + storage adapter + host wiring');
+console.log('OK: logConsole mirror surface + storage adapter + host wiring');

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Automated accessibility scan — §53 / §52.6.
+// Automated accessibility scan (§53 / §52.6).
 //
 // Runs `@axe-core/playwright` against every rendered screen the web
 // SPA reaches in Phase 1 (onboarding welcome → create password stage
@@ -16,7 +16,7 @@
 // Any violation at WCAG A / AA severity fails the build.
 //
 // Rules we disable + why:
-//   - `color-contrast` — axe can't evaluate the tokens.css custom
+//   - `color-contrast`: axe can't evaluate the tokens.css custom
 //     properties that drive our palette until Chromium emits the
 //     computed styles we rely on; leave it on but excluded per-screen
 //     if headless evaluation flakes. Today it passes; revisit if it
@@ -40,12 +40,12 @@ async function scan(page, label) {
     expect(
         results.violations,
         `${label} a11y violations: ${results.violations
-            .map((v) => `${v.id} (${v.impact}) — ${v.help}`)
+            .map((v) => `${v.id} (${v.impact}): ${v.help}`)
             .join('; ')}`,
     ).toEqual([]);
 }
 
-test.describe('a11y — WCAG 2.1 A/AA', () => {
+test.describe('a11y: WCAG 2.1 A/AA', () => {
     test('onboarding welcome', async ({ page }) => {
         await page.goto('/');
         await expect(
@@ -54,7 +54,7 @@ test.describe('a11y — WCAG 2.1 A/AA', () => {
         await scan(page, 'Onboarding welcome');
     });
 
-    test('create wallet — password stage', async ({ page }) => {
+    test('create wallet: password stage', async ({ page }) => {
         await page.goto('/');
         await page.getByRole('button', { name: 'Create a new wallet' }).click();
         await expect(
@@ -63,7 +63,7 @@ test.describe('a11y — WCAG 2.1 A/AA', () => {
         await scan(page, 'CreateWallet password stage');
     });
 
-    test('create wallet — mnemonic display stage', async ({ page }) => {
+    test('create wallet: mnemonic display stage', async ({ page }) => {
         await page.goto('/');
         await page.getByRole('button', { name: 'Create a new wallet' }).click();
         await page.getByLabel('Password', { exact: true }).fill('a11ypassword123');
@@ -96,7 +96,7 @@ test.describe('a11y — WCAG 2.1 A/AA', () => {
         await scan(page, 'Locked');
     });
 
-    test('send — form stage', async ({ page }) => {
+    test('send: form stage', async ({ page }) => {
         await seedWallet(page, 'a11ysendpassword');
         await page.getByRole('button', { name: 'Send' }).click();
         await expect(

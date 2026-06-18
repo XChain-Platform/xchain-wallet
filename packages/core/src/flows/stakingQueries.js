@@ -8,13 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// stakingQueries — thin read-only wrappers over the staking-side
+// stakingQueries: thin read-only wrappers over the staking-side
 // explorer passthroughs landed in xchain-sdk 1.10.0
 // (ExplorerClient.getStakes / getDelegations / getValidators /
 // getValidatorRewards). Back the §42.7.4 Staking dashboard and the
 // §42.7.5 Operator dashboard.
 //
-// Staking is BTC-only at launch per §10.3 — callers should already
+// Staking is BTC-only at launch per §10.3; callers should already
 // have resolved a BTC chain via useBtcAddressesPresent before
 // invoking these. Each flow delegates to an sdkRegistry-scoped SDK.
 
@@ -103,11 +103,11 @@ export async function capabilityThresholds({ sdkRegistry, chainId }) {
 }
 
 /**
- * Contract-targeted staking queries — parallel to the capability staking ones above.
+ * Contract-targeted staking queries, parallel to the capability staking ones above.
  * Backs the §42.7.x ContractStakedPositions dashboard surface.
  *
  * NOTE: These call sdk.getContractStakes / getContractUnstakes / getContractDelegations /
- * getSlashEvents — methods that need to be added to ExplorerClient in xchain-sdk + REST
+ * getSlashEvents. These methods need to be added to ExplorerClient in xchain-sdk + REST
  * endpoints exposed by xchain-explorer. Tracked as a Phase 7 follow-up alongside the
  * wallet UI work. Until the SDK methods land, these wrappers will throw at runtime.
  */

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §12 / G012 — Per-origin sign-request throttle.
+// Smoke for §12 / G012: Per-origin sign-request throttle.
 //
 // Verifies:
 //   1. `flows/signThrottle.js` exists and exports `createSignThrottle`
@@ -20,7 +20,7 @@
 //   4. clear(origin) drops a single bucket; clear() drops all.
 //   5. Bridge handlers register a throttle and call assertNotThrottled
 //      from each of the four sign methods (signMessage, signAction,
-//      signPsbt, signIn) — connect / disconnect / read methods do NOT.
+//      signPsbt, signIn); connect / disconnect / read methods do NOT.
 //   6. The bridge-spec BridgeErrorCode union and docs/BRIDGE.md table
 //      both list THROTTLED.
 
@@ -49,7 +49,7 @@ const barrelSrc = read('packages/core/src/flows/index.js');
 assert.ok(/createSignThrottle/.test(barrelSrc) && /signThrottle\.js/.test(barrelSrc),
     'flows barrel re-exports createSignThrottle');
 
-// 2 + 3 + 4. Runtime — exercise the throttle directly with a fake clock.
+// 2 + 3 + 4. Runtime: exercise the throttle directly with a fake clock.
 const { createSignThrottle, SIGN_THROTTLE_DEFAULT_BURST, SIGN_THROTTLE_DEFAULT_WINDOW_MS } =
     await import(join(root, flowPath));
 
@@ -153,4 +153,4 @@ assert.ok(/`THROTTLED`/.test(bridgeDocSrc),
 assert.ok(/per-origin sign-request rate limit/.test(bridgeDocSrc),
     'docs/BRIDGE.md describes the throttle');
 
-console.log('OK — sign-throttle flow + bridge wiring + spec + docs smoke');
+console.log('OK: sign-throttle flow + bridge wiring + spec + docs smoke');

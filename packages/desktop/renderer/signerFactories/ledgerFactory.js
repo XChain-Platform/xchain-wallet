@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Ledger transport factory — Electron desktop renderer.
+// Ledger transport factory for the Electron desktop renderer.
 //
 // Same shape as the extension binding: lazy-import WebHID transport +
 // `@ledgerhq/hw-app-btc`, bind core's `makeLedgerFactory`. Electron's

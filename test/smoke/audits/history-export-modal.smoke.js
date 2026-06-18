@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// §28.5 / Cluster I FOLLOWUP 5 smoke — History export modal.
+// §28.5 / Cluster I FOLLOWUP 5 smoke: History export modal.
 //
 // Asserts:
 //   1. historyExport.js gains a `columns` parameter on entriesToCsv +
@@ -102,7 +102,7 @@ assert.deepEqual(Object.keys(jsonSubset.entries[0]).sort(),
     ['action', 'address', 'link', 'raw'].sort(),
     'JSON entry includes only requested columns + sidecars (link/raw kept)');
 
-// Bad / empty columns array falls back to default — preserves existing
+// Bad / empty columns array falls back to default; preserves existing
 // caller behaviour.
 const csvBadCols = entriesToCsv(sample, { columns: ['nonsense'] });
 assert.ok(csvBadCols.startsWith(EXPORT_COLUMNS.join(',') + '\n'),
@@ -174,5 +174,5 @@ assert.ok(/filterEntriesByDateRange/.test(historySrc),
     'History.jsx wires filterEntriesByDateRange when a date range is set');
 
 console.log(
-    'OK — history-export-modal smoke (§28.5 / Cluster I FOLLOWUP 5 — entriesToCsv + entriesToJson honour an optional columns subset; filterEntriesByDateRange caps by inclusive epoch-second bounds; flows/index.js re-exports both new symbols + EXPORT_COLUMNS; History.jsx replaces the two chips with a single Export… trigger + ExportModal carrying format radio + columns checkboxes + scope radio + date-range inputs + role="dialog" + Esc-to-close)',
+    'OK: history-export-modal smoke (§28.5 / Cluster I FOLLOWUP 5: entriesToCsv + entriesToJson honour an optional columns subset; filterEntriesByDateRange caps by inclusive epoch-second bounds; flows/index.js re-exports both new symbols + EXPORT_COLUMNS; History.jsx replaces the two chips with a single Export... trigger + ExportModal carrying format radio + columns checkboxes + scope radio + date-range inputs + role="dialog" + Esc-to-close)',
 );

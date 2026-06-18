@@ -9,14 +9,14 @@
 // contact legal@dankest.llc.
 
 // Origin blocklist (§12 / G009). User-managed list of origins that
-// should be hard-rejected at the bridge boundary — `bridge.connect`
+// should be hard-rejected at the bridge boundary: `bridge.connect`
 // short-circuits, and the four sign methods reject before going to
 // approvals.
 //
 // "Allowlist" semantics live elsewhere: a `ConnectedSite` record
 // already gates whether a site has been approved at all (the absence
 // of a record means an origin must call `connect()` and get user
-// approval). The blocklist is the explicit complement — an origin
+// approval). The blocklist is the explicit complement: an origin
 // listed here can never connect or sign even if it previously had
 // approval, until the user removes it.
 //
@@ -27,7 +27,7 @@
 //                    matches any subdomain. The pattern is stored as
 //                    `*.example.com` (no scheme) and matched against
 //                    the request's URL.host. The bare apex is NOT
-//                    matched by `*.example.com` — add `example.com`
+//                    matched by `*.example.com`; add `example.com`
 //                    or `*.example.com` separately as the user wishes.
 // Bare hosts ("example.com") are normalized to `https://example.com`
 // at write time so case + protocol comparisons stay simple. Wildcard
@@ -100,12 +100,12 @@ function matchesWildcard(origin, pattern) {
     } catch {
         return false;
     }
-    // Strip an optional port for comparison — the wildcard binds to
+    // Strip an optional port for comparison; the wildcard binds to
     // the host, not the port.
     const hostNoPort = host.replace(/:\d+$/, '');
     if (hostNoPort === wildcardDomain) {
-        // Bare apex is not matched by `*.example.com` — see comment
-        // at the top of the file. Add the apex separately.
+        // Bare apex is not matched by `*.example.com` (see comment
+        // at the top of the file). Add the apex separately.
         return false;
     }
     return hostNoPort.endsWith(`.${wildcardDomain}`);
@@ -139,7 +139,7 @@ function asList(settings) {
     return Array.isArray(list) ? list.slice() : [];
 }
 
-// Cluster S FOLLOWUP 4 — blocklist audit log. Ring-buffer of recent
+// Cluster S FOLLOWUP 4: blocklist audit log. Ring-buffer of recent
 // mutations so a security-conscious user (or incident responder) can
 // see *what* changed and *when* without having to diff backups. Lives
 // in `settings.blocklistAuditLog: AuditEntry[]`. Capped at AUDIT_MAX
@@ -229,9 +229,9 @@ export async function listBlockedOrigins({ vault }) {
 /**
  * Add an origin or wildcard pattern to the blocklist and delete any
  * matching `ConnectedSite` records so an in-flight session can't keep
- * signing. Idempotent — adding an already-blocked entry is a no-op.
+ * signing. Idempotent (adding an already-blocked entry is a no-op).
  *
- * Cluster S FOLLOWUP 3 — accepts wildcard patterns (`*.example.com`).
+ * Cluster S FOLLOWUP 3: accepts wildcard patterns (`*.example.com`).
  * When the entry is a wildcard, every existing ConnectedSite whose
  * origin matches gets evicted at write time so a previously-approved
  * subdomain can't keep signing.
@@ -257,7 +257,7 @@ export async function addBlockedOrigin({ vault, origin }) {
     }
     const evictedSiteIds = [];
     if (parseWildcardPattern(normalized)) {
-        // Wildcard — fall back to listing all sites + matching them
+        // Wildcard: fall back to listing all sites + matching them
         // since findBy('origin', ...) only handles exact matches.
         const all = await vault.connectedSites.list();
         for (const site of all) {
@@ -274,7 +274,7 @@ export async function addBlockedOrigin({ vault, origin }) {
         }
     }
     if (!already) {
-        // Cluster S FOLLOWUP 4 — only audit a real state change. Idempotent
+        // Cluster S FOLLOWUP 4: only audit a real state change. Idempotent
         // re-adds don't pollute the log.
         nextSettings = {
             ...nextSettings,

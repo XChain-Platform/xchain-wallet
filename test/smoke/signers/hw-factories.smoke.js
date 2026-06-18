@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for Phase 2 — Step 18 (piece 5c) — core HW factory builders
+// Smoke for Phase 2, Step 18 (piece 5c): core HW factory builders
 // (§40.12).
 //
 // Steps 13–14 introduced `TrezorSigner` / `LedgerSigner` as DI-based
@@ -91,7 +91,7 @@ assert.ok(!/@trezor\//.test(coreTrezor), 'core trezor.js has no @trezor/* import
 assert.ok(!/@ledgerhq\//.test(coreLedger), 'core ledger.js has no @ledgerhq/* imports (real code)');
 
 function stripComments(src) {
-    // Line comments + /* … */ blocks. Good enough for our own source —
+    // Line comments + /* … */ blocks. Good enough for our own source;
     // no strings containing `//` or `/*` markers.
     return src
         .replace(/\/\*[\s\S]*?\*\//g, '')
@@ -183,7 +183,7 @@ assert.throws(
 );
 
 {
-    // Mock Ledger Btc app + transport — matches the shape pairing
+    // Mock Ledger Btc app + transport (matches the shape pairing
     // exercises: getAppAndVersion + getWalletPublicKey.
     class MockBtcApp {
         constructor({ transport, currency }) {
@@ -195,7 +195,7 @@ assert.throws(
         }
         async getWalletPublicKey(path, _opts) {
             assert.equal(path, "m/44'/0'/0'", 'identity path is m/44\'/0\'/0\'');
-            // 33-byte compressed pubkey in hex — deriveLedgerDeviceIdentifier
+            // 33-byte compressed pubkey in hex; deriveLedgerDeviceIdentifier
             // takes the raw hex string and hashes it to produce a
             // deterministic identifier.
             return {
@@ -430,5 +430,5 @@ assert.ok(
 );
 
 console.log(
-    'OK — hw-factories smoke (Step 18 §40.12: core makeTrezorFactory + makeLedgerFactory DI builders — success + failure paths exercised against mock Connect/transport/app; desktop renderer factories delegate to core builders with lazy HW-SDK imports; desktop package.json deps at extension-parity versions; App.jsx wires real factories; main-process WebHID permission handlers + vendor-ID allowlist cover Ledger + both Trezor variants)',
+    'OK: hw-factories smoke (Step 18 §40.12: core makeTrezorFactory + makeLedgerFactory DI builders; success + failure paths exercised against mock Connect/transport/app; desktop renderer factories delegate to core builders with lazy HW-SDK imports; desktop package.json deps at extension-parity versions; App.jsx wires real factories; main-process WebHID permission handlers + vendor-ID allowlist cover Ledger + both Trezor variants)',
 );

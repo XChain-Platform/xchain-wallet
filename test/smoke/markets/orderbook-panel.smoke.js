@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Phase 3 Step 4 smoke — Orderbook panel (§41.3.2).
+// Phase 3 Step 4 smoke: Orderbook panel (§41.3.2).
 //
 // Runtime coverage of normalizeOrderbook (pure) + static wiring
 // checks for OrderbookPanel (polling cadence, visibilitychange
@@ -116,5 +116,5 @@ assert.ok(/maxCumulative/.test(src)
     'OrderbookPanel renders a depth bar proportional to cumulative');
 
 console.log(
-    'OK — orderbook-panel smoke (normalizeOrderbook: wrapped + unwrapped shapes; bids descending + asks ascending; cumulative totals + maxCumulative across both sides; malformed rows dropped; display strings preserved for precision; OrderbookPanel fetches via messaging.getOrderbook + normalises + polls every 5s + pauses on visibilitychange + onPickPrice + depth-bar % of maxCumulative)',
+    'OK: orderbook-panel smoke (normalizeOrderbook: wrapped + unwrapped shapes; bids descending + asks ascending; cumulative totals + maxCumulative across both sides; malformed rows dropped; display strings preserved for precision; OrderbookPanel fetches via messaging.getOrderbook + normalises + polls every 5s + pauses on visibilitychange + onPickPrice + depth-bar % of maxCumulative)',
 );

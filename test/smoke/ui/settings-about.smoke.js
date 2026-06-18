@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §35 Settings — Step 3 — About panel.
+// Smoke for §35 Settings, Step 3: About panel.
 //
 // Source-level checks: AboutSection.jsx pulls from buildInfo.js,
 // renders the spec §35.1 About rows (version, license, repro-build,

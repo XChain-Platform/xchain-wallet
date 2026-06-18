@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §35 Settings — Step 5 — Language & Region panel.
+// Smoke for §35 Settings, Step 5: Language & Region panel.
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
@@ -28,7 +28,7 @@ assert.match(src, /update\(\{\s*language:\s*next\s*\}\)/, 'language write throug
 assert.match(src, /update\(\{\s*fiatCurrency:\s*next\s*\}\)/, 'currency picker write through update({ fiatCurrency })');
 assert.match(src, /update\(\{\s*fiatCurrency:\s*code\s*\}\)/, 'custom currency input write through update');
 
-// Language picker — Cluster R FOLLOWUP 4: dynamic from availableLocales()
+// Language picker (Cluster R FOLLOWUP 4): dynamic from availableLocales()
 assert.match(src, /import \{ availableLocales, setLocale as setI18nLocale \} from '\.\.\/\.\.\/\.\.\/i18n\/index\.js'/,
     'imports availableLocales + setLocale from the core i18n module');
 assert.match(src, /buildLanguageOptions\(\)/, 'derives language options dynamically');

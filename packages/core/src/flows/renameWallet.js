@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// renameWallet — change the `name` field on a Wallet record. Pure
+// renameWallet: change the `name` field on a Wallet record. Pure
 // vault metadata update; no signer needed.
 
 import { WalletNotFoundError } from './unlockWallet.js';

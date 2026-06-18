@@ -117,5 +117,5 @@ assert.match(
 );
 
 console.log(
-    'OK — release-gates smoke (threat model §1–§7, reproducible-build README + check script, dry-run exit 0)',
+    'OK: release-gates smoke (threat model §1–§7, reproducible-build README + check script, dry-run exit 0)',
 );

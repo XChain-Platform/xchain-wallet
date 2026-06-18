@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §52 / G162 — Trezor / Ledger signer mocks.
+// Smoke for §52 / G162: Trezor / Ledger signer mocks.
 //
 // Pins:
 //   - test/unit/signers/MockHardwareSigner.js exists, exports

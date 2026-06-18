@@ -8,17 +8,17 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Queued broadcasts — §49.5. When the user signs a tx while offline,
+// Queued broadcasts (§49.5). When the user signs a tx while offline,
 // the signed hex is stashed in a PendingTx record with `status='queued'`
 // and `txHex` populated. On reconnection the user explicitly drains
 // each record (§49.5 explicitly rules out automatic re-broadcast).
 //
 // Flows:
-//   - `enqueueSignedTx`           — create or update a queued PendingTx
-//   - `listQueuedBroadcasts`      — read all status='queued' records
-//   - `drainQueuedBroadcast`      — attempt to broadcast a single queued
+//   - `enqueueSignedTx`           : create or update a queued PendingTx
+//   - `listQueuedBroadcasts`      : read all status='queued' records
+//   - `drainQueuedBroadcast`      : attempt to broadcast a single queued
 //                                   record; transition state on result
-//   - `discardQueuedBroadcast`    — delete a queued record ("Discard" button)
+//   - `discardQueuedBroadcast`    : delete a queued record ("Discard" button)
 //
 // `submitAction` remains the normal path; this module is the offline
 // fallback. Callers wrap `submitAction` calls with try/catch; on a
@@ -46,7 +46,7 @@ export class NoQueuedTxError extends Error {
  * @property {string} action                      e.g. 'SEND'
  * @property {string} actionSummary               plain-English summary
  * @property {string} txHex                       signed tx
- * @property {string} [psbtHex]                   optional — retained for parity with PendingTx shape
+ * @property {string} [psbtHex]                   optional; retained for parity with PendingTx shape
  * @property {string} [existingPendingTxId]       if set, update that record instead of creating a new one
  */
 
@@ -192,7 +192,7 @@ export async function drainQueuedBroadcast({
 }
 
 /**
- * Discard a queued broadcast — user's "Discard" button. Idempotent.
+ * Discard a queued broadcast (the "Discard" button). Idempotent.
  *
  * @param {{ vault: import('../storage/Vault.js').Vault, pendingTxId: string }} opts
  * @returns {Promise<boolean>}   true if a record was removed

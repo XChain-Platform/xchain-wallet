@@ -13,14 +13,14 @@ import { AddressText, InfoTip } from '@xchain-wallet/core/ui';
 import styles from './DerivationPathCrossCheck.module.css';
 
 /**
- * DerivationPathCrossCheck — §18.5. Reusable UI block that sits above
+ * DerivationPathCrossCheck (§18.5): reusable UI block that sits above
  * a sign button when the signer is a hardware device. Displays the
  * three facts the user must confirm against the device screen, then
  * the explicit cross-check instruction copy.
  *
  * Rendered by sign screens (shared SignApproval, the wallet's own
  * send/issue/etc. review stages) whenever `signer.kind` is `trezor`
- * or `ledger`. Does not render anything for software signers — those
+ * or `ledger`. Does not render anything for software signers, which
  * have no physical confirmation step.
  *
  * The wallet explicitly instructs the user to compare BOTH the
@@ -58,7 +58,7 @@ export function DerivationPathCrossCheck({
 
     const [confirmed, setConfirmed] = useState(false);
 
-    // Reset the checkbox whenever the path or address changes — the user
+    // Reset the checkbox whenever the path or address changes. The user
     // must re-confirm if the values they were verifying have rotated under
     // them. Safer than carrying a stale "yes I verified" through a route
     // change.
@@ -83,7 +83,7 @@ export function DerivationPathCrossCheck({
                     Derivation path
                     <InfoTip
                         aria="Derivation path help"
-                        label="The BIP32 path that locates this account inside your seed. Different paths produce different addresses from the same seed — verify it matches what your device displays so the host can't trick the device into signing for a different sub-account."
+                        label="The BIP32 path that locates this account inside your seed. Different paths produce different addresses from the same seed. Verify it matches what your device displays so the host can't trick the device into signing for a different sub-account."
                     />
                 </dt>
                 <dd className={styles.value}><code className={styles.path}>{path}</code></dd>

@@ -10,7 +10,7 @@
 
 // Unit: BIP39 mnemonic generation, validation, seed derivation, and
 // entropy round-trip. Pins the wallet's BIP39 wrapper layer (which is
-// thin glue around @scure/bip39 — but the wrapper boundary is what
+// thin glue around @scure/bip39, but the wrapper boundary is what
 // every wallet flow imports).
 
 import { describe, it, expect } from 'vitest';

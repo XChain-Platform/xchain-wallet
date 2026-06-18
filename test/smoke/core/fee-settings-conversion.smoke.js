@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §44 Fee UX — Step 5 — settings ↔ display rate
+// Smoke for §44 Fee UX, Step 5: settings ↔ display rate
 // conversion helpers.
 
 import { strict as assert } from 'node:assert';

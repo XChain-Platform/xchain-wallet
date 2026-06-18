@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// InfoTip — §37 / G122 contextual tooltip.
+// InfoTip: §37 / G122 contextual tooltip.
 //
 // Self-contained "?" affordance that surfaces a short explanation
 // without claiming layout space inside a form row. Keyboard reachable
@@ -16,7 +16,7 @@
 // announced via `aria-describedby`, and dismisses on focus loss /
 // outside click so a stale bubble doesn't shadow other controls.
 //
-// Sized for the kinds of unfamiliar elements §37 calls out — fee
+// Sized for the kinds of unfamiliar elements §37 calls out: fee
 // estimator tiers, RBF, derivation paths, BIP39 passphrase, ADS
 // thresholds. Not a replacement for inline help that the user must
 // read; the bubble is opt-in and dismissible.
@@ -45,7 +45,7 @@ const BUBBLE_HALF_WIDTH = 130; // ≈ max-width / 2
  */
 export function InfoTip({ label, aria = 'More info', placement = 'top', className }) {
     const [open, setOpen] = useState(false);
-    // Cluster P FOLLOWUP 3 — alignment is measured at open time so the
+    // Cluster P FOLLOWUP 3: alignment is measured at open time so the
     // bubble re-anchors to the start / end of the trigger when its
     // center-anchored extent would clip the viewport. Default 'center'
     // matches the v0.210.0 layout for triggers that comfortably fit.

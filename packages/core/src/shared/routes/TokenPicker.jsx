@@ -29,15 +29,15 @@ const PLATFORM_QUERY_DEBOUNCE_MS = 350;
 const chainRegistry = registryLib.defaultRegistry();
 
 /**
- * TokenPicker — the single "pick a coin or token" screen shared by the
+ * TokenPicker: the single "pick a coin or token" screen shared by the
  * Send and Receive quick-actions (and the markets coin/token picker).
  * Renders a flat scrollable balance list with an inline filter toolbar
  * (free-text search + an All / Coins / Tokens segmented control) docked
  * above it. Selecting a row hands {chainId, tick} to the host.
  *
  * `purpose` is the only behavioural switch:
- *   - `'send'`    — lists only spendable balances the wallet holds.
- *   - `'receive'` — also surfaces every chain the wallet has an address
+ *   - `'send'`    : lists only spendable balances the wallet holds.
+ *   - `'receive'` : also surfaces every chain the wallet has an address
  *                   on (receive is meaningful at zero balance) and runs
  *                   the cross-chain "On the platform" token discovery so
  *                   the user can receive a token they have never held.
@@ -168,7 +168,7 @@ export function TokenPicker({
     const allRows = useMemo(() => {
         const rowsFromBalances = buildBalanceRows(balances, chainRegistry);
         // Receive only: ensure every chain with an address contributes a
-        // native row, even at zero balance — receive is meaningful then.
+        // native row, even at zero balance (receive is meaningful then).
         if (!isReceive || !addressesByChain) return rowsFromBalances;
         const seenChains = new Set();
         for (const r of rowsFromBalances) {
@@ -218,7 +218,7 @@ export function TokenPicker({
     const hiddenSet = useMemo(() => new Set(hiddenTokens), [hiddenTokens]);
     const pinnedSet = useMemo(() => new Set(pinnedTokens), [pinnedTokens]);
 
-    // Platform discovery (receive only) — when the user types a partial
+    // Platform discovery (receive only): when the user types a partial
     // ticker, substring-search every chain the wallet has addresses on and
     // surface matching tokens that aren't already in their balance as a
     // second "On the platform" section. Lets the user receive a token they

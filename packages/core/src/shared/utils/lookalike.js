@@ -8,20 +8,20 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Lookalike address detection — §21.5 + §12.3.
+// Lookalike address detection: §21.5 + §12.3.
 //
 // On paste / blur, compare the entered address against the user's
 // known set (contacts + recent send history). If a known address is a
-// near-match — same length, only one or two characters off — surface
+// near-match (same length, only one or two characters off), surface
 // a warning so a clipboard hijack that swapped a single character
 // can't slip through unnoticed.
 //
 // The Send route feeds in the same `Suggestion[]` it already uses for
 // autocomplete. Because the threshold is per-character (similarity =
 // 1 - editDistance / max(a.length, b.length)), addresses of very
-// different lengths score low and don't fire — exactly what we want
-// (a real typo lands in the same bucket; a totally different chain
-// looks dissimilar).
+// different lengths score low and don't fire. That is exactly what we
+// want: a real typo lands in the same bucket; a totally different chain
+// looks dissimilar.
 
 /**
  * Levenshtein edit distance between two strings. Iterative DP over a

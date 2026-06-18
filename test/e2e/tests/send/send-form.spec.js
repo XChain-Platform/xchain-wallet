@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Send form UX — §29. Exercises everything up to the broadcast
+// Send form UX (§29). Exercises everything up to the broadcast
 // attempt, which against the dev-SDK stub surfaces as a visible
 // error banner. A sibling spec that actually signs + broadcasts
 // lands once the real xchain-sdk is bundled into the web shell.
@@ -17,7 +17,7 @@ import { expect, test } from '@playwright/test';
 
 test.describe('send form', () => {
     test.beforeEach(async ({ page }) => {
-        // Seed a wallet per test — each browser context starts with
+        // Seed a wallet per test; each browser context starts with
         // empty IDB, so we create fresh every time.
         await page.goto('/');
         await page.getByRole('button', { name: 'Create new wallet' }).click();
@@ -40,7 +40,7 @@ test.describe('send form', () => {
         await page.getByLabel('Memo').fill('e2e test');
         await page.getByRole('button', { name: 'Review' }).click();
 
-        // Review stage — summary rows present
+        // Review stage: summary rows present
         await expect(page.getByText('Review')).toBeVisible();
         await expect(page.getByText('bc1qtestrecipient', { exact: false })).toBeVisible();
         await expect(page.getByText('e2e test')).toBeVisible();
@@ -85,7 +85,7 @@ test.describe('send form', () => {
         await page.getByLabel('Password').fill('sendpassword123');
         await page.getByRole('button', { name: 'Send' }).click();
 
-        // Stub SDK errors at the encoder — surfaced inline, not a hang.
+        // Stub SDK errors at the encoder; surfaced inline, not a hang.
         await expect(page.getByRole('alert')).toContainText(
             /xchain-sdk|not yet wired|encoder|createAction/i,
             { timeout: 30_000 },

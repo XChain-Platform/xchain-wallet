@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §56.3 Pre-launch Step 6 of 7 — Reproducible-build
+// Smoke for §56.3 Pre-launch Step 6 of 7: Reproducible-build
 // scaffolding gate. The actual run-twice-and-compare verification
 // has to happen on a fresh dev machine; this smoke catches drift
 // in the scaffolding (digest pinning lost, frozen-lockfile flag
@@ -21,9 +21,9 @@ const results = runReproBuildAudit();
 const failed = results.filter((r) => !r.ok);
 assert.equal(failed.length, 0,
     `repro-build audit: ${failed.length} rule(s) failed:\n${
-        failed.map((r) => `  ✗ ${r.rule} — ${r.detail}`).join('\n')
+        failed.map((r) => `  ✗ ${r.rule}: ${r.detail}`).join('\n')
     }`);
 
 console.log(
-    `OK — repro-build audit smoke (${results.length} rules pass: digest-pinned base + Node pin + locale pins + SOURCE_DATE_EPOCH wiring + frozen-lockfile + sha256 manifest + worktree isolation + asar + xz compression + Level-2 docs)`,
+    `OK: repro-build audit smoke (${results.length} rules pass: digest-pinned base + Node pin + locale pins + SOURCE_DATE_EPOCH wiring + frozen-lockfile + sha256 manifest + worktree isolation + asar + xz compression + Level-2 docs)`,
 );

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Phase 3 Step 3 smoke — Chart panel (§41.3.1).
+// Phase 3 Step 3 smoke: Chart panel (§41.3.1).
 //
 // Runtime coverage of the bucketize helper (pure, Node-safe) plus
 // static wiring checks for the MarketChart component + package.json
@@ -36,7 +36,7 @@ for (const id of ['1m', '5m', '15m', '1h', '4h', '1d', '1w']) {
 }
 assert.equal(DEFAULT_PERIOD_ID, '1h', 'default period is 1h');
 
-// --- 2. bucketizeMatches — empty / degenerate inputs ------------
+// --- 2. bucketizeMatches: empty / degenerate inputs ------------
 
 assert.deepEqual(bucketizeMatches([], { tick1: 'A', tick2: 'B', periodSeconds: 60 }), []);
 assert.deepEqual(bucketizeMatches(null, { tick1: 'A', tick2: 'B', periodSeconds: 60 }), []);
@@ -53,7 +53,7 @@ assert.deepEqual(
 
 // --- 3. Bucketing + OHLCV math ----------------------------------
 
-// MYTOKEN / BTC — give_tick=MYTOKEN means price = get / give.
+// MYTOKEN / BTC: give_tick=MYTOKEN means price = get / give.
 // Bucket = 1h = 3600s. Put three matches in the same bucket + one
 // in the next bucket and verify open/high/low/close + volume.
 const rows = [
@@ -125,5 +125,5 @@ for (const [shell, pkgPath] of [
 }
 
 console.log(
-    'OK — chart-panel smoke (bucketizeMatches OHLCV orientation + volume aggregation + period boundary math + mismatched-pair rows dropped; PERIODS constant covers 7 granularities with 1h default; MarketChart dynamically imports lightweight-charts, fetches via messaging.getMarketHistory, renders line series with period toggle; lightweight-charts declared in extension + web + desktop package.json)',
+    'OK: chart-panel smoke (bucketizeMatches OHLCV orientation + volume aggregation + period boundary math + mismatched-pair rows dropped; PERIODS constant covers 7 granularities with 1h default; MarketChart dynamically imports lightweight-charts, fetches via messaging.getMarketHistory, renders line series with period toggle; lightweight-charts declared in extension + web + desktop package.json)',
 );

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §49.5 / G154 / Cluster G FOLLOWUP 3 — reconnection prompt.
+// Smoke for §49.5 / G154 / Cluster G FOLLOWUP 3: reconnection prompt.
 //
 // QueuedBroadcastBanner now subscribes to useReachability and fires a
 // one-shot toast when the `overall` value transitions from
@@ -120,7 +120,7 @@ assert.ok(
 );
 assert.ok(
     /durationMs: 12_000/.test(effectBody),
-    'toast lingers 12 seconds — long enough to read',
+    'toast lingers 12 seconds (long enough to read)',
 );
 
 // --- 5. Banner DOM gets ref + tabIndex so focus() works ----------------

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// no-jsx-literal-strings — §54 / G172.
+// no-jsx-literal-strings. §54 / G172.
 //
 // Flags raw string literals that render in JSX so translators have a
 // single index of user-facing copy in `i18n/locales/<bcp47>/index.js`.
@@ -30,10 +30,10 @@
 // What the rule allows:
 //
 //   - Empty / whitespace-only strings.
-//   - Strings shorter than `minLength` (default 2) — abbreviations like
+//   - Strings shorter than `minLength` (default 2), abbreviations like
 //     "&" or ":" are punctuation.
 //   - Strings made up entirely of digits / punctuation / one ASCII
-//     letter (e.g. "•", "—", "0x", "1d"). Catches version chips,
+//     letter (e.g. "•", "-", "0x", "1d"). Catches version chips,
 //     status dots, etc.
 //   - Specific allow-listed values via the rule option `allow: [...]`.
 //   - Technical attributes that never render to humans: `className`,
@@ -136,7 +136,7 @@ function isTechnicalAttr(name) {
 }
 
 /**
- * Decide whether a string value is "trivial" enough to ignore — pure
+ * Decide whether a string value is "trivial" enough to ignore: pure
  * whitespace, a single character, all digits / punctuation, or in
  * the explicit allowlist.
  */
@@ -163,7 +163,7 @@ export function shouldSkipFile(filename, extra = []) {
 }
 
 /**
- * Top-level dispatch — given an AST node + filename, return the list
+ * Top-level dispatch: given an AST node + filename, return the list
  * of violations { node, message }. The rule wraps this in an ESLint
  * `create()` and reports each violation through context.report.
  */
@@ -198,19 +198,19 @@ export function findViolations(node, options = {}) {
                     });
                 }
             }
-            // Recurse inside non-flagged attributes too — JSX expression
+            // Recurse inside non-flagged attributes too; JSX expression
             // children may hide further JSX trees.
             visit(n.value);
         } else if (n.type === 'JSXExpressionContainer'
                 && n.expression?.type === 'Literal'
                 && typeof n.expression.value === 'string'
                 && !isTrivialString(n.expression.value, allow, minLength)) {
-            // {'inline literal'} inside JSX content — flag.
+            // {'inline literal'} inside JSX content; flag.
             out.push({
                 node: n.expression,
                 message: `Inline JSX expression "${truncate(n.expression.value)}" should use t('key').`,
             });
-            // Don't descend further — the literal is terminal.
+            // Don't descend further; the literal is terminal.
             return;
         }
 

@@ -8,22 +8,22 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for Phase 2 — Step 4 (piece 2b) — Token Creation Wizard
+// Smoke for Phase 2, Step 4 (piece 2b): Token Creation Wizard
 // scaffold.
 //
 // Asserts:
 //   1. packages/core/src/shared/routes/TokenWizard.jsx exists + exports
 //      the TokenWizard component + the ISSUE-v0 composer used by Step 5
 //      and Step 6 is file-local (not exported from the module's
-//      public surface — we don't want wallet callers composing params
+//      public surface; we don't want wallet callers composing params
 //      directly; they go through messaging.issueToken).
 //   2. The 5 wizard stages + 'done' + 'error' are present as state
 //      literals; each stage wires to the next via setStage.
 //   3. All six templates appear in the TEMPLATES table, Custom is the
 //      only `interactive: true` entry in Step 4.
 //   4. Preview stage consumes decoder.decodeAction with action: 'ISSUE'
-//      and the composed params — that's the contract with Piece 2a.
-//   5. Sign stage calls messaging.issueToken — the helper lands in
+//      and the composed params; that's the contract with Piece 2a.
+//   5. Sign stage calls messaging.issueToken; the helper lands in
 //      Step 5 (piece 2c) but the call-site wiring is in place today.
 //   6. Ticker is uppercased before passing to the decoder / backend.
 //   7. The CSS module ships matching class names for the stage UIs.
@@ -151,7 +151,7 @@ for (const field of ['MINT_ADDRESS_MAX', 'MINT_START_BLOCK', 'MINT_STOP_BLOCK'])
 }
 assert.ok(
     !/p\.MINT_SUPPLY\s*=/.test(edBlock[0]),
-    'edition composer does NOT pre-mint (no MINT_SUPPLY — fair mint)',
+    'edition composer does NOT pre-mint (no MINT_SUPPLY; fair mint)',
 );
 assert.ok(
     !/p\.LOCK_MINT\s*=/.test(edBlock[0]),
@@ -228,7 +228,7 @@ assert.ok(
 
 // --- 6. ISSUE v0 composer --------------------------------------------
 
-// Ticker must be uppercased before hitting the decoder / backend —
+// Ticker must be uppercased before hitting the decoder / backend;
 // protocol §ISSUE rules require A-Z / 0-9 / period. The wizard does
 // it in two places: the Input's onChange (so the user sees it) AND
 // the composer (belt-and-suspenders).
@@ -250,7 +250,7 @@ assert.ok(
     'composer maps divisible → DECIMALS 8 / 0',
 );
 // Custom template flips LOCK_MAX_SUPPLY + LOCK_MINT when lockOnCreate
-// is true (Meme + Collectible set them unconditionally — covered in
+// is true (Meme + Collectible set them unconditionally; covered in
 // Section 3b above).
 assert.ok(
     src.includes("p.LOCK_MAX_SUPPLY = '1'"),
@@ -327,5 +327,5 @@ for (const [shell, appPath] of [
 }
 
 console.log(
-    'OK — token wizard smoke (file exists, 5 stages, 7 templates all interactive, per-template composers + field-visibility map, decoder wiring, messaging.issueToken call-site, Home entry + both App.jsx sub-routes, CSS classes present)',
+    'OK: token wizard smoke (file exists, 5 stages, 7 templates all interactive, per-template composers + field-visibility map, decoder wiring, messaging.issueToken call-site, Home entry + both App.jsx sub-routes, CSS classes present)',
 );

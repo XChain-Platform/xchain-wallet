@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §20 / Cluster X Step 17 — DelegationActionForm watcher-mode
+// Smoke for §20 / Cluster X Step 17: DelegationActionForm watcher-mode
 // branch (DELEGATE rotate vs DELEGATE v2 revoke depending on mode; both wire to DELEGATE).
 
 import { strict as assert } from 'node:assert';

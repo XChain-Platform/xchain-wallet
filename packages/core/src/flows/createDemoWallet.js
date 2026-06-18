@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// createDemoWallet — §25.2 try-before-commit onboarding. Ephemeral
+// createDemoWallet (§25.2): try-before-commit onboarding. Ephemeral
 // wallet whose storage never touches disk (InMemoryBackend), whose
 // password is auto-generated (user never sees it; session ends when
 // the caller drops its references), and whose KDF cost is deliberately
@@ -17,7 +17,7 @@
 // Returns `{ vault, password, ... }` so the caller can drive subsequent
 // flows (receiveAddress, sendToken, etc.) against this demo wallet by
 // passing the same `vault` + `walletId` + `password` back through the
-// standard flow API — same surface, same code path, just backed by an
+// standard flow API, same surface, same code path, just backed by an
 // in-memory backend instead of IndexedDB / chrome.storage / file.
 //
 // Per §25.2 the shell layer is responsible for:
@@ -30,7 +30,7 @@ import { Vault } from '../storage/Vault.js';
 import { InMemoryBackend } from '../storage/backend.js';
 import { createWallet } from './createWallet.js';
 
-// Intentionally weak KDF for demo mode — the in-memory ciphertext never
+// Intentionally weak KDF for demo mode; the in-memory ciphertext never
 // reaches an attacker, so paying ~1s of Argon2id buys nothing and
 // makes the demo feel sluggish.
 const DEMO_KDF_OVERRIDES = { iterations: 1, memory: 8192, parallelism: 1 };

@@ -8,22 +8,22 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// submitWithSigner — §10.4. Reproduces `sdk.submitAction`'s end-to-end
+// submitWithSigner: §10.4. Reproduces `sdk.submitAction`'s end-to-end
 // lifecycle (create → encode → sign → broadcast → wait) but routes
 // signing through a Signer interface instead of an in-memory WIF, so the
 // same wrapper drives Software, Trezor, and Ledger (once those land).
 //
-// §26.5 / G068 — panic-mode signing freeze is enforced at the top of
+// §26.5 / G068: panic-mode signing freeze is enforced at the top of
 // the flow via `assertSigningAllowed()`. See `flows/panicMode.js`.
 //
-// The wrapper does NOT re-derive the caller's pubkey — supply it via
+// The wrapper does NOT re-derive the caller's pubkey; supply it via
 // `encoderOpts.pubkey`. The caller already knew which address/path they
 // were spending from when they built the action; duplicating derivation
 // inside the wrapper would hide a signer-mismatch bug rather than
 // surface it.
 //
 // Step 5 (indexer wait) is opt-in via a `waitForTxid` callback. The SDK
-// bundles `ActionWaiter` but doesn't expose it on the instance — shells
+// bundles `ActionWaiter` but doesn't expose it on the instance. Shells
 // wire this themselves (e.g., via `new ActionWaiter(sdk).waitForTxid`)
 // or skip the wait and poll separately.
 
@@ -33,8 +33,8 @@ import { applyNativeFeePreflight } from './nativeFeePreflight.js';
 /**
  * Thrown when a transaction was signed successfully but the broadcast
  * leg failed (encoder unreachable, network timeout, etc.). Carries the
- * signed hex so callers — typically `submitAction` and the bridge
- * background handlers — can hand it off to the queued-broadcast surface
+ * signed hex so callers (typically `submitAction` and the bridge
+ * background handlers) can hand it off to the queued-broadcast surface
  * (§49.5) instead of dropping the work.
  *
  * Cluster G FOLLOWUP 1.
@@ -69,10 +69,10 @@ export class BroadcastFailedError extends Error {
 
 /**
  * @typedef {Object} SubmitEncoderOpts
- * @property {string} pubkey                 hex; caller-supplied — we do NOT derive from the signer
+ * @property {string} pubkey                 hex; caller-supplied (we do NOT derive from the signer)
  * @property {string} [change]               change address
  * @property {unknown[]} [utxos]             hand-selected utxos (otherwise encoder selects)
- * @property {string} [rawData]            binary string (Latin-1) — gated-FILE ciphertext, ECIES envelopes
+ * @property {string} [rawData]            binary string (Latin-1): gated-FILE ciphertext, ECIES envelopes
  * @property {string} [encoding]             'OP_RETURN' | 'P2SH' | 'P2WSH' | ... (encoder chooses if omitted)
  * @property {number} [fee]                  absolute fee in sats
  * @property {number} [feePerKb]
@@ -139,7 +139,7 @@ export async function submitWithSigner({
         throw new Error('submitWithSigner: signingPaths must be a non-empty array');
     }
 
-    // §26.5 / G068 — refuse to drive any signer while panic mode is on.
+    // §26.5 / G068: refuse to drive any signer while panic mode is on.
     // Cleared automatically once the timer expires.
     assertSigningAllowed();
 
@@ -147,17 +147,17 @@ export async function submitWithSigner({
     const encoder = sdk.encoder;
     if (!encoder) {
         throw new Error(
-            'submitWithSigner: SDK encoder not initialized — call sdkRegistry.initActive([chainId]) first',
+            'submitWithSigner: SDK encoder not initialized; call sdkRegistry.initActive([chainId]) first',
         );
     }
 
-    // Step 1 — create action string (no network call, just formatting).
+    // Step 1: create action string (no network call, just formatting).
     onProgress('creating', { action: actionData.action });
     const createResult = sdk.actions.createAction(actionData);
 
-    // Step 1b — native-coin fee pre-flight. When the caller opted to pay the protocol fee in the
+    // Step 1b: native-coin fee pre-flight. When the caller opted to pay the protocol fee in the
     // native coin, this sizes the FEE_DESTINATION output and REFUSES (throws NativeFeeForfeitError)
-    // a transaction that can't be safely priced — a failed native-fee action forfeits the fee.
+    // a transaction that can't be safely priced. A failed native-fee action forfeits the fee.
     // No-op when payFeeInNativeCoin is not set.
     const preflight = await applyNativeFeePreflight({
         sdk,
@@ -168,14 +168,14 @@ export async function submitWithSigner({
     });
     const effectiveEncoderOpts = preflight.encoderOpts;
 
-    // Step 2 — encode to PSBT via the encoder service.
+    // Step 2: encode to PSBT via the encoder service.
     onProgress('encoding', { actionString: createResult.actionString });
     const encoded = await encoder.createTx({
         data: createResult.actionString,
         ...effectiveEncoderOpts,
     });
 
-    // Step 3 — sign via the injected Signer.
+    // Step 3: sign via the injected Signer.
     onProgress('signing', { encoding: encoded.encoding });
     const signed = await signer.signPsbt({
         psbtHex: encoded.psbt,
@@ -183,7 +183,7 @@ export async function submitWithSigner({
         signingPaths,
     });
 
-    // Step 4 — broadcast phase-1 tx. Wrap rejections so submitAction
+    // Step 4: broadcast phase-1 tx. Wrap rejections so submitAction
     // (and ultimately the §49.5 queued-broadcast surface) can recover
     // the signed hex instead of losing it on a network blip.
     onProgress('broadcasting', { txid: signed.txid });
@@ -201,7 +201,7 @@ export async function submitWithSigner({
         });
     }
 
-    // Step 4b — P2SH/P2WSH two-phase: encoder paid to a script, we now
+    // Step 4b: P2SH/P2WSH two-phase: encoder paid to a script, we now
     // spend that output with a second tx. Signer signs phase-2 too.
     let finalTxid = signed.txid;
     let finalSigned = signed;
@@ -213,13 +213,13 @@ export async function submitWithSigner({
             // Phase 2 spends the P2SH/P2WSH output created by phase 1. The encoder
             // identifies that output from the phase-1 transaction itself, so p2shHash
             // is the broadcast phase-1 txid (the create_tx response carries only
-            // { psbt, encoding } — there is no separate hash field).
+            // { psbt, encoding }; there is no separate hash field).
             p2shHash: signed.txid,
             p2shHex: signed.txHex,
             // Phase 2 re-derives the P2SH/P2WSH reveal script chunks from the SAME
             // action data + encoding used in phase 1. Omitting these makes the encoder
             // default to empty data and auto-select OP_RETURN, producing reveal outputs
-            // that don't match the phase-1 script — the spend would be unspendable and
+            // that don't match the phase-1 script, making the spend unspendable and
             // lock funds in the script address. rawData is undefined-safe (the encoder
             // client skips it when absent) and carries gated-FILE / ECIES MESSAGE v2 payloads.
             data: createResult.actionString,
@@ -263,7 +263,7 @@ export async function submitWithSigner({
         nativeFeeQuote: preflight.quote,
     };
 
-    // Step 5 — optional indexer confirmation.
+    // Step 5: optional indexer confirmation.
     if (waitForTxid) {
         onProgress('waiting', { txid: finalTxid });
         const indexed = await waitForTxid(finalTxid, waitOpts);

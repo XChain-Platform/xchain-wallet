@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Product identity constants — spec §5.
+// Product identity constants (spec §5).
 //
 // This module is the single source of truth for user-facing brand
 // strings and tick pointers. §5.5 placeholders (tagline candidates,
@@ -46,7 +46,7 @@ export const ACCENT_SECONDARY = '#7B2C8F';
 export const DEFAULT_EXPLORER_BASE = 'https://explorer.xchain.io';
 export const DEFAULT_HUB_BASE = 'https://hub.xchain.io';
 
-// Filenames (not URLs) — UI code calls `brandingUrl(filename)` to get a
+// Filenames (not URLs). UI code calls `brandingUrl(filename)` to get a
 // bundler-friendly URL. Keep these as strings so chain descriptors can
 // carry them without importing Vite-specific syntax.
 export const LOGO_FILE = 'xchain-color-750.png';

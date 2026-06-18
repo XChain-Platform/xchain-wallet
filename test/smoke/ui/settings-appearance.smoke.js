@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §35 Settings — Step 4 — Appearance panel.
+// Smoke for §35 Settings, Step 4: Appearance panel.
 //
 // Source-level checks: AppearanceSection wires `useSettings`, renders
 // a Theme <select> with the three values (system, light, dark) the

@@ -8,9 +8,9 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §20 / Cluster X Step 22 — CoinpayForm watcher-mode branch.
+// Smoke for §20 / Cluster X Step 22: CoinpayForm watcher-mode branch.
 // COINPAY needs encoderOpts.customOutputs to direct the buyer's
-// payment to the matched seller — preserved through the watcher-mode
+// payment to the matched seller; preserved through the watcher-mode
 // buildActionPsbtRequest call.
 
 import { strict as assert } from 'node:assert';

@@ -12,7 +12,7 @@ import { useEffect, useState } from 'react';
 import { useMessaging } from '../useMessaging.js';
 
 /**
- * §27.6 + §27.5 — shared tick-metadata lookup for token-detail and
+ * §27.6 + §27.5: shared tick-metadata lookup for token-detail and
  * collectibles surfaces. Cluster I FOLLOWUP 3 + Cluster C FOLLOWUP 3.
  *
  * Returns the normalized `TokenInfo` record (description, creator,
@@ -20,7 +20,7 @@ import { useMessaging } from '../useMessaging.js';
  * tick) pair, or `null` when:
  *   - `chainId` or `tick` is missing,
  *   - `messaging.getTokenInfo` isn't wired in this build,
- *   - the lookup fails (silently — caller renders "no metadata" copy).
+ *   - the lookup fails (silently; caller renders "no metadata" copy).
  *
  * Module-level cache keyed by `chainId:tick` survives re-mounts inside
  * a single session so navigating Detail → back → Detail (or hovering
@@ -59,7 +59,7 @@ export function useTokenInfo({ chainId, tick, skip = false }) {
                 cache.set(key, next);
                 setInfo(next);
             })
-            .catch(() => { /* silent — renderer falls back to "no metadata" copy */ });
+            .catch(() => { /* silent; renderer falls back to "no metadata" copy */ });
         return () => { cancelled = true; };
     }, [key, skip, messaging, chainId, tick]);
 
@@ -67,8 +67,8 @@ export function useTokenInfo({ chainId, tick, skip = false }) {
 }
 
 /**
- * Promise-shaped sibling of the hook, sharing the same module cache —
- * for callers that classify SETS of rows (e.g. the Collectibles tab)
+ * Promise-shaped sibling of the hook, sharing the same module cache.
+ * For callers that classify SETS of rows (e.g. the Collectibles tab)
  * rather than rendering one tick. Resolves null on any failure or when
  * `messaging.getTokenInfo` isn't wired, mirroring the hook's silence.
  *
@@ -91,7 +91,7 @@ export function fetchTokenInfo(messaging, chainId, tick) {
 }
 
 /**
- * Test helper — clears the module-level tick-info cache between spec
+ * Test helper: clears the module-level tick-info cache between spec
  * runs so a stale mock doesn't leak across cases.
  */
 export function __clearTokenInfoCache() {

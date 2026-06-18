@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Label-sync commitment key + payload codec — §19.5.2.
+// Label-sync commitment key + payload codec (§19.5.2).
 //
 // Deterministic, seed-derived encryption that lets labels + contacts
 // survive a from-seed restore WITHOUT an external backup file. The
@@ -20,7 +20,7 @@
 //   Publishing labels on-chain exposes THAT the user has published
 //   labels, but not what those labels are (encrypted). The commitment
 //   key is deterministic from the seed, so an adversary who knows the
-//   seed can find the labels — but if they know the seed, they already
+//   seed can find the labels. If they know the seed, they already
 //   have the funds. Labels are no worse off.
 
 import { sha256 } from '@noble/hashes/sha2';
@@ -30,7 +30,7 @@ export const LABEL_SYNC_DOMAIN = 'xchain-wallet-label-sync';
 
 /**
  * SHA256("xchain-wallet-label-sync" || seed). Deterministic; the same
- * seed always produces the same key. 32 bytes — directly usable as an
+ * seed always produces the same key. 32 bytes, directly usable as an
  * AES-256 key, no stretching needed (seed already has full entropy).
  *
  * @param {Uint8Array} seed          64 bytes for BIP39, 16 bytes for Counterwallet
@@ -80,7 +80,7 @@ export function computeLabelSyncDiscoveryName(commitmentKey) {
 /**
  * Encrypt a LabelSyncBody into the ciphertext that lands in the FILE
  * action's content. Output layout is the AEAD module's packed
- * `iv || ct || tag` blob — the FILE action carries opaque bytes, so
+ * `iv || ct || tag` blob. The FILE action carries opaque bytes, so
  * there's no reason to split iv/tag into separate fields the way the
  * §19.4 envelope does.
  *

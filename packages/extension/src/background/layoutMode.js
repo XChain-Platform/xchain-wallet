@@ -10,9 +10,9 @@
 
 // Layout-mode controller for the MV3 action button.
 //
-//   `popup`     — clicking the toolbar icon opens the wallet in a 360×600
+//   `popup`     - clicking the toolbar icon opens the wallet in a 360×600
 //                 popup (Chrome's default, what we shipped first).
-//   `sidepanel` — clicking the toolbar icon opens (or closes) the
+//   `sidepanel` - clicking the toolbar icon opens (or closes) the
 //                 wallet in Chrome's side panel, à la UniSat. Great
 //                 for users who want the wallet visible while they
 //                 browse a dApp.
@@ -86,7 +86,7 @@ export async function applyLayoutMode(mode) {
             }
         }
     } catch (e) {
-        // Surface in console without taking down the worker — bad mode
+        // Surface in console without taking down the worker; bad mode
         // shouldn't break the popup flow, which is the safe default.
         // eslint-disable-next-line no-console -- background worker diagnostics: console is the only debug channel
         console.warn('[xchain-wallet/extension] applyLayoutMode failed:', e);

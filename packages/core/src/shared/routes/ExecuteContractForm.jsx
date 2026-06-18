@@ -31,7 +31,7 @@ import styles from './IssueTokenForm.module.css';
 const chainRegistry = registryLib.defaultRegistry();
 
 /**
- * EXECUTE contract method form — §42.4.
+ * EXECUTE contract method form (§42.4).
  *
  * Manual authoring lane only: method name + pipe-delimited params.
  * The spec's ABI-driven lane ("if a contract publishes an ABI, the
@@ -40,10 +40,10 @@ const chainRegistry = registryLib.defaultRegistry();
  * (FOLLOWUP 2 in claude/reports/specs/2026-04-24_phase4-monaco-editor.md).
  *
  * Inputs split the pipe-delimited parameter string into an array on
- * submit — the SDK validator expects PARAMS as an array, not a single
+ * submit. The SDK validator expects PARAMS as an array, not a single
  * string, and enforces no-pipe-or-semicolon inside each element.
  *
- * Gas limit defaults to 50000 if the user leaves the field blank —
+ * Gas limit defaults to 50000 if the user leaves the field blank.
  * contracts.suggestGasLimit is a source-code heuristic, not available
  * from the contract row alone, so an execute-time estimate isn't
  * automatic. Users override freely.
@@ -123,10 +123,10 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, on
     const [hwStatus, setHwStatus] = useState('idle');
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
 
-    // §20 / Cluster W FOLLOWUP 5 — watcher-mode encode-only branch.
+    // §20 / Cluster W FOLLOWUP 5: watcher-mode encode-only branch.
     const { isWatcherMode } = useWalletMode();
 
-    // Phase F — permissions-manifest consent disclosure, shown inline in
+    // Phase F: permissions-manifest consent disclosure, shown inline in
     // the review `<dl>`. Deferred via `skip` until the user reaches the
     // review stage so we don't fetch a manifest the user may never see.
     const manifest = useContractManifest({
@@ -169,11 +169,11 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, on
         }
         // Validator forbids pipes/semicolons inside each PARAM, which
         // our split eliminates; it also forbids them at the field
-        // boundaries — nothing we can do about those except surface
+        // boundaries. Nothing we can do about those except surface
         // clearly below.
         for (const p of paramsArray) {
             if (p.includes(';')) {
-                setFormError(`Parameter "${p}" contains a semicolon — not allowed in PARAMS.`);
+                setFormError(`Parameter "${p}" contains a semicolon, which is not allowed in PARAMS.`);
                 return;
             }
         }
@@ -278,7 +278,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, on
                 <p className={styles.summary}>Method call broadcast.</p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Txid</dt>
-                    <dd className={styles.detailsValue}>{String(txid || '—')}</dd>
+                    <dd className={styles.detailsValue}>{String(txid || '(none)')}</dd>
                 </dl>
                 <div className={styles.actions}>
                     <Button variant="primary" onClick={onBack}>Done</Button>
@@ -330,7 +330,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, on
                 </dl>
                 {isWatcherMode ? (
                     <p className={styles.hint}>
-                        Watcher mode — this wallet will build an unsigned transaction.
+                        Watcher mode: this wallet will build an unsigned transaction.
                         Sign it on your Signer-mode wallet, then bring the
                         signed transaction to a Full-mode wallet to broadcast.
                     </p>
@@ -401,7 +401,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, on
             />
             <Input
                 label="Params (optional)"
-                hint="Pipe-delimited arguments, e.g. foo|42|bc1q… — leave blank for no-arg methods."
+                hint="Pipe-delimited arguments, e.g. foo|42|bc1q… Leave blank for no-arg methods."
                 value={paramsText}
                 onChange={(e) => setParamsText(e.target.value)}
                 autoComplete="off"

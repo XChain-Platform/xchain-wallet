@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for Phase 4 — Step 7 of 23 — Staking dashboard (§42.7.4).
+// Smoke for Phase 4, Step 7 of 23: Staking dashboard (§42.7.4).
 
 import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
@@ -165,5 +165,5 @@ for (const [shell, appPath] of [
 }
 
 console.log(
-    'OK — staking dashboard smoke (StakingDashboard shared route + four staking flows + bg handlers + 3-shell messaging + Home onStaking + BTC gate via useBtcAddressesPresent)',
+    'OK: staking dashboard smoke (StakingDashboard shared route + four staking flows + bg handlers + 3-shell messaging + Home onStaking + BTC gate via useBtcAddressesPresent)',
 );

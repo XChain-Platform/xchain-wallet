@@ -14,16 +14,16 @@
 // which isn't bundled yet. This smoke exercises what CAN be verified
 // deterministically today:
 //
-//   1. Static wiring — Send.jsx exists with the expected stages
+//   1. Static wiring: Send.jsx exists with the expected stages
 //      (form / review / submitting / done), validation rules (memo,
 //      amount, word counts), messaging.sendToken helper present, App
 //      sub-route + Home onSend prop activated.
-//   2. Messaging round-trip — `sendToken` goes through `action.send`
+//   2. Messaging round-trip: `sendToken` goes through `action.send`
 //      which reaches the core flow, which blows up on the dev-SDK
 //      stub at the encoder step. The flow still wraps the error in
 //      the host's response envelope, so the popup side gets a
 //      structured error (not a hang). Verifying this guarantees the
-//      UX "Send failed — <reason>" path stays wired.
+//      UX "Send failed: <reason>" path stays wired.
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
@@ -172,7 +172,7 @@ try {
     thrown = err;
 }
 assert.ok(thrown, 'Send against dev-SDK stub surfaces an error');
-// The error message varies by exactly which step the stub trips on —
+// The error message varies by exactly which step the stub trips on;
 // accept any of the obvious "SDK not wired" surfaces.
 assert.match(
     thrown.message,
@@ -183,5 +183,5 @@ assert.match(
 IndexedDBStorageBackend.prototype._openStore = originalOpen;
 
 console.log(
-    'OK — web send smoke (static wiring + sendToken error surface against dev-SDK stub)',
+    'OK: web send smoke (static wiring + sendToken error surface against dev-SDK stub)',
 );

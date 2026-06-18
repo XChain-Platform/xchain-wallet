@@ -8,12 +8,12 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §24 / G055 — Resume-last-view on unlock.
+// Smoke for §24 / G055: Resume-last-view on unlock.
 //
 // Verifies:
 //   1. `lastViewMemory.js` exposes the helper surface and a frozen
 //      `RESUMABLE_VIEWS` allowlist.
-//   2. Read/write/clear behave correctly under a stub localStorage —
+//   2. Read/write/clear behave correctly under a stub localStorage,
 //      including filtering out non-resumable views, treating Home as
 //      the implicit default (no entry written), and the storage
 //      defensiveness (missing localStorage / throwing localStorage
@@ -47,7 +47,7 @@ for (const view of ['home', 'history', 'addresses', 'actions', 'contacts', 'mess
         `RESUMABLE_VIEWS includes '${view}'`);
 }
 
-// 2. Runtime — exercise read/write/clear with a stub localStorage.
+// 2. Runtime: exercise read/write/clear with a stub localStorage.
 const stub = {};
 const stubStorage = {
     getItem(key) { return key in stub ? stub[key] : null; },
@@ -68,7 +68,7 @@ assert.equal(readLastView(W1), null, 'fresh storage reads as null');
 
 // Writing 'home' is a no-op (Home is the implicit default).
 writeLastView(W1, 'home');
-assert.equal(readLastView(W1), null, 'home is the implicit default — not stored');
+assert.equal(readLastView(W1), null, 'home is the implicit default (not stored)');
 assert.equal(stub['xc:lastView:' + W1], undefined, 'home write removes any existing entry');
 
 // Writing a resumable non-home view persists.
@@ -83,9 +83,9 @@ assert.equal(readLastView(W1), 'history', 'first walletId still has its value');
 
 // Writing a non-resumable view no-ops.
 writeLastView(W1, 'send');
-assert.equal(readLastView(W1), 'history', 'send is non-resumable — no overwrite');
+assert.equal(readLastView(W1), 'history', 'send is non-resumable (no overwrite)');
 writeLastView(W1, 'token-detail');
-assert.equal(readLastView(W1), 'history', 'token-detail is non-resumable — no overwrite');
+assert.equal(readLastView(W1), 'history', 'token-detail is non-resumable (no overwrite)');
 
 // Clearing drops the entry.
 clearLastView(W1);
@@ -109,11 +109,11 @@ for (const key of Object.keys(stub)) {
 assert.equal(wroteNullKey, false, 'null/empty walletId never produces a storage key');
 
 // A persisted view that's no longer in the resumable set reads as null
-// (handles spec drift — view was removed but a stale entry survives).
+// (handles spec drift: view was removed but a stale entry survives).
 stub['xc:lastView:' + W1] = 'not-a-real-view';
 assert.equal(readLastView(W1), null, 'persisted view outside resumable set reads null');
 
-// Defensiveness — a localStorage that throws on every call must not crash.
+// Defensiveness: a localStorage that throws on every call must not crash.
 const throwingStorage = {
     getItem() { throw new Error('boom'); },
     setItem() { throw new Error('boom'); },
@@ -152,4 +152,4 @@ for (const shellPath of shells) {
         `${shellPath} calls useLastView with active wallet / current view / setter`);
 }
 
-console.log('OK — last-view memory + useLastView hook + 3 shells wiring smoke');
+console.log('OK: last-view memory + useLastView hook + 3 shells wiring smoke');

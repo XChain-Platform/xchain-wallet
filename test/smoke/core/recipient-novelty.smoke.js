@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §29 Send/Receive — Step 3 — recipientNovelty helper.
+// Smoke for §29 Send/Receive, Step 3: recipientNovelty helper.
 
 import { strict as assert } from 'node:assert';
 import { checkRecipientNovelty } from '../../../packages/core/src/flows/recipientNovelty.js';

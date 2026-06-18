@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §30.4 / G088 (closes paired G042) — PSBT paste-in form.
+// Smoke for §30.4 / G088 (closes paired G042): PSBT paste-in form.
 // Verifies the new PsbtSignForm component, its messaging endpoints
 // (parsePsbtRequest + signPsbtUserInitiated), the background handlers
 // (psbt.parse + auth.signPsbt), and the wiring into both shells'

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// SignCredentials — shared sign-screen block that switches between
+// SignCredentials: shared sign-screen block that switches between
 // the software-wallet password input and the hardware-signer
 // `HwSignBlock` based on `fromAddress.source`. Every review/sign
 // form in the wallet renders this; the form owns the Submit button
@@ -47,8 +47,8 @@ import { HwSignBlock } from './HwSignBlock.jsx';
  * @param {string | null} [props.submitError]
  * @param {boolean} [props.disabled]
  * @param {(opts: { signerId: string, chainId?: string }) => Promise<any>} [props.getSignerStatus]
- * @param {{ vendor: string, model: string, firmwareVersion: string | null } | null} [props.signerInfo]   firmware metadata; passed through to HwSignBlock so the firmware-update warning banner renders. Optional — when omitted, no banner shows (callers that haven't yet looked up the SignerRecord render gracefully).
- * @param {boolean} [props.unlocked]   when true for a software wallet, the password input is hidden — the unlocked session signs without it ("password only at unlock"). HW signing is unaffected (still confirms on-device).
+ * @param {{ vendor: string, model: string, firmwareVersion: string | null } | null} [props.signerInfo]   firmware metadata passed through to HwSignBlock so the firmware-update warning banner renders. Optional: when omitted, no banner shows (callers that haven't yet looked up the SignerRecord render gracefully).
+ * @param {boolean} [props.unlocked]   when true for a software wallet, the password input is hidden; the unlocked session signs without it ("password only at unlock"). HW signing is unaffected (still confirms on-device).
  */
 export function SignCredentials({
     fromAddress,
@@ -85,7 +85,7 @@ export function SignCredentials({
             />
         );
     }
-    // Unlocked software session — no password needed ("password only at
+    // Unlocked software session: no password needed ("password only at
     // unlock"). Show a brief note instead of the input; the form's submit
     // gate is relaxed in parallel (see useSignerReady).
     if (unlocked) {
@@ -100,7 +100,7 @@ export function SignCredentials({
                     color: 'var(--xc-text-muted)',
                 }}
             >
-                <span aria-hidden="true">🔓</span> Wallet unlocked — no password needed.
+                <span aria-hidden="true">🔓</span> Wallet unlocked. No password needed.
             </p>
         );
     }
@@ -120,7 +120,7 @@ export function SignCredentials({
 }
 
 /**
- * Helper — inspects a fromAddress to decide whether the parent form
+ * Helper: inspects a fromAddress to decide whether the parent form
  * should follow the HW submit path. Exported so callers can mirror
  * the detection logic in their handleSubmit without duplicating it.
  *

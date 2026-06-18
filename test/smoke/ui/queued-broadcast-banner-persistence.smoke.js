@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// §49 / Cluster G FOLLOWUP 4 smoke — QueuedBroadcastBanner mounted in
+// §49 / Cluster G FOLLOWUP 4 smoke: QueuedBroadcastBanner mounted in
 // the FullLayoutWithNav header slot so the banner persists across
 // every unlocked view (Send, History, Markets, …) instead of only
 // rendering above Home.
@@ -20,7 +20,7 @@
 //      (flex 1 1 auto with --xc-screen-h reset) so the banner sits
 //      above a Screen child that still fills the remaining space.
 //   3. Web App.jsx no longer mounts QueuedBroadcastBanner above the
-//      Home fallback — it's now in the FullLayoutWithNav.header slot.
+//      Home fallback; it's now in the FullLayoutWithNav.header slot.
 //   4. Desktop App.jsx imports QueuedBroadcastBanner and threads it
 //      through the same header slot (it never had the Home-only
 //      mount before this change).
@@ -92,5 +92,5 @@ assert.ok(
 );
 
 console.log(
-    'OK — queued-broadcast-banner-persistence smoke (§49 / Cluster G FOLLOWUP 4 — FullLayoutWithNav.header slot mounts QueuedBroadcastBanner above every unlocked view; .mainBody flex column resets --xc-screen-h; web App drops the Home-only mount; desktop App gains the banner for the first time)',
+    'OK: queued-broadcast-banner-persistence smoke (§49 / Cluster G FOLLOWUP 4: FullLayoutWithNav.header slot mounts QueuedBroadcastBanner above every unlocked view; .mainBody flex column resets --xc-screen-h; web App drops the Home-only mount; desktop App gains the banner for the first time)',
 );

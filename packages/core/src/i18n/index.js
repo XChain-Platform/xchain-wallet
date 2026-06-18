@@ -8,26 +8,26 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// i18n helper — §54.
+// i18n helper: §54.
 //
 // Tiny runtime with no dependencies. API surface:
 //
-//   t(key, vars?)            — lookup + interpolate
-//   setLocale(locale)        — switch dictionary at runtime (triggers
+//   t(key, vars?)            - lookup + interpolate
+//   setLocale(locale)        - switch dictionary at runtime (triggers
 //                              onChange callbacks)
-//   onLocaleChange(fn)       — subscribe; returns an unsubscribe fn
-//   registerLocale(code, d)  — add a dictionary at runtime
-//   getLocale()              — current locale code
-//   availableLocales()       — codes of registered dictionaries
+//   onLocaleChange(fn)       - subscribe; returns an unsubscribe fn
+//   registerLocale(code, d)  - add a dictionary at runtime
+//   getLocale()              - current locale code
+//   availableLocales()       - codes of registered dictionaries
 //
 // Interpolation supports:
 //
-//   {name}                                       — simple substitution
-//   {count, plural, one {…} other {…}}           — ICU plural (Intl.PluralRules)
-//   {kind, select, mainnet {…} other {…}}        — ICU select (exact match)
+//   {name}                                       - simple substitution
+//   {count, plural, one {…} other {…}}           - ICU plural (Intl.PluralRules)
+//   {kind, select, mainnet {…} other {…}}        - ICU select (exact match)
 //
 // Inside plural / select cases, `#` is replaced by the value of the
-// argument. Nested ICU patterns are NOT supported — that's a deferred
+// argument. Nested ICU patterns are NOT supported (that's a deferred
 // piece per §54 / G173. The full ICU grammar can be swapped in later
 // (formatjs is the obvious choice) without changing the dictionary
 // shape, so dictionaries authored against this subset will keep
@@ -107,7 +107,7 @@ export function t(key, vars) {
 }
 
 /**
- * Pure substitution helper — exported separately for callers that
+ * Pure substitution helper, exported separately for callers that
  * already have a template string in hand (e.g. from an error envelope).
  *
  * Implements a pragmatic ICU MessageFormat subset:
@@ -170,7 +170,7 @@ function renderArg(inner, vars, locale) {
     const value = getVar(name, vars);
     if (type === 'plural') return resolvePlural(name, value, body, vars, locale);
     if (type === 'select') return resolveSelect(value, body, vars);
-    // Unknown type — fall back to plain substitution.
+    // Unknown type: fall back to plain substitution.
     return value;
 }
 

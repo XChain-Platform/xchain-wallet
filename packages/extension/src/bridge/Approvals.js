@@ -8,25 +8,25 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Approvals interface — §43.4 request-approval flow.
+// Approvals interface: §43.4 request-approval flow.
 //
 // Bridge handlers consult `ConnectedSite.permissions` first; anything
 // that isn't already permitted (`canSignAction[KIND] === 'always'`,
 // `canSignMessage === true`) must route through the user's approval
-// popup before proceeding. The background doesn't open popups itself
-// — shells inject an `Approvals` implementation that knows how to
+// popup before proceeding. The background doesn't open popups itself;
+// shells inject an `Approvals` implementation that knows how to
 // prompt the user (open chrome.action popup, window.open for desktop,
 // etc.).
 //
 // The default `rejectAll` implementation refuses everything with
-// `USER_APPROVAL_REQUIRED` — callers who haven't wired the popup get
+// `USER_APPROVAL_REQUIRED`. Callers who haven't wired the popup get
 // a structured error they can bubble up to the dApp.
 //
 // The shell's real implementation should:
 //   1. Open an approval popup pre-populated with origin + request
 //   2. Await the user's decision
-//   3. Return `{ approved: true, … }` with any "save permission" flag
-//   4. On reject, return `{ approved: false }` — the bridge surfaces
+//   3. Return `{ approved: true, ... }` with any "save permission" flag
+//   4. On reject, return `{ approved: false }`. The bridge surfaces
 //      this to the dApp as `USER_REJECTED`.
 
 /**
@@ -94,7 +94,7 @@ export const rejectAllApprovals = {
 export class ApprovalRequiredError extends Error {
     /** @param {string} operation */
     constructor(operation) {
-        super(`bridge: user approval required for "${operation}" — wire Approvals in the shell`);
+        super(`bridge: user approval required for "${operation}" (wire Approvals in the shell)`);
         this.name = 'ApprovalRequiredError';
         this.operation = operation;
         this.code = 'USER_APPROVAL_REQUIRED';

@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 // Unit: shared/MessagingContext + shared/useMessaging.
-// useMessaging is a React hook — tests via renderHook (React Testing Library).
+// useMessaging is a React hook; tests via renderHook (React Testing Library).
 
 import { describe, it, expect } from 'vitest';
 import { createContext } from 'react';

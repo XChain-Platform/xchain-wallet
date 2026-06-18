@@ -8,14 +8,14 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// buildActionPsbt — §20 / Cluster W FOLLOWUP 5. Generalized watcher-mode
+// buildActionPsbt: §20 / Cluster W FOLLOWUP 5. Generalized watcher-mode
 // helper that builds an UNSIGNED PSBT for any XChain action without
 // unlocking the wallet, calling a signer, or broadcasting. The user
 // transports the resulting hex to a separate Signer-mode wallet, gets
 // it signed, and brings the signed PSBT back to a Full-mode wallet to
 // broadcast.
 //
-// This is the encode-only path through `submitWithSigner` — Steps 1 + 2
+// This is the encode-only path through `submitWithSigner`: Steps 1 + 2
 // (createAction + encoder.createTx) and nothing else. SEND has its own
 // dedicated `buildSendPsbt` because the Send form layers fee tiering,
 // recent-destinations, and ADS donations on top; the rest of the action
@@ -85,7 +85,7 @@ export async function buildActionPsbt(opts) {
     const encoder = sdk?.encoder;
     if (!encoder) {
         throw new Error(
-            `buildActionPsbt: SDK encoder not initialized for "${opts.chainId}" — call sdkRegistry.initActive([chainId]) first`,
+            `buildActionPsbt: SDK encoder not initialized for "${opts.chainId}"; call sdkRegistry.initActive([chainId]) first`,
         );
     }
 

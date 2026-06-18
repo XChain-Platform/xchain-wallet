@@ -29,11 +29,11 @@ const chainRegistry = registryLib.defaultRegistry();
 
 // Contract-targeted staking is BTC-only at launch (mirrors capability staking's
 // indexer-side coin gate). All staking actions in this form go through STAKE v3 /
-// UNSTAKE v1 / DELEGATE v1 — capability staking lives in the separate StakeForm.
+// UNSTAKE v1 / DELEGATE v1; capability staking lives in the separate StakeForm.
 const STAKE_COIN = 'bitcoin';
 
 /**
- * ContractStakeForm — STAKE v3 / UNSTAKE v1 / DELEGATE v1 authoring surface.
+ * ContractStakeForm: STAKE v3 / UNSTAKE v1 / DELEGATE v1 authoring surface.
  *
  * Entered from ContractDetail.jsx when the target contract opted into staking
  * (cooldown_blocks set at DEPLOY v1). The form prominently surfaces the
@@ -64,10 +64,10 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, onBa
 
     const [fromAddressId, setFromAddressId] = useState(/** @type {string | null} */ (null));
 
-    // Contract metadata (cooldown + slash destination) — fetched to surface in the UI
+    // Contract metadata (cooldown + slash destination), fetched to surface in the UI
     const [contractMeta, setContractMeta] = useState(/** @type {{ cooldown: number|null, slashDestination: string|null, valid: boolean } | null} */ (null));
 
-    // Mode selection — defaults to stake (the most common operation)
+    // Mode selection, defaults to stake (the most common operation)
     const [mode, setMode] = useState(/** @type {'stake'|'unstake'|'delegate'} */ ('stake'));
     const [amount, setAmount] = useState('');
     const [signingPubkey, setSigningPubkey] = useState('');
@@ -282,7 +282,7 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, onBa
         return wrap(
             <>
                 <div role="alert" className={styles.error}>
-                    Contract #{contractActionIndex} is not stakeable — its DEPLOY did not
+                    Contract #{contractActionIndex} is not stakeable. Its DEPLOY did not
                     set a cooldown duration. Staking is only available on contracts that
                     explicitly opted in at deploy time.
                 </div>
@@ -310,7 +310,7 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, onBa
                 </p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Txid</dt>
-                    <dd className={styles.detailsValue}>{String(txid || '—')}</dd>
+                    <dd className={styles.detailsValue}>{String(txid || '(pending)')}</dd>
                 </dl>
                 <div className={styles.actions}>
                     <Button variant="primary" onClick={onBack}>Done</Button>
@@ -359,7 +359,7 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, onBa
                 </dl>
                 {isWatcherMode ? (
                     <p className={styles.hint}>
-                        Watcher mode — this wallet will build an unsigned transaction. Sign it on
+                        Watcher mode: this wallet will build an unsigned transaction. Sign it on
                         your Signer-mode wallet, then bring the signed transaction to a Full-mode
                         wallet to broadcast.
                     </p>
@@ -408,7 +408,7 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, onBa
     return wrap(
         <form onSubmit={handleReview} noValidate>
             <div className={styles.summary} style={{ marginBottom: '0.5rem' }}>
-                Target: contract #{contractActionIndex} —{' '}
+                Target: contract #{contractActionIndex},{' '}
                 <strong>{contractMeta.cooldown}-block cooldown</strong>.{' '}
                 Slashed funds are routed to{' '}
                 {contractMeta.slashDestination

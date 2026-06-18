@@ -8,11 +8,11 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Signing-secret session slot — the enabler for "password only at unlock".
+// Signing-secret session slot: the enabler for "password only at unlock".
 //
 // The MV3 background is a service worker Chrome can terminate at any time.
 // The session master key survives in chrome.storage.session, but the
-// in-memory SignerPool does not — and the master key alone CANNOT rebuild
+// in-memory SignerPool does not. The master key alone CANNOT rebuild
 // the pool, because each wallet's seed is encrypted under a password-derived
 // key (its own kdfParams), not under the vault master key.
 //

@@ -8,8 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// useWalletMode — §20 / Cluster W FOLLOWUP 5. Single source of truth
-// for the wallet's `walletMode` field — pulls from settings, falls back
+// useWalletMode (§20 / Cluster W FOLLOWUP 5): single source of truth
+// for the wallet's `walletMode` field; pulls from settings, falls back
 // to `WALLET_MODE_DEFAULT` when settings are still loading or absent
 // (older v2 records before the field was added), and exposes the three
 // boolean shorthand flags every action surface needs.

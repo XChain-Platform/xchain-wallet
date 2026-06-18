@@ -8,14 +8,14 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// recipientsByAction — Cluster O FOLLOWUP 2 (DIVIDEND / AIRDROP recipient
+// recipientsByAction: Cluster O FOLLOWUP 2 (DIVIDEND / AIRDROP recipient
 // lists for §31.4 save-as-contact in History).
 //
 // Both action kinds carry a recipient set that's *derived*, not on-row:
 //
 //   - DIVIDEND distributes a payout to every holder of TICK at the
 //     snapshot block. The row payload carries TICK + DIVIDEND_TICK +
-//     AMOUNT, but not the recipient list — that's the holders table at
+//     AMOUNT, but not the recipient list (that's the holders table at
 //     the snapshot block. We fetch via `sdk.getHolders(tick)`. Note:
 //     the holders set is a *current* snapshot; for very old DIVIDEND
 //     rows, holders may have shifted. The UI surfaces this as a hint
@@ -24,8 +24,8 @@
 //   - AIRDROP distributes to addresses in a referenced LIST. The row
 //     payload carries LIST_ACTION_INDEX. We fetch the LIST action via
 //     `sdk.getAction(idx)` and read its TYPE=2 (ADDRESS) ITEM array.
-//     Older multi-airdrop variants (v1/v2/v3) reference multiple lists
-//     — out of scope for this FOLLOWUP; the v0 path is the common
+//     Older multi-airdrop variants (v1/v2/v3) reference multiple lists;
+//     those are out of scope for this FOLLOWUP. The v0 path is the common
 //     authored shape.
 //
 // Both flows accept optional pre-resolved fields (`tick`, `listAction-

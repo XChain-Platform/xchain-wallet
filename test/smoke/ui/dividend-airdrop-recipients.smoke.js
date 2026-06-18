@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §31.4 / Cluster O FOLLOWUP 2 — DIVIDEND / AIRDROP recipient
+// Smoke for §31.4 / Cluster O FOLLOWUP 2: DIVIDEND / AIRDROP recipient
 // resolution + Save-N-as-one-contact UI in History.
 //
 // Pins:
@@ -74,7 +74,7 @@ function makeSdkRegistry({ holders, action, list }) {
         holders: [
             { address: 'addr-A', balance: 100 },
             { address: 'addr-B', balance: 50 },
-            { address: 'addr-A', balance: 999 }, // dup — should be deduped
+            { address: 'addr-A', balance: 999 }, // dup; should be deduped
         ],
     });
     const r = await getDividendRecipients({
@@ -91,7 +91,7 @@ function makeSdkRegistry({ holders, action, list }) {
 {
     const sdkRegistry = makeSdkRegistry({
         holders: [
-            { address: 'src-addr', balance: 1000 }, // source — should be excluded
+            { address: 'src-addr', balance: 1000 }, // source; should be excluded
             { address: 'addr-A', balance: 100 },
             { address: 'addr-B', balance: 50 },
         ],
@@ -226,4 +226,4 @@ assert.match(historySrc, /messaging\.getAirdropRecipients/, 'consumes getAirdrop
 assert.match(historySrc, /Save \{recipients\.length\} as one contact/,
     'Save N as one contact button');
 
-console.log('OK — DIVIDEND / AIRDROP recipient flow + host + shells + History UI');
+console.log('OK: DIVIDEND / AIRDROP recipient flow + host + shells + History UI');

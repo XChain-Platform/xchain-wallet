@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Unit: balanceAdapter — SDK balance shape → txSimulator BalanceLookup[].
+// Unit: balanceAdapter. SDK balance shape -> txSimulator BalanceLookup[].
 
 import { describe, it, expect } from 'vitest';
 import { balancesFromSdk } from '../../../packages/core/src/decoder/balanceAdapter.js';
@@ -102,7 +102,7 @@ describe('balancesFromSdk', () => {
 
         it('handles tokens: undefined gracefully', () => {
             const out = balancesFromSdk({ native: { tick: 'BTC', divisibility: 8, quantity: '1' } });
-            // Only the native row — no error on missing tokens.
+            // Only the native row; no error on missing tokens.
             expect(out).toHaveLength(1);
         });
     });

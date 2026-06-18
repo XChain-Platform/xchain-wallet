@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Unit: txSimulator — pure balance-delta projection for all ACTION types.
+// Unit: txSimulator - pure balance-delta projection for all ACTION types.
 
 import { describe, it, expect } from 'vitest';
 import { simulateAction } from '../../../packages/core/src/decoder/txSimulator.js';

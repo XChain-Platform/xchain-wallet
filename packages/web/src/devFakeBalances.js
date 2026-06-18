@@ -21,11 +21,11 @@
 //
 // `fiatRate` is USD per ONE whole unit (after dividing by divisibility).
 // Used by the UI to render a per-row USD line and roll up a portfolio
-// total. Numbers picked to look plausible in 2026 — not real prices.
+// total. Numbers picked to look plausible in 2026; not real prices.
 
 /**
  * @typedef {Object} FakeToken
- * @property {string} tick         ticker — uppercase, no whitespace
+ * @property {string} tick         ticker (uppercase, no whitespace)
  * @property {string} displayName   user-friendly name
  * @property {string} description   one-line subtitle
  * @property {string} quantity      atomic-unit string
@@ -165,7 +165,7 @@ export function fakeOwnedTokensFor(chainId) {
     const rows = (TOKENS_BY_COIN[coin] || []).slice(0, take);
     return rows.map(([tick, _displayName, description, quantity, divisibility], i) => {
         // Half locked, two-thirds still held, every-other listed for
-        // sale — gives the My Tokens chip filters a deterministic mix
+        // sale; gives the My Tokens chip filters a deterministic mix
         // of states to render without needing any real backend.
         const locked = (tick.length % 2) === 0;
         const youOwn = (i % 3) !== 2;
@@ -183,7 +183,7 @@ export function fakeOwnedTokensFor(chainId) {
     });
 }
 
-// Native ticker for a chain — needed when pairing a token side against
+// Native ticker for a chain; needed when pairing a token side against
 // the chain coin in fake orders / swaps / dispensers.
 function nativeTickFor(chainId) {
     const coin = coinForChain(chainId);
@@ -191,7 +191,7 @@ function nativeTickFor(chainId) {
 }
 
 // Deterministic pseudo-address derived from (chainId, tick, seed). Not
-// validated by the wallet (dev-mock only) but visually plausible —
+// validated by the wallet (dev-mock only) but visually plausible;
 // uses chain-appropriate prefixes so screenshots look realistic.
 function fakeAddress(chainId, tick, seed) {
     const coin = coinForChain(chainId);
@@ -394,7 +394,7 @@ export function fakeTokenInfoFor(tick, chainId) {
     const nativeFiat = NATIVE_BY_COIN[coin]?.fiatRate || 1;
     // Express the per-token price in native-coin units: how many BTC /
     // LTC / DOGE one token costs at the dev's USD rate. Tiny for cheap
-    // memes, larger for the high-value rows — chart range buttons end
+    // memes, larger for the high-value rows; chart range buttons end
     // up with visibly different y-axes per token.
     const marketPrice = nativeFiat > 0 ? found.fiatRate / nativeFiat : found.fiatRate;
     const ownerAddr = fakeAddress(chainId, found.tick, 0);
@@ -423,7 +423,7 @@ export function fakeTokenInfoFor(tick, chainId) {
 /**
  * Genesis (ISSUE) row for `tick`. Used by the dev-mock SDK's
  * getIssues(tick, 'token') path. Returns the indexer's collapsed
- * positional array shape — same wire format the explorer emits — so
+ * positional array shape (same wire format the explorer emits) so
  * the ManageToken Genesis section can normalize it identically to
  * real-data rows.
  *
@@ -435,11 +435,11 @@ export function fakeGenesisFor(tick, chainId) {
     if (!found) return [];
     const ownerAddr = fakeAddress(chainId, found.tick, 0);
     const { blockIndex, actionIndex } = fakeBlockFor(chainId, 'ISSUE', tick, 0);
-    // Two years ago — deterministic but far enough back to look like a
+    // Two years ago; deterministic but far enough back to look like a
     // genuine genesis row rather than a recent reissue.
     const timestamp = Math.floor(Date.now() / 1000) - 60 * 60 * 24 * 365 * 2;
     // [count_reverse, block_index, timestamp, source, tick, max_supply,
-    //  max_mint, locks, status, action_index] — see xchain-explorer
+    //  max_mint, locks, status, action_index] (see xchain-explorer
     // XChainExplorer.js line 793.
     return [[
         1,
@@ -494,7 +494,7 @@ export function fakeSubassetsFor(tick, chainId) {
 }
 
 /**
- * Recent on-chain history for `tick` — every action that mentions the
+ * Recent on-chain history for `tick`: every action that mentions the
  * tick. Used by the dev-mock SDK's getHistory(tick, 'token') path.
  *
  * @param {string} tick

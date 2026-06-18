@@ -25,7 +25,7 @@ import styles from './PairSignerForm.module.css';
 const { checkFirmware } = signersLib;
 
 /**
- * Pair hardware signer — §17.6 / §18.3.
+ * Pair hardware signer (§17.6 / §18.3).
  *
  * Four-stage flow:
  *
@@ -38,7 +38,7 @@ const { checkFirmware } = signersLib;
  *   done:    show the SignerRecord id + return to caller.
  *
  * The pairing factories (`pairTrezor` + `pairLedger`) are passed in
- * as props rather than imported from shell packages — the shared
+ * as props rather than imported from shell packages. The shared
  * route stays decoupled from shell-specific transport modules.
  *
  * When a factory is `undefined`, the corresponding vendor card shows
@@ -51,7 +51,7 @@ const { checkFirmware } = signersLib;
  * @param {null | (() => Promise<{ signer: any, pairingInfo: PairingInfo }>)} [props.pairLedger]
  * @param {() => void} props.onBack
  * @param {() => void} [props.onPaired]
- * @param {(signerId: string, signer: any) => void} [props.onSignerPaired]   called after the SignerRecord is persisted — the shell registers the live Signer instance with its port bridge so background sign requests can reach it
+ * @param {(signerId: string, signer: any) => void} [props.onSignerPaired]   called after the SignerRecord is persisted. The shell registers the live Signer instance with its port bridge so background sign requests can reach it
  *
  * @typedef {{ vendor: 'trezor' | 'ledger', model: string, deviceIdentifier: string, firmwareVersion: string | null }} PairingInfo
  */
@@ -180,10 +180,10 @@ export function PairSignerForm({
                                     ? 'Not available in this context.'
                                     : ledgerNeedsWebHid
                                     ? browserFamily === 'firefox'
-                                        ? 'WebHID required — Firefox is not supported. Switch to Chrome, Edge, or Brave.'
+                                        ? 'WebHID required. Firefox is not supported. Switch to Chrome, Edge, or Brave.'
                                         : browserFamily === 'safari'
-                                        ? 'WebHID required — Safari is not supported. Switch to Chrome, Edge, or Brave.'
-                                        : 'WebHID required — this browser does not support it. Switch to Chrome, Edge, or Brave.'
+                                        ? 'WebHID required. Safari is not supported. Switch to Chrome, Edge, or Brave.'
+                                        : 'WebHID required. This browser does not support it. Switch to Chrome, Edge, or Brave.'
                                     : 'Connect via WebHID. Chrome, Edge, or Brave on desktop.'}
                             </span>
                         </button>
@@ -243,7 +243,7 @@ export function PairSignerForm({
         );
     }
 
-    // stage === 'confirm' or 'saving' — pairingInfo present
+    // stage === 'confirm' or 'saving': pairingInfo present
     const verdict = pairingInfo
         ? checkFirmware({
             vendor: pairingInfo.vendor,

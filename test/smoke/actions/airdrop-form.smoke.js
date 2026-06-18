@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for Phase 2 — Step 24 (piece 9) — AIRDROP via LIST + AIRDROP
+// Smoke for Phase 2: Step 24 (piece 9): AIRDROP via LIST + AIRDROP
 // two-transaction flow (§40.9).
 //
 // Asserts:
@@ -22,10 +22,10 @@
 //      + savePendingAirdrop + updatePendingAirdrop + listPendingAirdrops
 //      + clearPendingAirdrop. Password-error handling for both signs.
 //   5. Polling loop pauses on document.visibilityState hidden.
-//   6. Parser module — parsePaste / parseCsv / classifyRecipients /
+//   6. Parser module: parsePaste / parseCsv / classifyRecipients /
 //      isPlausibleAddress round-trips; bech32 + base58 accepted,
 //      garbage rejected, duplicates counted.
-//   7. Core flows — createList / airdropAction / actionByTxid /
+//   7. Core flows: createList / airdropAction / actionByTxid /
 //      listByActionIndex / pendingAirdrops CRUD are re-exported +
 //      guard required inputs. actionByTxid returns null on 404.
 //   8. Decoder LIST v0/v1 + AIRDROP v0/v1/v2 cases surface summary +
@@ -405,5 +405,5 @@ assert.ok(
 }
 
 console.log(
-    'OK — airdrop form smoke (AirdropForm §40.9 two-tx flow: 5-stage machine + decoder LIST/AIRDROP + messaging wiring + createList + airdropAction + actionByTxid 404 + pendingAirdrops CRUD + parser + 3-shell messaging + 3-shell App.jsx + Home resume card + vault persistence round-trip)',
+    'OK: airdrop form smoke (AirdropForm §40.9 two-tx flow: 5-stage machine + decoder LIST/AIRDROP + messaging wiring + createList + airdropAction + actionByTxid 404 + pendingAirdrops CRUD + parser + 3-shell messaging + 3-shell App.jsx + Home resume card + vault persistence round-trip)',
 );

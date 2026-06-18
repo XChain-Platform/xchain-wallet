@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §20 / Cluster X Step 20 — ExecuteContractForm watcher-mode branch.
+// Smoke for §20 / Cluster X Step 20: ExecuteContractForm watcher-mode branch.
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';

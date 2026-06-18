@@ -10,7 +10,7 @@
 
 // Boundary: BIP39 mnemonic word counts. Wallet accepts the 5 standard
 // counts (12/15/18/21/24) and rejects everything else. Counterwallet-
-// legacy is exactly 12 — it's allowed but goes through a separate code
+// legacy is exactly 12; it's allowed but goes through a separate code
 // path (not exercised here).
 
 import { describe, it, expect } from 'vitest';

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Unit: schemas/signer — createSignerRecord + validateSignerRecord.
+// Unit: schemas/signer: createSignerRecord + validateSignerRecord.
 
 import { describe, it, expect } from 'vitest';
 import {
@@ -61,7 +61,7 @@ describe('createSignerRecord', () => {
     });
 
     it('defaults label to "Hardware signer" for unknown kind', () => {
-        // NOTE: The factory does not validate kind — it accepts any string and
+        // NOTE: The factory does not validate kind; it accepts any string and
         // falls through the defaultLabel else-branch. This is characterization.
         const s = createSignerRecord({ ...BASE_INPUT, kind: 'unknown' });
         expect(s.label).toBe('Hardware signer');

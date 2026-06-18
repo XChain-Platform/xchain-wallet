@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// PendingTx record — §11.3.8. In-flight or recently confirmed transaction
+// PendingTx record (§11.3.8): in-flight or recently confirmed transaction
 // state. Drives the tx status timeline (§28.4) and RBF/cancel UX (§44.4).
 
 import { NETWORKS } from './constants.js';

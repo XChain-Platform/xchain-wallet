@@ -18,7 +18,7 @@ import { describe, it, expect } from 'vitest';
 import { mnemonicToSeedSync } from '@scure/bip39';
 import { HDKey } from '@scure/bip32';
 
-// 12-word BIP39 test vector (NOT a real wallet — well-known docs vector)
+// 12-word BIP39 test vector (NOT a real wallet; this is a well-known docs vector)
 const MNEMONIC = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
 
 describe('integration/hd/derive-cross-chain', () => {

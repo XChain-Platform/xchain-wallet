@@ -8,16 +8,16 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for Phase 2 — Step 15 (piece 4d) — Signer selection UI +
+// Smoke for Phase 2, Step 15 (piece 4d): Signer selection UI +
 // view/export private key UI (§17.6, §17.7).
 //
 // Closes out Piece 4. Step 15 has two user-visible surfaces:
 //
-//   1. PairSignerForm — vendor picker (Trezor / Ledger) → pairing
+//   1. PairSignerForm: vendor picker (Trezor / Ledger) → pairing
 //      factory → confirm + firmware verdict → persist via
 //      messaging.registerSigner. Factories pass in as props so the
 //      shared route stays shell-agnostic.
-//   2. ViewPrivateKey — §17.7 reveal ceremony. Re-prompts for
+//   2. ViewPrivateKey: §17.7 reveal ceremony. Re-prompts for
 //      password even inside unlocked session; classifies HW /
 //      watch-only addresses to informational panels; tap-to-reveal +
 //      window-blur auto-hide + clipboard auto-clear.
@@ -158,7 +158,7 @@ assert.ok(
 // QR via render-prop (keeps core free of qrcode dep).
 assert.ok(
     /renderQR/.test(viewSrc),
-    'ViewPrivateKey accepts a renderQR render-prop — QR lib lives in shells',
+    'ViewPrivateKey accepts a renderQR render-prop; QR lib lives in shells',
 );
 
 // --- 3. Messaging wiring: exportPrivateKey ----------------------------
@@ -239,5 +239,5 @@ assert.ok(
 );
 
 console.log(
-    'OK — signer UI smoke (PairSignerForm §17.6/§18.3: vendor picker + DI factories + firmware-verdict gating + messaging.registerSigner wiring; ViewPrivateKey §17.7: classifySource routes HW/watch-only to info panels + tap-to-reveal + window-blur auto-hide + configurable clipboard auto-clear (§17.7.1 / G028) + password re-prompt; exportPrivateKey handler + messaging; pair-signer sub-route wired into both shells)',
+    'OK: signer UI smoke (PairSignerForm §17.6/§18.3: vendor picker + DI factories + firmware-verdict gating + messaging.registerSigner wiring; ViewPrivateKey §17.7: classifySource routes HW/watch-only to info panels + tap-to-reveal + window-blur auto-hide + configurable clipboard auto-clear (§17.7.1 / G028) + password re-prompt; exportPrivateKey handler + messaging; pair-signer sub-route wired into both shells)',
 );

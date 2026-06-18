@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Fuzz: WIF round-trip property — decode(encode(privkey, ver, comp))
+// Fuzz: WIF round-trip property: decode(encode(privkey, ver, comp))
 // recovers (privkey, ver, comp) for any valid input.
 
 import { describe, it } from 'vitest';

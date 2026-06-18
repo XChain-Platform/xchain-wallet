@@ -30,7 +30,7 @@ const chainRegistry = registryLib.defaultRegistry();
 const FALLBACK_ACTION_CLASSES = ['transfer', 'trade', 'burn', 'mint', 'stake'];
 
 /**
- * Controller-bind authoring form — Phase F (Part 3b).
+ * Controller-bind authoring form: Phase F (Part 3b).
  *
  * Binds (or unbinds) a guard contract over a SUBJECT: either a token
  * the user issued (TICK → ISSUE v6) or the signing address itself
@@ -44,7 +44,7 @@ const FALLBACK_ACTION_CLASSES = ['transfer', 'trade', 'burn', 'mint', 'stake'];
  * `controller.*` helper (core can't import the SDK), then submitted
  * through the same `advancedAction` (createAction → sign → broadcast)
  * path every other action form uses. The SDK controller helper ships
- * under Phase F Part 2 and may not exist yet — the form degrades
+ * under Phase F Part 2 and may not exist yet. The form degrades
  * gracefully: the action-class dropdown falls back to the locked-fact
  * list, and a build/submit against a too-old SDK surfaces a clear error
  * and keeps the user on the review screen.
@@ -295,7 +295,7 @@ export function ControllerBindForm({ walletId, chainId, tick, onBack }) {
                 </p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Txid</dt>
-                    <dd className={styles.detailsValue}>{String(txid || '—')}</dd>
+                    <dd className={styles.detailsValue}>{String(txid || '-')}</dd>
                 </dl>
                 <div className={styles.actions}>
                     <Button variant="primary" onClick={onBack}>Done</Button>
@@ -342,7 +342,7 @@ export function ControllerBindForm({ walletId, chainId, tick, onBack }) {
                 </dl>
                 {isWatcherMode ? (
                     <p className={styles.hint}>
-                        Watcher mode — this wallet will build an unsigned transaction.
+                        Watcher mode: this wallet will build an unsigned transaction.
                         Sign it on your Signer-mode wallet, then bring the
                         signed transaction to a Full-mode wallet to broadcast.
                     </p>

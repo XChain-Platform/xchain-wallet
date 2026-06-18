@@ -13,15 +13,15 @@ import { Icon } from '@xchain-wallet/core/ui';
 import styles from './BottomTabBar.module.css';
 
 /**
- * §24.3 / G054 — mobile bottom-sheet navigation.
+ * §24.3 / G054: mobile bottom-sheet navigation.
  *
  * Five thumb-reachable tabs at the bottom of the viewport:
  *   [Home] [History] [Send] [Scan] [More]
  *
  * "More" toggles a bottom-sheet drawer that lists the rest of the
  * navigation (Receive, DEX, Dispensers, Contracts, Messaging,
- * Contacts) plus the wallet switcher, Settings, and Lock — same
- * surface set as `<LeftNav>` so the user sees a single coherent map
+ * Contacts) plus the wallet switcher, Settings, and Lock (same
+ * surface set as `<LeftNav>`) so the user sees a single coherent map
  * of the wallet.
  *
  * Visibility: this component renders itself unconditionally; the
@@ -31,7 +31,7 @@ import styles from './BottomTabBar.module.css';
  * bottom-padding to clear the bar.
  *
  * §24.3 / Cluster Y FOLLOWUP 1: the Scan slot now occupies the
- * primary tab row per spec — `<ScanRoute>` (the dedicated scan-and-
+ * primary tab row per spec. `<ScanRoute>` (the dedicated scan-and-
  * classify surface) ships at v0.285.0. Receive moves into the More
  * sheet (still daily-use, but the wallet's primary intent is "act on
  * something I scanned" more often than "show my address").
@@ -75,7 +75,7 @@ export function BottomTabBar({
 }) {
     const [sheetOpen, setSheetOpen] = useState(false);
 
-    // Close the sheet whenever the user navigates — the parent flips
+    // Close the sheet whenever the user navigates. The parent flips
     // currentView, which is enough of a signal that the user picked a
     // destination and the sheet should get out of the way.
     useEffect(() => {

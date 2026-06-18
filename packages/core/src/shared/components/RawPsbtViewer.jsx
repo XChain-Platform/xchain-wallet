@@ -17,14 +17,14 @@ import styles from './RawPsbtViewer.module.css';
  * Renders nothing when `developerMode` is false. When on, renders a
  * collapsed `<details>` disclosure exposing whichever pieces the
  * caller has at sign time:
- *   - **Action fields** — always available for the user-initiated Send
+ *   - **Action fields**: always available for the user-initiated Send
  *     flow and for dApp-initiated `signAction` requests. Pretty-printed
  *     JSON of the payload the encoder will ingest.
- *   - **PSBT hex** — available for dApp-initiated `signPsbt` requests
+ *   - **PSBT hex**: available for dApp-initiated `signPsbt` requests
  *     (the dApp passes the hex it built). For `signAction` and Send.jsx
  *     review, the PSBT is constructed *after* the user approves, so
  *     this section is omitted.
- *   - **Inputs / outputs** — placeholder. A future commit wires a real
+ *   - **Inputs / outputs**: placeholder. A future commit wires a real
  *     PSBT parser (BIP-174); until then the section reads "(parser not
  *     wired yet)" so the disclosure remains honest about its limits.
  *
@@ -55,7 +55,7 @@ export function RawPsbtViewer({ developerMode, psbtHex, actionFields }) {
             setTimeout(() => setCopied(false), 1500);
         } catch (_err) {
             // Clipboard write can fail in approval popup contexts
-            // without permissions — the textarea above stays
+            // without permissions; the textarea above stays
             // selectable as a fallback.
         }
     }
@@ -90,7 +90,7 @@ export function RawPsbtViewer({ developerMode, psbtHex, actionFields }) {
                 <section className={styles.section} aria-label="Parsed inputs / outputs">
                     <p className={styles.label}>Parsed inputs / outputs</p>
                     <p className={styles.placeholder}>
-                        (parser not wired yet — see PSBT hex above for the raw bytes)
+                        (parser not wired yet; see PSBT hex above for the raw bytes)
                     </p>
                 </section>
 

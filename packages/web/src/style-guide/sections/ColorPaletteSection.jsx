@@ -11,7 +11,7 @@
 import { useEffect, useState } from 'react';
 import { Section, Guidance, LiveExample } from '../StyleGuidePage.jsx';
 
-// Just the curated palette the wallet actually leans on — not every
+// Just the curated palette the wallet actually leans on, not every
 // token in tokens.css. Add more here if a new color earns repeated
 // use across the app.
 const ROLES = [
@@ -66,12 +66,12 @@ export function ColorPaletteSection() {
             id="color-palette"
             title="Color palette"
             tag="curated · the colors we actually use"
-            kicker="Brand accent + key surface / text / status tokens. All other --xc-* tokens exist in tokens.css but get pulled in less often — start here when designing a new screen."
+            kicker="Brand accent + key surface / text / status tokens. All other --xc-* tokens exist in tokens.css but get pulled in less often. Start here when designing a new screen."
         >
             <Guidance
-                what={<>The wallet's visual identity sits on a single brand-blue accent (<code>--xc-accent-primary</code>, <code>#1E90C7</code>) over neutral gray surfaces. Status colors (danger / warning / success) appear sparingly — for errors, confirmations, and "supersedes" callouts.</>}
+                what={<>The wallet's visual identity sits on a single brand-blue accent (<code>--xc-accent-primary</code>, <code>#1E90C7</code>) over neutral gray surfaces. Status colors (danger / warning / success) appear sparingly (for errors, confirmations, and "supersedes" callouts).</>}
                 doRule={<>✓ Always reference tokens (e.g. <code>var(--xc-accent-primary)</code>) so dark-mode + high-contrast overrides apply uniformly · use <code>color-mix(in srgb, var(--xc-accent-primary) 12%, transparent)</code> for accent-tinted backgrounds (matches the quick-action icon halo)</>}
-                dontRule={<>✗ Hard-code hex values · introduce a new accent color for a new feature — extend the existing palette via tint/shade with <code>color-mix</code> if you need variation</>}
+                dontRule={<>✗ Hard-code hex values · introduce a new accent color for a new feature; extend the existing palette via tint/shade with <code>color-mix</code> if you need variation</>}
             />
             <LiveExample label="Tokens · auto-themed (try a system-level dark-mode toggle)">
                 <div>

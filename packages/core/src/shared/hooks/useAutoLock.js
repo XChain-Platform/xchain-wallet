@@ -11,21 +11,21 @@
 import { useEffect, useRef } from 'react';
 
 /**
- * Foreground auto-lock timer — §26.
+ * Foreground auto-lock timer (§26).
  *
  * Calls `onLock()` after `idleMs` milliseconds of no user activity
  * while the host is foreground. Activity events: mousemove, keydown,
  * scroll, click, touchstart. The timer ticks every `tickMs` (default
- * 30s) so a precise idle measurement isn't needed — one tick past the
+ * 30s) so a precise idle measurement isn't needed; one tick past the
  * threshold is acceptable.
  *
  * Scope note: foreground-only. Doesn't auto-lock while a popup is
  * closed or a web tab is backgrounded. Spec §26 envisions a
  * background-mediated lock that honours the timeout across popup
- * close/open — that needs a `lastActivity` stamp persisted for the
+ * close/open; that needs a `lastActivity` stamp persisted for the
  * service worker to read on startup, tracked separately.
  *
- * Pass `enabled: false` to make the hook a no-op — the React hook
+ * Pass `enabled: false` to make the hook a no-op; the React hook
  * rules forbid skipping the call itself, so callers pass a flag when
  * they want auto-lock off (e.g. while a lock action is already
  * in-flight). All three shells (popup, web, desktop) opt in via the

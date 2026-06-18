@@ -31,7 +31,7 @@ const chainRegistry = registryLib.defaultRegistry();
  * §41.7.3 Compose encrypted message.
  *
  * Flow:
- *   1. User picks a source (chain + address — defaults to the first
+ *   1. User picks a source (chain + address, defaults to the first
  *      HD address on the first available chain, or pre-selected when
  *      opened from the Inbox / a Contact).
  *   2. Recipient address input. On blur / debounce, the wallet looks
@@ -101,7 +101,7 @@ export function ComposeMessage({
                 if (cancelled) return;
                 setAddressesByChain(byChain);
                 if (!byChain || Object.keys(byChain).length === 0) {
-                    setLoadError('No addresses yet — use Receive to generate one before sending.');
+                    setLoadError('No addresses yet. Use Receive to generate one before sending.');
                     return;
                 }
                 const preferredChain = initialChainId && byChain[initialChainId]
@@ -289,7 +289,7 @@ export function ComposeMessage({
             ) : null}
             {pubkeyState === 'found' ? (
                 <p className={styles.hint}>
-                    ✓ Recipient pubkey found. Message will be encrypted with ECIES — only they can read it.
+                    ✓ Recipient pubkey found. Message will be encrypted with ECIES (only they can read it).
                 </p>
             ) : null}
             {pubkeyState === 'missing' ? (

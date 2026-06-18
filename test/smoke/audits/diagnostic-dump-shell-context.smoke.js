@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// §50 / Cluster L FOLLOWUP 4 smoke — diagnostic dump fills env / build /
+// §50 / Cluster L FOLLOWUP 4 smoke: diagnostic dump fills env / build /
 // signers so support tickets carry shell + version + paired-device
 // metadata.
 //
@@ -107,5 +107,5 @@ assert.ok(/getDiagnosticContext:\s*runtime\.getDiagnosticContext/.test(dskRuntim
     'desktop runtime forwards the callback into createDesktopMessageHost');
 
 console.log(
-    'OK — diagnostic-dump-shell-context smoke (§50 / Cluster L FOLLOWUP 4 — getDiagnosticContext callback in createBackgroundHost; dump handler iterates vault.wallets to build signer rows; extension + web + desktop all wire shell-specific env + build payloads)',
+    'OK: diagnostic-dump-shell-context smoke (§50 / Cluster L FOLLOWUP 4: getDiagnosticContext callback in createBackgroundHost; dump handler iterates vault.wallets to build signer rows; extension + web + desktop all wire shell-specific env + build payloads)',
 );

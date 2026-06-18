@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// getActiveAddresses — enumerate the wallet's addresses for the §46
+// getActiveAddresses: enumerate the wallet's addresses for the §46
 // notification watcher. Each entry pairs an on-chain address with the
 // chainId + human label the NotificationService needs to subscribe and
 // to render notification text. Deduped by (chainId, address) and,

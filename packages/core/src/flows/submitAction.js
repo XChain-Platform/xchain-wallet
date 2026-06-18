@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// submitAction — convenience wrapper that chains unlockWallet +
+// submitAction: convenience wrapper that chains unlockWallet +
 // submitWithSigner + signer.lock() for the common "send this one
 // action" path. Every UI surface that builds a single transaction (send
 // form, sign-dApp-request screen, dispenser purchase, etc.) uses this.
@@ -22,7 +22,7 @@
 // live state.
 //
 // For batched submissions under one unlock, use unlockWallet +
-// submitWithSigner directly — re-unlocking is expensive (Argon2id).
+// submitWithSigner directly (re-unlocking is expensive with Argon2id).
 
 import { unlockWallet } from './unlockWallet.js';
 import { submitWithSigner, BroadcastFailedError } from '../sdk/submitWithSigner.js';
@@ -48,12 +48,12 @@ import { commitAdsStep, resolveAdsPlanForNextTx } from './ads.js';
  * @property {{ action: string, params: object }} actionData
  * @property {import('../sdk/submitWithSigner.js').SubmitEncoderOpts} encoderOpts
  * @property {Array<{ inputIndex: number, path: string, sighashType?: number }>} signingPaths
- * @property {import('../signers/Signer.js').Signer} [signer]   pre-built signer (RemoteSigner for HW). When supplied, the flow skips unlockWallet entirely — no password KDF — and does not call `.lock()` at the end (signer lifecycle is the caller's responsibility).
+ * @property {import('../signers/Signer.js').Signer} [signer]   pre-built signer (RemoteSigner for HW). When supplied, the flow skips unlockWallet entirely (no password KDF) and does not call `.lock()` at the end (signer lifecycle is the caller's responsibility).
  * @property {PendingTxMeta} [pendingTxMeta]     when set, the flow persists + updates a PendingTx record
  * @property {(txid: string, opts?: object) => Promise<unknown>} [waitForTxid]
  * @property {object} [waitOpts]
  * @property {(phase: string, data: object) => void} [onProgress]
- * @property {(entry: { signedTxHex: string, txid: string, chainId: string, signedAt: number, summary: string, error: string }) => void | Promise<void>} [onBroadcastFailure]   Cluster G FOLLOWUP 1 — fires when the broadcast leg fails after a successful sign. Caller (typically the bridge background host) hands the entry off to §49.5's queued-broadcast surface so the signed tx isn't lost on a network blip.
+ * @property {(entry: { signedTxHex: string, txid: string, chainId: string, signedAt: number, summary: string, error: string }) => void | Promise<void>} [onBroadcastFailure]   Cluster G FOLLOWUP 1: fires when the broadcast leg fails after a successful sign. Caller (typically the bridge background host) hands the entry off to §49.5's queued-broadcast surface so the signed tx isn't lost on a network blip.
  */
 
 /**
@@ -96,7 +96,7 @@ export async function submitAction({
     const descriptor = chainRegistry.get(chainId);
     if (!descriptor) throw new Error(`submitAction: unknown chain "${chainId}"`);
 
-    // §36.3 ADS — resolve the donation plan ONCE up front against the
+    // §36.3 ADS: resolve the donation plan ONCE up front against the
     // current settings snapshot. If `canSubmit`, inject a customOutput
     // into encoderOpts so the encoder builds the donation into the
     // same transaction. After a successful broadcast we call
@@ -105,7 +105,7 @@ export async function submitAction({
     //
     // If ADS is enabled but not `canSubmit` (e.g. placeholder donation
     // address still in the descriptor), we still advance the counter
-    // with `donationIncluded=false` — the user's lifetimeTxCount must
+    // with `donationIncluded=false` so the user's lifetimeTxCount
     // reflect the actual tx that was broadcast, regardless of whether
     // the donation fired.
     const adsSettingsSnapshot = await vault.settings.get();
@@ -192,7 +192,7 @@ export async function submitAction({
 
     // When the caller supplies a pre-built signer (e.g., a RemoteSigner
     // forwarding to a renderer-hosted HW signer), skip unlockWallet
-    // entirely — no password KDF, no software-seed decryption. The
+    // entirely (no password KDF, no software-seed decryption). The
     // caller owns the signer's lifecycle in that case, so we also
     // skip the trailing `.lock()`.
     const signer = injectedSigner
@@ -221,7 +221,7 @@ export async function submitAction({
                 onProgress: composedOnProgress,
             });
         } catch (err) {
-            // Cluster G FOLLOWUP 1 — broadcast leg failed after a clean
+            // Cluster G FOLLOWUP 1: broadcast leg failed after a clean
             // sign. Stamp the PendingTx as `queued` (with the signed
             // txHex) so the §49.5 queue can drain it later, then fire
             // the optional onBroadcastFailure callback so the host can
@@ -247,7 +247,7 @@ export async function submitAction({
                             error: err.message,
                         });
                     } catch (_inner) {
-                        // Swallow callback errors — the broadcast
+                        // Swallow callback errors; the broadcast
                         // failure is the load-bearing signal.
                     }
                 }
@@ -265,7 +265,7 @@ export async function submitAction({
         }
     }
 
-    // §36.3 — advance the ADS accumulator after a successful submit.
+    // §36.3: advance the ADS accumulator after a successful submit.
     // Only fire when ADS is actually enabled for this chain; otherwise
     // `stepAdsAccumulator` is identity but the extra vault write is
     // wasted. `donationIncluded` mirrors `adsPlan.canSubmit` so the
@@ -279,7 +279,7 @@ export async function submitAction({
                 donationIncluded: adsPlan.canSubmit,
             });
         } catch (e) {
-            // ADS accounting is non-critical — don't let a write failure
+            // ADS accounting is non-critical; don't let a write failure
             // here obscure the successful broadcast from the caller.
             // The next tx will try again. Surface via onProgress for
             // observability.

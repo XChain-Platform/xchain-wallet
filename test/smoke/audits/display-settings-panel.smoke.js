@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// §27.3 / §27.4 / Cluster I FOLLOWUP 1 smoke — Settings → Display panel.
+// §27.3 / §27.4 / Cluster I FOLLOWUP 1 smoke: Settings → Display panel.
 //
 // Asserts:
 //   1. DisplaySection.jsx exists, exports DisplaySection, and reads
@@ -110,5 +110,5 @@ assert.ok(/'No customization'/.test(settingsSrc),
     'displaySummary reports "No customization" when both lists are empty');
 
 console.log(
-    'OK — display-settings-panel smoke (§27.3 / §27.4 / Cluster I FOLLOWUP 1 — DisplaySection lists pinnedTokens + hiddenTokens; ↑ / ↓ reorder + ✕ unpin + per-row Unhide + bulk Unhide-all all write through useSettings.update; aria-label on every interactive control names the affected key; Settings.jsx mounts the panel as an internal-drill with displaySummary + search keywords)',
+    'OK: display-settings-panel smoke (§27.3 / §27.4 / Cluster I FOLLOWUP 1: DisplaySection lists pinnedTokens + hiddenTokens; ↑ / ↓ reorder + ✕ unpin + per-row Unhide + bulk Unhide-all all write through useSettings.update; aria-label on every interactive control names the affected key; Settings.jsx mounts the panel as an internal-drill with displaySummary + search keywords)',
 );

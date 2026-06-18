@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Firmware manifest — §18.4. Bundled at build time, consulted by
+// Firmware manifest: §18.4. Bundled at build time, consulted by
 // `checkFirmware` to verdict a device's reported version.
 //
 // Why JS not JSON: this manifest ships *inside* the wallet bundle so
@@ -19,13 +19,13 @@
 // the pipeline for no real benefit. Keeping it as a JS module makes
 // the import graph clean for both Vite (bundles the constant) and
 // Node (resolves it like any other ESM dep). Smokes pin this design
-// choice — see `signers/signer-scaffold.smoke.js`.
+// choice; see `signers/signer-scaffold.smoke.js`.
 //
 // Updating the manifest: when a new firmware advisory or release lands
 // upstream (Trezor / Ledger), update the relevant model's `minimum`,
 // `recommended`, `knownVulnerable`, or `unsupported` fields, bump
 // `generatedAt`, then ship a new wallet release. The shipped wallet
-// version's manifest is the trust boundary — users on older releases
+// version's manifest is the trust boundary; users on older releases
 // see older advisories. A runtime-fetch path that lets advisories
 // propagate between releases is tracked as Cluster N FOLLOWUP 1.
 //

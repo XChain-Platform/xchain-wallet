@@ -8,22 +8,22 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// HwSignBlock — composite sign-screen block for hardware-wallet sign
+// HwSignBlock: composite sign-screen block for hardware-wallet sign
 // flows. Renders the §18.5 derivation-path cross-check plus a live
 // device-status banner so the user knows when to expect the device
 // prompt. Meant to slot into every review/sign screen in place of
 // the software-signer password input when the source address is HW.
 //
 // Status banner variants:
-//   - 'available'     → quiet "Ready to sign — confirm on device" line
+//   - 'available'     → quiet "Ready to sign; confirm on device" line
 //   - 'wrong-app'     → "Open the [coin] app on your Ledger" warning
-//   - 'disconnected'  → "Device not detected — plug in and unlock"
-//   - 'locked'        → "Device is locked — enter PIN" (Trezor path)
+//   - 'disconnected'  → "Device not detected; plug in and unlock"
+//   - 'locked'        → "Device is locked; enter PIN" (Trezor path)
 //   - 'idle'          → no banner (pre-first-poll)
 //   - 'error'         → generic "Couldn't reach device" with detail
 //
 // The parent form is responsible for the Submit button copy + enable
-// state — `HwSignBlock` exposes the status via the `useSignerStatus`
+// state. `HwSignBlock` exposes the status via the `useSignerStatus`
 // hook so the parent can gate Submit on `status === 'available'`.
 
 import { useSignerStatus } from '../hooks/useSignerStatus.js';
@@ -41,8 +41,8 @@ import styles from './HwSignBlock.module.css';
  * @param {((opts?: object) => Promise<any>) | null} props.getStatus   signer.getStatus; pass null to disable polling
  * @param {(state: { status: string, detail: string | null, refresh: () => void }) => void} [props.onStatusChange]   parent subscribes to status
  * @param {{ vendor: string, model: string, firmwareVersion: string | null } | null} [props.signerInfo]   firmware metadata for the warning banner; when omitted the banner is suppressed (graceful for callers that don't have the SignerRecord on hand)
- * @param {boolean} [props.requireExplicitConfirm]   Cluster N FOLLOWUP 3 — when true, render the cross-check confirm checkbox; parent gates Submit on the result via onConfirmedChange.
- * @param {string | null} [props.requireExplicitConfirmReason]   user-facing one-liner explaining *why* the explicit confirm is required (e.g. "First-time recipient — confirm…"). Surfaces above the checkbox.
+ * @param {boolean} [props.requireExplicitConfirm]   Cluster N FOLLOWUP 3: when true, render the cross-check confirm checkbox; parent gates Submit on the result via onConfirmedChange.
+ * @param {string | null} [props.requireExplicitConfirmReason]   user-facing one-liner explaining *why* the explicit confirm is required (e.g. "First-time recipient, please confirm"). Surfaces above the checkbox.
  * @param {(confirmed: boolean) => void} [props.onConfirmedChange]   parent subscribes to the checkbox state.
  */
 export function HwSignBlock({
@@ -123,17 +123,17 @@ export function HwSignBlock({
 function statusCopy(status, signerKind, chainId, detail) {
     switch (status) {
         case 'available':
-            return 'Ready to sign — confirm on your device when you tap Send.';
+            return 'Ready to sign. Confirm on your device when you tap Send.';
         case 'wrong-app':
             return `Open the ${coinNameFor(chainId) || 'correct'} app on your Ledger and try again.`;
         case 'locked':
             return signerKind === 'trezor'
-                ? 'Device is locked — enter your PIN on the Trezor.'
-                : 'Device is locked — unlock it and try again.';
+                ? 'Device is locked. Enter your PIN on the Trezor.'
+                : 'Device is locked. Unlock it and try again.';
         case 'disconnected':
             return detail
                 ? `Device not detected. ${detail}`
-                : 'Device not detected — plug in and unlock.';
+                : 'Device not detected. Plug in and unlock.';
         case 'error':
             return detail
                 ? `Couldn't reach device. ${detail}`

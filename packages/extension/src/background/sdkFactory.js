@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Extension-side SDKFactory resolver — mirrors packages/web/src/sdkFactory.js.
+// Extension-side SDKFactory resolver: mirrors packages/web/src/sdkFactory.js.
 //
 // Dynamic import so the service worker can boot even when xchain-sdk
 // isn't installed (node smokes / CI jobs without workspace install).
@@ -43,7 +43,7 @@ export async function resolveSdkFactory({ devMockFactory }) {
             warned = true;
             // eslint-disable-next-line no-console -- intentional one-time diagnostic in the background service worker when xchain-sdk fails to load
             console.warn(
-                '[xchain-wallet/extension] xchain-sdk unavailable — falling back to dev-mock SDK. '
+                '[xchain-wallet/extension] xchain-sdk unavailable, falling back to dev-mock SDK. '
                     + 'Signing + broadcast will fail. Reason: '
                     + (err?.message || err),
             );
@@ -52,7 +52,7 @@ export async function resolveSdkFactory({ devMockFactory }) {
     }
 }
 
-/** Dev SDK stub — matches the web shell's fallback. */
+/** Dev SDK stub: matches the web shell's fallback. */
 export function createDevMockSdk(constructorOpts) {
     const chainId = constructorOpts?.network || 'bitcoin-mainnet';
     return {
@@ -79,7 +79,7 @@ export function createDevMockSdk(constructorOpts) {
             verifyMessage() { return false; },
             generateChallenge() { return ''; },
         },
-        // §46 — no-op WebSocket surface so the notification watcher can
+        // §46: no-op WebSocket surface so the notification watcher can
         // "connect" against the dev mock without the real explorer WS. It
         // never emits, so no notifications fire in dev-mock mode.
         connectWs() { return Promise.resolve(); },

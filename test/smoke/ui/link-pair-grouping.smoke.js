@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §28.3 / Cluster C FOLLOWUP 2 — cross-chain LINK pair
+// Smoke for §28.3 / Cluster C FOLLOWUP 2: cross-chain LINK pair
 // grouping. Pins the historyGrouping link-pair subkind, the
 // History.jsx GroupCard dual-badge surfacing, the connector-suppress
 // branch in grouped mode, and the badge label.
@@ -36,7 +36,7 @@ assert.ok(/linkPairLeaders\b/.test(hg),
 assert.ok(/Cross-chain link\b/.test(hg),
     'summarizeGroup renders the Cross-chain link prefix');
 
-// Behavior pin via a dynamic import — round-trip a 2-row pair through
+// Behavior pin via a dynamic import: round-trip a 2-row pair through
 // the live grouper to verify the leader / member / summary shapes.
 const { groupHistoryEntries } = await import(hgPath);
 const out = groupHistoryEntries([
@@ -59,7 +59,7 @@ assert.equal(out[0].kind, 'group');
 assert.equal(out[0].subkind, 'link-pair');
 assert.equal(out[0].leader.chainId, 'litecoin-mainnet',
     'leader is the older side');
-assert.equal(out[0].summary, 'Cross-chain link — SEND ↔ SEND');
+assert.equal(out[0].summary, 'Cross-chain link: SEND ↔ SEND');
 
 // Single-side LINK survives as a plain entry.
 const single = groupHistoryEntries([

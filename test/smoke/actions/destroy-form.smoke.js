@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for Phase 2 — Step 10 (piece 3c) — DESTROY form.
+// Smoke for Phase 2, Step 10 (piece 3c): DESTROY form.
 //
 // Asserts:
 //   1. DestroyForm.jsx exists and exports a single component, reusing
@@ -89,8 +89,8 @@ assert.ok(
 
 // --- 6. Danger variant on the sign button ------------------------------
 //
-// §20 Cluster X Step 7 — variant flips to 'primary' in watcher mode (the
-// "Create unsigned transaction" CTA is not destructive — destruction happens at
+// §20 Cluster X Step 7: variant flips to 'primary' in watcher mode (the
+// "Create unsigned transaction" CTA is not destructive; destruction happens at
 // broadcast on a different wallet). Pin the conditional shape so a future
 // drop of the danger variant doesn't go unnoticed.
 
@@ -195,5 +195,5 @@ for (const [shell, appPath] of [
 }
 
 console.log(
-    'OK — destroy form smoke (DestroyForm §40.4 + destroyToken core flow + action.destroy handler + both messaging helpers + ActionsMenu entry + danger-variant sign button + popup/web wiring)',
+    'OK: destroy form smoke (DestroyForm §40.4 + destroyToken core flow + action.destroy handler + both messaging helpers + ActionsMenu entry + danger-variant sign button + popup/web wiring)',
 );

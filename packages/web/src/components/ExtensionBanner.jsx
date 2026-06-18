@@ -12,8 +12,8 @@ import { useEffect, useState } from 'react';
 import styles from './ExtensionBanner.module.css';
 
 /**
- * Detect the `window.xchain` provider — injected by the XChain Wallet
- * extension's content script — and surface a banner offering the user
+ * Detect the `window.xchain` provider, injected by the XChain Wallet
+ * extension's content script, and surface a banner offering the user
  * the option to use the extension wallet instead of the standalone web
  * app (§8.3).
  *
@@ -57,7 +57,7 @@ export function ExtensionBanner() {
         <div role="status" className={styles.banner}>
             <span className={styles.label}>
                 <strong>XChain Wallet extension detected.</strong>
-                {' '}You can use your extension wallet — click its icon in
+                {' '}You can use your extension wallet; click its icon in
                 the browser toolbar.
             </span>
             <button

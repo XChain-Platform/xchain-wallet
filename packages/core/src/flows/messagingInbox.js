@@ -8,12 +8,12 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Messaging inbox flow — §41.7.2. Fetches MESSAGE action history for
+// Messaging inbox flow (§41.7.2). Fetches MESSAGE action history for
 // one of the wallet's own addresses and decrypts ECIES-encrypted
 // entries in-process using the address's WIF.
 //
 // Auth model: password required per call. WIF derivation is delegated
-// to `exportPrivateKey` (§17.7) — same unlock path, same error
+// to `exportPrivateKey` (§17.7), same unlock path, same error
 // surface (WrongPasswordError / NoKeyForAddressError / …). Once we
 // have the WIF we hand it to the SDK's `getMessagesForAddress`, which
 // auto-decrypts ECIES (method 1) entries.
@@ -25,7 +25,7 @@
 // (per spec §41.7.1); ECDH/AES will surface more richly once a
 // session-store lands.
 //
-// This flow is read-only — no vault mutation, no transaction.
+// This flow is read-only: no vault mutation, no transaction.
 
 import { exportPrivateKey } from './exportPrivateKey.js';
 

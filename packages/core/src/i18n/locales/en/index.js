@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// English string dictionary — §54 / G173 ICU format.
+// English string dictionary (§54 / G173 ICU format).
 //
 // Keys live in a flat object so collisions are lint-time errors, not
 // runtime surprises. Dotted keys (`home.lock`) express scope.
@@ -20,7 +20,7 @@
 //
 // `t()` in `i18n/index.js` runs a lightweight ICU subset interpreter
 // over the matched template. The interpreter only handles plural and
-// select (no nested patterns, no offset, no ordinal) — that's the
+// select (no nested patterns, no offset, no ordinal); that's the
 // subset the wallet actually uses today. The formatjs ICU library
 // can be swapped in later without changing the dictionary shape.
 //
@@ -56,7 +56,7 @@ export const en = {
     'home.noAddresses': 'No addresses yet. Use Receive to generate one.',
     'home.send': 'Send',
     'home.receive': 'Receive',
-    'home.balanceUnavailable': 'Balance unavailable — {reason}',
+    'home.balanceUnavailable': 'Balance unavailable: {reason}',
     'home.addressCount': '{count, plural, one {# address} other {# addresses}}',
 
     // --- onboarding ----------------------------------------------
@@ -64,13 +64,13 @@ export const en = {
     'onboarding.import': 'I already have a wallet',
     'create.title': 'Create a new wallet',
     'create.passwordHelp':
-        "Your password encrypts the wallet on this device. It can't be recovered — if you forget it, use the recovery phrase on the next screen to restore access.",
+        "Your password encrypts the wallet on this device. If you forget it, use the recovery phrase on the next screen to restore access. It cannot be recovered any other way.",
     'create.walletName': 'Wallet name',
     'create.passwordMinHint': 'At least {min} characters.',
     'create.passwordMismatch': 'Passwords do not match.',
     'create.mnemonicTitle': 'Write down your recovery phrase',
     'create.mnemonicHelp':
-        'These twelve words are the ONLY way to recover your wallet if you lose access to this device. Write them down on paper and store them somewhere safe — never type them into a website, email, or photo.',
+        'These twelve words are the ONLY way to recover your wallet if you lose access to this device. Write them down on paper and store them somewhere safe. Never type them into a website, email, or photo.',
     'create.mnemonicAck':
         'I have written down my recovery phrase and stored it safely.',
     'create.createWallet': 'Create wallet',
@@ -82,7 +82,7 @@ export const en = {
     'import.phrase': 'Recovery phrase',
     'import.phraseRequired': 'Recovery phrase is required.',
     'import.wordCount':
-        'Expected 12, 15, 18, 21, or 24 words — got {count}.',
+        'Expected 12, 15, 18, 21, or 24 words (got {count}).',
     'import.failed': 'Failed to import wallet.',
     'import.submit': 'Import',
 
@@ -104,7 +104,7 @@ export const en = {
     // --- extension banner ----------------------------------------
     'extBanner.detected': 'XChain Wallet extension detected.',
     'extBanner.hint':
-        'You can use your extension wallet — click its icon in the browser toolbar.',
+        'Your extension wallet is ready. Click its icon in the browser toolbar to open it.',
     'extBanner.dismiss': 'Dismiss',
 
     // --- xchain: URI intent labels (Cluster L FOLLOWUP 5) ---------
@@ -122,10 +122,10 @@ export const en = {
     'uri.intent.receiveAmountAt': 'Receive {amount} {tick} at {address}',
     'uri.intent.unknown': 'Unrecognized link',
 
-    // --- scan route (Cluster R FOLLOWUP 2 — i18n migration beachhead) -
+    // --- scan route (Cluster R FOLLOWUP 2: i18n migration beachhead) -
     'scan.title': 'Scan',
     'scan.scannerAlt': 'Scan a QR code',
-    'scan.routing': 'Scanned — routing…',
+    'scan.routing': 'Scanned, routing…',
     'scan.pasteLabel': 'Or paste a payload',
     'scan.pastePlaceholder': 'xchain:… / bitcoin:… / address / transaction hex',
     'scan.classifyPaste': 'Classify pasted payload',
@@ -137,11 +137,11 @@ export const en = {
     'scan.error.mnemonic':
         'A recovery phrase was scanned. Use Import Wallet → Recovery phrase to add it deliberately.',
     'scan.error.xcwChunk':
-        'Multi-frame transaction chunk {n}/{total} — open the Sign panel to capture every frame.',
+        'Multi-frame transaction chunk {n}/{total}. Open the Sign panel to capture every frame.',
     'scan.error.unknown':
         'Scanned content was not recognized ({type}). Try a clearer code.',
 
     // --- errors ---------------------------------------------------
-    'error.vaultClosed': 'Wallet is locked — unlock to continue.',
+    'error.vaultClosed': 'Wallet is locked. Unlock to continue.',
     'error.genericLoad': 'Failed to load.',
 };

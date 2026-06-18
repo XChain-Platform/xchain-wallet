@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for Cluster B Step 2 — G025 — Verify Signature route.
+// Smoke for Cluster B Step 2, G025: Verify Signature route.
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
@@ -57,7 +57,7 @@ assert.match(formSrc, /Signature does NOT match/, 'invalid copy');
 assert.match(formSrc, /role="status"/, 'result row has status role');
 assert.match(formSrc, /aria-live="polite"/, 'result row is aria-live');
 
-// No password input — verify is pure.
+// No password input; verify is pure.
 assert.equal(/type="password"/.test(formSrc), false, 'no password field');
 
 // --- host handler -----------------------------------------------------

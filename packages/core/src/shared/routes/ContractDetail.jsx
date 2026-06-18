@@ -23,11 +23,11 @@ import styles from './ActionsMenu.module.css';
 const chainRegistry = registryLib.defaultRegistry();
 
 /**
- * Contract detail page — §42.3.
+ * Contract detail page (§42.3).
  *
  * Layout (per spec):
  *
- *   Contract #42 — "MyMarket"                      [chain badge: BTC]
+ *   Contract #42: "MyMarket"                      [chain badge: BTC]
  *     Owner / Deployed / Gas limit / Status / Code hash
  *     State (expandable)
  *     Balances (tokens held by the contract)
@@ -35,18 +35,18 @@ const chainRegistry = registryLib.defaultRegistry();
  *     [Call method]  [Deposit]  [Withdraw]
  *
  * Loads five queries in parallel on mount:
- *   1. getContractByActionIndex    — header metadata
- *   2. getActionByIndex            — originating DEPLOY action (NAME /
+ *   1. getContractByActionIndex    - header metadata
+ *   2. getActionByIndex            - originating DEPLOY action (NAME /
  *      CODE_HASH / CONSTRUCTOR_PARAMS)
- *   3. getContractState            — full state map
- *   4. getContractBalance          — full balances map
- *   5. getExecutionsForContract    — first page of executions
- *   …plus getAddressesByChain to flag "you own this" against the
+ *   3. getContractState            - full state map
+ *   4. getContractBalance          - full balances map
+ *   5. getExecutionsForContract    - first page of executions
+ *   ...plus getAddressesByChain to flag "you own this" against the
  *   user's wallet addresses.
  *
  * EXECUTE / DEPOSIT / WITHDRAW buttons are rendered but are no-ops
  * until Steps 5 + 6 land the authoring forms. The `onExecute /
- * onDeposit / onWithdraw` props are optional — when omitted, the
+ * onDeposit / onWithdraw` props are optional. When omitted, the
  * buttons render disabled so the detail page ships complete in
  * Step 3 without a half-baked signing path.
  *
@@ -143,13 +143,13 @@ export function ContractDetail({
         [owner, walletAddresses],
     );
     const name = deployAction?.params?.NAME || contract?.name || contract?.NAME || '(unnamed)';
-    const deployBlock = contract?.block_index || contract?.BLOCK_INDEX || '—';
+    const deployBlock = contract?.block_index || contract?.BLOCK_INDEX || '?';
     const gasLimit = contract?.gas_limit || contract?.GAS_LIMIT
-        || deployAction?.params?.GAS_LIMIT || '—';
+        || deployAction?.params?.GAS_LIMIT || '?';
     const status = String(contract?.status || contract?.STATUS || 'Active');
     const codeHash = contract?.code_hash || contract?.CODE_HASH
-        || deployAction?.params?.CODE_HASH || '—';
-    // Contract-staking metadata (DEPLOY v1+) — null on non-stakeable contracts
+        || deployAction?.params?.CODE_HASH || '?';
+    // Contract-staking metadata (DEPLOY v1+): null on non-stakeable contracts
     const cooldownBlocks = contract?.cooldown_blocks ?? contract?.COOLDOWN_BLOCKS ?? null;
     const slashDestinationAddr = contract?.slash_destination ?? contract?.SLASH_DESTINATION
         ?? contract?.slash_destination_address ?? null;
@@ -185,7 +185,7 @@ export function ContractDetail({
                 <section>
                     <header style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
                         <h2 style={{ fontSize: '1rem', margin: 0 }}>
-                            Contract #{contractActionIndex} — &quot;{name}&quot;
+                            Contract #{contractActionIndex}: &quot;{name}&quot;
                         </h2>
                         {descriptor ? <ChainBadge descriptor={descriptor} size="md" /> : null}
                     </header>
@@ -193,7 +193,7 @@ export function ContractDetail({
                         <div><strong>Owner:</strong>{' '}
                             {owner
                                 ? <><AddressText address={String(owner)} />{isOwner ? ' (you)' : ''}</>
-                                : '—'}
+                                : '(unknown)'}
                         </div>
                         <div><strong>Deployed:</strong> block {deployBlock}</div>
                         <div><strong>Gas limit:</strong> {gasLimit}</div>
@@ -201,7 +201,7 @@ export function ContractDetail({
                         <div><strong>Code hash:</strong> {String(codeHash)}</div>
                         {isStakeable ? (
                             <>
-                                <div><strong>Stakeable:</strong> yes — {String(cooldownBlocks)}-block cooldown</div>
+                                <div><strong>Stakeable:</strong> yes, {String(cooldownBlocks)}-block cooldown</div>
                                 <div><strong>Slash destination:</strong>{' '}
                                     {slashDestinationAddr
                                         ? <AddressText address={String(slashDestinationAddr)} />
@@ -272,13 +272,13 @@ export function ContractDetail({
                             {executions.map((row, i) => (
                                 <div key={String(row.action_index ?? i) + ':' + i} className={styles.entry}>
                                     <span className={styles.entryLabel}>
-                                        {row.method || row.METHOD || '(method)'} — #{row.action_index ?? '?'}
+                                        {row.method || row.METHOD || '(method)'} #{row.action_index ?? '?'}
                                     </span>
                                     <span className={styles.entryDescription}>
                                         {row.source ? (
                                             <>caller <AddressText address={String(row.source)} /> · </>
                                         ) : null}
-                                        block {row.block_index || '—'}
+                                        block {row.block_index || '?'}
                                     </span>
                                 </div>
                             ))}
@@ -395,7 +395,7 @@ function BalancesTable({ balances }) {
 
 function Pagination({ page, total, pageSize, onChange }) {
     const hasNext = total === null
-        ? pageSize >= 25  // heuristic when total is absent — a full page implies more
+        ? pageSize >= 25  // heuristic when total is absent: a full page implies more
         : total > page * pageSize;
     const hasPrev = page > 1;
     if (!hasPrev && !hasNext) return null;

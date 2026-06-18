@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// MultisigSigningSession — §22.3 partial-signature tracking. Phase 4
+// MultisigSigningSession: §22.3 partial-signature tracking. Phase 4
 // Step 19 of 23. Persists per-tx contribution state so a multisig
 // spend can resume across wallet sessions.
 //
@@ -20,8 +20,8 @@
 //     contributions: signatures[]      one DER-encoded ECDSA sig per cosigner
 //
 //   taproot-musig2 (two rounds):
-//     status: 'collecting-nonces'      round 1 — collect 66-byte publicNonces
-//          → 'collecting-sigs'         round 2 — aggNonce computed; collect 32-byte partial sigs
+//     status: 'collecting-nonces'      round 1: collect 66-byte publicNonces
+//          → 'collecting-sigs'         round 2: aggNonce computed; collect 32-byte partial sigs
 //          → 'ready-to-finalize'       partialSigs aggregated into a 64-byte Schnorr sig
 //          → 'finalized' → 'broadcast'
 //     contributions: nonces[], partialSigs[]

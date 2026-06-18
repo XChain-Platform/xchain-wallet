@@ -15,7 +15,7 @@ import styles from './ActionsMenu.module.css';
 import pickerStyles from './WalletPicker.module.css';
 
 /**
- * WalletPicker — full-screen list of all wallets in the vault, with
+ * WalletPicker: full-screen list of all wallets in the vault, with
  * an "Add Wallet" affordance in the header. Reached from the gear
  * popover's Wallet summary row. Picking a wallet calls `onSwitch`
  * and returns to home.

@@ -11,11 +11,11 @@
 // Smoke test for Batch 4 piece 14 (plain-English action decoder + sign screens).
 //
 // Covers:
-//   1. Pure decoder — SEND / SWEEP produce human sentences; memos with
+//   1. Pure decoder: SEND / SWEEP produce human sentences; memos with
 //      `|` or `;` surface as warnings; empty destinations / non-positive
 //      amounts surface as warnings; unknown actions fall back to a
 //      generic summary + "no plain-English" warning.
-//   2. Static wiring — core/src/index.js re-exports the decoder
+//   2. Static wiring: core/src/index.js re-exports the decoder
 //      namespace; the extension's SignApproval.jsx calls
 //      `decoder.decodeAction` for the signAction kind and renders the
 //      warnings array.
@@ -106,7 +106,7 @@ const chainRegistry = registryLib.defaultRegistry();
 }
 
 // 1e. Unknown / not-yet-decoded action falls back with the "no
-// plain-English" warning. Using ORDER — Step 24 adds LIST + AIRDROP,
+// plain-English" warning. Using ORDER (Step 24 adds LIST + AIRDROP,
 // so the fallback now exercises ORDER / SWAP / etc.
 {
     const d = decoderLib.decodeAction({
@@ -140,9 +140,9 @@ const chainRegistry = registryLib.defaultRegistry();
     assert.ok(Array.isArray(d.warnings));
 }
 
-// --- 2. Phase 2 decoders — ISSUE / MINT / DESTROY / BATCH ------------
+// --- 2. Phase 2 decoders: ISSUE / MINT / DESTROY / BATCH ------------
 
-// 2a. ISSUE v0 fresh-create — Meme-template shape (MAX_SUPPLY + MINT_SUPPLY + lock flags).
+// 2a. ISSUE v0 fresh-create: Meme-template shape (MAX_SUPPLY + MINT_SUPPLY + lock flags).
 {
     const d = decoderLib.decodeAction({
         action: 'ISSUE',
@@ -178,7 +178,7 @@ const chainRegistry = registryLib.defaultRegistry();
     );
 }
 
-// 2b. ISSUE v0 transfer-only — TRANSFER set, no supply/mint fields.
+// 2b. ISSUE v0 transfer-only: TRANSFER set, no supply/mint fields.
 {
     const d = decoderLib.decodeAction({
         action: 'ISSUE',
@@ -218,7 +218,7 @@ const chainRegistry = registryLib.defaultRegistry();
     assert.equal(d.warnings.length, 0, 'description update alone has no warnings');
 }
 
-// 2d. ISSUE v3 lock-params — summary names what's being locked.
+// 2d. ISSUE v3 lock-params: summary names what's being locked.
 {
     const d = decoderLib.decodeAction({
         action: 'ISSUE',
@@ -364,9 +364,9 @@ const chainRegistry = registryLib.defaultRegistry();
     );
 }
 
-// --- 2.5. Step 24 decoders — LIST v0/v1 + AIRDROP v0/v1/v2/v3 --------
+// --- 2.5. Step 24 decoders: LIST v0/v1 + AIRDROP v0/v1/v2/v3 --------
 
-// 2l. LIST v0 create — address list.
+// 2l. LIST v0 create: address list.
 {
     const d = decoderLib.decodeAction({
         action: 'LIST',
@@ -389,7 +389,7 @@ const chainRegistry = registryLib.defaultRegistry();
     assert.equal(d.warnings.length, 0, 'happy LIST v0 has no warnings');
 }
 
-// 2m. LIST v0 create — TICK list, empty items warns.
+// 2m. LIST v0 create: TICK list, empty items warns.
 {
     const d = decoderLib.decodeAction({
         action: 'LIST',
@@ -414,7 +414,7 @@ const chainRegistry = registryLib.defaultRegistry();
     );
 }
 
-// 2o. LIST v1 add — summary names the parent list.
+// 2o. LIST v1 add: summary names the parent list.
 {
     const d = decoderLib.decodeAction({
         action: 'LIST',
@@ -433,7 +433,7 @@ const chainRegistry = registryLib.defaultRegistry();
     );
 }
 
-// 2p. LIST v1 remove — preposition switches to "from".
+// 2p. LIST v1 remove: preposition switches to "from".
 {
     const d = decoderLib.decodeAction({
         action: 'LIST',
@@ -446,7 +446,7 @@ const chainRegistry = registryLib.defaultRegistry();
     assert.match(d.summary, /Remove 1 item from list #4321/);
 }
 
-// 2q. AIRDROP v0 — single happy path.
+// 2q. AIRDROP v0: single happy path.
 {
     const d = decoderLib.decodeAction({
         action: 'AIRDROP',
@@ -464,7 +464,7 @@ const chainRegistry = registryLib.defaultRegistry();
     assert.equal(d.warnings.length, 0, 'happy AIRDROP v0 has no warnings');
 }
 
-// 2r. AIRDROP v0 — missing list index warns.
+// 2r. AIRDROP v0: missing list index warns.
 {
     const d = decoderLib.decodeAction({
         action: 'AIRDROP',
@@ -475,7 +475,7 @@ const chainRegistry = registryLib.defaultRegistry();
     );
 }
 
-// 2s. AIRDROP v0 — memo pipe is rejected.
+// 2s. AIRDROP v0: memo pipe is rejected.
 {
     const d = decoderLib.decodeAction({
         action: 'AIRDROP',
@@ -489,7 +489,7 @@ const chainRegistry = registryLib.defaultRegistry();
     );
 }
 
-// 2t. AIRDROP v1 — multi-token, single list.
+// 2t. AIRDROP v1: multi-token, single list.
 {
     const d = decoderLib.decodeAction({
         action: 'AIRDROP',
@@ -505,7 +505,7 @@ const chainRegistry = registryLib.defaultRegistry();
     assert.match(d.summary, /Airdrop on Bitcoin: 1 GAS → list #1234, 2 BRRR → list #1234/);
 }
 
-// 2u. AIRDROP v2 — multi-token, multi-list.
+// 2u. AIRDROP v2: multi-token, multi-list.
 {
     const d = decoderLib.decodeAction({
         action: 'AIRDROP',
@@ -559,5 +559,5 @@ assert.ok(signCss.includes('.warnings'), 'warnings block has a style');
 assert.ok(signCss.includes('.detailsList'), 'details list has a style');
 
 console.log(
-    'OK — action decoder smoke (28 cases: SEND + SWEEP + ISSUE v0/v1/v3 + MINT + DESTROY v0 + DESTROY multi-fallback + BATCH + LIST v0/v1 + AIRDROP v0/v1/v2 + fallback + null-safety + SignApproval wiring)',
+    'OK: action decoder smoke (28 cases: SEND + SWEEP + ISSUE v0/v1/v3 + MINT + DESTROY v0 + DESTROY multi-fallback + BATCH + LIST v0/v1 + AIRDROP v0/v1/v2 + fallback + null-safety + SignApproval wiring)',
 );

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §37.1 / G118 — `<Skeleton>` loading-placeholder primitive.
+// Smoke for §37.1 / G118: `<Skeleton>` loading-placeholder primitive.
 //
 // Verifies:
 //   1. Skeleton.jsx + Skeleton.module.css exist and ship in the
@@ -69,7 +69,7 @@ assert.ok(
     'Skeleton coerces numeric width/height props to px',
 );
 
-// CSS — keyframes + reduced-motion guard.
+// CSS: keyframes + reduced-motion guard.
 const cssSrc = readFileSync(cssPath, 'utf8');
 assert.ok(/@keyframes\s+xc-skeleton-shimmer/.test(cssSrc), 'CSS defines the shimmer keyframes');
 assert.ok(

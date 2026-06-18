@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Phase 3 Step 2 smoke — Market view shell (§41.3).
+// Phase 3 Step 2 smoke: Market view shell (§41.3).
 //
 // Scaffold check: MarketView renders the four-panel layout, reads
 // market summary via messaging.getMarket, and wires into all three
@@ -38,9 +38,9 @@ assert.ok(/walletId.*chainId.*tick1.*tick2/s.test(src),
 assert.ok(/messaging\.getMarket\(/.test(src),
     'MarketView fetches the market summary via messaging.getMarket');
 
-// --- 2. Panel wiring — real components + remaining stubs ------
+// --- 2. Panel wiring: real components + remaining stubs ------
 
-// Chart panel (§41.3.1) — Step 3 landed MarketChart; asserted here by
+// Chart panel (§41.3.1): Step 3 landed MarketChart; asserted here by
 // import, not by stub text.
 assert.ok(
     /import \{ MarketChart \}/.test(src),
@@ -51,7 +51,7 @@ assert.ok(
     'MarketView renders <MarketChart /> for the chart panel',
 );
 
-// Orderbook panel (§41.3.2) — Step 4 landed OrderbookPanel.
+// Orderbook panel (§41.3.2): Step 4 landed OrderbookPanel.
 assert.ok(
     /import \{ OrderbookPanel \}/.test(src),
     'MarketView imports OrderbookPanel (Step 4)',
@@ -65,7 +65,7 @@ assert.ok(
     'MarketView threads price picks from the orderbook into local state',
 );
 
-// Recent trades panel (§41.3.3) — Step 5 landed RecentTradesPanel.
+// Recent trades panel (§41.3.3): Step 5 landed RecentTradesPanel.
 assert.ok(
     /import \{ RecentTradesPanel \}/.test(src),
     'MarketView imports RecentTradesPanel (Step 5)',
@@ -75,7 +75,7 @@ assert.ok(
     'MarketView renders <RecentTradesPanel />',
 );
 
-// Place order form (§41.3.4) — Step 6 landed PlaceOrderPanel.
+// Place order form (§41.3.4): Step 6 landed PlaceOrderPanel.
 assert.ok(
     /import \{ PlaceOrderPanel \}/.test(src),
     'MarketView imports PlaceOrderPanel (Step 6)',
@@ -85,7 +85,7 @@ assert.ok(
     'MarketView renders <PlaceOrderPanel /> with prefillPrice from orderbook clicks',
 );
 
-// Open orders panel (§41.3.5) — Step 7 landed OpenOrdersPanel.
+// Open orders panel (§41.3.5): Step 7 landed OpenOrdersPanel.
 assert.ok(
     /import \{ OpenOrdersPanel \}/.test(src),
     'MarketView imports OpenOrdersPanel (Step 7)',
@@ -118,5 +118,5 @@ for (const [shell, appPath] of [
 }
 
 console.log(
-    'OK — market-view smoke (MarketView §41.3 shell + all five panels live: MarketChart (Step 3) + OrderbookPanel (Step 4) + RecentTradesPanel (Step 5) + PlaceOrderPanel (Step 6) with prefillPrice threading from orderbook clicks + OpenOrdersPanel (Step 7); messaging.getMarket summary hydration; popup/web/desktop App routing market→markets)',
+    'OK: market-view smoke (MarketView §41.3 shell + all five panels live: MarketChart (Step 3) + OrderbookPanel (Step 4) + RecentTradesPanel (Step 5) + PlaceOrderPanel (Step 6) with prefillPrice threading from orderbook clicks + OpenOrdersPanel (Step 7); messaging.getMarket summary hydration; popup/web/desktop App routing market->markets)',
 );

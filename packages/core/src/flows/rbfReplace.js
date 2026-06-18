@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// RBF replacement flow — §29.9 Speed-up / Cancel from History.
+// RBF replacement flow (§29.9): Speed-up / Cancel from History.
 //
 // The §29 cluster ships the UI surfaces (pending-tx rows in
 // History.jsx surface Speed up + Cancel buttons). This flow is the
@@ -24,7 +24,7 @@
 // of writing) surface a clear, honest "RBF not yet supported in this
 // build" error instead of pretending success.
 //
-// Output shape — `{ replacementTxHash, broadcastedAt, feeIncrease }` —
+// Output shape: `{ replacementTxHash, broadcastedAt, feeIncrease }`.
 // matches what the eventual handler will return; UI written against
 // this contract today won't change when the engine ships.
 
@@ -105,7 +105,7 @@ export function isEntryReplaceable(entry) {
 export async function sendRbfRequest({ messaging, request } = {}) {
     if (!messaging || typeof messaging.replaceTx !== 'function') {
         throw new RbfNotSupportedError(
-            'Replacement engine pending — track §44.4 / §44.5 for the SDK + encoder work.',
+            'Replacement engine pending; track §44.4 / §44.5 for the SDK + encoder work.',
         );
     }
     if (!request || typeof request !== 'object') {

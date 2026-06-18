@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §26 Lock & Panic — Step 6 — G068 part 2 — duress passphrase
+// Smoke for §26 Lock & Panic, Step 6, G068 part 2: duress passphrase
 // flow. Exercises the hash/verify round-trip + the trip-and-arm
 // integration with panicMode.
 

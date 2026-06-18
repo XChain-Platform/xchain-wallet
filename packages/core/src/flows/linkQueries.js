@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// linkQueries — thin read-only wrapper over `sdk.getLinks`. Backs
+// linkQueries: thin read-only wrapper over `sdk.getLinks`. Backs
 // the §23.5 cross-chain thread rendering on History: every LINK
 // action records a (coin1, coin1_action_index) ↔ (coin2,
 // coin2_action_index) pair, and the History route uses these to mark

@@ -85,7 +85,7 @@ for (const state of ['loading', 'error', 'no-wallet', 'locked', 'unlocked']) {
 }
 assert.ok(app.includes('getSessionStatus'), 'App.jsx queries getSessionStatus');
 
-// Locked hoisted to @xchain-wallet/core/shared/routes — the shared
+// Locked hoisted to @xchain-wallet/core/shared/routes; the shared
 // version unlocks via useMessaging(); the web App renders the
 // ExtensionBanner at App level, not inside the route.
 const sharedLocked = readFileSync(
@@ -166,7 +166,7 @@ function makeFakeKvStore() {
     };
 }
 
-// A shared fake localStorage for the whole run — module-scoped
+// A shared fake localStorage for the whole run. Module-scoped;
 // `globalThis.localStorage` is read by WebMetaBackend's default
 // constructor path, so tests that don't inject can still exercise the
 // real load/save code path.
@@ -287,10 +287,10 @@ const kdfParams = cryptoLib.makeFreshKdfParams();
     assert.equal(caught.name, 'VaultClosedError');
 }
 
-// Cleanup — restore the original opener so other smokes that import
+// Cleanup: restore the original opener so other smokes that import
 // IndexedDBStorageBackend aren't affected.
 IndexedDBStorageBackend.prototype._openStore = originalOpen;
 
 console.log(
-    'OK — web shell smoke (static wiring + hostBridge: no-wallet / locked / wrong / unlocked / lock)',
+    'OK: web shell smoke (static wiring + hostBridge: no-wallet / locked / wrong / unlocked / lock)',
 );

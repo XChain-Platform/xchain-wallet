@@ -8,20 +8,20 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// BackupSection — §35.1 Backup panel.
+// BackupSection: §35.1 Backup panel.
 //
 // Live:
-//   - Export encrypted backup (.xchain-wallet) — wires `exportBackupFile`
+//   - Export encrypted backup (.xchain-wallet): wires `exportBackupFile`
 //     core flow through the `wallet.exportBackup` host handler.
-//   - Back up seed phrase — wires `revealMnemonic` core flow through
+//   - Back up seed phrase: wires `revealMnemonic` core flow through
 //     the `wallet.revealMnemonic` host handler. Inline password gate;
 //     mnemonic blurred until tapped; row collapses on done.
-//   - Test backup (dry-run restore) — wires `dryRunRestore` core flow
+//   - Test backup (dry-run restore): wires `dryRunRestore` core flow
 //     through the `wallet.dryRunRestore` host handler. User pastes a
 //     candidate mnemonic; the panel renders an overall match flag plus
 //     a per-chain comparison report (matched / divergent / missing
 //     counts).
-//   - Publish labels (§19.5.2) — wires `publishLabelsNow` core flow
+//   - Publish labels (§19.5.2): wires `publishLabelsNow` core flow
 //     through the `wallet.publishLabels` host handler. User picks a
 //     chain + enters the wallet password; the panel encrypts the
 //     labels + contacts payload, broadcasts it as a FILE action, and
@@ -94,7 +94,7 @@ export function BackupSection({ activeWallet }) {
                 password,
             });
             triggerDownload(activeWallet.name || activeWallet.id, fileContent);
-            // §19.7 / G034 — successful encrypted-backup export counts as
+            // §19.7 / G034: successful encrypted-backup export counts as
             // a fresh backup verification for reminder purposes.
             try { flowsLib.markBackupVerified(activeWallet.id); } catch { /* best-effort */ }
             setPendingPassword(null);
@@ -127,7 +127,7 @@ export function BackupSection({ activeWallet }) {
         } catch (err) {
             const name = err?.name || '';
             const msg = name === 'NoMnemonicForWifOnlyError'
-                ? 'This wallet was imported from a private key only — there is no seed phrase to reveal.'
+                ? 'This wallet was imported from a private key only. There is no seed phrase to reveal.'
                 : (err?.message || 'Failed to reveal seed phrase.');
             setRevealError(msg);
         } finally {
@@ -230,7 +230,7 @@ export function BackupSection({ activeWallet }) {
             {revealStage === 'password' ? (
                 <UnlockPrompt
                     label="Reveal seed phrase"
-                    hint="Enter your wallet password. The seed phrase is the master key — anyone who sees it can spend your funds. Make sure no one is looking over your shoulder."
+                    hint="Enter your wallet password. The seed phrase is the master key: anyone who sees it can spend your funds. Make sure no one is looking over your shoulder."
                     busy={revealing}
                     onCancel={() => { setRevealStage('idle'); setRevealError(null); }}
                     onSubmit={(pw) => onReveal(pw)}
@@ -323,7 +323,7 @@ function BackupRow({ label, hint, actionLabel, disabled, onClick }) {
 }
 
 /**
- * Single-password unlock prompt — used by the §19.3 seed-phrase reveal
+ * Single-password unlock prompt used by the §19.3 seed-phrase reveal
  * flow. Differs from `<PasswordPrompt>` (the backup-export flow) by
  * not asking for confirmation, since the user is entering an EXISTING
  * password rather than picking a new one.
@@ -396,7 +396,7 @@ function RevealedMnemonic({ mnemonic, hidden, onToggle, onDone }) {
             <div style={ROW_HINT}>
                 Write it on paper or store it in a password manager. Never type or
                 paste it into anything else. The wallet has nothing else that can
-                recover this — losing the seed and your password loses the funds.
+                recover this. Losing the seed and your password loses the funds.
             </div>
             <button
                 type="button"
@@ -438,7 +438,7 @@ function RevealedMnemonic({ mnemonic, hidden, onToggle, onDone }) {
 }
 
 /**
- * Dry-run restore form — paste mnemonic, pick format / passphrase /
+ * Dry-run restore form: paste mnemonic, pick format / passphrase /
  * gap limit, fire the comparison.
  */
 function DryRunForm({ busy, error, onCancel, onSubmit }) {
@@ -468,7 +468,7 @@ function DryRunForm({ busy, error, onCancel, onSubmit }) {
             <textarea
                 value={mn}
                 onChange={(e) => setMn(e.target.value)}
-                placeholder="Paste mnemonic — separated by spaces"
+                placeholder="Paste mnemonic, separated by spaces"
                 rows={3}
                 aria-label="Candidate mnemonic"
                 style={{ ...passwordStyle, fontFamily: 'var(--xc-font-mono)', resize: 'vertical' }}
@@ -732,7 +732,7 @@ function PublishLabelsForm({ walletId, busy, error, onCancel, onSubmit }) {
             {chains === null ? (
                 <div style={ROW_HINT}>Loading chains…</div>
             ) : chains.length === 0 ? (
-                <Status text={chainsError || 'No chains have addresses on this wallet — generate one first.'} tone="error" />
+                <Status text={chainsError || 'No chains have addresses on this wallet. Generate one first.'} tone="error" />
             ) : (
                 <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 'var(--xc-text-sm)' }}>
                     <span style={ROW_HINT}>Chain</span>
@@ -780,7 +780,7 @@ function PublishLabelsForm({ walletId, busy, error, onCancel, onSubmit }) {
 }
 
 /**
- * §19.5.2 publish-labels result panel — shows the broadcast txid + the
+ * §19.5.2 publish-labels result panel: shows the broadcast txid + the
  * payload metadata (chain, encrypted size, discovery name). The user
  * can copy the txid; "Done" resets the section back to the idle row.
  */
@@ -803,11 +803,11 @@ function PublishLabelsReport({ result, onDone }) {
                 <dt style={ROW_HINT}>Txid</dt>
                 <dd style={{ margin: 0, fontFamily: 'var(--xc-font-mono)', fontSize: 'var(--xc-text-xs)', wordBreak: 'break-all' }}>{txid}</dd>
                 <dt style={ROW_HINT}>Chain</dt>
-                <dd style={{ margin: 0, fontSize: 'var(--xc-text-sm)' }}>{result?.chainId || '—'}</dd>
+                <dd style={{ margin: 0, fontSize: 'var(--xc-text-sm)' }}>{result?.chainId || '-'}</dd>
                 <dt style={ROW_HINT}>Encrypted size</dt>
                 <dd style={{ margin: 0, fontSize: 'var(--xc-text-sm)' }}>{result?.sizeBytes ?? 0} bytes</dd>
                 <dt style={ROW_HINT}>Discovery name</dt>
-                <dd style={{ margin: 0, fontFamily: 'var(--xc-font-mono)', fontSize: 'var(--xc-text-xs)', wordBreak: 'break-all' }}>{result?.discoveryName || '—'}</dd>
+                <dd style={{ margin: 0, fontFamily: 'var(--xc-font-mono)', fontSize: 'var(--xc-text-xs)', wordBreak: 'break-all' }}>{result?.discoveryName || '-'}</dd>
             </dl>
             <div style={{ display: 'flex', gap: 'var(--xc-space-2)', justifyContent: 'flex-end' }}>
                 <button

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// ChromeRuntimeAdapter — bridges a MessageHost to `chrome.runtime`.
+// ChromeRuntimeAdapter: bridges a MessageHost to `chrome.runtime`.
 // Runs in the MV3 service worker; popup, content script, and inject
 // script send messages via `chrome.runtime.sendMessage`.
 //

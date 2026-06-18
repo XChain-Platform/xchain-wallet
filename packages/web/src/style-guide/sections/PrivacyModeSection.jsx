@@ -96,12 +96,12 @@ export function PrivacyModeSection() {
             id="privacy-mode"
             title="Privacy mode"
             tag="GUIDANCE · figure-masking pattern"
-            kicker="One global toggle masks every figure (balance / fiat / fee amount) across the wallet so a user can pull the app up in a public place without showing the world their net worth. Identifying labels (asset names, ticks, addresses) stay visible — the goal is hiding $$$, not making the app unusable."
+            kicker="One global toggle masks every figure (balance / fiat / fee amount) across the wallet so a user can pull the app up in a public place without showing the world their net worth. Identifying labels (asset names, ticks, addresses) stay visible; the goal is hiding $$$, not making the app unusable."
         >
             <Guidance
                 what={<>A boolean flag (<code>settings.balancesHidden</code>) that swaps every numeric figure for the mask glyph <code>{PRIVACY_MASK}</code>. The trigger is a single eye-button in the Total balance hero on Home; the flag persists across sessions in settings.</>}
-                doRule={<>✓ Mask figures: balance quantity, fiat conversion, fee amounts, transaction values, change deltas · keep identifying text visible: asset name, tick, chain badge, address, action labels · use the same <code>{PRIVACY_MASK}</code> glyph everywhere (no "<em>***</em>" or "<em>HIDDEN</em>" — one mask language) · transition icon between <code>EyeIcon</code> (currently masked, tap to show) and <code>EyeOffIcon</code> (currently visible, tap to hide)</>}
-                dontRule={<>✗ Mask labels (turning "Bitcoin" into <code>{PRIVACY_MASK}</code> defeats wayfinding — the user still needs to know which row is which) · mask addresses (they're not private; they're already public on-chain) · build a per-row mask toggle (one global switch keeps the contract predictable — every figure is either shown or masked) · ask before enabling (it's a UI preference, not a security action)</>}
+                doRule={<>✓ Mask figures: balance quantity, fiat conversion, fee amounts, transaction values, change deltas · keep identifying text visible: asset name, tick, chain badge, address, action labels · use the same <code>{PRIVACY_MASK}</code> glyph everywhere (no "<em>***</em>" or "<em>HIDDEN</em>"; one mask language) · transition icon between <code>EyeIcon</code> (currently masked, tap to show) and <code>EyeOffIcon</code> (currently visible, tap to hide)</>}
+                dontRule={<>✗ Mask labels (turning "Bitcoin" into <code>{PRIVACY_MASK}</code> defeats wayfinding; the user still needs to know which row is which) · mask addresses (they're not private; they're already public on-chain) · build a per-row mask toggle (one global switch keeps the contract predictable; every figure is either shown or masked) · ask before enabling (it's a UI preference, not a security action)</>}
                 supersedes={<>Per-component masking code in BalanceList, History, GroupCard, OpenOrders, TotalBalanceHero. The canonical flag is <code>settings.balancesHidden</code>; the canonical mask glyph is <code>{PRIVACY_MASK}</code>.</>}
             />
 
@@ -117,14 +117,14 @@ const hidden = settings?.balancesHidden ?? false;
     {hidden ? PRIVACY_MASK : formatAmount(row.quantity, row.divisibility)}
 </div>
 
-// Toggle button — eye icon flips between EyeIcon (masked) and EyeOffIcon (visible):
+// Toggle button: eye icon flips between EyeIcon (masked) and EyeOffIcon (visible):
 <button onClick={() => setSettings({ ...settings, balancesHidden: !hidden })}
         aria-label={hidden ? 'Show balances' : 'Hide balances'}>
     {hidden ? <Icon.EyeIcon /> : <Icon.EyeOffIcon />}
 </button>`}
             </Markup>
 
-            <LiveExample label="Toggle the eye button — every figure swaps to the mask glyph">
+            <LiveExample label="Toggle the eye button: every figure swaps to the mask glyph">
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                     <HeroDemo hidden={hidden} onToggle={() => setHidden((h) => !h)} />
                     <RowDemo hidden={hidden} />

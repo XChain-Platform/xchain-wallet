@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// ConnectedSitesSection — §35.1 + §43.5 Connected Sites panel.
+// ConnectedSitesSection: §35.1 + §43.5 Connected Sites panel.
 //
 // Lists ConnectedSite records sorted by lastUsedAt desc. Each row:
 //   - origin / appName / lastUsedAt
@@ -101,7 +101,7 @@ export function ConnectedSitesSection() {
     useEffect(() => { reload(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
 
     const onDisconnect = async (id) => {
-        // §37.2 / Cluster D FOLLOWUP 1 — snapshot the full ConnectedSite
+        // §37.2 / Cluster D FOLLOWUP 1: snapshot the full ConnectedSite
         // record before tearing it down so the Undo toast can re-create
         // it with the same permissions / lastUsedAt / appName instead
         // of forcing the dApp to re-prompt.
@@ -234,7 +234,7 @@ export function ConnectedSitesSection() {
     );
 }
 
-// Cluster S FOLLOWUP 4 — Blocklist audit-log panel.
+// Cluster S FOLLOWUP 4: Blocklist audit-log panel.
 // Reads the persisted ring-buffer via messaging.listBlocklistAuditLog,
 // renders newest-first, and exposes a Clear log button.
 function BlocklistAuditPanel() {
@@ -337,7 +337,7 @@ function BlocklistAuditPanel() {
     );
 }
 
-// Cluster S FOLLOWUP 1 — Sign-request throttle limits panel.
+// Cluster S FOLLOWUP 1: Sign-request throttle limits panel.
 // Reads / edits `settings.signThrottle.{burst, windowMs}`. Empty values
 // fall back to defaults at the throttle layer (createSignThrottle), so
 // the user can clear an input to "unset" it without typing the default.
@@ -428,7 +428,7 @@ function SignThrottlePanel() {
         <div style={SITE_BLOCK}>
             <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>Sign-request throttle</span>
             <span style={ROW_HINT}>
-                Per-origin token bucket (§12 / G012) — caps how many sign requests
+                Per-origin token bucket (§12 / G012): caps how many sign requests
                 a single dApp can fire inside a window before further requests
                 reject with <code style={{ fontFamily: 'var(--xc-font-mono, monospace)' }}>THROTTLED</code>.
                 Lower numbers harden against abuse; higher numbers help during
@@ -502,7 +502,7 @@ function BlockedOriginsPanel({ blocked, manualBlock, setManualBlock, onSubmit, o
                     <code style={{ fontFamily: 'var(--xc-font-mono, monospace)' }}>BLOCKED_BY_USER</code>{' '}
                     until you remove the origin. Wildcards like{' '}
                     <code style={{ fontFamily: 'var(--xc-font-mono, monospace)' }}>*.example.com</code>{' '}
-                    block every subdomain (the bare apex is separate — add{' '}
+                    block every subdomain (the bare apex is separate; add{' '}
                     <code style={{ fontFamily: 'var(--xc-font-mono, monospace)' }}>example.com</code>{' '}
                     too if you want to cover it).
                 </span>
@@ -574,7 +574,7 @@ function PermissionsSummary({ permissions }) {
                         {Object.entries(actions).map(([action, perm]) => (
                             <li key={action} style={{ color: 'var(--xc-text)' }}>
                                 <code style={{ fontFamily: 'var(--xc-font-mono, monospace)' }}>{action}</code>
-                                {' — '}
+                                {': '}
                                 <span style={{ color: permColor(perm) }}>{perm}</span>
                             </li>
                         ))}

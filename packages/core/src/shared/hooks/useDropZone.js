@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// useDropZone — §37 / G123. Shared drop-target hook so individual
+// useDropZone: §37 / G123. Shared drop-target hook so individual
 // forms don't have to re-roll the (preventDefault → setDragOver →
 // validate → FileReader) plumbing every time.
 //
@@ -21,8 +21,8 @@
 // keep their bespoke wiring; the hook is opt-in for new sites.
 //
 // Read modes:
-//   'text'         — decoded as UTF-8 text (default for JSON / txt / base64 PSBTs)
-//   'arrayBuffer'  — passed through as ArrayBuffer (for binary blobs)
+//   'text'         - decoded as UTF-8 text (default for JSON / txt / base64 PSBTs)
+//   'arrayBuffer'  - passed through as ArrayBuffer (for binary blobs)
 //
 // The hook returns:
 //   { rootProps, isDragOver, openFilePicker }
@@ -34,7 +34,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-const DEFAULT_MAX_BYTES = 2 * 1024 * 1024; // 2 MB — large enough for PSBT / backup / contacts; small enough to keep paste OOM-proof.
+const DEFAULT_MAX_BYTES = 2 * 1024 * 1024; // 2 MB: large enough for PSBT / backup / contacts; small enough to keep paste OOM-proof.
 
 function matchesAccept(file, accept) {
     if (!accept || accept.length === 0) return true;

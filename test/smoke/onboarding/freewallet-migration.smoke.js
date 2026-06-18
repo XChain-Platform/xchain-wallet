@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for Phase 2 — Step 26 (piece 11) — FreeWallet migration UI
+// Smoke for Phase 2, Step 26 (piece 11): FreeWallet migration UI
 // (§40.13).
 //
 // Asserts:
@@ -138,5 +138,5 @@ for (const [shell, appPath] of [
 }
 
 console.log(
-    'OK — freewallet migration smoke (Onboarding 3rd entry + ImportWallet freewallet variant + MigrateToBip39 4-stage wizard + Home legacy banner + 3-shell App.jsx wiring of onboarding + unlocked sub-route)',
+    'OK: freewallet migration smoke (Onboarding 3rd entry + ImportWallet freewallet variant + MigrateToBip39 4-stage wizard + Home legacy banner + 3-shell App.jsx wiring of onboarding + unlocked sub-route)',
 );

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// broadcastAction — convenience wrapper for the BROADCAST action
+// broadcastAction: convenience wrapper for the BROADCAST action
 // (§40.6; protocol docs: xchain-documentation/protocol/actions/
 // BROADCAST.md). Mirrors issueToken / mintToken / destroyToken: takes
 // vault + registries + chain + source address + BROADCAST params,

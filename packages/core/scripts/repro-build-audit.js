@@ -8,11 +8,11 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// §56.3 Pre-launch Step 6 — static audit of the desktop reproducible-
+// §56.3 Pre-launch Step 6: static audit of the desktop reproducible-
 // build scaffolding. Asserts that every ingredient required for
 // Level-2 reproducibility is in place. The actual run-twice-and-
 // compare verification has to happen on a fresh dev machine before
-// v1.0.0 GA — see claude/reports/specs/2026-04-24_repro-build.md.
+// v1.0.0 GA. See claude/reports/specs/2026-04-24_repro-build.md.
 //
 // Rules checked:
 //   1. Dockerfile pins the base image by sha256 digest (not just tag).

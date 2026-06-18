@@ -8,12 +8,12 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// §18.4 / Cluster N FOLLOWUP 1 smoke — runtime-fetched firmware
+// §18.4 / Cluster N FOLLOWUP 1 smoke: runtime-fetched firmware
 // manifest with bundled fallback.
 //
 // Asserts:
 //   1. Without a configured URL / public key, refreshFirmwareManifest
-//      returns `{ ok: false, reason: 'not-configured' }` — no fetch,
+//      returns `{ ok: false, reason: 'not-configured' }`: no fetch,
 //      no cache write.
 //   2. A network failure returns `{ ok: false, reason: 'network' }`
 //      and leaves the cache untouched (no downgrade-to-no-advisories
@@ -29,7 +29,7 @@
 //   7. resolveActiveFirmwareManifest falls back to the bundled
 //      manifest when the cache is empty, source = 'bundled'.
 //   8. resolveActiveFirmwareManifest falls back to bundled when the
-//      cache is older than TTL — stale cache does NOT silently
+//      cache is older than TTL; stale cache does NOT silently
 //      downgrade safety.
 //   9. checkFirmware accepts an optional manifest arg (so callers can
 //      pass the resolver's output) and stays back-compat without it.
@@ -300,5 +300,5 @@ const verifyAlwaysFalse = async () => false;
 }
 
 console.log(
-    'OK — firmware-manifest-refresh smoke (Cluster N FOLLOWUP 1 — refreshFirmwareManifest no-ops on empty URL/key, surfaces network/schema/signature failures without writing cache; happy path verifies + writes cache; resolveActiveFirmwareManifest prefers fresh cache, falls back to bundled on empty/stale cache (no silent downgrade); checkFirmware accepts optional manifest arg)',
+    'OK: firmware-manifest-refresh smoke (Cluster N FOLLOWUP 1: refreshFirmwareManifest no-ops on empty URL/key, surfaces network/schema/signature failures without writing cache; happy path verifies + writes cache; resolveActiveFirmwareManifest prefers fresh cache, falls back to bundled on empty/stale cache (no silent downgrade); checkFirmware accepts optional manifest arg)',
 );

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// §9 / G002 — `@xchain-wallet/signers-ledger` package entry point.
+// §9 / G002: `@xchain-wallet/signers-ledger` package entry point.
 //
 // Ledger-specific signer implementation extracted from
 // `@xchain-wallet/core/signers/`. Mirrors the §9 / G001 split for
@@ -23,7 +23,7 @@
 // `@xchain-wallet/core/signers/index.js` (kept so existing shell
 // imports that go through `core` keep working). The factory
 // (`makeLedgerFactory`) still lives in `@xchain-wallet/core/signerFactories`
-// — it owns the post-init pair sequence, which is shell-agnostic.
+// It owns the post-init pair sequence, which is shell-agnostic.
 
 export {
     LedgerSigner,

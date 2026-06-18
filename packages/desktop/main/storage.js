@@ -12,7 +12,7 @@
 //
 // Writes the opaque ciphertext blob to a single file under Electron's
 // `app.getPath('userData')` directory. The file contains only
-// already-encrypted-under-master-key bytes — see Vault's codec for
+// already-encrypted-under-master-key bytes; see Vault's codec for
 // the plaintext document shape. Losing this file is equivalent to
 // losing an extension's chrome.storage.local or a web app's
 // IndexedDB blob; recovery runs through the seed phrase.
@@ -31,7 +31,7 @@ import { StorageBackend } from '../../core/src/storage/backend.js';
 
 export class FileStorageBackend extends StorageBackend {
     /**
-     * @param {string} filePath   absolute path — typically
+     * @param {string} filePath   absolute path, typically
      *                            `path.join(app.getPath('userData'), 'vault.bin')`
      */
     constructor(filePath) {

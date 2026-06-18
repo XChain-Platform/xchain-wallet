@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Phase 3 Step 9 smoke — COINPAY queue + sign (§41.4).
+// Phase 3 Step 9 smoke: COINPAY queue + sign (§41.4).
 //
 // Asserts:
 //   1. coinpayAction + query flows exported from @xchain-wallet/core.
@@ -190,5 +190,5 @@ for (const [shell, pkgPath] of [
 }
 
 console.log(
-    'OK — coinpay-form smoke (§41.4 COINPAY: core flow guards + CoinpayForm fans out getCoinpayObligationsForAddress + coinpayAction/Hw behind SignCredentials + 3-shell messaging + 3-shell App.jsx + ActionsMenu entry + Home resume card filters pending_coinpay on payer_address + xchain-sdk ^1.9.1 pin)',
+    'OK: coinpay-form smoke (§41.4 COINPAY: core flow guards + CoinpayForm fans out getCoinpayObligationsForAddress + coinpayAction/Hw behind SignCredentials + 3-shell messaging + 3-shell App.jsx + ActionsMenu entry + Home resume card filters pending_coinpay on payer_address + xchain-sdk ^1.9.1 pin)',
 );

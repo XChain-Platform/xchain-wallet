@@ -18,16 +18,16 @@ export function StatesSection() {
             id="states"
             title="Loading, empty, and error states"
             tag="GUIDANCE · pick the right one"
-            kicker="Every fetch has four possible outcomes — fetching, loaded-with-content, loaded-empty, failed — plus the result-of-an-action: success or failure. We have a primitive for each. The rule below picks the right one so the wallet's never showing a spinner where it should show an empty state, or text where it should show a toast."
+            kicker="Every fetch has four possible outcomes (fetching, loaded-with-content, loaded-empty, failed) plus the result-of-an-action: success or failure. We have a primitive for each. The rule below picks the right one so the wallet's never showing a spinner where it should show an empty state, or text where it should show a toast."
         >
             <Guidance
                 what={<>Five primitives, each owning one slot in the state machine:
                     <ul style={{ margin: '8px 0 0 16px', padding: 0, lineHeight: 1.6 }}>
-                        <li><strong><code>&lt;Skeleton&gt;</code></strong> — first paint while data is in flight; shapes mimic what's about to load.</li>
-                        <li><strong><code>&lt;EmptyStateNudge&gt;</code></strong> — loaded successfully, dataset is empty; optional CTA to populate.</li>
-                        <li><strong><code>&lt;StatusMessage variant="error"&gt;</code></strong> — inline, in the form, when a fetch or validation failed and the user needs to act in the same view.</li>
-                        <li><strong><code>&lt;StatusMessage variant="status" | "success"&gt;</code></strong> — inline informational copy / confirmation after a successful action stays on the same view.</li>
-                        <li><strong>Toast</strong> (via <code>ToastHost</code>) — ephemeral result of an action when the user has already moved on (e.g. copied to clipboard, address generated).</li>
+                        <li><strong><code>&lt;Skeleton&gt;</code></strong>: first paint while data is in flight; shapes mimic what's about to load.</li>
+                        <li><strong><code>&lt;EmptyStateNudge&gt;</code></strong>: loaded successfully, dataset is empty; optional CTA to populate.</li>
+                        <li><strong><code>&lt;StatusMessage variant="error"&gt;</code></strong>: inline, in the form, when a fetch or validation failed and the user needs to act in the same view.</li>
+                        <li><strong><code>&lt;StatusMessage variant="status" | "success"&gt;</code></strong>: inline informational copy / confirmation after a successful action stays on the same view.</li>
+                        <li><strong>Toast</strong> (via <code>ToastHost</code>): ephemeral result of an action when the user has already moved on (e.g. copied to clipboard, address generated).</li>
                     </ul>
                 </>}
                 doRule={<>✓ Pick by intent, not aesthetic preference. Pre-fetch = Skeleton. Loaded-empty = EmptyStateNudge. Failed = inline StatusMessage. Action result = Toast (if non-blocking) or success StatusMessage (if blocking)</>}
@@ -35,10 +35,10 @@ export function StatesSection() {
             />
 
             <Markup>
-{`// Pre-fetch — render a skeleton that matches the upcoming shape
+{`// Pre-fetch: render a skeleton that matches the upcoming shape
 {loading ? <Skeleton.List rows={5} /> : null}
 
-// Loaded, nothing here — empty-state nudge with optional CTA
+// Loaded, nothing here: empty-state nudge with optional CTA
 {!loading && rows.length === 0 ? (
     <EmptyStateNudge
         title="No balances yet"
@@ -49,18 +49,18 @@ export function StatesSection() {
     />
 ) : null}
 
-// Inline error — user is still here, needs to act
+// Inline error: user is still here, needs to act
 <StatusMessage variant="error" recovery={
     <Button size="sm" onClick={useMax}>Use Max</Button>
 }>
     Insufficient balance.
 </StatusMessage>
 
-// Action just completed, user has likely moved on — toast
+// Action just completed, user has likely moved on: toast
 showToast({ kind: 'success', message: 'Address copied to clipboard.' });`}
             </Markup>
 
-            <LiveExample label="Skeleton — first paint, shape matches the data">
+            <LiveExample label="Skeleton: first paint, shape matches the data">
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                     <Skeleton shape="title" width="40%" />
                     <Skeleton shape="row" />
@@ -69,7 +69,7 @@ showToast({ kind: 'success', message: 'Address copied to clipboard.' });`}
                 </div>
             </LiveExample>
 
-            <LiveExample label="EmptyStateNudge — loaded successfully, nothing yet">
+            <LiveExample label="EmptyStateNudge: loaded successfully, nothing yet">
                 <EmptyStateNudge
                     title="No balances yet"
                     body="Generate a receive address to start funding your wallet."
@@ -79,19 +79,19 @@ showToast({ kind: 'success', message: 'Address copied to clipboard.' });`}
                 />
             </LiveExample>
 
-            <LiveExample label="StatusMessage — inline error in a form">
+            <LiveExample label="StatusMessage: inline error in a form">
                 <StatusMessage variant="error">
                     Insufficient balance. You have 0.001 BTC available.
                 </StatusMessage>
             </LiveExample>
 
-            <LiveExample label="StatusMessage — inline success after action">
+            <LiveExample label="StatusMessage: inline success after action">
                 <StatusMessage variant="success">
                     Address copied to clipboard.
                 </StatusMessage>
             </LiveExample>
 
-            <LiveExample label="StatusMessage — neutral status / informational">
+            <LiveExample label="StatusMessage: neutral status / informational">
                 <StatusMessage variant="status">
                     Fee estimate refreshing…
                 </StatusMessage>

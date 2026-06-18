@@ -8,13 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// multisigAddress — Phase 4 Step 18 wrapper. Reads the persisted
+// multisigAddress: Phase 4 Step 18 wrapper. Reads the persisted
 // MultisigConfig off a Wallet record, dispatches to
 // `sdk.deriveMultisigAddress` (xchain-sdk 1.11+), and returns the
 // rendered multisig address along with metadata the Receive surface
 // needs (N-of-M label, scheme tag, cosigner names).
 //
-// Pure read — no signing, no PSBT construction. The wallet.multisig
+// Pure read: no signing, no PSBT construction. The wallet.multisig
 // field is the source of truth for the address computation: the
 // scriptTemplate persisted at MultisigConfig creation time (Step 17)
 // drives the address render here.
@@ -78,7 +78,7 @@ export async function receiveMultisigAddress(opts) {
     }
     if (!config) {
         throw new Error(
-            `receiveMultisigAddress: wallet "${opts.walletId}" has no multisig configuration — run the §22 coordinator first`,
+            `receiveMultisigAddress: wallet "${opts.walletId}" has no multisig configuration. Run the §22 coordinator first`,
         );
     }
 
@@ -88,7 +88,7 @@ export async function receiveMultisigAddress(opts) {
     }
     if (typeof sdk.deriveMultisigAddress !== 'function') {
         throw new Error(
-            'receiveMultisigAddress: sdk.deriveMultisigAddress is unavailable — bump xchain-sdk to ^1.11.0',
+            'receiveMultisigAddress: sdk.deriveMultisigAddress is unavailable. Bump xchain-sdk to ^1.11.0',
         );
     }
 
@@ -115,7 +115,7 @@ export async function receiveMultisigAddress(opts) {
 }
 
 /**
- * §56.3 pre-launch Step 4 plural variant — render every multisig
+ * §56.3 pre-launch Step 4 plural variant: render every multisig
  * receive address the wallet has configured for the given chain.
  * Returns an array (possibly empty); each entry mirrors the
  * single-config `receiveMultisigAddress` return shape.
@@ -148,7 +148,7 @@ export async function listMultisigReceiveAddresses(opts) {
             });
             out.push(r);
         } catch {
-            // A misconfigured config shouldn't blow up the whole list — skip it.
+            // A misconfigured config shouldn't blow up the whole list; skip it.
         }
     }
     return out;

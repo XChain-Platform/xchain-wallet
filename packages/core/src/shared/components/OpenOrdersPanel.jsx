@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// OpenOrdersPanel — §41.3.5 per-market user open orders + cancel.
+// OpenOrdersPanel (§41.3.5): per-market user open orders + cancel.
 //
 // Lists the user's open orders on this market (filtered by any
 // address in the wallet on `chainId`), each row with a Cancel button

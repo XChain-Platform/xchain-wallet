@@ -15,7 +15,7 @@
 // ---------------
 // The sibling of the missing-import bug (see jsx-imports.test.js): here the
 // import statement IS present, but the target module doesn't export that
-// name anymore — a refactor renamed/removed it. The bound name is then
+// name anymore; a refactor renamed/removed it. The bound name is then
 // `undefined`, and using it crashes (`X is not a function`, or a render
 // blow-up). Vite resolves the *module* fine, so neither the build nor a
 // smoke test catches it; it only fails at runtime on the code path that
@@ -26,7 +26,7 @@
 // -----
 // Checks RELATIVE imports (`./ ../`) and WORKSPACE-ALIAS imports
 // (`@xchain-wallet/*`, resolved through each package's `exports` map),
-// against JS/JSX targets only — CSS-module / asset / json imports have
+// against JS/JSX targets only; CSS-module / asset / json imports have
 // their default synthesized by the bundler and are skipped. Re-export
 // barrels (`export * from`, `export { x } from`) are followed so imports
 // from an index file validate against the real origin. Third-party package
@@ -158,7 +158,7 @@ describe('every named/default import resolves to a real export', () => {
                     return tryExt(resolve(info.dir, rel));
                 }
             }
-            return null; // third-party — out of scope
+            return null; // third-party; out of scope
         }
 
         const astCache = new Map();
@@ -225,11 +225,11 @@ describe('every named/default import resolves to a real export', () => {
                         let want;
                         if (spec.type === 'ImportDefaultSpecifier') want = 'default';
                         else if (spec.type === 'ImportSpecifier') want = spec.imported.name;
-                        else continue; // namespace import — always valid
+                        else continue; // namespace import; always valid
                         checked += 1;
                         if (!exports.has(want)) {
                             const rel = file.slice(root.length + 1);
-                            broken.push(`${rel}:${spec.loc?.start.line} imports {${want}} from '${source}' — not exported by target`);
+                            broken.push(`${rel}:${spec.loc?.start.line} imports {${want}} from '${source}' (not exported by target)`);
                         }
                     }
                 },

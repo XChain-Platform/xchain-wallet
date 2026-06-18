@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for Phase 4 — Step 15 of 23 — Cross-chain swap form
+// Smoke for Phase 4, Step 15 of 23: Cross-chain swap form
 // (§42.8.3).
 
 import { strict as assert } from 'node:assert';
@@ -50,7 +50,7 @@ assert.ok(/SWAP cannot give/.test(src),
 assert.ok(/SWAP cannot get/.test(src),
     'CrossChainSwapForm preserves the native-coin DISPENSER rule on the get side');
 
-// Reuses the existing swapAction handler — no new core flow needed.
+// Reuses the existing swapAction handler; no new core flow needed.
 for (const call of [
     'messaging.swapAction',
     'messaging.swapActionHw',
@@ -91,5 +91,5 @@ for (const [shell, appPath] of [
 }
 
 console.log(
-    'OK — cross-chain swap smoke (CrossChainSwapForm §42.8.3 give-chain + get-chain pickers + auto-filled receiver via getNewestAddress + GIVE_COIN/GET_COIN asymmetry validation + native-coin DISPENSER rule retained + reuses swapAction core flow + HW vs software signing + 3-shell App.jsx + ActionsMenu entry)',
+    'OK: cross-chain swap smoke (CrossChainSwapForm §42.8.3 give-chain + get-chain pickers + auto-filled receiver via getNewestAddress + GIVE_COIN/GET_COIN asymmetry validation + native-coin DISPENSER rule retained + reuses swapAction core flow + HW vs software signing + 3-shell App.jsx + ActionsMenu entry)',
 );

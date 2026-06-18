@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for Phase 4 — Step 11 of 23 — Operator / validator dashboard
+// Smoke for Phase 4, Step 11 of 23: Operator / validator dashboard
 // (§42.7.5).
 
 import { strict as assert } from 'node:assert';
@@ -135,5 +135,5 @@ for (const [shell, appPath] of [
 }
 
 console.log(
-    'OK — operator dashboard smoke (OperatorDashboard 5-section read-only view + Publisher-mode v3 BROADCAST quick-compose with rapid value entry + broadcastsForAddress flow + bg handler + 3-shell messaging + StakingDashboard.onOpenOperatorDashboard prop + 3-shell App.jsx sub-route)',
+    'OK: operator dashboard smoke (OperatorDashboard 5-section read-only view + Publisher-mode v3 BROADCAST quick-compose with rapid value entry + broadcastsForAddress flow + bg handler + 3-shell messaging + StakingDashboard.onOpenOperatorDashboard prop + 3-shell App.jsx sub-route)',
 );

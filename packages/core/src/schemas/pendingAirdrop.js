@@ -8,15 +8,15 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// PendingAirdrop record — §40.9. Crash-safe state for the AIRDROP
+// PendingAirdrop record: §40.9. Crash-safe state for the AIRDROP
 // two-transaction flow so the user can close the wallet between stages
 // and resume. One record per in-flight airdrop:
 //
-//   stage = 'waiting-index'   — LIST signed + broadcast; polling for
+//   stage = 'waiting-index'    LIST signed + broadcast; polling for
 //                               the ACTION_INDEX assignment.
-//   stage = 'ready-to-airdrop' — ACTION_INDEX resolved; user needs to
+//   stage = 'ready-to-airdrop' ACTION_INDEX resolved; user needs to
 //                                sign the AIRDROP.
-//   stage = 'done'            — both tx broadcast; kept briefly so the
+//   stage = 'done'             both tx broadcast; kept briefly so the
 //                               success screen can render if the user
 //                               returns. Home / resume surface filters
 //                               'done' records and may clear on read.

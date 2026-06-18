@@ -8,9 +8,9 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// QueuedBroadcastBanner — §49.5 / G154.
+// QueuedBroadcastBanner (§49.5 / G154).
 //
-// Surfaces signed transactions that were queued for broadcast — typically
+// Surfaces signed transactions that were queued for broadcast, typically
 // because the user was offline when they signed. Each row exposes
 // "Broadcast now" and "Discard" affordances and clears itself from the
 // queue on action. Hidden when the queue is empty, so it costs nothing
@@ -20,7 +20,7 @@
 // auto-enqueue from action.* broadcast failures (Cluster G FOLLOWUP 1);
 // v0.293.0 moved the queue into chrome.storage.local / localStorage so
 // it survives reload (Cluster G FOLLOWUP 2); v0.294.0 adds the §49.5
-// reconnection prompt — when reachability flips offline/degraded →
+// reconnection prompt: when reachability flips offline/degraded →
 // normal AND the queue is non-empty, surface a one-shot toast with an
 // "Open queue" action so the user knows to retry (Cluster G FOLLOWUP 3).
 
@@ -40,7 +40,7 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
     const [queue, setQueue] = useState(/** @type {any[]} */ ([]));
     const [busyId, setBusyId] = useState(/** @type {string | null} */ (null));
     const [error, setError] = useState(/** @type {string | null} */ (null));
-    // Cluster G FOLLOWUP 3 — reconnection prompt. Track previous
+    // Cluster G FOLLOWUP 3: reconnection prompt. Track previous
     // reachability `overall` so a transition `offline|degraded → normal`
     // with a non-empty queue surfaces a one-shot toast nudging the user
     // to broadcast.
@@ -89,7 +89,7 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
                 : `You have ${queue.length} queued transactions. Broadcast now?`,
             actionLabel: 'Open queue',
             onAction: () => {
-                // Source of truth is the banner — focus it so screen
+                // Source of truth is the banner; focus it so screen
                 // readers + keyboard users land on the action buttons.
                 if (bannerRef.current && typeof bannerRef.current.focus === 'function') {
                     bannerRef.current.focus();

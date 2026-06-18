@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// signMultisigLocally — §22.3 local-cosigner contribution flow.
+// signMultisigLocally: §22.3 local-cosigner contribution flow.
 // Phase 4 Step 21 of 23.
 //
 // Wraps the unlock + signer-dispatch + contribute-via-Step-19-API
@@ -19,13 +19,13 @@
 //   taproot-musig2 + collecting-sigs    → signMusig2Round2 → contributeMultisigSignature (32-byte partial)
 //   p2sh / p2wsh   + collecting-sigs    → signMultisigClassical → contributeMultisigSignature (DER ECDSA)
 //
-// The local cosigner is identified by the wallet's `MultisigConfig`
-// — exactly one cosigner is expected to have `origin === 'local'`
+// The local cosigner is identified by the wallet's `MultisigConfig`.
+// Exactly one cosigner is expected to have `origin === 'local'`
 // and a `localSignerId`; that cosigner's `derivationPath` is what we
 // hand to the signer.
 //
 // Hardware signers throw a clear "Update firmware to use MuSig2 on
-// this device" error per §22.3 — the flow surfaces that to the
+// this device" error per §22.3; the flow surfaces that to the
 // caller verbatim so the sign screen can show it.
 
 import { unlockWallet } from './unlockWallet.js';
@@ -97,7 +97,7 @@ export async function signMultisigLocally(opts) {
     });
     if (!config) {
         throw new Error(
-            `signMultisigLocally: wallet "${session.walletId}" has no MultisigConfig matching this session's cosigners — coordinator wallet must own the same config the session was started against`,
+            `signMultisigLocally: wallet "${session.walletId}" has no MultisigConfig matching this session's cosigners (coordinator wallet must own the same config the session was started against)`,
         );
     }
     const localCosigner = config.cosigners.find((c) => c.origin === 'local');
@@ -120,7 +120,7 @@ export async function signMultisigLocally(opts) {
         if (session.status === 'collecting-sigs') {
             if (!session.aggNonce) {
                 throw new Error(
-                    'signMultisigLocally: round 2 cannot start until aggNonce is set — coordinator must run aggregateMultisigSession first',
+                    'signMultisigLocally: round 2 cannot start until aggNonce is set; coordinator must run aggregateMultisigSession first',
                 );
             }
             if (session.partialSigs.some((s) => s.pubkey === lowerLocalPubkey)) {

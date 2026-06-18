@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for Phase 2 — Step 9 (piece 3b) — MINT form.
+// Smoke for Phase 2, Step 9 (piece 3b): MINT form.
 //
 // Asserts:
 //   1. packages/core/src/shared/routes/MintForm.jsx exists and exports
@@ -16,7 +16,7 @@
 //   2. Two-stage state machine (form → review/submitting → done)
 //      matches the Send.jsx / IssueTokenForm pattern.
 //   3. Review runs the composed MINT params through decoder.decodeAction.
-//   4. Sign wires through messaging.mintToken — the new Step-9 helper.
+//   4. Sign wires through messaging.mintToken (the new Step-9 helper).
 //   5. Validation rejects empty ticker / non-A-Z-0-9-dot ticker / empty
 //      or zero amount.
 //   6. Params composer: VERSION='0', TICK uppercased, AMOUNT set,
@@ -209,5 +209,5 @@ for (const [shell, appPath] of [
 }
 
 console.log(
-    'OK — mint form smoke (MintForm §40.3 + mintToken core flow + action.mint handler + both messaging helpers + ActionsMenu entry + popup/web wiring)',
+    'OK: mint form smoke (MintForm §40.3 + mintToken core flow + action.mint handler + both messaging helpers + ActionsMenu entry + popup/web wiring)',
 );

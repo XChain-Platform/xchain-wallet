@@ -8,13 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// unlockWallet — fetch a persisted Wallet record, build a live
+// unlockWallet: fetch a persisted Wallet record, build a live
 // SoftwareSigner against it, and unlock. The symmetric counterpart to
 // createWallet (§15.3). Also exposes the lower-level primitive
 // `unlockWalletRecord` that other flows reuse when they already hold
 // the Wallet record in memory.
 //
-// Does NOT touch addresses — the caller is responsible for any address
+// Does NOT touch addresses. The caller is responsible for any address
 // work after unlocking. Keeping this thin means it's usable from every
 // shell that needs a signer.
 
@@ -39,7 +39,7 @@ export class WalletNotFoundError extends Error {
 
 /**
  * Build a SoftwareSigner tied to an already-loaded Wallet record and
- * unlock it. Lower-level primitive — callers with a Wallet record in
+ * unlock it. Lower-level primitive for callers with a Wallet record in
  * hand (like `createWallet`) skip the vault lookup.
  *
  * @param {UnlockRecordOpts} opts
@@ -128,9 +128,9 @@ export async function unlockWallet({
  * Session helper: unlock a wallet, run the callback with the unlocked
  * signer, and always lock on return (success or error). The signer is
  * guaranteed to be locked by the time `withUnlocked` resolves or
- * rejects — no half-unlocked state can leak.
+ * rejects. No half-unlocked state can leak.
  *
- * Batches multiple signing operations under one unlock — important
+ * Batches multiple signing operations under one unlock, which is important
  * because Argon2id KDF is ~1s per unlock on a typical device. Instead
  * of calling `receiveAddress` three times (three KDF rounds), a shell
  * can call `withUnlocked(opts, async (signer) => { …derive three… })`

@@ -8,15 +8,15 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// §28.5 / G081 — History export. Pure converters from the History
+// §28.5 / G081: History export. Pure converters from the History
 // route's `HistoryEntry[]` shape to CSV / JSON file content. Filename
 // helper produces `xchain-history-<scope>-<isoDate>.{csv,json}` so an
 // export taken multiple times in one day stays sorted by chain scope.
 //
-// CSV is RFC-4180 — fields with commas / quotes / newlines get wrapped
+// CSV is RFC-4180: fields with commas / quotes / newlines get wrapped
 // in double quotes and inner double quotes are doubled.
 //
-// Cluster I FOLLOWUP 5 (v0.288.0) — both converters now accept an
+// Cluster I FOLLOWUP 5 (v0.288.0): both converters now accept an
 // optional `columns` parameter that filters which fields land in the
 // output. Default behaviour matches the pre-FOLLOWUP shape (all fields
 // in EXPORT_COLUMNS order), so existing callers keep working without
@@ -109,7 +109,7 @@ export function entriesToJson(entries, meta) {
 
 /**
  * Filter entries by a `[fromTs, toTs]` epoch-seconds window. Rows
- * outside the window — or with no timestamp — are dropped. Either
+ * outside the window (or with no timestamp) are dropped. Either
  * bound can be null/undefined to leave that side open.
  *
  * @param {Array<{ timestamp?: number }>} entries

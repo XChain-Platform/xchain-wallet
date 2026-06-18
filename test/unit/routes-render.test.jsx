@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Render harness — mount every shared route and fail if it throws a
+// Render harness: mount every shared route and fail if it throws a
 // code-bug crash, in two layers: initial render, then a post-mount
 // effects flush.
 //
@@ -24,7 +24,7 @@
 //     `const fromAddress = useMemo(...)` → TDZ `ReferenceError: Cannot
 //     access 'fromAddress' before initialization`;
 //   * two more never-rendered screens called registry methods that don't
-//     exist — `chainRegistry.list()` / `.all()` (the enumerator is
+//     exist: `chainRegistry.list()` / `.all()` (the enumerator is
 //     `supportedChains()`) → `TypeError: … is not a function`.
 // None were caught because the smoke suite is source-regex assertions
 // that never actually render a component, and there were zero form-level
@@ -33,33 +33,33 @@
 //
 // TWO LAYERS
 // ----------
-// Layer 1 — INITIAL RENDER. Mount each route with a *never-resolving*
+// Layer 1: INITIAL RENDER. Mount each route with a *never-resolving*
 //   messaging mock, so routes stay in their loading branch and we observe
 //   only render-time code. Fail policy is the widest here (INITIAL_BUG_RE,
 //   incl. `is not a function`) because every crash this layer sees is on a
-//   module-level import/singleton — never on the generic prop bag — so
+//   module-level import/singleton: never on the generic prop bag: so
 //   `is not a function` has no false positives (it caught the registry
 //   bugs above).
 //
-// Layer 2 — EFFECTS FLUSH. Mount with a *resolving* messaging mock
-//   (every host call resolves to a shared frozen `[]` — a non-null,
+// Layer 2: EFFECTS FLUSH. Mount with a *resolving* messaging mock
+//   (every host call resolves to a shared frozen `[]`: a non-null,
 //   iterable generic that penetrates deepest; see its definition) and
 //   drain microtasks inside `act()`, so each route's post-await
 //   data-handling path actually runs.
 //   This surfaces `ReferenceError`/TDZ bugs that live in effect bodies,
-//   `.then` callbacks, and the "loaded" branch — code Layer 1 never
+//   `.then` callbacks, and the "loaded" branch: code Layer 1 never
 //   reaches. Fail policy is NARROWER here (EFFECT_BUG_RE, drops
 //   `is not a function`): feeding `undefined` where real code expects an
 //   array/fn legitimately produces `x is not a function` / `Cannot read
 //   properties of undefined`, which is mock-shape noise, not a defect.
-//   We still catch the unambiguous classes — a missing import or TDZ in
+//   We still catch the unambiguous classes: a missing import or TDZ in
 //   an effect body throws `is not defined` / `before initialization`
 //   regardless of data shape.
 //
-// Layer 3 — INTERACTION. After the effects flush, fill every field and
+// Layer 3: INTERACTION. After the effects flush, fill every field and
 //   click every enabled button, draining microtasks between. Handler code
 //   (onClick/submit) is the least-executed surface in an AI-generated app,
-//   so missing-import/TDZ bugs hide there. Same NARROW policy as Layer 2 —
+//   so missing-import/TDZ bugs hide there. Same NARROW policy as Layer 2 :
 //   validation throws from a garbage-form submit and jsdom gaps
 //   (`window.confirm` "Not implemented", navigation) don't match it, so
 //   Layer 3 needs no per-route allow-list.
@@ -70,14 +70,14 @@
 // pass of field-fill/button-click interaction. It does NOT let real timers
 // fire (Layers 2–3 await microtasks ONLY, so `setInterval`/`setTimeout`
 // pollers never fire and can't hang the run), drive multi-step flows
-// (wizard step 2+), or assert on rendered output — it's a crash probe, not
+// (wizard step 2+), or assert on rendered output: it's a crash probe, not
 // a behaviour spec. Field-fill uses a single generic value (`'1'`), so
 // format-specific paths (a valid address, a real mnemonic) stay unexercised.
 //
 // Runs as ONE vitest process by design: the Parallels share thrashes
 // under hundreds of rapid node spawns, so a single-process render sweep
 // is both faster and far less flaky than the per-file smoke runner. Use
-// the LOCAL vitest bin — `npx vitest` pulls a fresh major into the npx
+// the LOCAL vitest bin: `npx vitest` pulls a fresh major into the npx
 // cache that can't find jsdom; the workspace pins a compatible version.
 //   node_modules/.bin/vitest run test/unit/routes-render.test.jsx \
 //     --config test/vitest/unit.config.js
@@ -91,13 +91,13 @@ import { MessagingProvider } from '../../packages/core/src/shared/MessagingProvi
 // React effects/state in Layer 2.
 
 // Run every test under fake timers. Some routes (e.g. MarketChart) schedule
-// a setTimeout / rAF on mount — chart init, animations — that fires AFTER
+// a setTimeout / rAF on mount: chart init, animations: that fires AFTER
 // our microtask-only flush and throws in jsdom (`Cannot parse color:
 // canvastext`, canvas not implemented, …) as an UNHANDLED exception. Vitest
 // flags those as "might cause false positive tests", a flakiness vector for
 // a kept guard. Fake timers capture those callbacks so they never execute;
 // the global afterEach's `vi.useRealTimers()` (test/setup.js) discards them.
-// We fake only timer APIs — NOT queueMicrotask/promises — so the effects-
+// We fake only timer APIs: NOT queueMicrotask/promises: so the effects-
 // flush drain and React's scheduler keep working. This also hardens the
 // "real timers deliberately never fire" guarantee Layers 2–3 rely on.
 beforeEach(() => {
@@ -112,7 +112,7 @@ beforeEach(() => {
 });
 
 // Discover every route module via vite's compile-time glob. Resolved
-// relative to THIS file, so the suite works regardless of cwd — and it
+// relative to THIS file, so the suite works regardless of cwd: and it
 // avoids fs/URL-scheme fragility (import.meta.url isn't a file:// URL
 // under the vitest transform). Lazy importers (no `eager`) keep a
 // module-load crash inside the route's own `it()` instead of failing the
@@ -170,7 +170,7 @@ const props = {
 // Layer 1 (initial render): the crash sits on a module-level import or
 // singleton, so `is not a function` is a real defect, not prop noise.
 const INITIAL_BUG_RE = /is not defined|before initialization|is not a function/;
-// Layer 2 (effects flush): drop `is not a function` — feeding `undefined`
+// Layer 2 (effects flush): drop `is not a function`: feeding `undefined`
 // where real code expects an array/fn produces that message as mock-shape
 // noise. Missing-symbol and TDZ bugs still throw the two we keep.
 const EFFECT_BUG_RE = /is not defined|before initialization/;
@@ -202,7 +202,7 @@ function tree(Component, messaging) {
 }
 
 // Drain chained microtasks so resolved host calls + their setState
-// re-renders settle. Microtasks ONLY — never `setTimeout` — so real-timer
+// re-renders settle. Microtasks ONLY: never `setTimeout`: so real-timer
 // pollers can't fire and hang the run. Wrapped in act() by callers.
 async function drainMicrotasks(rounds = 8) {
     for (let i = 0; i < rounds; i += 1) {
@@ -249,7 +249,7 @@ afterAll(() => {
     globalThis.matchMedia = savedGlobals.matchMedia;
 });
 
-describe('Layer 1 — every shared route renders without a code-bug crash', () => {
+describe('Layer 1: every shared route renders without a code-bug crash', () => {
     // Guard against an empty glob silently passing the suite (e.g. if the
     // routes dir ever moves). If there are no routes, that's itself a bug.
     it('discovers route files to test', () => {
@@ -277,7 +277,7 @@ describe('Layer 1 — every shared route renders without a code-bug crash', () =
     });
 });
 
-describe('Layer 2 — every shared route survives an effects flush', () => {
+describe('Layer 2: every shared route survives an effects flush', () => {
     routeEntries.forEach(([importer, file]) => {
         it(file, async () => {
             const Component = await resolveComponent(importer, file);
@@ -297,14 +297,14 @@ describe('Layer 2 — every shared route survives an effects flush', () => {
     });
 });
 
-describe('Layer 3 — every shared route survives basic interaction', () => {
+describe('Layer 3: every shared route survives basic interaction', () => {
     // Mount, then exercise handler code: fill every field and click every
     // enabled button. Handlers in an AI-generated app with never-rendered
     // screens are the LEAST-executed code, so missing-import / TDZ bugs
     // hide here. Fail policy stays EFFECT_BUG_RE (is not defined / before
     // initialization): an empty/garbage-form submit legitimately throws
     // validation errors and jsdom gaps (`window.confirm` "Not implemented",
-    // navigation), none of which match — so this needs no per-route
+    // navigation), none of which match: so this needs no per-route
     // allow-list. Only an undefined symbol or TDZ in handler code fails it.
     routeEntries.forEach(([importer, file]) => {
         it(file, async () => {

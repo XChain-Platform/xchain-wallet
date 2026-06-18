@@ -8,13 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §21 — Step 4 — SignApproval (signAction) wires <BalanceChanges>.
+// Smoke for §21, Step 4: SignApproval (signAction) wires <BalanceChanges>.
 //
 // Source-level checks that the approval window now:
 //   - imports BalanceChanges + the new approval-side messaging helpers
 //   - fetches address balances against the dApp-requested chain only
 //     for the signAction kind (signMessage / signPsbt / signIn skip
-//     the preview — they don't move value)
+//     the preview (they don't move value)
 //   - resolves the source address from payload.payload.from.address
 //     when the dApp passes it; otherwise falls back to the wallet's
 //     first address on the requested chain
@@ -119,7 +119,7 @@ assert.ok(
     'BalanceChanges sits between SignSummary and the password form',
 );
 
-// signMessage / signPsbt / signIn do NOT render the preview — gated.
+// signMessage / signPsbt / signIn do NOT render the preview (gated).
 const balanceBlockIdx = signSrc.indexOf('<BalanceChanges', balanceJsxIdx);
 const blockExtract = signSrc.slice(balanceJsxIdx, balanceBlockIdx + 200);
 assert.match(blockExtract, /signAction/, 'render gate references signAction');

@@ -8,13 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// linkAction — convenience wrapper for the LINK action (§42.8.1;
+// linkAction: convenience wrapper for the LINK action (§42.8.1;
 // protocol docs: xchain-documentation/protocol/actions/LINK.md).
 // Mirrors swapAction / coinpayAction: takes vault + registries +
 // submit-chain + source + the two ends of the cross-chain pair, and
 // forwards to submitAction.
 //
-// LINK is a free-standing cross-chain anchor — it pairs two existing
+// LINK is a free-standing cross-chain anchor that pairs two existing
 // actions (one on each chain) without consuming or producing tokens.
 // On-chain shape per `xchain-sdk` formats: `VERSION|COIN1|
 // COIN1_ACTION_INDEX|COIN2|COIN2_ACTION_INDEX|MEMO`. The LINK action
@@ -23,7 +23,7 @@
 // the History route's §23.5 thread rendering works regardless of
 // which side the user opens.
 //
-// Coin codes (COIN1 / COIN2) are tickers — 'BTC' / 'DOGE' / 'LTC'.
+// Coin codes (COIN1 / COIN2) are tickers: 'BTC' / 'DOGE' / 'LTC'.
 // The form layer is responsible for resolving chainId → ticker; this
 // flow validates non-empty strings and integer-string action indices
 // but does not enforce any specific ticker set.

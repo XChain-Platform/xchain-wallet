@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for Piece 1b — real xchain-sdk browser-bundle pass.
+// Smoke for Piece 1b: real xchain-sdk browser-bundle pass.
 //
 // Asserts the static bits a browser bundle of xchain-sdk needs to
 // resolve cleanly:
@@ -27,7 +27,7 @@
 //
 // The full "does it actually build" check is `pnpm -C packages/web
 // build && pnpm -C packages/extension build` + running
-// `tools/build-reproduce/check-no-dev-mock.sh` against dist/ — those
+// `tools/build-reproduce/check-no-dev-mock.sh` against dist/: those
 // gates run in CI and before a release, not in this smoke.
 
 import { strict as assert } from 'node:assert';
@@ -70,7 +70,7 @@ for (const constant of ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED']) {
         `ws-browser shim exposes static constant ${constant}`,
     );
 }
-// Shim must not pull Node built-ins — if it did, we'd still need the
+// Shim must not pull Node built-ins: if it did, we'd still need the
 // polyfills to load it. The shim's whole job is to stay browser-pure.
 // Look only at non-comment lines so the JSDoc example at the top of
 // the shim (which cites `require('ws')` as the consumer call site)
@@ -144,7 +144,7 @@ for (const [shell, viteConfigPath, pkgPath] of [
     assert.match(
         pkg.dependencies?.['xchain-sdk'] || '',
         /^(?:link:|\^1\.(?:1[1-9]|[2-9]\d)\.0$)/,
-        `${shell} pins xchain-sdk ≥ ^1.11.0 (Phase 4 Step 18 baseline) — or link: for sibling-repo dev`,
+        `${shell} pins xchain-sdk ≥ ^1.11.0 (Phase 4 Step 18 baseline): or link: for sibling-repo dev`,
     );
     assert.match(
         pkg.devDependencies?.['vite-plugin-node-polyfills'] || '',
@@ -205,6 +205,6 @@ for (const marker of [
 }
 
 console.log(
-    'OK — sdk-bundle smoke (ws shim, polyfills wired in both Vite configs, '
+    'OK: sdk-bundle smoke (ws shim, polyfills wired in both Vite configs, '
         + 'xchain-sdk pinned, sdkFactory wiring intact, release gate unchanged)',
 );

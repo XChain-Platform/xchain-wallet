@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §20 / Cluster X Step 11 — AdvancedActionsForm watcher-mode
+// Smoke for §20 / Cluster X Step 11: AdvancedActionsForm watcher-mode
 // branch. The form's user-chosen `action` variable is passed straight
 // into actionData, so the watcher branch handles ANY XChain action via
 // one buildActionPsbtRequest call.

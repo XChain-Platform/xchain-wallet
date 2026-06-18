@@ -8,14 +8,14 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §12 / Cluster S FOLLOWUP 3 — wildcard / domain blocklist
+// Smoke for §12 / Cluster S FOLLOWUP 3: wildcard / domain blocklist
 // entries.
 //
 // Pins:
 //   - parseWildcardPattern + normalizeBlocklistEntry exports.
 //   - isOriginBlocked recognizes wildcard patterns. Apex is NOT
 //     matched by *.example.com (consistent with browser cookie
-//     scoping — *.example.com matches sub.example.com but not
+//     scoping; *.example.com matches sub.example.com but not
 //     example.com). Subdomains do match including deeper levels.
 //   - addBlockedOrigin accepts wildcards, stores them as `*.host`
 //     verbatim (no scheme), and evicts every ConnectedSite whose

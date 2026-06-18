@@ -9,14 +9,14 @@
 // contact legal@dankest.llc.
 
 // Desktop main-process listener for the signer-bridge ipc channel.
-// Mirrors the extension `signerBridgeListener.js` pattern — accepts
+// Mirrors the extension `signerBridgeListener.js` pattern: accepts
 // renderer connections, builds a transport for each connection, and
 // populates the signerBridge registry so `action.*.hw` handlers can
 // reach the renderer-hosted Trezor/Ledger signers.
 //
 // Extension ports vs Electron ipc: chrome.runtime gives us a per-port
 // lifecycle with `onMessage` + `onDisconnect`. Electron ipc is a
-// singleton ipcMain event stream with no connection concept — every
+// singleton ipcMain event stream with no connection concept; every
 // message arrives with an `event.sender` (the BrowserWindow's
 // webContents) that we key a synthetic "port" off of. First message
 // from a given webContents creates the entry; when the webContents

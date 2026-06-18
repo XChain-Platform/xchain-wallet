@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Standalone user-initiated sign flows — §30.1, §30.4.
+// Standalone user-initiated sign flows (§30.1, §30.4).
 //
 // `signMessageFlow` signs an arbitrary message with the key at a given
 // address (user wants to prove ownership, produce a Sign-in challenge
@@ -33,10 +33,10 @@ import { assertSigningAllowed } from './panicMode.js';
  * @property {import('../registry/index.js').ChainRegistry} chainRegistry
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
  * @property {string} chainId
- * @property {string} [path]        BIP32 path — HD key
- * @property {string} [addressId]   Address record id — imported-WIF key
+ * @property {string} [path]        BIP32 path (HD key)
+ * @property {string} [addressId]   Address record id (imported-WIF key)
  * @property {string} message
- * @property {import('../signers/Signer.js').Signer} [signer]   pre-built signer (pooled SoftwareSigner for an unlocked session, or RemoteSigner for HW). When supplied, the flow skips unlockWallet — no password KDF — and does not call `.lock()` (signer lifecycle is the caller's responsibility).
+ * @property {import('../signers/Signer.js').Signer} [signer]   pre-built signer (pooled SoftwareSigner for an unlocked session, or RemoteSigner for HW). When supplied, the flow skips unlockWallet (no password KDF) and does not call `.lock()` (signer lifecycle is the caller's responsibility).
  */
 
 /**
@@ -104,7 +104,7 @@ export async function signMessageFlow({
  * @property {string} chainId
  * @property {string} psbtHex
  * @property {import('../signers/Signer.js').SigningPathEntry[]} signingPaths
- * @property {import('../signers/Signer.js').Signer} [signer]   pre-built signer (RemoteSigner for HW). When supplied, the flow skips unlockWallet — no password KDF — and does not call `.lock()` at the end (signer lifecycle is the caller's responsibility).
+ * @property {import('../signers/Signer.js').Signer} [signer]   pre-built signer (RemoteSigner for HW). When supplied, the flow skips unlockWallet (no password KDF) and does not call `.lock()` at the end (signer lifecycle is the caller's responsibility).
  */
 
 /**

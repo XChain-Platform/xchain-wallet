@@ -8,14 +8,14 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// mintToken — convenience wrapper for the MINT action (§Phase 2
+// mintToken: convenience wrapper for the MINT action (§Phase 2
 // authoring surface; protocol docs: xchain-documentation/protocol/
 // actions/MINT.md). Mirrors issueToken's shape: takes vault +
 // registries + chain + source address + MINT params, forwards to
 // submitAction, returns the standard SubmitResult.
 //
 // Callers on the UI side (MintForm, messaging.mintToken) build the
-// params themselves — the SDK's Actions.createAction runs the
+// params themselves; the SDK's Actions.createAction runs the
 // authoritative validator. The flow only guards required inputs so
 // bad callers get a loud error before we hit the signer.
 

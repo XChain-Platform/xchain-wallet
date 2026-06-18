@@ -22,7 +22,7 @@ const chainRegistry = registryLib.defaultRegistry();
  *
  * Replaces the form's editable ticker input + chain picker with a
  * single chip that shows the token icon, its ticker, and the chain
- * it's on — so the user can't accidentally retype, and the form's
+ * it's on, so the user can't accidentally retype, and the form's
  * "this action operates on token X" intent is reinforced visually.
  *
  * @param {object} props

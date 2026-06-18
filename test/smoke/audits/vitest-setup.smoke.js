@@ -10,7 +10,7 @@
 
 // Smoke test for Batch 5 piece 15 (Vitest in core).
 //
-// Can't execute Vitest itself without `pnpm install` — this smoke
+// Can't execute Vitest itself without `pnpm install`; this smoke
 // verifies the harness is wired correctly. Once CI runs, the real
 // `pnpm -C packages/core test` step exercises the suites.
 //
@@ -144,7 +144,7 @@ assert.ok(
 );
 
 console.log(
-    `OK — vitest setup smoke (config, setup, ${testFiles.length} test suite(s), ${smokeFiles.length} smoke(s), devDeps, runner, gitignore)`,
+    `OK: vitest setup smoke (config, setup, ${testFiles.length} test suite(s), ${smokeFiles.length} smoke(s), devDeps, runner, gitignore)`,
 );
 
 // ---------------------------------------------------------------------

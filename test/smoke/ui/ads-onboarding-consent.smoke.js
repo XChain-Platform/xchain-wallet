@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §36.1 — ADS onboarding consent screen during wallet creation.
+// Smoke for §36.1: ADS onboarding consent screen during wallet creation.
 //
 // Source-level: CreateWallet.jsx grows an `ads-consent` stage between
 // 'persisting' and `onCreated()`. The stage renders Enable +
@@ -26,7 +26,7 @@ const createPath = join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', '
 
 const src = readFileSync(createPath, 'utf8');
 
-// Stage type widened — must still include the ads-consent member.
+// Stage type widened: must still include the ads-consent member.
 // The full union grew further (verify quiz at v0.176.0 / G033) so we match
 // the ads-consent member specifically rather than pinning the entire shape.
 assert.match(

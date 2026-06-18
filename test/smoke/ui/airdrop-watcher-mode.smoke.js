@@ -8,9 +8,9 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §20 / Cluster X Step 10 — AirdropForm watcher-mode block.
+// Smoke for §20 / Cluster X Step 10: AirdropForm watcher-mode block.
 //
-// AIRDROP is a two-phase action — broadcast LIST, wait for indexer to
+// AIRDROP is a two-phase action: broadcast LIST, wait for indexer to
 // confirm, then broadcast AIRDROP referencing the indexed list's
 // ACTION_INDEX. The index-wait step is fundamentally incompatible with
 // the watcher-mode contract (the wallet that builds the PSBT does not
@@ -39,7 +39,7 @@ assert.match(
     /if \(isWatcherMode\) \{[\s\S]+?Not available in watcher mode/,
     'watcher-mode block fires before the stage-based returns',
 );
-// AIRDROP form should NOT call buildActionPsbtRequest — the action is
+// AIRDROP form should NOT call buildActionPsbtRequest; the action is
 // blocked entirely, not split.
 assert.doesNotMatch(
     formSrc,

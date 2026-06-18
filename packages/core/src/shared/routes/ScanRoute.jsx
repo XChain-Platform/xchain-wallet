@@ -8,16 +8,16 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// §24.3 / Cluster Y FOLLOWUP 1 — dedicated scan-and-classify route.
+// §24.3 / Cluster Y FOLLOWUP 1: dedicated scan-and-classify route.
 //
 // Mounts <QrScanner> as a top-level view. Each scanned frame runs
-// through `detectQrContent` (the existing §32.2 classifier — same one
+// through `detectQrContent` (the existing §32.2 classifier, same one
 // used by Send's address paste and PsbtSignForm's PSBT input). On the
 // first recognized payload the scanner stops and the parent shell
 // receives a callback for the matching route.
 //
-// The route does NOT auto-import secret material (WIF / mnemonic) —
-// those classifications surface a clear "use the Import flow" message
+// The route does NOT auto-import secret material (WIF / mnemonic).
+// Those classifications surface a clear "use the Import flow" message
 // rather than navigating somewhere that could write a secret to the
 // vault from a casual scan. Address / BIP21 / xchain-uri / PSBT-hex
 // drive the four supported routes.
@@ -146,7 +146,7 @@ export function ScanRoute({ onClassified, onBack, chainRegistry }) {
 
         if (detected.type === 'wif' || detected.type === 'mnemonic-bip39'
             || detected.type === 'mnemonic-counterwallet') {
-            // Secret material from a casual scan — do not auto-import.
+            // Secret material from a casual scan: do not auto-import.
             // Surface a clear message and let the user pick the deliberate
             // Import lane themselves.
             setStatus(
@@ -158,7 +158,7 @@ export function ScanRoute({ onClassified, onBack, chainRegistry }) {
         }
 
         if (detected.type === 'xcw-chunk') {
-            // Multi-frame PSBT-over-QR — the scan route only handles
+            // Multi-frame PSBT-over-QR: the scan route only handles
             // single-shot recognition. Direct the user to the Sign panel
             // which mounts the full XCW collector + animated source pane.
             setStatus(t('scan.error.xcwChunk', { n: detected.n, total: detected.total }));

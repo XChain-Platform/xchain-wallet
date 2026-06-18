@@ -10,8 +10,8 @@
 
 // Unit tests for the two row normalizers that map xchain-explorer
 // responses (positional-array OR keyed-object) into the stable shapes
-// the wallet renders against. Both endpoints — /tokens/{address}/address
-// (listOwnedTokens) and /issues/{tick}/token (Genesis section) — emit
+// the wallet renders against. Both endpoints (/tokens/{address}/address
+// (listOwnedTokens) and /issues/{tick}/token (Genesis section)) emit
 // the array shape today via XChainExplorer.js's response collapsing,
 // so the wallet has to tolerate both wire formats.
 

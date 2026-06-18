@@ -67,7 +67,7 @@ for (const fn of ['createWallet', 'importMnemonic']) {
 
 // CreateWallet + ImportWallet are hoisted into @xchain-wallet/core/shared/routes.
 // The shared CreateWallet generates the mnemonic client-side and persists
-// post-confirm via messaging.importMnemonic — converged on the web shell's
+// post-confirm via messaging.importMnemonic; converged on the web shell's
 // post-confirm-commit pattern (§19.2: a user who bails at the display
 // stage leaves no vault behind).
 const sharedRoutes = join(
@@ -245,7 +245,7 @@ await withChrome({}, async (stub) => {
         request: { mnemonic: cryptoLib.generateBip39Mnemonic(128) },
     });
     // With existing wallet, this now fails as WalletExistsError BEFORE
-    // hitting the password guard — that's fine; both prevent the import.
+    // hitting the password guard; that's fine, both prevent the import.
     assert.equal(missingPw.ok, false);
 });
 
@@ -266,5 +266,5 @@ await withChrome({}, async () => {
 });
 
 console.log(
-    'OK — extension onboarding smoke (wallet.create + wallet.import pre-host handlers, onUnlocked firing, idempotence + empty-password guards)',
+    'OK: extension onboarding smoke (wallet.create + wallet.import pre-host handlers, onUnlocked firing, idempotence + empty-password guards)',
 );

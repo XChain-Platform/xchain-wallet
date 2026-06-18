@@ -34,9 +34,9 @@ export function QuickActionSection() {
                 when={<>Top of a page that exposes 2–4 primary actions on a single row (Home quick actions, future onboarding action grids). Grid is <code>repeat(N, 1fr)</code> with 8px gap so the cards span the row.</>}
                 whenNot={<>Single-action contexts → use <code>&lt;Button variant="primary"&gt;</code>. Long lists → use a vertical card stack or a more list. Toolbar actions (filter / scan / etc.) → use the <code>ScreenHeader</code> trailing slot.</>}
                 sizing={<>Card: <code>padding: var(--xc-space-3) var(--xc-space-1)</code>, <code>min-height: 72px</code>. Icon halo: 32×32, circular, accent-tinted bg, accent-colored glyph. Label: <code>var(--xc-text-xs)</code>, weight 600.</>}
-                doRule={<>✓ Always pair an Icon with a label (icon-only loses meaning; label-only loses scannability) · keep all four cards the same height (let the grid stretch the cell — don't size the button itself) · use the same <code>Icon.XxxIcon</code> already in the icon catalog so the affordance reads consistently with the rest of the app</>}
+                doRule={<>✓ Always pair an Icon with a label (icon-only loses meaning; label-only loses scannability) · keep all four cards the same height (let the grid stretch the cell; don't size the button itself) · use the same <code>Icon.XxxIcon</code> already in the icon catalog so the affordance reads consistently with the rest of the app</>}
                 dontRule={<>✗ Mix icon styles (emoji vs SVG) within the row · pad the label so it wraps two lines · drop the accent border in favor of a filled background (the outline+halo is the look)</>}
-                supersedes={<>Inline ad-hoc CTA cards. The canonical source is <code>packages/core/src/shared/routes/Home.module.css</code> (<code>.quickAction</code> / <code>.quickActionIcon</code>) — extract to <code>QuickAction</code> in <code>@xchain-wallet/core/ui</code> next time a third caller appears.</>}
+                supersedes={<>Inline ad-hoc CTA cards. The canonical source is <code>packages/core/src/shared/routes/Home.module.css</code> (<code>.quickAction</code> / <code>.quickActionIcon</code>). Extract to <code>QuickAction</code> in <code>@xchain-wallet/core/ui</code> next time a third caller appears.</>}
             />
 
             <Markup>
@@ -49,7 +49,7 @@ export function QuickActionSection() {
 </div>`}
             </Markup>
 
-            <LiveExample label="4-up row — Home's canonical quick actions">
+            <LiveExample label="4-up row: Home's canonical quick actions">
                 <div className={styles.quickActions}>
                     <QuickAction icon={<Icon.SendIcon />} label="Send" />
                     <QuickAction icon={<Icon.ReceiveIcon />} label="Receive" />
@@ -58,7 +58,7 @@ export function QuickActionSection() {
                 </div>
             </LiveExample>
 
-            <LiveExample label="2-up row — works the same with fewer actions">
+            <LiveExample label="2-up row: works the same with fewer actions">
                 <div className={styles.quickActionsTwo}>
                     <QuickAction icon={<Icon.ScanIcon />} label="Scan QR" />
                     <QuickAction icon={<Icon.BookIcon />} label="Contacts" />

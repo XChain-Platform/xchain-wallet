@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// LogConsole — §48.5 / G150 Developer-Mode log viewer. Renders the
+// LogConsole: §48.5 / G150 Developer-Mode log viewer. Renders the
 // process-wide `logConsole` ring buffer in a scrollable, filterable
 // panel. Mounts inside Settings → Developer Mode (keeps the change
 // scoped to one Settings surface; doesn't require touching all three
@@ -18,7 +18,7 @@
 // any subsequent `console.log/info/warn/error` flows into the buffer.
 // Already-attached state is preserved across mounts; a sister page
 // that opens later sees the full session backlog. The component never
-// detaches — leaving it attached for the rest of the session is
+// detaches; leaving it attached for the rest of the session is
 // cheaper than re-arming on every Developer Mode visit.
 
 import { useEffect, useMemo, useState } from 'react';
@@ -149,7 +149,7 @@ export function LogConsole() {
             setCopied(true);
             setTimeout(() => setCopied(false), 1500);
         } catch {
-            /* swallow — best effort */
+            /* swallow; best effort */
         }
     };
 

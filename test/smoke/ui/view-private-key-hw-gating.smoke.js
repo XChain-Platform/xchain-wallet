@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §17.7.2 / G026 — ViewPrivateKey does not offer a reveal
+// Smoke for §17.7.2 / G026: ViewPrivateKey does not offer a reveal
 // path for HW (Trezor/Ledger) or watch-only addresses. Both source
 // kinds short-circuit to an informational panel that says "the key
 // lives on your device" / "no key here", without prompting for a
@@ -39,7 +39,7 @@ assert.ok(/case 'watch-only':\s*return\s*\{\s*kind:\s*'watch-only'/.test(vpk),
 // Hardware branch must short-circuit BEFORE the warning / password
 // / reveal render-stage branches. Use the render-branch headers
 // (`stage === 'warning'`, `(stage === 'password' || stage === 'submitting')`,
-// `// stage === 'revealed'`) — those only appear once, in render order.
+// `// stage === 'revealed'`). Those only appear once, in render order.
 const hwBranch = /sourceInfo\.kind === 'hardware'/.exec(vpk);
 const warningStage = /stage === 'warning'/.exec(vpk);
 const passwordStage = /stage === 'password' \|\| stage === 'submitting'/.exec(vpk);
@@ -61,7 +61,7 @@ assert.ok(watchBranch, 'ViewPrivateKey gates watch-only addresses');
 assert.ok(watchBranch.index < passwordStage.index,
     'Watch-only gating short-circuits before the password render-branch');
 
-// HW info panel says the key lives on the device — no prompt to enter password.
+// HW info panel says the key lives on the device. No prompt to enter password.
 assert.ok(/lives on your/.test(vpk),
     'HW panel explains the key lives on the device');
 

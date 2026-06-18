@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// PrivacyBlurGate — §26 / G069 mount point. Renders nothing; bridges
+// PrivacyBlurGate (§26 / G069) mount point. Renders nothing; bridges
 // `settings.privacy.blurOnBlur` into `usePrivacyBlur` so every shell that
 // wraps its tree in <MessagingProvider> automatically gets the privacy
 // blur behaviour without duplicating the wiring.

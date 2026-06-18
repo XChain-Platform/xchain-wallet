@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// §50 / Cluster L FOLLOWUP 3 smoke — diagnostic dump redaction sweep.
+// §50 / Cluster L FOLLOWUP 3 smoke: diagnostic dump redaction sweep.
 //
 // Asserts:
 //   1. Custom endpoint URLs (settings.sdkEndpoints[chainId]) are
@@ -101,7 +101,7 @@ assert.equal(ltc.explorerUrl, 'https://ltc.example',
 const dumpB = await diagnosticDump({ vault: fakeVault, chainRegistry: fakeRegistry });
 const btcB = dumpB.endpoints.find((e) => e.chainId === 'BTC.mainnet');
 assert.equal(btc.explorerUrl, btcB.explorerUrl,
-    'redaction is deterministic — same URL → same hash prefix across runs');
+    'redaction is deterministic: same URL → same hash prefix across runs');
 
 // --- 3. AboutSection has a "Show preview" expander ---------------------
 
@@ -132,5 +132,5 @@ assert.ok(/redactCustomUrl/.test(dumpSrc),
     'diagnosticDump exposes a redactCustomUrl helper for endpoint URLs');
 
 console.log(
-    'OK — diagnostic-dump-redaction smoke (§50 / Cluster L FOLLOWUP 3 — custom endpoint URLs land as redacted:sha256:<hex>; AboutSection ships Show preview expander wired with aria-expanded + aria-controls; redaction is deterministic so a single user\'s dumps stay comparable)',
+    'OK: diagnostic-dump-redaction smoke (§50 / Cluster L FOLLOWUP 3: custom endpoint URLs land as redacted:sha256:<hex>; AboutSection ships Show preview expander wired with aria-expanded + aria-controls; redaction is deterministic so a single user\'s dumps stay comparable)',
 );

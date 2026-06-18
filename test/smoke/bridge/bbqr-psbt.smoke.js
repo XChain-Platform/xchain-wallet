@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §20.4 / G043 — BBQr / UR PSBT QR. BBQr H + B + Z all
+// Smoke for §20.4 / G043: BBQr / UR PSBT QR. BBQr H + B + Z all
 // decode now (Cluster U FOLLOWUP 1 wired Z via pako); UR is still
 // recognized but throws "not yet supported" pending Cluster U FU 2.
 
@@ -39,7 +39,7 @@ for (const fn of ['detectQrFrameFormat', 'describeUnsupportedFormat']) {
         `qrPsbtFormat exports ${fn}`);
 }
 
-// 2. Runtime — format detection.
+// 2. Runtime: format detection.
 const fmtUrl = `file://${join(root, fmtPath)}`;
 const { detectQrFrameFormat, describeUnsupportedFormat } = await import(fmtUrl);
 
@@ -59,13 +59,13 @@ assert.equal(describeUnsupportedFormat('bbqr'), null,
     'BBQr is supported (H/B); unsupported variants surface via the BBQr decoder error');
 assert.equal(describeUnsupportedFormat(null), null);
 
-// 3. Runtime — BBQr decode (single-frame H).
+// 3. Runtime: BBQr decode (single-frame H).
 const bbqrUrl = `file://${join(root, bbqrPath)}`;
 const { parseBbqrFrame, decodeBbqrFrames, decodeBbqrPsbt, encodeBbqrPsbtFrames, BbqrError } =
     await import(bbqrUrl);
 
 // Build a fake single-frame BBQr-PSBT-H. PSBT magic is "70736274ff"
-// in hex; we don't need a real PSBT here — the BBQr layer just hands
+// in hex; we don't need a real PSBT here: the BBQr layer just hands
 // bytes back, and decodeBbqrPsbt asserts file-type P only.
 const samplePsbtHex = '70736274ff0001020304';
 const sampleSingleH = `B$HP0100${samplePsbtHex.toUpperCase()}`;
@@ -78,7 +78,7 @@ const decodedH = decodeBbqrPsbt([sampleSingleH]);
 assert.equal(decodedH.psbtHex, samplePsbtHex);
 assert.equal(decodedH.psbt instanceof Uint8Array, true);
 
-// Multi-frame H — split the same payload into two halves.
+// Multi-frame H: split the same payload into two halves.
 const half1 = samplePsbtHex.slice(0, 10).toUpperCase();
 const half2 = samplePsbtHex.slice(10).toUpperCase();
 const multiH1 = `B$HP0200${half1}`;
@@ -106,7 +106,7 @@ assert.throws(() => decodeBbqrPsbt([`B$HP0200${half1}`, `B$HP0301${half2}`]),
 assert.throws(() => decodeBbqrPsbt([`B$HP0200${half1}`, `B$BP0201ABCDEFGH`]),
     /encoding mismatch/);
 
-// Z encoding round-trip — generate a zlib-compressed PSBT, base32 it
+// Z encoding round-trip: generate a zlib-compressed PSBT, base32 it
 // (no padding), wrap in a BBQr Z frame, and decode back. This is the
 // shape Coldcard / SeedSigner emit when sending a signed PSBT back
 // to a host. Pako is the runtime dep.
@@ -172,7 +172,7 @@ assert.throws(() => decodeBbqrPsbt([txFrame]),
 assert.throws(() => parseBbqrFrame('notbbqr'),
     BbqrError);
 
-// 4. encodeBbqrPsbtFrames — round-trip + shape.
+// 4. encodeBbqrPsbtFrames: round-trip + shape.
 //
 // Single-frame: payload fits in one chunk.
 const tinyHex = '70736274ff' + '00'.repeat(40);  // 45 bytes
@@ -220,4 +220,4 @@ assert.ok(/unsupportedFormatHint/.test(formSrc),
 assert.ok(/hex, base64, or BBQr PSBT/.test(formSrc),
     'fallback error mentions BBQr alongside hex / base64');
 
-console.log('OK — BBQr PSBT decode + format detector + PsbtSignForm wiring smoke');
+console.log('OK: BBQr PSBT decode + format detector + PsbtSignForm wiring smoke');

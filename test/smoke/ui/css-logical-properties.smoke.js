@@ -26,7 +26,7 @@
 //   right: → use inset-inline-end
 //
 // What we leave alone (top: / bottom: / cursor: ew-resize / flex-direction:
-// row[-reverse] etc.) — these are either block-direction (already
+// row[-reverse] etc.): these are either block-direction (already
 // RTL-safe) or physically intentional.
 
 import { strict as assert } from 'node:assert';
@@ -64,11 +64,11 @@ for (const f of cssFiles) {
         violations.push(`${rel}: physical inline-axis property "${match[1]}"`);
     }
     if (physicalPosition.test(src)) {
-        violations.push(`${rel}: physical inset position "left:" or "right:" — use inset-inline-start/end`);
+        violations.push(`${rel}: physical inset position "left:" or "right:": use inset-inline-start/end`);
     }
     if (physicalTextAlign.test(src)) {
         const match = src.match(physicalTextAlign);
-        violations.push(`${rel}: text-align: ${match[1]} — use text-align: start / end`);
+        violations.push(`${rel}: text-align: ${match[1]}: use text-align: start / end`);
     }
 }
 
@@ -79,7 +79,7 @@ if (violations.length > 0) {
 }
 
 // Sanity check: at least one logical property must be in use somewhere
-// — guards against a future "no module.css imports anything" regression
+//: guards against a future "no module.css imports anything" regression
 // that would silently pass the negative-only test above.
 let logicalCount = 0;
 for (const f of cssFiles) {
@@ -91,4 +91,4 @@ for (const f of cssFiles) {
 assert.ok(logicalCount > 0,
     'at least one *.module.css uses logical properties (sanity check)');
 
-console.log(`OK — ${cssFiles.length} *.module.css files clean of physical inline-axis properties; ${logicalCount} use logical equivalents`);
+console.log(`OK: ${cssFiles.length} *.module.css files clean of physical inline-axis properties; ${logicalCount} use logical equivalents`);

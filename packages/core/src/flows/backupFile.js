@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Encrypted backup-file flows — §19.4.
+// Encrypted backup-file flows (§19.4).
 //
 // `exportBackupFile` reads everything the vault knows about a wallet
 // (wallet record incl. encryptedSeed + importedKeys, accounts, addresses
@@ -24,7 +24,7 @@
 //   onConflict = 'error'       throw BackupConflictError if any collision exists
 //
 // Not included in the payload (per §19.4):
-//   - BIP39 passphrase (user re-enters on restore — the passphrase is a
+//   - BIP39 passphrase (user re-enters on restore; the passphrase is a
 //     security property of the seed, not stored state).
 //   - Hardware-wallet private keys (they live on the device; the backup
 //     only records the pairing metadata in `signers`).
@@ -216,13 +216,13 @@ export async function importBackupFile({
         throw new Error('importBackupFile: payload missing wallet record');
     }
 
-    // §19.4 / Cluster H FOLLOWUP 3 — 'add' mode re-mints wallet /
+    // §19.4 / Cluster H FOLLOWUP 3: 'add' mode re-mints wallet /
     // account / address ids so the restored wallet coexists with what
     // the vault already has, even if the source vault and target vault
     // happened to share an id (a from-seed restore on the same device,
     // for example, would deterministically produce some equal ids).
     // Contacts / connectedSites / settings stay shared (their ids are
-    // already global) — collisions there fall through to the existing
+    // already global); collisions there fall through to the existing
     // onConflict policy.
     if (mode === 'add') {
         remintIdentifiers(decoded);
@@ -230,7 +230,7 @@ export async function importBackupFile({
 
     // Collect conflicts up-front; onConflict='error' fails fast. Add
     // mode skips the wallet / account / address collisions because we
-    // just re-minted those ids — only contacts / connectedSites /
+    // just re-minted those ids; only contacts / connectedSites /
     // settings can still conflict.
     const conflicts = await collectConflicts(
         vault, decoded, { skipWalletScoped: mode === 'add' },
@@ -265,7 +265,7 @@ export async function importBackupFile({
     await applyCollection(vault.connectedSites, decoded.connectedSites ?? [], onConflict, writes, skipped, 'connectedSites');
     await applyCollection(vault.pendingTxs, decoded.pendingTxs ?? [], onConflict, writes, skipped, 'pendingTxs');
 
-    // Settings is a singleton — overwrite/preserve decisions apply to
+    // Settings is a singleton; overwrite/preserve decisions apply to
     // the whole record.
     if (decoded.settings) {
         const existing = await vault.settings.get();
@@ -327,7 +327,7 @@ async function collectConflicts(vault, payload, opts = {}) {
  *   - wallet.importedKeys[].addressId
  *   - account.id, account.walletId
  *   - address.id, address.accountId
- *   - pendingTx.id    (kept independent — pending txs are address-scoped
+ *   - pendingTx.id    (kept independent; pending txs are address-scoped
  *                     via `fromAddress`, not id-scoped)
  *
  * Contacts / connectedSites / settings ids stay as-is (they're global
@@ -379,7 +379,7 @@ export function remintIdentifiers(decoded) {
         }
     }
 
-    // PendingTxs — re-mint id so a re-import of the same backup doesn't
+    // PendingTxs: re-mint id so a re-import of the same backup doesn't
     // collide; keep the rest of the row (fromAddress / txid / status)
     // untouched. fromAddress is the canonical address string, not an
     // id, so it survives the address-id re-mint.

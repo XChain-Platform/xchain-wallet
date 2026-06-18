@@ -68,7 +68,7 @@ function ensurePort() {
 /**
  * Register a live Signer instance so background-initiated sign
  * requests for its id can reach it. Called by the pair flow after
- * `messaging.registerSigner` persists the SignerRecord — we use
+ * `messaging.registerSigner` persists the SignerRecord. We use
  * the record's id as the key so the descriptor built by
  * `resolveSigner` (which reads the same id from the vault) matches.
  *
@@ -103,7 +103,7 @@ export function unregisterSigner(signerId) {
 }
 
 /**
- * Diagnostic — currently registered signer ids.
+ * Diagnostic: currently registered signer ids.
  * @returns {string[]}
  */
 export function registeredIds() {
@@ -111,7 +111,7 @@ export function registeredIds() {
 }
 
 /**
- * Test hook — drop all live signers and the port reference.
+ * Test hook: drop all live signers and the port reference.
  * Production code has no reason to call this.
  */
 export function _resetForTests() {

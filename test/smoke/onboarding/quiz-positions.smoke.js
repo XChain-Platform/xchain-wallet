@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §19.2 / Cluster H FOLLOWUP 6 — pickQuizPositions scaling.
+// Smoke for §19.2 / Cluster H FOLLOWUP 6: pickQuizPositions scaling.
 //
 // 12-word mnemonics keep the original 3-position quiz; 24-word phrases
 // get a 4-position quiz so coverage scales proportionally. Helper now
@@ -44,7 +44,7 @@ for (let trial = 0; trial < 100; trial++) {
 // Wallet only emits 12 / 24 word phrases via `cryptoLib.generate-
 // Bip39Mnemonic`, but the floor exists so that fictional shorter
 // phrases (e.g. test fixtures) don't collapse to a one-position quiz.
-// We assert the *upper bound* (≤ targetCount) for short phrases — the
+// We assert the *upper bound* (≤ targetCount) for short phrases; the
 // greedy non-adjacent picker can fall short on small candidate sets,
 // which is fine since real BIP39 lengths (12, 18, 24) always have
 // enough room.
@@ -100,7 +100,7 @@ assert.ok(
     /from '\.\.\/utils\/pickQuizPositions\.js'/.test(cwSrc),
     'CreateWallet imports pickQuizPositions from the shared util',
 );
-// The local copy should be gone — only the import + comment reference.
+// The local copy should be gone; only the import + comment reference remains.
 assert.ok(
     !/function pickQuizPositions\(totalWords\) \{/.test(cwSrc),
     'CreateWallet no longer ships an inline pickQuizPositions definition',

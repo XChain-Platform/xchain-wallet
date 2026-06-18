@@ -8,23 +8,23 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// BIP21 URI parse/encode — §29.10.
+// BIP21 URI parse/encode: §29.10.
 //
 // Format:  scheme:address[?param1=value1&param2=value2]
 //
 // Standard params (all optional):
-//   amount    — decimal chain-native units (e.g. BTC for bitcoin:)
-//   label     — percent-encoded string
-//   message   — percent-encoded string
+//   amount    - decimal chain-native units (e.g. BTC for bitcoin:)
+//   label     - percent-encoded string
+//   message   - percent-encoded string
 //
 // Extension params with `req-` prefix MUST be supported by the wallet
-// or the URI MUST be rejected — per BIP21 spec. The parser surfaces
+// or the URI MUST be rejected (per BIP21 spec). The parser surfaces
 // them in `required[]` so callers can decide whether to honor or
 // reject. XChain doesn't use req- params at launch, but correctness
 // here avoids silently accepting bitcoin: URIs from other wallets that
 // rely on them.
 //
-// Scheme is caller-verified — we don't hardcode the set. The wallet
+// Scheme is caller-verified; we don't hardcode the set. The wallet
 // cross-checks against `ChainRegistry.supportedChains()[...].uriScheme`.
 
 export class InvalidBip21Error extends Error {

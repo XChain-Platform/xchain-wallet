@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// dispenserQueries — thin wrappers around the SDK's explorer methods
+// dispenserQueries: thin wrappers around the SDK's explorer methods
 // for the §40.7.2 "My dispensers" + detail surfaces. Single-chain
 // read-only queries; no vault, no signing.
 //
@@ -20,9 +20,9 @@
 // lane as a dedicated helper so callers don't reach for magic strings.
 //
 // Indexer surface is still incomplete (see xchain-explorer/db.js's
-// getDispensers TODO — GIVE_ESCROW / current stock / dispense count
+// getDispensers TODO: GIVE_ESCROW / current stock / dispense count
 // aren't returned yet). Callers render what's present and fall back
-// to "—" for missing fields.
+// to a placeholder for missing fields.
 
 /**
  * @typedef {Object} DispenserQueryOpts

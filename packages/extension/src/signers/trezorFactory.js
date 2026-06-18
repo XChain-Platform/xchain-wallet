@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Trezor Connect factory — extension (popup + service worker) target.
+// Trezor Connect factory for the extension (popup + service worker) target.
 // Thin binding layer: the pair sequence itself lives in
 // `@xchain-wallet/core/signerFactories/trezor.js` (Phase 2 Step 18, §40.12),
 // shared with the web + desktop shells. This file owns the extension-
@@ -16,20 +16,20 @@
 // `connectSrc` pointing at connect.trezor.io).
 //
 // Lazy-imports `@trezor/connect-web` so the SDK only loads when the
-// user actually pairs a Trezor — keeps the extension's baseline
+// user actually pairs a Trezor. This keeps the extension's baseline
 // bundle free of Trezor Connect's iframe bootstrap code until it's
 // needed. Connect uses a popup/iframe that talks to the Trezor Bridge
 // daemon (or WebUSB on supported browsers); the MV3 service worker
 // can't host that directly, so the caller runs this from the
 // extension's React popup.
 
-// Cross-package relative path to core — matches the convention in
+// Cross-package relative path to core. Matches the convention in
 // hostBridge.js and messageHost.js so Node smoke scripts resolve the
 // module without the pnpm workspace symlink.
 import { makeTrezorFactory } from '../../../core/src/signerFactories/index.js';
 
 /**
- * Manifest handed to Trezor Connect at init. Required — Trezor gates
+ * Manifest handed to Trezor Connect at init. Required: Trezor gates
  * the popup on a recognized manifest. Both fields must be accurate;
  * Trezor Connect may block unknown-origin manifests.
  */
@@ -43,7 +43,7 @@ let connectPromise = null;
 
 /**
  * Lazy-init Trezor Connect. Subsequent calls return the same instance.
- * The `loader` parameter exists for tests — in production pass the
+ * The `loader` parameter exists for tests. In production pass the
  * real `@trezor/connect-web` package via `() => import('@trezor/connect-web')`.
  *
  * @param {() => Promise<any>} [loader]

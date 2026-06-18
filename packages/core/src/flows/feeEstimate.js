@@ -8,18 +8,18 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Fee estimate — bridge between the §21.2 simulator, the §29.2 Max
+// Fee estimate: bridge between the §21.2 simulator, the §29.2 Max
 // button, and the §44.2 user-selectable fee tiers.
 //
 // Three speed tiers per chain (low / normal / fast) sized for a
 // typical 1-input / 2-output SEND tx. Plus a "custom" mode the
-// FeeSelector exposes for power users — it accepts a sat/vB rate (or
+// FeeSelector exposes for power users. It accepts a sat/vB rate (or
 // DOGE/kB rate) and recomputes the absolute fee.
 //
 // Values are STATIC PLACEHOLDERS marked as such. When the SDK exposes
 // a real fee endpoint (Step 4 of this cluster), this flow probes for
-// it and swaps the source while keeping the same return shape —
-// callers don't relearn the contract.
+// it and swaps the source while keeping the same return shape.
+// Callers don't relearn the contract.
 //
 // Output is always `{ sats, source, confidence, ... }`. `source` is
 // the truthful provenance of the value; surfaces show it next to the
@@ -28,7 +28,7 @@
 /**
  * Per-chain fee tier table. Each tier has a sat/vB or DOGE/kB rate.
  * `txSize` is the assumed virtual size in vbytes (BTC/LTC) or raw
- * bytes (DOGE — its minrelayfee is denominated per-kB of raw size).
+ * bytes (DOGE uses per-kB of raw size for minrelayfee).
  */
 const PLACEHOLDER_FEE_TIERS = /** @type {const} */ ({
     bitcoin: {
@@ -117,7 +117,7 @@ export function estimateNativeSendFee({ chainId, chainRegistry, speed = DEFAULT_
         confidence: 'low',
         rate: formatRate(table.unit, tier.rate),
         unit: table.unit,
-        // §44.7 — rateValue is the user-displayed value in the chain's
+        // §44.7: rateValue is the user-displayed value in the chain's
         // natural unit (sat/vB for BTC/LTC, DOGE/kB for DOGE). Custom
         // mode echoes this value back through the input verbatim.
         rateValue: perByteRateToDisplay(table.unit, tier.rate),
@@ -155,7 +155,7 @@ export function estimateNativeSendFeeTiers({ chainId, chainRegistry } = {}) {
 
 /**
  * Build a custom-rate FeeEstimate. The FeeSelector's "Custom" mode
- * feeds this — user enters a rate in the displayed unit (sat/vB for
+ * feeds this. User enters a rate in the displayed unit (sat/vB for
  * BTC/LTC, DOGE/kB for DOGE), this function converts to per-byte
  * internally and recomputes the absolute fee. §44.7.
  *
@@ -192,7 +192,7 @@ export function customFeeEstimate({ chainId, chainRegistry, rate } = {}) {
  * Convert a `settings.fees[chainId].customSatsPerKb` value to the
  * FeeSelector's displayed-unit rate. The §35 Fees panel stores rates
  * as smallest-unit per kilobyte (sats/KB on BTC/LTC, koinu/KB on
- * DOGE — they're the same semantics, just different ticker on
+ * DOGE; same semantics, just different ticker on
  * display). The FeeSelector wants the user-natural display unit:
  * sat/vB for BTC/LTC, DOGE/kB for DOGE. This helper bridges the two.
  *
@@ -212,7 +212,7 @@ export function settingsCustomToDisplayRate(unit, customSatsPerKb) {
 }
 
 /**
- * Inverse of `settingsCustomToDisplayRate` — used when persisting the
+ * Inverse of `settingsCustomToDisplayRate`. Used when persisting the
  * Send-form custom rate back into `settings.fees[chainId].customSatsPerKb`.
  *
  * @param {string} unit
@@ -303,7 +303,7 @@ export async function fetchNativeSendFeeTiers({ messaging, chainId, chainRegistr
                 };
             }
         } catch {
-            // SDK refused / errored — silently fall through to the placeholder.
+            // SDK refused or errored; silently fall through to the placeholder.
         }
     }
 

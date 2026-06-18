@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for Cluster B Step 5 — Seed-phrase reveal UI wiring.
+// Smoke for Cluster B Step 5: Seed-phrase reveal UI wiring.
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';

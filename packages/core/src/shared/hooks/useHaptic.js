@@ -8,24 +8,24 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// useHaptic — §37.3 / G120. Thin wrapper around the Vibration API
+// useHaptic: §37.3 / G120. Thin wrapper around the Vibration API
 // (`navigator.vibrate`) that exposes intent-named pulses (success,
 // warn, error, tap) instead of leaving callers to guess pattern
-// constants. Returns a stable API regardless of host capability — on
+// constants. Returns a stable API regardless of host capability; on
 // a desktop browser without vibration support, every method silently
 // no-ops, so callers don't have to feature-detect.
 //
 // Reduced-motion guard: subscribes to the `prefers-reduced-motion`
 // media query (same pattern AnimatedQrFrames uses) and suppresses
 // every pulse while the user has the OS preference enabled. Vibration
-// is a motion affordance — users who turn motion off are signalling
+// is a motion affordance; users who turn motion off are signalling
 // they don't want involuntary feedback either.
 //
-// Cluster P FOLLOWUP 1 — `settings.privacy.hapticsEnabled` (v2-tolerant,
+// Cluster P FOLLOWUP 1: `settings.privacy.hapticsEnabled` (v2-tolerant,
 // default true) is now honored as an in-wallet opt-out alongside the
 // OS-level reduced-motion preference. Users who want haptics off
-// without disabling motion globally — or whose device's vibration motor
-// is harsh enough that the pulses are more annoying than informative —
+// without disabling motion globally, or whose device's vibration motor
+// is harsh enough that the pulses are more annoying than informative,
 // can flip it in Settings → Privacy.
 
 import { useCallback, useEffect, useState } from 'react';
@@ -73,7 +73,7 @@ function safeVibrate(pattern) {
  */
 export function useHaptic() {
     const [reducedMotion, setReducedMotion] = useState(readReducedMotion);
-    // Cluster P FOLLOWUP 1 — read the in-wallet opt-out. Default-true
+    // Cluster P FOLLOWUP 1: read the in-wallet opt-out. Default-true
     // when the field is absent so existing settings records keep their
     // current behaviour; `=== false` is the only suppress signal.
     const { settings } = useSettings();

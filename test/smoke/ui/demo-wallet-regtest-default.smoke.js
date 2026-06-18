@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Cluster J FOLLOWUP 7 — demo wallets activate on the regtest networks
+// Cluster J FOLLOWUP 7: demo wallets activate on the regtest networks
 // rather than mainnet. Pairs with FOLLOWUP 1 (synthesizeDemo* flows
 // short-circuit the chain fetch entirely so the wallet never actually
 // hits a regtest node), but keeps any future "fan out a real fetch"
@@ -55,4 +55,4 @@ for (const path of chainSources) {
         `${coin} descriptor file declares the regtest chain`);
 }
 
-console.log('OK — demo wallet regtest defaults');
+console.log('OK: demo wallet regtest defaults');

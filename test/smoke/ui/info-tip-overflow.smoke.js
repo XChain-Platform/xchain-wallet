@@ -8,11 +8,11 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Cluster P FOLLOWUP 3 — InfoTip placement-aware overflow. v0.210.0
+// Cluster P FOLLOWUP 3: InfoTip placement-aware overflow. v0.210.0
 // shipped a center-anchored bubble (`inset-inline-start: 50%;
 // transform: translateX(-50%)`); in narrow contexts (extension popup
 // is 360px wide) a tooltip near the right edge of the screen could
-// clip. This sweep adds a measurement-driven re-anchor — when the
+// clip. This sweep adds a measurement-driven re-anchor; when the
 // trigger sits in a position where the center-anchored bubble would
 // overflow either viewport edge, the alignment class swaps to the
 // near-edge anchor.
@@ -78,4 +78,4 @@ assert.ok(/\.alignEnd\s*\{[^}]*inset-inline-end:\s*0;[^}]*inset-inline-start:\s*
 assert.ok(/className=\{`\$\{styles\.bubble\} \$\{placement === 'bottom' \? styles\.placementBottom : styles\.placementTop\} \$\{alignClass\}`\}/.test(tipSrc),
     'InfoTip composes bubble + placement + alignment classes on the bubble element');
 
-console.log('OK — InfoTip placement-aware overflow re-anchor');
+console.log('OK: InfoTip placement-aware overflow re-anchor');

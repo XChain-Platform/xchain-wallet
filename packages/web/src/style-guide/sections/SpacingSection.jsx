@@ -22,7 +22,7 @@ const SPACING = [
 
 const RADII = [
     { token: '--xc-radius-sm',   value: '4px',    role: 'Tiny chips, Max button, hints' },
-    { token: '--xc-radius-md',   value: '8px',    role: 'Default — cards, inputs, buttons, hero' },
+    { token: '--xc-radius-md',   value: '8px',    role: 'Default: cards, inputs, buttons, hero' },
     { token: '--xc-radius-lg',   value: '12px',   role: 'Larger raised cards (modal, popover)' },
     { token: '--xc-radius-pill', value: '9999px', role: 'Pill-segmented selector, count badges, round buttons' },
 ];
@@ -75,13 +75,13 @@ export function SpacingSection() {
             id="spacing"
             title="Spacing & radii"
             tag="4px grid"
-            kicker="The wallet runs on a 4px spacing grid (1 / 2 / 3 / 4 / 5 / 6 / 8 — skipping 7 deliberately, the spec settled there) and four radius tokens. Always reach for a token, never raw px."
+            kicker="The wallet runs on a 4px spacing grid (1 / 2 / 3 / 4 / 5 / 6 / 8, skipping 7 deliberately as the spec settled there) and four radius tokens. Always reach for a token, never raw px."
         >
             <Guidance
-                doRule={<>✓ Use the smallest token that achieves visual separation · pair like-sized tokens (gap and padding on the same row should both pull from the same scale step or one step apart) · default to <code>--xc-radius-md</code> for cards/inputs/buttons — diverge only when a component is genuinely round (pill) or genuinely small (chip)</>}
+                doRule={<>✓ Use the smallest token that achieves visual separation · pair like-sized tokens (gap and padding on the same row should both pull from the same scale step or one step apart) · default to <code>--xc-radius-md</code> for cards/inputs/buttons; diverge only when a component is genuinely round (pill) or genuinely small (chip)</>}
                 dontRule={<>✗ Use raw px values · invent a 7th step (round to the nearest existing token) · mix radii within a row of sibling components (one button at <code>radius-sm</code> next to another at <code>radius-md</code> reads as a bug)</>}
             />
-            <LiveExample label="Spacing scale — bar width matches the token">
+            <LiveExample label="Spacing scale (bar width matches the token)">
                 <div>
                     {SPACING.map((s) => <SpaceBar key={s.token} {...s} />)}
                 </div>

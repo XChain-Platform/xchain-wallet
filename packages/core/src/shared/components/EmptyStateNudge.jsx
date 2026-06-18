@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// EmptyStateNudge — §27.7 / §27.8 / §28 / G077. Replaces bare
+// EmptyStateNudge (§27.7 / §27.8 / §28 / G077). Replaces bare
 // "No X yet" text placeholders with a content-shaped empty state that
 // includes an optional primary action button. Used by Balance, History,
 // and AddressList when the underlying dataset is empty.

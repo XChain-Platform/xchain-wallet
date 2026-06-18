@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// AppHeader — persistent top strip that stays mounted across every
+// AppHeader: persistent top strip that stays mounted across every
 // unlocked route. Matches the layout used at the top of Home: brand on
 // the left, network-filter button + pancake-menu button on the right.
 // Living in the FullLayoutWithNav header slot means TokenDetail / Send
@@ -17,7 +17,7 @@
 //
 // `chainRegistry` + `coinFamilies` + `networkFilter` + `onNetworkFilterChange`
 // drive the HeaderNetworkButton. `onMenuOpen` fires when the pancake
-// is tapped — the parent layout owns the menu drawer mount so it can
+// is tapped. The parent layout owns the menu drawer mount so it can
 // span the viewport.
 
 import * as branding from '../../branding/branding.js';
@@ -34,7 +34,7 @@ import styles from './AppHeader.module.css';
  * @param {string} [props.tokenQuery]                                free-text token filter forwarded to the popover; omitting `onTokenQueryChange` hides the text input
  * @param {(q: string) => void} [props.onTokenQueryChange]
  * @param {() => void} [props.onMenuOpen]                            pancake-tap handler
- * @param {boolean} [props.showNetworkFilter]                        when false, the network-filter button is hidden — used to scope the filter to the home view only
+ * @param {boolean} [props.showNetworkFilter]                        when false, the network-filter button is hidden (used to scope the filter to the home view only)
  * @param {'all' | 'coins' | 'tokens'} [props.kindFilter]            optional asset-kind segmented control; only shown when `onKindFilterChange` is provided
  * @param {(kind: 'all' | 'coins' | 'tokens') => void} [props.onKindFilterChange]
  * @param {() => void} [props.onScan]                                when provided, renders a QR-scan icon button between the filter and the pancake menu

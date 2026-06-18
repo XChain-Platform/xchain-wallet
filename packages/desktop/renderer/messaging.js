@@ -55,7 +55,7 @@ export function addImportedWallet(opts) {
 }
 
 /**
- * §15.5 / G020 — add a single imported WIF to an existing HD wallet.
+ * §15.5 / G020: add a single imported WIF to an existing HD wallet.
  * @param {{ walletId: string, password: string, chainId: string, wif: string, addressType?: string, label?: string }} opts
  */
 export function importWifRequest(opts) {
@@ -63,14 +63,14 @@ export function importWifRequest(opts) {
 }
 
 /**
- * §19.4 / G036 — restore an encrypted backup envelope.
+ * §19.4 / G036: restore an encrypted backup envelope.
  * @param {{ fileContent: string, password: string, onConflict?: 'overwrite' | 'preserve' | 'error' }} opts
  */
 export function importBackupRequest(opts) {
     return /** @type {any} */ (sendMessage('wallet.importBackup', opts));
 }
 
-/** §48.3 / G149 — runtime chain activation. */
+/** §48.3 / G149: runtime chain activation. */
 export function activateChainRequest(opts) {
     return /** @type {any} */ (sendMessage('wallet.activateChain', opts));
 }
@@ -80,7 +80,7 @@ export function removeWallet(req) {
     return /** @type {any} */ (sendMessage('wallet.remove', req));
 }
 
-/** §50 / G156 — diagnostic dump for support copy-paste. */
+/** §50 / G156: diagnostic dump for support copy-paste. */
 export function getDiagnosticDump() {
     return /** @type {any} */ (sendMessage('diagnostic.dump'));
 }
@@ -136,7 +136,7 @@ export function sendToken(opts) {
 }
 
 /**
- * §20 / G040 — Watcher-mode encode-only helper.
+ * §20 / G040: Watcher-mode encode-only helper.
  * @param {object} opts
  */
 export function buildSendPsbtRequest(opts) {
@@ -144,7 +144,7 @@ export function buildSendPsbtRequest(opts) {
 }
 
 /**
- * §20 / Cluster W FOLLOWUP 5 — generic watcher-mode encode-only helper
+ * §20 / Cluster W FOLLOWUP 5: generic watcher-mode encode-only helper
  * for the non-Send action surface.
  * @param {object} opts
  */
@@ -153,7 +153,7 @@ export function buildActionPsbtRequest(opts) {
 }
 
 /**
- * §20 / G040 FOLLOWUP 1 — broadcast a signed transaction.
+ * §20 / G040 FOLLOWUP 1: broadcast a signed transaction.
  * @param {{ chainId: string, txHex: string }} opts
  */
 export function broadcastSignedTxRequest(opts) {
@@ -161,7 +161,7 @@ export function broadcastSignedTxRequest(opts) {
 }
 
 /**
- * §30.4 / G088 — read-only PSBT decompose for the paste-in form.
+ * §30.4 / G088: read-only PSBT decompose for the paste-in form.
  * @param {{ chainId: string, psbtHex: string }} opts
  */
 export function parsePsbtRequest(opts) {
@@ -169,7 +169,7 @@ export function parsePsbtRequest(opts) {
 }
 
 /**
- * §30.4 / G088 — user-initiated PSBT signing (software signers).
+ * §30.4 / G088: user-initiated PSBT signing (software signers).
  * @param {{ walletId: string, addressId: string, password: string, psbtHex: string, bip39Passphrase?: string }} opts
  */
 export function signPsbtUserInitiated(opts) {
@@ -177,7 +177,7 @@ export function signPsbtUserInitiated(opts) {
 }
 
 /**
- * §30.4 / Cluster E FOLLOWUP 1 — HW variant of `signPsbtUserInitiated`.
+ * §30.4 / Cluster E FOLLOWUP 1: HW variant of `signPsbtUserInitiated`.
  * @param {{ walletId: string, addressId: string, psbtHex: string }} opts
  */
 export function signPsbtUserInitiatedHw(opts) {
@@ -185,7 +185,7 @@ export function signPsbtUserInitiatedHw(opts) {
 }
 
 /**
- * §49.5 / G154 — queued broadcast list / broadcast / discard / enqueue.
+ * §49.5 / G154: queued broadcast list / broadcast / discard / enqueue.
  *
  * @param {{ walletId: string }} opts
  */
@@ -201,7 +201,7 @@ export function discardQueuedRequest(opts) {
     return /** @type {any} */ (sendMessage('broadcast.queue.discard', opts));
 }
 /**
- * Cluster G FOLLOWUP 1 — push a signed-but-unbroadcast tx onto the
+ * Cluster G FOLLOWUP 1: push a signed-but-unbroadcast tx onto the
  * queue. Action handlers auto-enqueue on broadcast failure server-
  * side; this shim is for explicit caller use.
  *
@@ -321,7 +321,7 @@ export function getContractByActionIndex(req) {
 }
 
 /**
- * Phase F — a contract's permissions manifest for the inline consent
+ * Phase F: a contract's permissions manifest for the inline consent
  * disclosure. Resolves `{ permissions, maxTakeBps }`; never rejects on
  * a missing/undeclared manifest (host flow degrades to nulls).
  *
@@ -332,7 +332,7 @@ export function getContractManifest(req) {
 }
 
 /**
- * Phase F — canonical controller action-class list for the bind form's
+ * Phase F: canonical controller action-class list for the bind form's
  * dropdown. Resolves `{ actionClasses: string[] }`.
  *
  * @param {{ chainId: string }} req
@@ -342,7 +342,7 @@ export function getControllerActionClasses(req) {
 }
 
 /**
- * Phase F — build the `{ action, params }` for a controller bind/unbind
+ * Phase F: build the `{ action, params }` for a controller bind/unbind
  * via the SDK's controller helper (host-side). Rejects with a clear
  * message when the installed SDK lacks the controller helper.
  *
@@ -762,13 +762,13 @@ export function linkAction(opts) { return /** @type {any} */ (sendMessage('actio
 /** @param {object} opts */
 export function linkActionHw(opts) { return /** @type {any} */ (sendMessage('action.link.hw', opts)); }
 
-// FILE — public on-chain file upload (NFT artwork attachment)
+// FILE: public on-chain file upload (NFT artwork attachment)
 /** @param {object} opts */
 export function fileAction(opts) { return /** @type {any} */ (sendMessage('action.file', opts)); }
 /** @param {object} opts */
 export function fileActionHw(opts) { return /** @type {any} */ (sendMessage('action.file.hw', opts)); }
 
-// Project registry — current roster lookup
+// Project registry: current roster lookup
 /** @param {object} opts */
 export function getProjectForToken(opts) { return /** @type {any} */ (sendMessage('projects.byTick', opts)); }
 
@@ -841,7 +841,7 @@ export function exportPrivateKey(opts) {
     return /** @type {any} */ (sendMessage('wallet.exportPrivateKey', opts));
 }
 
-// §12 / G009 — origin blocklist.
+// §12 / G009: origin blocklist.
 export function listBlockedOrigins() {
     return /** @type {Promise<string[]>} */ (sendMessage('sites.listBlocked'));
 }
@@ -854,7 +854,7 @@ export function unblockOrigin(req) {
     return /** @type {any} */ (sendMessage('sites.unblock', req));
 }
 
-// §9.7 / G007 — runtime chain-registry refresh from hub.
+// §9.7 / G007: runtime chain-registry refresh from hub.
 export function getChainRegistryStatus() {
     return /** @type {any} */ (sendMessage('chainRegistry.status'));
 }
@@ -862,7 +862,7 @@ export function refreshChainRegistry() {
     return /** @type {any} */ (sendMessage('chainRegistry.refresh'));
 }
 
-// §9.7 / Cluster Q FOLLOWUP 2 — Developer Mode custom chain registry.
+// §9.7 / Cluster Q FOLLOWUP 2: Developer Mode custom chain registry.
 export function listCustomChains() {
     return /** @type {Promise<{ descriptors: object[] }>} */ (sendMessage('chainRegistry.listCustomChains'));
 }
@@ -873,7 +873,7 @@ export function removeCustomChain(req) {
     return /** @type {Promise<{ removed: boolean }>} */ (sendMessage('chainRegistry.removeCustomChain', req));
 }
 
-// §31.4 / Cluster O FOLLOWUP 2 — DIVIDEND / AIRDROP recipient resolution.
+// §31.4 / Cluster O FOLLOWUP 2: DIVIDEND / AIRDROP recipient resolution.
 export function getDividendRecipients(req) {
     return /** @type {Promise<{ recipients: object[], tick: string, source?: string | null, snapshotNote: string }>} */ (
         sendMessage('history.getDividendRecipients', req)
@@ -886,7 +886,7 @@ export function getAirdropRecipients(req) {
 }
 
 /**
- * Native-coin price oracle — see web shell for shape. Gated on
+ * Native-coin price oracle (see web shell for shape). Gated on
  * settings.privacy.priceDataEnabled; returns `{ disabled: true }` when
  * the user has opted out.
  *

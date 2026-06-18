@@ -8,23 +8,23 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Plain-English action decoder — §21.1 / §30.
+// Plain-English action decoder. §21.1 / §30.
 //
 // Translates the raw protocol-shaped action payload (uppercase field
 // names, string-encoded amounts) into UI-friendly strings the sign
-// screens render. Pure function — no vault, no SDK, no network — so
+// screens render. Pure function (no vault, no SDK, no network), so
 // both shells can use the same decoder and the logic is trivial to
 // smoke-test.
 //
 // Phase 1 covers SEND and SWEEP per §39.1. Phase 2 adds ISSUE (all 6
-// format versions — create, edit-description, edit-mint-params, lock-
+// format versions: create, edit-description, edit-mint-params, lock-
 // params, edit-callback, edit-lists), MINT, DESTROY (v0 single; v1/v2
 // multi-destroy falls through to the generic decoder), and BATCH (which
 // recurses into its COMMANDS array and composes sub-decoder output).
 // Step 20 adds BROADCAST (v0/v1/v2/v3), Step 21 adds DISPENSER
 // (v0/v1/v2), Step 23 adds DIVIDEND (v0), and Step 24 adds LIST
 // (v0/v1) + AIRDROP (v0/v1/v2/v3). Every other ACTION type still gets
-// the generic fallback — dedicated decoders for the remaining kinds
+// the generic fallback; dedicated decoders for the remaining kinds
 // land alongside their authoring forms in later phases.
 
 /**
@@ -63,7 +63,7 @@ export function decodeAction({ action, params, chainId, chainRegistry }) {
             ],
             warnings: [
                 ...(memo && /[|;]/.test(memo)
-                    ? ['Memo contains | or ; — the protocol will reject this transaction.']
+                    ? ['Memo contains | or ;: the protocol will reject this transaction.']
                     : []),
                 ...(!amount || Number(amount) <= 0
                     ? ['Amount is not positive.']
@@ -123,7 +123,7 @@ export function decodeAction({ action, params, chainId, chainRegistry }) {
                     ? ['Amount is not positive.']
                     : []),
                 ...(memo && /[|;]/.test(memo)
-                    ? ['Memo contains | or ; — the protocol will reject this transaction.']
+                    ? ['Memo contains | or ;: the protocol will reject this transaction.']
                     : []),
             ],
         };
@@ -149,13 +149,13 @@ export function decodeAction({ action, params, chainId, chainRegistry }) {
                     ...(memo ? [{ label: 'Memo', value: memo }] : []),
                 ],
                 warnings: [
-                    'Destroying is irreversible — the tokens cannot be recovered.',
+                    'Destroying is irreversible. The tokens cannot be recovered.',
                     ...(!tick ? ['Token ticker is empty.'] : []),
                     ...(!amount || Number(amount) <= 0
                         ? ['Amount is not positive.']
                         : []),
                     ...(memo && /[|;]/.test(memo)
-                        ? ['Memo contains | or ; — the protocol will reject this transaction.']
+                        ? ['Memo contains | or ;: the protocol will reject this transaction.']
                         : []),
                 ],
             };
@@ -164,7 +164,7 @@ export function decodeAction({ action, params, chainId, chainRegistry }) {
         // the irreversibility warning so the user still sees it.
         const generic = genericFallback(action, p, chainSuffix);
         generic.warnings.unshift(
-            'Destroying is irreversible — the tokens cannot be recovered.',
+            'Destroying is irreversible. The tokens cannot be recovered.',
         );
         return generic;
     }
@@ -197,12 +197,12 @@ export function decodeAction({ action, params, chainId, chainRegistry }) {
 }
 
 /**
- * LIST decoder — §40.9 / LIST.md. Two format versions:
+ * LIST decoder. §40.9 / LIST.md. Two format versions:
  *
- *   - v0 Create — VERSION|TYPE|ITEM (ITEM repeats). TYPE 1 = TICK list,
+ *   - v0 Create: VERSION|TYPE|ITEM (ITEM repeats). TYPE 1 = TICK list,
  *     TYPE 2 = ADDRESS list. The wallet's AIRDROP authoring flow emits
  *     v0 with TYPE=2 (address pool).
- *   - v1 Edit — VERSION|EDIT|LIST_ACTION_INDEX|ITEM (ITEM repeats).
+ *   - v1 Edit: VERSION|EDIT|LIST_ACTION_INDEX|ITEM (ITEM repeats).
  *     Clones an existing list and adds (EDIT=1) or removes (EDIT=2)
  *     the listed items. No authoring UI in Step 24, but the decoder
  *     case lands so imports / pasted raw actions read sensibly.
@@ -229,14 +229,14 @@ function decodeList(p, chainSuffix) {
                     : []),
             ],
             warnings: [
-                ...(!edit ? ['Edit direction is empty — specify add (1) or remove (2).'] : []),
+                ...(!edit ? ['Edit direction is empty. Specify add (1) or remove (2).'] : []),
                 ...(!parent ? ['Parent list action index is empty.'] : []),
                 ...(count === 0 ? ['List has no items.'] : []),
             ],
         };
     }
 
-    // Version 0 — create.
+    // Version 0: create.
     const type = str(p.TYPE);
     const kind = type === '1' ? 'token' : type === '2' ? 'address' : 'item';
     const summary = `Create ${kind} list of ${count || '?'} item${count === 1 ? '' : 's'}${chainSuffix}`;
@@ -250,35 +250,35 @@ function decodeList(p, chainSuffix) {
                 : []),
         ],
         warnings: [
-            ...(!type ? ['List type is empty — specify 1 (TICK) or 2 (ADDRESS).'] : []),
+            ...(!type ? ['List type is empty. Specify 1 (TICK) or 2 (ADDRESS).'] : []),
             ...(count === 0 ? ['List has no items.'] : []),
         ],
     };
 }
 
 /**
- * AIRDROP decoder — §40.9 / AIRDROP.md. Four format versions:
+ * AIRDROP decoder. §40.9 / AIRDROP.md. Four format versions:
  *
- *   - v0 Single — one TICK, one AMOUNT, one LIST_ACTION_INDEX, MEMO.
+ *   - v0 Single: one TICK, one AMOUNT, one LIST_ACTION_INDEX, MEMO.
  *     The wallet's §40.9 two-tx flow emits v0; the prior LIST action's
  *     ACTION_INDEX is resolved after indexing and baked in here.
- *   - v1 Multi-token, single list — repeating TICK/AMOUNT pairs to one
+ *   - v1 Multi-token, single list: repeating TICK/AMOUNT pairs to one
  *     LIST_ACTION_INDEX.
- *   - v2 Multi-token, multi-list — repeating TICK/AMOUNT/LIST triples.
+ *   - v2 Multi-token, multi-list: repeating TICK/AMOUNT/LIST triples.
  *   - v3 Same as v2 plus per-tuple MEMO.
  *
  * The decoder cannot know whether the referenced LIST is a TICK list
  * (airdrop to holders of each ticker) or an ADDRESS list (airdrop to
- * each address) without a DB lookup — the summary stays neutral.
+ * each address) without a DB lookup, so the summary stays neutral.
  */
 function decodeAirdrop(p, chainSuffix) {
     const version = str(p.VERSION) || '0';
     const memo = str(p.MEMO);
     const memoArr = toArray(p.MEMO);
     const memoWarning = memo && /[|;]/.test(memo)
-        ? ['Memo contains | or ; — the protocol will reject this transaction.']
+        ? ['Memo contains | or ;: the protocol will reject this transaction.']
         : memoArr.some((m) => /[|;]/.test(String(m)))
-            ? ['A memo contains | or ; — the protocol will reject this transaction.']
+            ? ['A memo contains | or ;: the protocol will reject this transaction.']
             : [];
 
     if (version === '0') {
@@ -348,11 +348,11 @@ function decodeAirdrop(p, chainSuffix) {
 }
 
 /**
- * DIVIDEND decoder — §40.8. DIVIDEND.md has a single format version
+ * DIVIDEND decoder. §40.8. DIVIDEND.md has a single format version
  * `VERSION|TICK|DIVIDEND_TICK|AMOUNT|MEMO`. The action pays AMOUNT of
  * DIVIDEND_TICK per unit of TICK held at the snapshot block. Source
  * address is excluded from receiving dividends (§40.8 / DIVIDEND.md
- * Rules). The decoder can't fetch holder count itself — the form
+ * Rules). The decoder cannot fetch holder count itself; the form
  * adds that preview at render time.
  */
 function decodeDividend(p, chainSuffix) {
@@ -375,31 +375,31 @@ function decodeDividend(p, chainSuffix) {
                 ? ['Per-unit amount is not positive.']
                 : []),
             ...(memo && /[|;]/.test(memo)
-                ? ['Memo contains | or ; — the protocol will reject this transaction.']
+                ? ['Memo contains | or ;: the protocol will reject this transaction.']
                 : []),
         ],
     };
 }
 
 /**
- * DISPENSER decoder — §40.7. Three format versions (DISPENSER.md):
+ * DISPENSER decoder. §40.7. Three format versions (DISPENSER.md):
  *
- *   - v0 Create — open a new dispenser. The form can emit either a
- *     coin-paid lane (GET_COIN set, GET_TICK empty — buyer pays in the
+ *   - v0 Create: open a new dispenser. The form can emit either a
+ *     coin-paid lane (GET_COIN set, GET_TICK empty; buyer pays in the
  *     native coin) or a token-paid lane (GET_TICK set, GET_COIN empty).
  *     FIAT dispensers (FIAT_CODE + FIAT_AMOUNT, or ORACLE_ADDRESS) get
  *     their own summary line so the user sees the pricing mode before
  *     signing.
- *   - v1 Cancel — closes an existing dispenser; the v1 decoder is
+ *   - v1 Cancel: closes an existing dispenser; the v1 decoder is
  *     reached from the dispenser-detail "Close" path.
- *   - v2 Edit — refills escrow, updates expiration / lists.
+ *   - v2 Edit: refills escrow, updates expiration / lists.
  */
 function decodeDispenser(p, chainSuffix) {
     const version = str(p.VERSION) || '0';
     const memo = str(p.MEMO);
     const baseWarnings = [
         ...(memo && /[|;]/.test(memo)
-            ? ['Memo contains | or ; — the protocol will reject this transaction.']
+            ? ['Memo contains | or ;: the protocol will reject this transaction.']
             : []),
     ];
 
@@ -445,7 +445,7 @@ function decodeDispenser(p, chainSuffix) {
         };
     }
 
-    // Version 0 — create
+    // Version 0: create.
     const giveCoin = str(p.GIVE_COIN);
     const giveTick = str(p.GIVE_TICK);
     const giveAmount = str(p.GIVE_AMOUNT);
@@ -461,7 +461,7 @@ function decodeDispenser(p, chainSuffix) {
     const allowList = str(p.ALLOW_LIST);
     const blockList = str(p.BLOCK_LIST);
 
-    // Pricing lane — determines how the one-liner reads.
+    // Pricing lane: determines how the one-liner reads.
     const payPriceLabel = oracle
         ? `an oracle-priced ${fiatCode || 'FIAT'} amount`
         : fiatAmount && fiatCode
@@ -504,14 +504,14 @@ function decodeDispenser(p, chainSuffix) {
             ? ['Escrow amount is not positive.']
             : []),
         ...(giveAmount && giveEscrow && Number(giveEscrow) < Number(giveAmount)
-            ? ['Escrow is smaller than a single fill — the dispenser will never dispense.']
+            ? ['Escrow is smaller than a single fill, so the dispenser will never dispense.']
             : []),
         ...(!getAmount ? ['Trigger amount is empty.'] : []),
         ...(!getTick && !getCoin
-            ? ['Buyer payment is ambiguous — set either a token (GET_TICK) or a coin (GET_COIN).']
+            ? ['Buyer payment is ambiguous. Set either a token (GET_TICK) or a coin (GET_COIN).']
             : []),
         ...(oracle && !fiatCode
-            ? ['Oracle pricing requires FIAT_CODE — the oracle publishes token prices in that fiat.']
+            ? ['Oracle pricing requires FIAT_CODE. The oracle publishes token prices in that fiat.']
             : []),
         ...baseWarnings,
     ];
@@ -520,9 +520,9 @@ function decodeDispenser(p, chainSuffix) {
 }
 
 /**
- * BROADCAST decoder — §40.6. Protocol BROADCAST.md defines four format
+ * BROADCAST decoder. §40.6. Protocol BROADCAST.md defines four format
  * versions; the wallet's authoring form emits v0/v1/v2 based on which
- * fields the user filled (v3 — feed-results — is a resolve path reached
+ * fields the user filled (v3, feed-results, is a resolve path reached
  * from an existing feed, not a standalone authoring surface). Each
  * version prints a different summary so the sign screen tells the user
  * whether they're publishing a plain message, an oracle value, or a
@@ -538,10 +538,10 @@ function decodeBroadcast(p, chainSuffix) {
 
     const baseWarnings = [
         ...(memo && /[|;]/.test(memo)
-            ? ['Memo contains | or ; — the protocol will reject this transaction.']
+            ? ['Memo contains | or ;: the protocol will reject this transaction.']
             : []),
         ...(message && /[|;]/.test(message)
-            ? ['Message contains | or ; — the protocol will reject this transaction.']
+            ? ['Message contains | or ;: the protocol will reject this transaction.']
             : []),
     ];
 
@@ -595,7 +595,7 @@ function decodeBroadcast(p, chainSuffix) {
         };
     }
 
-    // Version 0 — plain broadcast message.
+    // Version 0: plain broadcast message.
     return {
         summary: `Broadcast "${message || ''}"${chainSuffix}`,
         details: [
@@ -611,7 +611,7 @@ function decodeBroadcast(p, chainSuffix) {
 }
 
 /**
- * ISSUE decoder — six format versions. Summaries differentiate
+ * ISSUE decoder. Six format versions. Summaries differentiate
  * "create a token" from the narrower "update the XYZ settings of an
  * existing token" variants so the user sees at the sign screen what
  * the transaction actually does.
@@ -624,7 +624,7 @@ function decodeIssue(p, chainName, chainSuffix) {
     const baseWarnings = [
         ...(!tick ? ['Token ticker is empty.'] : []),
         ...(memo && /[|;]/.test(memo)
-            ? ['Memo contains | or ; — the protocol will reject this transaction.']
+            ? ['Memo contains | or ;: the protocol will reject this transaction.']
             : []),
     ];
 
@@ -682,7 +682,7 @@ function decodeIssue(p, chainName, chainSuffix) {
             ],
             warnings: [
                 ...(lockFlags.length > 0
-                    ? ['Locking is permanent — these properties cannot be changed after this transaction confirms.']
+                    ? ['Locking is permanent. These properties cannot be changed after this transaction confirms.']
                     : []),
                 ...baseWarnings,
             ],
@@ -723,7 +723,7 @@ function decodeIssue(p, chainName, chainSuffix) {
         };
     }
 
-    // Version 0 — full create-or-update. Differentiate the common
+    // Version 0: full create-or-update. Differentiate the common
     // shapes so the summary matches what the user actually did:
     //   - Fresh token creation: MAX_SUPPLY present (usually with
     //     MINT_SUPPLY to seed initial balance).
@@ -775,7 +775,7 @@ function decodeIssue(p, chainName, chainSuffix) {
 
     const warnings = [
         ...(lockFlags.length > 0
-            ? ['Locking is permanent — these properties cannot be changed after this transaction confirms.']
+            ? ['Locking is permanent. These properties cannot be changed after this transaction confirms.']
             : []),
         ...baseWarnings,
     ];
@@ -784,7 +784,7 @@ function decodeIssue(p, chainName, chainSuffix) {
 }
 
 /**
- * BATCH decoder — composes summaries + warnings from every nested
+ * BATCH decoder. Composes summaries + warnings from every nested
  * command. The wallet emits BATCH with params shaped as
  * `{ COMMANDS: [{ action, params }, ...] }`; protocol §BATCH v0
  * supports any command set with one ISSUE + one MINT max (no nested
@@ -799,7 +799,7 @@ function decodeBatch(p, chainId, chainName, chainSuffix, chainRegistry) {
             summary: `Batch of actions${chainSuffix}`,
             details: [],
             warnings: [
-                'Batch has no decoded commands — review the raw transaction carefully before signing.',
+                'Batch has no decoded commands. Review the raw transaction carefully before signing.',
             ],
         };
     }
@@ -874,7 +874,7 @@ function genericFallback(action, p, chainSuffix) {
         summary: `Sign ${action || 'unknown action'}${chainSuffix}`,
         details: paramEntries,
         warnings: [
-            `No plain-English summary is available for "${action || 'unknown action'}" yet — review the parameters carefully before approving.`,
+            `No plain-English summary is available for "${action || 'unknown action'}" yet. Review the parameters carefully before approving.`,
         ],
     };
 }

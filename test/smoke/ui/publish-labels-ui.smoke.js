@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §19.5.2 / G037 — manual on-chain label publish.
+// Smoke for §19.5.2 / G037: manual on-chain label publish.
 //
 // Verifies:
 //   1. `publishLabelsNow` flow exists, validates inputs, derives the
@@ -143,7 +143,7 @@ assert.ok(
     'BackupSection BackupRow uses the new "Publish labels on-chain" copy (was: Coming soon placeholder)',
 );
 assert.ok(
-    !/Coming soon — opt into §19\.5\.2/.test(bs),
+    !/Coming soon; opt into §19\.5\.2/.test(bs),
     'BackupSection no longer carries the "Coming soon" placeholder copy',
 );
 assert.ok(
@@ -165,7 +165,7 @@ const followups = join(
 assert.ok(existsSync(followups), 'claude/reports/xchain-wallet/FOLLOWUPS.md exists');
 const fSrc = readFileSync(followups, 'utf8');
 assert.ok(
-    /§17\/§19 Sign \/ Verify \/ Backup — closed at v0\.154\.0/.test(fSrc),
+    /§17\/§19 Sign \/ Verify \/ Backup: closed at v0\.154\.0/.test(fSrc),
     'FOLLOWUPS.md has the §17/§19 Cluster B closing header at v0.154.0',
 );
 assert.ok(

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for Phase 2 — Step 22b (piece 7b part 2) — DispenserExplorer
+// Smoke for Phase 2, Step 22b (piece 7b part 2): DispenserExplorer
 // (§40.7.2 browse surface) + DispenserDetail buyer surface extensions.
 //
 // Asserts:
@@ -190,5 +190,5 @@ for (const [shell, appPath] of [
 }
 
 console.log(
-    'OK — dispenser explorer smoke (DispenserExplorer §40.7.2 browse — token + address search modes + per-chain fan-out; DispenserDetail buyer surfaces: token-paid sendToken buy with fills multiplier + password re-prompt + UTXO-race warning, coin-paid pay-here panel with copy-to-clipboard + native-send roadmap note; ActionsMenu "Browse dispensers" entry + explorer sub-route + origin-tagged list vs explorer nav in popup/web/desktop)',
+    'OK: dispenser explorer smoke (DispenserExplorer §40.7.2 browse: token + address search modes + per-chain fan-out; DispenserDetail buyer surfaces: token-paid sendToken buy with fills multiplier + password re-prompt + UTXO-race warning, coin-paid pay-here panel with copy-to-clipboard + native-send roadmap note; ActionsMenu "Browse dispensers" entry + explorer sub-route + origin-tagged list vs explorer nav in popup/web/desktop)',
 );

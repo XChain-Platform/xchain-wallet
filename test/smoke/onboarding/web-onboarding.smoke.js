@@ -14,7 +14,7 @@
 // bootstrap gap. Exercises both create + import against a real Vault
 // with a real BIP39 mnemonic, then verifies the post-state:
 //
-//   1. Static wiring — routes exist, messaging helpers exported, App
+//   1. Static wiring: routes exist, messaging helpers exported, App
 //      has the create/import sub-route, the dev-mock SDK is flagged
 //      in-line so it can't quietly reach mainnet.
 //   2. createWalletLocal → mnemonic returned, vault persisted to the
@@ -134,7 +134,7 @@ IndexedDBStorageBackend.prototype._openStore = function _openStore() {
 
 const hostBridge = await import('../../../packages/web/src/hostBridge.js');
 
-// 2a. Fresh page — no wallet.
+// 2a. Fresh page: no wallet.
 {
     const s = await hostBridge.getSessionStatus();
     assert.equal(s.state, 'no-wallet');
@@ -163,7 +163,7 @@ let createdMnemonic = null;
     assert.equal(wallets[0].format, 'bip39');
 }
 
-// 2c. Lock + unlock round-trip with the same password — proves meta
+// 2c. Lock + unlock round-trip with the same password. Proves meta
 //     + kdfParams persisted correctly so a subsequent session can
 //     decrypt the blob.
 {
@@ -176,7 +176,7 @@ let createdMnemonic = null;
     assert.equal(s2.state, 'unlocked', 'unlock-after-create works');
 }
 
-// 2d. Idempotence guard — second create throws.
+// 2d. Idempotence guard: second create throws.
 {
     let caught = null;
     try {
@@ -194,7 +194,7 @@ fakeKv._store = new Map();
 const origStore = new Map();
 // Reset fake KV (Map) and localStorage fully between the two flows.
 for (const k of Array.from(fakeKv._store?.keys?.() || [])) fakeKv._store.delete(k);
-// Deeper reset — swap in brand-new Maps/objects.
+// Deeper reset: swap in brand-new Maps/objects.
 {
     const freshKv = makeFakeKvStore();
     const freshLocal = makeFakeLocalStorage();
@@ -250,5 +250,5 @@ for (const k of Array.from(fakeKv._store?.keys?.() || [])) fakeKv._store.delete(
 IndexedDBStorageBackend.prototype._openStore = originalOpen;
 
 console.log(
-    'OK — web onboarding smoke (static wiring + create/import round-trips + lock/unlock persistence + idempotence guards)',
+    'OK: web onboarding smoke (static wiring + create/import round-trips + lock/unlock persistence + idempotence guards)',
 );

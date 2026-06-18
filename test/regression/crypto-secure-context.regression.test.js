@@ -8,11 +8,11 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Regression suite — crypto secure-context fallout.
+// Regression suite: crypto secure-context fallout.
 //
 // Past incidents pinned here:
 //
-//   [P0] 2026-04-25 — `crypto.subtle.importKey` threw on plain HTTP
+//   [P0] 2026-04-25: `crypto.subtle.importKey` threw on plain HTTP
 //        because Web Crypto's SubtleCrypto is gated on a secure
 //        context. The wallet's KDF / AEAD / RANDOM-UUID paths reached
 //        for SubtleCrypto, breaking onboarding under any LAN-hosted
@@ -20,7 +20,7 @@
 //        SHA-256 to `@noble/hashes/sha2`, and randomUUID to a
 //        `crypto.getRandomValues`-based polyfill.
 //
-//   [P0] 2026-04-25 — `crypto.randomUUID is not a function` thrown
+//   [P0] 2026-04-25: `crypto.randomUUID is not a function` thrown
 //        from every schema factory that minted an entity id (12 schema
 //        files affected) for the same reason. Fix: shared
 //        `packages/core/src/util/uuid.js` helper used by every schema.

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Unit: schemas/watchlistEntry — createWatchlistEntry + validateWatchlistEntry + watchlistEntryKey.
+// Unit: schemas/watchlistEntry: createWatchlistEntry + validateWatchlistEntry + watchlistEntryKey.
 
 import { describe, it, expect } from 'vitest';
 import {

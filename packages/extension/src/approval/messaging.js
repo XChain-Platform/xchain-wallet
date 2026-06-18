@@ -40,7 +40,7 @@ export function fetchApproval(id) {
  * Report the user's decision. `result` must match the shape the
  * relevant bridge handler expects (ConnectApprovalResult for connect,
  * SignApprovalResult for the signing kinds). Broker closes the window
- * on resolve — the promise is effectively fire-and-forget.
+ * on resolve; the promise is effectively fire-and-forget.
  *
  * @param {string} id
  * @param {object} result
@@ -51,7 +51,7 @@ export function resolveApproval(id, result) {
 }
 
 /**
- * Single-address balance read — feeds the §21.2 simulator preview on
+ * Single-address balance read. Feeds the §21.2 simulator preview on
  * the SignApproval (signAction) screen. Routes to the same
  * `balances.address` host handler the popup + web shells use.
  *
@@ -106,7 +106,7 @@ export function getSettings() {
  * for the §21.2 / §48 intent cross-check on the signPsbt approval
  * screen. Routes to the same `psbt.parse` host handler the in-wallet
  * PSBT sign form uses, so the dApp-bridge approval shows the same
- * decoded destinations/amounts the user would see signing locally —
+ * decoded destinations/amounts the user would see signing locally,
  * instead of an opaque truncated hex string a malicious dApp could
  * swap for a drain transaction.
  *

@@ -14,14 +14,14 @@
 //   1. @xchain-wallet/core/shared/{MessagingProvider,useMessaging,routes/*}
 //      resolve from the package's exports map.
 //   2. Each shared route calls its messaging helper via
-//      `messaging.<name>` (not a direct import) — the signal that the
+//      `messaging.<name>` (not a direct import): the signal that the
 //      route is shell-agnostic.
 //   3. Each route drives `Screen`'s variant from `screenVariantFor(shell)`
 //      so popup + web render under the correct layout.
 //   4. Both popup + web App.jsx wrap the router in <MessagingProvider>
 //      with the right shell value.
 //   5. The popup-local + web-local routes + their old component siblings
-//      (MnemonicGrid, ChainBalanceCard, useAutoLock) are gone — regressing
+//      (MnemonicGrid, ChainBalanceCard, useAutoLock) are gone; regressing
 //      to per-shell duplication would break the smoke.
 
 import { strict as assert } from 'node:assert';
@@ -137,7 +137,7 @@ for (const [route, calls] of Object.entries(routeMessagingCalls)) {
         src.includes('useMessaging'),
         `shared ${route}.jsx reads context via useMessaging`,
     );
-    // Loading + Onboarding don't call any messaging helpers — skip
+    // Loading + Onboarding don't call any messaging helpers; skip
     // the per-call assertions for those.
     for (const call of calls) {
         assert.ok(
@@ -255,5 +255,5 @@ for (const fn of requiredExports) {
 }
 
 console.log(
-    'OK — shared-routes smoke (provider + hook + 8 routes + both shells wired + legacy files removed)',
+    'OK: shared-routes smoke (provider + hook + 8 routes + both shells wired + legacy files removed)',
 );

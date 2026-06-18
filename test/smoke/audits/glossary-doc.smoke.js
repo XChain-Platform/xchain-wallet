@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §55 / G179 — `docs/GLOSSARY.md`.
+// Smoke for §55 / G179: `docs/GLOSSARY.md`.
 //
 // Pins the canonical wallet vocabulary so the doc cannot drift far
 // from the codebase. Every term checked here is one a contributor
@@ -29,7 +29,7 @@ assert.ok(existsSync(join(root, docPath)), `${docPath} exists`);
 
 const docSrc = read(docPath);
 
-// Required structural sections — keep the partition stable.
+// Required structural sections (keep the partition stable).
 const requiredSections = [
     '## Wallet architecture',
     '## Signing and key management',
@@ -43,7 +43,7 @@ for (const heading of requiredSections) {
         `glossary has section: ${heading}`);
 }
 
-// Required terms — anything below is a term the codebase actively
+// Required terms: anything below is a term the codebase actively
 // uses. Each must have a bold-prefixed definition line.
 const requiredTerms = [
     // Architecture
@@ -67,9 +67,9 @@ const requiredTerms = [
 ];
 for (const term of requiredTerms) {
     const escaped = term.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
-    const re = new RegExp(`\\*\\*${escaped}\\*\\*\\s*—`);
+    const re = new RegExp(`\\*\\*${escaped}\\*\\*\\s*([\u2014:])`);
     assert.ok(re.test(docSrc),
-        `glossary defines: **${term}** — …`);
+        `glossary defines: **${term}** (followed by definition separator)`);
 }
 
 // Cross-link to upstream protocol glossary so the wallet doc does not
@@ -90,9 +90,9 @@ for (const linkPath of companions) {
         `companion exists: ${linkPath}`);
 }
 
-// Honest framing about staleness — glossaries that fall behind the
+// Honest framing about staleness: glossaries that fall behind the
 // codebase are worse than no glossary, so the doc itself flags this.
 assert.ok(/PR adding it/i.test(docSrc),
     'glossary invites PRs for missing terms (anti-staleness)');
 
-console.log('OK — GLOSSARY.md doc smoke');
+console.log('OK: GLOSSARY.md doc smoke');

@@ -8,13 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// §27 / Cluster I FOLLOWUP 7 smoke — UnifiedBalanceList retired.
+// §27 / Cluster I FOLLOWUP 7 smoke: UnifiedBalanceList retired.
 //
 // Asserts the orphan is gone and stays gone:
 //   1. The component file + CSS module no longer exist.
 //   2. No source file (packages/**/*.{js,jsx}) imports or mounts
 //      UnifiedBalanceList. A grep that comes back empty proves the
-//      retirement was clean — nothing's silently broken by the deletion.
+//      retirement was clean; nothing's silently broken by the deletion.
 //   3. The two smokes that previously asserted UnifiedBalanceList
 //      parity (empty-state-nudge, token-detail) are renumbered through
 //      the deleted section, not silently still present.
@@ -56,7 +56,7 @@ function walk(dir) {
 }
 walk(join(wsRoot, 'packages'));
 assert.deepEqual(offenders, [],
-    `no source file should reference UnifiedBalanceList — found: ${offenders.join(', ')}`);
+    `no source file should reference UnifiedBalanceList; found: ${offenders.join(', ')}`);
 
 // --- 3. Smokes that used to assert UnifiedBalanceList are renumbered ------
 
@@ -77,5 +77,5 @@ assert.ok(!/readFileSync\(join\(components, 'UnifiedBalanceList\.(jsx|module\.cs
     'token-detail.smoke.js no longer reads UnifiedBalanceList.jsx / .module.css');
 
 console.log(
-    'OK — unified-balance-list-retired smoke (§27 / Cluster I FOLLOWUP 7 — UnifiedBalanceList.jsx + .module.css removed; zero references across packages/**; empty-state-nudge + token-detail smokes dropped their parity sections — orphan gone for good)',
+    'OK: unified-balance-list-retired smoke (§27 / Cluster I FOLLOWUP 7): UnifiedBalanceList.jsx + .module.css removed; zero references across packages/**; empty-state-nudge + token-detail smokes dropped their parity sections; orphan gone for good',
 );

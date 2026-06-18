@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// §43.2 / Cluster F FOLLOWUP 1 smoke — actually emit accountsChanged /
+// §43.2 / Cluster F FOLLOWUP 1 smoke: actually emit accountsChanged /
 // chainChanged / disconnect.
 //
 // The provider listener pipeline was wired in Phase 1 (content script
@@ -23,12 +23,12 @@
 //   2. Tabs with no `url`, with malformed URLs, or sitting on a
 //      different origin are skipped.
 //   3. With no `chrome.tabs` surface, every method becomes a no-op
-//      (no throws — important for shells without extension APIs).
+//      (no throws; important for shells without extension APIs).
 //   4. emitPermissionDiff fires accountsChanged when the accounts list
 //      changes, and chainChanged when a single chain is added.
 //   5. emitPermissionDiff is silent when there is no diff.
 //   6. registerBridgeHandlers accepts an `events` opt and threads it
-//      into bridge.disconnect — calling bridge.disconnect on a known
+//      into bridge.disconnect; calling bridge.disconnect on a known
 //      origin emits 'disconnect' to that origin once.
 //   7. createBackgroundHost accepts a `bridgeEvents` dep and threads
 //      it through to registerBridgeHandlers.
@@ -228,7 +228,7 @@ function makeFakeTabs(tabs) {
     assert.equal(fired[0].reason, 'user-requested');
 
     // bridge.disconnect on an unknown origin: silent (no record, no
-    // event — the dApp wasn't connected, no listener to inform).
+    // event; the dApp wasn't connected, no listener to inform).
     fired.length = 0;
     const resp2 = await host.handle({
         type: 'bridge.disconnect',
@@ -284,5 +284,5 @@ assert.ok(
 );
 
 console.log(
-    'OK — bridge-events-emit smoke (Cluster F FOLLOWUP 1 — createBridgeEventBroadcaster fans bridge.event messages to chrome.tabs filtered by URL.origin, skipping no-url / malformed-url / wrong-origin / no-id tabs and degrading to no-op without chrome.tabs; emitPermissionDiff fires accountsChanged + chainChanged on diff and stays silent on equal permissions; bridge.disconnect handler fires events.disconnect with user-requested reason; createBackgroundHost + background.js + handlers.js wired)',
+    'OK: bridge-events-emit smoke (Cluster F FOLLOWUP 1: createBridgeEventBroadcaster fans bridge.event messages to chrome.tabs filtered by URL.origin, skipping no-url / malformed-url / wrong-origin / no-id tabs and degrading to no-op without chrome.tabs; emitPermissionDiff fires accountsChanged + chainChanged on diff and stays silent on equal permissions; bridge.disconnect handler fires events.disconnect with user-requested reason; createBackgroundHost + background.js + handlers.js wired)',
 );

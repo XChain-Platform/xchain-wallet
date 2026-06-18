@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Cluster P FOLLOWUP 5 — form-draft persistence sweep. v0.212.0 wired
+// Cluster P FOLLOWUP 5: form-draft persistence sweep. v0.212.0 wired
 // the hook into Send + SignMessageForm; this sweep extends it to
 // IssueTokenForm + DispenserForm. Both new adopters honor the
 // privacy.formDraftTtlMs setting, persist the user-visible composition
@@ -90,4 +90,4 @@ for (const [label, src, viewName, restoreFields] of [
         `${label} calls draft.clear() + setDraftPending(false) immediately after setStage('done')`);
 }
 
-console.log('OK — form-draft persistence sweep (IssueTokenForm + DispenserForm)');
+console.log('OK: form-draft persistence sweep (IssueTokenForm + DispenserForm)');

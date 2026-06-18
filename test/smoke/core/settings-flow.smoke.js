@@ -11,14 +11,14 @@
 // Smoke for §35 Settings substrate (Step 1 of the Settings build).
 //
 // Covers:
-//   1. flows.getSettings — returns createDefaultSettings() against an
+//   1. flows.getSettings: returns createDefaultSettings() against an
 //      empty vault (no record persisted yet).
-//   2. flows.updateSettings — top-level scalar replacement, nested
+//   2. flows.updateSettings: top-level scalar replacement, nested
 //      shallow merge, chain-keyed deep merge by key, validation
 //      rejection of malformed values.
 //   3. flows index re-exports getSettings / updateSettings.
 //   4. Extension popup + web messaging modules export getSettings /
-//      updateSettings (static source check — no runtime).
+//      updateSettings (static source check, no runtime).
 //   5. createBackgroundHost.js registers `settings.get` and
 //      `settings.update` (static source check).
 

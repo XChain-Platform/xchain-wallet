@@ -8,12 +8,12 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Duress passphrase — §26.5 / G068 part 2.
+// Duress passphrase: §26.5 / G068 part 2.
 //
 // A second password the user can configure for emergencies. Entering
 // it on the Locked screen silently arms panic mode (24-hour signing
 // freeze) and shows the same "Incorrect password" UX a normal wrong
-// guess produces — so an observer (someone forcing the user to
+// guess produces, so an observer (someone forcing the user to
 // unlock) cannot tell the duress flag was tripped.
 //
 // Verification is INTENTIONALLY checked AFTER the real unlock fails:
@@ -38,10 +38,10 @@
 // `hash = sha256(salt || passphrase_utf8)`. SHA-256 is sufficient
 // because:
 //   1. Verification only runs AFTER the real wallet KDF already
-//      rejected the input — i.e., after the user already chose to type
+//      rejected the input; i.e., after the user already chose to type
 //      a password.
 //   2. Offline attacks on the duress hash from a stolen localStorage
-//      blob aren't a meaningful threat — anyone with localStorage
+//      blob aren't a meaningful threat: anyone with localStorage
 //      already has the encrypted wallet vault to attack instead.
 //
 // The stored hash never leaves localStorage; the plaintext duress

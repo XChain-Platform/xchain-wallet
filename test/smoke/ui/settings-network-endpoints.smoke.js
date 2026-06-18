@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §35 Settings — Step 10 — Network & Endpoints panel.
+// Smoke for §35 Settings, Step 10: Network & Endpoints panel.
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';

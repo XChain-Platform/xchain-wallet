@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Unit: buildInfo.js — wallet version constants.
+// Unit: buildInfo.js - wallet version constants.
 
 import { describe, it, expect } from 'vitest';
 import {

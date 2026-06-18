@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §19.4 / Cluster H FOLLOWUP 3 — `add` mode for encrypted
+// Smoke for §19.4 / Cluster H FOLLOWUP 3: `add` mode for encrypted
 // backup restore. Pins:
 //   - importBackupFile accepts a `mode` parameter
 //   - the helper re-mints wallet / account / address ids and rewires

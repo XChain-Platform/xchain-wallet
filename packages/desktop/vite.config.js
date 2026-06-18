@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Vite config — Electron renderer target.
+// Vite config: Electron renderer target.
 //
 // Produces `renderer/dist/` which `main/index.js`'s `loadFile` points
 // at and electron-builder's `files` glob pulls into the asar. Kept
@@ -28,7 +28,7 @@ export default defineConfig({
     build: {
         outDir: resolve(here, 'renderer', 'dist'),
         emptyOutDir: true,
-        // Source maps off — see the module docstring + REPRODUCIBLE_BUILDS.md
+        // Source maps off; see the module docstring + REPRODUCIBLE_BUILDS.md
         // "non-determinism sources". Re-enable in a local dev config if
         // you need to debug a shipped bundle.
         sourcemap: false,
@@ -38,7 +38,7 @@ export default defineConfig({
         assetsInlineLimit: 0,
         rollupOptions: {
             output: {
-                // Deterministic chunk names — Vite's default includes
+                // Deterministic chunk names. Vite's default includes
                 // a hash, which is fine (content-addressed), but we
                 // pin the pattern here so changes surface via review.
                 entryFileNames: 'assets/[name]-[hash].js',

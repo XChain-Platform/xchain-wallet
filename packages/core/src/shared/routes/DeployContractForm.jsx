@@ -32,12 +32,12 @@ const chainRegistry = registryLib.defaultRegistry();
 const VM_COIN = 'bitcoin';
 
 /**
- * DEPLOY authoring form — §42.6.
+ * DEPLOY authoring form: §42.6.
  *
  * Surface:
  *
  *   Name:               [ … ]
- *   Code source:        [ textarea — multi-line JS ]
+ *   Code source:        [ textarea (multi-line JS) ]
  *   Gas limit:          [ input, auto-suggested ]
  *   Constructor params: [ pipe-delimited ]
  *
@@ -54,7 +54,7 @@ const VM_COIN = 'bitcoin';
  * posture need their own discussion) to a follow-up captured in
  * `claude/reports/specs/2026-04-24_phase4-monaco-editor.md`.
  *
- * Hex-encoding of the source happens inside the SDK validator chain —
+ * Hex-encoding of the source happens inside the SDK validator chain;
  * callers pass raw UTF-8 as `params.CODE`. GAS_LIMIT is a decimal
  * string per the protocol. NAME + CONSTRUCTOR_PARAMS are optional.
  *
@@ -85,7 +85,7 @@ export function DeployContractForm({ walletId, onBack }) {
     const [code, setCode] = useState('');
     const [gasLimit, setGasLimit] = useState('');
     const [constructorParams, setConstructorParams] = useState('');
-    // DEPLOY v1 — optional staking config. Leaving cooldownBlocks blank deploys a
+    // DEPLOY v1: optional staking config. Leaving cooldownBlocks blank deploys a
     // non-stakeable contract (DEPLOY v0 behavior). Setting it opts into contract-staking;
     // slashDestination defaults to 'BURN' when cooldown is set but destination is blank.
     const [cooldownBlocks, setCooldownBlocks] = useState('');
@@ -180,7 +180,7 @@ export function DeployContractForm({ walletId, onBack }) {
         if (constructorParams.trim()) p.CONSTRUCTOR_PARAMS = constructorParams.trim();
         if (hasCooldown) {
             p.COOLDOWN_BLOCKS = cooldownBlocks.trim();
-            // Default to BURN if cooldown is set but destination is blank — the indexer
+            // Default to BURN if cooldown is set but destination is blank; the indexer
             // applies the same default, but surfacing it here makes review honest.
             p.SLASH_DESTINATION = slashDestination.trim() || 'BURN';
         }
@@ -242,7 +242,7 @@ export function DeployContractForm({ walletId, onBack }) {
             setFormError('Fix the syntax error before previewing (see Validate code).');
             return;
         }
-        // Staking config validation — only enforced when the user opted in
+        // Staking config validation: only enforced when the user opted in
         if (cooldownBlocks.trim() !== '') {
             const cb = Number(cooldownBlocks.trim());
             if (!Number.isInteger(cb) || cb < 1 || cb > 100000) {
@@ -257,7 +257,7 @@ export function DeployContractForm({ walletId, onBack }) {
         setStage('review');
     }
 
-    // §20 / Cluster W FOLLOWUP 5 — watcher-mode encode-only branch.
+    // §20 / Cluster W FOLLOWUP 5: watcher-mode encode-only branch.
     const { isWatcherMode } = useWalletMode();
 
     async function handleSubmit(event) {
@@ -361,7 +361,7 @@ export function DeployContractForm({ walletId, onBack }) {
                 </p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Txid</dt>
-                    <dd className={styles.detailsValue}>{String(txid || '—')}</dd>
+                    <dd className={styles.detailsValue}>{String(txid || 'N/A')}</dd>
                 </dl>
                 <div className={styles.actions}>
                     <Button variant="primary" onClick={onBack}>Done</Button>
@@ -375,7 +375,7 @@ export function DeployContractForm({ walletId, onBack }) {
             <form onSubmit={handleSubmit} noValidate>
                 <p className={styles.summary}>
                     Deploy contract {actionParams.NAME ? `"${actionParams.NAME}"` : ''} to{' '}
-                    {descriptor?.displayName || chainId} — gas limit {actionParams.GAS_LIMIT}.
+                    {descriptor?.displayName || chainId}, gas limit {actionParams.GAS_LIMIT}.
                 </p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Chain</dt>
@@ -418,7 +418,7 @@ export function DeployContractForm({ walletId, onBack }) {
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>
-                        Watcher mode — this wallet will build an unsigned transaction.
+                        Watcher mode: this wallet will build an unsigned transaction.
                         Sign it on your Signer-mode wallet, then bring the
                         signed transaction to a Full-mode wallet to broadcast.
                     </p>
@@ -545,7 +545,7 @@ export function DeployContractForm({ walletId, onBack }) {
                 >
                     {validation.msg}
                     {validation.warnings && validation.warnings.length > 0 ? (
-                        <> — {validation.warnings.length} warning(s)</>
+                        <> ({validation.warnings.length} warning(s))</>
                     ) : null}
                 </p>
             ) : null}
@@ -554,13 +554,13 @@ export function DeployContractForm({ walletId, onBack }) {
                     role={sizeInfo.withinLimit ? undefined : 'alert'}
                     className={sizeInfo.withinLimit ? styles.summary : styles.error}
                 >
-                    {sizeInfo.bytes} bytes{sizeInfo.withinLimit ? ' (within 64KB limit)' : ' — exceeds 64KB limit'}
+                    {sizeInfo.bytes} bytes{sizeInfo.withinLimit ? ' (within 64KB limit)' : ' (exceeds 64KB limit)'}
                 </p>
             ) : null}
             {suggestedGas !== null ? (
                 <p className={styles.summary}>
                     Suggested gas limit: {suggestedGas}
-                    {gasLimit !== String(suggestedGas) ? ' — applied' : ''}
+                    {gasLimit !== String(suggestedGas) ? ' (applied)' : ''}
                 </p>
             ) : null}
 
@@ -592,7 +592,7 @@ export function DeployContractForm({ walletId, onBack }) {
 
             <Input
                 label="Slash destination (optional)"
-                hint='Where slashed tokens go. Enter an address or "BURN" to route to the chain burn address. Defaults to BURN when cooldown is set. Locked at deploy — cannot change later.'
+                hint='Where slashed tokens go. Enter an address or "BURN" to route to the chain burn address. Defaults to BURN when cooldown is set. Locked at deploy and cannot change later.'
                 value={slashDestination}
                 onChange={(e) => setSlashDestination(e.target.value)}
                 autoComplete="off"

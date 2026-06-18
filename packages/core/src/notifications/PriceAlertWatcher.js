@@ -8,9 +8,9 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// PriceAlertWatcher — §46 price-alert delivery. The sibling of
+// PriceAlertWatcher: §46 price-alert delivery. The sibling of
 // NotificationService: where that one is WebSocket-event-driven (the
-// explorer pushes on-chain events), price has no WS channel — the only
+// explorer pushes on-chain events), price has no WS channel. The only
 // source is the CoinGecko-backed price oracle (an HTTP fetch). So this
 // watcher *polls*: every `intervalMs` it reads the user's armed alerts,
 // fetches the current native-coin price, and fires a notification (via the
@@ -18,14 +18,14 @@
 // threshold is crossed. One-shot: a fired alert is marked `triggered` so it
 // never re-fires until the user re-arms it.
 //
-// PRIVACY — this is the wallet's only opt-out telemetry (see
+// PRIVACY: this is the wallet's only opt-out telemetry (see
 // flows/priceOracle.js). A background poll is *new recurring* network
 // exposure, so the watcher is hard-gated and makes ZERO network calls
 // unless ALL of these hold each tick:
 //   1. settings.privacy.priceDataEnabled !== false  (the telemetry opt-out)
 //   2. settings.notifications.priceAlerts            (the feature toggle)
 //   3. at least one armed alert exists               (nothing to watch)
-// With no armed alerts it never touches the network — an idle user with the
+// With no armed alerts it never touches the network; an idle user with the
 // toggle on but no alerts set leaks nothing.
 
 // Align with priceOracle's SPOT_TTL_MS so a poll usually hits the oracle's
@@ -38,7 +38,7 @@ export class PriceAlertWatcher {
     /**
      * @param {Object} deps
      * @param {(opts: { chainIds: string[], fiatCurrency: string }) => Promise<{ prices?: Record<string, { priceFiat: number|null }|null>, disabled?: boolean, error?: string }>} deps.getNativePrices
-     *   the price source — typically a priceOracle.getNativePrices wrapper
+     *   the price source (typically a priceOracle.getNativePrices wrapper)
      * @param {() => Promise<import('../schemas/priceAlert.js').PriceAlert[]>} deps.listArmedAlerts
      *   the user's alerts; the watcher filters to status === 'armed'
      * @param {() => Promise<import('../schemas/settings.js').Settings>} deps.getSettings

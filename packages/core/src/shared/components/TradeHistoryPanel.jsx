@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// TradeHistoryPanel — §41.3.6 per-market user trade history.
+// TradeHistoryPanel (§41.3.6): per-market user trade history.
 //
 // Collapsible section below OpenOrdersPanel. Fans out
 // `messaging.getMarketHistory({ chainId, tick1, tick2, address })`
@@ -19,7 +19,7 @@
 // Fetch strategy: on-demand (only when expanded) plus a manual
 // Refresh button. Trade history grows slowly and this panel is
 // secondary to the active-trading surface above it, so there's no
-// polling — we avoid adding another 5s timer alongside the
+// no polling. We avoid adding another 5s timer alongside the
 // orderbook and open-orders pollers.
 
 import { useCallback, useEffect, useState } from 'react';
@@ -186,7 +186,7 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
                                     <span>
                                         {summary.ownerAddress ? (
                                             <AddressText address={summary.ownerAddress} />
-                                        ) : '—'}
+                                        ) : '--'}
                                     </span>
                                 </div>
                             );
@@ -249,7 +249,7 @@ function summarizeRow(row, tick1, tick2) {
         price: String(price),
         size: String(size),
         side,
-        timeLabel: ts ? formatTime(ts) : '—',
+        timeLabel: ts ? formatTime(ts) : '--',
         ownerAddress: row.__owner?.address || null,
         txHash: txHash ? String(txHash) : null,
         key: String(row.action_index ?? txHash ?? `${ts}-${price}-${size}`),
@@ -281,7 +281,7 @@ function formatTime(unixSeconds) {
             minute: '2-digit',
         });
     } catch {
-        return '—';
+        return '--';
     }
 }
 

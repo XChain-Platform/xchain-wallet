@@ -24,17 +24,17 @@ import styles from './ActionsMenu.module.css';
 const chainRegistry = registryLib.defaultRegistry();
 
 /**
- * Dispenser explorer — §40.7.2 buyer-facing browse surface.
+ * Dispenser explorer (§40.7.2 buyer-facing browse surface).
  *
  * The explorer backend doesn't expose an "all dispensers" wildcard;
  * every query is scoped to a token or an address. This view therefore
  * centers on a required search input. Users pick:
  *
- *   - "By token" — ticker-based search (common case: "find open
+ *   - "By token": ticker-based search (common case: "find open
  *     MYTOKEN dispensers"). Passes the input as `token` to
  *     `dispensersForToken`, which the backend matches against both
  *     GIVE_TICK and GET_TICK.
- *   - "By address" — address-based search. Passes the input as
+ *   - "By address": address-based search. Passes the input as
  *     `address` to `dispensersForAddress`, matching either source or
  *     dispenser address.
  *
@@ -247,7 +247,7 @@ function ResultsPane({ rowsByChain, searching, onOpenDispenser }) {
 
 function ResultRow({ row, onSelect }) {
     const rate = rateLabel(row);
-    const status = String(row.status || '—');
+    const status = String(row.status || '-');
     return (
         <button
             type="button"

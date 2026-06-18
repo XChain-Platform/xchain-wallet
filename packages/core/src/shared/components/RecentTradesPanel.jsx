@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// RecentTradesPanel — §41.3.3 chronological trade feed for a market.
+// RecentTradesPanel (§41.3.3): chronological trade feed for a market.
 //
 // Shares the `getMarketHistory` fetch with the chart, but renders the
 // match rows directly instead of bucketing. Each row = one filled
@@ -26,7 +26,7 @@ const MAX_ROWS = 30;
  * @param {string} props.chainId
  * @param {string} props.tick1
  * @param {string} props.tick2
- * @param {boolean} [props.demo]   demo wallet — render sample trades when there's no live history
+ * @param {boolean} [props.demo]   demo wallet; render sample trades when there's no live history
  * @param {(txid: string) => void} [props.onOpenTx]   navigate to the tx detail (future)
  */
 export function RecentTradesPanel({ chainId, tick1, tick2, demo = false, onOpenTx }) {
@@ -44,7 +44,7 @@ export function RecentTradesPanel({ chainId, tick1, tick2, demo = false, onOpenT
                 const real = extractRows(resp);
                 // Demo wallets show sample trades when there's no live
                 // history; real wallets show real fills or the "No trades
-                // yet" empty state — never fabricated trades.
+                // yet" empty state. Never fabricated trades.
                 const next = real.length > 0 ? real : (demo ? sampleMatchesFor(tick1, tick2) : []);
                 setRows(next.slice(0, MAX_ROWS));
             })
@@ -171,13 +171,13 @@ function summarizeRow(row, tick1, tick2) {
         price: formatPrice(price),
         size: formatSize(size),
         side,
-        timeLabel: ts ? formatTime(ts) : '—',
+        timeLabel: ts ? formatTime(ts) : 'N/A',
         counterparty: row.destination || row.give_address || row.get_address || null,
     };
 }
 
 function formatPrice(n) {
-    if (!Number.isFinite(n)) return '—';
+    if (!Number.isFinite(n)) return 'N/A';
     if (n === 0) return '0';
     if (n >= 1) return n.toFixed(4);
     if (n >= 0.01) return n.toFixed(6);
@@ -185,7 +185,7 @@ function formatPrice(n) {
 }
 
 function formatSize(n) {
-    if (!Number.isFinite(n)) return '—';
+    if (!Number.isFinite(n)) return 'N/A';
     if (Number.isInteger(n)) return String(n);
     if (n >= 1) return n.toFixed(2);
     return n.toFixed(4);
@@ -206,7 +206,7 @@ function formatTime(unixSeconds) {
         const d = new Date(unixSeconds * 1000);
         return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
     } catch {
-        return '—';
+        return 'N/A';
     }
 }
 

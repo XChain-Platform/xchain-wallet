@@ -38,7 +38,7 @@ import styles from './Locked.module.css';
  *
  * `InvalidPasswordError` surfaces as a field-level error and increments
  * the §26 / G066 lockout counter; any other failure shows the raw
- * message and does NOT count against the user — those are bugs, not
+ * message and does NOT count against the user (those are bugs, not
  * bad guesses.
  *
  * @param {object} props
@@ -78,7 +78,7 @@ export function Locked({ onUnlocked }) {
         setDemoWipeBusy(true);
         setDemoWipeError(null);
         try {
-            // Try the surgical messaging path first — works when the
+            // Try the surgical messaging path first: works when the
             // wallet happens to still be unlocked, or on shells whose
             // host accepts wallet.remove without an unlocked vault.
             try {
@@ -96,7 +96,7 @@ export function Locked({ onUnlocked }) {
             } catch (innerErr) {
                 // Demo wallets are unrecoverable once the session
                 // password cache is gone, and the vault blob is one
-                // encrypted unit — there's no way to surgically remove
+                // encrypted unit, so there's no way to surgically remove
                 // a single wallet record without the master key. Fall
                 // back to deleting the whole IndexedDB database so the
                 // App reboots into clean onboarding. The demo-exit
@@ -114,7 +114,7 @@ export function Locked({ onUnlocked }) {
         }
     }
 
-    // §26.4 — last-resort escape for a real wallet whose owner has lost
+    // §26.4: last-resort escape for a real wallet whose owner has lost
     // the password. The vault blob is encrypted under the master key, so
     // there's no surgical "reset password" path; the only option is to
     // wipe the device-side wallet and re-import from seed or encrypted
@@ -160,7 +160,7 @@ export function Locked({ onUnlocked }) {
         return () => { cancelled = true; };
     }, []);
 
-    // Countdown ticker — runs only while a lockout is active.
+    // Countdown ticker: runs only while a lockout is active.
     useEffect(() => {
         if (remainingMs <= 0) return undefined;
         const handle = window.setInterval(() => {
@@ -217,11 +217,11 @@ export function Locked({ onUnlocked }) {
         } catch (err) {
             const isBadPassword = err?.name === 'InvalidPasswordError';
             if (isBadPassword) {
-                // §26.5 / G068 — silently arm panic mode if the entered
+                // §26.5 / G068: silently arm panic mode if the entered
                 // password is the configured duress passphrase. The user
                 // sees the SAME wrong-password UX an actual mistype
                 // produces, so an observer can't tell the duress flag
-                // fired. Lockout still increments — both branches must
+                // fired. Lockout still increments; both branches must
                 // look identical from the outside.
                 tripDuressIfMatch(password);
                 const next = recordLockoutFailure();
@@ -258,7 +258,7 @@ export function Locked({ onUnlocked }) {
             onUnlocked?.();
         } catch (err) {
             // Biometric failures (cancelled prompt, missing credential,
-            // PRF failure) are surfaced raw — they are not bad-password
+            // PRF failure) are surfaced raw: they are not bad-password
             // guesses and must NOT increment the lockout counter.
             setError(err?.message || 'Biometric unlock failed.');
             haptic.error();
@@ -331,7 +331,7 @@ export function Locked({ onUnlocked }) {
             {demoWalletId ? (
                 <div className={styles.demoExitBlock}>
                     <p className={styles.demoExitNote}>
-                        This is a demo wallet — its password is randomly generated and not recoverable. Exiting will wipe all wallet data on this device and return you to onboarding.
+                        This is a demo wallet. Its password is randomly generated and not recoverable. Exiting will wipe all wallet data on this device and return you to onboarding.
                     </p>
                     <Button
                         type="button"
@@ -370,7 +370,7 @@ export function Locked({ onUnlocked }) {
                                 <strong>Without your recovery phrase or encrypted backup file, wiping this wallet will permanently lose access to any funds it holds.</strong>
                             </p>
                             <p className={styles.wipeNote}>
-                                Wiping only removes the wallet from this device — the wallet on the blockchain itself is unaffected. Use this only if you have a backup, or if this wallet is empty.
+                                Wiping only removes the wallet from this device. The wallet on the blockchain itself is unaffected. Use this only if you have a backup, or if this wallet is empty.
                             </p>
                             <Input
                                 type="text"
@@ -429,15 +429,15 @@ export function Locked({ onUnlocked }) {
 
 /**
  * Nuke the wallet's IndexedDB database AND localStorage meta entry.
- * Used as the last-resort escape from a locked demo wallet — the demo
+ * Used as the last-resort escape from a locked demo wallet. The demo
  * password is unrecoverable, so surgical deletion of just the demo
  * record is impossible (the vault blob is one encrypted unit).
  *
  * Two stores to clear:
  *   - IndexedDB `xchain-wallet` (matches DEFAULT_DB_NAME in
- *     IndexedDBStorageBackend.js) — holds the encrypted vault blob.
+ *     IndexedDBStorageBackend.js): holds the encrypted vault blob.
  *   - localStorage `xchain-wallet:vault-meta` (matches DEFAULT_META_KEY
- *     in WebMetaBackend.js) — holds the kdfParams metadata that the
+ *     in WebMetaBackend.js): holds the kdfParams metadata that the
  *     bridge's "a wallet already exists" check reads. Without this
  *     clear, a fresh `wallet.import` call after the IDB wipe still
  *     trips the existence check and the demo flow can't restart.
@@ -448,7 +448,7 @@ export function Locked({ onUnlocked }) {
  * @returns {Promise<void>}
  */
 function deleteWalletDatabase() {
-    // Clear the localStorage meta entry first — synchronous, can't fail.
+    // Clear the localStorage meta entry first (synchronous, can't fail).
     try {
         globalThis.localStorage?.removeItem('xchain-wallet:vault-meta');
     } catch { /* ignore */ }

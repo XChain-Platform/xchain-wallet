@@ -71,4 +71,4 @@ for (const { src, file, match } of integrations) {
     assert.ok(match.test(src), `${file} mounts <InfoTip aria="…">`);
 }
 
-console.log('OK — InfoTip primitive + 5 integration smoke');
+console.log('OK: InfoTip primitive + 5 integration smoke');

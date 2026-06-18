@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §26 Lock & Panic — Step 5 — G068 part 1 — panic-mode
+// Smoke for §26 Lock & Panic, Step 5, G068 part 1: panic-mode
 // signing freeze foundation.
 
 import { strict as assert } from 'node:assert';

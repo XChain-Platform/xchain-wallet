@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// useSignerStatus — §18.4 / §17.3 sign-screen helper. Polls a signer's
+// useSignerStatus (§18.4 / §17.3): sign-screen helper. Polls a signer's
 // `getStatus()` at a cadence matching the HW UX: fast at mount (user
 // just plugged the device in or opened the screen), slow after it
 // reports 'available' (steady state), fast again after 'wrong-app' /
@@ -16,8 +16,8 @@
 //
 // Shapes itself as a React hook so per-form wiring is one line; the
 // underlying polling is plain setInterval so any signer with a
-// working `getStatus` method — RemoteSigner, TrezorSigner,
-// LedgerSigner — plugs in without change.
+// working `getStatus` method. RemoteSigner, TrezorSigner, and
+// LedgerSigner all plug in without change.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 

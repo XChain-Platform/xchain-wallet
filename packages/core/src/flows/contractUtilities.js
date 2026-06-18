@@ -8,13 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// contractUtilities — pure-function wrappers over sdk.contracts.* for
+// contractUtilities: pure-function wrappers over sdk.contracts.* for
 // the DEPLOY form's validate / estimate-size / suggest-gas buttons.
 // These reach through an sdkRegistry-scoped SDK so the contract
 // authoring tools (acorn-based syntax check, UTF-8 byte counting,
 // heuristic gas estimation) are versioned alongside the decoder.
 //
-// None of these make network calls — acorn is bundled with the SDK.
+// None of these make network calls. Acorn is bundled with the SDK.
 // They're routed through the messaging layer anyway for consistency
 // (the UI never imports an SDK directly; it always goes through the
 // vault-owning process for discipline even when no secret is in play).

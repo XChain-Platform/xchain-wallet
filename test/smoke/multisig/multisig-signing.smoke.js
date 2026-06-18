@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for Phase 4 — Step 19 of 23 — Multisig-aware sign-round
+// Smoke for Phase 4, Step 19 of 23: Multisig-aware sign-round
 // persistence + dual-mode partial-signature tracking (§22.3 + §42.9).
 
 import { strict as assert } from 'node:assert';
@@ -93,7 +93,7 @@ const musig2 = createMultisigSigningSession(sample({
     threshold: 2,
     cosignerPubkeys: [alicePk, bobPk],
 }));
-assert.equal(musig2.status, 'collecting-nonces', 'MuSig2 starts in round 1 — nonce collection');
+assert.equal(musig2.status, 'collecting-nonces', 'MuSig2 starts in round 1: nonce collection');
 assert.equal(validateMultisigSigningSession(musig2).ok, true, 'MuSig2 session validates');
 
 // progressSummary uses dual-mode labels.
@@ -193,7 +193,7 @@ function makeFakeVault({ wallet }) {
                 const r = validateMultisigSigningSession(record);
                 if (!r.ok) {
                     throw new Error(
-                        `fake-vault: invalid multisigSigningSession — ${r.errors.join('; ')}`,
+                        `fake-vault: invalid multisigSigningSession (${r.errors.join('; ')})`,
                     );
                 }
                 sessions.set(record.id, record);
@@ -372,7 +372,7 @@ function makeFakeVault({ wallet }) {
     });
     assert.equal(afterBobNonce.nonces.length, 2);
     assert.equal(afterBobNonce.status, 'collecting-nonces',
-        'session does not auto-advance — caller drives aggregateMultisigSession');
+        'session does not auto-advance; caller drives aggregateMultisigSession');
 
     const afterRound1Agg = await flows.aggregateMultisigSession({
         vault,
@@ -413,7 +413,7 @@ function makeFakeVault({ wallet }) {
     });
     assert.equal(afterBobPartial.partialSigs.length, 2);
     assert.equal(afterBobPartial.status, 'collecting-sigs',
-        'partial sigs do NOT auto-aggregate — caller drives aggregateMultisigSession');
+        'partial sigs do NOT auto-aggregate; caller drives aggregateMultisigSession');
 
     const afterRound2Agg = await flows.aggregateMultisigSession({
         vault,
@@ -540,5 +540,5 @@ for (const [shell, pkgPath] of [
 }
 
 console.log(
-    'OK — multisig signing smoke (schema state machine + dual-mode tracker labels + threshold+msgHash guards + flow re-exports + P2WSH single-round end-to-end + MuSig2 two-round drive + duplicate-cosigner guard + status-gated contribution + cancel terminal state + bg handler 8 routes + 3-shell messaging exports + MultisigSigningSession route renders dual-mode tracker copy + 3-shell App.jsx wiring + BTC gate + SDK pin unchanged)',
+    'OK: multisig signing smoke (schema state machine + dual-mode tracker labels + threshold+msgHash guards + flow re-exports + P2WSH single-round end-to-end + MuSig2 two-round drive + duplicate-cosigner guard + status-gated contribution + cancel terminal state + bg handler 8 routes + 3-shell messaging exports + MultisigSigningSession route renders dual-mode tracker copy + 3-shell App.jsx wiring + BTC gate + SDK pin unchanged)',
 );

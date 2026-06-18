@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Unit: schemas/pendingTx — createPendingTx + validatePendingTx.
+// Unit: schemas/pendingTx: createPendingTx + validatePendingTx.
 
 import { describe, it, expect } from 'vitest';
 import {
@@ -228,7 +228,7 @@ describe('validatePendingTx', () => {
 
     it('rejects non-string non-null error', () => {
         const tx = createPendingTx(BASE_INPUT);
-        // error is validated via isNullableString — non-string-non-null should fail
+        // error is validated via isNullableString; non-string-non-null should fail
         const r = validatePendingTx({ ...tx, error: 42 });
         expect(r.ok).toBe(false);
     });

@@ -8,17 +8,17 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for Phase 2 — Step 8 (piece 3a) — standalone ISSUE form.
+// Smoke for Phase 2, Step 8 (piece 3a): standalone ISSUE form.
 //
 // Asserts:
 //   1. packages/core/src/shared/routes/IssueTokenForm.jsx exists and
-//      exports a single named component — no incidental exports.
+//      exports a single named component (no incidental exports).
 //   2. The form has the 2-stage shape (form → review/submitting → done)
 //      mirroring Send.jsx, and wires setStage transitions accordingly.
 //   3. Review stage runs the composed ISSUE params through
-//      decoder.decodeAction — the sign preview must match what
+//      decoder.decodeAction; the sign preview must match what
 //      SignApproval renders for dApp-initiated ISSUE.
-//   4. Sign stage calls messaging.issueToken — the Step 5 helper — not
+//   4. Sign stage calls messaging.issueToken (the Step 5 helper), not
 //      a new flow. Piece 3a intentionally does not add new messaging.
 //   5. Validation blocks submit on: empty ticker, non-A/0-9 ticker,
 //      missing/zero supply.
@@ -254,5 +254,5 @@ for (const cls of [
 }
 
 console.log(
-    'OK — issue form smoke (standalone ISSUE §40.2 + ActionsMenu + Home "More actions" entry + popup/web wiring)',
+    'OK: issue form smoke (standalone ISSUE §40.2 + ActionsMenu + Home "More actions" entry + popup/web wiring)',
 );

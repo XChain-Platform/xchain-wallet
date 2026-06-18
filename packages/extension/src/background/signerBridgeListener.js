@@ -16,7 +16,7 @@
 //
 // Ports are many-per-renderer (each open popup tab maintains its
 // own port). If two renderers both register the same signerId, the
-// latest registration wins — signing will route to whichever
+// latest registration wins. Signing will route to whichever
 // renderer the user most recently interacted with. Disconnect
 // tears down only the transports this specific port registered.
 

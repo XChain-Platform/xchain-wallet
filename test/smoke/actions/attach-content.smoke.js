@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for NFT Phase 2B — attach on-chain artwork to a token from
+// Smoke for NFT Phase 2B: attach on-chain artwork to a token from
 // ManageToken: FILE upload → wait-for-index → owner-validated LINK
 // (the NFT content-attachment pattern, NFT_Standard.md).
 
@@ -34,7 +34,7 @@ const src = readFileSync(formPath, 'utf8');
 assert.ok(/export function AttachContentForm\b/.test(src),
     'AttachContentForm is a named export');
 
-// Stage machine — two signs with an indexing wait between them.
+// Stage machine: two signs with an indexing wait between them.
 for (const stage of ['compose', 'review-file', 'wait-index', 'review-link', 'done']) {
     assert.ok(src.includes(`'${stage}'`), `form tracks stage "${stage}"`);
 }
@@ -57,7 +57,7 @@ for (const call of [
 // user signed.
 assert.ok(/MAX_FILE_BYTES/.test(src), 'form caps the file size pre-sign');
 
-// The LINK is only honoured from the token's owner — the form must
+// The LINK is only honoured from the token's owner; the form must
 // surface a mismatch instead of failing silently after two signs.
 assert.ok(/ownerMismatch/.test(src), 'form warns on issuer/owner mismatch');
 
@@ -142,5 +142,5 @@ for (const [shell, appPath] of [
 }
 
 console.log(
-    'OK — attach-content smoke (AttachContentForm stage machine FILE → wait-index → LINK, size cap + owner-mismatch warning + watcher block, fileAction core flow guards, bg handlers, 3-shell messaging + App.jsx wiring, owner-gated ManageToken entry)',
+    'OK: attach-content smoke (AttachContentForm stage machine FILE → wait-index → LINK, size cap + owner-mismatch warning + watcher block, fileAction core flow guards, bg handlers, 3-shell messaging + App.jsx wiring, owner-gated ManageToken entry)',
 );

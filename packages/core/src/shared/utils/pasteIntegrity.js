@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Paste-integrity check — §21.5 / §12.3.
+// Paste-integrity check: §21.5 / §12.3.
 //
 // Defense against clipboard-hijack patterns where malware monitors the
 // OS clipboard for crypto address strings and silently swaps them.

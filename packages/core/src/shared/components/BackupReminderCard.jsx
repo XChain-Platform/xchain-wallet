@@ -15,7 +15,7 @@ import { useMessaging } from '../useMessaging.js';
 import styles from './BackupReminderCard.module.css';
 
 /**
- * §19.7 / G034 + G062 — progressive backup reminder card on Home.
+ * §19.7 / G034 + G062: progressive backup reminder card on Home.
  *
  * Loads settings via messaging on mount, then evaluates
  * `flowsLib.computeBackupReminderState({ walletId, walletCreatedAt,
@@ -23,7 +23,7 @@ import styles from './BackupReminderCard.module.css';
  * quiet card with a Dismiss button; 'firm' renders a more prominent card
  * without a dismiss.
  *
- * The card itself does not navigate — callers wire `onAction` to take the
+ * The card itself does not navigate. Callers wire `onAction` to take the
  * user to a backup ceremony (Settings → Backup, or a verify lane for
  * never-verified wallets).
  *

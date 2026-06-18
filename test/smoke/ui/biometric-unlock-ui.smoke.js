@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §26 Lock & Panic — Step 4 — G063 — biometric unlock UI
+// Smoke for §26 Lock & Panic, Step 4 (G063): biometric unlock UI
 // wiring (Locked.jsx button + Settings → Safety BiometricRow).
 
 import { strict as assert } from 'node:assert';

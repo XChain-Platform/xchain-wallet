@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for Phase 4 — Step 14 of 23 — Parallel cross-chain composer
+// Smoke for Phase 4, Step 14 of 23: Parallel cross-chain composer
 // (§42.8.2).
 
 import { strict as assert } from 'node:assert';
@@ -92,5 +92,5 @@ for (const [shell, appPath] of [
 }
 
 console.log(
-    'OK — parallel composer smoke (ParallelComposer §42.8.2 multi-row draft list + 4-stage compose/review/signing/done flow + sequential advancedAction calls + per-row pending/submitting/success/failed/skipped state + no-rollback ack gate + HW vs software signing + 3-shell App.jsx + ActionsMenu entry)',
+    'OK: parallel composer smoke (ParallelComposer §42.8.2 multi-row draft list + 4-stage compose/review/signing/done flow + sequential advancedAction calls + per-row pending/submitting/success/failed/skipped state + no-rollback ack gate + HW vs software signing + 3-shell App.jsx + ActionsMenu entry)',
 );

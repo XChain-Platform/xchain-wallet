@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Unit tests for SignerPool — the in-memory cache of unlocked software
+// Unit tests for SignerPool: the in-memory cache of unlocked software
 // signers held for the lifetime of an unlocked session.
 //
 // `unlockWalletRecord` (the only collaborator that does real crypto) is

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Price-alert CRUD flows — §46. Thin wrappers around the vault's
+// Price-alert CRUD flows (§46). Thin wrappers around the vault's
 // priceAlerts collection, mirroring the watchlist flow shape. The
 // NotificationsSection manager + the TokenDetail "Set price alert" entry
 // read via listAlertsForWallet and write via saveAlert / clearAlert; the
@@ -32,7 +32,7 @@ export async function listAlertsForWallet({ vault, walletId }) {
 /**
  * Add a price alert. Idempotent by (walletId, chainId, direction,
  * targetFiat): an existing match is returned as-is when armed, or re-armed
- * (status → 'armed', triggeredAt → null) when it had already fired — so
+ * (status → 'armed', triggeredAt → null) when it had already fired, so
  * re-adding the same alert "resets" it rather than stacking duplicates.
  *
  * @param {{ vault: import('../storage/Vault.js').Vault, walletId: string, chainId: string, direction: 'above'|'below', targetFiat: number, fiatCurrency: string }} params

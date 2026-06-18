@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §9.5 / §51 — the web SPA ships an app-controlled CSP.
+// Smoke for §9.5 / §51: the web SPA ships an app-controlled CSP.
 //
 // The SPA previously had no Content-Security-Policy of its own and relied
 // entirely on a server-sent header. This checks the policy module defines

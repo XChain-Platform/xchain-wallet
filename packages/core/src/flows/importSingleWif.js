@@ -8,13 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// importSingleWif — §15.4. Creates a fresh wallet whose only key
+// importSingleWif (§15.4). Creates a fresh wallet whose only key
 // material is a single imported WIF. Wallet.format = 'wif-only';
 // encryptedSeed is empty; importedKeys holds the WIF ciphertext.
 //
 // This is distinct from `importWif` (§15.5), which adds a WIF to an
-// existing HD wallet. Here the whole wallet is WIF-only — no mnemonic,
-// no HD derivation.
+// existing HD wallet. Here the whole wallet is WIF-only (no mnemonic,
+// no HD derivation).
 //
 // Signing-from-imported-WIF (sendToken / sweepToken on a wif-only
 // wallet) is NOT wired by this flow. The current SoftwareSigner.signPsbt
@@ -23,7 +23,7 @@
 // wif-only wallet supports: persist, unlock (password validation),
 // receive-to, export the WIF. Spending requires that separate gap fix.
 //
-// Backup implications (§15.5.3) apply doubled: there is NO seed — the
+// Backup implications (§15.5.3) apply doubled: there is NO seed; the
 // encrypted backup file (§19.4) is the ONLY recovery path beyond the
 // user's own record of the WIF. The shell surfaces this at import time.
 
@@ -118,7 +118,7 @@ export async function importSingleWif({
         : makeFreshKdfParams());
 
     // Encrypt the WIF under the freshly-derived master key. No seed blob
-    // to produce — encryptedSeed stays empty.
+    // to produce; encryptedSeed stays empty.
     const masterKey = deriveMasterKey(password, params);
     let encryptedWif;
     try {
@@ -134,7 +134,7 @@ export async function importSingleWif({
     }
 
     // Build the Wallet record manually so we can set format='wif-only'
-    // and an empty encryptedSeed — the schema factory defaults to
+    // and an empty encryptedSeed (the schema factory defaults to
     // bip39/non-empty. The shape still matches validateWallet (which
     // has a carve-out for format='wif-only').
     const walletRecord = {

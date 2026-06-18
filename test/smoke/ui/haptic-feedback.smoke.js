@@ -98,4 +98,4 @@ assert.ok(/haptic\.success\(\);[\s\S]{0,200}onUnlocked\?\.\(\)/.test(lockedSrc),
 assert.ok((lockedSrc.match(/haptic\.error\(\)/g) || []).length >= 2,
     'Locked.jsx fires haptic.error on at least two failure branches (bad password + biometric / non-bad-password)');
 
-console.log('OK — useHaptic + ToastHost / Send / Locked wiring smoke (8 checks)');
+console.log('OK: useHaptic + ToastHost / Send / Locked wiring smoke (8 checks)');

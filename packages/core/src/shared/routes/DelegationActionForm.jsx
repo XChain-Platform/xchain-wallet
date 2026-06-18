@@ -28,7 +28,7 @@ import styles from './IssueTokenForm.module.css';
 const chainRegistry = registryLib.defaultRegistry();
 
 /**
- * DELEGATE combined form (rotate v0 + revoke v2) — §42.7.2 delegation-lane.
+ * DELEGATE combined form (rotate v0 + revoke v2): §42.7.2 delegation-lane.
  *
  * One component, two modes via the `mode` prop. Both actions share a
  * chassis (address load / SignCredentials / HW branch / review / done)
@@ -36,11 +36,11 @@ const chainRegistry = registryLib.defaultRegistry();
  * (`NEW_SIGNING_PUBKEY` vs `SIGNING_PUBKEY`), which messaging helper
  * is called, and the verb rendered on the submit button.
  *
- *   - `mode: 'delegate'` — VERSION|NEW_SIGNING_PUBKEY. Points
+ *   - `mode: 'delegate'`: VERSION|NEW_SIGNING_PUBKEY. Points
  *     hub-signing authority at a fresh key without touching the
  *     stake amount. The form asks for a pubkey and explains it
  *     replaces any currently-active delegation.
- *   - `mode: 'revoke'` — VERSION|SIGNING_PUBKEY. Removes a
+ *   - `mode: 'revoke'`: VERSION|SIGNING_PUBKEY. Removes a
  *     previously-delegated key. The form pre-loads current
  *     delegations for the source address (via
  *     `messaging.getDelegationsForAddress`) and pre-fills the most
@@ -105,7 +105,7 @@ export function DelegationActionForm({ mode, walletId, chainId, onBack }) {
 
     // Revoke mode: pre-populate the pubkey input with the most recent
     // active delegation for the source address. The user can still
-    // override — they might want to revoke an older key.
+    // the user can still override to revoke an older key.
     useEffect(() => {
         if (isDelegate) return;
         if (!fromAddressId || !addressesByChain) return;
@@ -141,7 +141,7 @@ export function DelegationActionForm({ mode, walletId, chainId, onBack }) {
     const [hwStatus, setHwStatus] = useState('idle');
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
 
-    // §20 / Cluster W FOLLOWUP 5 — watcher-mode encode-only branch.
+    // §20 / Cluster W FOLLOWUP 5: watcher-mode encode-only branch.
     const { isWatcherMode } = useWalletMode();
 
     const actionParams = useMemo(() => {
@@ -266,7 +266,7 @@ export function DelegationActionForm({ mode, walletId, chainId, onBack }) {
                 </p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Txid</dt>
-                    <dd className={styles.detailsValue}>{String(txid || '—')}</dd>
+                    <dd className={styles.detailsValue}>{String(txid || 'n/a')}</dd>
                 </dl>
                 <div className={styles.actions}>
                     <Button variant="primary" onClick={onBack}>Done</Button>
@@ -302,7 +302,7 @@ export function DelegationActionForm({ mode, walletId, chainId, onBack }) {
                 </dl>
                 {isWatcherMode ? (
                     <p className={styles.hint}>
-                        Watcher mode — this wallet will build an unsigned transaction.
+                        Watcher mode: this wallet will build an unsigned transaction.
                         Sign it on your Signer-mode wallet, then bring the
                         signed transaction to a Full-mode wallet to broadcast.
                     </p>
@@ -366,7 +366,7 @@ export function DelegationActionForm({ mode, walletId, chainId, onBack }) {
                 label={isDelegate ? 'New signing pubkey' : 'Signing pubkey to revoke'}
                 hint={isDelegate
                     ? '64-character hex-encoded Ed25519 public key. Replaces any currently-active delegation for this address.'
-                    : '64-character hex-encoded Ed25519 public key. Pre-filled with your most recent active delegation — override to revoke a specific older key.'}
+                    : '64-character hex-encoded Ed25519 public key. Pre-filled with your most recent active delegation; change it to revoke a specific older key.'}
                 value={pubkey}
                 onChange={(e) => setPubkey(e.target.value)}
                 autoComplete="off"

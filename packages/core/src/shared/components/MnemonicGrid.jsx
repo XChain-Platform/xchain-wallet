@@ -12,8 +12,8 @@ import styles from './MnemonicGrid.module.css';
 
 /**
  * Read-only mnemonic display per §19.2. Renders words in a numbered
- * grid so users can transcribe them to paper. Never interactive —
- * copy-to-clipboard is deliberately NOT provided; the spec wants users
+ * grid so users can transcribe them to paper. Never interactive;
+ * copy-to-clipboard is deliberately NOT provided. The spec wants users
  * to write seeds down rather than park them in clipboard history.
  *
  * `variant="small"` renders a compact 3-column grid for the narrow

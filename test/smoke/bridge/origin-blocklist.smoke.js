@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §12 / G009 — Origin allowlist/blocklist infrastructure.
+// Smoke for §12 / G009: Origin allowlist/blocklist infrastructure.
 //
 // Verifies:
 //   1. `flows/blocklist.js` exists and exports the helper surface;
@@ -56,7 +56,7 @@ for (const fn of ['normalizeOrigin', 'isOriginBlocked', 'listBlockedOrigins', 'a
         `flows barrel re-exports ${fn}`);
 }
 
-// 2 + 3. Runtime — exercise normalize + isBlocked.
+// 2 + 3. Runtime: exercise normalize + isBlocked.
 const { normalizeOrigin, isOriginBlocked } = await import(join(root, flowPath));
 
 assert.equal(normalizeOrigin('https://example.com/'), 'https://example.com',
@@ -168,4 +168,4 @@ assert.ok(/`BLOCKED_BY_USER`/.test(bridgeDocSrc),
 assert.ok(/explicitly blocked this origin/.test(bridgeDocSrc),
     'docs/BRIDGE.md describes the user-initiated block path');
 
-console.log('OK — origin blocklist flow + bridge wiring + host + shims + UI + spec + docs smoke');
+console.log('OK: origin blocklist flow + bridge wiring + host + shims + UI + spec + docs smoke');

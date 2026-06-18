@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for Phase 4 — Step 3 of 23 — Contract detail page (§42.3).
+// Smoke for Phase 4, Step 3 of 23: Contract detail page (§42.3).
 //
 // Asserts:
 //   1. ContractDetail.jsx exists and is a single-component named export.
@@ -18,7 +18,7 @@
 //      Gas limit / Status / Code hash) + State (expandable) + Balances
 //      + Execution history (paginated) + action buttons.
 //   4. Action buttons disable when their optional on* props are omitted
-//      — Step 3 ships with read-only surface; Steps 5+6 wire signing.
+//      Step 3 ships with read-only surface; Steps 5+6 wire signing.
 //   5. Core flows guard inputs + call the right SDK method, re-exported
 //      from the flows barrel.
 //   6. Background host registers five new passthroughs; three shell
@@ -248,5 +248,5 @@ for (const [shell, appPath] of [
 }
 
 console.log(
-    'OK — contract detail smoke (ContractDetail shared route + five read-only passthroughs + messaging helpers in popup/web/desktop + list→detail nav + Call method / Deposit / Withdraw buttons disabled until Step 5+6)',
+    'OK: contract detail smoke (ContractDetail shared route + five read-only passthroughs + messaging helpers in popup/web/desktop + list to detail nav + Call method / Deposit / Withdraw buttons disabled until Step 5+6)',
 );

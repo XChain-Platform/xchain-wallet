@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Back-compat shim — the canonical English dictionary moved under
+// Back-compat shim. The canonical English dictionary moved under
 // `./locales/en/index.js` at v0.216.0 (§54 / G173). Existing imports of
 // `./i18n/en.js` keep working through this re-export so we don't have
 // to chase every consumer in one step. New code should import from

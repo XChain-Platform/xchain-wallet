@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Bridge message handlers — §43.2 `window.xchain` surface routed
+// Bridge message handlers (§43.2): `window.xchain` surface routed
 // through the extension's background MessageHost. Registered via
 // `registerBridgeHandlers(host, { approvals })`.
 //
@@ -68,11 +68,11 @@ export function registerBridgeHandlers(host, opts = {}) {
     const signThrottle = opts.signThrottle ?? createSignThrottle();
     const events = opts.events ?? noopBridgeEvents;
 
-    // Cluster Q FOLLOWUP 4 — every bridge handler logs entry / exit /
+    // Cluster Q FOLLOWUP 4: every bridge handler logs entry / exit /
     // error to logConsole. The `source` is `bridge:<channel>` so the
     // Developer Mode log viewer can filter by `bridge:` to see only
     // dApp traffic. Origins are short (`http(s)://host[:port]`) so
-    // we include them verbatim — they are by definition known to the
+    // we include them verbatim; they are by definition known to the
     // dApp making the request.
     const register = (name, handler) => {
         host.register(name, async (req, deps) => {
@@ -105,7 +105,7 @@ export function registerBridgeHandlers(host, opts = {}) {
     register('bridge.connect', async (req, deps) => {
         assertOrigin(req);
         await assertNotBlocked(req, deps);
-        // Cluster F FOLLOWUP 3 — version negotiation. Reject the
+        // Cluster F FOLLOWUP 3: version negotiation. Reject the
         // connect cleanly when the dApp asks for a bridge version
         // we don't implement, instead of accepting and failing later
         // when a version-specific method gets called.
@@ -128,11 +128,11 @@ export function registerBridgeHandlers(host, opts = {}) {
             };
         }
 
-        // §48.6 / G151 — Developer-Mode auto-approve for localhost.
+        // §48.6 / G151: Developer-Mode auto-approve for localhost.
         // Skips the approval prompt and synthesizes a permissive
         // connect decision when settings allow + origin is localhost.
         // Sign requests (signMessage / signAction / signPsbt / signIn)
-        // still go through approvals — the password is required to
+        // still go through approvals. The password is required to
         // sign and the wallet never caches it, so connect is the only
         // safe step to short-circuit.
         const settings = await deps.vault.settings.get().catch(() => null);
@@ -179,7 +179,7 @@ export function registerBridgeHandlers(host, opts = {}) {
         const site = await findConnectedSite(deps.vault, req.origin);
         if (!site) return { disconnected: false };
         await deps.vault.connectedSites.delete(site.id);
-        // §43.2 — fire `disconnect` so the dApp's listener can clear
+        // §43.2: fire `disconnect` so the dApp's listener can clear
         // session state without polling. Reason mirrors the bridge-spec
         // BridgeEventMap.disconnect signature.
         await events.disconnect(req.origin, 'user-requested');
@@ -262,7 +262,7 @@ export function registerBridgeHandlers(host, opts = {}) {
         if (!settings) return [];
         // "Active" = any chain that has seeded per-chain state (feeStrategy,
         // ADS, etc). Matches what seedSettings populates at createWallet.
-        // Filtered down to the user's active network — chains on inactive
+        // Filtered down to the user's active network. Chains on inactive
         // networks aren't being queried by the wallet, so dApps must not
         // see them either (otherwise a dApp would attempt to sign against
         // a chain we can't reach). The filter helper falls through with
@@ -299,7 +299,7 @@ export function registerBridgeHandlers(host, opts = {}) {
             return result;
         }
         // canSignMessage: the site is allowed, but we still need a
-        // password — approvals is asked for password-only.
+        // password; approvals is asked for password-only.
         const decision = await approvals.signMessage({
             origin: req.origin,
             kind: 'signMessage',
@@ -444,7 +444,7 @@ export function registerBridgeHandlers(host, opts = {}) {
             ? req.nonce
             : randomNonce();
         // req.origin is stamped by the content script (location.origin),
-        // never by the page — requireSite above has already asserted it.
+        // never by the page. requireSite above has already asserted it.
         // Embedding it in the signed bytes binds the sign-in to the site
         // the user was actually on: relying backends verify the origin
         // field, so a look-alike site passing a legitimate appId can no

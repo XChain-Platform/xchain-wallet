@@ -8,10 +8,10 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Bitcoin chain descriptors — mainnet, testnet, regtest.
+// Bitcoin chain descriptors: mainnet, testnet, regtest.
 // Derivation paths per §16.1. Address types p2pkh / p2sh-p2wpkh /
-// p2wpkh / p2tr; p2wpkh is the default. URLs are placeholders per §5.5
-// — real endpoints resolve before launch.
+// p2wpkh / p2tr; p2wpkh is the default. URLs are placeholders per §5.5;
+// real endpoints resolve before launch.
 //
 // `icon` carries an tick filename resolved by `branding.brandingUrl()`;
 // per-network icons live in packages/core/src/branding/images/.

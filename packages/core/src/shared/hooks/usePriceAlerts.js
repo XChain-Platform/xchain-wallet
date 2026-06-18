@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// usePriceAlerts — §46 price-alert CRUD hook. Wraps the per-wallet
+// usePriceAlerts (§46): price-alert CRUD hook. Wraps the per-wallet
 // messaging routes (priceAlert.*), mirroring how MarketsList consumes the
 // watchlist routes. Shells whose messaging module predates these routes
 // surface `supported: false` so the UI degrades to a "not available" note

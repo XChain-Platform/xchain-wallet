@@ -24,29 +24,29 @@ import styles from './ActionsMenu.module.css';
 const chainRegistry = registryLib.defaultRegistry();
 
 // VM is BTC-only at launch (see xchain-wallet registry/actions.js
-// BITCOIN_ACTIONS — DEPLOY / EXECUTE / DEPOSIT / WITHDRAW). The Contracts
+// BITCOIN_ACTIONS: DEPLOY / EXECUTE / DEPOSIT / WITHDRAW). The Contracts
 // nav item is gated on the wallet having at least one BTC address; this
 // component assumes the caller has already done that gating but also
 // surfaces the no-BTC-address case defensively.
 const VM_COIN = 'bitcoin';
 
 /**
- * Contracts browse landing — §42.2.
+ * Contracts browse landing (§42.2).
  *
  * Three sections:
- *   1. "My contracts (deployed by me)" — sdk.getContracts(addr, 'source').
- *   2. "My interactions (deposits/withdrawals/executes)" — union of
+ *   1. "My contracts (deployed by me)": sdk.getContracts(addr, 'source').
+ *   2. "My interactions (deposits/withdrawals/executes)": union of
  *      getDeposits + getWithdrawals by address, deduped by
  *      CONTRACT_ACTION_INDEX. Executions-by-address is not yet wired
  *      (SDK getExecutions is contract-scoped today); the detail page
  *      in Step 3 surfaces per-contract executions via the contract
  *      lane. Documented limitation, not a silent gap.
- *   3. "Browse all contracts" — sdk.getContracts() paginated.
+ *   3. "Browse all contracts": sdk.getContracts() paginated.
  *
  * Chain filter is fixed to Bitcoin for now (only coin that supports
  * VM actions); testnet / regtest BTC chains appear when present. The
  * search input filters the currently-rendered rows client-side on
- * CONTRACT_ACTION_INDEX prefix or NAME substring — the explorer
+ * CONTRACT_ACTION_INDEX prefix or NAME substring. The explorer
  * doesn't expose a server-side contract-name search today.
  *
  * @param {object} props
@@ -88,7 +88,7 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
         /** @type {Record<string, LoadState>} */ ({}),
     );
 
-    // Phase 1 — load wallet addresses so we know which BTC chains have
+    // Phase 1: load wallet addresses so we know which BTC chains have
     // a source address we can filter by.
     useEffect(() => {
         let cancelled = false;
@@ -118,7 +118,7 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
         return btcChainsWithAddresses.includes(chainFilter) ? [chainFilter] : [];
     }, [chainFilter, btcChainsWithAddresses]);
 
-    // Phase 2 — "My contracts" (deployed by one of my addresses on the
+    // Phase 2: "My contracts" (deployed by one of my addresses on the
     // chain). Fan out one sdk.getContracts(addr, 'source') per address
     // per chain, merge, de-dupe.
     useEffect(() => {
@@ -161,7 +161,7 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
         return () => { cancelled = true; };
     }, [addressesByChain, activeChains, messaging]);
 
-    // Phase 3 — "My interactions": union of deposits + withdrawals
+    // Phase 3: "My interactions": union of deposits + withdrawals
     // scoped to the user's addresses. Returns the set of distinct
     // CONTRACT_ACTION_INDEX values this address has interacted with.
     // Each entry is a synthesized row carrying { contract_action_index,
@@ -228,7 +228,7 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
         return () => { cancelled = true; };
     }, [addressesByChain, activeChains, messaging]);
 
-    // Phase 4 — "Browse all" paginated list per chain. One request per
+    // Phase 4: "Browse all" paginated list per chain. One request per
     // chain; no address fan-out.
     useEffect(() => {
         if (activeChains.length === 0) {
@@ -344,7 +344,7 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                 })}
                 <p className={styles.entryDescription}>
                     EXECUTE-only interactions (method calls with no deposit)
-                    are not yet listed — the SDK's getExecutions is
+                    are not yet listed. The SDK's getExecutions is
                     contract-scoped today; that lane surfaces on the contract
                     detail page.
                 </p>
@@ -445,11 +445,11 @@ function ChainGroup({ descriptor, chainId, state, emptyText, onOpenContract, ren
 function ContractRow({ row }) {
     const name = row.name || row.NAME || '(unnamed)';
     const owner = row.source || row.SOURCE || row.owner || row.OWNER;
-    const status = String(row.status || row.STATUS || '—');
+    const status = String(row.status || row.STATUS || '(unknown)');
     return (
         <>
             <span className={styles.entryLabel}>
-                {name} — #{row.action_index ?? '?'}
+                {name} #{row.action_index ?? '?'}
             </span>
             <span className={styles.entryDescription}>
                 {owner ? (
@@ -469,7 +469,7 @@ function InteractionRow({ row }) {
                 Contract #{row.contract_action_index ?? '?'}
             </span>
             <span className={styles.entryDescription}>
-                {kinds || '—'} · last block {row.latestBlock || '—'}
+                {kinds || '(none)'} · last block {row.latestBlock || '?'}
             </span>
         </>
     );

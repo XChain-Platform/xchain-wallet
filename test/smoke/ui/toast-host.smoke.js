@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §37.2 / G119 — ToastHost + useToast + integration into
+// Smoke for §37.2 / G119: ToastHost + useToast + integration into
 // ContactsList delete and History "Clear filters" + App.jsx wrapping.
 
 import { strict as assert } from 'node:assert';
@@ -41,7 +41,7 @@ for (const field of ['showToast', 'dismissToast', 'clearToasts']) {
     );
 }
 // Auto-dismiss timer is the spec's "after the timeout, the action is
-// final" contract — ToastHost has to clean its timers up on unmount.
+// final" contract; ToastHost has to clean its timers up on unmount.
 assert.ok(/clearTimeout/.test(th), 'ToastHost clears its setTimeout timers');
 // Default 8s per §37.2.
 assert.ok(/8000/.test(th), 'ToastHost defaults durationMs to 8000 per §37.2');

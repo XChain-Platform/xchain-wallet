@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Custom chain registry — §9.7 / Cluster Q FOLLOWUP 2.
+// Custom chain registry: §9.7 / Cluster Q FOLLOWUP 2.
 //
 // Developer Mode lets a user plug in a non-bundled chain at runtime by
 // supplying a full ChainDescriptor JSON blob. The wallet validates the
@@ -34,7 +34,7 @@
 // JSON descriptor without trusting that the source verified the shape.
 // The settings-schema validator only enforces "array of plain objects"
 // because a future ChainDescriptor schema bump should not retroactively
-// invalidate already-persisted records — the registry's own validator
+// invalidate already-persisted records; the registry's own validator
 // is the single source of truth for "is this descriptor usable?".
 
 import { validateChainDescriptor } from '../registry/validate.js';
@@ -75,7 +75,7 @@ export async function addCustomChain({ vault, chainRegistry, descriptor }) {
     }
     const res = validateChainDescriptor(descriptor);
     if (!res.ok) {
-        throw new Error(`addCustomChain: invalid descriptor — ${res.errors.join('; ')}`);
+        throw new Error(`addCustomChain: invalid descriptor: ${res.errors.join('; ')}`);
     }
     if (chainRegistry?.has?.(descriptor.id)) {
         throw new Error(`addCustomChain: chain "${descriptor.id}" is already registered`);
@@ -86,7 +86,7 @@ export async function addCustomChain({ vault, chainRegistry, descriptor }) {
     }
     const list = asList(settings);
     if (list.some((d) => d?.id === descriptor.id)) {
-        // Persisted but not yet seeded — re-seed and bail. This branch
+        // Persisted but not yet seeded; re-seed and bail. This branch
         // covers the edge case where a previous boot persisted but the
         // registry seed step failed or was skipped.
         try { chainRegistry?.addCustom?.(descriptor); } catch { /* idempotent */ }
@@ -131,7 +131,7 @@ export async function removeCustomChain({ vault, chainRegistry, chainId }) {
     try {
         registryRemoved = Boolean(chainRegistry?.removeCustom?.(chainId));
     } catch (_err) {
-        // Bundled chains throw — surface a friendlier error if the
+        // Bundled chains throw; surface a friendlier error if the
         // user tried to remove one. Otherwise rethrow.
         if (chainRegistry?.has?.(chainId)) {
             throw new Error(

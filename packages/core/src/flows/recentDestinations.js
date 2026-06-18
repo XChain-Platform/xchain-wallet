@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Recent-destinations join — §29.4 + §21 FOLLOWUP 4 source data.
+// Recent-destinations join: §29.4 + §21 FOLLOWUP 4 source data.
 //
 // Pure helper. The shell is responsible for fetching the inputs (history
 // rows for each of the wallet's addresses on the active chain, plus the
@@ -16,9 +16,9 @@
 // suitable for `<AddressCombobox>`.
 //
 // Two source kinds:
-//   - `contact`  — entries[].chain matches the chain's coin family.
+//   - `contact`: entries[].chain matches the chain's coin family.
 //                  Sort earlier (more authoritative).
-//   - `history`  — destinations the user has previously sent to from
+//   - `history`: destinations the user has previously sent to from
 //                  any of their own addresses on this chain. Deduped
 //                  by address; weighted by recency × frequency.
 //
@@ -27,7 +27,7 @@
 //     label: string,            // visible primary line
 //     sublabel?: string,        // visible secondary line
 //     source: 'contact' | 'history',
-//     lastSentAt?: number       // unix ms — present for history rows
+//     lastSentAt?: number       // unix ms; present for history rows
 //   }
 
 const HISTORY_ADDR_FIELDS = ['destination', 'DESTINATION', 'recipient'];

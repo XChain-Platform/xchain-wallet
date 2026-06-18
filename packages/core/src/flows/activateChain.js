@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// activateChain — §48.3 / G149. Adds an additional chain to an existing
+// activateChain: §48.3 / G149. Adds an additional chain to an existing
 // wallet at runtime. Two operations, both idempotent:
 //
 //   1. Seed `settings.fees[chainId]` and `settings.ads.perChain[chainId]`
@@ -22,15 +22,15 @@
 //      already have an address on this chain (re-running is a no-op).
 //
 // Today's caller is the Settings → Developer Mode "Regtest networks"
-// affordance — a developer activating bitcoin-regtest / dogecoin-regtest
-// / litecoin-regtest at runtime so they can drive the local regtest
+// affordance. A developer activating bitcoin-regtest / dogecoin-regtest
+// / litecoin-regtest at runtime can drive the local regtest
 // stack from a wallet that was created against mainnets. Nothing in the
-// flow restricts the chainId to regtest descriptors though — when the
+// flow restricts the chainId to regtest descriptors; when the
 // custom chain registry lands (§9.7) it can use the same primitive.
 //
 // Hardware-signer handling: §17.4 lists HW-derived addresses as the
-// signer's responsibility — addresses are derived against a SignerRecord
-// rather than the wallet's seed. Activating a new chain across a
+// signer's responsibility (addresses are derived against a SignerRecord
+// rather than the wallet's seed). Activating a new chain across a
 // HW-only account isn't well-defined yet, so this flow refuses signers
 // whose `kind !== 'software'`. The HW-aware path lands as a follow-up.
 
@@ -89,13 +89,13 @@ export async function activateChain({
     const wallet = await vault.wallets.get(walletId);
     if (!wallet) throw new WalletNotFoundError(walletId);
 
-    // Seed settings first — even if the address-derivation step fails
+    // Seed settings first. Even if the address-derivation step fails
     // (signer rejected, etc.) the user still ends up with the chain
     // visible in pickers, which is the worse half of being half-active.
     // Using the existing primitive keeps this idempotent.
     const settings = (await vault.settings.get()) ?? null;
     if (!settings) {
-        throw new Error('activateChain: settings record missing — wallet not fully provisioned');
+        throw new Error('activateChain: settings record missing (wallet not fully provisioned)');
     }
     const seeded = seedSettingsForChains(settings, chainRegistry, [chainId]);
     if (seeded !== settings) {
@@ -121,7 +121,7 @@ export async function activateChain({
     if (signer.kind !== 'software') {
         if (ownsSigner && typeof signer.lock === 'function') signer.lock();
         throw new Error(
-            'activateChain: hardware-signer activation not supported yet — pair the chain via a software wallet first',
+            'activateChain: hardware-signer activation not supported yet. Pair the chain via a software wallet first.',
         );
     }
 

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// DeveloperModeSection — §35.1 + §48 Developer Mode panel.
+// DeveloperModeSection (§35.1 + §48): Developer Mode panel.
 //
 // Live:
 //   - Developer Mode master toggle (`settings.developerMode`). Gates
@@ -19,7 +19,7 @@
 //     copy on confirmation screens; toggle ships now even though some
 //     consumers haven't been wired yet.
 //   - Auto-approve localhost dApps (`settings.autoApproveLocalhost`).
-//     §48.6 / G151 — when both this and Developer Mode are on,
+//     §48.6 / G151: when both this and Developer Mode are on,
 //     `bridge.connect` from localhost / 127.0.0.1 / [::1] origins
 //     skips the approval prompt. Sign requests still prompt (the
 //     password is required to sign and the wallet never caches it).
@@ -85,14 +85,14 @@ export function DeveloperModeSection() {
             <CustomChainsRow developerMode={Boolean(settings.developerMode)} />
             <ToggleRow
                 label="Raw PSBT inspector"
-                hint="Coming soon — reveals the raw PSBT hex + parsed fields on sign screens. §48.4."
+                hint="Coming soon: reveals the raw PSBT hex + parsed fields on sign screens. §48.4."
                 checked={false}
                 disabled
                 onChange={() => {}}
             />
             <ToggleRow
                 label="Auto-approve localhost dApps"
-                hint="Skip the bridge.connect prompt for http://localhost / 127.0.0.1 / [::1] origins. Requires Developer Mode. Sign requests still prompt — the password is needed to sign and the wallet never caches it."
+                hint="Skip the bridge.connect prompt for http://localhost / 127.0.0.1 / [::1] origins. Requires Developer Mode. Sign requests still prompt (the password is needed to sign and the wallet never caches it)."
                 checked={Boolean(settings.autoApproveLocalhost)}
                 disabled={!settings.developerMode}
                 onChange={(v) => onToggle('autoApproveLocalhost', v)}
@@ -118,7 +118,7 @@ function LogConsoleRow({ developerMode }) {
                 <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
                     <span style={{ fontWeight: 500, color: 'var(--xc-text)' }}>Logs and diagnostics console</span>
                     <span style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)' }}>
-                        Process-wide ring buffer of console.* output. Useful when DevTools isn't available (popup, packaged desktop). Captures from now on — already-emitted entries are not replayed.
+                        Process-wide ring buffer of console.* output. Useful when DevTools isn't available (popup, packaged desktop). Captures from now on; already-emitted entries are not replayed.
                         {!developerMode ? ' Turn Developer Mode on to view.' : ''}
                     </span>
                 </div>
@@ -195,7 +195,7 @@ function RegtestRow({ descriptor, isActive, disabled }) {
             if (cancelled) return;
             const first = Array.isArray(wallets) ? wallets[0] : null;
             setWalletId(first?.id ?? null);
-        }).catch(() => { /* silent — activate button stays disabled */ });
+        }).catch(() => { /* silent; activate button stays disabled */ });
         return () => { cancelled = true; };
     }, [messaging]);
 
@@ -224,7 +224,7 @@ function RegtestRow({ descriptor, isActive, disabled }) {
             setStatusText(
                 created > 0
                     ? `Activated. Derived ${created} address${created === 1 ? '' : 'es'}${skipped > 0 ? ` (${skipped} account${skipped === 1 ? '' : 's'} already had one)` : ''}.`
-                    : 'Already activated — no new addresses needed.',
+                    : 'Already activated. No new addresses needed.',
             );
             setPassword('');
             setOpen(false);
@@ -329,14 +329,14 @@ function RegtestRow({ descriptor, isActive, disabled }) {
     );
 }
 
-// §9.7 / Cluster Q FOLLOWUP 2 — Custom chains subsection.
+// §9.7 / Cluster Q FOLLOWUP 2: Custom chains subsection.
 //
 // Persisted user-added ChainDescriptor entries surfaced as a list with
 // per-row Remove buttons + an "Add custom chain" form that accepts a
 // JSON descriptor blob. The form is intentionally minimal: pasting a
 // full ChainDescriptor JSON is the canonical path because the spec
 // shape has 16+ fields (derivation paths, fee strategies, endpoints,
-// adsDonationAddress, …) — a guided form would be large and quickly
+// adsDonationAddress, etc.). A guided form would be large and quickly
 // drift from the validator. Validation runs in the host route
 // (`chainRegistry.addCustomChain` → `validateChainDescriptor`); error
 // messages here are forwarded verbatim so the user sees exactly which

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §56.3 Pre-launch Step 2 of 7 — Standalone AddressList route
+// Smoke for §56.3 Pre-launch Step 2 of 7: Standalone AddressList route
 // (Phase 4 FOLLOWUP 4 from 2026-04-24_phase4-close.md).
 
 import { strict as assert } from 'node:assert';
@@ -56,7 +56,7 @@ assert.ok(/aria-label="Wallet addresses"/.test(route),
 assert.ok(/Multisig receive/.test(route),
     'AddressList synthesizes a "Multisig receive" row when the address is not in the persisted table');
 
-// ─── Home — new onAddresses nav prop + button ─────────────────
+// ─── Home: new onAddresses nav prop + button ─────────────────
 
 const home = readFileSync(join(sharedRoutes, 'Home.jsx'), 'utf8');
 assert.ok(/\bonAddresses\b/.test(home),
@@ -86,5 +86,5 @@ for (const [shell, appPath] of [
 }
 
 console.log(
-    'OK — address-list smoke (AddressList route exists + getAddressesByChain aggregation + getMultisigReceiveAddress prefetch + MultisigBadge on matching rows + "Multisig only" filter + synthetic multisig row when not persisted + Home.onAddresses nav prop + 3-shell App.jsx wiring of \'addresses\' sub-route)',
+    'OK: address-list smoke (AddressList route exists + getAddressesByChain aggregation + getMultisigReceiveAddress prefetch + MultisigBadge on matching rows + "Multisig only" filter + synthetic multisig row when not persisted + Home.onAddresses nav prop + 3-shell App.jsx wiring of \'addresses\' sub-route)',
 );

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for Phase 4 — Step 9 of 23 — UNSTAKE + COLLECT forms
+// Smoke for Phase 4, Step 9 of 23: UNSTAKE + COLLECT forms
 // (§42.7.2 unstake-lane + §42.7.3).
 
 import { strict as assert } from 'node:assert';
@@ -156,5 +156,5 @@ for (const [shell, appPath] of [
 }
 
 console.log(
-    'OK — staking action form smoke (StakingActionForm mode=unstake|claim-rewards + capability-model pubkey-based unstake + bg handlers + 3-shell messaging + two App.jsx sub-routes wired from StakingDashboard)',
+    'OK: staking action form smoke (StakingActionForm mode=unstake|claim-rewards + capability-model pubkey-based unstake + bg handlers + 3-shell messaging + two App.jsx sub-routes wired from StakingDashboard)',
 );

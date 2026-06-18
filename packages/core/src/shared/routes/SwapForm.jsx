@@ -41,14 +41,14 @@ const PROTOCOL_COIN_TICKER = {
 /**
  * §41.5 SWAP authoring surface.
  *
- * Builds a v0 Create SWAP — atomic token-pair swap that settles in one
+ * Builds a v0 Create SWAP: atomic token-pair swap that settles in one
  * transaction with no COINPAY follow-up. The v0 form is deliberately
  * single-chain in the default UX (GIVE_COIN = GET_COIN = current
  * chain's native ticker) because the common case is "swap MYTOKEN for
  * COOLCOIN on Bitcoin". Cross-chain swaps use the same SWAP primitive
  * but are out-of-scope for the Phase 3 form.
  *
- * SWAP does NOT work with native coin (BTC / LTC / DOGE) — that's
+ * SWAP does NOT work with native coin (BTC / LTC / DOGE). That's
  * what DISPENSER is for. The form rejects inputs where GIVE_TICK or
  * GET_TICK match the chain's native ticker.
  *
@@ -159,10 +159,10 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
         if (!getTick) return null;
         // SWAP does NOT work with native coin per protocol rules.
         if (coinTicker && giveTick.toUpperCase() === coinTicker) {
-            return `SWAP cannot give ${coinTicker} — use DISPENSER for token ↔ native coin.`;
+            return `SWAP cannot give ${coinTicker}. Use DISPENSER for token to native coin.`;
         }
         if (coinTicker && getTick.toUpperCase() === coinTicker) {
-            return `SWAP cannot get ${coinTicker} — use DISPENSER for token ↔ native coin.`;
+            return `SWAP cannot get ${coinTicker}. Use DISPENSER for token to native coin.`;
         }
         if (giveTick.toUpperCase() === getTick.toUpperCase()) {
             return 'Give and get tickers must differ.';
@@ -170,7 +170,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
         return null;
     }, [giveTick, getTick, coinTicker]);
 
-    // §20 / Cluster W FOLLOWUP 5 — watcher-mode encode-only branch.
+    // §20 / Cluster W FOLLOWUP 5: watcher-mode encode-only branch.
     const { isWatcherMode } = useWalletMode();
 
     async function handleSubmit(event) {
@@ -195,7 +195,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                 VERSION: '0',
                 GIVE_COIN: coinTicker,
                 GIVE_TICK: giveTick.trim(),
-                // Ownership side escrows the token's ownership record — no
+                // Ownership side escrows the token's ownership record. No
                 // amount; otherwise serialize the balance amount.
                 ...(giveOwnership
                     ? { GIVE_OWNERSHIP: '1' }
@@ -363,7 +363,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
             </label>
             {giveOwnership ? (
                 <p className={styles.hint} style={{ margin: '0 0 0.5rem' }}>
-                    Transfers the entire ownership of {giveTick.trim() ? giveTick.trim().toUpperCase() : 'this token'} — single-fill, no partial matches.
+                    Transfers the entire ownership of {giveTick.trim() ? giveTick.trim().toUpperCase() : 'this token'} (single-fill, no partial matches).
                 </p>
             ) : null}
 
@@ -428,7 +428,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
 
                     {isWatcherMode ? (
                         <p className={styles.hint}>
-                            Watcher mode — this wallet will build an unsigned transaction.
+                            Watcher mode: this wallet will build an unsigned transaction.
                             Sign it on your Signer-mode wallet, then bring the
                             signed transaction to a Full-mode wallet to broadcast.
                         </p>

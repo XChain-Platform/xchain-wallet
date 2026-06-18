@@ -8,13 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Contact CRUD flows — §41.7.4 contact integration + §11.3.4 address
+// Contact CRUD flows: §41.7.4 contact integration + §11.3.4 address
 // book. The Contact schema + vault collection already exist
 // (packages/core/src/schemas/contact.js + Vault.contacts); these are
 // the flow-layer primitives that the shared routes call.
 //
 // Read-only; `saveContact` / `deleteContact` mutate the vault but
-// don't require a password (no signing — contacts are local-only
+// don't require a password (no signing; contacts are local-only
 // metadata). Persistence is whatever backs the vault (encrypted blob
 // on the extension's local storage for the popup, browser-backed
 // IndexedDB wrapper for the web shell, etc.).
@@ -23,7 +23,7 @@ import { createContact, validateContact } from '../schemas/contact.js';
 
 /**
  * List every contact in the wallet. Contacts aren't scoped to a
- * specific wallet record — they're shared across all wallets in the
+ * specific wallet record; they're shared across all wallets in the
  * vault, same as `Settings` / `Signers`.
  *
  * @param {{ vault: import('../storage/Vault.js').Vault }} opts
@@ -39,8 +39,8 @@ export async function listContacts({ vault }) {
  * the messaging inbox to auto-label incoming senders. Returns null
  * when no contact has an entry matching the (chain, address) pair.
  *
- * `chain` matches `ContactEntry.chain` — the human form
- * ('bitcoin' / 'litecoin' / 'dogecoin'), not a chainId.
+ * `chain` matches `ContactEntry.chain` (the human form,
+ * 'bitcoin' / 'litecoin' / 'dogecoin', not a chainId).
  *
  * @param {{ vault: import('../storage/Vault.js').Vault, chain: string, address: string }} opts
  */
@@ -84,7 +84,7 @@ export async function saveContact({ vault, record, input }) {
     }
     const validation = validateContact(rec);
     if (!validation.ok) {
-        throw new Error(`saveContact: invalid contact — ${validation.errors.join('; ')}`);
+        throw new Error(`saveContact: invalid contact: ${validation.errors.join('; ')}`);
     }
     await vault.contacts.put(rec);
     return rec;

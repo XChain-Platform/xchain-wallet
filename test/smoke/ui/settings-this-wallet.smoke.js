@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §35 Settings — Step 16 — This Wallet panel + removeWallet flow.
+// Smoke for §35 Settings / Step 16: This Wallet panel + removeWallet flow.
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';

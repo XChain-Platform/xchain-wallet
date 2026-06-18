@@ -27,17 +27,17 @@ export const NOTIFICATION_EVENT = 'xchain:notification';
  */
 export function createWebNotifyAdapter() {
     return function notify({ kind, title, body }) {
-        // In-app channel — always dispatched; the React listener decides
+        // In-app channel: always dispatched; the React listener decides
         // whether to show it (it only toasts when the tab is focused).
         try {
             if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
                 window.dispatchEvent(new CustomEvent(NOTIFICATION_EVENT, { detail: { kind, title, body } }));
             }
         } catch {
-            // Non-DOM environment (e.g. a Node smoke run) — nothing to do.
+            // Non-DOM environment (e.g. a Node smoke run); nothing to do.
         }
 
-        // OS channel — only when backgrounded and permission is granted.
+        // OS channel: only when backgrounded and permission is granted.
         try {
             if (typeof document !== 'undefined'
                 && document.visibilityState === 'hidden'
@@ -47,7 +47,7 @@ export function createWebNotifyAdapter() {
                 new Notification(title, { body });
             }
         } catch {
-            // Permission revoked mid-session / unsupported — silently skip.
+            // Permission revoked mid-session / unsupported; silently skip.
         }
     };
 }

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// §47 / Cluster L FOLLOWUP 2 smoke — extension popup deep-link
+// §47 / Cluster L FOLLOWUP 2 smoke: extension popup deep-link
 // handling for shared `xchain:` links via the manifest's
 // `protocol_handlers` block.
 //
@@ -108,5 +108,5 @@ assert.ok(
 );
 
 console.log(
-    "OK — extension-uri-deeplink smoke (Cluster L FOLLOWUP 2 — extension manifest declares protocol_handlers for web+xchain → popup.html?uri=%s; popup App.jsx imports core uri ns, declares sendPrefill state, parses ?uri= once on mount, routes send/receive, strips param via history.replaceState; Send renders with prefill={sendPrefill}, onBack clears it)",
+    "OK: extension-uri-deeplink smoke (Cluster L FOLLOWUP 2: extension manifest declares protocol_handlers for web+xchain → popup.html?uri=%s; popup App.jsx imports core uri ns, declares sendPrefill state, parses ?uri= once on mount, routes send/receive, strips param via history.replaceState; Send renders with prefill={sendPrefill}, onBack clears it)",
 );

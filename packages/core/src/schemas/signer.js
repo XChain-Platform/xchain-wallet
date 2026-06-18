@@ -8,10 +8,10 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// SignerRecord — §17.6 / §18.3. Persisted metadata for every signer
+// SignerRecord (§17.6 / §18.3). Persisted metadata for every signer
 // the wallet has paired, across hardware kinds.
 //
-// The SoftwareSigner itself does *not* need a SignerRecord — the
+// The SoftwareSigner itself does *not* need a SignerRecord. The
 // Wallet record is its identity (one software signer per wallet,
 // driven by the seed). Hardware signers do: each Trezor / Ledger the
 // user pairs becomes a distinct record, and `Address.signerId` points
@@ -26,7 +26,7 @@
 // label.
 //
 // `deviceIdentifier` is an opaque string the signer implementation
-// provides — for Trezor it's typically the `deviceId` from Trezor
+// provides. For Trezor it's typically the `deviceId` from Trezor
 // Connect; for Ledger it's typically a fingerprint derived from a
 // known xpub. The wallet treats it as-is; uniqueness within the
 // wallet is enforced by the signer-registry flow, not the schema.
@@ -58,9 +58,9 @@ export const SIGNER_KINDS = ['trezor', 'ledger'];
  * @property {string} model                vendor-specific model code (e.g. "T2T1", "nanoX")
  * @property {string} deviceIdentifier     opaque per-device identifier from the signer backend
  * @property {string} label                user-facing label ("Trezor #1" etc.)
- * @property {string | null} firmwareVersion    last-observed firmware — null until first connect
+ * @property {string | null} firmwareVersion    last-observed firmware (null until first connect)
  * @property {string} pairedAt             ISO timestamp
- * @property {string} lastSeenAt           ISO timestamp — bumped on each successful interaction
+ * @property {string} lastSeenAt           ISO timestamp, bumped on each successful interaction
  */
 
 /**

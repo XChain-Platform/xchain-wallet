@@ -8,12 +8,12 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// COINPAY query flows — §41.4. Passthroughs to the SDK's explorer
+// COINPAY query flows (§41.4). Passthroughs to the SDK's explorer
 // client methods covering the `coinpay_obligations`,
 // `coinpays`, and `coinpay_expires` tables.
 //
 // The primary entry point for the wallet is
-// `getCoinpayObligationsForAddress` — used by the Home resume card
+// `getCoinpayObligationsForAddress`, used by the Home resume card
 // to detect "does this wallet address owe a COINPAY?" Returns every
 // obligation touching the address (as payer *or* payee) joined with
 // its current status; callers filter to `pending_coinpay` on the

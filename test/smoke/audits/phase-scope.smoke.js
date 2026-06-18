@@ -80,4 +80,4 @@ assert.ok(
     'desktop/package.json description mentions Phase 2',
 );
 
-console.log('OK — phase-scope smoke (§8, §39, §40.12, status doc, desktop package.json)');
+console.log('OK: phase-scope smoke (§8, §39, §40.12, status doc, desktop package.json)');

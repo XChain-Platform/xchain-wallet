@@ -8,10 +8,10 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// projectQueries — read-only wrapper over the explorer's project
-// registry endpoint (`sdk.getProject` → /api/project/{TICK}). Backs
+// projectQueries: read-only wrapper over the explorer's project
+// registry endpoint (`sdk.getProject` -> /api/project/{TICK}). Backs
 // the ProjectRosterForm's current-roster prefill. A project with no
-// published roster is a normal state — the explorer 400s it, which we
+// published roster is a normal state; the explorer 400s it, which we
 // map to null rather than an error.
 
 /**
@@ -32,7 +32,7 @@ export async function getProjectForTick({ sdkRegistry, chainId, tick }) {
     try {
         return await sdk.getProject(tick.toUpperCase());
     } catch (err) {
-        // No-roster (or unknown tick) comes back as an explorer 400/404 —
+        // No-roster (or unknown tick) comes back as an explorer 400/404;
         // both mean "nothing published yet" to the form.
         const status = /** @type {any} */ (err)?.status
             ?? /** @type {any} */ (err)?.response?.status;

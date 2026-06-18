@@ -9,7 +9,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Glossary auto-appendix — Cluster T FOLLOWUP 3.
+// Glossary auto-appendix: Cluster T FOLLOWUP 3.
 //
 // Writes a "machine-derived" appendix into docs/GLOSSARY.md between
 // fenced markers, populated from canonical sources in the codebase
@@ -88,15 +88,15 @@ function buildAppendix() {
     const lines = [];
     lines.push(BEGIN_MARKER);
     lines.push('');
-    lines.push('## Appendix — Machine-derived terms');
+    lines.push('## Appendix: Machine-derived terms');
     lines.push('');
     lines.push('The entries in this appendix are auto-generated from canonical');
-    lines.push('source files. Do **not** edit by hand — run');
+    lines.push('source files. Do **not** edit by hand; run');
     lines.push('`node tools/glossary/generate-appendix.js` to refresh from source.');
     lines.push('Sources:');
     lines.push('');
-    lines.push('- `packages/bridge-spec/src/index.ts` — `BridgeErrorCode` union');
-    lines.push('- `packages/core/src/schemas/connectedSite.js` — `SitePermissions` keys');
+    lines.push('- `packages/bridge-spec/src/index.ts`: `BridgeErrorCode` union');
+    lines.push('- `packages/core/src/schemas/connectedSite.js`: `SitePermissions` keys');
     lines.push('');
     lines.push('### Bridge error codes');
     lines.push('');

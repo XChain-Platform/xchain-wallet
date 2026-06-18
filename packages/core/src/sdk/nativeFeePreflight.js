@@ -8,13 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// nativeFeePreflight — hard client-side guardrail for native-coin protocol fees.
+// nativeFeePreflight: hard client-side guardrail for native-coin protocol fees.
 //
 // A protocol fee normally paid in the XCHAIN token can instead be paid in the native coin
 // (BTC/LTC/DOGE) at the USD-equivalent, by adding an on-chain output to the chain's
 // FEE_DESTINATION. Unlike an XCHAIN-balance fee (debited only when the action succeeds), a
-// native-coin fee is a REAL on-chain payment that is FORFEITED if the action is rejected — no
-// refund. So before we ever sign/broadcast a native-fee transaction we run the indexer's
+// native-coin fee is a REAL on-chain payment that is FORFEITED if the action is rejected (no
+// refund). So before we ever sign/broadcast a native-fee transaction we run the indexer's
 // read-only pre-flight (`sdk.quoteNativeFee`, proxied through the explorer) and REFUSE to build
 // one that can't be priced or sized correctly:
 //   - supported === false → the indexer can't price this action's fee (client should pay in XCHAIN)
@@ -22,7 +22,7 @@
 // When the quote is good we size the FEE_DESTINATION output to `requiredFeeSats` so the on-chain
 // check lands inside the tolerance band.
 //
-// Both build paths (submitWithSigner — sign+broadcast; buildActionPsbt — watcher/unsigned) call
+// Both build paths (submitWithSigner for sign+broadcast; buildActionPsbt for watcher/unsigned) call
 // this single helper, so the guardrail covers every action surface.
 
 /**

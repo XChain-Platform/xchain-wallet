@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Price lookup — bridges to the §45 PRICE oracle that lands later.
+// Price lookup: bridges to the §45 PRICE oracle that lands later.
 //
 // Returns a fiat conversion rate for a chain's native coin against the
 // user's chosen fiat currency. Until §45 wires the real on-chain
@@ -16,7 +16,7 @@
 // STATIC PLACEHOLDER. Callers must surface the `source` field so users
 // don't mistake placeholder rates for live feeds.
 //
-// The shape — `{ rate, source, fiatCurrency, fetchedAt }` — is what
+// The returned shape `{ rate, source, fiatCurrency, fetchedAt }` is what
 // the eventual oracle implementation will return; only the data source
 // changes. UI code written against this contract today will keep
 // working when the oracle lands.

@@ -8,13 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// destroyToken — convenience wrapper for the DESTROY action (§Phase 2
+// destroyToken: convenience wrapper for the DESTROY action (§Phase 2
 // authoring surface; protocol docs: xchain-documentation/protocol/
 // actions/DESTROY.md). Mirrors issueToken / mintToken: takes vault +
 // registries + chain + source address + DESTROY params, forwards to
 // submitAction.
 //
-// DESTROY is irreversible — the action burns the caller's balance of
+// DESTROY is irreversible: the action burns the caller's balance of
 // TICK. The SDK validator enforces ownership; this flow only guards
 // required inputs to catch obvious programming errors before hitting
 // the signer.

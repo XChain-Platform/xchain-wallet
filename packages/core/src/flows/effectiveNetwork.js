@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Active-network filter helpers — the single source of truth for which
+// Active-network filter helpers: the single source of truth for which
 // chains are "live" given the user's `settings.activeNetwork` choice.
 //
 // The wallet's `activeChainIds` records every chain the user has ever
@@ -16,7 +16,7 @@
 // show" set is a derived subset filtered down to chains whose
 // `networkKind` matches `settings.activeNetwork`. A user with mainnet
 // + testnet chains configured who has `activeNetwork: 'mainnet'` sees
-// only mainnet — and the wallet makes no network requests against
+// only mainnet, and the wallet makes no network requests against
 // the testnet chains.
 //
 // Switching networks = updating one setting. Underlying chain
@@ -34,7 +34,7 @@ import { NETWORK_DEFAULT } from '../schemas/settings.js';
 /**
  * Read the active-network preference from a settings record. Falls
  * back to the v2-tolerant default (`'mainnet'`) when the field is
- * absent — older records written before the field existed get the
+ * absent. Older records written before the field existed get the
  * safe default at read time, no migration write required.
  *
  * @param {object | null | undefined} settings
@@ -64,7 +64,7 @@ export function isChainOnActiveNetwork(chainId, settings, chainRegistry) {
 /**
  * Filter an array of chainIds down to those on the active network.
  * Unknown chainIds (not in the registry) are excluded as a defensive
- * default — if we can't classify a chain's network, we don't fetch
+ * default: if we can't classify a chain's network, we don't fetch
  * against it.
  *
  * @param {string[]} chainIds

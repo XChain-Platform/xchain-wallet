@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §49.5 / G154 / Cluster G FOLLOWUP 2 — broadcast-queue
+// Smoke for §49.5 / G154 / Cluster G FOLLOWUP 2: broadcast-queue
 // persistence across reload. The queue lives in-memory inside
 // createBackgroundHost; v0.293.0 adds a pluggable storage adapter that
 // rehydrates the in-memory map at host construction and writes back on

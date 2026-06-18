@@ -8,12 +8,12 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// WebMetaBackend — plaintext JSON metadata for the web shell,
+// WebMetaBackend: plaintext JSON metadata for the web shell,
 // mirroring `ChromeMetaBackend`'s role in the extension.
 //
 // Holds vault-level kdfParams so the unlock flow can derive the master
 // key from the user's password before touching the encrypted blob in
-// IndexedDB. kdfParams are not secret by design — Argon2id salt is
+// IndexedDB. kdfParams are not secret by design: Argon2id salt is
 // public and memory/iterations are tuning info.
 //
 // Backed by `localStorage` (survives tab close / reload) rather than

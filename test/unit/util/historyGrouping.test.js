@@ -161,7 +161,7 @@ describe('shared/utils/historyGrouping', () => {
         expect(out).toHaveLength(1);
         expect(out[0].kind).toBe('group');
         expect(out[0].subkind).toBe('dispenser-dispense');
-        expect(out[0].summary).toMatch(/Dispenser at bc1qab…rxyz — 2 dispenses/);
+        expect(out[0].summary).toMatch(/Dispenser at bc1qab…rxyz: 2 dispenses/);
     });
 
     it('does not group a DISPENSE whose dispenser is filtered out', () => {
@@ -178,7 +178,7 @@ describe('shared/utils/historyGrouping', () => {
 
     it('collapses ORDER + ORDER_MATCH fills via order_action_index', () => {
         // Two ORDER_MATCH fills referencing the leader via
-        // order_action_index — single-fill groups are intentionally
+        // order_action_index; single-fill groups are intentionally
         // suppressed (impl historyGrouping.js:188) since collapsing
         // ORDER + one MATCH would only add an extra click.
         const entries = [
@@ -199,7 +199,7 @@ describe('shared/utils/historyGrouping', () => {
         expect(out).toHaveLength(1);
         expect(out[0].kind).toBe('group');
         expect(out[0].subkind).toBe('order-fills');
-        expect(out[0].summary).toBe('Limit order — 2 fills');
+        expect(out[0].summary).toBe('Limit order: 2 fills');
     });
 
     it('collapses ORDER fills via the canonical tx0_index reference', () => {
@@ -217,7 +217,7 @@ describe('shared/utils/historyGrouping', () => {
         const out = groupHistoryEntries(entries, 'grouped');
         expect(out).toHaveLength(1);
         expect(out[0].kind).toBe('group');
-        expect(out[0].summary).toBe('Limit order — 2 fills');
+        expect(out[0].summary).toBe('Limit order: 2 fills');
     });
 
     it('emits a group at the position of its newest member so recent activity stays on top', () => {
@@ -271,7 +271,7 @@ describe('shared/utils/historyGrouping', () => {
         expect(out[0].summary).toBe('Launched MYTOKEN (supply 70)');
     });
 
-    // §28.3 / Cluster C FOLLOWUP 2 — cross-chain LINK pair grouping.
+    // §28.3 / Cluster C FOLLOWUP 2: cross-chain LINK pair grouping.
 
     it('collapses both sides of a cross-chain LINK into one card', () => {
         // Two SEND rows on different chains paired by the same
@@ -302,7 +302,7 @@ describe('shared/utils/historyGrouping', () => {
         // Leader is the older side (LTC), peer/member is the newer (BTC).
         expect(out[0].leader.chainId).toBe(LTC);
         expect(out[0].members.map((m) => m.chainId)).toEqual([BTC, LTC]);
-        expect(out[0].summary).toBe('Cross-chain link — SEND ↔ SEND');
+        expect(out[0].summary).toBe('Cross-chain link: SEND ↔ SEND');
     });
 
     it('renders link-pair summary with asymmetric action names', () => {
@@ -328,7 +328,7 @@ describe('shared/utils/historyGrouping', () => {
         // up via link-pair without conflicting with issue-mint grouping.
         const linkGroup = out.find((it) => it.kind === 'group' && it.subkind === 'link-pair');
         expect(linkGroup).toBeTruthy();
-        expect(linkGroup.summary).toBe('Cross-chain link — LINK ↔ ISSUE');
+        expect(linkGroup.summary).toBe('Cross-chain link: LINK ↔ ISSUE');
     });
 
     it('does not collapse a LINK whose peer is not in the visible window', () => {

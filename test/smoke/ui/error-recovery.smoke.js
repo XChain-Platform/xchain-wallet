@@ -74,4 +74,4 @@ assert.ok(/label: 'Try again'[\s\S]*handlePickVendor\(vendor\)/.test(pairSrc),
 assert.ok(/!\/WebHID\|not supported\|not available\/i\.test\(error\)/.test(pairSrc),
     'PairSignerForm Try-again recovery is suppressed for WebHID-unsupported errors');
 
-console.log('OK — StatusMessage.recovery + Send / PsbtSignForm / ImportWallet / PairSignerForm wiring smoke');
+console.log('OK: StatusMessage.recovery + Send / PsbtSignForm / ImportWallet / PairSignerForm wiring smoke');

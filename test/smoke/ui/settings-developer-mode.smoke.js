@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §35 Settings — Step 11 — Developer Mode panel + regtest reveal.
+// Smoke for §35 Settings, Step 11, Developer Mode panel + regtest reveal.
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';

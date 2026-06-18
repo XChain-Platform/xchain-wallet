@@ -8,13 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// swapAction — convenience wrapper for the SWAP action (§41.5;
+// swapAction: convenience wrapper for the SWAP action (§41.5;
 // protocol docs: xchain-documentation/protocol/actions/SWAP.md).
 // Mirrors orderAction: takes vault + registries + chain + source +
 // SWAP params, forwards to submitAction.
 //
 // SWAP is the atomic cross-chain / token-pair swap primitive. Unlike
-// ORDER, a SWAP settles atomically without a COINPAY follow-up — it
+// ORDER, a SWAP settles atomically without a COINPAY follow-up; it
 // does NOT work with native coin (use DISPENSER for token ↔ native
 // coin). Phase 3 Step 10 exposes the v0 Create lane via SwapForm;
 // Cancel (v1) and Edit (v2) use the same action name with different
@@ -22,7 +22,7 @@
 //
 // v0 create requires GIVE_TICK / GIVE_AMOUNT / GET_TICK / GET_AMOUNT
 // (per the SDK validator's `_validateSwap`). GIVE_COIN / GET_COIN are
-// the network tickers (BTC / LTC / DOGE) — set by the form from the
+// the network tickers (BTC / LTC / DOGE), set by the form from the
 // chain registry rather than user input.
 //
 // Ownership trading (token-name trades): when GIVE_OWNERSHIP=1 the swap
@@ -69,7 +69,7 @@ export async function swapAction(opts) {
         && opts.params.SWAP_ACTION_INDEX.length > 0;
 
     if (!isIndexOp) {
-        // v0 create — match the SDK validator's baseline. Amounts drop out
+        // v0 create: match the SDK validator's baseline. Amounts drop out
         // of the required set when the matching side trades ownership (the
         // SDK validator additionally enforces they're empty). Field order is
         // preserved so the surfaced error matches the validator's.

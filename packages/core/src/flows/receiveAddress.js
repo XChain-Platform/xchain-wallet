@@ -8,13 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// receiveAddress — §29.7. Derive and persist the next unused external
+// receiveAddress: §29.7. Derive and persist the next unused external
 // address for a wallet/account/chain/addressType tuple. Each call
 // advances the index: "fresh address per open of the Receive screen"
 // per the spec's privacy posture.
 //
 // "Highest existing index" is computed from persisted Address records
-// — addresses that have been handed out. This doesn't check on-chain
+// (addresses that have been handed out). This doesn't check on-chain
 // usage; the UI layer can cross-reference SDK history if it wants to
 // reuse a pre-generated-but-unfunded address.
 
@@ -42,8 +42,8 @@ export class NoMatchingAccountError extends Error {
  * @property {import('../registry/index.js').ChainRegistry} chainRegistry
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
  * @property {string} chainId
- * @property {string} [accountId]               preferred — pick the Account by id
- * @property {number} [accountIndex]            fallback — pick by BIP44 index (default 0). Ignored when `accountId` is supplied.
+ * @property {string} [accountId]               preferred: pick the Account by id
+ * @property {number} [accountIndex]            fallback: pick by BIP44 index (default 0). Ignored when `accountId` is supplied.
  * @property {string} [addressType]             defaults to descriptor.defaultAddressType
  * @property {string} [label]                   defaults to "Address #N+1"
  */

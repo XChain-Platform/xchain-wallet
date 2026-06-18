@@ -19,7 +19,7 @@ import styles from './NetworkFilter.module.css';
  * that surfaces the currently selected filter; clicking opens a
  * dropdown with every coin family in the dataset.
  *
- * The dropdown is searchable when there are more than 6 entries —
+ * The dropdown is searchable when there are more than 6 entries;
  * cheap to add and pays off the moment a wallet hosts more chains.
  *
  * `value` is the active filter: `'all'` or a coin family

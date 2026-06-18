@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Phase 3 Step 12 smoke — Messaging inbox + thread (§41.7.2).
+// Phase 3 Step 12 smoke: Messaging inbox + thread (§41.7.2).
 //
 // Asserts:
 //   1. getMessagingInbox flow exported from @xchain-wallet/core; input
@@ -138,5 +138,5 @@ assert.ok(/>\s*Messaging\s*</.test(homeSrc),
     'Home.jsx renders a "Messaging" button');
 
 console.log(
-    'OK — messaging-inbox smoke (§41.7.2: getMessagingInbox core flow with password-gated ECIES decrypt via exportPrivateKey; MessagingInbox 4-stage state machine + password re-prompt + Conversations/Thread panes + counterparty grouping; messaging.inbox handler + 3-shell messaging + 3-shell App.jsx + Home "Messaging" button)',
+    'OK: messaging-inbox smoke (§41.7.2: getMessagingInbox core flow with password-gated ECIES decrypt via exportPrivateKey; MessagingInbox 4-stage state machine + password re-prompt + Conversations/Thread panes + counterparty grouping; messaging.inbox handler + 3-shell messaging + 3-shell App.jsx + Home "Messaging" button)',
 );

@@ -22,7 +22,7 @@ import { encodeDocument, emptyDocument, DOCUMENT_VERSION } from '../../../packag
 
 const MASTER_KEY = new Uint8Array(32).fill(33);
 
-// A simulated v1 wallet record — schemaVersion: 1, with the singular
+// A simulated v1 wallet record: schemaVersion 1, with the singular
 // `multisig` field that v2 renamed to `multisigs[]`. Other v2-required
 // fields (importedKeys, encryptionAlgorithm) are present too because
 // migrateWallet only touches what changed between v1 and v2.
@@ -45,7 +45,7 @@ function v1Wallet() {
             parallelism: 1,
         },
         importedKeys: [],
-        multisig: null, // singular — the v1 shape
+        multisig: null, // singular: the v1 shape
     };
 }
 
@@ -63,7 +63,7 @@ describe('integration/migrations/wallet v1 → v2', () => {
         const blob = await encodeDocument(MASTER_KEY, legacyDoc);
         await backend.save(blob);
 
-        // Open and read — the migration harness should rewrite the
+        // Open and read; the migration harness should rewrite the
         // wallet record in-flight.
         const vault = new Vault({ backend, masterKey: MASTER_KEY });
         await vault.open();

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Storage backend contract — §11.2. Targets implement this in their own
+// Storage backend contract: §11.2. Targets implement this in their own
 // shell packages:
 //   - Web:       IndexedDB (via `idb` or raw IDB)
 //   - Extension: chrome.storage.local
@@ -46,7 +46,7 @@ export class StorageBackend {
 }
 
 /**
- * In-process backend. Contents vanish on process exit — use only for
+ * In-process backend. Contents vanish on process exit; use only for
  * tests and transient demo-mode wallets.
  */
 export class InMemoryBackend extends StorageBackend {

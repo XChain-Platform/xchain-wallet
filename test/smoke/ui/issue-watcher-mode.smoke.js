@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §20 / Cluster X Step 4 — IssueTokenForm watcher-mode branch.
+// Smoke for §20 / Cluster X Step 4: IssueTokenForm watcher-mode branch.
 //
 // First action form to adopt the FOLLOWUP 5 pattern:
 //   - useWalletMode hook for isWatcherMode derivation

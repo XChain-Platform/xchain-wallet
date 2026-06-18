@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// MenuRoute — full-screen pancake menu (replaces the overlay drawer in
+// MenuRoute: full-screen pancake menu (replaces the overlay drawer in
 // the web shell). The route renders the same item list HeaderActionMenu
 // shows, but as a normal `<Screen>` with a Back-titled header instead
 // of a sliding panel over the page underneath. The drawer variant in

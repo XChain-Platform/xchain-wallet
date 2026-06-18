@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §29 Send/Receive — Step 4 — priceLookup flow.
+// Smoke for §29 Send/Receive, Step 4: priceLookup flow.
 
 import { strict as assert } from 'node:assert';
 import {

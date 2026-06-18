@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Generic submit-any-action flow — §40.10. The authoring form is the
+// Generic submit-any-action flow (§40.10). The authoring form is the
 // only caller; this wrapper exists so the background host can mount a
 // single `action.advanced` handler rather than exposing a raw
 // `submitAction` path (which would let a malicious renderer skip the

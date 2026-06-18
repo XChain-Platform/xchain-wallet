@@ -31,7 +31,7 @@ import wifStyles from './AddressList.wif.module.css';
 const chainRegistry = registryLib.defaultRegistry();
 
 /**
- * §22 + §56.3 Pre-launch Step 2 — Standalone address list. Aggregates
+ * §22 + §56.3 Pre-launch Step 2: Standalone address list. Aggregates
  * every address the wallet has generated across every chain, rendered
  * as a single flat list. Each row shows chain badge + label +
  * shortened address + copy button; rows whose address equals the
@@ -41,14 +41,14 @@ const chainRegistry = registryLib.defaultRegistry();
  * Filters:
  *   - Chain chips (toggle each chainId on/off; re-uses the History
  *     route's chip CSS for consistency)
- *   - "Multisig only" — keep only the multisig receive address row
+ *   - "Multisig only": keep only the multisig receive address row
  *
  * @param {object} props
  * @param {string} props.walletId
  * @param {string} [props.accountId]   active BIP44 account; when set, only that account's addresses are shown
  * @param {() => void} props.onBack
  * @param {() => void} [props.onReceive]
- * @param {(address: { id: string, address: string, source: string, chain: string, network: string, derivationPath: string | null, label: string }) => void} [props.onShowPrivateKey]   §17.7 — when supplied, each non-multisig row gets a "Show key" affordance that hands the row's address back to the caller (shell wires it to <ViewPrivateKey>)
+ * @param {(address: { id: string, address: string, source: string, chain: string, network: string, derivationPath: string | null, label: string }) => void} [props.onShowPrivateKey]   §17.7: when supplied, each non-multisig row gets a "Show key" affordance that hands the row's address back to the caller (shell wires it to <ViewPrivateKey>)
  */
 export function AddressList({
     walletId,
@@ -69,7 +69,7 @@ export function AddressList({
     const [multisigs, setMultisigs] = useState(
         /** @type {Array<{ multisigConfigId: string, address: string, threshold: number, cosignerCount: number, scheme: string }>} */ ([]),
     );
-    // §15.5 / G020 + G021 — Import WIF inline form. Hidden until the user
+    // §15.5 / G020 + G021: Import WIF inline form. Hidden until the user
     // expands it; gates submit on the §15.5.3 backup-implications warning
     // checkbox.
     const [showWifForm, setShowWifForm] = useState(false);
@@ -167,7 +167,7 @@ export function AddressList({
                 if (cancelled) return;
                 setMultisigs(list);
             })
-            .catch(() => { /* no multisig configured — silent */ });
+            .catch(() => { /* no multisig configured; silent */ });
         return () => { cancelled = true; };
     }, [walletId, messaging]);
 
@@ -199,7 +199,7 @@ export function AddressList({
             }
         }
         // Synthesize one row per multisig config when its derived address
-        // isn't already in the wallet's address table — Receive derives
+        // isn't already in the wallet's address table; Receive derives
         // them on-demand and doesn't necessarily persist them.
         const btc = chainRegistry.byCoin('bitcoin')[0]?.id;
         if (btc && networkMatch(btc)) {
@@ -292,7 +292,7 @@ export function AddressList({
                 {showWifForm ? (
                     <form className={wifStyles.wifForm} onSubmit={handleImportWif} noValidate>
                         <p className={wifStyles.wifWarning}>
-                            <strong>Heads up — imported keys are not covered by your recovery phrase.</strong>{' '}
+                            <strong>Heads up: imported keys are not covered by your recovery phrase.</strong>{' '}
                             If you wipe this device or restore from your seed words, this address will not come back. You must keep a separate copy of the WIF, or move the funds back to a derived address before that happens.
                         </p>
                         <label className={wifStyles.wifField}>

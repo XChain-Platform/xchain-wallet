@@ -10,7 +10,7 @@
 
 // Maps a wallet semver string to a Chrome-Web-Store-compatible
 // `manifest.json` version. Chrome requires 1–4 dot-separated integers,
-// each 0–65535 — prerelease suffixes like `-rc.1` are not allowed. We
+// each 0–65535; prerelease suffixes like `-rc.1` are not allowed. We
 // mirror the wallet's semver into `manifest.version_name` (free-form,
 // human-readable) and derive a monotonic integer tuple for `version`
 // (what Chrome actually uses for upgrade ordering).
@@ -25,7 +25,7 @@
 //    compares segment-by-segment, and the leading `0` pins prerelease
 //    tuples strictly below every stable tuple with M ≥ 1.
 //  - Successive RCs increase (0.1.0.1 < 0.1.0.2 < … < 0.1.0.N).
-//  - N fits in one segment up to 65535 RC candidates — plenty.
+//  - N fits in one segment up to 65535 RC candidates (plenty).
 //
 // Usage:
 //   import { deriveExtensionVersion } from './derive-extension-version.js';
@@ -48,8 +48,8 @@ function assertSegment(n, label) {
 /**
  * Derive the Chrome-manifest `version` string from a wallet semver.
  *
- * @param {string} walletVersion  — e.g. '1.0.0-rc.1' or '1.0.0'
- * @returns {string}              — e.g. '0.1.0.1'  or '1.0.0'
+ * @param {string} walletVersion  e.g. '1.0.0-rc.1' or '1.0.0'
+ * @returns {string}              e.g. '0.1.0.1'  or '1.0.0'
  * @throws if the input doesn't match either supported shape.
  */
 export function deriveExtensionVersion(walletVersion) {

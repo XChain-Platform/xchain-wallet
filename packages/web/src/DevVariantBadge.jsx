@@ -45,10 +45,10 @@ function clampToViewport(p, el) {
  * dropdown or clear the override with one click.
  *
  * Variants:
- *   small      — mobile browser portrait / narrow desktop / future native app (375×600 frame; bottom tab bar)
- *   full       — desktop browser / tablet landscape / electron / extension full-screen tab (no frame; left nav)
- *   sidebar    — Chrome MV3 side panel (right-docked 375 column; full viewport height)
- *   extension  — Chrome extension toolbar popup (360×600 fixed; no bottom tab bar — drawer only)
+ *   small      : mobile browser portrait / narrow desktop / future native app (375x600 frame; bottom tab bar)
+ *   full       : desktop browser / tablet landscape / electron / extension full-screen tab (no frame; left nav)
+ *   sidebar    : Chrome MV3 side panel (right-docked 375 column; full viewport height)
+ *   extension  : Chrome extension toolbar popup (360x600 fixed; no bottom tab bar, drawer only)
  *
  * Drag the grip (⠿) on the left to reposition; the chosen position
  * persists in localStorage and survives reload. Default position is
@@ -104,7 +104,7 @@ export function DevVariantBadge({ state }) {
         const dy = e.clientY - d.startY;
         const next = clampToViewport({ x: d.baseLeft + dx, y: d.baseTop + dy }, badgeRef.current);
         setPos(next);
-        // Eager persist — guarantees the latest position survives a
+        // Eager persist: guarantees the latest position survives a
         // page reload (which fires synchronously when the user picks a
         // new variant from the dropdown) without a stale-state race
         // between setPos and onGripUp.

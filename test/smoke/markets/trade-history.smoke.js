@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Phase 3 Step 8 smoke — Per-market trade history (§41.3.6).
+// Phase 3 Step 8 smoke: Per-market trade history (§41.3.6).
 
 import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
@@ -53,5 +53,5 @@ assert.ok(openOrdersIdx > 0 && tradeHistoryIdx > openOrdersIdx,
     'TradeHistoryPanel rendered below OpenOrdersPanel');
 
 console.log(
-    'OK — trade-history smoke (TradeHistoryPanel §41.3.6 collapsible; fans out getMarketHistory per wallet address; no polling, manual Refresh; onOpenTx reserved; rendered below OpenOrdersPanel in MarketView)',
+    'OK: trade-history smoke (TradeHistoryPanel §41.3.6 collapsible; fans out getMarketHistory per wallet address; no polling, manual Refresh; onOpenTx reserved; rendered below OpenOrdersPanel in MarketView)',
 );

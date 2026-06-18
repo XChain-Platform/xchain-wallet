@@ -8,12 +8,12 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// KeyQR — static-string QR primitive for ViewPrivateKey + similar
+// KeyQR: static-string QR primitive for ViewPrivateKey + similar
 // "show this opaque value as a scannable QR" surfaces (Cluster E
 // FOLLOWUP 5 / §17.7).
 //
 // Renders a lazy QR via the bundled `qrcode` library. The component
-// is self-contained — caller passes a string `value`; the canvas
+// is self-contained. Caller passes a string `value`; the canvas
 // regenerates whenever the value changes. Errors degrade silently
 // (the component renders nothing) so reveal screens stay usable
 // even if the encoder rejects an oversized string.

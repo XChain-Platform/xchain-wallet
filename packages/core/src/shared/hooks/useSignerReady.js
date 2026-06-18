@@ -13,14 +13,14 @@ import { flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging } from '../useMessaging.js';
 
 /**
- * Whether the active wallet can sign WITHOUT a password right now — i.e.
+ * Whether the active wallet can sign WITHOUT a password right now (i.e.
  * the session is unlocked AND the background has a pre-unlocked signer
  * for it in the pool ("password only at unlock"). Sign/derive UIs use
  * this to hide their per-action password input.
  *
  * Defaults to `false` (show the password) so the rare empty-pool cases
- * — passphrase wallets, or a service-worker restart that couldn't
- * rehydrate the pool — keep prompting and signing still works via the
+ * passphrase wallets, or a service-worker restart that couldn't
+ * rehydrate the pool; keep prompting and signing still works via the
  * password fallback. Demo wallets are always "ready" (signing is mocked,
  * the generated password is never shown to the user).
  *

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// RemoteSigner — §17.x (new). A Signer shim that forwards every
+// RemoteSigner. §17.x (new). A Signer shim that forwards every
 // interface call over an injected transport function. Exists so
 // hardware signing can live in the renderer (where WebHID transport
 // and Trezor Connect popups require a user gesture + tab anchor),
@@ -44,7 +44,7 @@
 //
 // The shim passes the Signer-interface params through unchanged; the
 // renderer-side handler is responsible for looking up the live signer
-// instance by this shim's `id` (see §signingRegistry — shell-level)
+// instance by this shim's `id` (see §signingRegistry, shell-level)
 // and calling the matching method.
 //
 // Why not just call the signer from the renderer?
@@ -71,7 +71,7 @@ import { Signer, SignerStatusError } from './Signer.js';
 export class RemoteSigner extends Signer {
     /**
      * @param {Object} opts
-     * @param {string} opts.id                           Stable signer id — must match a SignerRecord persisted on the renderer
+     * @param {string} opts.id                           Stable signer id (must match a SignerRecord persisted on the renderer)
      * @param {string} opts.displayName
      * @param {'trezor'|'ledger'} opts.kind              mirrors the paired SignerRecord
      * @param {RemoteSignerTransport} opts.transport

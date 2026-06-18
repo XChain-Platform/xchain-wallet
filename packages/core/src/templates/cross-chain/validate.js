@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Cross-chain template validator — §42.8.4. Pure function, no I/O.
+// Cross-chain template validator (§42.8.4). Pure function, no I/O.
 // Lives in its own file so Node-level smokes can validate the
 // bundled JSON files via `fs` without importing index.js (which
 // uses Vite's JSON-import path).

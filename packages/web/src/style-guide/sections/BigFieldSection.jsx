@@ -30,15 +30,15 @@ export function BigFieldSection() {
             id="big-field"
             title="Big-field input"
             tag="CANONICAL primary form field"
-            kicker="The bumped-up Input treatment for the few fields a screen really wants the user to touch — Send's Amount and To fields. Larger type, more vertical padding, and a reserved right gutter where an inline action button (Max, Address book) overlays the input edge."
+            kicker="The bumped-up Input treatment for the few fields a screen really wants the user to touch (Send's Amount and To fields). Larger type, more vertical padding, and a reserved right gutter where an inline action button (Max, Address book) overlays the input edge."
         >
             <Guidance
                 what={<>An <code>&lt;Input&gt;</code> with an inline style bump (<code>font-size: var(--xc-text-lg)</code>, vertical padding <code>var(--xc-space-3)</code>, <code>min-height: 48px</code>) and right padding reserved for a single absolutely-positioned action button. Wrap in a <code>position: relative</code> container so the button can anchor over the right edge.</>}
-                when={<>The 1–2 primary inputs on a form — the ones a user is most likely to interact with on each page. Send's Amount + To, Receive's Amount. Other inputs on the same page stay at default size so the priority reads.</>}
+                when={<>The 1–2 primary inputs on a form: the ones a user is most likely to interact with on each page. Send's Amount + To, Receive's Amount. Other inputs on the same page stay at default size so the priority reads.</>}
                 whenNot={<>Secondary inputs (memo, label, optional metadata) → default Input. Settings inputs → default. Long-form text → use a textarea variant, not big-field.</>}
-                sizing={<>Right padding: ~52px for one icon-button action (Address book), ~64px for a wider text-button (Max). Action button: absolute-positioned at <code>right: var(--xc-space-2)</code>, vertically centered. Keep one action max — multi-action fields get cramped fast.</>}
+                sizing={<>Right padding: ~52px for one icon-button action (Address book), ~64px for a wider text-button (Max). Action button: absolute-positioned at <code>right: var(--xc-space-2)</code>, vertically centered. Keep one action max; multi-action fields get cramped fast.</>}
                 doRule={<>✓ Reserve the right gutter ONLY when an inline action is actually present · use the action that's most useful to the user on that page (Send Amount → Max; Send To → Address book; Receive Amount → none, so no gutter) · pair the inline action with the <code>Icon</code> from the canonical icon catalog</>}
-                dontRule={<>✗ Stack inline action buttons (two icons on the right edge cramp the input) · use big-field for every input on the page (loses the "this is what matters" signal) · build a custom big input wrapper — always use the shared Input primitive with the inline style</>}
+                dontRule={<>✗ Stack inline action buttons (two icons on the right edge cramp the input) · use big-field for every input on the page (loses the "this is what matters" signal) · build a custom big input wrapper (always use the shared Input primitive with the inline style)</>}
                 supersedes={<>The inline <code>style={'{…}'}</code> bumps on Send's Amount and To fields. Lift the style fragment into a named export from Input.module.css when a third caller appears.</>}
             />
 

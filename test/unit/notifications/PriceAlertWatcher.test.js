@@ -87,7 +87,7 @@ describe('PriceAlertWatcher', () => {
         expect(markTriggered).not.toHaveBeenCalled();
     });
 
-    it('is one-shot — does not re-fire on a second poll in the same session', async () => {
+    it('is one-shot: does not re-fire on a second poll in the same session', async () => {
         const { watcher, notify } = makeWatcher({ price: 71000 });
         await watcher.pollOnce();
         await watcher.pollOnce();

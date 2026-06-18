@@ -15,8 +15,8 @@
 // A regression here would hand any same-origin script (XSS sink,
 // compromised dependency) a reusable credential that decrypts the vault.
 //
-// We drive the three flows that take a password — unlock, createWallet,
-// importMnemonic — through the real web-shell messaging layer (with the
+// We drive the three flows that take a password (unlock, createWallet,
+// importMnemonic) through the real web-shell messaging layer (with the
 // in-page host stubbed) and assert sessionStorage holds neither the
 // dedicated cache key nor the password value under ANY key.
 

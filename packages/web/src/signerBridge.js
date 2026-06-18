@@ -8,9 +8,9 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Web-shell signer bridge. Unlike the extension popup — which opens
+// Web-shell signer bridge. Unlike the extension popup (which opens
 // a long-lived chrome.runtime port so the renderer-hosted signer is
-// reachable from the service-worker-hosted background — web's
+// reachable from the service-worker-hosted background), web's
 // "background" (the MessageHost returned by `createBackgroundHost`)
 // runs in the same JS context as the React tree. No ipc boundary
 // means no port: the transport wired into `signerBridge.setTransport`
@@ -47,7 +47,7 @@ export function registerSigner(signerId, signer) {
 }
 
 /**
- * Drop a registration (rare — user unpairs the device).
+ * Drop a registration (called when the user unpairs the device).
  * @param {string} signerId
  */
 export function unregisterSigner(signerId) {
@@ -61,7 +61,7 @@ export function registeredIds() {
 }
 
 /**
- * Shared transport — all signerIds route through this single
+ * Shared transport: all signerIds route through this single
  * function (it reads signerId off the payload). Saves allocating a
  * closure per signer; the identity also makes the signerBridge
  * registry's Map-ness trivially observable in tests.

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for Phase 2 — Step 14 (piece 4c) — LedgerSigner class +
+// Smoke for Phase 2, Step 14 (piece 4c): LedgerSigner class +
 // per-target WebHID transport factory.
 //
 // Mirrors trezor-signer.smoke.js: DI mock of the Ledger Bitcoin app,
@@ -22,7 +22,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { webcrypto } from 'node:crypto';
 
-// deriveLedgerDeviceIdentifier uses crypto.subtle.digest — Node 18
+// deriveLedgerDeviceIdentifier uses crypto.subtle.digest. Node 18
 // exposes WebCrypto only on globalThis.crypto, matching setup.js.
 if (!globalThis.crypto) {
     globalThis.crypto = webcrypto;
@@ -38,7 +38,7 @@ const wsRoot = join(here, '..', '..', '..');
 const core = join(wsRoot, 'packages', 'core');
 const ext = join(wsRoot, 'packages', 'extension');
 const web = join(wsRoot, 'packages', 'web');
-// §9 / G002 — LedgerSigner.js + ledgerFormat.js moved to the standalone
+// §9 / G002: LedgerSigner.js + ledgerFormat.js moved to the standalone
 // signers-ledger workspace package; the back-compat shim in
 // `core/src/signers/index.js` keeps the `signers.LedgerSigner` runtime
 // re-export working, so the in-process import above still resolves.
@@ -420,11 +420,11 @@ assert.ok(
 );
 assert.ok(
     !/@ledgerhq/.test(stripComments(coreFactorySrc)),
-    'core builder does NOT import @ledgerhq/* — DI keeps core decoupled',
+    'core builder does NOT import @ledgerhq/* (DI keeps core decoupled)',
 );
 assert.ok(
     /pairingInfo/.test(coreFactorySrc),
-    'core builder returns pairingInfo — caller persists via flows.registerSigner',
+    'core builder returns pairingInfo; caller persists via flows.registerSigner',
 );
 
 function stripComments(src) {
@@ -500,7 +500,7 @@ assert.ok(
     'LedgerSigner class does NOT import any @ledgerhq package',
 );
 
-// §9 / G002 — LedgerSigner now lives in @xchain-wallet/signers-ledger;
+// §9 / G002: LedgerSigner now lives in @xchain-wallet/signers-ledger;
 // back-compat shim in core/src/signers/index.js keeps the runtime
 // re-export reachable.
 assert.ok(
@@ -532,5 +532,5 @@ for (const sym of [
 }
 
 console.log(
-    'OK — ledger signer smoke (class conforms to Signer interface against DI mock; getStatus distinguishes wrong-app / disconnected / available; getAddresses path derivation for BTC/LTC/DOGE; deriveLedgerDeviceIdentifier deterministic; signPsbt pipes through sdk.decomposePsbt → Ledger envelope builder → createPaymentTransaction; signMessage composes base64 compact sig with address-type header base; factories declared in both shells; core has zero Ledger SDK imports)',
+    'OK: ledger signer smoke (class conforms to Signer interface against DI mock; getStatus distinguishes wrong-app / disconnected / available; getAddresses path derivation for BTC/LTC/DOGE; deriveLedgerDeviceIdentifier deterministic; signPsbt pipes through sdk.decomposePsbt -> Ledger envelope builder -> createPaymentTransaction; signMessage composes base64 compact sig with address-type header base; factories declared in both shells; core has zero Ledger SDK imports)',
 );

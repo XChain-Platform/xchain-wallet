@@ -21,7 +21,7 @@ import { LocaleSync } from './LocaleSync.jsx';
  * hook re-runs whenever settings change, without forcing every shell
  * to mount the gate manually.
  *
- * Cluster R FOLLOWUP 4 — also mounts <LocaleSync /> so a saved
+ * Cluster R FOLLOWUP 4: also mounts <LocaleSync /> so a saved
  * `settings.language` rehydrates the live i18n locale on cold start.
  *
  * @param {object} props

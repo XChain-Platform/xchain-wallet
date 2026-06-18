@@ -8,13 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// KeychainSessionBackend — §40.12 OS-keychain-backed session cache for
+// KeychainSessionBackend (§40.12): OS-keychain-backed session cache for
 // the desktop shell. Parallel to ChromeSessionBackend on the extension
 // side: stores the unlocked master key so subsequent app launches skip
 // the password prompt until the user either explicitly locks or the
 // OS-level keychain becomes unavailable (logout, keychain locked, etc.).
 //
-// The plaintext never touches disk — Electron's `safeStorage` wraps
+// The plaintext never touches disk. Electron's `safeStorage` wraps
 // the OS keychain (macOS Keychain, Windows DPAPI, Linux libsecret) and
 // returns an opaque ciphertext that only a process running under the
 // same OS-user session can decrypt. We write that ciphertext to a file
@@ -23,7 +23,7 @@
 //
 // If the OS keychain isn't available (headless Linux with no gnome-
 // keyring / kwallet, or Electron falling back to the deterministic
-// `basic_text` backend) we refuse to persist to disk — storing the key
+// `basic_text` backend) we refuse to persist to disk. Storing the key
 // there would offer no confidentiality against anyone with read access.
 // The session still works for the current process: `save` holds the
 // key in a module-private in-memory slot, so subsequent `load` calls
@@ -84,7 +84,7 @@ export class KeychainSessionBackend {
         if (!this._safeStorage.isEncryptionAvailable()) return false;
         if (typeof this._safeStorage.getSelectedStorageBackend === 'function') {
             // `basic_text` means Electron fell back to a deterministic
-            // scheme — no keychain-level protection, so we'd leak the
+            // scheme (no keychain-level protection, so we'd leak the
             // master key to anyone with read access to session.bin.
             // Refuse to persist in that case.
             const backend = this._safeStorage.getSelectedStorageBackend();
@@ -95,7 +95,7 @@ export class KeychainSessionBackend {
 
     /**
      * Read the cached master key. Precedence:
-     *   1. In-memory slot (set by a prior `save` in this process) — the
+     *   1. In-memory slot (set by a prior `save` in this process). The
      *      shell keeps the current-session key here even when the
      *      keychain isn't available, so unlock-then-query works.
      *   2. Encrypted file on disk, decrypted via safeStorage.
@@ -103,7 +103,7 @@ export class KeychainSessionBackend {
      * Returns null when no cache exists, the keychain is unavailable
      * and no in-memory copy is present, or the ciphertext can't be
      * decrypted (e.g. user logged in under a different OS account,
-     * keychain was reset). Never throws on "no session" — callers treat
+     * keychain was reset). Never throws on "no session"; callers treat
      * null as "prompt for password".
      *
      * @returns {Promise<Uint8Array | null>}
@@ -123,7 +123,7 @@ export class KeychainSessionBackend {
             const hex = this._safeStorage.decryptString(cipher);
             return hexToBytes(hex);
         } catch (_err) {
-            // Corrupt ciphertext or keychain-scope mismatch — fall back
+            // Corrupt ciphertext or keychain-scope mismatch. Fall back
             // to "no session"; the user can re-unlock and a fresh blob
             // will overwrite this one.
             return null;
@@ -142,7 +142,7 @@ export class KeychainSessionBackend {
         if (!(blob instanceof Uint8Array)) {
             throw new Error('KeychainSessionBackend.save: blob must be a Uint8Array');
         }
-        // In-memory copy always — this is what load() checks first so
+        // In-memory copy always. This is what load() checks first so
         // the current process stays unlocked even on platforms without
         // a real OS keychain.
         if (this._inMemory) this._inMemory.fill(0);

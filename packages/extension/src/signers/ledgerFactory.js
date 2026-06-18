@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Ledger transport factory — extension (popup + service worker)
+// Ledger transport factory for extension (popup + service worker)
 // target. Thin binding layer: the pair sequence itself lives in
 // `@xchain-wallet/core/signerFactories/ledger.js` (Phase 2 Step 18),
 // shared with web + desktop. This file owns the extension-specific
@@ -21,7 +21,7 @@
 // Lazy-imports `@ledgerhq/hw-transport-webhid` + `@ledgerhq/hw-app-btc`
 // so the SDK chunks only load when the user pairs a Ledger.
 
-// Cross-package relative path to core — Node smoke scripts resolve
+// Cross-package relative path to core; Node smoke scripts resolve
 // this without the pnpm workspace symlink.
 import { makeLedgerFactory } from '../../../core/src/signerFactories/index.js';
 

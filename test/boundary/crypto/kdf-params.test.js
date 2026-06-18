@@ -72,7 +72,7 @@ describe('boundary/crypto/kdf-params', () => {
         // guard against accidental "" passing through unchecked.
         let threw = false;
         try { deriveMasterKey('', FLOOR); } catch { threw = true; }
-        // Either it throws OR returns a key — pin whichever the wallet does.
+        // Either it throws OR returns a key: pin whichever the wallet does.
         // Today the wallet defers to noble/hashes which accepts empty input.
         if (!threw) {
             const k = deriveMasterKey('', FLOOR);

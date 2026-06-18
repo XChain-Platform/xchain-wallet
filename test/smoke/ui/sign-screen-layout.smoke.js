@@ -8,14 +8,14 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §21 — Step 5 — sign-screen layout polish (§21.3 + §21.7).
+// Smoke for §21, Step 5: sign-screen layout polish (§21.3 + §21.7).
 //
 // Cross-cuts SignApproval.jsx (extension approval window) and
 // Send.jsx (user-initiated send). Asserts:
 //   - Approve button label reads "Approve & Sign on <chain>" for
 //     signAction / signPsbt; "Sign in" for signIn; bare "Approve"
 //     for signMessage. Send.jsx uses "Sign on <chain>" (user-initiated
-//     verb per §21.7 — "Sign", not "Approve & Sign").
+//     verb per §21.7: "Sign", not "Approve & Sign").
 //   - dApp Source block renders when an origin is present (Origin +
 //     optional App name).
 //   - Action details collapsed by default behind a <details> toggle.
@@ -66,7 +66,7 @@ assert.match(
     'signIn keeps a "Sign in" label',
 );
 // Bare "Approve" remains for signMessage. The button JSX renders {approveLabel}
-// (no longer a hardcoded "Approve") — confirm both the literal fallback exists
+// (no longer a hardcoded "Approve"); confirm both the literal fallback exists
 // and the button consumes the derived label.
 assert.match(
     signSrc,

@@ -9,8 +9,8 @@
 // contact legal@dankest.llc.
 
 // Smoke for §54 / G173 ICU subset + locales directory layout. The
-// smoke runs the format helper at runtime — unlike most other smokes
-// which are static-text only — because the ICU interpreter is the
+// smoke runs the format helper at runtime (unlike most other smokes
+// which are static-text only) because the ICU interpreter is the
 // load-bearing piece and small parser bugs would slip past a regex.
 
 import { strict as assert } from 'node:assert';
@@ -57,25 +57,25 @@ const { format, t } = await import(
 // 1. Plain substitution.
 assert.strictEqual(format('Hello {name}!', { name: 'world' }), 'Hello world!');
 
-// 2. Plural — singular vs other.
+// 2. Plural: singular vs other.
 const tmpl = '{count, plural, one {# address} other {# addresses}}';
 assert.strictEqual(format(tmpl, { count: 1 }), '1 address');
 assert.strictEqual(format(tmpl, { count: 2 }), '2 addresses');
 assert.strictEqual(format(tmpl, { count: 0 }), '0 addresses');
 
-// 3. Plural — `=N` exact match wins over the plural category.
+// 3. Plural: `=N` exact match wins over the plural category.
 const exactTmpl = '{count, plural, =0 {none} one {one} other {many}}';
 assert.strictEqual(format(exactTmpl, { count: 0 }), 'none');
 assert.strictEqual(format(exactTmpl, { count: 1 }), 'one');
 assert.strictEqual(format(exactTmpl, { count: 5 }), 'many');
 
-// 4. Select — exact match with fallback to `other`.
+// 4. Select: exact match with fallback to `other`.
 const selTmpl = '{kind, select, mainnet {Live} testnet {Testnet} other {Other}}';
 assert.strictEqual(format(selTmpl, { kind: 'mainnet' }), 'Live');
 assert.strictEqual(format(selTmpl, { kind: 'testnet' }), 'Testnet');
 assert.strictEqual(format(selTmpl, { kind: 'regtest' }), 'Other');
 
-// 5. Mixed — substitution alongside ICU plural in the same string.
+// 5. Mixed: substitution alongside ICU plural in the same string.
 const mixed = '{name}: {count, plural, one {# address} other {# addresses}}';
 assert.strictEqual(
     format(mixed, { name: 'BTC', count: 3 }),
@@ -91,11 +91,11 @@ assert.strictEqual(t('home.addressCount', { count: 1 }), '1 address');
 assert.strictEqual(t('home.addressCount', { count: 7 }), '7 addresses');
 
 // 8. The legacy (non-ICU) substitution path still works on existing
-//    keys that use `{name}` placeholders — guards against regressions
+//    keys that use `{name}` placeholders; guards against regressions
 //    in keys we haven't migrated yet.
 assert.strictEqual(
     t('home.balanceUnavailable', { reason: 'offline' }),
-    'Balance unavailable — offline',
+    'Balance unavailable: offline',
 );
 
-console.log('OK — ICU subset (plural / select / mixed) + locales layout smoke');
+console.log('OK: ICU subset (plural / select / mixed) + locales layout smoke');

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Per-list chain-filter memory — §23.5 / G052. Persists the user's last
+// Per-list chain-filter memory: §23.5 / G052. Persists the user's last
 // chain-filter choice to localStorage so navigating away and back
 // restores the same view. Each list (history, balances) owns its own
 // key so filters don't bleed across surfaces with different semantics
@@ -17,7 +17,7 @@
 //
 // Defensive reads: missing / corrupt / empty values resolve to null
 // (caller falls back to its own default). Defensive writes: failures
-// are swallowed — localStorage can be disabled in private modes, full,
+// are swallowed; localStorage can be disabled in private modes, full,
 // or otherwise unwritable.
 //
 // Why localStorage instead of vault settings: per the project memory
@@ -120,7 +120,7 @@ export function writeChainString(key, value) {
 }
 
 /**
- * Cluster O FOLLOWUP 3 — wipe every persisted chain-filter entry. Used
+ * Cluster O FOLLOWUP 3: wipe every persisted chain-filter entry. Used
  * by Settings → Display's "Reset list preferences" button so a user
  * who finds a list filtered unexpectedly can return every list to its
  * "show all" baseline without hunting down per-list affordances.

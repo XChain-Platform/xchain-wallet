@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Unit tests for SDKRegistry — the per-chain SDK instance cache.
+// Unit tests for SDKRegistry: the per-chain SDK instance cache.
 
 import { describe, it, expect } from 'vitest';
 import { SDKRegistry, UnknownChainError } from '../../../packages/core/src/sdk/SDKRegistry.js';
@@ -55,7 +55,7 @@ describe('sdk/SDKRegistry', () => {
             const btcChains = chainRegistry.byCoin('bitcoin');
             expect(btcChains.length).toBeGreaterThan(0);
             // Every BTC chain id should resolve to a fresh SDK instance
-            // without throwing — proves the registry hands the chainId
+            // without throwing. Proves the registry hands the chainId
             // to the factory, not just a hard-coded subset.
             for (const d of btcChains) {
                 const sdk = reg.get(d.id);

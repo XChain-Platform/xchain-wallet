@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §26 Lock & Panic — Step 1 — G067 — Caps-Lock warning in Input.
+// Smoke for §26 Lock & Panic, Step 1, G067: Caps-Lock warning in Input.
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';

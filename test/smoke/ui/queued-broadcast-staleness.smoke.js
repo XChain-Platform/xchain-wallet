@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §49.3 / §49.5 — StalenessLabel (G155) + QueuedBroadcastBanner
+// Smoke for §49.3 / §49.5: StalenessLabel (G155) + QueuedBroadcastBanner
 // (G154 partial: UI + storage shipped; auto-enqueue is a Cluster G
 // FOLLOWUP). Cluster G Step 2 of 2.
 
@@ -35,7 +35,7 @@ assert.ok(/export function StalenessLabel\b/.test(sl),
     'StalenessLabel is a named export');
 assert.ok(/export function formatAgo\b/.test(sl),
     'formatAgo is a named export (reusable + smoke-testable)');
-// §49.3: never fabricate data — if lastSyncedAt is null, render nothing.
+// §49.3: never fabricate data; if lastSyncedAt is null, render nothing.
 assert.ok(/lastSyncedAt === null \|\| lastSyncedAt === undefined/.test(sl),
     'StalenessLabel renders nothing when lastSyncedAt is null/undefined');
 // Self-refreshing tick so "30s ago" doesn't sit stale forever.

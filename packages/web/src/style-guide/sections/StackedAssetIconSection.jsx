@@ -27,14 +27,14 @@ export function StackedAssetIconSection() {
             id="stacked-asset-icon"
             title="Stacked asset icon"
             tag="CANONICAL token + chain visual"
-            kicker="Round token image with a small chain pip overlaid in the bottom-right corner. Used wherever a token is shown next to its chain — balance rows, asset cards, asset heros, history entries."
+            kicker="Round token image with a small chain pip overlaid in the bottom-right corner. Used wherever a token is shown next to its chain: balance rows, asset cards, asset heros, history entries."
         >
             <Guidance
-                what={<>A 48×48 (or 40×40 in compact contexts) circular wrap with the token image inside. For non-native tokens, a 20×20 (or 18×18) chain pip overlays the bottom-right, sitting on a white-background ring so it reads against any underlying surface. Native rows skip the pip — the icon IS the chain.</>}
+                what={<>A 48×48 (or 40×40 in compact contexts) circular wrap with the token image inside. For non-native tokens, a 20×20 (or 18×18) chain pip overlays the bottom-right, sitting on a white-background ring so it reads against any underlying surface. Native rows skip the pip; the icon IS the chain.</>}
                 when={<>Any row or hero that represents a held / receivable / sendable asset. BalanceList rows, Send asset hero, Receive asset card, history rows, contact rows with last-sent token.</>}
                 sizing={<>Balance row: 48×48 wrap, 20×20 pip. Asset card row: 40×40 wrap, 18×18 pip. Asset hero (Send): 88×88 wrap, 28×28 pip. Pip is always anchored bottom + inset-inline-end with -2px offset so it sits at the corner without clipping.</>}
                 doRule={<>✓ Use the published token image when available · fall back to a 1-letter chip tinted via <code>tickerColor(tick)</code> when not · always preserve the original art shape (don't crop to a square if the source is round / odd) · keep <code>object-fit: contain</code></>}
-                dontRule={<>✗ Force <code>border-radius: 50%</code> on the token image — it crops square art into circles · drop the chain pip on non-native tokens (loses chain context) · resize the pip below 18px (illegible)</>}
+                dontRule={<>✗ Force <code>border-radius: 50%</code> on the token image (it crops square art into circles) · drop the chain pip on non-native tokens (loses chain context) · resize the pip below 18px (illegible)</>}
                 supersedes={<>Inline icon-rendering logic across BalanceList, Receive, Send, History. Source of truth is <code>BalanceList.module.css</code> (<code>.iconWrap</code> / <code>.iconImg</code> / <code>.iconLetter</code> / <code>.chainOverlay</code>) + <code>BalanceList.jsx</code>'s <code>tickerColor</code> helper.</>}
             />
 

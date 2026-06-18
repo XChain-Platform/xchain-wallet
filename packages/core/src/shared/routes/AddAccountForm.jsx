@@ -25,12 +25,12 @@ import styles from './CreateWallet.module.css';
  * hasn't wired SignerPool yet), the call surfaces an error and the
  * user has to lock + unlock to refresh the pool.
  *
- * Cluster P FOLLOWUP 4 — error-recovery audit: this form's errors
- * are all "edit a single input then re-submit" — the canonical
- * recovery is the form itself. The `error` state binds to the Input's
+ * Cluster P FOLLOWUP 4: error-recovery audit. This form's errors
+ * are all "edit a single input then re-submit" (the canonical
+ * recovery is the form itself). The `error` state binds to the Input's
  * `error` prop so it renders inline at the offending field; the
  * Input's onChange clears `error` on the next keystroke. No additional
- * StatusMessage `recovery: { label, onAction }` affordance fits — the
+ * StatusMessage `recovery: { label, onAction }` affordance fits: the
  * fix is "type the right name + click Add account again", which is
  * already the form's primary control. Auditable per-form decision:
  * terminal-as-rendered with user-iteration as the recovery path.

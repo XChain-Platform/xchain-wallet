@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// broadcastQueueStorage — §49.5 / Cluster G FOLLOWUP 2.
+// broadcastQueueStorage (§49.5 / Cluster G FOLLOWUP 2).
 //
 // Persistence layer for the queued-broadcast surface. The queue itself
 // lives as an in-memory `Map<walletId, entry[]>` inside createBackground-
@@ -26,7 +26,7 @@
 //
 // When neither API is available (Node tests, ad-hoc smoke harness),
 // `createBroadcastQueueStorage` returns null and createBackgroundHost
-// falls back to in-memory only — the prior v0.292.0 behavior.
+// falls back to in-memory only (the prior v0.292.0 behavior).
 
 const STORAGE_KEY = 'xchain.broadcastQueue';
 
@@ -121,7 +121,7 @@ function localStorageAdapter() {
             try {
                 localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
             } catch (_e) {
-                // Quota errors / privacy modes — tolerate so the queue
+                // Quota errors / privacy modes: tolerate so the queue
                 // mutation itself still succeeds.
             }
         },

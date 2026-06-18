@@ -8,13 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Wallet encrypted blob — pairs the KDF and AEAD primitives with the
+// Wallet encrypted blob: pairs the KDF and AEAD primitives with the
 // Wallet schema's kdfParams + encryptedSeed fields (§11.3.1, §11.4).
 //
 // The plaintext protected here is the user's BIP39 seed. Imported WIFs
 // use the same master key but are stored under Wallet.importedKeys with
-// per-entry ciphertext — see §15.5 and the TODO at the bottom of this
-// file.
+// per-entry ciphertext (see §15.5 and the TODO at the bottom of this
+// file).
 
 import { decrypt, encrypt } from './aead.js';
 import {

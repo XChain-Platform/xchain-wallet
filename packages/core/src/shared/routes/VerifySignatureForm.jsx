@@ -8,10 +8,10 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// VerifySignatureForm — §17.5 / G025.
+// VerifySignatureForm: §17.5 / G025.
 //
 // Verify that a signature was produced by a given address over a given
-// message. The form does not need a wallet password or signer — it
+// message. The form does not need a wallet password or signer; it
 // hits the chain's SDK auth.verifyMessage, which is pure
 // public-key-recovery math.
 //

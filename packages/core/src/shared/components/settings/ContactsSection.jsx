@@ -8,15 +8,15 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// ContactsSection — §35.1 Contacts panel.
+// ContactsSection (§35.1 Contacts panel).
 //
 // Export / import the address book. Export downloads the array of
 // Contact records as JSON; import reads a JSON file and upserts each
-// contact via `messaging.saveContact({ record })` — the existing id is
+// contact via `messaging.saveContact({ record })`; the existing id is
 // preserved, so re-imports overwrite rather than duplicate.
 //
 // Editing contacts (add / rename / delete) lives in the dedicated
-// `ContactsList` route reached from the main menu — Settings only
+// `ContactsList` route reached from the main menu. Settings only
 // owns the bulk export / import action.
 
 import { useEffect, useRef, useState } from 'react';
@@ -127,7 +127,7 @@ export function ContactsSection() {
             <div style={ROW}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
                     <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>Export</span>
-                    <span style={ROW_HINT}>Saves the address book as plain JSON. No encryption — keep the file private.</span>
+                    <span style={ROW_HINT}>Saves the address book as plain JSON. Not encrypted, so keep the file private.</span>
                 </div>
                 <button type="button" onClick={onExport} style={ACTION_BTN} disabled={count === 0}>
                     Export…

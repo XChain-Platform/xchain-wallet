@@ -33,9 +33,9 @@ const COIN_TICKER_TO_NAME = {
  * composer (§42.8.2) with rows pre-filled.
  *
  * Chain resolution. Each template row has a `chainHint`:
- *   - `primary`   — the wallet's first chain with addresses
- *   - `secondary` — the second
- *   - `tertiary`  — the third
+ *   - `primary`:   the wallet's first chain with addresses
+ *   - `secondary`: the second
+ *   - `tertiary`:  the third
  *
  * The template authors don't know which chains a given user has
  * addresses on; the launch step resolves each hint to a concrete
@@ -85,7 +85,7 @@ export function CrossChainTemplates({ walletId, onLaunch, onBack }) {
         };
         // For LINK rows, swap the placeholder COIN1/COIN2 to the
         // resolved chains' actual tickers when possible. Action
-        // indices stay as placeholders — they're only known after
+        // indices stay as placeholders; they're only known after
         // earlier rows broadcast and confirm.
         const prefill = template.actions.map((row) => {
             const chainId = resolveChainId(row.chainHint);
@@ -149,7 +149,7 @@ export function CrossChainTemplates({ walletId, onLaunch, onBack }) {
                         <li key={i} style={{ marginBottom: '0.25rem' }}>
                             <strong>{row.action}</strong> on{' '}
                             <em>{labelForChainHint(row.chainHint, chainsWithAddresses)}</em>
-                            {row.note ? <> — <span style={{ opacity: 0.8 }}>{row.note}</span></> : null}
+                            {row.note ? <> <span style={{ opacity: 0.8 }}>({row.note})</span></> : null}
                         </li>
                     ))}
                 </ol>

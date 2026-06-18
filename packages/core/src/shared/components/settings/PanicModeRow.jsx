@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// PanicModeRow — §26.5 / G068 Safety panel row. Distinct from the
+// PanicModeRow (§26.5 / G068): Safety panel row. Distinct from the
 // `settings.panicMode.enabled` schema toggle (which gates whether the
 // feature is offered): this row owns the live runtime activation state
 // stored in localStorage via `flows/panicMode.js`.
@@ -16,7 +16,7 @@
 // States:
 //   inactive   "Activate panic mode" button. Clicking arms the
 //              24-hour signing freeze immediately; no confirmation
-//              modal — the moment of decision IS the moment of risk.
+//              modal. The moment of decision IS the moment of risk.
 //   active     Status line with countdown + "Deactivate" button. The
 //              countdown ticks once per minute; the persisted
 //              expiresAt is the source of truth.

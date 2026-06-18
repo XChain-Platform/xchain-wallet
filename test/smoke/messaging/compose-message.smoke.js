@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Phase 3 Step 13 smoke — Compose flow (§41.7.3).
+// Phase 3 Step 13 smoke: Compose flow (§41.7.3).
 //
 // Asserts:
 //   1. messageAction + getRecipientPubkey + PubkeyNotFoundError
@@ -153,5 +153,5 @@ assert.ok(/Reply/.test(inboxSrc),
     'MessagingInbox renders "Reply" button when counterparty selected');
 
 console.log(
-    'OK — compose-message smoke (§41.7.3: messageAction + getRecipientPubkey + PubkeyNotFoundError; ComposeMessage debounced pubkey lookup, 4-state UI, unencrypted fallback, SignCredentials gate; background handlers + 3-shell messaging + 3-shell App.jsx + Inbox Reply/New button)',
+    'OK: compose-message smoke (§41.7.3: messageAction + getRecipientPubkey + PubkeyNotFoundError; ComposeMessage debounced pubkey lookup, 4-state UI, unencrypted fallback, SignCredentials gate; background handlers + 3-shell messaging + 3-shell App.jsx + Inbox Reply/New button)',
 );

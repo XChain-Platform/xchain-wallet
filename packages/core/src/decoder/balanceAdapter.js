@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Adapter — SDK `getBalances(address)` shape → simulator `BalanceLookup[]`.
+// Adapter: SDK `getBalances(address)` shape to simulator `BalanceLookup[]`.
 //
 // The explorer / SDK returns `{ native: { tick, divisibility, quantity },
 // tokens: [{ tick, displayName, divisibility, quantity }] }` where every
@@ -17,7 +17,7 @@
 // balances at human scale (`'0.05'` for 5,000,000 sats with divisibility
 // 8) so before/after deltas read straight on the sign screen.
 //
-// Pure function — no I/O, no SDK reference. Lives in `decoder/` because
+// Pure function with no I/O or SDK reference. Lives in `decoder/` because
 // it pairs 1:1 with `simulateAction`'s input contract.
 
 /**
@@ -83,7 +83,7 @@ function scaleDown(qty, divisibility) {
     const negative = raw.startsWith('-');
     const body = negative ? raw.slice(1) : raw;
     if (!/^\d+$/.test(body)) {
-        // Already-decimal input — pass through verbatim, the simulator
+        // Already-decimal input: pass through verbatim, the simulator
         // accepts decimal strings.
         return raw;
     }

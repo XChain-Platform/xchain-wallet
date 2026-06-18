@@ -14,7 +14,7 @@
 // Each smoke is a standalone Node script that exercises a thin slice
 // of wiring (no Vitest, no jsdom). The runner stays small on purpose
 // so dropping a new `*.smoke.js` into any subdirectory is enough to
-// pick it up — no manifest to update.
+// pick it up; no manifest to update.
 //
 // `cwd` for spawned smokes is the wallet repo root so smokes that
 // read project files via relative paths get a stable base.

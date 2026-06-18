@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke test for §21 — Step 2 — <BalanceChanges> renderer.
+// Smoke test for §21, Step 2: <BalanceChanges> renderer.
 //
 // JSX-free harness: source-level assertions on the component module +
 // render-phase reasoning by directly testing the directionOf helper
@@ -57,7 +57,7 @@ assert.match(src, /if \(!result\) return null;/, 'no-result branch renders nothi
 assert.match(
     src,
     /deltas\.length === 0 && sideEffects\.length === 0 && notes\.length === 0/,
-    'empty result renders nothing — no orphaned section',
+    'empty result renders nothing (no orphaned section)',
 );
 
 // --- Delta row rendering --------------------------------------------------
@@ -68,7 +68,7 @@ assert.match(src, /Network fee/, 'fee row label is "Network fee" per §21.7');
 assert.match(src, /Your \{delta\.tick\}/, 'token row label is "Your <TICK>" per §21.2');
 assert.match(src, /data-direction=/, 'rows expose direction for color coding');
 
-// directionOf helper — semantic correctness
+// directionOf helper: semantic correctness
 {
     // Re-derive using the same parseLoose / comparison the source uses.
     // This is a tiny internal helper, exercised by inspection: the

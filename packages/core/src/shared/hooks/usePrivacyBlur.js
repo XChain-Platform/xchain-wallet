@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// usePrivacyBlur — §26 / G069. Sets `data-xc-privacy-blur="true"` on the
+// usePrivacyBlur (§26 / G069). Sets `data-xc-privacy-blur="true"` on the
 // document root whenever the host window loses focus AND the user has
 // turned the feature on in Settings → Privacy. CSS in tokens.css picks
 // up the attribute and applies the actual blur, so the hook itself only

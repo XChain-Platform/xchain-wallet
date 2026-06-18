@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §43 / Cluster F FOLLOWUP 3 — bridge version negotiation.
+// Smoke for §43 / Cluster F FOLLOWUP 3: bridge version negotiation.
 //
 // Pins:
 //   - bridge-spec exports BRIDGE_SUPPORTED_VERSIONS + isBridgeVersion-

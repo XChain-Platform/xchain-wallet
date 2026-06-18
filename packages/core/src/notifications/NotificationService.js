@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// NotificationService — §46 delivery core. Platform-agnostic: it owns the
+// NotificationService (§46 delivery core): Platform-agnostic; it owns the
 // "which on-chain event, gated by which setting, becomes which notification"
 // logic, and nothing else. The actual OS/browser notification is an injected
 // `notify` adapter (browser Notification API on web, chrome.notifications in
@@ -18,7 +18,7 @@
 // Event source: the SDK's existing explorer-WebSocket subscriptions
 // (`sdk.onAddress`). A single `onAddress(addr, cb)` subscription routes
 // NEW_ACTION / ORDER_MATCH / SWAP_MATCH / DISPENSE / COINPAY_REQUIRED for that
-// address to one callback — so one subscription per active address (well under
+// address to one callback, so one subscription per active address (well under
 // the explorer's 25-sub/connection cap) covers every notification kind.
 //
 // Direction matters for NEW_ACTION: source === our address means an action we
@@ -27,10 +27,10 @@
 // action row is precise where an ADDRESS_UPDATE balance snapshot is not (it
 // can't tell a send from a receive).
 //
-// Privacy (§46.4): notification text carries no keys and no precise balances —
-// only the chain name and the event kind. (Amount/token inclusion gated by the
-// `notifications.showAmounts` preference is a follow-up; bodies stay generic
-// for now.)
+// Privacy (§46.4): notification text carries no keys and no precise balances.
+// Only the chain name and the event kind are included. (Amount/token inclusion
+// gated by the `notifications.showAmounts` preference is a follow-up; bodies
+// stay generic for now.)
 
 const DEDUP_TTL_MS = 30_000;
 const DEDUP_CAP = 200;
@@ -46,15 +46,15 @@ export class NotificationService {
      * @param {(chainId: string) => import('../sdk/SDKRegistry.js').XChainSDKLike} deps.getSdkForChain
      *   resolve the SDK instance for a chain (e.g. sdkRegistry.get)
      * @param {() => Promise<import('../schemas/settings.js').Settings>} deps.getSettings
-     *   read the live Settings record — re-read per event so toggling a flag off
+     *   read the live Settings record; re-read per event so toggling a flag off
      *   takes effect immediately, no resubscribe
      * @param {(n: { kind: string, title: string, body: string, data?: object }) => (void | Promise<void>)} deps.notify
      *   the shell-specific delivery adapter
      * @param {() => Promise<Set<string> | string[]>} [deps.getPendingTxids]
-     *   optional — txids the wallet broadcast and is awaiting (status 'broadcast').
+     *   optional: txids the wallet broadcast and is awaiting (status 'broadcast').
      *   When provided, tx-confirmed only fires for txs we actually sent.
      * @param {(txid: string) => (void | Promise<void>)} [deps.onTxConfirmed]
-     *   optional — called with a confirmed txid so the shell can flip its
+     *   optional: called with a confirmed txid so the shell can flip its
      *   PendingTx record to 'indexed'
      * @param {() => number} [deps.now]  injectable clock (dedup); defaults to Date.now
      * @param {{ debug: Function, warn: Function, error: Function }} [deps.logger]
@@ -162,7 +162,7 @@ export class NotificationService {
             }
             const perChain = Array.from(this._subs.values()).filter((s) => s.chainId === a.chainId).length;
             if (perChain >= SUB_WARN_THRESHOLD) {
-                this._log.warn(`NotificationService: ${perChain + 1} subscriptions on ${a.chainId} — nearing the explorer 25-sub cap`);
+                this._log.warn(`NotificationService: ${perChain + 1} subscriptions on ${a.chainId}, nearing the explorer 25-sub cap`);
             }
             try {
                 const unsub = sdk.onAddress(a.address, this._makeHandler(a));
@@ -195,7 +195,7 @@ export class NotificationService {
      */
     async _handle(addr, msg) {
         if (!msg || !msg.type) return;
-        // catch_up events are historical replays sent on (re)connect — not a
+        // catch_up events are historical replays sent on (re)connect, not a
         // live occurrence, so never notify on them.
         if (msg.catch_up) return;
         const data = msg.data || {};
@@ -247,14 +247,14 @@ export class NotificationService {
                 }
                 break;
             case 'COINPAY_REQUIRED':
-                // BTCPAY-style obligation. No dedicated v1 toggle — gate under
+                // BTCPAY-style obligation. No dedicated v1 toggle; gate under
                 // incomingReceipts (it's an inbound-settlement prompt).
                 if (flags.incomingReceipts) {
                     plan = { kind: 'coinpay-required', title: 'Payment required', body: `A coin payment is required to complete your swap on ${addr.label}.` };
                 }
                 break;
             // priceAlerts has no client event source in v1 (no alert-threshold
-            // store) — see the §46 plan's "deferred" note. The toggle exists but
+            // store). See the §46 plan's "deferred" note. The toggle exists but
             // this service never fires it.
             default:
                 break;

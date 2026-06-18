@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §29 Send/Receive — Step 1 — Send.jsx wires the
+// Smoke for §29 Send/Receive / Step 1: Send.jsx wires the
 // AddressCombobox + suggestion fetch + paste handler.
 
 import { strict as assert } from 'node:assert';

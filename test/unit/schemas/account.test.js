@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Unit: schemas/account — createAccount + validateAccount.
+// Unit: schemas/account: createAccount + validateAccount.
 
 import { describe, it, expect } from 'vitest';
 import {

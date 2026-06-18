@@ -12,7 +12,7 @@
 //
 // Collapses related entries into a single expandable card while leaving
 // unrelated entries as plain rows. Operates on the already-filtered
-// visible entry list — when a member's leader is not in the input the
+// visible entry list. When a member's leader is not in the input the
 // member renders ungrouped, so chain / cross-chain filters can never
 // produce orphan cards.
 //
@@ -24,13 +24,13 @@
 //   - order-fills:       ORDER leader + every ORDER_MATCH / fill row
 //                        that references it via order_action_index or
 //                        the canonical tx0_index / tx1_index pair.
-//   - link-pair:         §28.3 cross-chain LINK pairing — both sides
+//   - link-pair:         §28.3 cross-chain LINK pairing. Both sides
 //                        of the same LINK action collapse into a
 //                        single dual-chain card. Leader = the entry
 //                        that appears first (newest) in the visible
 //                        feed, members = the peer side(s).
 //
-// BATCH grouping is intentionally skipped — XChain's BATCH parent
+// BATCH grouping is intentionally skipped. XChain's BATCH parent
 // reference is not exposed on history-row payloads we currently consume,
 // so a heuristic would risk false collapses. Tracked in FOLLOWUPS.md
 // under §28.
@@ -96,7 +96,7 @@ export function groupHistoryEntries(entries, mode = 'grouped') {
         }
         const lai = e.link?.linkActionIndex;
         if (lai) {
-            // Keep overwriting — the loop runs DESC (newest first) so
+            // Keep overwriting; the loop runs DESC (newest first) so
             // the final value retained is the oldest entry, which we
             // want as the leader so the group renders at the older
             // member's slot and the expanded list reads newest-first.
@@ -166,7 +166,7 @@ export function groupHistoryEntries(entries, mode = 'grouped') {
         // §28.3 link-pair grouping. A row whose linkActionIndex matches
         // an earlier entry in the visible window is a peer side of the
         // LINK; collapse under the leader. The leader's own row stays
-        // out of the members list — `ensureGroup` registers it once via
+        // out of the members list. `ensureGroup` registers it once via
         // memberGroup, and the dispatch loop further down emits the
         // group at the leader's position.
         const lai = e.link?.linkActionIndex;
@@ -190,7 +190,7 @@ export function groupHistoryEntries(entries, mode = 'grouped') {
             if (seen.has(groupKey)) continue;
             const g = groups.get(groupKey);
             // Suppress single-child groups for leader-plus-children
-            // subkinds — "Limit order — 1 fill" would expand to show
+            // subkinds. "Limit order: 1 fill" would expand to show
             // just the ORDER + its single ORDER_MATCH, which is the
             // same information as letting them render as two flat
             // rows but with an extra click. link-pair stays at >=1
@@ -245,22 +245,22 @@ function summarizeGroup(subkind, leader, members) {
         const src = pickField(leader.raw, ['source', 'SOURCE']) || leader.source || '';
         const short = src.length > 12 ? `${src.slice(0, 6)}…${src.slice(-4)}` : src;
         const noun = members.length === 1 ? 'dispense' : 'dispenses';
-        return `Dispenser at ${short} — ${members.length} ${noun}`;
+        return `Dispenser at ${short}: ${members.length} ${noun}`;
     }
     if (subkind === 'order-fills') {
         const noun = members.length === 1 ? 'fill' : 'fills';
-        return `Limit order — ${members.length} ${noun}`;
+        return `Limit order: ${members.length} ${noun}`;
     }
     if (subkind === 'link-pair') {
         // Leader is the older side; members[0] is the newer (peer that
         // completed the pair). `${peer} ↔ ${leader}` reads in the
-        // user's reading direction — newer (top) ↔ older (bottom).
+        // user's reading direction: newer (top) ↔ older (bottom).
         const leaderAction = upper(leader.action) || 'LINK';
         const peer = members[0];
         const peerAction = peer ? (upper(peer.action) || 'LINK') : '';
         return peerAction
-            ? `Cross-chain link — ${peerAction} ↔ ${leaderAction}`
-            : `Cross-chain link — ${leaderAction}`;
+            ? `Cross-chain link: ${peerAction} ↔ ${leaderAction}`
+            : `Cross-chain link: ${leaderAction}`;
     }
     return '';
 }

@@ -220,5 +220,5 @@ assert.ok(registerMsg, 'register message received by background');
 assert.deepEqual(registerMsg.signerIds, ['sig-a', 'sig-b']);
 
 console.log(
-    'OK — signer port protocol smoke (renderer bridge dispatches to signer map by id; background transport correlates responses via reqId; thrown errors propagate with name; unknown signerId rejects via SignerNotRegisteredError; port disconnect rejects in-flight + future requests with "signer bridge disconnected"; announce() posts register messages)',
+    'OK: signer port protocol smoke (renderer bridge dispatches to signer map by id; background transport correlates responses via reqId; thrown errors propagate with name; unknown signerId rejects via SignerNotRegisteredError; port disconnect rejects in-flight + future requests with "signer bridge disconnected"; announce() posts register messages)',
 );

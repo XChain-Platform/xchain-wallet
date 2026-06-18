@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// AES-256-GCM via `@noble/ciphers/aes` — §11.4 step 2.
+// AES-256-GCM via `@noble/ciphers/aes` (§11.4 step 2).
 //
 // We deliberately do NOT use `crypto.subtle.encrypt` here: SubtleCrypto
 // is only exposed in secure contexts (HTTPS or `localhost`), so a wallet
@@ -22,7 +22,7 @@
 // Ciphertext format (binary concatenation):
 //   [12-byte IV | ciphertext || 16-byte auth tag]
 // `gcm()` from `@noble/ciphers/aes` appends the 16-byte tag to its
-// ciphertext output by default, matching what Web Crypto produced — so
+// ciphertext output by default, matching what Web Crypto produced, so
 // blobs written by an older subtle-based build decrypt cleanly under
 // the new code path and vice versa. This is wire-format-compatible.
 
@@ -36,7 +36,7 @@ const TAG_LENGTH_BYTES = 16; // GCM auth tag (128 bits)
  * (not encrypted) and must be supplied again at decrypt time.
  *
  * Returns a Promise (rather than a sync value) so the public surface
- * stays identical to the previous Web-Crypto-backed implementation —
+ * stays identical to the previous Web-Crypto-backed implementation;
  * every existing caller awaits this.
  *
  * @param {Uint8Array} key        32 bytes

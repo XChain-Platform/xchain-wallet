@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for HW Sign Step 4 — RemoteSigner class.
+// Smoke for HW Sign Step 4: RemoteSigner class.
 //
 // RemoteSigner implements the Signer interface by forwarding every
 // call over an injected transport function. Background-process flows
@@ -18,7 +18,7 @@
 // an MV3 service worker).
 //
 // This smoke exercises the shim against a hand-written mock transport
-// that records every op + payload — no real messaging channel, no
+// that records every op + payload; no real messaging channel, no
 // real signer, just the forwarding contract.
 
 import { strict as assert } from 'node:assert';
@@ -177,5 +177,5 @@ assert.equal(typeof unsub, 'function');
 unsub();
 
 console.log(
-    'OK — remote signer smoke (Signer-interface forwarding via injected transport; status/addresses/publicKey/signPsbt/signMessage payloads carry signerId; transport throw → SignerStatusError; malformed remote results rejected)',
+    'OK: remote signer smoke (Signer-interface forwarding via injected transport; status/addresses/publicKey/signPsbt/signMessage payloads carry signerId; transport throw → SignerStatusError; malformed remote results rejected)',
 );

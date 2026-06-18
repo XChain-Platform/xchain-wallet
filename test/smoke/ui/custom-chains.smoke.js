@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §9.7 / Cluster Q FOLLOWUP 2 — custom (user-added) chain
+// Smoke for §9.7 / Cluster Q FOLLOWUP 2: custom (user-added) chain
 // registry.
 //
 // Pins:
@@ -283,4 +283,4 @@ assert.match(sectionSrc, /messaging\.listCustomChains/, 'CustomChainsRow calls m
 assert.match(sectionSrc, /messaging\.addCustomChain/, 'CustomChainsRow calls messaging.addCustomChain');
 assert.match(sectionSrc, /messaging\.removeCustomChain/, 'CustomChainsRow calls messaging.removeCustomChain');
 
-console.log('OK — custom chain registry flow + schema + host + shells + UI');
+console.log('OK: custom chain registry flow + schema + host + shells + UI');

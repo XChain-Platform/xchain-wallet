@@ -18,7 +18,7 @@
 //
 // Session semantics:
 //   - The master key lives in `vault` (in-memory). There is no
-//     `chrome.storage.session` equivalent — a page refresh re-locks
+//     `chrome.storage.session` equivalent; a page refresh re-locks
 //     the wallet, by design.
 //   - kdfParams live in `localStorage` via WebMetaBackend so the
 //     unlock flow can derive the master key before touching the
@@ -58,7 +58,7 @@ import {
     fakeSubassetsFor,
 } from './devFakeBalances.js';
 
-// §50 / Cluster L FOLLOWUP 4 — shell-specific diagnostic env + build
+// §50 / Cluster L FOLLOWUP 4: shell-specific diagnostic env + build
 // for the dump handler. Same shape across all three createBackgroundHost
 // call sites (create-from-fresh, create-from-existing, unlock).
 const webDiagnosticContext = async () => ({
@@ -79,7 +79,7 @@ import { resolveSdkFactory } from './sdkFactory.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
-// Dev-mode SDK stub — fallback when `xchain-sdk` isn't resolvable.
+// Dev-mode SDK stub: fallback when `xchain-sdk` isn't resolvable.
 //
 // Production builds load the real SDK via `resolveSdkFactory` which
 // dynamically imports `xchain-sdk`. This stub exists so Node smoke
@@ -88,7 +88,7 @@ const chainRegistry = registryLib.defaultRegistry();
 //
 // `deriveAddress` returns deterministic pseudo-addresses per
 // (pubkey, type) so createWallet / importMnemonic persist real vault
-// records. Signing / broadcast / WIF-import throw loudly — those
+// records. Signing / broadcast / WIF-import throw loudly; those
 // paths have no non-SDK implementation.
 const createDevMockSdk = (constructorOpts) => {
     // Each per-chain SDK instance carries its own `network` (chainId)
@@ -101,7 +101,7 @@ const createDevMockSdk = (constructorOpts) => {
     // rather than crashing with "X.getBalances is not a function".
     // `getBalances` is overridden to return the realistic dev dataset
     // so the UI has something to render. Methods that mutate or sign
-    // throw loudly — those paths have no non-SDK implementation.
+    // throw loudly; those paths have no non-SDK implementation.
     const readStub = new Proxy({}, {
         get(_target, prop) {
             if (typeof prop !== 'string') return undefined;
@@ -129,14 +129,14 @@ const createDevMockSdk = (constructorOpts) => {
             }
             if (prop === 'getIssues') {
                 // Genesis (ISSUE) lookup. Only the token-filtered shape
-                // is populated — ManageToken takes the latest row and
+                // is populated: ManageToken takes the latest row and
                 // treats it as the genesis event.
                 return async (query, type /* , opts */) => {
                     if (type === 'token' && query) return fakeGenesisFor(query, chainId);
                     return [];
                 };
             }
-            // ManageToken tab panels — Dispensers / Orders / Swaps /
+            // ManageToken tab panels: Dispensers / Orders / Swaps /
             // Holders / Activity. Real explorer isn't reachable from
             // this build (explorer.xchain.io is not yet provisioned),
             // so the dev mock returns realistic populated rows for the
@@ -205,7 +205,7 @@ const createDevMockSdk = (constructorOpts) => {
             verifyMessage() { return false; },
             generateChallenge() { return ''; },
         },
-        // §46 — no-op WebSocket surface so the notification watcher can
+        // §46: no-op WebSocket surface so the notification watcher can
         // "connect" against the dev mock without a real explorer WS. It
         // never emits, so no notifications fire in dev-mock mode.
         connectWs() { return Promise.resolve(); },
@@ -231,7 +231,7 @@ const createDevMockSdk = (constructorOpts) => {
 // this is safe because `SDKRegistry._instances` caches per chain, so
 // early-bind calls (onboarding) get the mock and post-resolution
 // calls (Send) get the real SDK. For a clean production run users
-// should onboard AFTER the swap — the `sdkResolved` promise below
+// should onboard AFTER the swap; the `sdkResolved` promise below
 // gives callers a handle on that.
 let sdkRegistry = new sdkLib.SDKRegistry({
     chainRegistry,
@@ -262,7 +262,7 @@ let notificationService = null;
 let priceAlertWatcher = null;
 let priceOracleInstance = null;
 
-// §46 — start the live notification watcher once a vault + host exist. All
+// §46: start the live notification watcher once a vault + host exist. All
 // three host-creation paths (create / import / unlock) call this; lock stops
 // it. Idempotent: a second call while already running is a no-op. `getFlows`
 // is hoisted (a function declaration below), so referencing it here is safe.
@@ -290,7 +290,7 @@ function startNotifications() {
         console.error('[xchain] notification watcher start failed:', err);
     });
 
-    // §46 price-alert poll watcher — same lifecycle, same notify adapter.
+    // §46 price-alert poll watcher: same lifecycle, same notify adapter.
     if (!priceAlertWatcher && typeof globalThis.fetch === 'function') {
         priceAlertWatcher = new notificationsLib.PriceAlertWatcher({
             getNativePrices: async ({ chainIds, fiatCurrency }) => {
@@ -328,7 +328,7 @@ function stopNotifications() {
 }
 
 /**
- * Classify the current wallet-session state — matches the extension's
+ * Classify the current wallet-session state. Matches the extension's
  * `session.status` response shape so route code can be shared verbatim.
  *
  * @returns {Promise<{ hasWallet: boolean, hasSession: boolean, state: 'no-wallet' | 'locked' | 'unlocked' }>}
@@ -382,7 +382,7 @@ export async function createWalletLocal(req) {
 
     const meta = new WebMetaBackend();
     if (await meta.load()) {
-        throw new Error('wallet.create: a wallet already exists — import or reset first');
+        throw new Error('wallet.create: a wallet already exists; import or reset first');
     }
 
     const kdfParams = cryptoLib.makeFreshKdfParams();
@@ -430,7 +430,7 @@ export async function createWalletLocal(req) {
 
 /**
  * Import a pre-existing mnemonic (BIP39 12/24-word or Counterwallet
- * legacy 12-word). Same persistence path as `createWalletLocal` — fresh
+ * legacy 12-word). Same persistence path as `createWalletLocal`: fresh
  * kdfParams, open vault, run the core `importMnemonic` flow, save meta.
  *
  * @param {{ password: string, mnemonic: string, name?: string, bip39Passphrase?: string, activeChainIds?: string[] }} req
@@ -453,7 +453,7 @@ export async function importMnemonicLocal(req) {
 
     const meta = new WebMetaBackend();
     if (await meta.load()) {
-        throw new Error('wallet.import: a wallet already exists — unlock or reset first');
+        throw new Error('wallet.import: a wallet already exists; unlock or reset first');
     }
 
     const kdfParams = cryptoLib.makeFreshKdfParams();
@@ -604,7 +604,7 @@ export async function sendMessage(type, request) {
     });
 }
 
-/** Test hook — expose module state without touching real IDB/localStorage. */
+/** Test hook: expose module state without touching real IDB/localStorage. */
 export function __resetForTests() {
     stopNotifications();
     vault = null;

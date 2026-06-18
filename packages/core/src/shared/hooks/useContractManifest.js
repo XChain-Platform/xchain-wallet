@@ -12,7 +12,7 @@ import { useEffect, useState } from 'react';
 import { useMessaging } from '../useMessaging.js';
 
 /**
- * Phase F — shared permissions-manifest lookup for the inline consent
+ * Phase F: shared permissions-manifest lookup for the inline consent
  * disclosure shown before EXECUTE / DEPOSIT / WITHDRAW. Mirrors
  * `useTokenInfo` (module cache, null-sentinel, `skip` support).
  *
@@ -21,7 +21,7 @@ import { useMessaging } from '../useMessaging.js';
  * `{ permissions: null, maxTakeBps: null }` when:
  *   - `chainId` or `contractActionIndex` is missing,
  *   - `messaging.getContractManifest` isn't wired in this build,
- *   - the lookup fails (silently — the panel renders its
+ *   - the lookup fails (silently; the panel renders its
  *     "undeclared manifest" soft caution).
  *
  * `skip` lets the caller defer the fetch until it actually needs the
@@ -72,7 +72,7 @@ export function useContractManifest({ chainId, contractActionIndex, skip = false
                 cache.set(key, normalized);
                 setManifest(normalized);
             })
-            .catch(() => { /* silent — panel falls back to the undeclared-manifest caution */ });
+            .catch(() => { /* silent; panel falls back to the undeclared-manifest caution */ });
         return () => { cancelled = true; };
     }, [key, skip, messaging, chainId, contractActionIndex]);
 
@@ -80,7 +80,7 @@ export function useContractManifest({ chainId, contractActionIndex, skip = false
 }
 
 /**
- * Test helper — clears the module-level manifest cache between spec
+ * Test helper. Clears the module-level manifest cache between spec
  * runs so a stale mock doesn't leak across cases.
  */
 export function __clearContractManifestCache() {

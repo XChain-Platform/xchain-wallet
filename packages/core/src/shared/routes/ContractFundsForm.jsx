@@ -30,12 +30,12 @@ import styles from './IssueTokenForm.module.css';
 const chainRegistry = registryLib.defaultRegistry();
 
 /**
- * DEPOSIT / WITHDRAW form — §42.5.
+ * DEPOSIT / WITHDRAW form (§42.5).
  *
  * One component handles both modes via the `mode` prop. The protocol
  * field shape is identical (CONTRACT_ACTION_INDEX + TICK + QUANTITY),
  * the validator accepts both, and the sign-screen / HW branch /
- * error-handling chassis is the same — the only copy that changes is
+ * error-handling chassis is the same; the only copy that changes is
  * the verb ("Deposit to" vs "Withdraw from") and the summary line.
  *
  * Kept as two exported routes rather than one mode-switched flow at
@@ -116,10 +116,10 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
     const [hwStatus, setHwStatus] = useState('idle');
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
 
-    // §20 / Cluster W FOLLOWUP 5 — watcher-mode encode-only branch.
+    // §20 / Cluster W FOLLOWUP 5: watcher-mode encode-only branch.
     const { isWatcherMode } = useWalletMode();
 
-    // Phase F — permissions-manifest consent disclosure, shown inline in
+    // Phase F: permissions-manifest consent disclosure, shown inline in
     // the review `<dl>` for both deposit and withdraw. Deferred via
     // `skip` until the user reaches the review stage.
     const manifest = useContractManifest({
@@ -258,7 +258,7 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
                 </p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Txid</dt>
-                    <dd className={styles.detailsValue}>{String(txid || '—')}</dd>
+                    <dd className={styles.detailsValue}>{String(txid || 'N/A')}</dd>
                 </dl>
                 <div className={styles.actions}>
                     <Button variant="primary" onClick={onBack}>Done</Button>
@@ -296,7 +296,7 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
                 </dl>
                 {isWatcherMode ? (
                     <p className={styles.hint}>
-                        Watcher mode — this wallet will build an unsigned transaction.
+                        Watcher mode: this wallet will build an unsigned transaction.
                         Sign it on your Signer-mode wallet, then bring the
                         signed transaction to a Full-mode wallet to broadcast.
                     </p>

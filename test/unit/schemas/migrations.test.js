@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Unit: schemas/migrations — migrate harness + all per-schema convenience wrappers.
+// Unit: schemas/migrations - migrate harness + all per-schema convenience wrappers.
 
 import { describe, it, expect } from 'vitest';
 import {
@@ -112,7 +112,7 @@ describe('migrate() harness', () => {
     });
 });
 
-describe('walletMigrations — v1 → v2', () => {
+describe('walletMigrations: v1 to v2', () => {
     it('null multisig → empty multisigs array', () => {
         const r = walletMigrations[1](makeV1Wallet({ multisig: null }));
         expect(r.schemaVersion).toBe(2);
@@ -151,7 +151,7 @@ describe('migrateWallet', () => {
     });
 });
 
-describe('addressMigrations — v1 → v2', () => {
+describe('addressMigrations: v1 to v2', () => {
     it('adds signerId: null to v1 record', () => {
         const v1 = { schemaVersion: 1, address: '1abc' };
         const r = addressMigrations[1](v1);
@@ -187,7 +187,7 @@ describe('migrateAddress', () => {
     });
 });
 
-describe('settingsMigrations — v1 → v2', () => {
+describe('settingsMigrations: v1 to v2', () => {
     const makeV1Settings = (overrides = {}) => ({
         schemaVersion: 1,
         theme: 'system',
@@ -266,7 +266,7 @@ describe('migrateSettings', () => {
     });
 });
 
-describe('multisigConfigMigrations — v1 → v2', () => {
+describe('multisigConfigMigrations: v1 to v2', () => {
     it('adds id field', () => {
         const v1 = { schemaVersion: 1, scheme: 'p2wsh-multisig' };
         const r = multisigConfigMigrations[1](v1);
@@ -282,7 +282,7 @@ describe('multisigConfigMigrations — v1 → v2', () => {
     });
 });
 
-describe('empty migration maps — account, contact, connectedSite, pendingTx, etc.', () => {
+describe('empty migration maps (account, contact, connectedSite, pendingTx, etc.)', () => {
     it('accountMigrations has no registered steps', () => {
         expect(Object.keys(accountMigrations)).toHaveLength(0);
     });

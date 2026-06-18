@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Cluster H FOLLOWUP 1 — BIP39 passphrase toggle in CreateWallet +
+// Cluster H FOLLOWUP 1: BIP39 passphrase toggle in CreateWallet +
 // ImportWallet now carries explanatory copy that hardware wallets
 // handle passphrases on the device itself, not via this UI. The
 // Create / Import lanes are software-only by construction (HW
@@ -53,10 +53,10 @@ assert.ok(/pair a hardware wallet via Add Account → Hardware Signer/.test(impo
 
 // 3. The ImportWallet InfoTip lives inside the existing
 //    `<label className={styles.advancedToggle}>` next to the
-//    "This wallet uses a BIP39 passphrase" copy — sanity check it
+//    "This wallet uses a BIP39 passphrase" copy: sanity check it
 //    sits adjacent to the trigger text rather than floating
 //    elsewhere in the form.
 assert.ok(/<span>This wallet uses a BIP39 passphrase<\/span>[\s\S]{0,400}<InfoTip/.test(importSrc),
     'ImportWallet places the InfoTip immediately after the toggle label');
 
-console.log('OK — BIP39 passphrase HW-hint sweep (CreateWallet + ImportWallet)');
+console.log('OK: BIP39 passphrase HW-hint sweep (CreateWallet + ImportWallet)');

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Unit: schemas/wallet — createWallet + validateWallet.
+// Unit: schemas/wallet - createWallet + validateWallet.
 
 import { describe, it, expect } from 'vitest';
 import {
@@ -188,26 +188,26 @@ describe('validateWallet', () => {
         expect(r.errors.some((e) => e.includes('passphraseEnabled'))).toBe(true);
     });
 
-    it('rejects malformed kdfParams — wrong algorithm', () => {
+    it('rejects malformed kdfParams: wrong algorithm', () => {
         const w = createWallet(BASE_INPUT);
         const r = validateWallet({ ...w, kdfParams: { ...BASE_KDF, algorithm: 'pbkdf2' } });
         expect(r.ok).toBe(false);
         expect(r.errors.some((e) => e.includes('kdfParams'))).toBe(true);
     });
 
-    it('rejects malformed kdfParams — non-integer iterations', () => {
+    it('rejects malformed kdfParams: non-integer iterations', () => {
         const w = createWallet(BASE_INPUT);
         const r = validateWallet({ ...w, kdfParams: { ...BASE_KDF, iterations: 1.5 } });
         expect(r.ok).toBe(false);
     });
 
-    it('rejects malformed kdfParams — negative memory', () => {
+    it('rejects malformed kdfParams: negative memory', () => {
         const w = createWallet(BASE_INPUT);
         const r = validateWallet({ ...w, kdfParams: { ...BASE_KDF, memory: -1 } });
         expect(r.ok).toBe(false);
     });
 
-    it('rejects malformed kdfParams — empty salt', () => {
+    it('rejects malformed kdfParams: empty salt', () => {
         const w = createWallet(BASE_INPUT);
         const r = validateWallet({ ...w, kdfParams: { ...BASE_KDF, salt: '' } });
         expect(r.ok).toBe(false);
@@ -218,7 +218,7 @@ describe('validateWallet', () => {
         expect(validateWallet({ ...w, importedKeys: 'bad' }).ok).toBe(false);
     });
 
-    it('rejects malformed importedKey — empty addressId', () => {
+    it('rejects malformed importedKey: empty addressId', () => {
         const w = createWallet(BASE_INPUT);
         const r = validateWallet({
             ...w,
@@ -227,7 +227,7 @@ describe('validateWallet', () => {
         expect(r.ok).toBe(false);
     });
 
-    it('rejects malformed importedKey — invalid importedAt', () => {
+    it('rejects malformed importedKey: invalid importedAt', () => {
         const w = createWallet(BASE_INPUT);
         const r = validateWallet({
             ...w,

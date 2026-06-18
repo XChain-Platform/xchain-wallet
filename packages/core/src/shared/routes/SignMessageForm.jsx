@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// SignMessageForm — §17.4 / §30.1 / G024.
+// SignMessageForm: §17.4 / §30.1 / G024.
 //
 // User-initiated message signing surface. The user picks a chain +
 // address from their wallet, types a message, enters their password,
@@ -16,7 +16,7 @@
 // `messaging.signMessageRequest`, which the host implements via
 // `flows.signMessageFlow`.
 //
-// The form is presentation-only — chain + address resolution comes
+// The form is presentation-only; chain + address resolution comes
 // from `messaging.getAddressesByChain` (already exposed for Send /
 // Receive); the actual key handling stays inside the host. Hardware
 // signers are NOT supported here yet; G024's HW counterpart lives in a
@@ -72,9 +72,9 @@ export function SignMessageForm({ walletId, onBack }) {
     const [signedMessage, setSignedMessage] = useState('');
     const [signedAddress, setSignedAddress] = useState('');
 
-    // §37 / G125 — form-draft persistence. Persists chain / address /
+    // §37 / G125: form-draft persistence. Persists chain / address /
     // message; password stays in component state only.
-    // Cluster P FOLLOWUP 6 — honor settings.privacy.formDraftTtlMs.
+    // Cluster P FOLLOWUP 6: honor settings.privacy.formDraftTtlMs.
     const formDraftTtlMs = Number.isFinite(settings?.privacy?.formDraftTtlMs)
         ? Number(settings.privacy.formDraftTtlMs)
         : undefined;
@@ -390,7 +390,7 @@ export function SignMessageForm({ walletId, onBack }) {
             </div>
             {signerReady ? (
                 <p style={{ margin: 'var(--xc-space-2) 0 0', display: 'flex', alignItems: 'center', gap: 'var(--xc-space-1)', fontSize: 'var(--xc-text-sm)', color: 'var(--xc-text-muted)' }}>
-                    <span aria-hidden="true">🔓</span> Wallet unlocked — no password needed.
+                    <span aria-hidden="true">🔓</span> Wallet unlocked, no password needed.
                 </p>
             ) : (
                 <Input

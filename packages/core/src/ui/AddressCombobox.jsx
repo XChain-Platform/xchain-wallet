@@ -14,7 +14,7 @@ import { filterSuggestions } from '../flows/recentDestinations.js';
 import styles from './AddressCombobox.module.css';
 
 /**
- * AddressCombobox — Send / authoring forms' destination input with
+ * AddressCombobox: destination input for Send / authoring forms, with
  * autocomplete from contacts + recent send history. §29.4 + §21.6.
  *
  * The wrapping shell builds the suggestion list (via
@@ -23,13 +23,13 @@ import styles from './AddressCombobox.module.css';
  * input, keyboard navigation, and selection.
  *
  * Props
- *   - value, onChange       — same shape as `<Input>`; onChange fires
+ *   - value, onChange       same shape as `<Input>`; onChange fires
  *                             with `{ target: { value } }` so callers
  *                             can swap from `<Input>` without changes.
- *   - suggestions           — `Suggestion[]` from buildRecentDestinations.
- *   - onPaste               — pass-through to the underlying input.
+ *   - suggestions           `Suggestion[]` from buildRecentDestinations.
+ *   - onPaste               pass-through to the underlying input.
  *                             Send.jsx wires this for BIP21 / WIF detect.
- *   - everything else       — forwarded to `<Input>` (label, hint, error,
+ *   - everything else       forwarded to `<Input>` (label, hint, error,
  *                             placeholder, autoComplete, etc.).
  *
  * @typedef {object} AddressComboboxOwnProps

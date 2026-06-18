@@ -27,7 +27,7 @@ import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 
-// Same ticker map SwapForm uses — descriptor.coin is long-form
+// Same ticker map SwapForm uses. descriptor.coin is long-form
 // ('bitcoin' / 'litecoin' / 'dogecoin'); SWAP serializes the
 // short-form tickers in GIVE_COIN / GET_COIN.
 const PROTOCOL_COIN_TICKER = {
@@ -47,7 +47,7 @@ const PROTOCOL_COIN_TICKER = {
  * SwapForm doesn't grow a "cross-chain mode" toggle.
  *
  * Native-coin rejection still applies (GIVE_TICK / GET_TICK cannot
- * be a coin's native ticker — that's DISPENSER territory).
+ * be a coin's native ticker (that's DISPENSER territory).
  *
  * Receiver address (`GET_ADDRESS`) defaults to the user's newest
  * address on the get-chain, surfaced via `messaging.getNewestAddress`.
@@ -162,7 +162,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                 if (cancelled) return;
                 if (rec?.address) setGetAddress(rec.address);
             })
-            .catch(() => { /* non-fatal — user can enter manually */ });
+            .catch(() => { /* non-fatal; user can enter manually */ });
         return () => { cancelled = true; };
     }, [walletId, getChainId, getAddressTouched, messaging]);
 
@@ -180,13 +180,13 @@ export function CrossChainSwapForm({ walletId, onBack }) {
     const validationError = useMemo(() => {
         if (!giveCoinTicker || !getCoinTicker) return null;
         if (giveCoinTicker === getCoinTicker) {
-            return 'Give and get chains must differ — for same-chain swaps use Swap tokens (§41.5).';
+            return 'Give and get chains must differ. For same-chain swaps use Swap tokens (§41.5).';
         }
         if (giveTick && giveTick.toUpperCase() === giveCoinTicker) {
-            return `SWAP cannot give ${giveCoinTicker} — use DISPENSER for token ↔ native coin.`;
+            return `SWAP cannot give ${giveCoinTicker}. Use DISPENSER for token to native coin.`;
         }
         if (getTick && getTick.toUpperCase() === getCoinTicker) {
-            return `SWAP cannot get ${getCoinTicker} — use DISPENSER for token ↔ native coin.`;
+            return `SWAP cannot get ${getCoinTicker}. Use DISPENSER for token to native coin.`;
         }
         if (expirationBlocks && !/^\d+$/.test(expirationBlocks)) {
             return 'Expiration must be a positive integer.';
@@ -194,7 +194,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
         return null;
     }, [giveCoinTicker, getCoinTicker, giveTick, getTick, expirationBlocks]);
 
-    // §20 / Cluster W FOLLOWUP 5 — watcher-mode encode-only branch.
+    // §20 / Cluster W FOLLOWUP 5: watcher-mode encode-only branch.
     const { isWatcherMode } = useWalletMode();
 
     async function handleSubmit(event) {
@@ -479,13 +479,13 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                         </dd>
                         <dt className={styles.detailsLabel}>To</dt>
                         <dd className={styles.detailsValue}>
-                            {getAddress ? <AddressText address={getAddress} /> : '—'}
+                            {getAddress ? <AddressText address={getAddress} /> : '(none)'}
                         </dd>
                     </dl>
 
                     {isWatcherMode ? (
                         <p className={styles.hint}>
-                            Watcher mode — this wallet will build an unsigned transaction.
+                            Watcher mode: this wallet will build an unsigned transaction.
                             Sign it on your Signer-mode wallet, then bring the
                             signed transaction to a Full-mode wallet to broadcast.
                         </p>

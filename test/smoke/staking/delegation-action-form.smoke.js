@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for Phase 4 — Step 10 of 23 — DELEGATE (rotate + revoke)
+// Smoke for Phase 4, Step 10 of 23: DELEGATE (rotate + revoke)
 // forms (§42.7.2 delegation-lane).
 
 import { strict as assert } from 'node:assert';
@@ -50,7 +50,7 @@ for (const stage of ['form', 'review', 'submitting', 'done']) {
         `DelegationActionForm tracks '${stage}' stage`);
 }
 
-// Pubkey validation — 64 hex chars.
+// Pubkey validation: 64 hex chars.
 assert.ok(/\[0-9a-fA-F\]\{64\}/.test(formSrc),
     'DelegationActionForm validates signing pubkey as 64 hex chars');
 
@@ -162,5 +162,5 @@ for (const [shell, appPath] of [
 }
 
 console.log(
-    'OK — delegation action form smoke (DelegationActionForm mode=delegate|revoke + delegateAction/revokeDelegationAction flows with 64-hex Ed25519 validation + revoke auto-prefill via getDelegationsForAddress + bg handlers + 3-shell messaging + two App.jsx sub-routes wired from StakingDashboard)',
+    'OK: delegation action form smoke (DelegationActionForm mode=delegate|revoke + delegateAction/revokeDelegationAction flows with 64-hex Ed25519 validation + revoke auto-prefill via getDelegationsForAddress + bg handlers + 3-shell messaging + two App.jsx sub-routes wired from StakingDashboard)',
 );

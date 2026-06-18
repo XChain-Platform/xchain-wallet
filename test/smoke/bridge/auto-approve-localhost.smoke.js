@@ -83,4 +83,4 @@ assert.ok(/r\.autoApproveLocalhost !== undefined/.test(schemaSrc),
 assert.ok(/'autoApproveLocalhost'/.test(schemaSrc),
     'Settings validator rejects non-boolean values');
 
-console.log('OK — localhost auto-approve helper + bridge wiring + Settings + schema smoke');
+console.log('OK: localhost auto-approve helper + bridge wiring + Settings + schema smoke');

@@ -29,10 +29,10 @@ import styles from './BalanceList.module.css';
  * @param {string} [props.emptyBody]                 explanatory body copy
  * @param {() => void} [props.onReceive]             when supplied, the empty-state shows a Receive CTA
  * @param {(token: { chainId: string, tick: string, kind: string, displayName: string, divisibility: number, fiatRate: number | null, quantity: string }) => void} [props.onSelectToken]
- *        Click handler for a balance row — surfaces the §27.6 Token detail page (G071) when supplied.
- * @param {Set<string> | null} [props.pinnedKeys]    `chainId:tick` keys pinned by the user — pinned rows sort to the top (§27.3 / G072)
+ *        Click handler for a balance row. Surfaces the §27.6 Token detail page (G071) when supplied.
+ * @param {Set<string> | null} [props.pinnedKeys]    `chainId:tick` keys pinned by the user. Pinned rows sort to the top (§27.3 / G072).
  * @param {(key: string, nextPinned: boolean) => void} [props.onTogglePin]   per-row pin/unpin callback; when supplied each row renders a star button
- * @param {Set<string> | null} [props.hiddenKeys]    `chainId:tick` keys hidden by the user — hidden rows collapse into the Hidden footer section (§27.4 / G073)
+ * @param {Set<string> | null} [props.hiddenKeys]    `chainId:tick` keys hidden by the user. Hidden rows collapse into the Hidden footer section (§27.4 / G073).
  * @param {(key: string, nextHidden: boolean) => void} [props.onToggleHide]  per-row hide/unhide callback; when supplied, each row gains a "hide" entry in its overflow menu
  */
 export function BalanceList({
@@ -129,13 +129,13 @@ export function BalanceList({
 function BalanceRowEl({ row, multisig, onSelect, pinned, onTogglePin, hidden, onToggleHide }) {
     const isNative = row.kind === 'native';
     const chainIconUrl = branding.chainIconSmallUrl(row.chainId);
-    // App-wide privacy toggle — when on, replace the per-row qty and
+    // App-wide privacy toggle: when on, replace the per-row qty and
     // fiat values with dots so navigating to / from the row leaks
     // nothing. Distinct from the per-row `hidden` prop above, which
     // controls whether this row appears in the Hidden tokens section.
     const [balancesHidden] = useBalancesHidden();
     // Network/env (mainnet/testnet/regtest) is already chosen globally
-    // in Settings — repeating it on every row adds noise. Show just the
+    // in Settings, so repeating it on every row adds noise. Show just the
     // tick symbol; chain family is conveyed by the chain icon.
     const subtitle = row.tick;
     const fiat = useMemo(
@@ -181,7 +181,7 @@ function BalanceRowEl({ row, multisig, onSelect, pinned, onTogglePin, hidden, on
                             // If the published image 404s, fall back to
                             // the letter chip by hiding the broken img;
                             // the next render still has imageUrl set, so
-                            // we can't swap to <span> — just hide.
+                            // we can't swap to <span>, so just hide.
                             e.currentTarget.style.display = 'none';
                         }}
                     />
@@ -279,7 +279,7 @@ function BalanceRowEl({ row, multisig, onSelect, pinned, onTogglePin, hidden, on
 }
 
 /**
- * Heuristic for the "hide spam" affordance — flags rows that are
+ * Heuristic for the "hide spam" affordance. Flags rows that are
  * tiny / unknown-issuer / zero-balance so the UI can surface a "hide all
  * spam" sweep button. Conservative: only obvious noise. Callers pass the
  * resulting key set into `<BalanceList>` `hiddenKeys`.
@@ -297,7 +297,7 @@ export function detectSpamCandidates(rows) {
             continue;
         }
         // Subdivisible token whose magnitude rounds to 0.0001 of a unit
-        // and has no fiat price — almost always airdrop dust.
+        // and has no fiat price. Almost always airdrop dust.
         if (r.fiatRate === null && r.divisibility > 0) {
             const div = 10n ** BigInt(r.divisibility);
             if (q < div / 10000n) flagged.push(`${r.chainId}:${r.tick}`);
@@ -406,8 +406,8 @@ export function buildNativeRow(chainId, chainRegistry) {
  * tokens that exist on the platform but aren't in the user's balance.
  * Tapping the row lands on Receive with the chain + tick pre-filled.
  *
- * `meta` is whatever the picker has on hand from its search call —
- * usually just nulls — so the row falls back to a letter chip + the
+ * `meta` is whatever the picker has on hand from its search call
+ * (usually just nulls), so the row falls back to a letter chip + the
  * tick as displayName. Callers are responsible for confirming the
  * token exists; this helper trusts its inputs and only fails on an
  * unregistered chain.

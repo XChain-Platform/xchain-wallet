@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §20.4 / Cluster E FOLLOWUP 4 — QR scan for PsbtSignForm.
+// Smoke for §20.4 / Cluster E FOLLOWUP 4: QR scan for PsbtSignForm.
 //
 // Pins:
 //   - PsbtSignForm imports QrScanner from core/ui and the XCW collector

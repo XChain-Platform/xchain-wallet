@@ -33,16 +33,16 @@ import styles from './IssueTokenForm.module.css';
 const chainRegistry = registryLib.defaultRegistry();
 
 /**
- * Standalone ISSUE form — §40.2.
+ * Standalone ISSUE form (§40.2).
  *
  * The Token Creation Wizard (§40.1) is the primary authoring surface.
  * This form is the escape hatch for users who want to compose ISSUE
- * without the template picker — every ISSUE v0 field the Custom
- * template exposes, on a single screen. Two stages: form → review+sign,
+ * without the template picker: every ISSUE v0 field the Custom
+ * template exposes, on a single screen. Two stages: form -> review+sign,
  * mirroring Send.jsx.
  *
- * Backed by the same `messaging.issueToken` helper the wizard uses —
- * no new flow, no new background handler. The review step runs the
+ * Backed by the same `messaging.issueToken` helper the wizard uses.
+ * No new flow, no new background handler. The review step runs the
  * draft through `decoder.decodeAction` so the plain-English summary
  * matches the sign screen shown for dApp-initiated ISSUE requests.
  *
@@ -83,7 +83,7 @@ export function IssueTokenForm({ walletId, onBack }) {
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
-    // Cluster P FOLLOWUP 5 — form-draft persistence sweep. Persists the
+    // Cluster P FOLLOWUP 5: form-draft persistence sweep. Persists the
     // user-visible composition fields; password stays in component
     // state. Honors privacy.formDraftTtlMs (Off / 1h / 24h / 7d) the
     // same way Send + SignMessageForm do.
@@ -230,7 +230,7 @@ export function IssueTokenForm({ walletId, onBack }) {
     const [hwStatus, setHwStatus] = useState('idle');
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
 
-    // §20 / Cluster W FOLLOWUP 5 — watcher-mode wallets have pubkeys but
+    // §20 / Cluster W FOLLOWUP 5: watcher-mode wallets have pubkeys but
     // no keys to sign with. Submit path routes through buildActionPsbt
     // (encode-only, no vault unlock, no signer, no broadcast); the user
     // takes the resulting unsigned PSBT to a Signer-mode wallet.
@@ -272,7 +272,7 @@ export function IssueTokenForm({ walletId, onBack }) {
             setResult(res);
             setPassword('');
             setStage('done');
-            // Cluster P FOLLOWUP 5 — clear the draft once the action
+            // Cluster P FOLLOWUP 5: clear the draft once the action
             // succeeds so a subsequent Issue starts fresh rather than
             // restoring the just-broadcast draft.
             draft.clear();
@@ -322,7 +322,7 @@ export function IssueTokenForm({ walletId, onBack }) {
 
     if (stage === 'done') {
         const txid = result?.txid || result?.broadcast?.txid;
-        // §20 / Cluster W FOLLOWUP 5 — watcher-mode result envelope carries
+        // §20 / Cluster W FOLLOWUP 5: watcher-mode result envelope carries
         // psbtHex instead of a txid. Render the shared WatcherResultPanel
         // so the user can transport the unsigned PSBT to a Signer-mode wallet.
         if (result?.psbtHex && !txid) {
@@ -378,7 +378,7 @@ export function IssueTokenForm({ walletId, onBack }) {
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>
-                        Watcher mode — this wallet will build an unsigned transaction.
+                        Watcher mode: this wallet will build an unsigned transaction.
                         Sign it on your Signer-mode wallet, then bring the
                         signed transaction to a Full-mode wallet to broadcast.
                     </p>
@@ -403,7 +403,7 @@ export function IssueTokenForm({ walletId, onBack }) {
                     <StatusMessage
                         variant="error"
                         recovery={
-                            // Cluster P FOLLOWUP 4 — the post-submit
+                            // Cluster P FOLLOWUP 4: the post-submit
                             // error class is "encoder rejected /
                             // network unreachable / device unplugged".
                             // Returning to the form stage lets the
@@ -541,10 +541,10 @@ export function IssueTokenForm({ walletId, onBack }) {
                 autoCorrect="off"
             />
             {formError ? (
-                // Cluster P FOLLOWUP 4 — formError surfaces field-level
+                // Cluster P FOLLOWUP 4: formError surfaces field-level
                 // validation ("Ticker is required", "Supply must be a
                 // positive number", "Pick a source address first").
-                // No one-click recovery affordance fits — the user
+                // No one-click recovery affordance fits here; the user
                 // edits the offending field and re-submits. Auditable
                 // per-form decision: terminal-as-rendered, recovery is
                 // user-iteration via the Inputs above.

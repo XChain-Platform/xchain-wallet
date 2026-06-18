@@ -19,6 +19,6 @@ import { Router } from './Router.jsx';
 
 const container = document.getElementById('xchain-approval-root');
 if (!container) {
-    throw new Error('approval: #xchain-approval-root missing — check approval.html');
+    throw new Error('approval: #xchain-approval-root missing; check approval.html');
 }
 createRoot(container).render(<Router />);

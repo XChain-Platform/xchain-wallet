@@ -11,22 +11,22 @@
 import styles from './StatusMessage.module.css';
 
 /**
- * §53.3 / G169 — shared status / error / success row that every form can
+ * §53.3 / G169: shared status / error / success row that every form can
  * use in place of an unannounced `<p>` or `<div>`. Picks the right
  * `role` + `aria-live` per variant so screen readers announce the
  * message exactly once when it appears.
  *
- *   variant="status"   role="status" aria-live="polite"  — neutral progress / informational copy
- *   variant="error"    role="alert"  aria-live="assertive" — validation failure / runtime error
- *   variant="success"  role="status" aria-live="polite"  — confirmation copy after a successful action
+ *   variant="status"   role="status" aria-live="polite"  (neutral progress / informational copy)
+ *   variant="error"    role="alert"  aria-live="assertive" (validation failure / runtime error)
+ *   variant="success"  role="status" aria-live="polite"  (confirmation copy after a successful action)
  *
  * Renders nothing when `children` is empty, so callers can mount the
  * component conditionally inside an effect-driven flow without an
  * extra null branch.
  *
- * §37 / G121 — `recovery` slot lets a caller surface a one-click fix
- * inline with the error message ("Insufficient balance — Use Max",
- * "Backup file missing — Browse"). The button shares the message
+ * §37 / G121: `recovery` slot lets a caller surface a one-click fix
+ * inline with the error message (e.g. "Insufficient balance? Use Max",
+ * "Backup file missing? Browse"). The button shares the message
  * row's aria-live region so the recovery affordance is announced
  * together with the diagnostic.
  *
@@ -57,7 +57,7 @@ export function StatusMessage({ variant = 'status', id, children, className, rec
                     aria-label={recovery.ariaLabel || recovery.label}
                     onClick={() => {
                         Promise.resolve(recovery.onAction()).catch(() => {
-                            /* swallow — caller surfaces its own follow-up */
+                            /* swallow; caller surfaces its own follow-up */
                         });
                     }}
                 >

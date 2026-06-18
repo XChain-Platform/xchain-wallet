@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §13 / G016 — `docs/VERIFY-RELEASE.md`.
+// Smoke for §13 / G016: `docs/VERIFY-RELEASE.md`.
 //
 // Pins the doc's required structure: imports the maintainer's release
 // key, downloads + signature-verifies the hash manifest, hash-checks
@@ -29,16 +29,16 @@ assert.ok(existsSync(join(root, docPath)), `${docPath} exists`);
 
 const docSrc = read(docPath);
 
-// Required headings — the procedure has to be skimmable.
+// Required headings (the procedure has to be skimmable).
 const requiredHeadings = [
     '# Verify a release',
     '## What you\'re checking',
     '## Prerequisites',
-    '## Step 1 — Import the maintainer\'s release key',
-    '## Step 2 — Download the artifact and its signature',
-    '## Step 3 — Verify the signature on the hash manifest',
-    '## Step 4 — Verify the artifact hash',
-    '## Step 5 (optional but recommended) — Reproduce the build',
+    '## Step 1: Import the maintainer\'s release key',
+    '## Step 2: Download the artifact and its signature',
+    '## Step 3: Verify the signature on the hash manifest',
+    '## Step 4: Verify the artifact hash',
+    '## Step 5 (optional but recommended): Reproduce the build',
     '## What "verified" means and does not mean',
     '## Reporting a verification failure',
 ];
@@ -99,4 +99,4 @@ for (const limit of [
         `doc honestly bounds verification scope: ${limit}`);
 }
 
-console.log('OK — VERIFY-RELEASE.md doc smoke');
+console.log('OK: VERIFY-RELEASE.md doc smoke');

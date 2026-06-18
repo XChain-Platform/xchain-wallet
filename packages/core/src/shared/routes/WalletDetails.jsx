@@ -17,13 +17,13 @@ import styles from './ActionsMenu.module.css';
 import pickerStyles from './WalletPicker.module.css';
 
 /**
- * WalletDetails — read-only display of a Wallet record's metadata.
+ * WalletDetails: read-only display of a Wallet record's metadata.
  * Reached from the 3-dot menu on a row in WalletPicker.
  *
  * Surfaces: name, format (BIP39 / Counterwallet-legacy), origin
  * (created / imported / freewallet-migrated), 25th-word-passphrase
  * status, created-at, account count, and address count. No secrets
- * — the encryptedSeed and kdfParams are projected out by `wallet.list`.
+ * The encryptedSeed and kdfParams are projected out by `wallet.list`.
  *
  * @param {object} props
  * @param {string} props.walletId
@@ -132,11 +132,11 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
         'imported-freewallet':    'Imported from FreeWallet',
         'imported-xchain-backup': 'Restored from backup file',
         'imported-wif':           'Imported single private key',
-    })[wallet.origin] || wallet.origin || '—';
+    })[wallet.origin] || wallet.origin || 'N/A';
     const created = wallet.createdAt ? new Date(wallet.createdAt) : null;
     const createdLabel = created && !Number.isNaN(created.getTime())
         ? created.toLocaleString()
-        : '—';
+        : 'N/A';
 
     return (
         <Screen variant={variant} header={header}>

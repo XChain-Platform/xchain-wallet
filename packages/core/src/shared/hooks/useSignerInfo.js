@@ -12,14 +12,14 @@ import { useEffect, useMemo, useState } from 'react';
 import { useMessaging } from '../useMessaging.js';
 
 /**
- * §18.4 / Cluster N FOLLOWUP 2 — shared SignerRecord-lookup hook for
+ * §18.4 / Cluster N FOLLOWUP 2: shared SignerRecord-lookup hook for
  * HW sign surfaces.
  *
  * Returns `{ vendor, model, firmwareVersion }` for the matching
  * SignerRecord, or `null` when:
  *   - `walletId` or `signerId` is missing,
  *   - the record isn't found (race / pruned / unpaired),
- *   - `messaging.listSigners` fails (silently — the banner just doesn't render).
+ *   - `messaging.listSigners` fails (silently; the banner just doesn't render).
  *
  * Callers pass the props straight into `<HwSignBlock signerInfo={info} />`
  * + `<HwFirmwareBanner>` and the warning banner / advisory copy lights
@@ -58,7 +58,7 @@ export function useSignerInfo({ walletId, signerId }) {
                 cache.set(walletId, arr);
                 setRows(arr);
             })
-            .catch(() => { /* silent — banner / advisory just doesn't render */ });
+            .catch(() => { /* silent; banner / advisory just doesn't render */ });
         return () => { cancelled = true; };
     }, [walletId, messaging]);
 
@@ -75,7 +75,7 @@ export function useSignerInfo({ walletId, signerId }) {
 }
 
 /**
- * Test helper — clears the module-level signer-list cache between
+ * Test helper: clears the module-level signer-list cache between
  * spec runs so a stale mock doesn't leak across cases.
  */
 export function __clearSignerInfoCache() {

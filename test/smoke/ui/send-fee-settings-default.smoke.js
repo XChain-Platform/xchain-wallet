@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §44 Fee UX — Step 5 — Send.jsx seeds feePick from
+// Smoke for §44 Fee UX, Step 5: Send.jsx seeds feePick from
 // settings.fees[chainId].
 
 import { strict as assert } from 'node:assert';

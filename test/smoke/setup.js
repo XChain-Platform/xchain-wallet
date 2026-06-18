@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// No setup file is needed for the Node-script smoke runner — each
+// No setup file is needed for the Node-script smoke runner; each
 // smoke is a self-contained Node script invoked via spawnSync, so
 // imports / globals / matchers are managed in the smoke itself.
 //

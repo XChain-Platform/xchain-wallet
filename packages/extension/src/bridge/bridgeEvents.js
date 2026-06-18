@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Bridge event broadcaster — §43.2 dApp event pipeline (Cluster F
+// Bridge event broadcaster: §43.2 dApp event pipeline (Cluster F
 // FOLLOWUP 1).
 //
 // The provider's listener side is wired (content script relays
@@ -24,13 +24,13 @@
 // Tabs are matched by `URL.origin` against the supplied origin string.
 // Mismatches are silently dropped (a dApp on a different origin must
 // not see another site's events). Tabs without a `url` (chrome://, the
-// New Tab page) are skipped. Send failures are swallowed — a tab may
+// New Tab page) are skipped. Send failures are swallowed; a tab may
 // have been closed between query and send, and the event is best-
 // effort anyway.
 //
 // In environments without `chrome.tabs` (Node smokes, web/desktop
 // shells that do not expose extension APIs) every method becomes a
-// no-op — the wallet can still mutate state without crashing.
+// no-op. The wallet can still mutate state without crashing.
 
 const EVENT_MESSAGE_TYPE = 'bridge.event';
 
@@ -120,7 +120,7 @@ export const noopBridgeEvents = {
  *
  * Caller resolves `accountsChangedPayload` (Array<{id, name}>) ahead of
  * time because vault.accounts.list() is async and the broadcaster
- * stays stateless — the bridge handler that has the new permissions
+ * stays stateless; the bridge handler that has the new permissions
  * already has the account records.
  *
  * @param {{
@@ -144,7 +144,7 @@ export async function emitPermissionDiff(args) {
     const addedChains = nextChains.filter((c) => !prevChains.includes(c));
     if (addedChains.length === 1 && prevChains.length > 0) {
         // Most "user added a chain" flows surface a single chain at a
-        // time — emit chainChanged with the new chainId so the dApp
+        // time, so emit chainChanged with the new chainId so the dApp
         // can re-bind its chain-scoped state.
         await events.chainChanged(origin, addedChains[0]);
     }

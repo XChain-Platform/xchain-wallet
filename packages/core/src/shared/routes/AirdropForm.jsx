@@ -35,21 +35,21 @@ const chainRegistry = registryLib.defaultRegistry();
 const POLL_INTERVAL_MS = 10_000;
 
 /**
- * Airdrop form — §40.9.
+ * Airdrop form: §40.9.
  *
  * Authors an AIRDROP-to-address-list as two sequential transactions:
  *
- *   1. LIST (v0, TYPE=2) — creates an on-chain ADDRESS list. Gets an
+ *   1. LIST (v0, TYPE=2): creates an on-chain ADDRESS list. Gets an
  *      ACTION_INDEX assigned by the indexer.
- *   2. AIRDROP (v0) — references that ACTION_INDEX to distribute the
+ *   2. AIRDROP (v0): references that ACTION_INDEX to distribute the
  *      per-recipient amount to each address on the list.
  *
  * Stage machine:
- *   compose         — user pastes/uploads addresses, picks token+amount
- *   review-list     — decoder-rendered LIST preview + sign
- *   wait-index      — poll explorer for LIST's ACTION_INDEX
- *   review-airdrop  — decoder-rendered AIRDROP preview + sign
- *   done            — both txids shown
+ *   compose         - user pastes/uploads addresses, picks token+amount
+ *   review-list     - decoder-rendered LIST preview + sign
+ *   wait-index      - poll explorer for LIST's ACTION_INDEX
+ *   review-airdrop  - decoder-rendered AIRDROP preview + sign
+ *   done            - both txids shown
  *
  * Progress is persisted to `vault.pendingAirdrops` at each stage
  * transition so the user can close the wallet between signs and
@@ -141,7 +141,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 if (cancelled) return;
                 const rec = (records || []).find((r) => r.id === resumeId);
                 if (!rec) {
-                    setLoadError('Pending airdrop not found — it may have been cleared.');
+                    setLoadError('Pending airdrop not found. It may have been cleared.');
                     return;
                 }
                 setChainId(rec.chainId);
@@ -227,7 +227,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                             patch: { stage: 'ready-to-airdrop', listActionIndex: idx },
                         });
                     } catch (err) {
-                        // Persistence failure is non-fatal here — the in-memory
+                        // Persistence failure is non-fatal here; the in-memory
                         // state still advances, and the user can re-sign.
                     }
                     setStage('review-airdrop');
@@ -312,7 +312,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         reader.readAsText(file);
     }, []);
 
-    // Cluster P FOLLOWUP 2 — drag-and-drop a CSV / TXT recipient list
+    // Cluster P FOLLOWUP 2: drag-and-drop a CSV / TXT recipient list
     // onto the textarea. Additive; the click-to-pick lane via the
     // `<input type="file">` below stays the primary affordance.
     const recipientsDrop = useDropZone({
@@ -361,7 +361,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     const [hwStatus, setHwStatus] = useState('idle');
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
 
-    // §20 / Cluster W FOLLOWUP 5 — AIRDROP is a multi-phase action: LIST is
+    // §20 / Cluster W FOLLOWUP 5: AIRDROP is a multi-phase action. LIST is
     // broadcast first, then the wallet polls for indexer confirmation, then
     // AIRDROP is broadcast referencing the indexed LIST's ACTION_INDEX. The
     // index-wait step is fundamentally incompatible with the watcher-mode
@@ -517,7 +517,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
             <>
                 <h2 className={styles.successTitle}>Not available in watcher mode</h2>
                 <p className={styles.hint}>
-                    Airdrop is a two-phase action — the wallet broadcasts a
+                    Airdrop is a two-phase action: the wallet broadcasts a
                     LIST transaction, waits for the indexer to confirm it,
                     then broadcasts the AIRDROP transaction referencing the
                     list. A watcher-mode wallet can't observe the LIST
@@ -571,7 +571,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 <p className={styles.hint}>
                     Waiting for the LIST transaction to be indexed. Once the
                     explorer assigns an ACTION_INDEX, we'll continue to the
-                    AIRDROP step. Safe to close the wallet — we'll resume from
+                    AIRDROP step. Safe to close the wallet; we'll resume from
                     Home when you reopen it.
                 </p>
                 {slow ? (

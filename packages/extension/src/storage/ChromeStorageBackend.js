@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// ChromeStorageBackend — §11.2 MV3 adapter. Wraps chrome.storage.local
+// ChromeStorageBackend (§11.2 MV3 adapter): Wraps chrome.storage.local
 // (or .session, if passed in) to implement @xchain-wallet/core's
 // StorageBackend contract.
 //
@@ -16,7 +16,7 @@
 // Chrome's structured clone does support Uint8Array in principle, but
 // the round-trip behavior has been unreliable across engine versions
 // and between popup / service-worker contexts. base64 is a stable,
-// readable-by-humans encoding with a ~33% size overhead — acceptable
+// readable-by-humans encoding with a ~33% size overhead, acceptable
 // for a single wallet blob that's at most tens of KB.
 
 import { storage as coreStorage, crypto as coreCrypto } from '@xchain-wallet/core';

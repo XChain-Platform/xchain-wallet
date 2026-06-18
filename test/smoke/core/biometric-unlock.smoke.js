@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §26 Lock & Panic — Step 4 — G063 — biometric unlock flow.
+// Smoke for §26 Lock & Panic: Step 4: G063: biometric unlock flow.
 // Mocks navigator.credentials + PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable
 // + globalThis.localStorage so the smoke runs in Node without a real
 // platform authenticator.

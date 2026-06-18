@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §55 / Cluster J FOLLOWUP 5 — full LICENSE.md text surfaced
+// Smoke for §55 / Cluster J FOLLOWUP 5: full LICENSE.md text surfaced
 // in Settings → About.
 //
 // Pins:

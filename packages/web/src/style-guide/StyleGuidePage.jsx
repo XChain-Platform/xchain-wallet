@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Canonical component style guide — the single source of truth for the
+// Canonical component style guide: the single source of truth for the
 // wallet's reusable component vocabulary. Add a new <Section> for each
 // component as it's documented. Sections render in the order declared
 // in `SECTIONS` below; the TOC is generated from that list.
@@ -33,7 +33,7 @@ import { VoiceSection } from './sections/VoiceSection.jsx';
 import { StatesSection } from './sections/StatesSection.jsx';
 import { PrivacyModeSection } from './sections/PrivacyModeSection.jsx';
 
-// Curated catalog — patterns we've established across the recent work
+// Curated catalog: patterns we've established across the recent work
 // (Home, Receive, Send, TokenDetail). Add a section here when a new
 // pattern lands in two routes or you want to codify a one-off as
 // canonical going forward.
@@ -63,7 +63,7 @@ const SECTIONS = [
 export function StyleGuidePage() {
     return (
         <main className="sg-page">
-            <h1 className="sg-h1">📐 XChain Wallet — Component Style Guide</h1>
+            <h1 className="sg-h1">📐 XChain Wallet Component Style Guide</h1>
             <p className="sg-lead">
                 The single source of truth for the wallet's reusable component vocabulary.
                 When adding a new screen or changing an existing one, reach for the
@@ -76,7 +76,7 @@ export function StyleGuidePage() {
                 is · when / when-not to use · sizing &amp; spacing · variants · do/don't),
                 then the canonical JSX, then a live rendered example you can interact with.
                 Examples render the actual component from
-                {' '}<code>@xchain-wallet/core/ui</code> — what you see here is what you get
+                {' '}<code>@xchain-wallet/core/ui</code>: what you see here is what you get
                 in the app.
             </div>
             <nav className="sg-toc" aria-label="Table of contents">
@@ -94,7 +94,7 @@ export function StyleGuidePage() {
     );
 }
 
-// Reusable doc-chrome wrappers — each Section composes a heading,
+// Reusable doc-chrome wrappers: each Section composes a heading,
 // guidance block, canonical markup, and one or more live examples.
 // Sections import these so the catalog has a consistent voice.
 export function Section({ id, title, tag, kicker, children }) {
@@ -102,7 +102,7 @@ export function Section({ id, title, tag, kicker, children }) {
         <section id={id} className="sg-section">
             <h2>
                 {title}
-                {tag ? <span className="sg-h2-tag">— {tag}</span> : null}
+                {tag ? <span className="sg-h2-tag">({tag})</span> : null}
             </h2>
             {kicker ? <p className="sg-kicker">{kicker}</p> : null}
             {children}
@@ -124,7 +124,7 @@ export function Guidance({ what, when, whenNot, sizing, variants, doRule, dontRu
             </dl>
             {supersedes ? (
                 <div className="sg-supersedes">
-                    <strong>Canonical — supersedes:</strong> {supersedes}
+                    <strong>Canonical, supersedes:</strong> {supersedes}
                 </div>
             ) : null}
         </div>

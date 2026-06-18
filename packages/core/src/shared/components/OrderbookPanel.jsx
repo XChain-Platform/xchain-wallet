@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// OrderbookPanel — §41.3.2 depth-visualized orderbook.
+// OrderbookPanel: §41.3.2 depth-visualized orderbook.
 //
 // Two columns (bids / asks). Each row renders price, size, cumulative
 // total, and a depth bar proportional to cumulative / maxCumulative.
@@ -34,7 +34,7 @@ const POLL_INTERVAL_MS = 5000;
  * @param {string} props.chainId
  * @param {string} props.tick1
  * @param {string} props.tick2
- * @param {boolean} [props.demo]   demo wallet — render a sample book when the live book is empty
+ * @param {boolean} [props.demo]   demo wallet: render a sample book when the live book is empty
  * @param {(price: string) => void} [props.onPickPrice]
  */
 export function OrderbookPanel({ chainId, tick1, tick2, demo = false, onPickPrice }) {

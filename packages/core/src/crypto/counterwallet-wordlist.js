@@ -10,7 +10,7 @@
 
 // Counterwallet 1626-word mnemonic wordlist. Vendored for legacy
 // FreeWallet import support only (§15.2). Do not import into new-wallet
-// generation paths — BIP39 (see ./mnemonic.js) is the only sanctioned
+// generation paths: BIP39 (see ./mnemonic.js) is the only sanctioned
 // format for new wallets.
 //
 // Source: `Mnemonic.js` v1.1.0 by Yiorgis Gozadinos / Crypho AS

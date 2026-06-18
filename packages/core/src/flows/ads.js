@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// ADS (Automatic Donation System) accumulator — §36.3.
+// ADS (Automatic Donation System) accumulator: §36.3.
 //
 // Model (per spec): each tx contributes `perTxAmountSats` to a per-chain
 // accumulator. When the accumulator reaches `triggerAmountSats`, the
@@ -18,13 +18,13 @@
 //
 // This module ships three layers:
 //
-//   • `resolveAdsForNextTx`   — pure arithmetic only, ignores the chain
+//   • `resolveAdsForNextTx`: pure arithmetic only, ignores the chain
 //                               descriptor. Returns the amount that
 //                               WOULD be donated if ADS were fully
 //                               configured. Kept for callers that
 //                               want the raw accounting.
 //
-//   • `resolveAdsPlanForNextTx` — adds the configuration check from
+//   • `resolveAdsPlanForNextTx`: adds the configuration check from
 //                               §5.5: if the chain descriptor's
 //                               `adsDonationAddress` is the
 //                               placeholder sentinel, `canSubmit` is
@@ -33,7 +33,7 @@
 //                               still advance normally so the user's
 //                               lifetimeTxCount reflects reality).
 //
-//   • `stepAdsAccumulator` + `commitAdsStep` — state transition after
+//   • `stepAdsAccumulator` + `commitAdsStep`: state transition after
 //                               a broadcast. Pure + vault-aware pair.
 //
 // The submitAction integration (inject donation output into
@@ -117,7 +117,7 @@ export function resolveAdsPlanForNextTx(settings, chainId, chainRegistry) {
     if (!isDonationAddressConfigured(descriptor)) {
         // Arithmetic says donate, but the address is still the §5.5
         // placeholder. Surface the amount so UI can show "pending
-        // donation $X — address not yet configured" but do NOT inject.
+        // donation $X (address not yet configured)" but do NOT inject.
         return {
             donationAmount: state.accumulatedSats,
             donationAddress: null,
@@ -135,7 +135,7 @@ export function resolveAdsPlanForNextTx(settings, chainId, chainRegistry) {
 
 /**
  * Produce a new Settings with the per-chain ADS state advanced by one
- * transaction. Pure — returns a new object if something changed, or
+ * transaction. Pure function: returns a new object if something changed, or
  * the same reference if no change would be applied.
  *
  * - `donationIncluded = false` (normal): accumulator += perTxAmountSats;

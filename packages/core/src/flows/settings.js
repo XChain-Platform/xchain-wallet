@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// settings — read + patch the Settings record. Sits above the
+// settings: read + patch the Settings record. Sits above the
 // raw `vault.settings.get/put` primitives so callers don't need to
 // reason about the default-vs-persisted state, the schema validator,
 // or the deep-merge semantics every time.
@@ -17,10 +17,10 @@
 //   - Top-level scalars (theme, autolockMinutes, language, etc.) are
 //     replaced when the patch carries them.
 //   - Nested plain objects (privacy, notifications, grace, ads) merge
-//     one level deep — caller can flip a single sub-flag without
+//     one level deep; caller can flip a single sub-flag without
 //     restating the rest.
 //   - Chain-keyed records (sdkEndpoints, fees, ads.perChain) merge by
-//     chainId — caller updating one chain's endpoint keeps the other
+//     chainId; caller updating one chain's endpoint keeps the other
 //     chains untouched.
 //   - Arrays / primitives / null in the patch always replace.
 //
@@ -65,7 +65,7 @@ export async function updateSettings(vault, patch) {
         const detail = (validation.errors ?? [])
             .map((e) => (e?.path ? `${e.path}: ${e.message}` : String(e?.message ?? e)))
             .join('; ');
-        throw new Error(`updateSettings: invalid settings — ${detail}`);
+        throw new Error(`updateSettings: invalid settings: ${detail}`);
     }
     await vault.settings.put(merged);
     return merged;

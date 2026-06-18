@@ -86,4 +86,4 @@ assert.ok(/setBackupFileName\(file\.name\);[\s\S]{0,200}setBackupContent/.test(i
 assert.ok(/drop a backup file/i.test(importSrc),
     'ImportWallet hint surfaces the drop affordance');
 
-console.log('OK — useDropZone + PsbtSignForm / ContactsSection / ImportWallet wiring smoke (24 checks)');
+console.log('OK: useDropZone + PsbtSignForm / ContactsSection / ImportWallet wiring smoke (24 checks)');

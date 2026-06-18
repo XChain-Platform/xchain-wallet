@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §26 Lock & Panic — Step 3 — G069 — Privacy blur on window
+// Smoke for §26 Lock & Panic, Step 3 (G069): Privacy blur on window
 // blur. Asserts hook + gate + CSS + provider wiring.
 
 import { strict as assert } from 'node:assert';

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §56.3 Pre-launch Step 1 of 7 — Camera scanner for the
+// Smoke for §56.3 Pre-launch Step 1 of 7: Camera scanner for the
 // multisig paste-inbox (Phase 4 FOLLOWUP 2 from 2026-04-24_phase4-close.md).
 
 import { strict as assert } from 'node:assert';
@@ -22,7 +22,7 @@ const core = join(wsRoot, 'packages', 'core');
 const sharedRoutes = join(core, 'src', 'shared', 'routes');
 const ui = join(core, 'src', 'ui');
 
-// ─── QrScanner — exports + shape ──────────────────────────────
+// ─── QrScanner: exports + shape ───────────────────────────────
 
 const barrel = readFileSync(join(ui, 'index.js'), 'utf8');
 assert.ok(/export\s*\{\s*QrScanner\s*\}\s*from\s*['"]\.\/QrScanner\.jsx['"]/.test(barrel),
@@ -66,11 +66,11 @@ assert.ok(/handleScannerFrame/.test(route),
 assert.ok(/addChunkToCollector\(collectorState,\s*text\)/.test(route),
     'scanner handler routes each frame through the existing XCW collector');
 
-// ─── Old copy removed — spec text no longer promises Step 21 ─
+// ─── Old copy removed: spec text no longer promises Step 21 ──
 
 assert.ok(!/Step 21 will wire the camera scanner/.test(route),
     'legacy "Step 21 will wire the camera scanner" comment has been removed');
 
 console.log(
-    'OK — qr scanner smoke (QrScanner exports + BarcodeDetector + environment camera + RAF loop + track-cleanup on unmount + supported + unsupported data-testids + onFrame emission; MultisigSigningSession Scan-with-camera button + scannerOpen state + QrScanner mount in paste-inbox + handleScannerFrame routes through XCW collector + legacy Step-21 copy removed)',
+    'OK: qr scanner smoke (QrScanner exports + BarcodeDetector + environment camera + RAF loop + track-cleanup on unmount + supported + unsupported data-testids + onFrame emission; MultisigSigningSession Scan-with-camera button + scannerOpen state + QrScanner mount in paste-inbox + handleScannerFrame routes through XCW collector + legacy Step-21 copy removed)',
 );

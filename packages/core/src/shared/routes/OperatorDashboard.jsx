@@ -26,12 +26,12 @@ import formStyles from './IssueTokenForm.module.css';
 const chainRegistry = registryLib.defaultRegistry();
 
 /**
- * Operator / validator dashboard — §42.7.5 (Devi persona).
+ * Operator / validator dashboard: §42.7.5 (Devi persona).
  *
  * Read-only consolidated view for stakers operating as oracles or
  * cross-chain validators. Shows publishing activity, validator
  * performance metrics (own row out of `getValidators`), staking
- * status, delegation chain, and rewards trajectory — plus an inline
+ * status, delegation chain, and rewards trajectory, plus an inline
  * "Publisher mode" quick-compose for rapid PRICE-oracle BROADCAST
  * value updates (v3 feed-result shape).
  *
@@ -89,7 +89,7 @@ export function OperatorDashboard({ walletId, chainId, address, onBack }) {
         }) || null;
     }, [validators.rows, activePubkey]);
 
-    // Detect the most recent v2 BROADCAST feed-create — its action_index
+    // Detect the most recent v2 BROADCAST feed-create; its action_index
     // is what publisher-mode v3 results reference. Sort newest first.
     const latestFeed = useMemo(() => {
         const v2 = broadcasts.rows.filter((b) => {
@@ -160,7 +160,7 @@ export function OperatorDashboard({ walletId, chainId, address, onBack }) {
                             {delegations.rows.slice(0, 10).map((d, i) => (
                                 <li key={i}>
                                     {shortPubkey(d.signing_pubkey || d.SIGNING_PUBKEY)}
-                                    {' '}@ block {d.block_index || '—'}
+                                    {' '}@ block {d.block_index || '?'}
                                     {d.status ? ` · ${d.status}` : ''}
                                 </li>
                             ))}
@@ -184,7 +184,7 @@ export function OperatorDashboard({ walletId, chainId, address, onBack }) {
                         </p>
                     ) : (
                         <p className={dashStyles.entryDescription}>
-                            No delegated signing pubkey — delegate one before the hub will track validator metrics.
+                            No delegated signing pubkey. Delegate one before the hub will track validator metrics.
                         </p>
                     )}
                 </Section>
@@ -197,7 +197,7 @@ export function OperatorDashboard({ walletId, chainId, address, onBack }) {
                         <ul style={{ margin: '0.25rem 0 0', paddingLeft: '1rem' }}>
                             {recentRewards.map((r, i) => (
                                 <li key={i} className={dashStyles.entryDescription}>
-                                    {formatRewardAmount(r)} XCP at block {r.block_index || '—'}
+                                    {formatRewardAmount(r)} XCP at block {r.block_index || '?'}
                                     {r.status ? ` · ${r.status}` : ''}
                                 </li>
                             ))}
@@ -220,9 +220,9 @@ export function OperatorDashboard({ walletId, chainId, address, onBack }) {
                                         ? <span title={String(b.message || b.MESSAGE)}>"{truncate(b.message || b.MESSAGE, 32)}"</span>
                                         : (b.broadcast_action_index || b.BROADCAST_ACTION_INDEX
                                             ? <>feed #{b.broadcast_action_index || b.BROADCAST_ACTION_INDEX}</>
-                                            : '—')}
+                                            : '(none)')}
                                     {(b.value !== undefined && b.value !== null) ? <> · value: {String(b.value)}</> : null}
-                                    {' · block '}{b.block_index || '—'}
+                                    {' · block '}{b.block_index || '?'}
                                 </li>
                             ))}
                         </ul>
@@ -303,7 +303,7 @@ function PublisherMode({ walletId, chainId, address, feed, messaging }) {
             const addrs = byChain?.[chainId] || [];
             const match = addrs.find((a) => a.address === address);
             if (match) setFromAddress(match);
-        }).catch(() => { /* the dashboard already showed the chain — silent */ });
+        }).catch(() => { /* the dashboard already showed the chain; ignore */ });
         return () => { cancelled = true; };
     }, [walletId, chainId, address, messaging]);
 
@@ -342,7 +342,7 @@ function PublisherMode({ walletId, chainId, address, feed, messaging }) {
                 ? { ...base, signerId: fromAddress.signerId }
                 : { ...base, password };
             const res = await fn(args);
-            setLastTxid(res?.txid || res?.tx_hash || '—');
+            setLastTxid(res?.txid || res?.tx_hash || '(none)');
             setValue('');
         } catch (err) {
             const isBadPassword = err?.name === 'InvalidPasswordError';
@@ -383,7 +383,7 @@ function PublisherMode({ walletId, chainId, address, feed, messaging }) {
                     />
                     <Input
                         label="Value"
-                        hint="The feed value to publish. The previous value clears on success — next value is one keystroke."
+                        hint="The feed value to publish. The previous value clears on success; the next value is one keystroke away."
                         value={value}
                         onChange={(e) => setValue(e.target.value)}
                         autoComplete="off"
@@ -443,7 +443,7 @@ function extractRows(resp) {
 }
 
 function formatAmount(stake) {
-    return String(stake?.amount ?? stake?.AMOUNT ?? stake?.quantity ?? '—');
+    return String(stake?.amount ?? stake?.AMOUNT ?? stake?.quantity ?? 'N/A');
 }
 
 function splitRewards(rows) {
@@ -460,11 +460,11 @@ function splitRewards(rows) {
 }
 
 function formatRewardAmount(row) {
-    return row?.amount ?? row?.AMOUNT ?? row?.reward ?? '—';
+    return row?.amount ?? row?.AMOUNT ?? row?.reward ?? 'N/A';
 }
 
 function shortPubkey(pk) {
-    if (!pk || typeof pk !== 'string') return '—';
+    if (!pk || typeof pk !== 'string') return 'N/A';
     return pk.length > 16 ? `${pk.slice(0, 8)}…${pk.slice(-4)}` : pk;
 }
 

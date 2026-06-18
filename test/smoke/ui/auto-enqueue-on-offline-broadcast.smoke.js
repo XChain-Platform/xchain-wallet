@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §49.5 / G154 / Cluster G FOLLOWUP 1 — auto-enqueue signed
+// Smoke for §49.5 / G154 / Cluster G FOLLOWUP 1: auto-enqueue signed
 // transactions on broadcast failure.
 //
 // Pins the wiring across four layers:
@@ -145,7 +145,7 @@ for (const [name, file] of [
 }
 
 // Desktop also gets the prerequisite list/broadcast/discard shims it
-// was previously missing — the QueuedBroadcastBanner mounted via
+// was previously missing. The QueuedBroadcastBanner mounted via
 // FullLayoutWithNav.header (Cluster G FOLLOWUP 4) silently no-op'd on
 // desktop until now.
 const desktopMsg = readFileSync(join(desktop, 'renderer', 'messaging.js'), 'utf8');

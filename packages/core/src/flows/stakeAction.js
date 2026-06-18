@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// stakeAction — STAKE composer for the §42.7.1 "Stake on Bitcoin"
+// stakeAction: STAKE composer for the §42.7.1 "Stake on Bitcoin"
 // form. Mirrors broadcastAction / deployAction. BTC-only per §10.3
 // (SDK staking actions are bitcoin-exclusive).
 //
@@ -16,9 +16,9 @@
 // action, no tier. User picks the AMOUNT; capabilities (price,
 // cross_chain, oracle_publish, attestation) auto-qualify when the
 // pubkey's total stake reaches each capability's MIN_STAKE.
-//   - VERSION '1' — new stake for a fresh signing pubkey
-//   - VERSION '2' — top-up an existing pubkey owned by SOURCE
-// CHAINS and DOGE_ADDRESS were dropped from the action format — those
+//   - VERSION '1': new stake for a fresh signing pubkey
+//   - VERSION '2': top-up an existing pubkey owned by SOURCE
+// CHAINS and DOGE_ADDRESS were dropped from the action format; those
 // sub-features now live in the operator's hub config (spec §8).
 
 import { submitAction } from './submitAction.js';

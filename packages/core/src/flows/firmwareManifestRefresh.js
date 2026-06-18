@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// §18.4 / Cluster N FOLLOWUP 1 — runtime fetch of the firmware
+// §18.4 / Cluster N FOLLOWUP 1: runtime fetch of the firmware
 // manifest with bundled fallback.
 //
 // The wallet bundles a `FIRMWARE_MANIFEST` at build time so every
@@ -21,7 +21,7 @@
 // cached manifest when it is fresh (within `FIRMWARE_MANIFEST_TTL_MS`)
 // and falls back to the bundled baseline otherwise.
 //
-// This module is the orchestrator. It is shell-agnostic — the
+// This module is the orchestrator. It is shell-agnostic: the
 // signature verifier, fetch implementation, cache backend, and clock
 // are all injectable. The extension's chrome.storage.local, the web
 // shell's IndexedDB, and the desktop shell's userData each plug their
@@ -34,8 +34,8 @@
 //   - Signature verification fail → `{ ok: false, reason: 'signature' }`
 //   - Schema mismatch             → `{ ok: false, reason: 'schema' }`
 // The cache is never written on failure; the resolver therefore keeps
-// using the previous cached payload (or the bundled baseline) — a
-// compromised CDN cannot push a downgrade-to-no-advisories.
+// using the previous cached payload (or the bundled baseline), so
+// a compromised CDN cannot push a downgrade-to-no-advisories.
 //
 // Structurally, the verified payload looks like:
 //
@@ -153,7 +153,7 @@ export async function refreshFirmwareManifest(deps) {
  * baseline. The verdict's `source` distinguishes 'cache' from
  * 'bundled' so the UI can surface "advisory data is X days old".
  *
- * Stale (out-of-TTL) cache entries are NOT silently used — they're
+ * Stale (out-of-TTL) cache entries are NOT silently used. They are
  * treated identically to cache miss because the CDN may have been
  * unreachable for an extended period and a network failure must not
  * silently downgrade safety. `checkFirmware` consumers can render

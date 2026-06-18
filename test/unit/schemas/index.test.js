@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Unit: schemas/index — barrel re-exports are complete and consistent.
+// Unit: schemas/index barrel re-exports are complete and consistent.
 
 import { describe, it, expect } from 'vitest';
 import * as schemas from '../../../packages/core/src/schemas/index.js';

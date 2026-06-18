@@ -8,12 +8,12 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Balance / history read helpers — §10.3 wallet consumers. Thin
+// Balance / history read helpers (§10.3 wallet consumers). Thin
 // wrappers over `sdk.getBalances` / `sdk.getHistory`, plus a wallet-
 // scoped aggregator that groups the caller's persisted addresses by
 // chain and fetches in parallel.
 //
-// The aggregator returns partial results — a fetch error on one address
+// The aggregator returns partial results: a fetch error on one address
 // does NOT fail the whole operation. The per-address entry surfaces
 // `error` instead of `balances`, so UIs can render retry affordances
 // for the failing rows.
@@ -61,7 +61,7 @@ export async function addressBalances({ sdkRegistry, chainId, address, opts }) {
 /**
  * Single-address history read. Defaults `type: 'address'`; the SDK's
  * `/history/{query}/{type}` endpoint also supports other `type`s
- * (`'recent'`, etc.) — callers who want those drop to the SDK directly.
+ * (`'recent'`, etc.); callers who want those drop to the SDK directly.
  *
  * @param {AddressHistoryOpts} params
  * @returns {Promise<unknown>}
@@ -80,8 +80,8 @@ export async function addressHistory({ sdkRegistry, chainId, address, opts }) {
  * @property {string} walletId
  * @property {import('../registry/index.js').ChainRegistry} chainRegistry
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
- * @property {string} [chainId]               optional filter — only fetch for this chain
- * @property {'mainnet' | 'testnet' | 'regtest'} [activeNetwork]  optional filter — skip chains whose `networkKind` doesn't match; the host wrapper threads this from `settings.activeNetwork` so a user on mainnet generates zero requests against testnet / regtest chains
+ * @property {string} [chainId]               optional filter; only fetch for this chain
+ * @property {'mainnet' | 'testnet' | 'regtest'} [activeNetwork]  optional filter; skips chains whose `networkKind` doesn't match. The host wrapper threads this from `settings.activeNetwork` so a user on mainnet generates zero requests against testnet / regtest chains
  * @property {object} [opts]                  passed through to each `sdk.getBalances`
  */
 
@@ -114,7 +114,7 @@ export async function walletBalances({
 
     // 1. Resolve which Account ids belong to this wallet. If `accountId`
     //    is supplied, restrict to that one (and validate that it really
-    //    belongs to the wallet — silently dropping a mismatch would
+    //    belongs to the wallet (silently dropping a mismatch would
     //    return wallet-wide totals when the caller asked for one
     //    account).
     const accounts = await vault.accounts.findBy('walletId', walletId);
@@ -129,14 +129,14 @@ export async function walletBalances({
     }
     const accountIds = scopedAccountIds;
     if (accountIds.size === 0) {
-        // No accounts for this walletId — nothing to fetch.
+        // No accounts for this walletId; nothing to fetch.
         return {};
     }
 
     // 2. Group this wallet's addresses by chainId (coin + networkKind
     //    → descriptor id). Unknown chains are skipped. When `activeNetwork`
     //    is supplied, chains on a different network are skipped at the
-    //    grouping site so no SDK fan-out fires for them — this is the
+    //    grouping site so no SDK fan-out fires for them; this is the
     //    chokepoint that enforces "switch to mainnet, stop querying
     //    testnet entirely."
     /** @type {Record<string, import('../schemas/address.js').Address[]>} */

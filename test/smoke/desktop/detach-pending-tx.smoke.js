@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §24.6 / Cluster Y FOLLOWUP 4 — desktop detach-pending-tx
+// Smoke for §24.6 / Cluster Y FOLLOWUP 4: desktop detach-pending-tx
 // into a new window. Pins:
 //   - main process registers `xchain:open-window` IPC handler
 //   - createWindow accepts an opts arg + builds a search-string prefill

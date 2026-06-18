@@ -77,7 +77,7 @@ const SCHEME_DESCRIPTION = {
 // Three distinct tones so a glance distinguishes scheme families
 // without the user having to read the tag.
 const SCHEME_TONE = {
-    'p2sh-multisig':  { bg: '#FEF3C7', fg: '#78350F', border: '#FCD34D' }, // amber — classic P2SH
-    'p2wsh-multisig': { bg: '#DBEAFE', fg: '#1E3A8A', border: '#93C5FD' }, // blue — segwit
-    'taproot-musig2': { bg: '#EDE9FE', fg: '#4C1D95', border: '#C4B5FD' }, // violet — taproot
+    'p2sh-multisig':  { bg: '#FEF3C7', fg: '#78350F', border: '#FCD34D' }, // amber (classic P2SH)
+    'p2wsh-multisig': { bg: '#DBEAFE', fg: '#1E3A8A', border: '#93C5FD' }, // blue (segwit)
+    'taproot-musig2': { bg: '#EDE9FE', fg: '#4C1D95', border: '#C4B5FD' }, // violet (taproot)
 };

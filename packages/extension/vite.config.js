@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Vite build for the MV3 extension shell — §9.5 / §51.
+// Vite build for the MV3 extension shell: §9.5 / §51.
 //
 // Multi-entry rollup producing four bundles + one HTML asset at the paths
 // manifest.json references:
@@ -57,7 +57,7 @@ function copyManifestPlugin() {
                 'utf8',
             );
             // Ensure dist/ exists in case rollup tree-shook everything
-            // away — the plugin's own output still needs a parent dir.
+            // away; the plugin's own output still needs a parent dir.
             await mkdir(
                 fileURLToPath(new URL('./dist/', import.meta.url)),
                 { recursive: true },
@@ -100,14 +100,14 @@ export default defineConfig({
     // `ws` is aliased to our browser shim (packages/core/src/shims/ws-browser.js);
     // `crypto`/`Buffer`/`process`/`stream`/`events` are handled by
     // vite-plugin-node-polyfills. The polyfills add ~20–30 KB to the
-    // popup + background chunks — acceptable for a wallet that needs to
+    // popup + background chunks: acceptable for a wallet that needs to
     // sign PSBTs. Content + inject scripts don't touch the SDK, so
     // tree-shaking keeps the polyfills out of those bundles.
     resolve: {
         alias: {
             ws: wsBrowserShim,
             // xchain-sdk's encoder.js + explorer.js use `new http.Agent`
-            // for connection pooling — browser manages its own pool, so
+            // for connection pooling; browser manages its own pool, so
             // our tiny no-op shim avoids pulling in stream-http (~30 KB).
             http: httpBrowserShim,
             // repl is loaded transitively via xchain-sdk/index.js →

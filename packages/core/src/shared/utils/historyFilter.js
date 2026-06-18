@@ -11,7 +11,7 @@
 // Advanced history filtering for the History route (§28.6).
 //
 // The chain / cross-chain / multisig chips and the Grouped / Flat
-// toggle live in History.jsx state — those are bookkeeping for the
+// toggle live in History.jsx state (those are bookkeeping for the
 // upstream data fetch and the post-filter render. This util handles
 // the four §28.6 filters that operate on the already-fetched entry
 // list:
@@ -156,7 +156,7 @@ export function applyHistoryFilters(entries, opts) {
         if (hasDateFilter) {
             const ts = entryTimestampMs(e);
             // Pending entries lack a timestamp. The spec lets users
-            // filter by status (Pending) or by date — we don't try to
+            // filter by status (Pending) or by date. We don't try to
             // satisfy both. If the user constrained the date range, we
             // exclude unconfirmed rows from that window.
             if (ts == null) return false;

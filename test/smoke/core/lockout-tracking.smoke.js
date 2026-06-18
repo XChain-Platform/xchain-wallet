@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §26 Lock & Panic — Step 2 — G066 — failed-attempts
+// Smoke for §26 Lock & Panic, Step 2 (G066): failed-attempts
 // escalating delay. Exercises the pure flow logic with a mock
 // localStorage so cross-shell behaviour stays consistent.
 

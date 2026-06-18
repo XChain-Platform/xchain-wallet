@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §9.3 / G006 — Zustand-proxy state model deferred.
+// Smoke for §9.3 / G006: Zustand-proxy state model deferred.
 //
 // The spec calls for a Zustand-proxy pattern; the wallet ships with
 // a MessagingProvider + per-component fetch pattern. The decision to
@@ -35,7 +35,7 @@ const adrRel = 'claude/reports/specs/2026-04-28_zustand-proxy-deferred.md';
 assert.ok(existsSync(join(repoRoot, adrRel)), `${adrRel} exists`);
 const adr = readRepo(adrRel);
 for (const heading of [
-    '# Zustand-proxy state model — deferred',
+    '# Zustand-proxy state model (deferred)',
     '## What the spec described',
     '## What we actually shipped',
     '## Why we kept the shipping model',
@@ -50,7 +50,7 @@ assert.ok(/§9\.3/.test(adr) || /§9\.2/.test(adr),
 
 // 2. Codebase ships the MessagingProvider pattern (no Zustand
 //    package dep, no proxyStore module). If any of these flip a
-//    decision was made — update the ADR + this smoke together.
+//    decision was made. Update the ADR + this smoke together.
 const corePkg = JSON.parse(read('packages/core/package.json'));
 const allDeps = {
     ...(corePkg.dependencies ?? {}),
@@ -84,11 +84,11 @@ const mp = read(mpPath);
 assert.ok(/export function MessagingProvider/.test(mp),
     'MessagingProvider is a named export');
 
-// 4. The shells use `useMessaging()` hooks — pin that pattern in at
+// 4. The shells use `useMessaging()` hooks. Pin that pattern in at
 //    least one shell so a future migration would have to update the
 //    smoke explicitly.
 const shellSrc = read('packages/extension/src/popup/App.jsx');
 assert.ok(/<MessagingProvider /.test(shellSrc),
     'extension popup wraps the tree in MessagingProvider');
 
-console.log('OK — Zustand-proxy deferred ADR + MessagingProvider shipping pattern smoke');
+console.log('OK: Zustand-proxy deferred ADR + MessagingProvider shipping pattern smoke');

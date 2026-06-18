@@ -47,12 +47,12 @@ assert.ok(
 // Every Phase-1 screen should have a scan case.
 const requiredCases = [
     'onboarding welcome',
-    'create wallet — password stage',
-    'create wallet — mnemonic display stage',
+    'create wallet - password stage',
+    'create wallet - mnemonic display stage',
     'import wallet',
     'home (unlocked)',
     'locked',
-    'send — form stage',
+    'send - form stage',
 ];
 for (const name of requiredCases) {
     assert.ok(
@@ -63,7 +63,7 @@ for (const name of requiredCases) {
 
 // --- 3. Every case asserts zero violations --------------------------
 
-// The shared scan helper does this — confirm its shape.
+// The shared scan helper does this; confirm its shape.
 assert.ok(
     /expect\(\s*results\.violations/.test(spec),
     'scan helper asserts on results.violations',
@@ -89,5 +89,5 @@ assert.ok(
 assert.ok(/WCAG/.test(readme), 'README names the WCAG target');
 
 console.log(
-    `OK — a11y harness smoke (dev dep, ${requiredCases.length} screens covered, violations=[] assertion, WCAG 2.1 A/AA tags, README)`,
+    `OK: a11y harness smoke (dev dep, ${requiredCases.length} screens covered, violations=[] assertion, WCAG 2.1 A/AA tags, README)`,
 );

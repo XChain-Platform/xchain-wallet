@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Unit: schemas/contact — createContact + validateContact.
+// Unit: schemas/contact: createContact + validateContact.
 
 import { describe, it, expect } from 'vitest';
 import {
@@ -119,25 +119,25 @@ describe('validateContact', () => {
         expect(r.errors.some((e) => e.includes('entries'))).toBe(true);
     });
 
-    it('rejects malformed entry — missing chain', () => {
+    it('rejects malformed entry: missing chain', () => {
         const c = createContact(BASE_INPUT);
         const r = validateContact({ ...c, entries: [{ address: '1abc', label: '' }] });
         expect(r.ok).toBe(false);
     });
 
-    it('rejects malformed entry — missing address', () => {
+    it('rejects malformed entry: missing address', () => {
         const c = createContact(BASE_INPUT);
         const r = validateContact({ ...c, entries: [{ chain: 'BTC', label: '' }] });
         expect(r.ok).toBe(false);
     });
 
-    it('rejects malformed entry — non-string label', () => {
+    it('rejects malformed entry: non-string label', () => {
         const c = createContact(BASE_INPUT);
         const r = validateContact({ ...c, entries: [{ chain: 'BTC', address: '1a', label: 42 }] });
         expect(r.ok).toBe(false);
     });
 
-    it('rejects malformed entry — not a plain object', () => {
+    it('rejects malformed entry: not a plain object', () => {
         const c = createContact(BASE_INPUT);
         const r = validateContact({ ...c, entries: ['not-an-object'] });
         expect(r.ok).toBe(false);

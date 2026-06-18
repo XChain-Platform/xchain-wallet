@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for Phase 4 — Step 21 of 23 — MuSig2 hardware-signer
+// Smoke for Phase 4, Step 21 of 23: MuSig2 hardware-signer
 // integration + local-cosigner contribution flow (§22.3 + §42.9).
 
 import { strict as assert } from 'node:assert';
@@ -35,7 +35,7 @@ const web = join(wsRoot, 'packages', 'web');
 const desktop = join(wsRoot, 'packages', 'desktop');
 const sharedRoutes = join(core, 'src', 'shared', 'routes');
 
-// ─── Signer base class — abstract MuSig2 methods ────────────────
+// ─── Signer base class: abstract MuSig2 methods ────────────────
 
 const base = new Signer();
 await assert.rejects(
@@ -54,7 +54,7 @@ await assert.rejects(
     'Signer.signMultisigClassical is abstract',
 );
 
-// ─── Hardware signers — firmware-too-old fallback per §22.3 ─────
+// ─── Hardware signers: firmware-too-old fallback per §22.3 ─────
 
 const trezor = new TrezorSigner({
     id: 't1',
@@ -102,7 +102,7 @@ await assert.rejects(
     'Ledger classical multisig surfaces the deferral error',
 );
 
-// ─── signMultisigLocally — flow guards ──────────────────────────
+// ─── signMultisigLocally: flow guards ──────────────────────────
 
 assert.equal(typeof flows.signMultisigLocally, 'function',
     'flows.signMultisigLocally is re-exported');
@@ -129,7 +129,7 @@ await assert.rejects(
     /password is required/,
 );
 
-// ─── signMultisigLocally — dispatch via stubbed unlock + signer ─
+// ─── signMultisigLocally: dispatch via stubbed unlock + signer ─
 
 const alice = '02' + 'a'.repeat(64);
 const bob = '03' + 'b'.repeat(64);
@@ -327,5 +327,5 @@ for (const name of ['signPsbt', 'signMessage', 'getAddresses', 'getStatus', 'get
 }
 
 console.log(
-    'OK — multisig signer smoke (Signer base abstracts + Trezor/Ledger firmware-too-old MuSig2 + classical-deferred errors + signMultisigLocally re-export + flow guards + status-gated round dispatch + bg multisigSign.signLocally handler + 3-shell signMultisigLocally helpers + sign-screen "Sign with my key" surface + spec-text firmware guidance + SDK pin ^1.12.0)',
+    'OK: multisig signer smoke (Signer base abstracts + Trezor/Ledger firmware-too-old MuSig2 + classical-deferred errors + signMultisigLocally re-export + flow guards + status-gated round dispatch + bg multisigSign.signLocally handler + 3-shell signMultisigLocally helpers + sign-screen "Sign with my key" surface + spec-text firmware guidance + SDK pin ^1.12.0)',
 );

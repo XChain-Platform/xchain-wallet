@@ -8,9 +8,9 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §9.7 / G007 — Runtime chain-registry refresh from hub.
+// Smoke for §9.7 / G007: Runtime chain-registry refresh from hub.
 //
-// Wallet-side scaffolding only — the hub-side `/api/v1/chain-registry`
+// Wallet-side scaffolding only: the hub-side `/api/v1/chain-registry`
 // endpoint is pending. This smoke pins the wallet's design hooks so a
 // future contract change cannot silently break the call site:
 //
@@ -19,7 +19,7 @@
 //      `flows` barrel re-exports them.
 //   2. The flow handles the happy path (200 + valid JSON) AND every
 //      failure mode (no fetcher, timeout, non-2xx, malformed JSON,
-//      missing descriptors[]) by always resolving — never throwing.
+//      missing descriptors[]) by always resolving: never throwing.
 //   3. `createBackgroundHost` registers `chainRegistry.status` +
 //      `chainRegistry.refresh` and schedules a boot-time refresh.
 //   4. All three messaging shims expose `getChainRegistryStatus` +
@@ -48,7 +48,7 @@ const barrelSrc = read('packages/core/src/flows/index.js');
 assert.ok(/refreshChainRegistry/.test(barrelSrc) && /refreshChainRegistry\.js/.test(barrelSrc),
     'flows barrel re-exports refreshChainRegistry');
 
-// 2. Runtime — exercise happy path + failure modes.
+// 2. Runtime: exercise happy path + failure modes.
 const flowUrl = `file://${join(root, flowPath)}`;
 const { refreshChainRegistry, createChainRegistryStatus } = await import(flowUrl);
 
@@ -85,7 +85,7 @@ const fail500 = await refreshChainRegistry({
 assert.equal(fail500.ok, false);
 assert.match(fail500.error, /HTTP 500/);
 
-// 404 (most likely current hub state — endpoint not implemented).
+// 404 (most likely current hub state: endpoint not implemented).
 const fail404 = await refreshChainRegistry({
     hubUrl: 'https://hub.xchain.io',
     fetcher: () => ({ ok: false, status: 404 }),
@@ -177,4 +177,4 @@ assert.ok(/Last refreshed \$\{formatRelative/.test(sectionSrc),
 assert.ok(/bundled descriptors active/.test(sectionSrc),
     'row honestly states the bundled-only fallback when no refresh has happened');
 
-console.log('OK — chain-registry refresh flow + host + 3 shims + Settings UI smoke');
+console.log('OK: chain-registry refresh flow + host + 3 shims + Settings UI smoke');

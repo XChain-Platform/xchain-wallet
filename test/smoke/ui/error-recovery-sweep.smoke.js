@@ -8,13 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Cluster P FOLLOWUP 4 — error-recovery sweep. v0.211.0 wired Send +
+// Cluster P FOLLOWUP 4: error-recovery sweep. v0.211.0 wired Send +
 // PsbtSignForm + ImportWallet (backup lane) + PairSignerForm. This
 // sweep extends auditable coverage to IssueTokenForm + DispenserForm +
 // AddAccountForm. The goal is per-form coverage, not 100% recovery
 // support: each form either ships an inline `recovery: { label,
 // onAction }` or carries a header note explaining why the error class
-// is genuinely "user-iterates over an input" — terminal-as-rendered.
+// is genuinely "user-iterates over an input": terminal-as-rendered.
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
@@ -60,9 +60,9 @@ assert.equal(
 
 // 3. AddAccountForm carries the audit header noting recovery is
 //    user-iteration via the Input (no fitting one-click affordance).
-assert.ok(/Cluster P FOLLOWUP 4 — error-recovery audit/.test(acctSrc),
+assert.ok(/Cluster P FOLLOWUP 4: error-recovery audit/.test(acctSrc),
     'AddAccountForm header documents the error-recovery audit decision');
 assert.ok(/terminal-as-rendered with user-iteration as the recovery path/.test(acctSrc),
     'AddAccountForm header explains the auditable terminal-as-rendered classification');
 
-console.log('OK — error-recovery sweep (IssueTokenForm + DispenserForm + AddAccountForm)');
+console.log('OK: error-recovery sweep (IssueTokenForm + DispenserForm + AddAccountForm)');

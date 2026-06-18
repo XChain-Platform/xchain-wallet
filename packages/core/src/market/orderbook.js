@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Market orderbook helpers — §41.3.2.
+// Market orderbook helpers (§41.3.2).
 //
 // Normalises the explorer's `/orderbook` response into two sorted
 // levels arrays (bids descending, asks ascending) with cumulative

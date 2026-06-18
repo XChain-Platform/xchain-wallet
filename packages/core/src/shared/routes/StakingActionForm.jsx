@@ -29,20 +29,20 @@ import styles from './IssueTokenForm.module.css';
 const chainRegistry = registryLib.defaultRegistry();
 
 /**
- * UNSTAKE + COLLECT combined form — §42.7.2 unstake-lane +
- * §42.7.3 collect-rewards.
+ * UNSTAKE + COLLECT combined form (§42.7.2 unstake-lane +
+ * §42.7.3 collect-rewards).
  *
  * One component, two modes via the `mode` prop. Both actions share a
  * chassis (address load / SignCredentials / HW branch / review / done)
  * and diverge only in which field inputs appear, which messaging
  * helper is called, and the verb rendered on the submit button.
  *
- *   - `mode: 'unstake'` — VERSION|SIGNING_PUBKEY. Capability-staking
+ *   - `mode: 'unstake'`: VERSION|SIGNING_PUBKEY. Capability-staking
  *     model (capability-staking-model.md §3): UNSTAKE addresses a
  *     specific signing pubkey, returning the full active balance for
  *     that pubkey (sum of original v1 stake + any v2 top-ups).
  *     Partial unstake is not a protocol concept.
- *   - `mode: 'claim-rewards'` — VERSION only. No input fields; the
+ *   - `mode: 'claim-rewards'`: VERSION only. No input fields; the
  *     form is a confirm-and-sign screen.
  *
  * @param {object} props
@@ -120,7 +120,7 @@ export function StakingActionForm({ mode, walletId, chainId, onBack }) {
     const [hwStatus, setHwStatus] = useState('idle');
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
 
-    // §20 / Cluster W FOLLOWUP 5 — watcher-mode encode-only branch.
+    // §20 / Cluster W FOLLOWUP 5: watcher-mode encode-only branch.
     const { isWatcherMode } = useWalletMode();
 
     const actionParams = useMemo(() => {
@@ -247,7 +247,7 @@ export function StakingActionForm({ mode, walletId, chainId, onBack }) {
                 </p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Txid</dt>
-                    <dd className={styles.detailsValue}>{String(txid || '—')}</dd>
+                    <dd className={styles.detailsValue}>{String(txid || '(pending)')}</dd>
                 </dl>
                 <div className={styles.actions}>
                     <Button variant="primary" onClick={onBack}>Done</Button>
@@ -261,7 +261,7 @@ export function StakingActionForm({ mode, walletId, chainId, onBack }) {
             <form onSubmit={handleSubmit} noValidate>
                 <p className={styles.summary}>
                     {isUnstake
-                        ? `Unstake signing pubkey ${actionParams.SIGNING_PUBKEY.slice(0, 12)}… — the full active balance for this pubkey is returned after the cooldown.`
+                        ? `Unstake signing pubkey ${actionParams.SIGNING_PUBKEY.slice(0, 12)}. The full active balance for this pubkey is returned after the cooldown.`
                         : 'Claim all pending staking rewards for this address.'}
                 </p>
                 <dl className={styles.detailsList}>
@@ -284,7 +284,7 @@ export function StakingActionForm({ mode, walletId, chainId, onBack }) {
                 </dl>
                 {isWatcherMode ? (
                     <p className={styles.hint}>
-                        Watcher mode — this wallet will build an unsigned transaction.
+                        Watcher mode: this wallet will build an unsigned transaction.
                         Sign it on your Signer-mode wallet, then bring the
                         signed transaction to a Full-mode wallet to broadcast.
                     </p>
@@ -348,11 +348,11 @@ export function StakingActionForm({ mode, walletId, chainId, onBack }) {
             {isUnstake ? (
                 <>
                     <p style={{ fontSize: '0.85rem', margin: '0 0 0.5rem', color: 'var(--muted, #666)' }}>
-                        Enter the signing pubkey to unstake. Returns the full active balance for that pubkey (original stake + any top-ups) after the cooldown — the protocol doesn't support partial unstakes.
+                        Enter the signing pubkey to unstake. Returns the full active balance for that pubkey (original stake + any top-ups) after the cooldown. The protocol doesn't support partial unstakes.
                     </p>
                     <Input
                         label="Signing pubkey"
-                        hint="64-character hex-encoded Ed25519 public key — the same one used to stake."
+                        hint="64-character hex-encoded Ed25519 public key (the same one used to stake)."
                         value={signingPubkey}
                         onChange={(e) => setSigningPubkey(e.target.value)}
                         autoComplete="off"

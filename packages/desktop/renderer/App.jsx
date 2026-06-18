@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Desktop renderer App — same shape as packages/extension/src/popup/App.jsx
+// Desktop renderer App: same shape as packages/extension/src/popup/App.jsx
 // and packages/web/src/App.jsx, wired against desktop-specific
 // messaging + HW factories.
 //
@@ -19,12 +19,12 @@
 // HW pairing (§40.12, Step 18): `pairTrezorSigner` + `pairLedgerSigner`
 // use Chromium's WebHID (via `@ledgerhq/hw-transport-webhid`) + Trezor
 // Connect's iframe popup (via `@trezor/connect-web`). Both libs are
-// pure JS — no native node-HID / node-usb — so the desktop factories
+// pure JS (no native node-HID / node-usb), so the desktop factories
 // are thin bindings around the shared core `makeTrezorFactory` /
 // `makeLedgerFactory` builders, same as extension + web.
 //
 // Main process (`main/permissions.js`) must wire WebHID permission
-// handlers onto `session.defaultSession` — without them, Electron
+// handlers onto `session.defaultSession`. Without them, Electron
 // returns an empty device list under `contextIsolation: true`.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -146,7 +146,7 @@ function AppInner() {
     const [composePrefill, setComposePrefill] = useState(
         /** @type {{ chainId?: string, fromAddressId?: string, toAddress?: string } | null} */ (null),
     );
-    // §24.3 / Cluster Y FOLLOWUP 1 — `<ScanRoute>` outcomes route into
+    // §24.3 / Cluster Y FOLLOWUP 1: `<ScanRoute>` outcomes route into
     // the existing 'send' view via this prefill slot. Cleared after
     // submit / back to avoid leaking a stale prefill into a future Send.
     const [sendPrefill, setSendPrefill] = useState(
@@ -166,7 +166,7 @@ function AppInner() {
     const [activeWalletId, setActiveWalletId] = useState(
         /** @type {string | null} */ (null),
     );
-    // §24 Cluster Y FOLLOWUP 3 — track the resolved active-wallet record
+    // §24 Cluster Y FOLLOWUP 3: track the resolved active-wallet record
     // for LeftNav / BottomTabBar wallet-switcher labelling and so the
     // 'settings' top-level view can pass `activeWallet` into Settings.
     const [walletList, setWalletList] = useState(/** @type {Array<{ id: string, name: string }>} */ ([]));
@@ -218,7 +218,7 @@ function AppInner() {
             kind: 'native',
         }),
     );
-    // §24.6 / Cluster Y FOLLOWUP 4 — when the renderer is launched
+    // §24.6 / Cluster Y FOLLOWUP 4: when the renderer is launched
     // with an `xc-init-route` search-string entry (set by main on
     // detach-window IPC), parse it once at mount, route the new
     // window's initial view + context, and strip the search so a
@@ -264,7 +264,7 @@ function AppInner() {
                 const arr = Array.isArray(list) ? list : [];
                 setWalletList(arr);
                 if (arr.length === 0) return;
-                // §24.6 / Cluster Y FU 4 — when an initial route names a
+                // §24.6 / Cluster Y FU 4: when an initial route names a
                 // walletId that's actually in the vault, prefer it over
                 // the first-wallet default. Otherwise fall through to
                 // the first wallet as before.
@@ -279,7 +279,7 @@ function AppInner() {
         return () => { cancelled = true; };
     }, [status.state]);
 
-    // §24.6 / Cluster Y FOLLOWUP 4 — apply the initialView once
+    // §24.6 / Cluster Y FOLLOWUP 4: apply the initialView once
     // unlock settles. Route + context-state both flip in lockstep
     // here. Runs once per route then clears the slot so subsequent
     // re-renders + later navigations don't re-trigger.
@@ -331,16 +331,16 @@ function AppInner() {
         if (activeWalletId && id) writeActiveAccount(activeWalletId, id);
     };
 
-    // §42.2 Contracts nav — show only when a BTC wallet address exists
+    // §42.2 Contracts nav: show only when a BTC wallet address exists
     // (VM actions are BTC-only at launch per BITCOIN_ACTIONS).
     const hasBtcAddress = useBtcAddressesPresent(activeWalletId);
 
-    // §24 / G055 — resume the user's last view on unlock (persisted
+    // §24 / G055: resume the user's last view on unlock (persisted
     // per-wallet in localStorage). Restricted to context-free views;
     // anything that needs a prefilled state object falls through to
     // Home. See `lastViewMemory.RESUMABLE_VIEWS` for the set.
     //
-    // §24.6 / Cluster Y FU 4 — detached windows skip the resume so
+    // §24.6 / Cluster Y FU 4: detached windows skip the resume so
     // they land on their pinned target (the initialView effect above
     // sets unlockedView). The resume effect's onResume still drives
     // the user's primary window.
@@ -393,7 +393,7 @@ function AppInner() {
         case 'locked':
             return <Locked onUnlocked={refresh} />;
         case 'unlocked': {
-            // §24.2 / G053 — wrap the unlocked-route render tree in
+            // §24.2 / G053: wrap the unlocked-route render tree in
             // <FullLayoutWithNav> so the left nav is always visible at
             // ≥900px viewports. Existing route returns are captured by
             // the IIFE so the surrounding switch case stays readable.
@@ -689,7 +689,7 @@ function AppInner() {
                     />
                 );
             }
-            // §20 / G041 (Cluster W FOLLOWUP 2) — sign / verify / sign-PSBT
+            // §20 / G041 (Cluster W FOLLOWUP 2): sign / verify / sign-PSBT
             // routes, in parity with the extension popup + web shells.
             if (unlockedView === 'sign-psbt' && activeWalletId) {
                 return (
@@ -1215,7 +1215,7 @@ function AppInner() {
                 );
             }
             if (unlockedView === 'settings' || unlockedView === 'connected-sites') {
-                // §24 Cluster Y FOLLOWUP 2 — same top-level Settings
+                // §24 Cluster Y FOLLOWUP 2: same top-level Settings
                 // route the web shell ships; 'connected-sites' deep-links
                 // into the Connected Sites drilldown.
                 const activeWallet = walletList.find((w) => w.id === activeWalletId) || null;
@@ -1430,7 +1430,7 @@ function AppInner() {
                     header={
                         activeWalletId ? (
                             <>
-                                {/* Cluster J FOLLOWUP 2 — DemoBanner persists across every
+                                {/* Cluster J FOLLOWUP 2: DemoBanner persists across every
                                     unlocked view via the shared layout header slot. */}
                                 <DemoBanner activeWalletId={activeWalletId} onExited={refresh} />
                                 <QueuedBroadcastBanner walletId={activeWalletId} />
@@ -1448,7 +1448,7 @@ function AppInner() {
 }
 
 /**
- * §24.6 / Cluster Y FOLLOWUP 4 — parse the `xc-init-route` search-string
+ * §24.6 / Cluster Y FOLLOWUP 4: parse the `xc-init-route` search-string
  * entry main appended to the BrowserWindow's loadFile when the window
  * was spawned via `xchain:open-window` IPC. Returns the decoded
  * { initialView?, initialContext? } payload, or null when the slot is
@@ -1501,7 +1501,7 @@ function buildActionEntries({
         {
             id: 'issue',
             label: 'Issue token',
-            description: 'Advanced ISSUE form — every field exposed (§40.2).',
+            description: 'Advanced ISSUE form: every field exposed (§40.2).',
             onSelect: onIssue,
         },
         {
@@ -1513,13 +1513,13 @@ function buildActionEntries({
         {
             id: 'destroy',
             label: 'Destroy',
-            description: 'Burn part of your balance — irreversible (§40.4).',
+            description: 'Burn part of your balance. Irreversible (§40.4).',
             onSelect: onDestroy,
         },
         {
             id: 'lock',
             label: 'Lock supply',
-            description: 'Freeze supply + minting for a token you own — permanent (§40.5).',
+            description: 'Freeze supply + minting for a token you own. Permanent (§40.5).',
             onSelect: onLock,
         },
         {
@@ -1549,7 +1549,7 @@ function buildActionEntries({
         {
             id: 'dispensers-list',
             label: 'My dispensers',
-            description: 'Manage dispensers you have opened — view + cancel (§40.7.1).',
+            description: 'Manage dispensers you have opened: view + cancel (§40.7.1).',
             onSelect: onMyDispensers,
         },
         {
@@ -1567,7 +1567,7 @@ function buildActionEntries({
         {
             id: 'airdrop',
             label: 'Airdrop tokens',
-            description: 'Distribute a token to a pasted or uploaded list of addresses — signs a LIST then an AIRDROP (§40.9).',
+            description: 'Distribute a token to a pasted or uploaded list of addresses (signs a LIST then an AIRDROP, §40.9).',
             onSelect: onAirdrop,
         },
         {
@@ -1579,7 +1579,7 @@ function buildActionEntries({
         {
             id: 'swap',
             label: 'Swap tokens',
-            description: 'Atomic token-pair swap — no native coin, no COINPAY follow-up (§41.5).',
+            description: 'Atomic token-pair swap: no native coin, no COINPAY follow-up (§41.5).',
             onSelect: onSwap,
         },
         {
@@ -1591,7 +1591,7 @@ function buildActionEntries({
         {
             id: 'parallel',
             label: 'Parallel cross-chain actions',
-            description: 'Compose multiple independent actions across any chains and sign them sequentially (§42.8.2). Not atomic — failures do not roll back.',
+            description: 'Compose multiple independent actions across any chains and sign them sequentially (§42.8.2). Not atomic: failures do not roll back.',
             onSelect: onParallel,
         },
         {
@@ -1621,13 +1621,13 @@ function buildActionEntries({
         {
             id: 'contacts',
             label: 'Contacts',
-            description: 'Local address book — label counterparties, quick-compose to saved recipients (§41.7.4).',
+            description: 'Local address book: label counterparties, quick-compose to saved recipients (§41.7.4).',
             onSelect: onContacts,
         },
         {
             id: 'advanced',
             label: 'Advanced action',
-            description: 'Submit any action the SDK supports — power-user surface for ADDRESS / CALLBACK / SLEEP / raw MESSAGE (§40.10).',
+            description: 'Submit any action the SDK supports. Power-user surface for ADDRESS / CALLBACK / SLEEP / raw MESSAGE (§40.10).',
             onSelect: onAdvanced,
         },
         {

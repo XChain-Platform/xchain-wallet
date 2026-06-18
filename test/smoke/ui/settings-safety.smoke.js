@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §35 Settings — Step 7 — Safety panel.
+// Smoke for §35 Settings, Step 7: Safety panel.
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
@@ -29,10 +29,10 @@ assert.match(
     'autolock writes through update({ autolockMinutes })',
 );
 
-// Undo-send was scrapped v0.132.0 — the row + its handler are gone.
-// (Comments may still reference the dead schema field —
+// Undo-send was scrapped v0.132.0; the row + its handler are gone.
+// (Comments may still reference the dead schema field.
 // settings.grace.undoSendSeconds stays writable until v3, per settings
-// close FOLLOWUP 12 — so we check for actionable wiring, not substrings.)
+// close FOLLOWUP 12; we check for actionable wiring, not substrings.)
 assert.doesNotMatch(src, /aria-label="Undo-send grace"/, 'undo-send <select> removed');
 assert.doesNotMatch(src, /onUndoSendChange/, 'undo-send handler removed');
 assert.doesNotMatch(src, /UNDO_SEND_OPTIONS/, 'undo-send option list removed');

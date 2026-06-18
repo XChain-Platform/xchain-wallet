@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Pre-host wallet.create + wallet.import handlers — §15.3 / §15.4.
+// Pre-host wallet.create + wallet.import handlers. §15.3 / §15.4.
 //
 // Mirror of the web shell's `createWalletLocal` / `importMnemonicLocal`
 // from hostBridge.js: derive a fresh master key from the user's
@@ -16,7 +16,7 @@
 // the meta slot, and trigger the background's `onUnlocked` callback so
 // the host listener attaches. Idempotence-guarded.
 //
-// Runs pre-host so a fresh install can onboard — the MessageHost's
+// Runs pre-host so a fresh install can onboard; the MessageHost's
 // vault-backed handlers aren't registered until a session key exists.
 
 import { crypto as cryptoLib, flows, storage as storageLib } from '@xchain-wallet/core';
@@ -84,7 +84,7 @@ export async function handleWalletCreate(request, deps) {
     if (typeof deps.onUnlocked === 'function') {
         await deps.onUnlocked();
     }
-    // Re-run create to fetch the mnemonic? No — createWallet already
+    // Re-run create to fetch the mnemonic? No: createWallet already
     // returned it above. Need to capture it before this final step.
     return { created: true };
 }
@@ -198,13 +198,13 @@ export async function handleWalletImport(request, deps) {
 async function assertFreshVault(deps) {
     if (await deps.metaBackend.load()) {
         throw Object.assign(
-            new Error('A wallet already exists — unlock or reset first.'),
+            new Error('A wallet already exists. Unlock or reset first.'),
             { name: 'WalletExistsError' },
         );
     }
     if (await deps.storageBackend.load()) {
         throw Object.assign(
-            new Error('A wallet already exists — unlock or reset first.'),
+            new Error('A wallet already exists. Unlock or reset first.'),
             { name: 'WalletExistsError' },
         );
     }

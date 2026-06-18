@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §12 / Cluster S FOLLOWUP 1 — sign-throttle settings UI.
+// Smoke for §12 / Cluster S FOLLOWUP 1: sign-throttle settings UI.
 //
 // Pins:
 //   - schemas/settings.js declares signThrottle?: { burst?, windowMs? }

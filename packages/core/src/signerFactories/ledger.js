@@ -8,18 +8,18 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// makeLedgerFactory — shell-agnostic Ledger pairing logic (§18.2,
+// makeLedgerFactory: shell-agnostic Ledger pairing logic (§18.2,
 // Phase 2 Step 18).
 //
 // Same split as `makeTrezorFactory`: core owns the post-transport pair
 // sequence, each shell owns how it obtains the WebHID transport + the
 // `@ledgerhq/hw-app-btc` class. The bitcoin-app pair sequence itself
-// is identical across shells — read `getAppAndVersion`, derive a
+// is identical across shells: read `getAppAndVersion`, derive a
 // device identifier from the account-0 xpub (Ledger has no stable
 // serial per §18 rationale), construct a `LedgerSigner`, surface
 // `pairingInfo` for `flows.registerSigner`.
 //
-// Core stays free of `@ledgerhq/*` imports — the shell binds them and
+// Core stays free of `@ledgerhq/*` imports. The shell binds them and
 // passes loaders through DI.
 //
 // Shape:
@@ -97,7 +97,7 @@ export function makeLedgerFactory({ getTransport, getAppClass }) {
         try {
             appInfo = await app.getAppAndVersion();
         } catch (err) {
-            throw new Error(`pairLedgerSigner: failed to read app info — ${err?.message || err}`);
+            throw new Error(`pairLedgerSigner: failed to read app info: ${err?.message || err}`);
         }
         if (!appInfo || !appInfo.name) {
             throw new Error('pairLedgerSigner: device did not report an app name');
@@ -110,7 +110,7 @@ export function makeLedgerFactory({ getTransport, getAppClass }) {
         try {
             identity = await app.getWalletPublicKey(LEDGER_IDENTITY_PATH, { verify: false });
         } catch (err) {
-            throw new Error(`pairLedgerSigner: failed to read identity xpub — ${err?.message || err}`);
+            throw new Error(`pairLedgerSigner: failed to read identity xpub: ${err?.message || err}`);
         }
         const deviceIdentifier = await deriveLedgerDeviceIdentifier(identity.publicKey);
 

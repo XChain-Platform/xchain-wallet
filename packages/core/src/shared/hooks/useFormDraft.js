@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// useFormDraft — §37 / G125. Per-(shell, view, walletId) localStorage
+// useFormDraft (§37 / G125): Per-(shell, view, walletId) localStorage
 // helper for in-progress form drafts so a tab refresh or accidental
 // navigation doesn't wipe what the user has typed.
 //
@@ -19,18 +19,18 @@
 // Key design choices:
 //
 //   1. Per-walletId so a from-seed restore (which provisions a new
-//      wallet id) lands fresh — strangers' drafts never bleed into
+//      wallet id) lands fresh: strangers' drafts never bleed into
 //      a freshly imported wallet.
 //   2. localStorage (not vault) so the draft survives a wallet lock
 //      / unlock cycle without needing the password. Drafts contain
-//      no signing material — Send keeps {amount, address, memo, tick}
+//      no signing material: Send keeps {amount, address, memo, tick}
 //      out of the draft and password / mnemonic / passphrase fields
 //      stay in component state only.
-//   3. TTL — draft is discarded on read if it's older than `ttlMs`
+//   3. TTL: draft is discarded on read if it's older than `ttlMs`
 //      (default 24 h). Stops a months-old "send 9999 BTC to bc1q…"
 //      draft from popping back up after a long idle.
 //   4. Imperative API (`load` / `save` / `clear` / `hasDraft`) rather
-//      than auto-syncing state — each form already owns its state
+//      than auto-syncing state: each form already owns its state
 //      and decides when to write / restore. The hook just centralises
 //      the storage shape so future-Claude can reason about what's in
 //      localStorage at a glance.
@@ -62,7 +62,7 @@ function safeStorage() {
  * @param {object} options
  * @param {string} options.view              short view name (e.g. 'send', 'sign-message')
  * @param {string | null | undefined} options.walletId  active wallet id; falsy → keyed under 'none'
- * @param {number} [options.ttlMs]           drafts older than this are discarded on load. Default 24h. Cluster P FOLLOWUP 6 — pass `0` to disable persistence entirely (the user's privacy.formDraftTtlMs = 0 setting case). load() returns null + save() no-ops + clear() still works (so the call site can clean up an existing draft from a previous setting).
+ * @param {number} [options.ttlMs]           drafts older than this are discarded on load. Default 24h. Cluster P FOLLOWUP 6: pass `0` to disable persistence entirely (the user's privacy.formDraftTtlMs = 0 setting case). load() returns null + save() no-ops + clear() still works (so the call site can clean up an existing draft from a previous setting).
  */
 export function useFormDraft({ view, walletId, ttlMs = DEFAULT_TTL_MS }) {
     const draftDisabled = ttlMs === 0;
@@ -74,7 +74,7 @@ export function useFormDraft({ view, walletId, ttlMs = DEFAULT_TTL_MS }) {
     const load = useCallback(() => {
         const store = safeStorage();
         if (!store) return null;
-        // Cluster P FOLLOWUP 6 — Off setting evicts any persisted
+        // Cluster P FOLLOWUP 6: Off setting evicts any persisted
         // draft and returns null. Switching from 24h → Off should
         // wipe pre-existing drafts on next load, not orphan them.
         if (draftDisabled) {
@@ -119,7 +119,7 @@ export function useFormDraft({ view, walletId, ttlMs = DEFAULT_TTL_MS }) {
                 JSON.stringify({ savedAt: Date.now(), values }),
             );
         } catch {
-            /* QuotaExceeded etc. — swallow; the draft is best-effort */
+            /* QuotaExceeded etc.: swallow; the draft is best-effort */
         }
     }, [storageKey, draftDisabled]);
 

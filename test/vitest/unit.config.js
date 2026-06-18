@@ -28,7 +28,7 @@
 // `root` resolves to the workspace root so include/setupFiles patterns
 // can reference `test/...` paths unchanged. Anchored to this config
 // file's location (not cwd) so the suite works regardless of where
-// vitest is invoked from — Vitest resolves a relative `root` against
+// vitest is invoked from. Vitest resolves a relative `root` against
 // cwd, which would point at the wrong directory.
 
 import { fileURLToPath } from 'node:url';
@@ -49,7 +49,7 @@ export default defineConfig({
         // every route across three layers, and jsx-imports/import-exports
         // run Babel-AST scans over the whole wallet source tree. They land
         // well under this ceiling locally, but the Parallels share adds
-        // variance — a generous timeout keeps them from flaking the suite
+        // variance; a generous timeout keeps them from flaking the suite
         // while still catching a genuine hang.
         testTimeout: 20000,
         coverage: {

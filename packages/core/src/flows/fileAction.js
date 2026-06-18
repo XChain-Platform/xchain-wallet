@@ -8,18 +8,18 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// fileAction — convenience wrapper for the FILE action (protocol docs:
+// fileAction: convenience wrapper for the FILE action (protocol docs:
 // xchain-documentation/protocol/actions/FILE.md). Mirrors linkAction:
 // takes vault + registries + chain + source + the file's metadata and
 // raw bytes, and forwards to submitAction.
 //
 // On-chain shape per `xchain-sdk` formats v0:
 // `VERSION|NAME|TYPE|TITLE|MEMO|GATE_TICKER|ENCRYPTION_METHOD|KEY_HASH`.
-// This flow submits PUBLIC files only — the gating fields stay empty
+// This flow submits PUBLIC files only. The gating fields stay empty
 // and the encoder strips them (token-gated publishing is its own flow;
 // the read side lives in gatedContent.js).
 //
-// The file bytes travel as `rawData` — a Latin-1 binary string the
+// The file bytes travel as `rawData`, a Latin-1 binary string the
 // encoder compiles into the transaction's data push verbatim
 // (Buffer.from(rawData, 'binary')). The decoder enforces a compiled
 // push ceiling of 8192 bytes (MAX_ACTION_DATA_LENGTH), so the encoder

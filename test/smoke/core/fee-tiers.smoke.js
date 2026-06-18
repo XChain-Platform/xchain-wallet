@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §44 Fee UX — Step 1 — fee tier helpers.
+// Smoke for §44 Fee UX / Step 1: fee tier helpers.
 
 import { strict as assert } from 'node:assert';
 import {
@@ -54,13 +54,13 @@ assert.equal(btcDefault.speed, 'normal');
 const btcUnknown = estimateNativeSendFee({ chainId: 'bitcoin-mainnet', chainRegistry: registry, speed: 'rocket' });
 assert.equal(btcUnknown.sats, btcNormal.sats);
 
-// DOGE shape — koinu/byte rates render as DOGE/kB.
+// DOGE shape: koinu/byte rates render as DOGE/kB.
 const dogeNormal = estimateNativeSendFee({ chainId: 'dogecoin-mainnet', chainRegistry: registry, speed: 'normal' });
 assert.equal(dogeNormal.unit, 'DOGE/kB');
 assert.match(dogeNormal.rate, /DOGE\/kB/);
 // 100_000 koinu/byte × 250 bytes = 25_000_000 koinu = 0.25 DOGE.
 assert.equal(dogeNormal.sats, 25_000_000);
-// §44.7 — DOGE rateValue is the displayed value (DOGE/kB), not
+// §44.7: DOGE rateValue is the displayed value (DOGE/kB), not
 // the internal koinu/byte. 100_000 koinu/byte × 1000 / 1e8 = 1 DOGE/kB.
 assert.equal(dogeNormal.rateValue, 1, 'DOGE rateValue is in DOGE/kB');
 const dogeFast = estimateNativeSendFee({ chainId: 'dogecoin-mainnet', chainRegistry: registry, speed: 'fast' });
@@ -117,7 +117,7 @@ const zero = customFeeEstimate({ chainId: 'bitcoin-mainnet', chainRegistry: regi
 assert.ok(zero);
 assert.equal(zero.sats, 0);
 
-// §44.7 — DOGE custom rate is in DOGE/kB
+// §44.7: DOGE custom rate is in DOGE/kB
 const dogeCustom = customFeeEstimate({
     chainId: 'dogecoin-mainnet',
     chainRegistry: registry,

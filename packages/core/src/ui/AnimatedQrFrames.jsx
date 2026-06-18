@@ -12,20 +12,20 @@ import { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 
 /**
- * Render a sequence of strings as animated QR codes — frames advance
+ * Render a sequence of strings as animated QR codes; frames advance
  * at `fps` per second. Used for §20.3 chunked PSBT-over-QR transport
  * (encoded by `encodeXcwChunks`) and for §22.3 multisig PSBT
  * round-trip envelopes wrapped in the same chunk format.
  *
  * Hidden complexity: `qrcode.toDataURL` is async, so we render each
  * frame to a data URL on demand and cache them in `urls`. While a
- * frame is being rendered the previous frame stays visible — avoids
- * flicker.
+ * frame is being rendered the previous frame stays visible (avoids
+ * flicker).
  *
  * Honors `prefers-reduced-motion: reduce`: when set, the auto-advance
  * interval is suspended and the user steps through frames manually
- * via Prev / Next buttons. Hardware scanners / cosigner phones aren't
- * inconvenienced — the QR content is the same; only the cadence changes.
+ * via Prev / Next buttons. Hardware scanners / cosigner phones are not
+ * inconvenienced; the QR content is the same, only the cadence changes.
  *
  * @param {object} props
  * @param {string[]} props.frames        non-empty array of strings (one QR per frame)

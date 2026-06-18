@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §21 — Step 3 — Send.jsx wires <BalanceChanges> on review.
+// Smoke for §21: Step 3: Send.jsx wires <BalanceChanges> on review.
 //
 // Source-level checks that the review stage now:
 //   - imports BalanceChanges + uses simulateAction + balancesFromSdk
@@ -35,7 +35,7 @@ const webMsg = join(wsRoot, 'packages', 'web', 'src', 'messaging.js');
 const decIdx = readFileSync(decoderIndex, 'utf8');
 assert.match(decIdx, /balancesFromSdk/, 'decoder/index.js re-exports balancesFromSdk');
 
-// --- 2. balanceAdapter — basic semantic check ---------------------------
+// --- 2. balanceAdapter: basic semantic check ---------------------------
 
 const adapter = await import(adapterPath);
 assert.equal(typeof adapter.balancesFromSdk, 'function');

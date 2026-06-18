@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for Cluster I FOLLOWUP 3 + Cluster C FOLLOWUP 3 —
+// Smoke for Cluster I FOLLOWUP 3 + Cluster C FOLLOWUP 3:
 // `messaging.getTokenInfo` host method + TokenDetail richer metadata.
 //
 // Pins:
@@ -46,7 +46,7 @@ assert.ok(/export async function tokenInfoFor\b/.test(flow),
     'flows/tokenInfo.js exports tokenInfoFor');
 for (const field of [
     'description', 'creator', 'totalSupply', 'maxSupply', 'locked', 'marketPrice', 'imageUrl',
-    // §27.6 TIS gallery additions — images/audio/video plus links/socials/files.
+    // §27.6 TIS gallery additions: images/audio/video plus links/socials/files.
     'images', 'audio', 'video', 'website', 'socials', 'files', 'category',
 ]) {
     assert.ok(new RegExp(`\\b${field}\\b`).test(flow),
@@ -123,7 +123,7 @@ for (const label of ['Creator', 'Total supply', 'Status']) {
     );
 }
 // The description body renders as plain prose (no labeled `Description`
-// row anymore — moved into its own .descriptionBody block as part of
+// row anymore. Moved into its own .descriptionBody block as part of
 // the §27.6 redesign).
 assert.ok(/descriptionBody/.test(td),
     'TokenDetail still renders the description body block');
@@ -208,7 +208,7 @@ assert.ok(/src=\{effectiveImageUrl\}/.test(cv),
     assert.deepEqual(empty.audio, [], 'audio defaults to empty array');
     assert.deepEqual(empty.video, [], 'video defaults to empty array');
 
-    // descriptionJsonUrl — URL detection across schemes.
+    // descriptionJsonUrl: URL detection across schemes.
     assert.equal(
         mod.descriptionJsonUrl('https://j-dog.net/json/JDOG.json'),
         'https://j-dog.net/json/JDOG.json',
@@ -235,7 +235,7 @@ assert.ok(/src=\{effectiveImageUrl\}/.test(cv),
         'descriptionJsonUrl returns null for plain text',
     );
 
-    // legacyJsonToTis — promotes top-level `image` into images[].
+    // legacyJsonToTis: promotes top-level `image` into images[].
     const legacy = mod.legacyJsonToTis({
         token: 'JDOG',
         description: 'A demo token',
@@ -247,7 +247,7 @@ assert.ok(/src=\{effectiveImageUrl\}/.test(cv),
     assert.equal(legacy.social[0].type, 'twitter',
         'legacyJsonToTis lifts website_social_twitter into social[]');
 
-    // tisToMediaBundle — normalizes a TIS document into the flat shape.
+    // tisToMediaBundle: normalizes a TIS document into the flat shape.
     const bundle = mod.tisToMediaBundle({
         description: 'Hello world',
         images: [
@@ -271,7 +271,7 @@ assert.ok(/src=\{effectiveImageUrl\}/.test(cv),
     assert.equal(bundle.files[0].name, 'Whitepaper');
     assert.equal(bundle.category, 'Gaming');
 
-    // normalizeTokenInfo with a TIS bundle attached — gallery + body
+    // normalizeTokenInfo with a TIS bundle attached: gallery + body
     // description take precedence over the on-chain description URL.
     const merged = mod.normalizeTokenInfo(
         'bitcoin-mainnet',
@@ -286,7 +286,7 @@ assert.ok(/src=\{effectiveImageUrl\}/.test(cv),
     assert.equal(merged.imageUrl, 'https://example.com/a.png',
         'imageUrl falls out of images[0]');
 
-    // fetchTisBundle — happy path with an injected fetch mock.
+    // fetchTisBundle: happy path with an injected fetch mock.
     const mockResp = {
         ok: true,
         text: async () => JSON.stringify({
@@ -304,7 +304,7 @@ assert.ok(/src=\{effectiveImageUrl\}/.test(cv),
     assert.equal(fetchedBundle.images[0].url, 'https://example.com/mock.png',
         'fetchTisBundle promotes legacy image into images[]');
 
-    // fetchTisBundle — graceful failure on non-JSON.
+    // fetchTisBundle: graceful failure on non-JSON.
     const garbage = await mod.fetchTisBundle({
         description: 'https://example.com/mock.json',
         fetch: async () => ({ ok: true, text: async () => '<html>not json</html>' }),
@@ -312,7 +312,7 @@ assert.ok(/src=\{effectiveImageUrl\}/.test(cv),
     assert.equal(garbage, null,
         'fetchTisBundle returns null when response isn\'t JSON');
 
-    // fetchTisBundle — null for plain-text descriptions (no fetch).
+    // fetchTisBundle: null for plain-text descriptions (no fetch).
     let fetchCalls = 0;
     const noFetch = await mod.fetchTisBundle({
         description: 'plain text token',

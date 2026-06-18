@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// registerSigner — §18.3. Persist a newly-paired hardware signer.
+// registerSigner (§18.3): Persist a newly-paired hardware signer.
 //
 // Steps 13 (Trezor) and 14 (Ledger) call this after a successful
 // pairing handshake: the signer-specific code does the detection + UX
@@ -18,15 +18,15 @@
 //   1. Look up any existing signer record for the same
 //      (walletId, vendor, deviceIdentifier). If one exists, update
 //      `firmwareVersion` + `lastSeenAt` + optional `label` and return
-//      the existing record — re-pairing the same physical device is
-//      idempotent.
+//      the existing record (re-pairing the same physical device is
+//      idempotent).
 //
 //   2. Otherwise create a fresh record via `createSignerRecord` and
 //      persist it. Returns the created record so the caller can write
 //      `address.signerId = record.id` on addresses derived from this
 //      device.
 //
-// Address persistence + derivation is *not* this flow's concern — it
+// Address persistence + derivation is *not* this flow's concern;
 // is a thin registry-write. Callers run `signer.getAddresses(...)`
 // separately and persist `Address` records the usual way.
 
@@ -112,7 +112,7 @@ export async function listSignersForWallet(vault, walletId) {
 }
 
 /**
- * Remove a paired signer. Does NOT cascade — addresses still point
+ * Remove a paired signer. Does NOT cascade. Addresses still point
  * at the old signerId until a subsequent reconciliation pass
  * rewrites them (or the user manually replaces them). Returns true
  * if a record was deleted, false if it wasn't found.

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// SDKRegistry — §10.2. Instantiates one SDK per active chain, lazily.
+// SDKRegistry: §10.2. Instantiates one SDK per active chain, lazily.
 //
 // `core` deliberately does NOT import xchain-sdk. The SDK is CommonJS,
 // heavy (pulls in express/axios/bitcoinjs-lib), and each shell target
@@ -41,7 +41,7 @@
  * @property {(address: string, opts?: { message?: string }) => string} auth.generateChallenge
  * @property {() => Promise<void>} [init]
  * @property {() => void} [close]
- * @property {() => Promise<any>} [connectWs]                                                       §46 — open the explorer WebSocket
+ * @property {() => Promise<any>} [connectWs]                                                       §46: open the explorer WebSocket
  * @property {() => void} [disconnectWs]
  * @property {(address: string, callback: (msg: any) => void, opts?: object) => (() => void)} [onAddress]   subscribe to an address; returns unsubscribe
  * @property {(address: string, callback: (msg: any) => void, opts?: object) => (() => void)} [onOrderMatch]
@@ -128,7 +128,7 @@ export class SDKRegistry {
     }
 
     /**
-     * Replace one instance — used when the user changes endpoints in
+     * Replace one instance (used when the user changes endpoints in
      * Settings, so the next `get(chainId)` uses fresh URLs.
      * @param {string} chainId
      */

@@ -8,10 +8,10 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §29 Send/Receive — Step 1 — AddressCombobox primitive.
+// Smoke for §29 Send/Receive: Step 1: AddressCombobox primitive.
 //
 // Source-level static checks: imports, exports, ARIA hooks, keyboard
-// nav, callback wiring, CSS hooks. No jsdom — pure file inspection.
+// nav, callback wiring, CSS hooks. No jsdom: pure file inspection.
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';

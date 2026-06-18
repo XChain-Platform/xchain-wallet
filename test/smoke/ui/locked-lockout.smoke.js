@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §26 Lock & Panic — Step 2 — G066 — Locked.jsx wiring
+// Smoke for §26 Lock & Panic: Step 2: G066: Locked.jsx wiring
 // for failed-attempts escalating delay.
 
 import { strict as assert } from 'node:assert';

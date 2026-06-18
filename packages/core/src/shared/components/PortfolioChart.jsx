@@ -101,10 +101,10 @@ export function PortfolioChart({ rows, walletId }) {
     const tone = delta == null || delta === 0
         ? styles.changeNeutral
         : delta > 0 ? styles.changePositive : styles.changeNegative;
-    const arrow = delta == null || delta === 0 ? '—' : delta > 0 ? '▲' : '▼';
+    const arrow = delta == null || delta === 0 ? '-' : delta > 0 ? '▲' : '▼';
 
     // Chart-icon toggle in TotalBalanceHero collapses the whole section.
-    // The eye toggle is a separate, narrower concern handled below — it
+    // The eye toggle is a separate, narrower concern handled below; it
     // suppresses the numeric delta line but leaves the chart shape and
     // range pills visible. The early return lives below every hook call
     // so the hook count stays stable as the toggle flips.
@@ -207,7 +207,7 @@ export function resampleTo(src, n) {
     return out;
 }
 
-// Mirror of the helper in TotalBalanceHero — returns the row's current
+// Mirror of the helper in TotalBalanceHero. Returns the row's current
 // fiat value, or null when the row has no price data.
 function fiatValueOf(row) {
     if (!row) return null;

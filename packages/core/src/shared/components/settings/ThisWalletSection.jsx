@@ -8,15 +8,15 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// ThisWalletSection — §35.1 This Wallet panel.
+// ThisWalletSection (§35.1 This Wallet panel).
 //
 // Inline replacement for the previous `kind: 'drill'` row. Surfaces:
 //   - Active wallet name + a "Switch wallet" drilldown (preserves the
-//     current behaviour — the WalletPicker is still reachable).
+//     current behaviour; the WalletPicker is still reachable).
 //   - "Rename" drilldown to the existing RenameWalletForm route.
 //   - "Migrate to BIP39" drilldown when the active wallet's format is
 //     `counterwallet-legacy`.
-//   - "Remove wallet" — destructive delete with two-step confirmation
+//   - "Remove wallet": destructive delete with two-step confirmation
 //     (typed-name confirmation modal). Wires `wallet.remove` host
 //     handler / `messaging.removeWallet` wrapper added in this step.
 
@@ -69,7 +69,7 @@ export function ThisWalletSection({
         setRemoveError(null);
         try {
             await messaging.removeWallet({ walletId: activeWallet.id });
-            // Cluster U FOLLOWUP 5 — drop the resume-last-view memory
+            // Cluster U FOLLOWUP 5: drop the resume-last-view memory
             // for this wallet so a future wallet that happens to reuse
             // the same id (vanishingly unlikely with cuids, but the
             // hygiene cost is zero) doesn't inherit a stale route.

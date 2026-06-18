@@ -8,12 +8,12 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// WalletModeSection — §20 wallet-mode selector (G039).
+// WalletModeSection: §20 wallet-mode selector (G039).
 //
 // Lets the user pick between three modes:
 //   - full    Sign + broadcast on this device. Default.
-//   - watcher Watch-only — builds unsigned PSBTs for an air-gapped signer.
-//   - signer  Air-gapped signer — accepts pasted PSBTs, returns signed.
+//   - watcher Watch-only; builds unsigned PSBTs for an air-gapped signer.
+//   - signer  Air-gapped signer; accepts pasted PSBTs, returns signed.
 //
 // Step 1 of 3: this section ships the selector + persistence only.
 // Send.jsx watcher branch (G040) and Home.jsx signer variant (G041) read
@@ -38,7 +38,7 @@ const MODE_OPTIONS = /** @type {const} */ ([
     {
         value: 'signer',
         label: 'Signer (air-gapped)',
-        hint: 'Sign transactions pasted in from a watcher wallet. Send / receive screens are hidden — this wallet does not broadcast.',
+        hint: 'Sign transactions pasted in from a watcher wallet. Send / receive screens are hidden; this wallet does not broadcast.',
     },
 ]);
 

@@ -38,7 +38,7 @@ const {
  *     met the wallet aggregates them via `sdk.musig2.aggregateNonces`
  *     and the header switches to "Partial sigs collected: 2 of 3".
  *     Round 2 collects 32-byte partial sigs which are then aggregated
- *     into a single 64-byte Schnorr signature (BIP327) — on chain
+ *     into a single 64-byte Schnorr signature (BIP327); on chain
  *     this is indistinguishable from a single-sig taproot spend
  *     (§22.4).
  *
@@ -179,7 +179,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
             }
             return encodeXcwChunks(encodeMultisigEnvelope(envelope));
         } catch (e) {
-            // Surface in the UI rather than crashing — sessions with
+            // Surface in the UI rather than crashing; sessions with
             // malformed state still let the user cancel them.
             return { error: e?.message || String(e) };
         }
@@ -191,7 +191,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
         setPasteResult(null);
     }
 
-    // Camera scanner frame handler — each detected QR string goes
+    // Camera scanner frame handler: each detected QR string goes
     // through the same collector the paste path uses, so whichever
     // transport completes the envelope first wins. Once the collector
     // completes we dispatch via the existing submit path so UX is
@@ -281,7 +281,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
         setBusy(true);
         setError(null);
         setPasteResult(null);
-        // Accept both single chunks and newline-separated batches —
+        // Accept both single chunks and newline-separated batches:
         // some users will paste the whole capture log at once rather
         // than frame-by-frame.
         const lines = pasteInput
@@ -441,9 +441,9 @@ export function MultisigSigningSession({ walletId, onBack }) {
     const isMusig2 = active.scheme === 'taproot-musig2';
     const roundLabel = isMusig2
         ? (active.status === 'collecting-nonces'
-            ? 'Round 1 — Collect nonces'
+            ? 'Round 1: Collect nonces'
             : (active.status === 'collecting-sigs'
-                ? 'Round 2 — Collect signatures'
+                ? 'Round 2: Collect signatures'
                 : null))
         : (active.status === 'collecting-sigs' ? 'Collect signatures' : null);
 
@@ -504,8 +504,8 @@ export function MultisigSigningSession({ walletId, onBack }) {
                     Wallet password unlocks the software signer; the corresponding
                     primitive runs based on the session's scheme + round
                     (§22.3). Hardware MuSig2 paths surface a clear "Update
-                    firmware to use MuSig2 on this device" error per spec —
-                    use the software signer instead until firmware ships
+                    firmware to use MuSig2 on this device" error per spec.
+                    Use the software signer instead until firmware ships
                     BIP327 nonce + partial-sign primitives.
                 </p>
                 <Input
@@ -604,10 +604,10 @@ export function MultisigSigningSession({ walletId, onBack }) {
             </p>
             {isMusig2 ? (
                 <p className={styles.hint}>
-                    Round 1 — Nonces collected: {active.nonces.length} of {active.threshold}
+                    Round 1: Nonces collected: {active.nonces.length} of {active.threshold}
                     {active.aggNonce ? ' (aggregated)' : ''}
                     <br />
-                    Round 2 — Partial sigs collected: {active.partialSigs.length} of {active.threshold}
+                    Round 2: Partial sigs collected: {active.partialSigs.length} of {active.threshold}
                     {active.aggregatedSchnorrSig ? ' (aggregated Schnorr signature ready)' : ''}
                 </p>
             ) : null}

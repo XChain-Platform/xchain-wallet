@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for Phase 4 — Step 8 of 23 — STAKE authoring form (§42.7.1).
+// Smoke for Phase 4: Step 8 of 23: STAKE authoring form (§42.7.1).
 //
 // Capability-staking model: form takes an amount + signing pubkey;
 // no tier picker, no chains selector. Spec:
@@ -59,7 +59,7 @@ assert.ok(/Top up an existing stake/.test(formSrc),
 assert.ok(/AMOUNT:\s*amount\.trim\(\)/.test(formSrc),
     'StakeForm passes AMOUNT in action params');
 
-// Pubkey validation — 64 hex chars
+// Pubkey validation: 64 hex chars
 assert.ok(/\[0-9a-fA-F\]\{64\}/.test(formSrc),
     'StakeForm validates signing pubkey as 64 hex chars');
 
@@ -81,7 +81,7 @@ for (const status of ['checking', 'new', 'topup', 'error']) {
     assert.ok(new RegExp(`detectStatus === '${status}'`).test(formSrc),
         `StakeForm renders detectStatus '${status}' hint`);
 }
-// §20 Cluster X Step 13 — handler refactored from a ternary into an if/
+// §20 Cluster X Step 13: handler refactored from a ternary into an if/
 // else cascade (watcher-mode branch wins first). Pin the HW branch
 // against either the legacy ternary OR the new cascade shape.
 assert.ok(
@@ -195,5 +195,5 @@ for (const [shell, appPath] of [
 }
 
 console.log(
-    'OK — stake form smoke (capability-staking model: amount + signing pubkey, new-stake/top-up modes, bg handler + 3-shell messaging + dashboard onStake wire-through)',
+    'OK: stake form smoke (capability-staking model: amount + signing pubkey, new-stake/top-up modes, bg handler + 3-shell messaging + dashboard onStake wire-through)',
 );

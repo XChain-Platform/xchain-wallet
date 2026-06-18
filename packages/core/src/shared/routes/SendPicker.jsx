@@ -11,14 +11,14 @@
 import { TokenPicker } from './TokenPicker.jsx';
 
 /**
- * Send picker — landing screen for the Send quick-action. Thin wrapper
+ * Send picker: landing screen for the Send quick-action. Thin wrapper
  * over the shared {@link TokenPicker} with `purpose="send"`, which lists
  * only the spendable balances the active wallet/account holds. Selecting a
  * row hands {chainId, tick} to the host so the Send form opens with that
  * asset pre-populated.
  *
  * Props are forwarded verbatim; `hideOwnFilter` is accepted for backward
- * compatibility but no longer meaningful — the inline toolbar is now the
+ * compatibility but no longer meaningful; the inline toolbar is now the
  * single filter on every shell (previously Send filtered via a header
  * popover).
  *

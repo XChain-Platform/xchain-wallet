@@ -15,18 +15,18 @@
 // posture), the renderer can call `navigator.hid.requestDevice()` but
 // Electron gates every permission prompt + device enumeration through
 // main-process session handlers. Without these handlers, WebHID
-// silently returns an empty device list — the renderer's call to
+// silently returns an empty device list; the renderer's call to
 // `TransportWebHID.create()` would spin indefinitely waiting for a
 // device the OS sees but Electron refuses to surface.
 //
 // Two handlers are needed:
 //
-//   1. `setPermissionRequestHandler` — when the renderer calls a
+//   1. `setPermissionRequestHandler`: when the renderer calls a
 //      permission-gated API (like requestDevice), Electron asks us
 //      whether to allow it. We allow `hid` globally; finer-grained
 //      filtering happens in handler 2.
 //
-//   2. `setDevicePermissionHandler` — Electron's device-picker invokes
+//   2. `setDevicePermissionHandler`: Electron's device-picker invokes
 //      this with each candidate HID device so we can decide whether
 //      the user is allowed to select it. We allowlist Ledger + Trezor
 //      vendor IDs so unrelated HID peripherals (keyboards, mice,
@@ -66,7 +66,7 @@ export function attachHidPermissions(session) {
     }
 
     session.setPermissionRequestHandler((_webContents, permission, callback) => {
-        // `hid` covers navigator.hid.* — we grant unconditionally here
+        // `hid` covers navigator.hid.*; we grant unconditionally here
         // and do the fine-grained vendor allowlist in the device
         // permission handler below. Everything else stays default-deny.
         if (permission === 'hid') {
@@ -85,7 +85,7 @@ export function attachHidPermissions(session) {
 }
 
 /**
- * Pure test helper — returns true for Ledger / Trezor vendor IDs,
+ * Pure test helper. Returns true for Ledger / Trezor vendor IDs,
  * false otherwise. Lets the smoke exercise the vendor allowlist
  * without mounting a real Electron session.
  *

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for Phase 2 — Step 5 (piece 2c) — issueToken flow +
+// Smoke for Phase 2, Step 5 (piece 2c): issueToken flow +
 // action.issue host handler + shell messaging helpers.
 //
 // End-to-end wiring behind the Token Creation Wizard's sign stage:
@@ -127,5 +127,5 @@ assert.ok(
 );
 
 console.log(
-    'OK — issueToken smoke (flow + guard rails + action.issue handler wiring + messaging helpers + wizard call-site)',
+    'OK: issueToken smoke (flow + guard rails + action.issue handler wiring + messaging helpers + wizard call-site)',
 );

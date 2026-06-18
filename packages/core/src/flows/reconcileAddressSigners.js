@@ -8,11 +8,11 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// reconcileAddressSigners — closes the Address v1→v2 migration loop
+// reconcileAddressSigners: closes the Address v1→v2 migration loop
 // (§17.6). Walks every persisted address with `signerId === null`
 // (produced by the schemaVersion migration) and attempts to match it
 // to one of the supplied signers by deriving the pubkey at the
-// address's stored derivationPath — a match means that signer owns
+// address's stored derivationPath. A match means that signer owns
 // the address, so we write its id back.
 //
 // Signers must be unlocked. The caller holds the unlock(s); we don't
@@ -25,7 +25,7 @@
 // registered chain are recorded as skipped with a reason.
 //
 // Ambiguity (multiple signers derive the same pubkey at the same path)
-// is treated as an error — it shouldn't happen in practice (distinct
+// is treated as an error. It shouldn't happen in practice (distinct
 // seeds produce distinct child keys) and silently picking one signer
 // could misroute future operations.
 

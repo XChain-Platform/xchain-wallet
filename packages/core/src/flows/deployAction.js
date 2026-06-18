@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// deployAction — DEPLOY composer for the §42.6 "Deploy new contract"
+// deployAction: DEPLOY composer for the §42.6 "Deploy new contract"
 // form. Mirrors broadcastAction / dispenserAction: takes vault +
 // registries + chain + source address + DEPLOY params, forwards to
 // submitAction.

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// §37.2 / Cluster D FOLLOWUP 4 smoke — toast queue stacking limit.
+// §37.2 / Cluster D FOLLOWUP 4 smoke: toast queue stacking limit.
 //
 // ToastHost caps the number of simultaneously visible toasts at 3.
 // Older queued toasts stay in state with their auto-dismiss timers
@@ -22,7 +22,7 @@
 //   3. The overflow indicator renders only when `hiddenCount > 0`.
 //   4. The overflow badge has its own CSS class (.overflowBadge).
 //   5. The overflow badge is `aria-hidden` (queued toasts still
-//      announce themselves as they surface — no double-counting).
+//      announce themselves as they surface, no double-counting).
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
@@ -71,9 +71,9 @@ assert.ok(/\.overflowBadge\b/.test(css),
 
 assert.ok(
     /<div className=\{styles\.overflowBadge\}\s+aria-hidden="true">/.test(src),
-    'overflow badge is aria-hidden — queued toasts continue to announce themselves',
+    'overflow badge is aria-hidden; queued toasts continue to announce themselves',
 );
 
 console.log(
-    'OK — toast-stacking-limit smoke (Cluster D FOLLOWUP 4 — VISIBLE_LIMIT = 3 visible at once; toasts.slice(-VISIBLE_LIMIT) drives the render set; hiddenCount surfaces an aria-hidden "+N more" badge above the stack; queued toasts retain their auto-dismiss timers and surface in arrival order)',
+    'OK: toast-stacking-limit smoke (Cluster D FOLLOWUP 4: VISIBLE_LIMIT = 3 visible at once; toasts.slice(-VISIBLE_LIMIT) drives the render set; hiddenCount surfaces an aria-hidden "+N more" badge above the stack; queued toasts retain their auto-dismiss timers and surface in arrival order)',
 );

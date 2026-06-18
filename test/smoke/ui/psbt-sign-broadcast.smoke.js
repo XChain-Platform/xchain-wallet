@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §20 / G040 FOLLOWUP 1 (Cluster D Step 1) — PsbtSignForm
+// Smoke for §20 / G040 FOLLOWUP 1 (Cluster D Step 1): PsbtSignForm
 // in-wallet broadcast.
 //
 // Pins:
@@ -61,7 +61,7 @@ assert.match(handlerBlock, /sdkRegistry\.get\(chainId\)/, 'looks up SDK by chain
 assert.match(handlerBlock, /sdk\?\.encoder\?\.broadcastTx/, 'guards against missing encoder.broadcastTx');
 assert.match(handlerBlock, /await sdk\.encoder\.broadcastTx\(txHex\)/, 'calls broadcastTx with txHex');
 assert.match(handlerBlock, /return \{ txid \}/, 'normalizes return to { txid }');
-// Vault should NOT appear — broadcast is read-only-ish, no unlock required.
+// Vault should NOT appear; broadcast is read-only-ish, no unlock required.
 assert.doesNotMatch(handlerBlock, /\bvault\b/, 'handler does not require vault');
 
 // ─── 2. messaging shims ---------------------------------------------
@@ -120,7 +120,7 @@ assert.match(
     /disabled=\{!signedTxHex \|\| broadcastState === 'broadcasting'\}/,
     'Broadcast button gated on signedTxHex + busy state',
 );
-// Old "later release" copy must be gone — replaced by the new status block.
+// Old "later release" copy must be gone, replaced by the new status block.
 assert.doesNotMatch(
     formSrc,
     /Broadcast from inside the wallet will arrive in a later release/,

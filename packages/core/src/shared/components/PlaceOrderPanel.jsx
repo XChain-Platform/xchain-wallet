@@ -8,9 +8,9 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// PlaceOrderPanel — §41.3.4 Place Order form.
+// PlaceOrderPanel: §41.3.4 Place Order form.
 //
-// Limit orders only (XChain ORDER is inherently limit-based — Pass 1
+// Limit orders only (XChain ORDER is inherently limit-based; Pass 1
 // §3 rules out margin / algo / aggregation). Buy vs Sell toggle maps
 // to which side of the (tick1, tick2) pair the user gives vs gets:
 //
@@ -193,7 +193,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
             setFormError('Expiration must be a non-negative integer (blocks).');
             return;
         }
-        // Password input intentionally removed — wallet is unlocked at
+        // Password input intentionally removed. The wallet is unlocked at
         // this point. If the backend has actually re-locked, the sign
         // call below will surface that as an InvalidPasswordError.
         if (hw && hwStatus !== 'available') {
@@ -297,11 +297,11 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
             }}>
                 <dt style={{ color: 'var(--xc-text-muted)' }}>Balance {tick1}</dt>
                 <dd style={{ margin: 0, color: 'var(--xc-text)', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                    {balanceFor(tick1) ?? '—'}
+                    {balanceFor(tick1) ?? '-'}
                 </dd>
                 <dt style={{ color: 'var(--xc-text-muted)' }}>Balance {tick2}</dt>
                 <dd style={{ margin: 0, color: 'var(--xc-text)', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                    {balanceFor(tick2) ?? '—'}
+                    {balanceFor(tick2) ?? '-'}
                 </dd>
             </dl>
             <div style={{ display: 'flex', gap: 'var(--xc-space-2)', marginBottom: 'var(--xc-space-2)' }}>
@@ -419,7 +419,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                     {summary}
                 </p>
             ) : null}
-            {/* Password input intentionally omitted — the wallet is
+            {/* Password input intentionally omitted. The wallet is
                 already unlocked at this point, and forcing a re-entry
                 here breaks the in-context trading flow. The submit
                 handler passes the empty password through; signing will
@@ -458,12 +458,12 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
 
 // Render a balance value with thousand separators and a sensible
 // number of decimals. Caps at `divisibility` digits when supplied
-// (defaults to 8 — the native-coin precision); trailing zeros after
+// (defaults to 8, the native-coin precision); trailing zeros after
 // the decimal point are trimmed so "1.00000000" reads as "1".
 function formatQuantity(quantity, divisibility) {
-    if (quantity == null || quantity === '') return '—';
+    if (quantity == null || quantity === '') return '-';
     const raw = String(quantity).trim();
-    if (!raw) return '—';
+    if (!raw) return '-';
     const n = Number(raw);
     if (!Number.isFinite(n)) return raw;
     const maxFractionDigits = Number.isFinite(divisibility) && divisibility >= 0

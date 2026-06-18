@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §13 / Cluster T FOLLOWUP 2 — VERIFY-RELEASE.md surfaced
+// Smoke for §13 / Cluster T FOLLOWUP 2: VERIFY-RELEASE.md surfaced
 // from Settings → About.
 //
 // Pins:

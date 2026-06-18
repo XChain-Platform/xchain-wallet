@@ -14,7 +14,7 @@
 // `new (require('http').Agent)({ keepAlive: true, ... })` to reuse
 // TCP connections when talking to their respective services from a
 // Node server context. In the browser, connection pooling is handled
-// by the user agent — passing an `httpAgent` to axios is a no-op.
+// by the user agent, so passing an `httpAgent` to axios is a no-op.
 //
 // This shim surfaces a zero-cost `Agent` class so the SDK's inline
 // `new http.Agent()` call resolves without pulling in the full
@@ -24,7 +24,7 @@
 
 class Agent {
     constructor(_options) {
-        // No-op — the browser manages its own connection pool.
+        // No-op: the browser manages its own connection pool.
     }
     destroy() { /* no-op */ }
 }

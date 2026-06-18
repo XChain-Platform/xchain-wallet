@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// coinpayAction — convenience wrapper for the COINPAY action (§41.4;
+// coinpayAction: convenience wrapper for the COINPAY action (§41.4;
 // protocol docs: xchain-documentation/protocol/actions/COINPAY.md).
 // Mirrors orderAction: takes vault + registries + chain + source +
 // obligation details, forwards to submitAction.
@@ -22,7 +22,7 @@
 //
 // The obligation details (payer, payee, coin_amount, order_match
 // action index, expiration) come from
-// `sdk.getCoinpayObligations(address, 'address')` — the wallet hydrates
+// `sdk.getCoinpayObligations(address, 'address')`; the wallet hydrates
 // them into the form and passes them through here. Anyone can
 // broadcast the COINPAY on the buyer's behalf (the protocol doesn't
 // require it to come from the buyer's address), but in practice we

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// LocaleSync — Cluster R FOLLOWUP 4.
+// LocaleSync (Cluster R FOLLOWUP 4).
 //
 // Bootstrap shim that flips the live i18n locale to whatever
 // `settings.language` carries. Mounted as a sibling under
@@ -20,11 +20,11 @@
 //     registered locale that differs from the current locale, call
 //     `setLocale(language)`.
 //   - On settings change (e.g. user edits LanguageRegionSection):
-//     same — keep the live locale in lockstep with the persisted value.
+//     same: keep the live locale in lockstep with the persisted value.
 //
 // The Settings panel's own change handler also calls setLocale eagerly
 // for an instant UI flip; this component is the cold-start safety net
-// + cross-tab coverage. Unknown locale codes are silently ignored —
+// + cross-tab coverage. Unknown locale codes are silently ignored;
 // missing keys already fall back to English at render time.
 
 import { useEffect } from 'react';

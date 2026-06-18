@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Desktop main-process runtime — everything that isn't Electron-specific.
+// Desktop main-process runtime: everything that isn't Electron-specific.
 //
 // Splitting this out of `index.js` lets the IPC dispatch + auto-unlock
 // path be unit-tested under plain Node (no `electron` import). `index.js`
@@ -46,7 +46,7 @@
 //   Any non-pre-host message when the host is null returns
 //     `WalletLockedError` in the standard envelope.
 
-// Cross-package relative paths — the pnpm workspace symlink makes the
+// Cross-package relative paths: the pnpm workspace symlink makes the
 // `@xchain-wallet/*` specifiers work at build time, but the core smoke
 // harness runs files via Node directly (no workspace setup) and
 // resolves these paths instead. Same convention as messageHost.js.
@@ -70,10 +70,10 @@ import { createDesktopMessageHost } from './messageHost.js';
  * @property {import('@xchain-wallet/core').registry.ChainRegistry} chainRegistry
  * @property {import('@xchain-wallet/core').sdk.SDKRegistry} sdkRegistry
  * @property {() => Promise<{env?: object, build?: object}>} [getDiagnosticContext]
- *        §50 / Cluster L FOLLOWUP 4 — supplied by main/index.js so the
+ *        §50 / Cluster L FOLLOWUP 4: supplied by main/index.js so the
  *        diagnostic dump records electron version + OS + walletVersion.
  * @property {(n: { kind: string, title: string, body: string }) => void} [notify]
- *        §46 — OS-notification adapter, injected by main/index.js (which
+ *        §46: OS-notification adapter, injected by main/index.js (which
  *        owns the `electron` import). When absent (unit tests / headless),
  *        the notification watcher is not started.
  *
@@ -112,7 +112,7 @@ export function createRuntime(deps) {
 
 /**
  * Build the Vault + MessageHost from the cached session master key, if
- * one is present. Idempotent — returns the existing host if already
+ * one is present. Idempotent: returns the existing host if already
  * built. Returns null when no cached key exists (locked state).
  *
  * @param {DesktopRuntime} runtime
@@ -137,7 +137,7 @@ export async function ensureHost(runtime) {
             getDiagnosticContext: runtime.getDiagnosticContext,
         });
 
-        // §46 — start the live notification watcher. main/index.js injects the
+        // §46: start the live notification watcher. main/index.js injects the
         // electron.Notification adapter; without it (unit tests) we skip.
         if (runtime.notify && !runtime.notificationService) {
             runtime.notificationService = new notificationsLib.NotificationService({
@@ -159,7 +159,7 @@ export async function ensureHost(runtime) {
             });
         }
 
-        // §46 price-alert poll watcher — same lifecycle + adapter as above.
+        // §46 price-alert poll watcher: same lifecycle + adapter as above.
         if (runtime.notify && !runtime.priceAlertWatcher && typeof globalThis.fetch === 'function') {
             const priceOracle = flowsLib.createPriceOracle({ fetch: globalThis.fetch.bind(globalThis) });
             runtime.priceAlertWatcher = new notificationsLib.PriceAlertWatcher({
@@ -175,7 +175,7 @@ export async function ensureHost(runtime) {
 
         return runtime.host;
     } catch (err) {
-        // Cached key doesn't decrypt the vault — most likely the user
+        // Cached key doesn't decrypt the vault. Most likely the user
         // reset the wallet, or the vault file was replaced by a
         // different install. Close the vault (zeros its key copy) and
         // clear the stale session so the renderer sees a clean
@@ -237,7 +237,7 @@ export async function handleIpcMessage(runtime, message) {
                 sdkRegistry: runtime.sdkRegistry,
                 onUnlocked: async () => {
                     try { await ensureHost(runtime); } catch (err) {
-                        // Logged but not thrown — the unlock itself
+                        // Logged but not thrown: the unlock itself
                         // succeeded; the host-build failure will
                         // resurface on the next message if it's real.
                         console.error('[xchain] ensureHost after unlock failed:', err);
@@ -251,7 +251,7 @@ export async function handleIpcMessage(runtime, message) {
         const host = runtime.host ?? await ensureHost(runtime);
         if (!host) {
             return errorEnvelope(Object.assign(
-                new Error('Wallet is locked — unlock before calling vault-backed handlers'),
+                new Error('Wallet is locked. Unlock before calling vault-backed handlers.'),
                 { name: 'WalletLockedError' },
             ));
         }

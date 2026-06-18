@@ -8,13 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// removeWallet — destructive flow that deletes a Wallet record and all
+// removeWallet: destructive flow that deletes a Wallet record and all
 // records linked to it: accounts, addresses (HD-derived + imported-WIF),
 // signers, pendingTxs, pendingAirdrops, multisigSigningSessions,
 // watchlistEntries, priceAlerts.
 //
 // Vault-level singletons (settings) and shared collections (contacts,
-// connectedSites) survive — they aren't owned by a single wallet.
+// connectedSites) survive; they aren't owned by a single wallet.
 //
 // SignerPool eviction is the responsibility of the host handler that
 // wraps this flow; the core flow is vault-only.
@@ -37,7 +37,7 @@ export async function removeWallet({ vault, walletId }) {
     const wallet = await vault.wallets.get(walletId);
     if (!wallet) throw new WalletNotFoundError(walletId);
 
-    // Resolve descendants up front — we delete by id, so capturing the
+    // Resolve descendants up front. We delete by id, so capturing the
     // shape before mutating the vault keeps the bookkeeping honest.
     const accounts = await vault.accounts.findBy('walletId', walletId);
     const accountIds = new Set(accounts.map((a) => a.id));

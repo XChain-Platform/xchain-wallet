@@ -10,9 +10,9 @@
 
 // Smoke test for Batch 3 piece 10 (end-to-end bridge).
 //
-// Simulates the full Phase-1 bridge stack — dApp request → content
-// script relay → background MessageHost → ApprovalBroker → popup
-// resolve — against a real Vault + real broker + real MessageHost.
+// Simulates the full Phase-1 bridge stack: dApp request -> content
+// script relay -> background MessageHost -> ApprovalBroker -> popup
+// resolve, against a real Vault + real broker + real MessageHost.
 //
 // The unit-tested layers (inject, content, adapter) are pure relays
 // with no business logic, so the integration exercise here skips
@@ -193,7 +193,7 @@ async function call(host, type, request) {
 
 async function autoApprove(host, fakeWindows, result) {
     // Give the bridge handler a couple of microtask ticks to call
-    // approvals.connect / signMessage / etc. — which in turn calls
+    // approvals.connect / signMessage / etc., which in turn calls
     // chrome.windows.create via the broker.
     for (let i = 0; i < 5; i += 1) {
         await new Promise((r) => setImmediate(r));
@@ -233,7 +233,7 @@ async function autoApprove(host, fakeWindows, result) {
     assert.equal(sites[0].origin, 'https://dapp.example');
     assert.equal(sites[0].permissions.chains[0], 'bitcoin-regtest');
 
-    // 4a. Second connect on the same origin is idempotent — no approval
+    // 4a. Second connect on the same origin is idempotent; no approval
     //     window opens, response reflects existing permissions.
     const secondConn = await call(host, 'bridge.connect', {
         origin: 'https://dapp.example',
@@ -313,7 +313,7 @@ async function autoApprove(host, fakeWindows, result) {
     for (const fn of fakeWindows.surface.onRemoved
         ? [] // onRemoved.addListener already captured by broker
         : []) fn(winId);
-    // Broker installed its listener during construction — invoke it by
+    // Broker installed its listener during construction; invoke it by
     // using the internal _onWindowRemoved (equivalent to chrome firing
     // the onRemoved event on the window).
     broker._onWindowRemoved(winId);
@@ -364,5 +364,5 @@ async function autoApprove(host, fakeWindows, result) {
 }
 
 console.log(
-    'OK — bridge e2e smoke (connect/resolve round-trip, idempotent reconnect, reads, UNSUPPORTED_ACTION, disconnect, window-close reject, test-dapp surface intact, runbook published)',
+    'OK: bridge e2e smoke (connect/resolve round-trip, idempotent reconnect, reads, UNSUPPORTED_ACTION, disconnect, window-close reject, test-dapp surface intact, runbook published)',
 );

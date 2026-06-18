@@ -41,16 +41,16 @@ const PROTOCOL_COIN_TICKER = {
  * Project_Registry.md): publish a TICK-type LIST of member tokens, then
  * sign a LINK pairing it with the project's original ISSUE. The indexer
  * only honours a LINK signed by the project's current owner, and the
- * latest owner-valid list replaces earlier ones — so editing is simply
+ * latest owner-valid list replaces earlier ones, so editing is simply
  * publishing a new full list.
  *
  * Same two-sign stage machine as AttachContentForm:
  *
- *   compose      — edit the member list (prefilled with the current one)
- *   review-list  — confirm + sign the LIST
- *   wait-index   — poll the explorer for the LIST's ACTION_INDEX
- *   review-link  — confirm + sign the LINK (owner-validated)
- *   done         — both txids shown
+ *   compose      - edit the member list (prefilled with the current one)
+ *   review-list  - confirm + sign the LIST
+ *   wait-index   - poll the explorer for the LIST's ACTION_INDEX
+ *   review-link  - confirm + sign the LINK (owner-validated)
+ *   done         - both txids shown
  *
  * No crash-safe resume: if the wallet closes mid-flow the LIST is
  * already on-chain and the pairing can be finished manually via
@@ -60,7 +60,7 @@ const PROTOCOL_COIN_TICKER = {
  * @param {string} props.walletId
  * @param {string} props.chainId          chain the project lives on
  * @param {string} props.tick             the project's ticker (uppercase)
- * @param {string | null} [props.issuerAddress]   the project's current owner — preferred signing address
+ * @param {string | null} [props.issuerAddress]   the project's current owner (preferred signing address)
  * @param {() => void} props.onBack
  */
 export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = null, onBack }) {
@@ -75,7 +75,7 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [fromAddressId, setFromAddressId] = useState(/** @type {string | null} */ (null));
 
-    // The project's ISSUE action index — the LINK's second leg.
+    // The project's ISSUE action index (the LINK's second leg).
     const [issueActionIndex, setIssueActionIndex] = useState(/** @type {string | null} */ (null));
     const [genesisChecked, setGenesisChecked] = useState(false);
 
@@ -135,7 +135,7 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
     }, [messaging, chainId, tick]);
 
     // Fetch the current roster for prefill. A project with no published
-    // list yet resolves to null — normal for first-time publishing.
+    // list yet resolves to null (normal for first-time publishing).
     useEffect(() => {
         if (typeof messaging?.getProjectForToken !== 'function') { setRosterChecked(true); return undefined; }
         let cancelled = false;
@@ -158,7 +158,7 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
         setPrefilled(true);
     }, [prefilled, rosterChecked, currentRoster, membersText]);
 
-    // Signing address — prefer the project's owner (the LINK is only
+    // Signing address: prefer the project's owner (the LINK is only
     // honoured from the owner), else the newest external HD address.
     useEffect(() => {
         if (!addressesByChain || fromAddressId) return;
@@ -187,7 +187,7 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
         }
     }, [stage]);
 
-    // Wait-index polling — same shape as AttachContentForm.
+    // Wait-index polling: same shape as AttachContentForm.
     useEffect(() => {
         if (stage !== 'wait-index' || !listTxid) return undefined;
         let cancelled = false;
@@ -263,8 +263,8 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
         if (!issueActionIndex) {
             setFormError(
                 genesisChecked
-                    ? `The creation record for ${tick} isn't indexed yet — try again in a minute.`
-                    : 'Still looking up the project\'s creation record — one moment.',
+                    ? `The creation record for ${tick} isn't indexed yet. Try again in a minute.`
+                    : 'Still looking up the project\'s creation record. One moment.',
             );
             return;
         }
@@ -295,7 +295,7 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                     source: fromAddress.source,
                     signerId: fromAddress.signerId,
                 },
-                // TICK-type LIST (TYPE=1) — the roster shape the registry
+                // TICK-type LIST (TYPE=1): the roster shape the registry
                 // standard expects (sdk.project.rosterParams).
                 params: {
                     VERSION: '0',
@@ -394,7 +394,7 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
             <>
                 <h2 className={styles.successTitle}>Not available in watcher mode</h2>
                 <p className={styles.hint}>
-                    Publishing an official-token list is a two-phase action —
+                    Publishing an official-token list is a two-phase action:
                     the wallet broadcasts the list, waits for it to be
                     indexed, then broadcasts the link that makes it official.
                     A watcher-mode wallet can't observe the list landing
@@ -452,14 +452,14 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                     </dd>
                 </dl>
                 <p className={styles.hint}>
-                    Waiting for the list to be confirmed and indexed —
+                    Waiting for the list to be confirmed and indexed.
                     usually one or two blocks. Then one more signature links
                     it to {tick} and makes it official.
                 </p>
                 {slow ? (
                     <p className={styles.hint}>
                         This is taking longer than usual. If you close this
-                        screen the list stays on-chain — you can finish the
+                        screen the list stays on-chain. You can finish the
                         pairing later from Actions → Link.
                     </p>
                 ) : null}
@@ -535,7 +535,7 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
         return wrap(
             <form onSubmit={handleSignLink} noValidate>
                 <p className={styles.summary}>
-                    Link the published list to {tick} — this makes it the
+                    Link the published list to {tick}. This makes it the
                     project's official-token list.
                 </p>
                 <dl className={styles.detailsList}>
@@ -606,12 +606,12 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
             {rosterChecked && hasRoster ? (
                 <p className={styles.hint}>
                     Current list ({currentRoster.members.length} token{currentRoster.members.length === 1 ? '' : 's'})
-                    {' '}loaded below — edit and republish.
+                    {' '}loaded below. Edit and republish.
                 </p>
             ) : null}
             {rosterChecked && !hasRoster ? (
                 <p className={styles.hint}>
-                    No list published yet — this will be the first.
+                    No list published yet. This will be the first.
                 </p>
             ) : null}
             <label className={styles.pickerLabel} htmlFor="roster-members">
@@ -648,7 +648,7 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
             {ownerMismatch ? (
                 <div role="alert" className={styles.warnings}>
                     <p className={styles.warning}>
-                        This wallet doesn't hold the project's owner address —
+                        This wallet doesn't hold the project's owner address.
                         the final link step will only be honoured if signed
                         by the current owner.
                     </p>
@@ -670,7 +670,7 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
     );
 }
 
-// Resolve the ACTION_INDEX from whatever shape the explorer returns —
+// Resolve the ACTION_INDEX from whatever shape the explorer returns:
 // a merged action row or the transactions endpoint's wrapper.
 function extractActionIndex(resp) {
     if (!resp || typeof resp !== 'object') return null;

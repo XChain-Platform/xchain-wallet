@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §17.7.1 / G028 — clipboard auto-clear configurable 0–600s.
+// Smoke for §17.7.1 / G028: clipboard auto-clear configurable 0-600s.
 // The default lives in the settings schema, the Privacy panel exposes
 // it as a number input, and ViewPrivateKey reads the chosen value to
 // time its post-copy clipboard wipe (0 disables). Cluster E Step 5 of 5.
@@ -66,13 +66,13 @@ assert.ok(/useSettings/.test(vpk),
     'ViewPrivateKey calls useSettings');
 assert.ok(/clipboardAutoClearSeconds/.test(vpk),
     'ViewPrivateKey reads clipboardAutoClearSeconds from settings');
-// 0 disables — the timer effect must short-circuit when value is <= 0.
+// 0 disables; the timer effect must short-circuit when value is <= 0.
 assert.ok(/clipboardAutoClearSeconds\s*<=\s*0/.test(vpk),
     'ViewPrivateKey skips the timer when the setting is 0 (disabled)');
 // Timer multiplies seconds by 1000 to ms.
 assert.ok(/clipboardAutoClearSeconds\s*\*\s*1000/.test(vpk),
     'ViewPrivateKey multiplies seconds-by-1000 to feed setTimeout');
-// Hard-coded 60_000 must be gone — otherwise the setting is a no-op.
+// Hard-coded 60_000 must be gone; otherwise the setting is a no-op.
 assert.ok(!/60_000/.test(vpk),
     'ViewPrivateKey no longer hard-codes the 60s timeout');
 

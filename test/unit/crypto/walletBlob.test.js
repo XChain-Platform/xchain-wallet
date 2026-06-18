@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Unit: walletBlob — encrypt/decrypt of the wallet's seed with the
+// Unit: walletBlob. Encrypt/decrypt of the wallet's seed with the
 // password-derived master key. End-to-end of the
 // password → KDF → AES-256-GCM chain.
 

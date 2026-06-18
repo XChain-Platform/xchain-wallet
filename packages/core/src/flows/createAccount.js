@@ -8,13 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// createAccount — derive a new BIP44 account under an existing Wallet
+// createAccount: derive a new BIP44 account under an existing Wallet
 // (§11.3.2). Picks the next free `index` (max(existing) + 1), persists
 // an Account record, unlocks the wallet to derive a first address per
 // active chain, and persists those Address records.
 //
-// Mirrors the second half of `_persistHdWallet.js` — same address-
-// derivation pipeline, no duplicate signer logic.
+// Mirrors the second half of `_persistHdWallet.js` (same address-
+// derivation pipeline, no duplicate signer logic).
 
 import { createAccount as createAccountRecord } from '../schemas/account.js';
 import { createAddress } from '../schemas/address.js';
@@ -94,7 +94,7 @@ export async function createAccount({
     await vault.accounts.put(account);
 
     // When the host gives us a pre-unlocked signer (from SignerPool),
-    // reuse it and DO NOT lock it — the pool owns its lifecycle. When
+    // reuse it and DO NOT lock it (the pool owns its lifecycle). When
     // we have to fall back to a password, build a one-shot signer and
     // lock it before returning.
     const signer = providedSigner

@@ -10,20 +10,20 @@
 
 // Read-only passthroughs to xchain-sdk's introspection surface.
 // AdvancedActionsForm (§40.10) uses these to render its schema-driven
-// field list and run live validation — the SDK is the source of
+// field list and run live validation. The SDK is the source of
 // truth for action names, format versions, field lists, and
 // validation rules.
 //
 // SDK surface:
-//   sdk.getActions()                           — array of action names
-//   sdk.getActionFormats(action)               — { versionN: formatStr, ... }
-//   sdk.getActionFields(action, version?)      — field list; without
+//   sdk.getActions()                           - array of action names
+//   sdk.getActionFormats(action)               - { versionN: formatStr, ... }
+//   sdk.getActionFields(action, version?)      - field list; without
 //                                                version, returns the
 //                                                union of all versions'
 //                                                fields (with '...'
 //                                                prefix preserved for
 //                                                rest-fields)
-//   sdk.validateAction(action, params)         — { valid, errors[] }
+//   sdk.validateAction(action, params)         - { valid, errors[] }
 
 /**
  * @param {{ sdkRegistry: any, chainId: string }} params

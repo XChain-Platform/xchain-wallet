@@ -8,15 +8,15 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Lockout tracking — §26 / G066. Persists failed-unlock counters and
+// Lockout tracking (§26 / G066). Persists failed-unlock counters and
 // timed lockouts across pop-up close/open and tab reload.
 //
 // The wallet vault is encrypted under the password the user is trying
 // to enter, so we cannot store lockout state inside it. Instead we use
-// the host's `localStorage` (web app, extension popup, desktop renderer
-// — every shell that mounts the Locked screen has it). When localStorage
+// the host's `localStorage` (web app, extension popup, desktop renderer;
+// every shell that mounts the Locked screen has it). When localStorage
 // is unavailable (SSR, tests, very old contexts) the helpers degrade to
-// in-memory state held only for the lifetime of the process — at the
+// in-memory state held only for the lifetime of the process, at the
 // cost of "close the popup to reset the counter", which is documented.
 //
 // Schedule (after N consecutive failed attempts the next attempt is
@@ -65,7 +65,7 @@ function getStorage() {
             return globalThis.localStorage;
         }
     } catch (_err) {
-        // SecurityError on cross-origin frames, etc. — fall through.
+        // SecurityError on cross-origin frames, etc. Fall through.
     }
     return null;
 }
@@ -156,7 +156,7 @@ export function recordFailure(nowMs = Date.now()) {
     return next;
 }
 
-/** Clear all lockout state — call after a successful unlock. */
+/** Clear all lockout state. Call after a successful unlock. */
 export function recordSuccess() {
     writeState(emptyLockoutState());
 }

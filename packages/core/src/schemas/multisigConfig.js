@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// MultisigConfig — §11.3.6 + §22.2. Reserved in Phase 1; implemented in
+// MultisigConfig (§11.3.6 + §22.2). Reserved in Phase 1; implemented in
 // Phase 4 Step 17. Cosigner record matches §22.2 verbatim: name +
 // pubkey + fingerprint + origin + localSignerId + xpub +
 // derivationPath + addedAt.
@@ -38,7 +38,7 @@ export const MULTISIG_SCHEMES = /** @type {const} */ ([
 // 'external-xpub' is an xpub copied in from another wallet; we can
 // build PSBTs for it but cannot sign. 'external-hardware' is a
 // hardware device controlled by someone other than this wallet's
-// user — interaction is via PSBT exchange.
+// user; interaction is via PSBT exchange.
 export const COSIGNER_ORIGINS = /** @type {const} */ ([
     'local',
     'external-xpub',
@@ -48,7 +48,7 @@ export const COSIGNER_ORIGINS = /** @type {const} */ ([
 /**
  * @typedef {Object} Cosigner
  * @property {string} name                                user-chosen
- * @property {string} pubkey                              hex — signing public key
+ * @property {string} pubkey                              hex (signing public key)
  * @property {string} fingerprint                         4-byte BIP32 master key fingerprint, hex
  * @property {typeof COSIGNER_ORIGINS[number]} origin
  * @property {string | null} localSignerId                set when origin='local'; references a Signer record
@@ -60,7 +60,7 @@ export const COSIGNER_ORIGINS = /** @type {const} */ ([
 /**
  * @typedef {Object} MultisigConfig
  * @property {2} schemaVersion
- * @property {string} id                                  uuid; stable across config edits and wallet reloads (§56.3 pre-launch — supports multiple configs per wallet)
+ * @property {string} id                                  uuid; stable across config edits and wallet reloads (§56.3 pre-launch, supports multiple configs per wallet)
  * @property {typeof MULTISIG_SCHEMES[number]} scheme
  * @property {number} threshold
  * @property {Cosigner[]} cosigners
@@ -102,7 +102,7 @@ export function validateMultisigConfig(record) {
         if (r.scheme === 'taproot-musig2'
             && typeof r.threshold === 'number'
             && r.threshold !== r.cosigners.length) {
-            errors.push('threshold: taproot-musig2 is n-of-n — threshold must equal cosigners.length');
+            errors.push('threshold: taproot-musig2 is n-of-n; threshold must equal cosigners.length');
         }
         const seenPubkeys = new Set();
         for (const c of r.cosigners) {
@@ -123,7 +123,7 @@ export function validateMultisigConfig(record) {
  * Build a `MultisigConfig` from a normalized cosigner list + scheme +
  * threshold. The caller is responsible for resolving each cosigner's
  * `pubkey` / `fingerprint` / `derivationPath` / `localSignerId` /
- * `xpub` before invoking this factory — this function only assembles
+ * `xpub` before invoking this factory; this function only assembles
  * the record and computes the `scriptTemplate` field.
  *
  * For Taproot-MuSig2: caller passes in `aggregatedXOnlyPubkey` (the
@@ -134,7 +134,7 @@ export function validateMultisigConfig(record) {
  * For P2SH/P2WSH: scriptTemplate is encoded as
  * `multi:<threshold>:<pk1>:<pk2>:...`. The actual redeem-script
  * bytes are computed at PSBT-construction time (Step 19) from the
- * template — the wallet doesn't need bitcoinjs-lib here.
+ * template (the wallet doesn't need bitcoinjs-lib here).
  *
  * @param {{
  *   scheme: typeof MULTISIG_SCHEMES[number],
@@ -166,7 +166,7 @@ export function buildMultisigConfig(input) {
     // unspendable. Real T-of-N policies must use p2wsh-multisig.
     if (input.scheme === 'taproot-musig2' && input.threshold !== input.cosigners.length) {
         throw new Error(
-            'buildMultisigConfig: taproot-musig2 is n-of-n only — threshold must equal cosigners.length '
+            'buildMultisigConfig: taproot-musig2 is n-of-n only; threshold must equal cosigners.length '
             + '(use scheme "p2wsh-multisig" for a true T-of-N policy)',
         );
     }
@@ -211,7 +211,7 @@ export function buildMultisigConfig(input) {
     };
     const res = validateMultisigConfig(config);
     if (!res.ok) {
-        throw new Error(`buildMultisigConfig: produced invalid config — ${res.errors.join('; ')}`);
+        throw new Error(`buildMultisigConfig: produced invalid config (${res.errors.join('; ')})`);
     }
     return config;
 }

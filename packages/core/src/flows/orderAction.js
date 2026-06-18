@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// orderAction — convenience wrapper for the ORDER action (§41.3.4;
+// orderAction: convenience wrapper for the ORDER action (§41.3.4;
 // protocol docs: xchain-documentation/protocol/actions/ORDER.md).
 // Mirrors dispenserAction: takes vault + registries + chain + source
 // address + ORDER params, forwards to submitAction.
@@ -54,8 +54,8 @@ export async function orderAction(opts) {
     }
     // Amounts drop out of the required set when the matching side trades
     // ownership (selling a token name escrows the ownership record, not a
-    // balance — GIVE_AMOUNT empty); the SDK validator additionally enforces
-    // they're empty. GET_TICK is not required — native-coin orders leave it
+    // balance, so GIVE_AMOUNT is empty); the SDK validator additionally enforces
+    // they're empty. GET_TICK is not required; native-coin orders leave it
     // empty (the coin is GET_COIN). Field order preserved so the surfaced
     // error matches the SDK validator's. GIVE_TICK stays required: every
     // wallet-composed order names the token it's giving.
@@ -112,7 +112,7 @@ export async function orderAction(opts) {
 }
 
 /**
- * cancelOrder — wrapper for the CANCEL action (§41.3.5). Cancels an
+ * cancelOrder: wrapper for the CANCEL action (§41.3.5). Cancels an
  * open ORDER by its action index. Signs a tx from the order's source
  * address.
  *

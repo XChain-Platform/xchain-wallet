@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// MockHardwareSigner — §52 / G162 test scaffolding.
+// MockHardwareSigner (§52 / G162 test scaffolding).
 //
 // Deterministic, in-process Signer implementation usable by unit tests
 // that exercise signer-touching code without a paired Trezor / Ledger.

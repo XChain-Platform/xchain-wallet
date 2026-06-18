@@ -18,7 +18,7 @@ import styles from './ScreenHeader.module.css';
  * under the AppHeader logo via a negative margin-inline-start), title
  * centering, and an optional trailing-action slot. Every route should
  * use this rather than rolling its own `.header` / `.back` / `.title`
- * CSS — see STYLE_GUIDE.md.
+ * CSS (see STYLE_GUIDE.md).
  *
  * @param {object} props
  * @param {(() => void) | undefined} [props.onBack]   when present, renders a

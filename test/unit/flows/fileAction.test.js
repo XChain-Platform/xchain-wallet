@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 // Unit tests for the fileAction flow's input gate. Every rejection
-// fires BEFORE the vault/signer path, so these run without mocks —
+// fires BEFORE the vault/signer path, so these run without mocks;
 // the validation contract is what the AttachContentForm relies on to
 // fail early instead of mid-sign.
 

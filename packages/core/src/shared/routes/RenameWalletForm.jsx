@@ -15,11 +15,11 @@ import styles from './CreateWallet.module.css';
 import pickerStyles from './WalletPicker.module.css';
 
 /**
- * RenameWalletForm — change a Wallet record's `name` field. No
+ * RenameWalletForm: change a Wallet record's `name` field. No
  * password input, no signer needed; pure metadata update.
  *
- * The header carries Back on the left and Save (✓) on the right —
- * matches the WalletPicker / AccountPicker shape so the user's eye
+ * The header carries Back on the left and Save (✓) on the right,
+ * matching the WalletPicker / AccountPicker shape so the user's eye
  * already knows where the action affordances live.
  *
  * @param {object} props

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for Phase 4 — Step 13 of 23 — LINK two-panel creation form
+// Smoke for Phase 4, Step 13 of 23: LINK two-panel creation form
 // (§42.8.1).
 
 import { strict as assert } from 'node:assert';
@@ -38,13 +38,13 @@ assert.ok(/Chain A/.test(src), 'LinkForm renders the Chain A panel');
 assert.ok(/Chain B/.test(src), 'LinkForm renders the Chain B panel');
 assert.ok(/SidePanel/.test(src), 'LinkForm uses a SidePanel sub-component');
 
-// Submit-on selector — defaults to chain A, can switch to chain B.
+// Submit-on selector: defaults to chain A, can switch to chain B.
 assert.ok(/submitOn/.test(src),
     'LinkForm tracks which chain the LINK is submitted on');
 assert.ok(/Submit LINK on/.test(src),
     'LinkForm exposes a "Submit LINK on" selector');
 
-// Decoded preview — calls getActionByIndex per side.
+// Decoded preview: calls getActionByIndex per side.
 for (const call of [
     'messaging.getActionByIndex',
     'messaging.getAddressesByChain',
@@ -140,5 +140,5 @@ for (const [shell, appPath] of [
 }
 
 console.log(
-    'OK — link form smoke (LinkForm §42.8.1 two-panel composer + side-panel decoded preview + submit-on selector + linkAction core flow + bg handlers + 3-shell messaging + 3-shell App.jsx sub-route + ActionsMenu entry + Advanced form dedupe)',
+    'OK: link form smoke (LinkForm §42.8.1 two-panel composer + side-panel decoded preview + submit-on selector + linkAction core flow + bg handlers + 3-shell messaging + 3-shell App.jsx sub-route + ActionsMenu entry + Advanced form dedupe)',
 );

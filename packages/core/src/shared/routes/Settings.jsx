@@ -34,7 +34,7 @@ import { WALLET_MODE_DEFAULT } from '../../schemas/settings.js';
 import styles from './ActionsMenu.module.css';
 
 /**
- * Settings page — §35.
+ * Settings page (§35).
  *
  * Top-level layout uses three section kinds:
  *   - `external-drill`   single row showing a key fact; click navigates
@@ -43,7 +43,7 @@ import styles from './ActionsMenu.module.css';
  *                        click renders the section's Component inside a
  *                        Settings sub-page (back returns to the list).
  *   - `panel`            short, dense bodies the user wants to see at a
- *                        glance — rendered inline with the section
+ *                        glance: rendered inline with the section
  *                        heading and description above the body.
  *
  * The drilldown / inline split is per the §35 UX pass: pages get long
@@ -57,7 +57,7 @@ import styles from './ActionsMenu.module.css';
  * @param {{ id: string, name: string, index: number } | null} [props.activeAccount]
  * @param {() => void} [props.onOpenWalletPicker]
  * @param {() => void} [props.onOpenAccountPicker]
- * @param {string} [props.initialSubpageId]   §24 Cluster Y FOLLOWUP 2 — open this drilldown panel on mount (e.g. 'connected-sites' from a deep nav row)
+ * @param {string} [props.initialSubpageId]   §24 Cluster Y FOLLOWUP 2: open this drilldown panel on mount (e.g. 'connected-sites' from a deep nav row)
  */
 export function Settings({
     onBack,
@@ -120,7 +120,7 @@ export function Settings({
         {
             id: 'display',
             title: 'Display',
-            description: 'Pinned and hidden tokens — reorder pinned, bulk-unhide hidden.',
+            description: 'Pinned and hidden tokens: reorder pinned, bulk-unhide hidden.',
             keywords: 'display pinned hidden tokens reorder unhide bulk star',
             kind: 'internal-drill',
             Component: DisplaySection,
@@ -253,7 +253,7 @@ export function Settings({
     ]), [walletLabel, accountLabel, onOpenWalletPicker, onOpenAccountPicker, activeWallet, settings, siteCount]);
 
     // List-view filter. Hoisted ABOVE the subpage early-return so that
-    // both render paths call the same number of hooks — flipping
+    // both render paths call the same number of hooks; flipping
     // `subpageId` from null to a section id used to drop a useMemo
     // call from the second render, tripping React's
     // "Rendered fewer hooks than expected" guard.
@@ -288,7 +288,7 @@ export function Settings({
                 </Screen>
             );
         }
-        // Fallback for stale subpageId — return to list
+        // Fallback for stale subpageId: return to list
         setSubpageId(null);
     }
 
@@ -477,7 +477,7 @@ function ComingSoon() {
 // ─── Summary helpers ──────────────────────────────────────────────
 
 function privacySummary(settings) {
-    if (!settings) return '—';
+    if (!settings) return '-';
     const p = settings.privacy || {};
     const flags = ['torRouting', 'changeAddressRotation', 'hideSmallBalances', 'blurOnBlur', 'labelsSurviveRestore'];
     const onCount = flags.filter((k) => Boolean(p[k])).length;
@@ -485,14 +485,14 @@ function privacySummary(settings) {
 }
 
 function safetySummary(settings) {
-    if (!settings) return '—';
+    if (!settings) return '-';
     const mins = settings.autolockMinutes;
     if (mins === 0) return 'Auto-lock off';
     return `Auto-lock ${mins} min`;
 }
 
 function displaySummary(settings) {
-    if (!settings) return '—';
+    if (!settings) return '-';
     const pinned = Array.isArray(settings.pinnedTokens) ? settings.pinnedTokens.length : 0;
     const hidden = Array.isArray(settings.hiddenTokens) ? settings.hiddenTokens.length : 0;
     if (pinned === 0 && hidden === 0) return 'No customization';
@@ -503,7 +503,7 @@ function displaySummary(settings) {
 }
 
 function walletModeSummary(settings) {
-    if (!settings) return '—';
+    if (!settings) return '-';
     const mode = settings.walletMode || WALLET_MODE_DEFAULT;
     if (mode === 'full') return 'Full';
     if (mode === 'watcher') return 'Watcher (watch-only)';
@@ -512,7 +512,7 @@ function walletModeSummary(settings) {
 }
 
 function feesSummary(settings) {
-    if (!settings) return '—';
+    if (!settings) return '-';
     const fees = settings.fees || {};
     const chainIds = Object.keys(fees);
     if (chainIds.length === 0) return 'No chains';
@@ -523,7 +523,7 @@ function feesSummary(settings) {
 }
 
 function endpointsSummary(settings) {
-    if (!settings) return '—';
+    if (!settings) return '-';
     const eps = settings.sdkEndpoints || {};
     const customCount = Object.values(eps).filter((e) => e?.custom).length;
     if (customCount === 0) return 'All defaults';
@@ -531,7 +531,7 @@ function endpointsSummary(settings) {
 }
 
 function adsSummary(settings) {
-    if (!settings) return '—';
+    if (!settings) return '-';
     if (!settings.ads?.enabled) return 'Off';
     const total = Object.values(settings.ads.perChain || {})
         .reduce((s, c) => s + (Number(c?.lifetimeDonatedSats) || 0), 0);
@@ -545,7 +545,7 @@ function developerSummary(settings) {
 }
 
 function connectedSitesSummary(siteCount) {
-    if (siteCount === null) return '—';
+    if (siteCount === null) return '-';
     if (siteCount === 0) return 'None';
     return `${siteCount} site${siteCount === 1 ? '' : 's'}`;
 }

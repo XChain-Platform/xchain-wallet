@@ -60,8 +60,8 @@ export function CopyButton({ value, label = 'Copy', ariaLabel, feedbackMs = 1500
 
 /**
  * Multi-tier clipboard write. Returns true on success, false on failure.
- * Tier 1: navigator.clipboard.writeText — modern, async, secure-context only.
- * Tier 2: hidden textarea + document.execCommand('copy') — works on HTTP,
+ * Tier 1: navigator.clipboard.writeText (modern, async, secure-context only).
+ * Tier 2: hidden textarea + document.execCommand('copy'), which works on HTTP
  *         deprecated but supported by every browser we ship to.
  */
 async function copyToClipboard(text) {

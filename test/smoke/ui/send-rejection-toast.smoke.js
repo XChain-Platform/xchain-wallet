@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §30.5 / G089 — user-initiated cancel during Send surfaces
+// Smoke for §30.5 / G089: user-initiated cancel during Send surfaces
 // the spec's "Transaction cancelled." toast and routes the user back to
 // the composing form instead of leaving an alarming red error on the
 // review screen. Cluster E Step 1 of 5.

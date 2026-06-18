@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Unit: license.js — LICENSE_SUMMARY + LICENSE_TEXT constants.
+// Unit: license.js - LICENSE_SUMMARY + LICENSE_TEXT constants.
 
 import { describe, it, expect } from 'vitest';
 import { LICENSE_SUMMARY, LICENSE_TEXT } from '../../packages/core/src/license.js';

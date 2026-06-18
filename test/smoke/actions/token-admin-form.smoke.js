@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for Phase 2 — Step 11 (piece 3d) — token admin surfaces.
+// Smoke for Phase 2, Step 11 (piece 3d): token admin surfaces.
 //
 // Asserts:
 //   1. TokenAdminForm.jsx exists and exports a single component. Reuses
@@ -20,7 +20,7 @@
 //        - 'transfer'    → VERSION='0', TRANSFER only
 //   4. Form stage renders the permanence warning only on 'lock' mode.
 //   5. Review runs through decoder.decodeAction with action: 'ISSUE'.
-//   6. Sign wires through messaging.issueToken (reuses Step 5 helper —
+//   6. Sign wires through messaging.issueToken (reuses Step 5 helper;
 //      no new flow / handler / messaging entry for admin actions).
 //   7. Lock-mode sign button uses the danger variant.
 //   8. ActionsMenu + App.jsx wire 'lock', 'description', 'transfer'
@@ -98,7 +98,7 @@ assert.ok(src.includes('decoded.warnings'), 'TokenAdminForm renders decoder warn
 
 assert.ok(
     /messaging\.issueToken\s*\(/.test(src),
-    'TokenAdminForm reuses messaging.issueToken — no new handler needed for admin actions',
+    'TokenAdminForm reuses messaging.issueToken (no new handler needed for admin actions)',
 );
 assert.ok(
     src.includes("'InvalidPasswordError'"),
@@ -107,8 +107,8 @@ assert.ok(
 
 // --- 7. Lock-mode danger variant --------------------------------------
 //
-// §20 Cluster X Step 21 — variant flips to plain 'primary' in watcher
-// mode (the "Create unsigned transaction" CTA is not destructive — destruction
+// §20 Cluster X Step 21: variant flips to plain 'primary' in watcher
+// mode (the "Create unsigned transaction" CTA is not destructive; destruction
 // happens later when the signed PSBT broadcasts). Pin both the legacy
 // shape AND the new wrapped shape. Either is acceptable.
 assert.ok(
@@ -154,5 +154,5 @@ for (const [shell, appPath] of [
 }
 
 console.log(
-    'OK — token admin form smoke (§40.5 Lock / Update description / Transfer ownership — mode-driven composers + reuses messaging.issueToken + lock permanence warning + danger-variant lock sign + popup/web wiring)',
+    'OK: token admin form smoke (§40.5 Lock / Update description / Transfer ownership; mode-driven composers + reuses messaging.issueToken + lock permanence warning + danger-variant lock sign + popup/web wiring)',
 );

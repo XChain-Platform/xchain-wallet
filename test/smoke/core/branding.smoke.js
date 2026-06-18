@@ -104,4 +104,4 @@ for (const id of EXPECTED_CHAINS) {
     statFromUrl(branding.brandingUrl(d.icon));
 }
 
-console.log('OK — branding smoke test (21 tokens, 17 exports, 9 descriptors)');
+console.log('OK: branding smoke test (21 tokens, 17 exports, 9 descriptors)');

@@ -8,13 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Playwright config — §52.4.
+// Playwright config (§52.4).
 //
 // Drives the web SPA (`packages/web`) via Vite's dev server. Specs
 // assume a fresh browser context per test (Playwright's default), so
 // IndexedDB + localStorage state don't leak between cases.
 //
-// Each spec test runs serial by default via `workers: 1` — the harness
+// Each spec test runs serial by default via `workers: 1`. The harness
 // talks to a single shared vault through the SPA's in-page host, and
 // IDB state inside one browser context isn't easy to reset between
 // tests without reloading the tab. One worker + one tab + one IDB =

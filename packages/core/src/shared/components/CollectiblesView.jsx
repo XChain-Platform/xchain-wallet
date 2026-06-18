@@ -16,7 +16,7 @@ import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import styles from './CollectiblesView.module.css';
 
 /**
- * §27.5 / G074 — Collectibles view. Renders an NFT-shaped grid (large
+ * §27.5 / G074: Collectibles view. Renders an NFT-shaped grid (large
  * square thumbnails) instead of the row layout used for fungible
  * balances. Each card shows the tick image when one is available and
  * falls back to a colored ticker-letter placeholder; tapping a card
@@ -129,7 +129,7 @@ export function CollectiblesView({
 function CollectibleCard({ row, pinned, hidden, onSelect, onTogglePin, onToggleHide }) {
     const [imgFailed, setImgFailed] = useState(false);
     const chainIconUrl = branding.chainIconSmallUrl(row.chainId);
-    // Cluster I FOLLOWUP 3 — fetch tick metadata to surface a real image
+    // Cluster I FOLLOWUP 3: fetch tick metadata to surface a real image
     // when the row payload doesn't already carry one. `useTokenInfo`'s
     // module-level cache means revisits don't re-fetch, and silent
     // failure leaves the ticker-letter placeholder in place.

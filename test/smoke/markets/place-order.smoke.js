@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Phase 3 Step 6 smoke — Place Order form (§41.3.4) + ORDER action
+// Phase 3 Step 6 smoke: Place Order form (§41.3.4) + ORDER action
 // flow + CANCEL helper (§41.3.5 prereq) + 3-shell messaging wiring +
 // HW branch wired through the shared SignCredentials path.
 
@@ -121,5 +121,5 @@ for (const [shell, msgPath] of [
 }
 
 console.log(
-    'OK — place-order smoke (orderAction + cancelOrder core flows guard required fields; PlaceOrderPanel §41.3.4 uses SignCredentials + isHwSource + branches orderAction/orderActionHw + prefillPrice from orderbook + buy/sell toggle maps to GIVE/GET orientation + EXPIRATION presets; 4 background handlers registered (order/cancelOrder × sw+hw); orderAction + orderActionHw + cancelOrder + cancelOrderHw exported by popup/web/desktop messaging)',
+    'OK: place-order smoke (orderAction + cancelOrder core flows guard required fields; PlaceOrderPanel §41.3.4 uses SignCredentials + isHwSource + branches orderAction/orderActionHw + prefillPrice from orderbook + buy/sell toggle maps to GIVE/GET orientation + EXPIRATION presets; 4 background handlers registered (order/cancelOrder × sw+hw); orderAction + orderActionHw + cancelOrder + cancelOrderHw exported by popup/web/desktop messaging)',
 );

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Unit tests for chain visibility helpers — regtest descriptors are
+// Unit tests for chain visibility helpers. Regtest descriptors are
 // hidden from user-facing pickers unless Developer Mode is on.
 
 import { describe, it, expect } from 'vitest';

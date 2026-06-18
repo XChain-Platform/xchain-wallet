@@ -8,11 +8,11 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// NetworkEndpointsSection — §35.1 Network & Endpoints panel.
+// NetworkEndpointsSection (§35.1): Network & Endpoints panel.
 //
 // Per-chain Explorer / Encoder / Hub URL editor. Writes through to
 // `settings.sdkEndpoints[chainId]`. The schema's SdkEndpoint shape is
-// { explorerUrl, encoderUrl, hubUrl, custom: boolean } — the `custom`
+// { explorerUrl, encoderUrl, hubUrl, custom: boolean }. The `custom`
 // flag distinguishes "user overrode the default" from "user typed the
 // default value back in", which matters for the §49 reachability
 // banner and any future hub-driven endpoint refresh.
@@ -106,9 +106,9 @@ export function NetworkEndpointsSection() {
     );
 }
 
-// §9.7 / G007 — Runtime chain-registry refresh from hub. The wallet
+// §9.7 / G007: Runtime chain-registry refresh from hub. The wallet
 // boot sequence kicks off one refresh; this row surfaces the result
-// + offers a manual refresh. The hub-side endpoint is pending — the
+// + offers a manual refresh. The hub-side endpoint is pending; the
 // row shows a clear "not yet available" hint when the hub returns a
 // non-2xx (any HTTP error means the route doesn't exist yet today).
 function ChainRegistryRefreshRow() {
@@ -147,7 +147,7 @@ function ChainRegistryRefreshRow() {
                             ? `Last refreshed ${formatRelative(status.lastRefreshedAt)} · ${status.descriptorCount} descriptors`
                             : status?.error
                                 ? `Last attempt failed: ${status.error}`
-                                : 'No refresh yet — bundled descriptors active.'}
+                                : 'No refresh yet; bundled descriptors active.'}
                     </span>
                 </div>
                 <button

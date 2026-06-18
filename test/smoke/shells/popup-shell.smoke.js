@@ -73,7 +73,7 @@ assert.ok(
 
 // Every Phase-1 popup route (Loading / Onboarding / Locked / Create /
 // Import / Home / Receive / Send) now lives in
-// @xchain-wallet/core/shared/routes — the popup imports them from
+// @xchain-wallet/core/shared/routes: the popup imports them from
 // there and passes `shell="popup"` through MessagingProvider. The
 // presence + wiring assertions live in shared-routes.smoke.js; the
 // popup shell's contract here is just that its App.jsx pulls the
@@ -281,5 +281,5 @@ async function probe(flags) {
 }
 
 console.log(
-    'OK — popup shell smoke (13 static checks, Vite/manifest wiring, 3 session states + non-session passthrough)',
+    'OK: popup shell smoke (13 static checks, Vite/manifest wiring, 3 session states + non-session passthrough)',
 );

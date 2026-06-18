@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// ChromeSessionBackend — §11.2 secondary (session-only) storage for
+// ChromeSessionBackend: §11.2 secondary (session-only) storage for
 // the extension target. Backed by `chrome.storage.session` (Chrome
 // 102+), which is wiped when the browser closes. Useful for:
 //
@@ -17,7 +17,7 @@
 //   - Short-lived dApp authentication tokens
 //   - Any ephemeral state that should not survive a browser restart
 //
-// NOT for the wallet's encrypted seed blob — that's the primary
+// NOT for the wallet's encrypted seed blob; that's the primary
 // ChromeStorageBackend. Mixing them up is a reliability bug class
 // (user closes browser, loses wallet), so we keep them separate
 // classes rather than a "mode" parameter.

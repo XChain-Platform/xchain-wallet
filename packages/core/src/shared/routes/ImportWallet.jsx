@@ -20,7 +20,7 @@ const ACCEPTED_WORD_COUNTS = [12, 15, 18, 21, 24];
 
 /**
  * Import an existing wallet via mnemonic. Accepts BIP39 (12/15/18/21/24
- * words) and Counterwallet-legacy (12 words) — the core
+ * words) and Counterwallet-legacy (12 words). The core
  * `importMnemonic` flow auto-detects format.
  *
  * When `variant="freewallet"` (§40.13), the form rebrands for users
@@ -28,7 +28,7 @@ const ACCEPTED_WORD_COUNTS = [12, 15, 18, 21, 24];
  * explicitly, the default wallet name is "FreeWallet", and the
  * word-count validator tightens to 12 (FreeWallet only ever used a
  * 12-word Counterwallet mnemonic). The import path is otherwise
- * identical — the format detector still dispatches to the
+ * identical. The format detector still dispatches to the
  * Counterwallet-legacy or BIP39 code path as appropriate.
  *
  * @param {object} props
@@ -44,7 +44,7 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
 
     const isFreeWallet = importVariant === 'freewallet';
     const acceptedWordCounts = isFreeWallet ? [12] : ACCEPTED_WORD_COUNTS;
-    // §19.4 / G036 — two import lanes: recovery phrase (default) and
+    // §19.4 / G036: two import lanes: recovery phrase (default) and
     // encrypted-backup restore. FreeWallet variant pins to 'mnemonic'.
     const [lane, setLane] = useState(/** @type {'mnemonic' | 'backup'} */ ('mnemonic'));
     const [name, setName] = useState(isFreeWallet ? 'FreeWallet' : 'Imported Wallet');
@@ -56,7 +56,7 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
     const [backupPassword, setBackupPassword] = useState('');
     const [backupOverwrite, setBackupOverwrite] = useState(false);
     const [backupFileName, setBackupFileName] = useState(/** @type {string | null} */ (null));
-    // §15.6 — optional 25th-word BIP39 passphrase. Hidden behind a toggle so
+    // §15.6: optional 25th-word BIP39 passphrase. Hidden behind a toggle so
     // users who never set one don't have to read the warning copy.
     // FreeWallet imports follow the Counterwallet legacy code path, which
     // rejects a passphrase, so we don't expose the toggle there.
@@ -64,7 +64,7 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
     const [bip39Passphrase, setBip39Passphrase] = useState('');
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [busy, setBusy] = useState(false);
-    // §15.4 G022 — QR-scan + drag-drop affordances. `scanning` toggles the
+    // §15.4 G022: QR-scan + drag-drop affordances. `scanning` toggles the
     // <QrScanner> block; `dragOver` lights up the drop zone styling.
     const [scanning, setScanning] = useState(false);
     const [dragOver, setDragOver] = useState(false);
@@ -99,7 +99,7 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
         reader.readAsText(file);
     }
 
-    // Encrypted-backup drop zone — same .xchain-wallet / JSON / text MIME
+    // Encrypted-backup drop zone (same .xchain-wallet / JSON / text MIME
     // set the file picker accepts; reads the content as text and seeds
     // the existing backupContent state so the rest of the lane behaves
     // identically to a click-to-pick.
@@ -137,7 +137,7 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                 fileContent: backupContent,
                 password: backupPassword,
                 onConflict: backupOverwrite ? 'overwrite' : 'error',
-                // §19.4 / Cluster H FOLLOWUP 3 — 'add' mode tells the
+                // §19.4 / Cluster H FOLLOWUP 3: 'add' mode tells the
                 // host to re-mint wallet / account / address ids so
                 // the restored wallet coexists with what's in the
                 // vault already (vs the default 'fresh' import that
@@ -151,7 +151,7 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
         }
     }
 
-    // Cluster H FOLLOWUP 2 — image-QR drop branch. The mnemonic
+    // Cluster H FOLLOWUP 2: image-QR drop branch. The mnemonic
     // dropzone keeps its plain-text fast path for `.txt` / `.asc` /
     // `text/*` MIME types, but now also accepts a printed-paper-wallet
     // photo: PNG / JPEG renders into a canvas, the global
@@ -160,7 +160,7 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
     // mnemonic textarea fills exactly the way a live `<QrScanner>`
     // capture would. Browsers without `BarcodeDetector` (Safari /
     // Firefox today) surface a friendly hint instead of silently
-    // failing. PDFs are still out of scope — they need a third-party
+    // failing. PDFs are still out of scope (they need a third-party
     // PDF render layer.
     function handleFileDrop(event) {
         event.preventDefault();
@@ -172,7 +172,7 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
             || /\.(png|jpe?g)$/i.test(file.name);
         if (isImage) {
             if (typeof globalThis.BarcodeDetector !== 'function') {
-                setError('Image-QR decoding requires a browser with BarcodeDetector support — try Chrome or Edge, or use the Scan QR button instead.');
+                setError('Image-QR decoding requires a browser with BarcodeDetector support. Try Chrome or Edge, or use the Scan QR button instead.');
                 return;
             }
             decodeImageQrFile(file)
@@ -198,7 +198,7 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
         const reader = new FileReader();
         reader.onload = () => {
             const raw = typeof reader.result === 'string' ? reader.result : '';
-            // Strip common surrounding text — many users paste a paragraph
+            // Strip common surrounding text; many users paste a paragraph
             // they wrote around the seed. We pick the longest line whose
             // tokens look like wordlist words.
             const candidate = raw
@@ -226,7 +226,7 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
         const wordCount = trimmed.split(' ').length;
         if (!acceptedWordCounts.includes(wordCount)) {
             const expected = acceptedWordCounts.join(', ');
-            setError(`Expected ${expected} word${acceptedWordCounts.length === 1 ? '' : 's'} — got ${wordCount}.`);
+            setError(`Expected ${expected} word${acceptedWordCounts.length === 1 ? '' : 's'}, got ${wordCount}.`);
             return;
         }
         if (password.length < MIN_PASSWORD_LENGTH) {
@@ -308,7 +308,7 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                 <p className={subtitleClass}>
                     {isFreeWallet
                         ? (isFull
-                            ? 'Paste your 12-word FreeWallet recovery phrase. We\'ll import it as a Counterwallet-legacy wallet — the same derivation FreeWallet used — so every address matches the one you already know.'
+                            ? 'Paste your 12-word FreeWallet recovery phrase. We\'ll import it as a Counterwallet-legacy wallet using the same derivation FreeWallet used, so every address matches the one you already know.'
                             : 'Paste your 12-word FreeWallet recovery phrase.')
                         : lane === 'backup'
                             ? (isFull
@@ -316,7 +316,7 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                                     ? 'Restore an encrypted backup as a new wallet alongside your existing one(s). The wallet record gets a fresh id at decode time so the two wallets don\'t collide.'
                                     : 'Pick a `.xchain-wallet` file you exported from this app and enter the password you set when you created the backup.')
                                 : (mode === 'add'
-                                    ? 'Restore as a new wallet — won\'t replace your existing one.'
+                                    ? 'Restore as a new wallet (won\'t replace your existing one).'
                                     : 'Pick a backup file and enter its password.'))
                             : (isFull
                                 ? 'Enter a BIP39 recovery phrase (12, 15, 18, 21, or 24 words) or a Counterwallet 12-word mnemonic. The format is detected automatically.'
@@ -352,7 +352,7 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                     {backupFileName ? (
                         <p className={styles.backupHint}>Loaded {backupFileName} ({backupContent.length.toLocaleString()} bytes).</p>
                     ) : (
-                        <p className={styles.backupHint}>Or drop a backup file onto the box below — or paste its contents.</p>
+                        <p className={styles.backupHint}>Or drop a backup file onto the box below, or paste its contents.</p>
                     )}
                     <textarea
                         {...backupDrop.rootProps}
@@ -517,7 +517,7 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                         <span>This wallet uses a BIP39 passphrase</span>
                         <InfoTip
                             aria="BIP39 passphrase help"
-                            label="The optional 25th word that derives a different wallet from the same recovery phrase. Required to land on the same addresses as the original software wallet. Hardware wallets (Trezor / Ledger) handle passphrases on the device itself — this lane is for software-wallet imports only; pair a hardware wallet via Add Account → Hardware Signer instead."
+                            label="The optional 25th word that derives a different wallet from the same recovery phrase. Required to land on the same addresses as the original software wallet. Hardware wallets (Trezor / Ledger) handle passphrases on the device itself. This lane is for software-wallet imports only; pair a hardware wallet via Add Account → Hardware Signer instead."
                         />
                     </label>
                     {showPassphrase ? (
@@ -581,7 +581,7 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
     );
 }
 
-// Cluster H FOLLOWUP 2 — image-QR decode helper. Loads a dropped
+// Cluster H FOLLOWUP 2: image-QR decode helper. Loads a dropped
 // image into an <img>, paints it onto a same-sized off-screen
 // canvas, runs the global BarcodeDetector for `qr_code` formats,
 // and returns the first match's rawValue (or null when no match

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Skeleton — §37.1 / G118. Content-shaped placeholder with a subtle
+// Skeleton (§37.1 / G118). Content-shaped placeholder with a subtle
 // shimmer; collapses to a static gray block under
 // `prefers-reduced-motion` (CSS handles that automatically).
 //
@@ -19,7 +19,7 @@
 //   <Skeleton shape="card" />
 //
 //   <Skeleton.Row />              // avatar + two text lines
-//   <Skeleton.List rows={5} />    // five stacked rows — drop-in for a
+//   <Skeleton.List rows={5} />    // five stacked rows (drop-in for a
 //                                 // not-yet-loaded list
 //
 // `aria-hidden="true"` is set by default so screen-readers skip the
@@ -104,7 +104,7 @@ function SkeletonRow({ avatar = true, titleWidth = '60%', subtitleWidth = '40%' 
 }
 
 /**
- * Stack of N placeholder rows — drop-in for a not-yet-loaded list.
+ * Stack of N placeholder rows, as a drop-in for a not-yet-loaded list.
  *
  * @param {object} props
  * @param {number} props.rows

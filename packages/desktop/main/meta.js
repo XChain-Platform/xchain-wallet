@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// FileMetaBackend — plaintext JSON slot for data the shell needs
+// FileMetaBackend: plaintext JSON slot for data the shell needs
 // *before* the vault can be opened (the desktop parallel of
 // ChromeMetaBackend from the extension). Today that's just the vault's
 // Argon2id `kdfParams`: salt + memory + iterations + parallelism. None
@@ -27,7 +27,7 @@ import { dirname, join } from 'node:path';
 
 export class FileMetaBackend {
     /**
-     * @param {string} filePath  absolute path —
+     * @param {string} filePath  absolute path.
      *                           typically `path.join(app.getPath('userData'), 'meta.json')`
      */
     constructor(filePath) {

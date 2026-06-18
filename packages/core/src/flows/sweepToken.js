@@ -8,12 +8,12 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// sweepToken — convenience wrapper for the SWEEP action (xchain-
+// sweepToken: convenience wrapper for the SWEEP action (xchain-
 // documentation/protocol/actions/SWEEP.md). Sweeps token balances and/or
 // ownerships from the source address to a destination, and optionally
 // closes open ORDERs / SWAPs / DISPENSERs and routes their escrowed
 // balance/ownership to the destination. Protocol defaults per the docs:
-// balances=1, ownerships=1, orders=0, swaps=0, dispensers=0 — we mirror
+// balances=1, ownerships=1, orders=0, swaps=0, dispensers=0; we mirror
 // those in JavaScript booleans.
 //
 // Only protocol format v0 is supported; callers needing finer control
@@ -33,11 +33,11 @@ import { normalizeSource } from './sendToken.js';
  * @property {string} chainId
  * @property {import('./sendToken.js').SourceRef | import('../schemas/address.js').Address} from
  * @property {string} to                                DESTINATION
- * @property {boolean} [balances]                       default true — sweep TICK balances
- * @property {boolean} [ownerships]                      default true — sweep TICK ownerships
- * @property {boolean} [orders]                          default false — cancel open ORDERs, route escrow to destination
- * @property {boolean} [swaps]                           default false — cancel open SWAPs, route escrow to destination
- * @property {boolean} [dispensers]                      default false — close open DISPENSERs, route escrow to destination
+ * @property {boolean} [balances]                       default true; sweeps TICK balances
+ * @property {boolean} [ownerships]                      default true; sweeps TICK ownerships
+ * @property {boolean} [orders]                          default false; cancels open ORDERs and routes escrow to destination
+ * @property {boolean} [swaps]                           default false; cancels open SWAPs and routes escrow to destination
+ * @property {boolean} [dispensers]                      default false; closes open DISPENSERs and routes escrow to destination
  * @property {string} [memo]
  * @property {number} [fee]
  * @property {number} [feePerKb]
@@ -63,7 +63,7 @@ export async function sweepToken(opts) {
     const dispensers = opts.dispensers ?? false;
     if (!balances && !ownerships && !orders && !swaps && !dispensers) {
         throw new Error(
-            'sweepToken: at least one of balances / ownerships / orders / swaps / dispensers must be true — SWEEP with every flag disabled is a no-op',
+            'sweepToken: at least one of balances / ownerships / orders / swaps / dispensers must be true (SWEEP with every flag disabled is a no-op)',
         );
     }
 
@@ -88,7 +88,7 @@ export async function sweepToken(opts) {
     if (orders) flags.push('orders');
     if (swaps) flags.push('swaps');
     if (dispensers) flags.push('dispensers');
-    const memoTail = opts.memo ? ` — "${opts.memo}"` : '';
+    const memoTail = opts.memo ? ` (memo: "${opts.memo}")` : '';
     const pendingTxMeta = opts.trackPendingTx === false ? undefined : {
         fromAddress: source.address,
         toAddress: opts.to,

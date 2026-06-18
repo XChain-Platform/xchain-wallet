@@ -15,7 +15,7 @@ import styles from './ActionsMenu.module.css';
 import pickerStyles from './WalletPicker.module.css';
 
 /**
- * AccountPicker — full-screen list of BIP44 accounts under the active
+ * AccountPicker: full-screen list of BIP44 accounts under the active
  * wallet, with an "Add Account" affordance. Reached from the gear
  * popover's Account summary row. Picking an account calls `onSwitch`
  * and returns to home.

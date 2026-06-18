@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Phase F — plain-language mapping for the inline consent disclosure.
+// Phase F: plain-language mapping for the inline consent disclosure.
 //
 // A contract's permissions manifest declares which ACTION TYPES the
 // contract is allowed to emit (the indexer enforces it). Those wire
@@ -16,7 +16,7 @@
 // wallet user, so we translate each into a short plain verb phrase
 // before showing it on the review screen.
 //
-// Both functions are pure and synchronous — unit-tested in
+// Both functions are pure and synchronous; unit-tested in
 // test/unit/flows/contractConsentLabels.test.js.
 
 import {
@@ -62,7 +62,7 @@ const VERB_MAP = /** @type {Record<string, string>} */ ({
 });
 
 // Sanity: keep VERB_MAP in step with the protocol action lists. This is
-// a build-time guard for maintainers, not a runtime path — it never
+// a build-time guard for maintainers, not a runtime path; it never
 // throws (an unmapped action still degrades to a humanized fallback).
 export const KNOWN_ACTION_TYPES = /** @type {readonly string[]} */ ([
     ...COMMON_ACTIONS,
@@ -86,9 +86,9 @@ function verbFor(perm) {
  * Map a manifest's `permissions` array into a sorted, de-duplicated
  * list of plain-language verb phrases.
  *
- *   - `null`  → `null`  (the contract declared NO restriction — it can
+ *   - `null`  → `null`  (the contract declared NO restriction; it can
  *               do anything; the caller renders that as "unrestricted").
- *   - `[]`    → `[]`    (declared an EMPTY allowlist — can do nothing).
+ *   - `[]`    → `[]`    (declared an EMPTY allowlist; can do nothing).
  *   - array   → sorted unique verbs; non-string / blank entries dropped.
  *
  * Sorted alphabetically by the rendered verb for a stable, readable

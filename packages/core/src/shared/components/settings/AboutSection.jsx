@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// AboutSection — §35.1 "About" + §51.3 release info. Read-only.
+// AboutSection (§35.1 "About" + §51.3 release info). Read-only.
 // Surfaces wallet version, update channel, license, reproducible-build
 // link, release-signatures link, and the SECURITY.md disclosure link.
 // Items whose underlying artifact isn't yet published render with a
@@ -79,7 +79,7 @@ export function AboutSection() {
             const text = preview ?? (await fetchDump());
             if (preview === null) setPreview(text);
             await navigator.clipboard?.writeText?.(text);
-            setStatus(`Copied — ${text.length.toLocaleString()} bytes. Paste into your bug report.`);
+            setStatus(`Copied (${text.length.toLocaleString()} bytes). Paste into your bug report.`);
         } catch (err) {
             setError(err?.message || 'Could not copy diagnostics.');
         } finally {
@@ -120,7 +120,7 @@ export function AboutSection() {
             <Row label="License">
                 <div style={{ display: 'flex', gap: 'var(--xc-space-2)', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                     <DocLink path={LICENSE_FILE} label={LICENSE_NAME} />
-                    {/* Cluster J FOLLOWUP 5 — surface the full LICENSE.md
+                    {/* Cluster J FOLLOWUP 5: surface the full LICENSE.md
                         text inline so users don't have to navigate to a
                         repo on GitHub to read what they're agreeing to. */}
                     <Button
@@ -176,8 +176,8 @@ export function AboutSection() {
                 <DocLink path={REPRODUCIBLE_BUILD_DOC} label="Verification procedure" />
             </Row>
             <Row label="Verify a release">
-                {/* Cluster T FOLLOWUP 2 — end-user verification recipe (key import →
-                    manifest download → GPG verify → artifact hash check). */}
+                {/* Cluster T FOLLOWUP 2: end-user verification recipe (key import ->
+                    manifest download -> GPG verify -> artifact hash check). */}
                 <DocLink path={VERIFY_RELEASE_DOC} label="Verification recipe" />
             </Row>
             <Row label="Release signatures">
@@ -263,7 +263,7 @@ function Row({ label, children }) {
 }
 
 function DocLink({ path, label }) {
-    // Repo-relative path shown literally — these documents ship inside
+    // Repo-relative path shown literally. These documents ship inside
     // the wallet bundle (LICENSE.md / NOTICE.md) or in-repo only. A
     // future pass replaces these with anchored links to a hosted docs
     // site once §55.6 governance + §51.5 release website land.

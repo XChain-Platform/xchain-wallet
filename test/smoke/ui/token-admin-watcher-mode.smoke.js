@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §20 / Cluster X Step 21 — TokenAdminForm watcher-mode branch.
+// Smoke for §20 / Cluster X Step 21: TokenAdminForm watcher-mode branch.
 // Token admin uses ISSUE with admin-only field combinations.
 
 import { strict as assert } from 'node:assert';

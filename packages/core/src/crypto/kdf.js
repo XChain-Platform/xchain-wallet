@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Argon2id KDF for the wallet master key — §11.4.
+// Argon2id KDF for the wallet master key (§11.4).
 //
 // Parameters are tuned per-device at wallet creation to target ~1s of
 // work on the user's machine. The tuning helper is exported; callers
@@ -108,7 +108,7 @@ export function calibrateKdfParams(opts = {}) {
     const probePassword = new TextEncoder().encode('calibration-probe');
 
     // Increment only when we're going to probe again, so on exit `iterations`
-    // holds the value actually measured — capped at maxIterations rather than
+    // holds the value actually measured, capped at maxIterations rather than
     // the post-increment maxIterations+1 a `for (; i <= max; i++)` would leave.
     let iterations = minIterations;
     let lastMs = 0;
@@ -136,7 +136,7 @@ export function calibrateKdfParams(opts = {}) {
     };
 }
 
-// Local base64 helpers — avoiding a dep for such a small surface.
+// Local base64 helpers (no dep needed for such a small surface).
 function bytesToBase64(bytes) {
     let str = '';
     for (const b of bytes) str += String.fromCharCode(b);

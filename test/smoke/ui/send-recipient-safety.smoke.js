@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §29 Send/Receive — Step 2 — Send.jsx wires lookalike +
+// Smoke for §29 Send/Receive, Step 2: Send.jsx wires lookalike +
 // paste-integrity + AddressText highlight in review.
 
 import { strict as assert } from 'node:assert';

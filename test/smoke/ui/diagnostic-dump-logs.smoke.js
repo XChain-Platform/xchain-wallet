@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Cluster Q FOLLOWUP 5 — logConsole.snapshot() integration with the
+// Cluster Q FOLLOWUP 5: logConsole.snapshot() integration with the
 // §50 diagnostic dump. The previous wallet's About-panel "Copy
 // diagnostics" button captured wallet metadata + chain registry +
 // endpoint config + record counts + recent errors but NOT the
@@ -85,4 +85,4 @@ assert.ok(/let recentLogs = \[\];[\s\S]{0,300}try \{[\s\S]{0,200}recentLogs = lo
 assert.ok(/diagnosticDump\(\{[\s\S]{0,500}recentLogs,[\s\S]{0,200}\}\)/.test(hostSrc),
     'diagnostic.dump handler passes recentLogs into diagnosticDump');
 
-console.log('OK — logConsole.snapshot + diagnostic-dump integration');
+console.log('OK: logConsole.snapshot + diagnostic-dump integration');

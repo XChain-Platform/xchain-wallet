@@ -19,7 +19,7 @@ import styles from './HeaderSettingsButton.module.css';
  *   ▸ Wallet     summary row showing the active wallet name; click
  *                navigates to the WalletPicker route (full list +
  *                Add Wallet affordance)
- *   ▸ Account    same shape — click navigates to AccountPicker
+ *   ▸ Account    same shape; click navigates to AccountPicker
  *   ▸ Network    inline coin-family filter (quick toggle, no nav)
  *
  * Keeping the popover compact: full lists + add affordances belong on
@@ -35,7 +35,7 @@ import styles from './HeaderSettingsButton.module.css';
  * @param {{ id: string, name: string, index: number } | null} [props.activeAccount]
  * @param {() => void} [props.onOpenWalletPicker]                          host navigates to the wallet picker route
  * @param {() => void} [props.onOpenAccountPicker]                         host navigates to the account picker route
- * @param {boolean} [props.walletNonDefault]   used by the gear's status dot — caller knows whether the active wallet is the "first" one in the list
+ * @param {boolean} [props.walletNonDefault]   used by the gear's status dot (caller knows whether the active wallet is the "first" one in the list)
  * @param {boolean} [props.accountNonDefault]
  * @param {import('../../registry/index.js').ChainRegistry} props.chainRegistry
  * @param {string[]} props.coinFamilies

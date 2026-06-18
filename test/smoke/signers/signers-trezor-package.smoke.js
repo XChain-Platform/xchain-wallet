@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// §9 / G001 smoke — `@xchain-wallet/signers-trezor` standalone package.
+// §9 / G001 smoke: `@xchain-wallet/signers-trezor` standalone package.
 //
 // Asserts:
 //   1. packages/signers-trezor/ exists with a workspace package.json
@@ -19,8 +19,8 @@
 //   3. TrezorSigner.js reaches the shared Signer base via a relative
 //      cross-package path (matches the established convention so Node
 //      smokes resolve without pnpm workspace symlinks).
-//   4. core/src/signers/index.js still exports TrezorSigner — back-compat
-//      re-export — pointed at the new location via relative path.
+//   4. core/src/signers/index.js still exports TrezorSigner (back-compat
+//      re-export) pointed at the new location via relative path.
 //   5. The new package's `src/index.js` re-exports the canonical surface
 //      so `import { TrezorSigner } from '@xchain-wallet/signers-trezor'`
 //      is the new canonical path.
@@ -125,5 +125,5 @@ for (const sym of [
 }
 
 console.log(
-    'OK — signers-trezor package smoke (§9 / G001 standalone workspace package; TrezorSigner.js + trezorFormat.js moved out of core; cross-package Signer import via relative path; core back-compat re-export; canonical entry exposes TrezorSigner + deviceIdentifierFromFeatures + format helpers)',
+    'OK: signers-trezor package smoke (§9 / G001 standalone workspace package; TrezorSigner.js + trezorFormat.js moved out of core; cross-package Signer import via relative path; core back-compat re-export; canonical entry exposes TrezorSigner + deviceIdentifierFromFeatures + format helpers)',
 );

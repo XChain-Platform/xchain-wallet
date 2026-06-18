@@ -33,7 +33,7 @@ import styles from './IssueTokenForm.module.css';
 const chainRegistry = registryLib.defaultRegistry();
 
 /**
- * BROADCAST form — §40.6.
+ * BROADCAST form (§40.6).
  *
  * Publishes an arbitrary text string, oracle value, or feed reference
  * on-chain, tied to the source address. Three UX lanes map onto the
@@ -46,7 +46,7 @@ const chainRegistry = registryLib.defaultRegistry();
  * v3 (feed results) is a resolve path from a prior feed's detail page
  * and not surfaced as a standalone authoring lane here.
  *
- * Field mapping — MESSAGE is the protocol's one-string payload; the
+ * Field mapping: MESSAGE is the protocol's one-string payload; the
  * form presents "Feed name" and "Text" as separate inputs for clarity
  * (§40.6) and composes them:
  *
@@ -162,7 +162,7 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
         const memoParts = [];
         if (includeTimestamp) memoParts.push(new Date().toISOString());
         if (feed && body) memoParts.push(body);
-        const memo = memoParts.join(' — ');
+        const memo = memoParts.join(' | ');
 
         // Version selection: oracle (v1) > feed (v2) > plain (v0).
         let version = '0';
@@ -213,7 +213,7 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
     }
 
     const isHwSource = fromAddress?.source === 'trezor' || fromAddress?.source === 'ledger';
-    // §18.4 / Cluster N FOLLOWUP 2 — surface firmware advisories when
+    // §18.4 / Cluster N FOLLOWUP 2: surface firmware advisories when
     // the source is HW. Hook handles the SignerRecord lookup + cache.
     const hwSignerInfo = useSignerInfo({
         walletId,
@@ -222,7 +222,7 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
     const [hwStatus, setHwStatus] = useState('idle');
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
 
-    // §20 / Cluster W FOLLOWUP 5 — watcher-mode encode-only branch.
+    // §20 / Cluster W FOLLOWUP 5: watcher-mode encode-only branch.
     const { isWatcherMode } = useWalletMode();
 
     async function handleSubmit(event) {
@@ -359,7 +359,7 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>
-                        Watcher mode — this wallet will build an unsigned transaction.
+                        Watcher mode: this wallet will build an unsigned transaction.
                         Sign it on your Signer-mode wallet, then bring the
                         signed transaction to a Full-mode wallet to broadcast.
                     </p>
@@ -454,7 +454,7 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
             />
             <Input
                 label="Value (optional)"
-                hint="Numeric oracle value — pairs with a feed fee for a v1 oracle."
+                hint="Numeric oracle value; pairs with a feed fee for a v1 oracle."
                 inputMode="decimal"
                 value={value}
                 onChange={(e) => setValue(e.target.value)}

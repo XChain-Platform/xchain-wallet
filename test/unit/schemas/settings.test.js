@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Unit: schemas/settings — createDefaultSettings, createDefaultAdsChainState, validateSettings.
+// Unit: schemas/settings: createDefaultSettings, createDefaultAdsChainState, validateSettings.
 
 import { describe, it, expect } from 'vitest';
 import {

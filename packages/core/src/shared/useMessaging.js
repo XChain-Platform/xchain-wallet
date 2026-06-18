@@ -14,7 +14,7 @@ import { MessagingContext } from './MessagingContext.js';
 /**
  * Access the shell's messaging module + shell identifier.
  *
- * Throws when used outside `<MessagingProvider>` — surfaces routing
+ * Throws when used outside `<MessagingProvider>`. This surfaces routing
  * mistakes immediately rather than silently returning null and letting
  * a downstream call fail with "cannot read properties of null".
  *
@@ -32,11 +32,11 @@ export function useMessaging() {
  * Resolve the Screen layout variant from the current shell.
  *
  * Layout variant follows AVAILABLE WIDTH, not container type:
- *   `small` — narrow viewport (Chrome extension popup, mobile browser,
+ *   `small`: narrow viewport (Chrome extension popup, mobile browser,
  *             narrow desktop window, future native app with limited
  *             width). The legacy `popup` literal is also accepted as
  *             an alias by every consumer.
- *   `full`  — wide viewport (desktop browser, tablet landscape,
+ *   `full`:  wide viewport (desktop browser, tablet landscape,
  *             extension full-screen mode).
  *
  * The shell-based mapping here is the conservative default for

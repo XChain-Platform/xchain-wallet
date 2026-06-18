@@ -39,12 +39,12 @@ const PROTOCOL_COIN_TICKER = {
 };
 
 /**
- * §42.8.1 LINK creation — two-panel composer.
+ * §42.8.1 LINK creation: two-panel composer.
  *
  * Anchors a pair of existing actions across two chains. The form
  * builds a LINK action with `COIN1 / COIN1_ACTION_INDEX / COIN2 /
  * COIN2_ACTION_INDEX / MEMO` and submits it on whichever chain the
- * user picks (defaults to chain A — the first panel). The LINK
+ * user picks (defaults to chain A, the first panel). The LINK
  * itself is a single on-chain action; both sides are still recorded
  * in the indexer's `links` table so the §23.5 cross-chain thread
  * rendering on History works regardless of which side the user
@@ -202,7 +202,7 @@ export function LinkForm({ walletId, onBack }) {
         return null;
     }, [ticker1, ticker2, actionIndex1, actionIndex2]);
 
-    // §20 / Cluster W FOLLOWUP 5 — watcher-mode encode-only branch.
+    // §20 / Cluster W FOLLOWUP 5: watcher-mode encode-only branch.
     const { isWatcherMode } = useWalletMode();
 
     async function handleSubmit(event) {
@@ -420,15 +420,15 @@ export function LinkForm({ walletId, onBack }) {
                         </dd>
                         <dt className={styles.detailsLabel}>Pair</dt>
                         <dd className={styles.detailsValue}>
-                            {ticker1} #{actionIndex1 || '—'}
+                            {ticker1} #{actionIndex1 || '?'}
                             {' ↔ '}
-                            {ticker2} #{actionIndex2 || '—'}
+                            {ticker2} #{actionIndex2 || '?'}
                         </dd>
                     </dl>
 
                     {isWatcherMode ? (
                         <p className={styles.hint}>
-                            Watcher mode — this wallet will build an unsigned transaction.
+                            Watcher mode: this wallet will build an unsigned transaction.
                             Sign it on your Signer-mode wallet, then bring the
                             signed transaction to a Full-mode wallet to broadcast.
                         </p>

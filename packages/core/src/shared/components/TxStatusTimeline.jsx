@@ -11,13 +11,13 @@
 import styles from './TxStatusTimeline.module.css';
 
 /**
- * §28.3 / G079 — Transaction status timeline. Renders a compact vertical
+ * §28.3 / G079: Transaction status timeline. Renders a compact vertical
  * stage list for a History entry, computing stage state from the fields
  * the explorer already returns:
  *
- *   - **Broadcast**  — txHash is present (mempool or confirmed)
- *   - **In mempool** — blockIndex === 0 (waiting for inclusion)
- *   - **Confirmed**  — blockIndex > 0; cell labels the block + timestamp.
+ *   - **Broadcast**: txHash is present (mempool or confirmed)
+ *   - **In mempool**: blockIndex === 0 (waiting for inclusion)
+ *   - **Confirmed**: blockIndex > 0; cell labels the block + timestamp.
  *                     When `chainTip` is supplied and at or above the
  *                     entry's block, the cell adds a confirmation count
  *                     ("· N confirmations") so the user can read tx
@@ -44,9 +44,9 @@ export function TxStatusTimeline({ entry, chainTip }) {
     const confirmations = confirmed && tip >= blockIndex ? tip - blockIndex + 1 : 0;
     const confirmedSubBase = confirmed && timestamp > 0
         ? relativeTime(timestamp)
-        : '—';
+        : '';
     const confirmedSub = confirmations > 0
-        ? (confirmedSubBase === '—'
+        ? (confirmedSubBase === ''
             ? `${confirmations.toLocaleString()} confirmation${confirmations === 1 ? '' : 's'}`
             : `${confirmedSubBase} · ${confirmations.toLocaleString()} confirmation${confirmations === 1 ? '' : 's'}`)
         : confirmedSubBase;
@@ -66,7 +66,7 @@ export function TxStatusTimeline({ entry, chainTip }) {
                 ? 'Waiting for a miner to include the tx'
                 : confirmed
                     ? 'Cleared mempool when the block was mined'
-                    : '—',
+                    : '',
         },
         {
             key: 'confirmed',

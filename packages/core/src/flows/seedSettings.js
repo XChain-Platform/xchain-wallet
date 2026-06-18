@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// seedSettings — populate per-chain entries in Settings.fees and
+// seedSettings: populate per-chain entries in Settings.fees and
 // Settings.ads.perChain from chain-registry defaults. Idempotent:
 // existing entries are never overwritten, so a user's customized
 // fee strategy or ADS amount survives a second invocation (e.g.,
@@ -78,7 +78,7 @@ export function seedSettingsForChains(settings, chainRegistry, activeChainIds) {
  *
  * `activeNetwork` only takes effect when settings are being CREATED on
  * this call (no existing record in the vault). For an already-configured
- * wallet, an existing `activeNetwork` is preserved — activating an
+ * wallet, an existing `activeNetwork` is preserved. Activating an
  * additional chain via Settings must not silently switch the user's
  * network mode. Pass `activeNetwork` from wallet-creation entry points
  * so a demo wallet (regtest chains) lands with `activeNetwork:'regtest'`

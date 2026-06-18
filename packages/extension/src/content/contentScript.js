@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Content script — runs in the extension's isolated world for every
+// Content script: runs in the extension's isolated world for every
 // matching page. Two responsibilities:
 //
 //   1. Inject the `xchainProvider.js` bundle into the page's main
@@ -21,8 +21,8 @@
 //      page's origin so the background can resolve `ConnectedSite`
 //      permissions.
 //
-// The content script does NOT implement any permission logic itself —
-// it's a pure message relay. All policy lives in the background
+// The content script does NOT implement any permission logic itself.
+// It is a pure message relay. All policy lives in the background
 // bridge handlers (§43.3 + Approvals).
 
 (function installBridge() {
@@ -41,7 +41,7 @@
         script.addEventListener('load', () => script.remove());
     } catch (e) {
         // If injection fails the page simply won't see window.xchain.
-        // Logging here for dev debugging only — production should not
+        // Logging here for dev debugging only. Production should not
         // reach this path since web_accessible_resources is configured
         // in the manifest.
         console.warn('[xchain] inject failed:', e);

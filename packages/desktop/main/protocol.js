@@ -8,20 +8,20 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// URI scheme registration + deep-link dispatch — §40.12 Step 19.
+// URI scheme registration + deep-link dispatch: §40.12 Step 19.
 //
 // Two-tier model the user signed off on:
 //
-//   Tier 1 — `xchain:`
+//   Tier 1: `xchain:`
 //     Claimed unconditionally on every launch. No conflict with
 //     existing wallets; XChain-branded. `setAsDefaultProtocolClient`
-//     is safe to call repeatedly — OS updates the handler if needed.
+//     is safe to call repeatedly; the OS updates the handler if needed.
 //
-//   Tier 2 — `bitcoin:`, `litecoin:`, `dogecoin:`
+//   Tier 2: `bitcoin:`, `litecoin:`, `dogecoin:`
 //     electron-builder's `protocols` config declares them at install
 //     time (so the OS knows we CAN handle them). At runtime we only
 //     call `setAsDefaultProtocolClient` if the user has opted in via
-//     settings — default OFF. The settings UI surface for the opt-in
+//     settings (default OFF). The settings UI surface for the opt-in
 //     toggle lands in a later step; for now this module exposes a
 //     public API (`setCoinSchemeOptIn`) that a future settings
 //     handler can call.
@@ -68,7 +68,7 @@ export function registerProtocolClients(app, opts = {}) {
             app.setAsDefaultProtocolClient(scheme);
         } else {
             // `removeAsDefaultProtocolClient` is a no-op if we're not
-            // currently the default — safe to call unconditionally.
+            // currently the default; safe to call unconditionally.
             // Not all platforms implement it (macOS returns false);
             // that's fine, the runtime toggle just doesn't have effect
             // on that platform until a settings-UI handler is wired up.
@@ -94,7 +94,7 @@ export function updateCoinSchemeOptIn(app, optedInSchemes) {
 
 /**
  * Wire deep-link listeners + single-instance lock. The `onDeepLink`
- * callback receives `{ scheme, raw, parsed }` — raw URI string plus
+ * callback receives `{ scheme, raw, parsed }`: raw URI string plus
  * the parsed BIP21 shape (or null for `xchain:` URIs, which the
  * renderer parses via its own action decoder).
  *
@@ -133,7 +133,7 @@ export function attachDeepLinkHandlers(app, { onDeepLink }) {
     const initial = findDeepLinkInArgv(process.argv);
     if (initial) {
         // Defer to after whenReady so the renderer exists; `app.whenReady`
-        // resolving is the caller's responsibility — we just queue on
+        // resolving is the caller's responsibility; we just queue on
         // next tick so the caller can attach listeners after us.
         setImmediate(() => dispatch(initial, onDeepLink));
     }
@@ -142,7 +142,7 @@ export function attachDeepLinkHandlers(app, { onDeepLink }) {
 }
 
 /**
- * Parse + classify a URI. Exposed for tests — also called from the
+ * Parse + classify a URI. Exposed for tests; also called from the
  * dispatch path internally.
  *
  * @param {string} url
@@ -156,7 +156,7 @@ export function classifyDeepLink(url) {
     if (!ALL_SCHEMES.includes(scheme)) return null;
 
     if (scheme === TIER_1_SCHEME) {
-        // §47.4 / G145 — parse the URI into an actionable intent so the
+        // §47.4 / G145: parse the URI into an actionable intent so the
         // renderer doesn't have to re-classify. Falls back to `parsed: null`
         // when the parser returns `kind: 'unknown'` so the renderer can
         // still surface a generic "couldn't parse" message.
@@ -190,7 +190,7 @@ function dispatch(url, onDeepLink) {
 function findDeepLinkInArgv(argv) {
     if (!Array.isArray(argv)) return null;
     // electron-builder's NSIS + Linux launchers forward the URL as the
-    // last arg — but the exact position isn't guaranteed. Scan the
+    // last arg, but the exact position isn't guaranteed. Scan the
     // whole argv for anything that starts with one of our schemes.
     for (const arg of argv) {
         if (typeof arg !== 'string') continue;

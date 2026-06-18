@@ -18,16 +18,16 @@ import styles from './ConnectApproval.module.css';
 const chainRegistry = registryLib.defaultRegistry();
 
 /**
- * Connect approval — §43.3 / §43.4. Grants a dApp the right to call
+ * Connect approval (§43.3 / §43.4): grants a dApp the right to call
  * `getAccounts` / `getBalances` / etc. against the permitted chains.
  *
  * Defaults favour the user:
  *   - Chains pre-select the dApp's requested set if present; otherwise
  *     an empty selection (user must opt in to each chain).
- *   - Message-signing permission defaults to OFF — dApps that want it
+ *   - Message-signing permission defaults to OFF. dApps that want it
  *     can still request signMessage later, which triggers a per-request
  *     approval the first time (and a per-origin "always allow" opt-in).
- *   - `canSignAction` starts empty — action-kind permissions are gated
+ *   - `canSignAction` starts empty. Action-kind permissions are gated
  *     inside the signAction flow with its own "always allow" toggle.
  *
  * @param {object} props

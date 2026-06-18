@@ -27,7 +27,7 @@ import styles from './TokenWizard.module.css';
 const chainRegistry = registryLib.defaultRegistry();
 
 /**
- * Token Creation Wizard — §40.1.
+ * Token Creation Wizard (§40.1).
  *
  * Five-stage flow: template → chain → details → preview → sign.
  *
@@ -44,7 +44,7 @@ const chainRegistry = registryLib.defaultRegistry();
  *              lock flags, transfer-ownership).
  *   preview:   plain-English summary from `decoder.decodeAction` for
  *              the composed ISSUE params.
- *   sign:      TODO — `messaging.issueToken` lands in Step 5 (piece
+ *   sign:      TODO: `messaging.issueToken` lands in Step 5 (piece
  *              2c). Today the sign button surfaces the "not yet
  *              wired" error through the shared submit path.
  *
@@ -73,7 +73,7 @@ export function TokenWizard({ walletId, onBack }) {
         /** @type {string | null} */ (null),
     );
 
-    // Details form state — some fields are only visible for certain
+    // Details form state (some fields are only visible for certain
     // templates (see renderDetailsStage). Keeping all state here so
     // the user can flip between templates without re-typing.
     const [name, setName] = useState('');
@@ -151,7 +151,7 @@ export function TokenWizard({ walletId, onBack }) {
     const chainsWithAddresses = addressesByChain ? Object.keys(addressesByChain) : [];
 
     // Compose ISSUE v0 params from the current form state. Dispatched
-    // by template (see TEMPLATE_COMPOSERS) — each picks the subset of
+    // by template (see TEMPLATE_COMPOSERS); each picks the subset of
     // ISSUE v0 fields its template wants. The memo key intentionally
     // includes `template` so switching templates re-composes.
     const actionParams = useMemo(
@@ -204,7 +204,7 @@ export function TokenWizard({ walletId, onBack }) {
                 return;
             }
         }
-        // Collectible's supply is hard-wired to 1 by the composer —
+        // Collectible's supply is hard-wired to 1 by the composer;
         // no user-facing supply field.
         if (template !== 'collectible') {
             if (!supply.trim() || Number(supply) <= 0) {
@@ -219,7 +219,7 @@ export function TokenWizard({ walletId, onBack }) {
             }
             if (mintStartBlock && mintStopBlock
                 && Number(mintStopBlock) <= Number(mintStartBlock)) {
-                setFormError('Minting must close after it opens — check the block numbers.');
+                setFormError('Minting must close after it opens. Check the block numbers.');
                 return;
             }
         }
@@ -409,34 +409,34 @@ export function TokenWizard({ walletId, onBack }) {
  *
  * Template semantics (§40.1):
  *
- * - **meme**  — fire-and-forget: MAX_SUPPLY + MINT_SUPPLY + non-divisible
+ * - **meme**: fire-and-forget: MAX_SUPPLY + MINT_SUPPLY + non-divisible
  *               + LOCK_MAX_SUPPLY + LOCK_MINT in one ISSUE transaction.
  *               (The spec describes a BATCH but the protocol's ISSUE v0
  *               composes all three atomically via `MINT_SUPPLY` +
- *               `LOCK_*` fields — simpler and one fewer signature.)
- * - **utility** — mintable, adjustable: MAX_SUPPLY + MAX_MINT, no lock
+ *               `LOCK_*` fields, simpler and one fewer signature.)
+ * - **utility**: mintable, adjustable: MAX_SUPPLY + MAX_MINT, no lock
  *               flags. Description encouraged for discovery.
- * - **community** — dividend-capable + mintable: same shape as utility;
+ * - **community**: dividend-capable + mintable: same shape as utility;
  *               dividends are a later DIVIDEND action on the TICK, not
  *               a flag on ISSUE.
- * - **collectible** — single-edition: MAX_SUPPLY=1 + MINT_SUPPLY=1 +
+ * - **collectible**: single-edition: MAX_SUPPLY=1 + MINT_SUPPLY=1 +
  *               non-divisible + LOCK_MAX_SUPPLY + LOCK_MINT. Image URL
  *               goes into DESCRIPTION (the JDOG protocol example). Full
  *               FILE + BATCH path is deferred past Phase 2 (BATCH bans
  *               FILE per protocol §BATCH; the FILE-action pipeline is
  *               its own feature).
- * - **edition** — fair-mint set of N identical prints (mirrors
+ * - **edition**: fair-mint set of N identical prints (mirrors
  *               `sdk.nft.edition({mint})`): MAX_SUPPLY=N + DECIMALS=0 +
  *               LOCK_MAX_SUPPLY + MAX_MINT (+ optional MINT_ADDRESS_MAX /
  *               MINT_START_BLOCK / MINT_STOP_BLOCK). Deliberately **no
- *               MINT_SUPPLY and no LOCK_MINT** — the cap locks at
+ *               MINT_SUPPLY and no LOCK_MINT**. The cap locks at
  *               issuance with zero minted supply (LOCK_MAX_SUPPLY
  *               validates the declared cap) so every print stays
  *               publicly mintable through the MINT window.
- * - **subtoken** — TICK = "PARENT.CHILD"; supply + decimals + optional
+ * - **subtoken**: TICK = "PARENT.CHILD"; supply + decimals + optional
  *               description. Parent-ownership check is runtime at the
  *               protocol layer; the wizard doesn't verify pre-flight.
- * - **custom**  — every ISSUE v0 field exposed. Superset of the other
+ * - **custom**: every ISSUE v0 field exposed. Superset of the other
  *               five; used for edge cases the templates don't cover.
  */
 function composeIssueParams(template, form) {
@@ -478,12 +478,12 @@ const TEMPLATE_COMPOSERS = {
         p.MINT_SUPPLY = '1';
         p.LOCK_MAX_SUPPLY = '1';
         p.LOCK_MINT = '1';
-        // The image URL lives in DESCRIPTION (the TIS IMAGE format) —
+        // The image URL lives in DESCRIPTION (the TIS IMAGE format);
         // the lightweight path. For fully ON-CHAIN artwork + metadata,
         // create the token here, then use Manage Token → Artwork with
         // "make this the token's picture everywhere": it uploads the
         // image and a TIS document as FILE actions and re-points
-        // DESCRIPTION at the document (action:<index> — TIS On-Chain
+        // DESCRIPTION at the document (action:<index>, TIS On-Chain
         // Format).
         if (form.imageUrl) p.DESCRIPTION = form.imageUrl.trim();
         else if (form.description) p.DESCRIPTION = form.description.trim();
@@ -499,7 +499,7 @@ const TEMPLATE_COMPOSERS = {
         if (form.perAddressMax) p.MINT_ADDRESS_MAX = String(form.perAddressMax).trim();
         if (form.mintStartBlock) p.MINT_START_BLOCK = String(form.mintStartBlock).trim();
         if (form.mintStopBlock) p.MINT_STOP_BLOCK = String(form.mintStopBlock).trim();
-        // Same DESCRIPTION convention as collectible — the shared
+        // Same DESCRIPTION convention as collectible; the shared
         // artwork URL, falling back to a plain description.
         if (form.imageUrl) p.DESCRIPTION = form.imageUrl.trim();
         else if (form.description) p.DESCRIPTION = form.description.trim();
@@ -560,7 +560,7 @@ const TEMPLATES = [
     {
         id: 'meme',
         name: 'Meme token',
-        tagline: 'Fixed supply, locked, non-divisible — launch and forget.',
+        tagline: 'Fixed supply, locked, non-divisible: launch and forget.',
         interactive: true,
     },
     {
@@ -623,7 +623,7 @@ function renderTemplateStage({ onPick }) {
                             <span className={styles.templateName}>{t.name}</span>
                             <span className={styles.templateTag}>{t.tagline}</span>
                             {!t.interactive ? (
-                                <span className={styles.templateSoon}>Use Custom — dedicated form ships in Step 6</span>
+                                <span className={styles.templateSoon}>Use Custom (dedicated form ships in Step 6)</span>
                             ) : null}
                         </button>
                     </li>
@@ -760,7 +760,7 @@ function renderDetailsStage({
             {show.displayName ? (
                 <Input
                     label="Display name (optional)"
-                    hint="UI label — not stored on-chain."
+                    hint="UI label, not stored on-chain."
                     value={displayName}
                     onChange={(e) => setDisplayName(e.target.value)}
                     autoComplete="off"
@@ -802,8 +802,8 @@ function renderDetailsStage({
                 <Input
                     label="Image URL"
                     hint={isEdition
-                        ? 'The artwork every copy shares — stored on-chain in the description. Use a stable URL (IPFS, your own host).'
-                        : "The collectible's image — stored in DESCRIPTION. Use a stable URL (IPFS, your own host)."}
+                        ? 'The artwork every copy shares, stored on-chain in the description. Use a stable URL (IPFS, your own host).'
+                        : "The collectible's image, stored in DESCRIPTION. Use a stable URL (IPFS, your own host)."}
                     value={imageUrl}
                     onChange={(e) => setImageUrl(e.target.value)}
                     autoComplete="off"

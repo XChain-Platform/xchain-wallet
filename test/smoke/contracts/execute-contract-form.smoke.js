@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for Phase 4 — Step 5 of 23 — EXECUTE method form (§42.4).
+// Smoke for Phase 4, Step 5 of 23: EXECUTE method form (§42.4).
 
 import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
@@ -58,7 +58,7 @@ assert.ok(/paramsText\.split\('\|'\)/.test(formSrc),
 assert.ok(/PARAMS\b/.test(formSrc), 'ExecuteContractForm composes a PARAMS field');
 
 // HW branch + wrong-password distinguished.
-// §20 Cluster X Step 20 — ternary refactored into if/else cascade.
+// §20 Cluster X Step 20: ternary refactored into if/else cascade.
 assert.ok(
     /isHwSource\s*\n?\s*\?\s*await messaging\.executeActionHw/.test(formSrc)
         || /else if \(isHwSource\) \{[\s\S]+?messaging\.executeActionHw/.test(formSrc),
@@ -127,5 +127,5 @@ for (const [shell, appPath] of [
 }
 
 console.log(
-    'OK — execute contract form smoke (ExecuteContractForm shared route + executeAction + bg handlers + 3-shell messaging + ContractDetail onExecute wire-through)',
+    'OK: execute contract form smoke (ExecuteContractForm shared route + executeAction + bg handlers + 3-shell messaging + ContractDetail onExecute wire-through)',
 );

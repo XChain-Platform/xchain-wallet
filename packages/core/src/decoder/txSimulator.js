@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Transaction simulator — §21.2.
+// Transaction simulator (§21.2).
 //
 // Pure projection of the post-state visible to the user *as a holder
 // of the source address*. Given the decoded ACTION + the source
@@ -28,7 +28,7 @@
 //   - `notes`: prose lines the UI renders muted under the deltas
 //     ("Contract state changes are not pre-simulated", "Holder count
 //     not known until indexed"). The simulator never *invents* a
-//     post-state — when it can't be projected, the note says so.
+//     post-state; when it can't be projected, the note says so.
 //
 // No I/O, no SDK, no vault. The caller fetches the balances via
 // `messaging.fetchAddressBalances` (Step 3 / 4) and passes them in.
@@ -43,7 +43,7 @@
 
 /**
  * @typedef {Object} BalanceDelta
- * @property {string} tick     ticker symbol — coin family for native coin (e.g., "BTC")
+ * @property {string} tick     ticker symbol (coin family for native coin, e.g., "BTC")
  * @property {string} before   pre-tx balance, formatted as a decimal string
  * @property {string} after    post-tx balance, same shape
  * @property {boolean} isCoin  true when this row tracks the native coin (rendered with the fee row)
@@ -77,7 +77,7 @@ const PROTOCOL_COIN_TICKER = {
 
 /**
  * @typedef {Object} BalanceLookup
- * @property {string} tick   ticker — coin family ("BTC") for the native coin
+ * @property {string} tick   ticker (coin family, e.g., "BTC" for the native coin)
  * @property {string} amount string-encoded big-number balance
  * @property {boolean} [isCoin]
  */
@@ -132,7 +132,7 @@ function simulateSend(p, balMap, coinTick, feeEstimate) {
     if (tick && amount && tick !== coinTick) {
         deltas.push(deltaRow(tick, balMap, neg(amount), false));
     } else if (tick && amount && tick === coinTick) {
-        // Coin send — combine principal + fee on the coin row below.
+        // Coin send: combine principal + fee on the coin row below.
         deltas.push(deltaRow(coinTick, balMap, neg(amount), true));
     }
     pushFeeRow(deltas, balMap, coinTick, feeEstimate);
@@ -142,7 +142,7 @@ function simulateSend(p, balMap, coinTick, feeEstimate) {
 function simulateSweep(_p, balMap, coinTick, _feeEstimate) {
     // SWEEP empties every non-coin token at the source and the coin
     // (less the fee). The simulator can only project what it knows
-    // about — every balance row in balMap goes to zero.
+    // about; every balance row in balMap goes to zero.
     const deltas = [];
     for (const [tick, before] of balMap.entries()) {
         if (tick === coinTick) continue;
@@ -175,7 +175,7 @@ function simulateMint(p, balMap, coinTick, feeEstimate) {
     if (tick && amount) {
         // No DESTINATION means the minted supply goes to the broadcasting
         // address (the source). With a DESTINATION the source's holdings
-        // don't change — this is a mint to someone else.
+        // don't change (this is a mint to someone else).
         if (!dest) {
             deltas.push(deltaRow(tick, balMap, pos(amount), false));
         }
@@ -207,7 +207,7 @@ function simulateDestroy(p, balMap, coinTick, feeEstimate) {
     return {
         deltas,
         sideEffects,
-        notes: ['Destroying is irreversible — the tokens cannot be recovered.'],
+        notes: ['Destroying is irreversible. The tokens cannot be recovered.'],
     };
 }
 
@@ -261,7 +261,7 @@ function simulateIssue(p, balMap, coinTick, feeEstimate) {
                 value: 'Locks one or more parameters (irreversible)',
             });
         }
-        notes.push('Locking is permanent — these properties cannot be changed after this transaction confirms.');
+        notes.push('Locking is permanent. These properties cannot be changed after this transaction confirms.');
     } else {
         if (tick) {
             sideEffects.push({
@@ -291,7 +291,7 @@ function simulateDividend(p, balMap, coinTick, feeEstimate) {
             label: 'Dividend pool',
             value: `${amount} ${dividendTick} per unit of ${tick}`,
         });
-        notes.push('Total cost depends on the holder count at the snapshot block (excluding the source address). The wallet cannot pre-fetch this — review the indexer estimate before signing.');
+        notes.push('Total cost depends on the holder count at the snapshot block (excluding the source address). Review the indexer estimate before signing; the wallet cannot pre-fetch this.');
     }
 
     return { deltas, sideEffects, notes };
@@ -309,7 +309,7 @@ function simulateDispenser(p, balMap, coinTick, feeEstimate) {
         sideEffects.push({
             kind: 'dispenser',
             label: 'Dispenser',
-            value: 'Cancel — escrow returns to source after a 1-hour close window',
+            value: 'Cancel: escrow returns to source after a 1-hour close window',
         });
         return { deltas, sideEffects, notes };
     }
@@ -328,13 +328,13 @@ function simulateDispenser(p, balMap, coinTick, feeEstimate) {
             sideEffects.push({
                 kind: 'dispenser',
                 label: 'Dispenser',
-                value: 'Edit — list / expiration update',
+                value: 'Edit: list / expiration update',
             });
         }
         return { deltas, sideEffects, notes };
     }
 
-    // Version 0 — open. GIVE_ESCROW is locked from the source's
+    // Version 0 (open). GIVE_ESCROW is locked from the source's
     // balance; GIVE_TICK is the locked tick.
     const giveEscrow = str(p.GIVE_ESCROW);
     const giveTick = upper(p.GIVE_TICK);
@@ -359,7 +359,7 @@ function simulateDispenser(p, balMap, coinTick, feeEstimate) {
     sideEffects.push({
         kind: 'dispenser',
         label: 'Dispenser',
-        value: `Opens — locks ${giveEscrow || '?'} ${giveTick || '?'}, dispenses ${giveAmount || '?'} ${giveTick || '?'} per ${priceLabel}`,
+        value: `Opens: locks ${giveEscrow || '?'} ${giveTick || '?'}, dispenses ${giveAmount || '?'} ${giveTick || '?'} per ${priceLabel}`,
     });
 
     return { deltas, sideEffects, notes };
@@ -420,7 +420,7 @@ function simulateAirdrop(p, balMap, coinTick, feeEstimate) {
     return {
         deltas,
         sideEffects,
-        notes: ['Total cost depends on the list size at the snapshot block — the wallet cannot pre-fetch this.'],
+        notes: ['Total cost depends on the list size at the snapshot block. The wallet cannot pre-fetch this.'],
     };
 }
 
@@ -451,7 +451,7 @@ function simulateBatch(p, balMap, coinTick, feeEstimate, chainId, chainRegistry)
         return {
             deltas,
             sideEffects: [],
-            notes: ['Batch has no decoded sub-actions — review the raw transaction before signing.'],
+            notes: ['Batch has no decoded sub-actions. Review the raw transaction before signing.'],
         };
     }
 

@@ -76,4 +76,4 @@ assert.ok(/LogConsoleRow/.test(sectionSrc),
 assert.ok(/disabled=\{!developerMode\}/.test(sectionSrc),
     'LogConsoleRow gates the Show/Hide button on Developer Mode');
 
-console.log('OK — logConsole singleton + LogConsole component + DeveloperModeSection wiring smoke');
+console.log('OK: logConsole singleton + LogConsole component + DeveloperModeSection wiring smoke');

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §29 Send/Receive — Step 6 — History.jsx wires RBF
+// Smoke for §29 Send/Receive, Step 6: History.jsx wires RBF
 // Speed up + Cancel actions.
 
 import { strict as assert } from 'node:assert';

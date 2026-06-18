@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Label-sync flows — §19.5.2.
+// Label-sync flows (§19.5.2).
 //
 // Assembles / applies the labels + contacts payload that the wallet
 // publishes on-chain via a FILE action (see §19.5.2 for the privacy
@@ -18,7 +18,7 @@
 // codec halves: build the encrypted payload from a seed, or apply a
 // decrypted payload back to a vault. `publishLabelsNow` is the
 // user-initiated full-cycle wrapper that the Settings → Backup
-// "Publish now" button calls — it decrypts the seed, builds the
+// "Publish now" button calls: it decrypts the seed, builds the
 // payload, and submits the FILE action via `submitAction` so the
 // resulting transaction is signed and broadcast end-to-end.
 //
@@ -140,7 +140,7 @@ export async function buildLabelSyncPayload({ vault, walletId, seed }) {
  * @property {import('../storage/Vault.js').Vault} vault
  * @property {string} walletId                         wallet the labels attach to
  * @property {import('../crypto/labelSync.js').LabelSyncBody} payload
- * @property {'overwrite' | 'preserve'} [onConflict]   default 'overwrite' — user asked for sync
+ * @property {'overwrite' | 'preserve'} [onConflict]   default 'overwrite' (user asked for sync)
  */
 
 /**
@@ -155,7 +155,7 @@ export async function buildLabelSyncPayload({ vault, walletId, seed }) {
 
 /**
  * Match incoming labels to persisted Address records (by id first, by
- * `address` string as fallback — the id can't survive a from-seed
+ * `address` string as fallback; the id can't survive a from-seed
  * restore because the new wallet generates fresh UUIDs for its
  * addresses).
  *
@@ -304,20 +304,20 @@ export class NoFundedAddressError extends Error {
 
 export class WifOnlyLabelSyncUnsupportedError extends Error {
     constructor(walletId) {
-        super(`publishLabelsNow: wallet "${walletId}" is wif-only — label-sync requires a seed`);
+        super(`publishLabelsNow: wallet "${walletId}" is wif-only; label-sync requires a seed`);
         this.name = 'WifOnlyLabelSyncUnsupportedError';
         this.walletId = walletId;
     }
 }
 
 /**
- * §19.5.2 manual publish — builds the encrypted labels payload from
+ * §19.5.2 manual publish: builds the encrypted labels payload from
  * the wallet's seed and broadcasts it as a FILE action on the chosen
  * chain. The from-address is the wallet's newest external HD address
  * on that chain (callers can override via `pickFromAddress`).
  *
  * Auto-sync (debounced on label change) and fetch-on-restore are
- * separate FOLLOWUPs — this flow only powers the manual "Publish now"
+ * separate FOLLOWUPs; this flow only powers the manual "Publish now"
  * button. HW wallets are not supported here because the commitment key
  * is derived from the seed, which only exists for software wallets.
  *
@@ -361,7 +361,7 @@ export async function publishLabelsNow({
         throw new Error(`publishLabelsNow: unknown chain "${chainId}"`);
     }
 
-    // Source address — caller override OR newest external HD address.
+    // Source address: caller override, or newest external HD address.
     const fromAddress = pickFromAddress
         ? await pickFromAddress(walletId, chainId)
         : await defaultPickFromAddress({ vault, walletId, descriptor });
@@ -433,7 +433,7 @@ export async function publishLabelsNow({
 }
 
 /**
- * Default source-address picker — newest external HD address on the
+ * Default source-address picker: newest external HD address on the
  * chain across any account in the wallet. Mirrors the host's
  * `addresses.newest` semantics so the publish flow lines up with what
  * the user sees in Receive.

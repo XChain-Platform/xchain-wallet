@@ -108,7 +108,7 @@ export function registeredIds() {
     return Array.from(liveSigners.keys());
 }
 
-/** Test hook — drop state so fresh instances can be constructed. */
+/** Test hook: drop state so fresh instances can be constructed. */
 export function _resetForTests() {
     liveSigners.clear();
     if (bridgeHandle) bridgeHandle.dispose();

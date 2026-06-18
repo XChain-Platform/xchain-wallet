@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §29 Send/Receive — Step 3 — Send.jsx wires the test-send
+// Smoke for §29 Send/Receive, Step 3: Send.jsx wires the test-send
 // protection gate.
 
 import { strict as assert } from 'node:assert';
@@ -90,7 +90,7 @@ assert.match(sendSrc, /setStage\('form'\)/, 'returns to form');
 
 assert.match(sendSrc, /styles\.testSendGate/, 'banner uses testSendGate class');
 assert.match(sendSrc, /Send a small test first/i, 'small-test button copy');
-assert.match(sendSrc, /I've verified — continue/, 'continue button copy');
+assert.match(sendSrc, /I've verified[,]?\s*continue/i, 'continue button copy');
 assert.match(
     sendSrc,
     /onClick=\{onSendSmallTest\}/,

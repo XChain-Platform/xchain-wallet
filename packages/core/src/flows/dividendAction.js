@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// dividendAction — convenience wrapper for the DIVIDEND action (§40.8;
+// dividendAction: convenience wrapper for the DIVIDEND action (§40.8;
 // protocol docs: xchain-documentation/protocol/actions/DIVIDEND.md).
 // Mirrors broadcastAction / dispenserAction: takes vault + registries
 // + chain + source address + DIVIDEND params, forwards to submitAction.
@@ -97,7 +97,7 @@ export async function dividendAction(opts) {
 }
 
 /**
- * List holders of a token — used by DividendForm's cost preview so the
+ * List holders of a token. Used by DividendForm's cost preview so the
  * user sees "N holders / ~TOTAL distribution" before signing.
  *
  * @param {{ sdkRegistry: any, chainId: string, tick: string, opts?: object }} params

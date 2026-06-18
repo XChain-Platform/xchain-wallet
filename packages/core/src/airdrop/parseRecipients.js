@@ -42,7 +42,7 @@ const BECH32_ALPHABET = /^[0-9a-z]+$/; // Lowercase per BIP173; we lowercase bef
  */
 export function parsePaste(text) {
     if (typeof text !== 'string' || text.length === 0) return [];
-    // Split on any newline or comma. Keeps the split lightweight — we
+    // Split on any newline or comma. Keeps the split lightweight; we
     // don't try to be a full CSV parser here.
     const parts = text.split(/[\r\n,]+/g);
     const out = [];

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §13 / Cluster T FOLLOWUPs 4 + 5 — governance section in
+// Smoke for §13 / Cluster T FOLLOWUPs 4 + 5: governance section in
 // CONTRIBUTING.md + per-section documentation parity check in
 // QA-CHECKLIST.md.
 //

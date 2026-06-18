@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Account record — §11.3.2. A BIP44-style account under one Wallet seed.
+// Account record (§11.3.2). A BIP44-style account under one Wallet seed.
 
 import {
     check,

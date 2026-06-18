@@ -37,7 +37,7 @@ const CAPABILITY_LABELS = {
 };
 
 /**
- * STAKE authoring form — §42.7.1.
+ * STAKE authoring form (§42.7.1).
  *
  * Capability-staking model: one STAKE action, no tier. The user enters
  * an amount and the signing pubkey; capabilities (price, cross_chain,
@@ -46,9 +46,9 @@ const CAPABILITY_LABELS = {
  * claude/reports/specs/2026-05-24_capability-staking-model.md.
  *
  * Two modes:
- *   - "New stake" (VERSION 1) — fresh pubkey. Indexer rejects if the
+ *   - "New stake" (VERSION 1): fresh pubkey. Indexer rejects if the
  *     pubkey already has an active stake.
- *   - "Top up" (VERSION 2) — adds to a pubkey this address already
+ *   - "Top up" (VERSION 2): adds to a pubkey this address already
  *     staked. Indexer rejects if no active stake or source mismatch.
  *
  * Fields:
@@ -88,7 +88,7 @@ export function StakeForm({ walletId, chainId, onBack }) {
     const [existingStake, setExistingStake] = useState('0');
     // Live per-capability MIN_STAKE thresholds from the hub, or null when the
     // hub is unreachable / not configured (regtest) / the SDK predates the
-    // getter — in which case the qualify readout is hidden.
+    // getter; in that case the qualify readout is hidden.
     const [thresholds, setThresholds] = useState(
         /** @type {Array<{capability: string, min_stake: string, disabled?: boolean}> | null} */ (null),
     );
@@ -101,7 +101,7 @@ export function StakeForm({ walletId, chainId, onBack }) {
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
-    // Declared before the effects below — the detection effect's dependency
+    // Declared before the effects below; the detection effect's dependency
     // array references fromAddress, which would hit the temporal dead zone
     // (ReferenceError at render) if these consts came after it.
     const descriptor = chainRegistry.get(chainId);
@@ -193,7 +193,7 @@ export function StakeForm({ walletId, chainId, onBack }) {
             })
             .catch(() => {
                 if (cancelled) return;
-                // Network/indexer failure — fall back to user's manual choice silently
+                // Network/indexer failure; fall back to user's manual choice silently
                 setExistingStake('0');
                 setDetectStatus('error');
             });
@@ -204,7 +204,7 @@ export function StakeForm({ walletId, chainId, onBack }) {
     const [hwStatus, setHwStatus] = useState('idle');
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
 
-    // §20 / Cluster W FOLLOWUP 5 — watcher-mode encode-only branch.
+    // §20 / Cluster W FOLLOWUP 5: watcher-mode encode-only branch.
     const { isWatcherMode } = useWalletMode();
 
     const actionParams = useMemo(() => {
@@ -219,7 +219,7 @@ export function StakeForm({ walletId, chainId, onBack }) {
 
     // Project which capabilities the post-submit total stake qualifies for.
     // Total = the pubkey's existing valid stake (top-ups) + the entered
-    // amount. Comparison is Number-based and display-only — the indexer
+    // amount. Comparison is Number-based and display-only; the indexer
     // enforces the real on-chain qualification. Null when thresholds are
     // unavailable (no hub / regtest / older SDK).
     const qualifyReadout = useMemo(() => {
@@ -240,7 +240,7 @@ export function StakeForm({ walletId, chainId, onBack }) {
                 };
             })
             // Drop capabilities the hub has no numeric threshold for
-            // (getMinStake returns null when unconfigured) — we can't claim
+            // (getMinStake returns null when unconfigured); we can't claim
             // qualified/not for those, and "null XCHAIN" would be nonsense.
             .filter((r) => r.minStake != null && Number.isFinite(r.min));
         if (rows.length === 0) return null;
@@ -358,7 +358,7 @@ export function StakeForm({ walletId, chainId, onBack }) {
                 </p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Txid</dt>
-                    <dd className={styles.detailsValue}>{String(txid || '—')}</dd>
+                    <dd className={styles.detailsValue}>{String(txid || 'N/A')}</dd>
                 </dl>
                 <div className={styles.actions}>
                     <Button variant="primary" onClick={onBack}>Done</Button>
@@ -397,7 +397,7 @@ export function StakeForm({ walletId, chainId, onBack }) {
                 </dl>
                 {isWatcherMode ? (
                     <p className={styles.hint}>
-                        Watcher mode — this wallet will build an unsigned transaction.
+                        Watcher mode: this wallet will build an unsigned transaction.
                         Sign it on your Signer-mode wallet, then bring the
                         signed transaction to a Full-mode wallet to broadcast.
                     </p>
@@ -458,7 +458,7 @@ export function StakeForm({ walletId, chainId, onBack }) {
             <fieldset style={{ border: '1px solid var(--border, #ccc)', padding: '0.5rem', borderRadius: '4px', marginBottom: '0.75rem' }}>
                 <legend style={{ padding: '0 0.25rem' }}>Mode</legend>
                 <p style={{ fontSize: '0.85rem', margin: '0 0 0.5rem', color: 'var(--muted, #666)' }}>
-                    Auto-set from the signing pubkey below — flip if you want to override.
+                    Auto-set from the signing pubkey below; flip if you want to override.
                 </p>
                 <label style={{ display: 'block', marginBottom: '0.25rem' }}>
                     <input
@@ -481,16 +481,16 @@ export function StakeForm({ walletId, chainId, onBack }) {
                 {detectStatus !== 'idle' ? (
                     <p style={{ fontSize: '0.8rem', margin: '0.5rem 0 0', color: 'var(--muted, #666)' }}>
                         {detectStatus === 'checking' && 'Checking the indexer for an existing stake…'}
-                        {detectStatus === 'new' && '✓ No existing stake for this pubkey — defaulting to New stake.'}
-                        {detectStatus === 'topup' && '✓ Existing stake found — defaulting to Top up. (Choose New stake to force-reject as duplicate.)'}
-                        {detectStatus === 'error' && 'Couldn\'t reach the indexer — pick the mode manually. The indexer will reject if the wrong one is chosen.'}
+                        {detectStatus === 'new' && '✓ No existing stake for this pubkey; defaulting to New stake.'}
+                        {detectStatus === 'topup' && '✓ Existing stake found; defaulting to Top up. (Choose New stake to force-reject as duplicate.)'}
+                        {detectStatus === 'error' && 'Couldn\'t reach the indexer. Pick the mode manually; the indexer will reject if the wrong one is chosen.'}
                     </p>
                 ) : null}
             </fieldset>
 
             <Input
                 label="Amount"
-                hint="How much XCHAIN to stake. You don't pick capabilities — each one activates automatically once your total stake reaches its threshold, so a larger stake can unlock more."
+                hint="How much XCHAIN to stake. You don't pick capabilities; each one activates automatically once your total stake reaches its threshold, so a larger stake can unlock more."
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 autoComplete="off"
@@ -531,7 +531,7 @@ export function StakeForm({ walletId, chainId, onBack }) {
                                     color: r.qualifies ? 'var(--xc-text, inherit)' : 'var(--muted, #777)',
                                 }}>
                                     {r.label}
-                                    <span className="sr-only">{r.qualifies ? ' — qualifies' : ' — not yet'}</span>
+                                    <span className="sr-only">{r.qualifies ? ' (qualifies)' : ' (not yet)'}</span>
                                 </span>
                                 <span style={{ color: 'var(--muted, #777)', fontVariantNumeric: 'tabular-nums' }}>
                                     {r.minStake} XCHAIN

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// §56.3 Pre-launch, user-initiated track, Step 1 — Chrome Web Store
+// §56.3 Pre-launch, user-initiated track, Step 1: Chrome Web Store
 // manifest hardening. Static audit over `packages/extension/manifest.json`
 // that catches the most common CWS rejection reasons before submission
 // and keeps the manifest in sync with the wallet's synchronized version
@@ -16,16 +16,16 @@
 //
 // Rules (each returns { rule, ok, detail }):
 //
-//   1. manifest-version-3            — `manifest_version` must be 3
-//   2. version-is-cws-valid          — 1–4 dot-separated integers, 0–65535
-//   3. version-matches-wallet        — equals deriveExtensionVersion(root)
-//   4. version-name-mirrors-wallet   — `version_name` === root package.json
-//   5. description-present-and-short — ≤ 132 chars (CWS listing limit)
-//   6. homepage-url-set              — listing requires a homepage
-//   7. icons-128-present             — CWS store tile requires 128×128
-//   8. action-icon-set               — toolbar icon entry points valid
-//   9. content-scripts-valid         — matches array well-formed
-//  10. permissions-minimal           — no broad/host permissions without
+//   1. manifest-version-3            - `manifest_version` must be 3
+//   2. version-is-cws-valid          - 1–4 dot-separated integers, 0–65535
+//   3. version-matches-wallet        - equals deriveExtensionVersion(root)
+//   4. version-name-mirrors-wallet   - `version_name` === root package.json
+//   5. description-present-and-short - ≤ 132 chars (CWS listing limit)
+//   6. homepage-url-set              - listing requires a homepage
+//   7. icons-128-present             - CWS store tile requires 128×128
+//   8. action-icon-set               - toolbar icon entry points valid
+//   9. content-scripts-valid         - matches array well-formed
+//  10. permissions-minimal           - no broad/host permissions without
 //                                      justification file
 //
 // Rule 10 treats host_permissions as the dangerous surface; matching-all
@@ -160,7 +160,7 @@ export function runExtensionManifestAudit() {
         ok: broad.length === 0,
         detail: broad.length === 0
             ? `host_permissions = ${JSON.stringify(hostPerms)} (no match-all entries)`
-            : `broad host_permissions flagged: ${JSON.stringify(broad)} — document justification before reinstating`,
+            : `broad host_permissions flagged: ${JSON.stringify(broad)} (document justification before reinstating)`,
     });
 
     return results;
@@ -172,7 +172,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     const failed = results.filter((r) => !r.ok);
     for (const r of results) {
         const mark = r.ok ? '✓' : '✗';
-        console.log(`${mark} ${r.rule} — ${r.detail}`);
+        console.log(`${mark} ${r.rule}: ${r.detail}`);
     }
     console.log('');
     if (failed.length > 0) {

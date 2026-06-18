@@ -25,7 +25,7 @@ export const NOTICE_FILE = 'NOTICE.md';
 // onboarding gate compares the user's persisted acceptance against this
 // constant and forces re-acceptance on mismatch (Cluster J FOLLOWUP 4).
 // '1' was the pre-launch Dankest Community License. '2' marks the relicense
-// to the GNU Affero General Public License v3.0 (AGPL-3.0) — a material
+// to the GNU Affero General Public License v3.0 (AGPL-3.0), a material
 // change to the binding terms, so every prior acceptance must be re-collected.
 export const LICENSE_VERSION = '2';
 
@@ -43,17 +43,17 @@ export const REPRODUCIBLE_BUILD_DOC = 'docs/REPRODUCIBLE_BUILDS.md';
 export const REPRODUCIBLE_BUILD_DOC_DESKTOP = 'packages/desktop/REPRODUCIBLE_BUILDS.md';
 export const RELEASE_SIGNATURES_DOC = 'packages/extension/RELEASE_SIGNATURES.md';
 export const RELEASE_SIGNATURES_PUBLISHED = false;
-// Cluster T FOLLOWUP 2 — verification recipe for end users (key import
-// → manifest download → GPG verify → artifact hash check → optional
+// Cluster T FOLLOWUP 2: verification recipe for end users (key import
+// -> manifest download -> GPG verify -> artifact hash check -> optional
 // reproduce). Surfaced in the About panel next to the reproducible-
 // build doc so users land on the right doc with one click.
 export const VERIFY_RELEASE_DOC = 'docs/VERIFY-RELEASE.md';
 
-// Update channel — currently only "development". Production / beta
+// Update channel: currently only "development". Production / beta
 // channels land at v1.0 GA per spec §51.
 export const UPDATE_CHANNEL = 'development';
 
-// §18.4 / Cluster N FOLLOWUP 1 — runtime-fetched firmware manifest.
+// §18.4 / Cluster N FOLLOWUP 1: runtime-fetched firmware manifest.
 //
 // The wallet ships with a bundled `FIRMWARE_MANIFEST` (see
 // signers/firmware-manifest.js). Newer advisories published between
@@ -63,13 +63,13 @@ export const UPDATE_CHANNEL = 'development';
 //
 // Pre-launch posture: both the signing key and the hosted endpoint are
 // gated on §51 release-signing infrastructure publication. Empty
-// values short-circuit the refresh flow — `refreshFirmwareManifest`
+// values short-circuit the refresh flow. `refreshFirmwareManifest`
 // returns `{ ok: false, reason: 'not-configured' }` so callers don't
 // hit a placeholder URL. When the signing key is published, fill
 // these constants and ship a release.
 export const FIRMWARE_MANIFEST_URL = '';
 export const FIRMWARE_MANIFEST_PUBLIC_KEY = '';
-// Cache TTL — fresh-ness window for a previously refreshed manifest.
+// Cache TTL: freshness window for a previously refreshed manifest.
 // Older cache entries fall back to the bundled manifest. 24 hours
 // matches the §18.4 deferred-shape sketch.
 export const FIRMWARE_MANIFEST_TTL_MS = 24 * 60 * 60 * 1000;

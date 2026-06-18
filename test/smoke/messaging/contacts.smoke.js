@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Phase 3 Step 14 smoke — Contacts integration (§41.7.4).
+// Phase 3 Step 14 smoke: Contacts integration (§41.7.4).
 //
 // Asserts:
 //   1. listContacts / findContactByAddress / saveContact /
@@ -183,5 +183,5 @@ assert.ok(/contactsByAddress/.test(inboxSrc),
     'MessagingInbox tracks contactsByAddress map');
 
 console.log(
-    'OK — contacts smoke (§41.7.4: CRUD flows + vault round-trip; ContactsList 3-mode state machine + Send-message shortcut; contacts.* handlers + 3-shell messaging + 3-shell App.jsx entry + Inbox auto-association)',
+    'OK: contacts smoke (§41.7.4: CRUD flows + vault round-trip; ContactsList 3-mode state machine + Send-message shortcut; contacts.* handlers + 3-shell messaging + 3-shell App.jsx entry + Inbox auto-association)',
 );

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §55 / G178 — `MAINTAINERS.md`.
+// Smoke for §55 / G178: `MAINTAINERS.md`.
 //
 // A conventional MAINTAINERS file at the repo root: lists the
 // people responsible, what each owns, escalation paths, and how new
@@ -46,7 +46,7 @@ for (const heading of requiredHeadings) {
 }
 
 // Lead is named with a real GitHub handle (link must be a real-looking
-// URL — not a placeholder).
+// URL, not a placeholder).
 assert.ok(/J-Dog/.test(docSrc), 'lead maintainer named');
 assert.ok(/https:\/\/github\.com\/J-Dog/.test(docSrc),
     'lead maintainer links to a real GitHub profile URL');
@@ -70,7 +70,7 @@ for (const area of requiredAreas) {
         `Areas of responsibility table covers: ${area}`);
 }
 
-// Escalation table names every required channel — these have to match
+// Escalation table names every required channel; these have to match
 // the channels published in SECURITY.md / CODE_OF_CONDUCT.md so a
 // reader can cross-reference.
 for (const channel of ['security@dankest.llc', 'conduct@dankest.llc']) {
@@ -97,4 +97,4 @@ for (const companion of ['CODE_OF_CONDUCT.md', 'SECURITY.md', 'CONTRIBUTING.md']
         `cited companion exists: ${companion}`);
 }
 
-console.log('OK — MAINTAINERS.md doc smoke');
+console.log('OK: MAINTAINERS.md doc smoke');

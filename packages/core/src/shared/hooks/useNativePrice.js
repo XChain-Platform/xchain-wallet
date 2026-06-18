@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// useNativePrice — fetch + cache the price oracle response for a
+// useNativePrice: fetch + cache the price oracle response for a
 // single chainId. Wraps `messaging.getNativePricesRequest` and surfaces
 // the per-chain entry alongside loading / error / disabled state.
 //
@@ -62,7 +62,7 @@ export function useNativePrice(chainId, opts = {}) {
             return undefined;
         }
         if (typeof messaging?.getNativePricesRequest !== 'function') {
-            // Host doesn't expose the route — treat as disabled so the
+            // Host doesn't expose the route; treat as disabled so the
             // UI hides the strip rather than spinning forever.
             setDisabled(true);
             return undefined;

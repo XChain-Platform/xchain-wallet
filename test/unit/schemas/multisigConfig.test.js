@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Unit: schemas/multisigConfig — validateMultisigConfig + buildMultisigConfig.
+// Unit: schemas/multisigConfig: validateMultisigConfig + buildMultisigConfig.
 
 import { describe, it, expect } from 'vitest';
 import {
@@ -162,19 +162,19 @@ describe('validateMultisigConfig', () => {
         expect(r.ok).toBe(false);
     });
 
-    it('rejects malformed cosigner — missing name', () => {
+    it('rejects malformed cosigner: missing name', () => {
         const bad = { ...BASE_COSIGNER_A, name: '' };
         const r = validateMultisigConfig({ ...BASE_CONFIG, cosigners: [bad, BASE_COSIGNER_B] });
         expect(r.ok).toBe(false);
     });
 
-    it('rejects malformed cosigner — invalid origin', () => {
+    it('rejects malformed cosigner: invalid origin', () => {
         const bad = { ...BASE_COSIGNER_A, origin: 'unknown' };
         const r = validateMultisigConfig({ ...BASE_CONFIG, cosigners: [bad, BASE_COSIGNER_B] });
         expect(r.ok).toBe(false);
     });
 
-    it('rejects malformed cosigner — empty string localSignerId', () => {
+    it('rejects malformed cosigner: empty string localSignerId', () => {
         const bad = { ...BASE_COSIGNER_A, localSignerId: '' };
         const r = validateMultisigConfig({ ...BASE_CONFIG, cosigners: [bad, BASE_COSIGNER_B] });
         expect(r.ok).toBe(false);
@@ -186,7 +186,7 @@ describe('validateMultisigConfig', () => {
         expect(r.ok).toBe(true);
     });
 
-    it('rejects malformed cosigner — empty string xpub', () => {
+    it('rejects malformed cosigner: empty string xpub', () => {
         const bad = { ...BASE_COSIGNER_B, xpub: '' };
         const r = validateMultisigConfig({ ...BASE_CONFIG, cosigners: [BASE_COSIGNER_A, bad] });
         expect(r.ok).toBe(false);

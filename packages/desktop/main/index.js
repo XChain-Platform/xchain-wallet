@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Electron main process — entry point.
+// Electron main process: entry point.
 //
 // Thin adapter over `runtime.js`: wires Electron's lifecycle events to
 // the pure-JS runtime state machine. Keeping Electron-specific code
@@ -21,7 +21,7 @@
 //     `sendMessage(message)` function via contextBridge.
 //   - Vault + signers live in main; the master key never crosses IPC.
 //   - All IPC traffic returns structured `{ ok, result } | { ok, error }`
-//     envelopes — same shape the extension background uses, so shared
+//     envelopes; same shape the extension background uses, so shared
 //     renderer code doesn't need to branch on shell.
 //
 // OS keychain integration (§40.12, Step 17):
@@ -31,11 +31,11 @@
 //     the key material stays inside the OS keychain.
 //   - On subsequent launches, `app.whenReady` probes the keychain; if
 //     the master key is readable, the vault opens and the renderer's
-//     first `session.status` call returns `unlocked` — the password
+//     first `session.status` call returns `unlocked`; the password
 //     prompt is skipped until the user explicitly locks (or the keychain
 //     becomes unreadable, e.g. OS logout, keychain reset).
 //   - If `safeStorage.isEncryptionAvailable()` is false, the session
-//     cache is silently disabled — the user re-enters their password
+//     cache is silently disabled; the user re-enters their password
 //     every launch rather than having the key written insecurely.
 
 import { app, BrowserWindow, Menu, ipcMain, safeStorage, session, Notification } from 'electron';
@@ -68,7 +68,7 @@ import {
 
 const here = dirname(fileURLToPath(import.meta.url));
 
-// §24.6 / G057 — multi-window: instead of a singleton mainWindow, the
+// §24.6 / G057: multi-window: instead of a singleton mainWindow, the
 // main process keeps a Set of every open BrowserWindow so File → New
 // Window can open additional renderers that share the same vault +
 // signer state via the main-process MessageHost. Existing logic
@@ -124,7 +124,7 @@ function buildRuntime() {
             chainRegistry,
             sdkFactory: createDevMockSdk,
         }),
-        // §46 — OS-notification adapter (main process owns the `electron`
+        // §46: OS-notification adapter (main process owns the `electron`
         // import; the runtime stays Electron-free for unit testing).
         notify: ({ title, body }) => {
             try {
@@ -135,7 +135,7 @@ function buildRuntime() {
                 console.error('[xchain] desktop notification failed:', err);
             }
         },
-        // §50 / Cluster L FOLLOWUP 4 — desktop diagnostic env + build.
+        // §50 / Cluster L FOLLOWUP 4: desktop diagnostic env + build.
         // Electron version + OS + Chromium UA help support narrow down
         // whether a bug is shell-specific.
         getDiagnosticContext: async () => ({
@@ -153,13 +153,13 @@ function buildRuntime() {
 }
 
 /**
- * Open a renderer window. Safe to call repeatedly — every call returns
+ * Open a renderer window. Safe to call repeatedly; every call returns
  * a fresh `BrowserWindow` connected to the same main-process MessageHost
  * (vault + signers stay singleton). Each window registers itself with
  * the `windows` set and unregisters on `closed`.
  *
- * §24.6 / G057 — File → New Window invokes this with no args.
- * §24.6 / Cluster Y FOLLOWUP 4 — `xchain:open-window` IPC invokes this
+ * §24.6 / G057: File → New Window invokes this with no args.
+ * §24.6 / Cluster Y FOLLOWUP 4: `xchain:open-window` IPC invokes this
  * with `{ initialView, initialContext }` to detach a pending tx detail
  * (or any other view) into its own window. The route prefill rides
  * through the URL search string so the renderer can pick it up on
@@ -192,7 +192,7 @@ function createWindow(opts = {}) {
     win.once('ready-to-show', () => {
         if (!win.isDestroyed()) win.show();
         // Replay any deep link that arrived before the first window
-        // came up. Subsequent windows ignore the queue — once one
+        // came up. Subsequent windows ignore the queue; once one
         // renderer has consumed it, additional renderers shouldn't
         // double-handle the same URI.
         if (pendingDeepLink) {
@@ -327,7 +327,7 @@ if (!deepLinkCtx.gotLock) {
 app.whenReady().then(async () => {
     runtime = buildRuntime();
     // Best-effort auto-unlock. Failure here is logged but doesn't block
-    // startup — the renderer will see `state: 'locked'` and prompt for
+    // startup; the renderer will see `state: 'locked'` and prompt for
     // the password.
     try {
         await ensureHost(runtime);
@@ -343,11 +343,11 @@ app.whenReady().then(async () => {
 
     // §40.12 Step 19: claim `xchain:` unconditionally. Tier-2 coin
     // schemes (bitcoin / litecoin / dogecoin) stay unclaimed until a
-    // future settings toggle opts in — we don't silently override the
+    // future settings toggle opts in; we don't silently override the
     // user's primary BTC wallet.
     registerProtocolClients(app, { optedInSchemes: [] });
 
-    // electron-updater — only active in packaged builds (isUpdaterActive
+    // electron-updater: only active in packaged builds (isUpdaterActive
     // returns false in dev). Events relay to every open renderer via
     // IPC so any window can surface the "update available" toast.
     try {
@@ -373,7 +373,7 @@ app.whenReady().then(async () => {
         return handleIpcMessage(runtime, message);
     });
 
-    // §24.6 / Cluster Y FOLLOWUP 4 — detach a pending tx (or any
+    // §24.6 / Cluster Y FOLLOWUP 4: detach a pending tx (or any
     // other view) into a fresh BrowserWindow. The renderer dispatches
     // through `xchainWalletWindow.openDetached` (preload), which
     // invokes this channel; main creates a window pre-routed via
@@ -401,7 +401,7 @@ app.whenReady().then(async () => {
     // same process-wide `signerBridge` registry this listener feeds.
     attachSignerBridgeListener({ ipcMain });
 
-    // §24.6 / G057 — install the application menu (File → New Window)
+    // §24.6 / G057: install the application menu (File → New Window)
     // before opening the primary window so the accelerator is live the
     // moment the renderer focuses.
     buildApplicationMenu();
@@ -420,7 +420,7 @@ app.on('before-quit', () => {
     // Zero the master key + close the encrypted doc. The OS already
     // treats process-exit memory as freed, but explicit zeroing catches
     // cases where a GC'd buffer might otherwise linger until
-    // reallocation. The session-backend ciphertext stays on disk — the
+    // reallocation. The session-backend ciphertext stays on disk; the
     // next launch reuses it via the keychain.
     if (runtime) tearDownHost(runtime);
 });

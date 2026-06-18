@@ -33,7 +33,7 @@ import styles from './IssueTokenForm.module.css';
 const chainRegistry = registryLib.defaultRegistry();
 
 /**
- * Dividend form — §40.8.
+ * Dividend form (§40.8).
  *
  * Pays a dividend of DIVIDEND_TICK to every holder of TICK at the
  * snapshot block (per DIVIDEND.md: the action is processed at the
@@ -42,7 +42,7 @@ const chainRegistry = registryLib.defaultRegistry();
  * Once the user fills in the "of token" ticker, the form fetches the
  * holder list via `messaging.getHoldersForToken` and renders a cost
  * preview (holder count + total distribution). The cost preview is
- * best-effort — a fetch failure falls back to a plain warning rather
+ * best-effort; a fetch failure falls back to a plain warning rather
  * than blocking review.
  *
  * Spec §40.8 shows the form reachable from a Token detail page with
@@ -84,7 +84,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
-    // Holders preview — fetched when the user's TICK input stabilizes,
+    // Holders preview: fetched when the user's TICK input stabilizes,
     // display-only. { loading, rows, error }. Rows per explorer shape:
     // { address, amount, percent }.
     const [holders, setHolders] = useState(
@@ -269,7 +269,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
     const [hwStatus, setHwStatus] = useState('idle');
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
 
-    // §20 / Cluster W FOLLOWUP 5 — watcher-mode encode-only branch.
+    // §20 / Cluster W FOLLOWUP 5: watcher-mode encode-only branch.
     const { isWatcherMode } = useWalletMode();
 
     async function handleSubmit(event) {
@@ -428,7 +428,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                 </p>
                 {isWatcherMode ? (
                     <p className={styles.hint}>
-                        Watcher mode — this wallet will build an unsigned transaction.
+                        Watcher mode: this wallet will build an unsigned transaction.
                         Sign it on your Signer-mode wallet, then bring the
                         signed transaction to a Full-mode wallet to broadcast.
                     </p>

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// BBQr PSBT encode + decode — §20.4 / G043 (partial).
+// BBQr PSBT encode + decode (§20.4 / G043, partial).
 //
 // BBQr is the standard chunked-QR PSBT transport used by Sparrow,
 // Coldcard, and SeedSigner. The frame format is:
@@ -19,31 +19,31 @@
 //   • E        encoding char: H (hex) | B (base32) | Z (zlib + base32)
 //   • F        file type: P (PSBT) | T (transaction) | R (binary) |
 //                          C (CBOR) | U (UTF-8) | J (JSON) | X (executable)
-//   • NN       2-char base36 (0-9A-Z) — total frame count
-//   • XX       2-char base36 — frame index (0-based)
+//   • NN       2-char base36 (0-9A-Z): total frame count
+//   • XX       2-char base36: frame index (0-based)
 //   • payload  encoding-specific bytes (rest of the frame)
 //
 // Multi-frame reassembly: collect frames in order of `index`,
 // concatenate payloads, decode the full bytestream once. BBQr does
-// NOT carry per-chunk integrity (unlike XCW's CRC32) — it relies on
+// NOT carry per-chunk integrity (unlike XCW's CRC32); it relies on
 // the QR code's own error correction.
 //
 // Coverage today:
-//   ✅ H (hex) — single + multi-frame, encode + decode
-//   ✅ B (base32, RFC 4648 no padding) — single + multi-frame decode
-//   ✅ Z (zlib + base32) — single + multi-frame decode (Cluster U FOLLOWUP 1)
-//   ⏸ Multi-encoder fallback — N/A, user picks the encoder upstream
+//   ✅ H (hex): single + multi-frame, encode + decode
+//   ✅ B (base32, RFC 4648 no padding): single + multi-frame decode
+//   ✅ Z (zlib + base32): single + multi-frame decode (Cluster U FOLLOWUP 1)
+//   ⏸ Multi-encoder fallback: N/A, user picks the encoder upstream
 //
 // Encode (Cluster W FOLLOWUP 4) emits H frames so a watcher-mode
 // wallet's unsigned PSBT can be imported by Sparrow / Coldcard /
-// SeedSigner. Hex is the simplest and least surprising choice — no
+// SeedSigner. Hex is the simplest and least surprising choice; no
 // dep on a base32 encoder, every BBQr-aware reader supports it.
 // Coldcard / SeedSigner default to Z when sending PSBTs back to a
 // host because Z compresses ~30%+ for typical PSBTs; the Z branch
 // here lets users scan those replies straight into PsbtSignForm.
 
 import { base32 } from '@scure/base';
-// pako is CommonJS — destructure off the default import so the Node
+// pako is CommonJS; destructure off the default import so the Node
 // ESM loader is happy. Bundlers (Vite + Rollup) preserve the named
 // references through tree-shaking.
 import pako from 'pako';
@@ -76,7 +76,7 @@ export const BBQR_FILE_TYPE_PSBT = 'P';
 // Default H-payload-bytes per frame. Each frame is "B$HP<NN><XX>" + 2
 // hex chars per byte, so 200 payload bytes → 400 hex chars + 8-char
 // header = 408 chars. Comfortably below the ~480-char alphanumeric QR
-// ceiling at error-correction level M for version 27 — a size most
+// ceiling at error-correction level M for version 27, a size most
 // hardware-wallet cameras and phone cameras can read reliably.
 export const DEFAULT_BBQR_PAYLOAD_BYTES = 200;
 const BBQR_MAX_FRAMES = 1295;  // 36^2 - 1 because base36 NN goes 00..ZZ
@@ -214,7 +214,7 @@ export function decodeBbqrFrames(frames) {
         // alphabet as 'B', so re-use the helper; pako.inflate then
         // unwraps the zlib container (2-byte header + adler32 trailer).
         // BBQr-Z producers (Coldcard, SeedSigner) emit a standard
-        // zlib stream — no raw-deflate fallback needed for spec'd
+        // zlib stream; no raw-deflate fallback needed for spec'd
         // content. We do try inflateRaw on the standard-decode failure
         // path to be defensive, since some signers have shipped
         // raw-deflate-by-mistake frames in the wild.
@@ -275,7 +275,7 @@ function decodeHexUpper(s) {
 /**
  * Inflate a zlib-wrapped DEFLATE stream. Tries the standard zlib path
  * first (the spec'd shape); falls back to raw-deflate if the header
- * is missing — a defensive branch for signers that ship raw-deflate
+ * is missing. A defensive branch for signers that ship raw-deflate
  * by mistake.
  * @param {Uint8Array} compressed
  * @returns {Uint8Array}

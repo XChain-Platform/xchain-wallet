@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for Phase 4 — Step 20 of 23 — Multisig PSBT-QR cosigner
+// Smoke for Phase 4, Step 20 of 23: Multisig PSBT-QR cosigner
 // round-trip (§22.3 reuses §20 chunked-QR transport).
 
 import { strict as assert } from 'node:assert';
@@ -200,7 +200,7 @@ assert.throws(
 assert.ok(MultisigEnvelopeError.prototype instanceof Error,
     'MultisigEnvelopeError extends Error');
 
-// ─── Sign-screen route — round labels + QR + paste inbox ────────
+// Sign-screen route: round labels + QR + paste inbox
 
 const routePath = join(sharedRoutes, 'MultisigSigningSession.jsx');
 assert.ok(existsSync(routePath), 'MultisigSigningSession.jsx exists');
@@ -208,10 +208,10 @@ const route = readFileSync(routePath, 'utf8');
 
 assert.ok(/AnimatedQrFrames/.test(route),
     'route renders the animated-QR component');
-assert.ok(/Round 1 — Collect nonces/.test(route),
-    'route uses §22.3 "Round 1 — Collect nonces" label for MuSig2 nonce round');
-assert.ok(/Round 2 — Collect signatures/.test(route),
-    'route uses §22.3 "Round 2 — Collect signatures" label for MuSig2 partial round');
+assert.ok(/Round 1.{0,2}Collect nonces/.test(route),
+    'route uses §22.3 "Round 1: Collect nonces" label for MuSig2 nonce round');
+assert.ok(/Round 2.{0,2}Collect signatures/.test(route),
+    'route uses §22.3 "Round 2: Collect signatures" label for MuSig2 partial round');
 assert.ok(/Collect signatures/.test(route),
     'route uses single-round "Collect signatures" label for P2SH/P2WSH');
 assert.ok(/Export transaction QR|Scan cosigner reply/.test(route),
@@ -259,7 +259,7 @@ for (const [shell, msgPath] of [
     ['desktop', join(desktop, 'renderer', 'messaging.js')],
 ]) {
     const m = readFileSync(msgPath, 'utf8');
-    // Step 19 helpers stay present — Step 20 didn't change the
+    // Step 19 helpers stay present; Step 20 didn't change the
     // bg-handler surface (envelope work happens entirely in the route
     // + core uri layer).
     assert.ok(/export function contributeMultisigNonce\b/.test(m),
@@ -269,5 +269,5 @@ for (const [shell, msgPath] of [
 }
 
 console.log(
-    'OK — multisig PSBT-QR smoke (envelope kinds + canonicalized fingerprint + request/reply/finalized builders + shape guards + XCW round-trip per kind + tampered-envelope detection + version-bump rejection + AnimatedQrFrames export + sign-screen round labels + paste-inbox + envelope decoder pipes contributions through messaging + uri barrel exposes 9 helpers)',
+    'OK: multisig PSBT-QR smoke (envelope kinds + canonicalized fingerprint + request/reply/finalized builders + shape guards + XCW round-trip per kind + tampered-envelope detection + version-bump rejection + AnimatedQrFrames export + sign-screen round labels + paste-inbox + envelope decoder pipes contributions through messaging + uri barrel exposes 9 helpers)',
 );

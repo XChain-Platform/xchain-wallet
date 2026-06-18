@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Reachability checks — §49.1. Classify each chain's services
+// Reachability checks (§49.1). Classify each chain's services
 // (explorer, encoder, hub) as reachable or not, and roll up into a
 // per-chain and overall mode.
 //
@@ -16,7 +16,7 @@
 //   - encoder:  `sdk.pingEncoder()` if present
 //   - hub:      `sdk.pingHub()`     if present
 //   - explorer: caller-supplied probe, or a fallback that calls
-//               `sdk.explorer._get('/')` — the explorer doesn't expose
+//               `sdk.explorer._get('/')`. The explorer doesn't expose
 //               a dedicated ping, so we hit its root with a short
 //               timeout. Most deployments return 200 or 404 quickly
 //               either way; the probe only cares that the TCP+HTTP
@@ -209,7 +209,7 @@ async function defaultHubProbe(sdk) {
 
 /** @type {ServiceProbe} */
 async function defaultExplorerProbe(sdk) {
-    // Explorer has no dedicated ping. Hit the root path — the server
+    // Explorer has no dedicated ping. Hit the root path; the server
     // responds to any HTTP request with a routing result quickly. A
     // 404 from a live server still means "reachable" for our purposes
     // since the timeout, not the status, is what we measure against.
@@ -220,7 +220,7 @@ async function defaultExplorerProbe(sdk) {
         await sdk.explorer._get('/');
     } catch (e) {
         // If the error is a 4xx/5xx that arrived within the timeout
-        // budget, the service is reachable — it just said "no". A
+        // budget, the service is reachable (it just said "no"). A
         // network/timeout error surfaces distinguishably and gets
         // propagated to mark the service unreachable.
         const msg = String(e?.message ?? e);

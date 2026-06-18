@@ -33,7 +33,7 @@ import styles from './IssueTokenForm.module.css';
 const chainRegistry = registryLib.defaultRegistry();
 
 /**
- * Destroy form — §40.4.
+ * Destroy form (§40.4).
  *
  * Burns `AMOUNT` of the caller's balance of `TICK`. Irreversible at
  * the protocol level: once broadcast and mined, the destroyed balance
@@ -61,7 +61,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
 
     const [chainId, setChainId] = useState(/** @type {string | null} */ (initialChainId || null));
-    // Typed-confirmation gate on the review stage — user must type
+    // Typed-confirmation gate on the review stage. User must type
     // DESTROY before the Sign button enables, on top of the existing
     // password / HW gate. Reset on every stage transition so the
     // confirmation can't carry forward from a previously-cancelled
@@ -189,7 +189,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
     const [hwStatus, setHwStatus] = useState('idle');
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
 
-    // §20 / Cluster W FOLLOWUP 5 — watcher-mode encode-only branch.
+    // §20 / Cluster W FOLLOWUP 5: watcher-mode encode-only branch.
     const { isWatcherMode } = useWalletMode();
 
     async function handleSubmit(event) {
@@ -326,7 +326,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>
-                        Watcher mode — this wallet will build an unsigned transaction.
+                        Watcher mode: this wallet will build an unsigned transaction.
                         Sign it on your Signer-mode wallet, then bring the
                         signed transaction to a Full-mode wallet to broadcast.
                     </p>

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for Phase 4 — Step 22 of 23 — Multisig badges surface-wide
+// Smoke for Phase 4, Step 22 of 23: Multisig badges surface-wide
 // (§22 + §22.4).
 
 import { strict as assert } from 'node:assert';
@@ -23,7 +23,7 @@ const sharedRoutes = join(core, 'src', 'shared', 'routes');
 const sharedComponents = join(core, 'src', 'shared', 'components');
 const ui = join(core, 'src', 'ui');
 
-// ─── MultisigBadge — exports from core/ui ─────────────────────
+// ─── MultisigBadge: exports from core/ui ─────────────────────
 
 const uiBarrel = readFileSync(join(ui, 'index.js'), 'utf8');
 assert.ok(/export\s*\{\s*MultisigBadge\s*\}\s*from\s*['"]\.\/MultisigBadge\.jsx['"]/.test(uiBarrel),
@@ -47,7 +47,7 @@ assert.ok(/MuSig2/.test(badgeFile),
 assert.ok(/P2SH/.test(badgeFile) && /P2WSH/.test(badgeFile),
     'badge labels P2SH and P2WSH schemes');
 
-// ─── Receive — replaces inline multisig pill with the badge ──
+// ─── Receive: replaces inline multisig pill with the badge ───
 
 const receive = readFileSync(join(sharedRoutes, 'Receive.jsx'), 'utf8');
 assert.ok(/MultisigBadge\b/.test(receive),
@@ -55,7 +55,7 @@ assert.ok(/MultisigBadge\b/.test(receive),
 assert.ok(/<MultisigBadge[\s\S]*?multisig\.threshold[\s\S]*?multisig\.cosignerCount[\s\S]*?multisig\.scheme/.test(receive),
     'Receive renders <MultisigBadge> wired to the multisig record fields');
 
-// ─── History — Multisig-only filter chip ─────────────────────
+// ─── History: Multisig-only filter chip ──────────────────────
 
 const history = readFileSync(join(sharedRoutes, 'History.jsx'), 'utf8');
 assert.ok(/multisigOnly/.test(history),
@@ -67,7 +67,7 @@ assert.ok(/getMultisigReceiveAddress/.test(history),
 assert.ok(/aria-pressed=\{multisigOnly\}/.test(history),
     'History\'s multisig-only chip carries aria-pressed for assistive tech');
 
-// ─── ChainBalanceCard — optional multisig prop ────────────────
+// ─── ChainBalanceCard: optional multisig prop ─────────────────
 
 const cardSrc = readFileSync(join(sharedComponents, 'ChainBalanceCard.jsx'), 'utf8');
 assert.ok(/multisig\b/.test(cardSrc),
@@ -81,7 +81,7 @@ assert.ok(/getMultisigReceiveAddress/.test(home),
 assert.ok(/multisig=\{isBtc \? multisig : null\}/.test(home),
     'Home passes multisig only to BTC chain cards (§10.3 BTC-only at launch)');
 
-// ─── MultisigSigningSession — uses the badge ──────────────────
+// ─── MultisigSigningSession: uses the badge ───────────────────
 
 const route = readFileSync(join(sharedRoutes, 'MultisigSigningSession.jsx'), 'utf8');
 assert.ok(/MultisigBadge\b/.test(route),
@@ -90,5 +90,5 @@ assert.ok(/<MultisigBadge[\s\S]*?threshold=\{(?:active|s)\.threshold\}[\s\S]*?co
     'MultisigSigningSession renders <MultisigBadge> against session.threshold + cosignerPubkeys.length');
 
 console.log(
-    'OK — multisig badge smoke (MultisigBadge: 3-scheme tone map + ARIA + data-scheme + Receive integration + History "Multisig only" filter chip + getMultisigReceiveAddress prefetch + ChainBalanceCard multisig prop + Home BTC-only badge gate + MultisigSigningSession header + list-row badge replaces inline schemeLabel)',
+    'OK: multisig badge smoke (MultisigBadge: 3-scheme tone map + ARIA + data-scheme + Receive integration + History "Multisig only" filter chip + getMultisigReceiveAddress prefetch + ChainBalanceCard multisig prop + Home BTC-only badge gate + MultisigSigningSession header + list-row badge replaces inline schemeLabel)',
 );

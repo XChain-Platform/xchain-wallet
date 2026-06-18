@@ -8,19 +8,19 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// DisplaySection — §27.3 / §27.4 / Cluster I FOLLOWUP 1.
+// DisplaySection: §27.3 / §27.4 / Cluster I FOLLOWUP 1.
 //
 // Pinned / hidden token management. Pinned tokens float to the top of
 // the balance list in the array's order; hidden tokens collapse into
 // each tab's "Show N hidden" footer. Until this panel landed, the
 // only way to manage either list was the per-row star / hide affordance
-// on Home — there was no surface to see the whole list at a glance,
+// on Home. There was no surface to see the whole list at a glance,
 // reorder pinned tokens, or bulk-unhide.
 //
 // MVP scope (per FOLLOWUPS.md note "drag-reorder is non-trivial; an
 // MVP without reorder still closes the gap"): up / down buttons rather
 // than drag handles. Bulk "Unhide all" + per-row Unpin / Unhide.
-// Token keys render as `chainId:tick` — sufficient to identify a row
+// Token keys render as `chainId:tick`, sufficient to identify a row
 // without a separate `messaging.getTokenInfo` round-trip.
 
 import { useCallback, useState } from 'react';
@@ -61,7 +61,7 @@ const EMPTY_HINT = { ...ROW_LABEL, fontStyle: 'italic' };
 
 export function DisplaySection() {
     const { settings, loading, error, update } = useSettings();
-    // Cluster O FOLLOWUP 3 — show a brief confirmation after a
+    // Cluster O FOLLOWUP 3: show a brief confirmation after a
     // filter-reset run so the click doesn't feel inert.
     const [resetMessage, setResetMessage] = useState(/** @type {string | null} */ (null));
 
@@ -108,11 +108,11 @@ export function DisplaySection() {
         writeHidden([]);
     }, [hidden, writeHidden]);
 
-    // Cluster O FOLLOWUP 3 — reset all per-list chain-filter memory
+    // Cluster O FOLLOWUP 3: reset all per-list chain-filter memory
     // entries. Affects History's enabledChains + the Home tab's coin-
     // family filter. Lives outside `update()` because the persistence
-    // layer is localStorage, not vault settings (per memory rule —
-    // ephemeral UI prefs that shouldn't survive a from-seed restore).
+    // layer is localStorage, not vault settings (ephemeral UI prefs
+    // that shouldn't survive a from-seed restore).
     const resetChainFilters = useCallback(() => {
         const count = clearAllChainFilters();
         setResetMessage(
@@ -146,7 +146,7 @@ export function DisplaySection() {
         <div style={STACK}>
             <h3 style={SECTION_HEADER}>Row affordances</h3>
             <p style={SECTION_HINT}>
-                Whether each balance row shows a quick pin / hide button. Off by default to keep rows clean — your existing pinned and hidden tokens still apply either way and can be managed below.
+                Whether each balance row shows a quick pin / hide button. Off by default to keep rows clean. Your existing pinned and hidden tokens still apply either way and can be managed below.
             </p>
             <ToggleRow
                 label="Show pin button on rows"

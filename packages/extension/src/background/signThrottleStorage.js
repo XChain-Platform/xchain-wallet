@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// signThrottleStorage — §12 / Cluster S FOLLOWUP 2.
+// signThrottleStorage: §12 / Cluster S FOLLOWUP 2.
 //
 // Persistence layer for the per-origin sign-throttle bucket state. Without
 // this, a service-worker restart (extension MV3) drops the bucket map and
@@ -106,7 +106,7 @@ function localStorageAdapter() {
             try {
                 localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
             } catch (_e) {
-                // Quota / privacy mode — tolerate so the throttle mutation
+                // Quota / privacy mode: tolerate so the throttle mutation
                 // itself still completes (it's already in memory).
             }
         },
@@ -117,7 +117,7 @@ function localStorageAdapter() {
 }
 
 /**
- * Defensive parse — only origins → finite-number arrays survive. Anything
+ * Defensive parse: only origins with finite-number arrays survive. Anything
  * malformed gets dropped silently rather than crashing the background.
  */
 function coerceSnapshot(v) {

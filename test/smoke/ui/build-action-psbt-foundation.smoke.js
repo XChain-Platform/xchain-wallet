@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §20 Cluster X Step 2 — `useWalletMode` hook + generic
+// Smoke for §20 Cluster X Step 2: `useWalletMode` hook + generic
 // `buildActionPsbt` flow + `action.psbt` host handler + three messaging
 // shims. This is the foundation that lets subsequent steps adopt
 // watcher-mode read-only across every non-Send action surface.
@@ -72,7 +72,7 @@ assert.match(flowSrc, /encoder\.createTx\(\{/, 'calls encoder.createTx');
 assert.match(flowSrc, /psbtHex: encoded\.psbt,/, 'returns psbtHex');
 assert.match(flowSrc, /actionData\.action/, 'validates actionData.action');
 assert.match(flowSrc, /actionData\.params/, 'validates actionData.params');
-// Watcher mode never broadcasts — guard against accidental signing / broadcast.
+// Watcher mode never broadcasts: guard against accidental signing / broadcast.
 assert.doesNotMatch(flowSrc, /import [\s\S]*signers\//, 'flow does not import any signer module');
 assert.doesNotMatch(flowSrc, /signer\.signPsbt/, 'no signer.signPsbt call in the flow');
 assert.doesNotMatch(flowSrc, /\.broadcastTx\(/, 'no broadcastTx call in the flow');
@@ -94,7 +94,7 @@ assert.notEqual(handlerIdx, -1, 'action.psbt handler registered');
 const handlerBlock = hostSrc.slice(handlerIdx, handlerIdx + 320);
 assert.match(handlerBlock, /chainRegistry, sdkRegistry/, 'handler uses chainRegistry + sdkRegistry deps only');
 assert.match(handlerBlock, /buildActionPsbt\(\{ \.\.\.req, chainRegistry, sdkRegistry \}\)/, 'handler forwards to buildActionPsbt');
-assert.doesNotMatch(handlerBlock, /\bvault\b/, 'handler does not require vault — no unlock');
+assert.doesNotMatch(handlerBlock, /\bvault\b/, 'handler does not require vault: no unlock');
 
 // ─── 4. Three messaging shims -------------------------------------
 

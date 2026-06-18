@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Panic mode — §26.5 / G068. A user-activated state that freezes ALL
+// Panic mode (§26.5 / G068). A user-activated state that freezes ALL
 // signing for a fixed window (default 24 hours). Activation is
 // deliberately one-way for the duration: once on, the only ways out
 // are (a) the timer expires or (b) the user explicitly deactivates
@@ -16,12 +16,12 @@
 //
 // State persists in localStorage so the freeze survives popup close,
 // tab reload, even browser restart. The schema preference
-// `settings.panicMode.enabled` is independent — it gates whether the
+// `settings.panicMode.enabled` is independent; it gates whether the
 // feature is offered, not whether it is currently active.
 //
 // Threat model (Step 1 / signing freeze):
 //   - Reading the locked-down vault is unaffected. The freeze is on
-//     SIGNING outputs, not data access — a user who triggered panic
+//     SIGNING outputs, not data access. A user who triggered panic
 //     mode can still see balances, history, and settings while waiting
 //     for the timer to expire or before manually deactivating.
 //   - The freeze gates `submitWithSigner`, `signMessageFlow`,
@@ -147,7 +147,7 @@ export function getPanicRemainingMs(state, nowMs = Date.now()) {
 }
 
 /**
- * Activate panic mode. Idempotent — re-activating with a fresh
+ * Activate panic mode. Idempotent: re-activating with a fresh
  * duration replaces the previous state without prompting.
  *
  * @param {object} [opts]
@@ -193,7 +193,7 @@ export function assertSigningAllowed(nowMs = Date.now()) {
     const state = readState();
     if (state.expiresAt === 0) return;
     if (state.expiresAt <= nowMs) {
-        // Timer expired — auto-clear and let the call through.
+        // Timer expired. Auto-clear and let the call through.
         writeState(emptyPanicModeState());
         return;
     }

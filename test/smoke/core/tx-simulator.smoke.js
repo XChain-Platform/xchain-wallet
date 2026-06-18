@@ -11,13 +11,13 @@
 // Smoke test for §21.2 transaction simulator (Step 1 of 6).
 //
 // Covers:
-//   1. Pure simulator — SEND token / SEND coin / SWEEP / MINT / DESTROY /
+//   1. Pure simulator: SEND token / SEND coin / SWEEP / MINT / DESTROY /
 //      ISSUE (create + lock + transfer-only) / DIVIDEND / DISPENSER
 //      (open + cancel + edit-refill) / BROADCAST (v0/v1/v2/v3) / AIRDROP /
 //      LIST / BATCH (recursive aggregation) / generic fallback.
-//   2. Decimal-string arithmetic — BTC-precision sat-level adds /
+//   2. Decimal-string arithmetic: BTC-precision sat-level adds /
 //      subtracts, no float drift.
-//   3. Static wiring — core/decoder/index.js re-exports `simulateAction`.
+//   3. Static wiring: core/decoder/index.js re-exports `simulateAction`.
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
@@ -41,7 +41,7 @@ const balances = [
 
 // --- 1. Per-action simulators -------------------------------------------
 
-// 1a. SEND token — token decremented; coin shows fee row only.
+// 1a. SEND token: token decremented; coin shows fee row only.
 {
     const r = decoderLib.simulateAction({
         action: 'SEND',
@@ -64,7 +64,7 @@ const balances = [
     assert.equal(r.notes.length, 0);
 }
 
-// 1b. SEND coin — fee folded into the coin row's `after`; separate
+// 1b. SEND coin: fee folded into the coin row's `after`; separate
 // fee-label row carries `feeAmount`.
 {
     const r = decoderLib.simulateAction({
@@ -86,7 +86,7 @@ const balances = [
     assert.equal(feeRow.after, '');
 }
 
-// 1c. SWEEP — every non-coin tick → 0; coin → 0; "Sweep moves..." note.
+// 1c. SWEEP: every non-coin tick → 0; coin → 0; "Sweep moves..." note.
 {
     const r = decoderLib.simulateAction({
         action: 'SWEEP',
@@ -105,7 +105,7 @@ const balances = [
     assert.ok(r.notes.some((n) => /sweep moves/i.test(n)));
 }
 
-// 1d. MINT to self — token increments; supply side-effect.
+// 1d. MINT to self: token increments; supply side-effect.
 {
     const r = decoderLib.simulateAction({
         action: 'MINT',
@@ -122,7 +122,7 @@ const balances = [
     assert.match(supply.value, /\+50/);
 }
 
-// 1e. MINT to someone else — no source balance change; still surfaces supply.
+// 1e. MINT to someone else: no source balance change; still surfaces supply.
 {
     const r = decoderLib.simulateAction({
         action: 'MINT',
@@ -136,7 +136,7 @@ const balances = [
     assert.ok(r.sideEffects.find((s) => s.kind === 'supply'));
 }
 
-// 1f. DESTROY — token down + irreversibility note.
+// 1f. DESTROY: token down + irreversibility note.
 {
     const r = decoderLib.simulateAction({
         action: 'DESTROY',
@@ -152,7 +152,7 @@ const balances = [
     assert.ok(r.sideEffects.some((s) => /−40/.test(s.value)));
 }
 
-// 1g. ISSUE v0 fresh-create — supply + initial mint side-effects + token row.
+// 1g. ISSUE v0 fresh-create: supply + initial mint side-effects + token row.
 {
     const r = decoderLib.simulateAction({
         action: 'ISSUE',
@@ -175,7 +175,7 @@ const balances = [
     assert.ok(r.sideEffects.some((s) => s.kind === 'supply'));
 }
 
-// 1h. ISSUE v0 transfer-only — no balance change, ownership side-effect.
+// 1h. ISSUE v0 transfer-only: no balance change, ownership side-effect.
 {
     const r = decoderLib.simulateAction({
         action: 'ISSUE',
@@ -189,7 +189,7 @@ const balances = [
     assert.ok(r.sideEffects.some((s) => s.kind === 'ownership'));
 }
 
-// 1i. ISSUE v3 lock — note about permanence.
+// 1i. ISSUE v3 lock: note about permanence.
 {
     const r = decoderLib.simulateAction({
         action: 'ISSUE',
@@ -203,7 +203,7 @@ const balances = [
     assert.ok(r.sideEffects.some((s) => s.kind === 'lock'));
 }
 
-// 1j. DIVIDEND — pool side-effect + holder-count caveat.
+// 1j. DIVIDEND: pool side-effect + holder-count caveat.
 {
     const r = decoderLib.simulateAction({
         action: 'DIVIDEND',
@@ -217,7 +217,7 @@ const balances = [
     assert.ok(r.notes.some((n) => /holder count/i.test(n)));
 }
 
-// 1k. DISPENSER v0 open — escrow debit on the give-token.
+// 1k. DISPENSER v0 open: escrow debit on the give-token.
 {
     const r = decoderLib.simulateAction({
         action: 'DISPENSER',
@@ -239,7 +239,7 @@ const balances = [
     assert.ok(r.sideEffects.some((s) => /opens/i.test(s.value)));
 }
 
-// 1l. DISPENSER v1 cancel — note-only side-effect.
+// 1l. DISPENSER v1 cancel: note-only side-effect.
 {
     const r = decoderLib.simulateAction({
         action: 'DISPENSER',
@@ -253,7 +253,7 @@ const balances = [
     assert.ok(!r.deltas.find((d) => d.tick === 'MYTOKEN' && !d.isFee));
 }
 
-// 1m. DISPENSER v2 edit-refill — debits give-tick by GIVE_ESCROW.
+// 1m. DISPENSER v2 edit-refill: debits give-tick by GIVE_ESCROW.
 {
     const r = decoderLib.simulateAction({
         action: 'DISPENSER',
@@ -273,7 +273,7 @@ const balances = [
     assert.ok(r.sideEffects.some((s) => /refill/i.test(s.value)));
 }
 
-// 1n. BROADCAST v0/v1/v2/v3 — each gets its own labeled side-effect.
+// 1n. BROADCAST v0/v1/v2/v3: each gets its own labeled side-effect.
 {
     for (const [version, expect] of [
         ['0', /Broadcast/],
@@ -294,7 +294,7 @@ const balances = [
     }
 }
 
-// 1o. AIRDROP — note about list-size unknowability.
+// 1o. AIRDROP: note about list-size unknowability.
 {
     const r = decoderLib.simulateAction({
         action: 'AIRDROP',
@@ -308,7 +308,7 @@ const balances = [
     assert.ok(r.sideEffects.some((s) => /per recipient/i.test(s.value)));
 }
 
-// 1p. LIST — counts items, distinguishes TICK vs ADDRESS lists.
+// 1p. LIST: counts items, distinguishes TICK vs ADDRESS lists.
 {
     const r = decoderLib.simulateAction({
         action: 'LIST',
@@ -321,7 +321,7 @@ const balances = [
     assert.ok(r.sideEffects.some((s) => /3 address entries/.test(s.value)));
 }
 
-// 1q. BATCH — sub-action deltas aggregate; one fee row at the end.
+// 1q. BATCH: sub-action deltas aggregate; one fee row at the end.
 {
     const r = decoderLib.simulateAction({
         action: 'BATCH',
@@ -343,7 +343,7 @@ const balances = [
     assert.equal(feeRows.length, 1, 'one fee row, not one per sub-action');
 }
 
-// 1r. Generic fallback — fee row + a "not pre-simulated" note.
+// 1r. Generic fallback: fee row + a "not pre-simulated" note.
 {
     const r = decoderLib.simulateAction({
         action: 'ORDER',

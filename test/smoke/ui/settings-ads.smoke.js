@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §35 + §36 Settings — Step 12 — Automatic Donation System.
+// Smoke for §35 + §36 Settings, Step 12: Automatic Donation System.
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
@@ -59,7 +59,7 @@ for (const field of ['lifetimeDonatedSats', 'lifetimeTxCount', 'accumulatedSats'
 
 // Donation address: placeholder vs real
 assert.match(src, /isPlaceholder\b/, 'placeholder branch present');
-assert.match(src, /Pending — real /, 'placeholder copy present');
+assert.match(src, /Pending[: ].*real /, 'placeholder copy present');
 
 // Inputs disable when ADS is off so the user can't poke them
 assert.match(src, /disabled=\{!settings\.ads\.enabled\}/, 'inputs disable when ADS is off');

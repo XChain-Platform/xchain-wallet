@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Chain visibility helpers — the wallet hides regtest descriptors
+// Chain visibility helpers: the wallet hides regtest descriptors
 // from user-facing pickers unless Developer Mode is on. Per spec §2.2
 // (chain-explicit by default; no global "current network" toggle) and
 // §48.3 (regtest exposed only via Developer Mode).
@@ -32,7 +32,7 @@ export function filterChainsForUser(descriptors, settings) {
 }
 
 /**
- * Same predicate, applied to a single descriptor — useful where the
+ * Same predicate, applied to a single descriptor. Useful where the
  * caller already has a descriptor in hand.
  *
  * @param {{ networkKind: string }} descriptor

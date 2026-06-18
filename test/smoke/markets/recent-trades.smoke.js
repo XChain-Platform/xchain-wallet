@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Phase 3 Step 5 smoke — Recent trades panel (§41.3.3).
+// Phase 3 Step 5 smoke: Recent trades panel (§41.3.3).
 
 import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
@@ -34,5 +34,5 @@ assert.ok(/onOpenTx/.test(src),
     'RecentTradesPanel exposes onOpenTx for future tx-detail nav');
 
 console.log(
-    'OK — recent-trades smoke (RecentTradesPanel §41.3.3 exists + fetches messaging.getMarketHistory + caps rows + labels buy/sell + onOpenTx callback reserved for tx detail)',
+    'OK: recent-trades smoke (RecentTradesPanel §41.3.3 exists + fetches messaging.getMarketHistory + caps rows + labels buy/sell + onOpenTx callback reserved for tx detail)',
 );

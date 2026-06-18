@@ -56,7 +56,7 @@ export function useBalancesHidden() {
             } catch { /* storage may be blocked in some shells */ }
             // Defer the broadcast to a microtask so subscriber components
             // don't run their `setHidden` synchronously inside *this*
-            // component's state-update reconciliation — React warns
+            // component's state-update reconciliation. React warns
             // "Cannot update a component while rendering a different
             // component" when those setStates happen during render.
             const broadcast = () => {

@@ -13,7 +13,7 @@
 // + the in-memory backend + the per-collection put/get plumbing.
 //
 // Uses the schema's own factory (`createWallet`) so the test fixture
-// always reflects the current wallet shape — if the schema gains a
+// always reflects the current wallet shape; if the schema gains a
 // required field, this test fails on the factory call rather than on
 // validateWallet at save time, which is easier to debug.
 

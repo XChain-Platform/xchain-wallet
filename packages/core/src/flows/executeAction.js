@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// executeAction — EXECUTE composer for the §42.4 "Execute contract
+// executeAction: EXECUTE composer for the §42.4 "Execute contract
 // method" form. Mirrors broadcastAction / deployAction: takes vault +
 // registries + chain + source + params (VERSION, CONTRACT_ACTION_INDEX,
 // METHOD, optional PARAMS array), forwards to submitAction.
@@ -16,7 +16,7 @@
 // PARAMS is variadic in the protocol format (...PARAMS after METHOD).
 // The SDK validator accepts an array; pipe-serialization happens in
 // the encoder. Callers collecting a pipe-delimited string from the UI
-// must split before passing in — this flow does NOT split for them,
+// must split before passing in; this flow does NOT split for them,
 // so the split rule stays visible at the call site.
 
 import { submitAction } from './submitAction.js';

@@ -8,25 +8,25 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for Phase 2 — Step 12 (piece 4a) — signer pairing scaffold +
+// Smoke for Phase 2, Step 12 (piece 4a): signer pairing scaffold +
 // firmware manifest + derivation-path cross-check UI (§18.3–18.5).
 //
 // Piece 4a is scaffolding only: Trezor + Ledger SDK integration lands
 // in Steps 13 (TrezorSigner) + 14 (LedgerSigner). Step 12 builds the
 // pluggable primitives those will consume:
 //
-//   1. Firmware manifest — bundled JS module, not a .json file (the
+//   1. Firmware manifest: bundled JS module, not a .json file (the
 //      browser shells can't import JSON without loaders, and the
 //      node smoke runner is on v18 which doesn't support
 //      `with { type: 'json' }` reliably).
-//   2. checkFirmware helper — verdicts 'ok' | 'outdated' |
+//   2. checkFirmware helper: verdicts 'ok' | 'outdated' |
 //      'vulnerable' | 'unsupported' | 'unknown'. compareVersions
 //      exported for Steps 13-14 to reuse.
 //   3. SignerRecord schema + vault collection + migration slot.
 //   4. registerSigner / listSignersForWallet / unregisterSigner
-//      flows — re-pair is idempotent by (walletId, vendor,
+//      flows; re-pair is idempotent by (walletId, vendor,
 //      deviceIdentifier).
-//   5. DerivationPathCrossCheck component — renders §18.5's cross-
+//   5. DerivationPathCrossCheck component: renders §18.5's cross-
 //      check UI. Used by sign screens when signer is HW.
 
 import { strict as assert } from 'node:assert';
@@ -94,7 +94,7 @@ assert.ok(
 
 const { checkFirmware, compareVersions } = signers;
 
-// 2a. Happy path — recommended or above.
+// 2a. Happy path: recommended or above.
 {
     const v = checkFirmware({ vendor: 'trezor', model: 'T2T1', version: '2.7.2' });
     assert.equal(v.status, 'ok');
@@ -111,21 +111,21 @@ const { checkFirmware, compareVersions } = signers;
     assert.match(v.detail, /recommended/i);
 }
 
-// 2c. Unsupported — below minimum.
+// 2c. Unsupported: below minimum.
 {
     const v = checkFirmware({ vendor: 'trezor', model: 'T2T1', version: '2.0.0' });
     assert.equal(v.status, 'unsupported');
     assert.match(v.detail, /minimum/i);
 }
 
-// 2d. Unsupported — via "1.x" major-only pattern (Ledger Nano S).
+// 2d. Unsupported via "1.x" major-only pattern (Ledger Nano S).
 {
     const v = checkFirmware({ vendor: 'ledger', model: 'nanoS', version: '1.6.1' });
     assert.equal(v.status, 'unsupported');
     assert.match(v.detail, /not supported/i);
 }
 
-// 2e. Unknown vendor falls back to 'unknown' — wallet doesn't block
+// 2e. Unknown vendor falls back to 'unknown'; wallet doesn't block
 //     sign, but renders a neutral "verify with vendor" banner.
 {
     const v = checkFirmware({ vendor: 'acme', model: 'xyz', version: '1.0.0' });
@@ -133,7 +133,7 @@ const { checkFirmware, compareVersions } = signers;
     assert.equal(v.updateUrl, null);
 }
 
-// 2f. Unknown model under a known vendor — still 'unknown', keeps the
+// 2f. Unknown model under a known vendor: still 'unknown', keeps the
 //     vendor's updateUrl so the banner can link to the right page.
 {
     const v = checkFirmware({ vendor: 'trezor', model: 'TX9', version: '9.0.0' });
@@ -141,7 +141,7 @@ const { checkFirmware, compareVersions } = signers;
     assert.ok(v.updateUrl?.includes('trezor.io'));
 }
 
-// 2g. Missing version string — 'unknown'.
+// 2g. Missing version string: 'unknown'.
 {
     const v = checkFirmware({ vendor: 'trezor', model: 'T2T1', version: '' });
     assert.equal(v.status, 'unknown');
@@ -210,7 +210,7 @@ assert.equal(created.kind, 'trezor');
 assert.equal(created.firmwareVersion, '2.7.2');
 assert.equal((await vault.signers.list()).length, 1);
 
-// 4b. Re-registering the same physical device is idempotent — no
+// 4b. Re-registering the same physical device is idempotent; no
 //     duplicate record, same id, firmware + lastSeenAt bumped.
 const again = await flows.registerSigner({
     vault,
@@ -300,5 +300,5 @@ for (const cls of ['.root', '.title', '.grid', '.label', '.value', '.path', '.in
 }
 
 console.log(
-    'OK — signer scaffold smoke (firmware manifest + checkFirmware verdicts + SignerRecord schema + vault collection + registerSigner idempotence + codec round-trip + DerivationPathCrossCheck component)',
+    'OK: signer scaffold smoke (firmware manifest + checkFirmware verdicts + SignerRecord schema + vault collection + registerSigner idempotence + codec round-trip + DerivationPathCrossCheck component)',
 );

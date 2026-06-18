@@ -11,7 +11,7 @@
 import { TokenPicker } from './TokenPicker.jsx';
 
 /**
- * Receive picker — landing screen for the Receive quick-action. Thin
+ * Receive picker: landing screen for the Receive quick-action. Thin
  * wrapper over the shared {@link TokenPicker} with `purpose="receive"`,
  * which lists every chain the wallet has an address on (even at zero
  * balance) and runs cross-chain "On the platform" token discovery.
@@ -21,7 +21,7 @@ import { TokenPicker } from './TokenPicker.jsx';
  * Token field pre-filled so the QR encodes that asset.
  *
  * Props are forwarded verbatim; `hideOwnFilter` is accepted for backward
- * compatibility but no longer meaningful — the inline toolbar is now the
+ * compatibility but no longer meaningful; the inline toolbar is now the
  * single filter on every shell.
  *
  * @param {import('./TokenPicker.jsx').TokenPicker} props

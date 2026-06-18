@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Phase 3 Step 11 smoke — Dispenser-available badge on MarketsList (§41.6).
+// Phase 3 Step 11 smoke: Dispenser-available badge on MarketsList (§41.6).
 //
 // Asserts:
 //   1. DispenserBadge.jsx exists with named export + reuses
@@ -64,5 +64,5 @@ assert.ok(/export function __clearDispenserBadgeCache\b/.test(src),
     'DispenserBadge exports __clearDispenserBadgeCache for downstream tests');
 
 console.log(
-    'OK — dispenser-badge smoke (§41.6 DispenserBadge with session cache + MarketsList row wiring for tick1 + tick2; renders nothing when no open dispensers or still loading; reuses messaging.getDispensersForToken)',
+    'OK: dispenser-badge smoke (§41.6 DispenserBadge with session cache + MarketsList row wiring for tick1 + tick2; renders nothing when no open dispensers or still loading; reuses messaging.getDispensersForToken)',
 );

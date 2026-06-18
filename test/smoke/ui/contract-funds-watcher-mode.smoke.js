@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §20 / Cluster X Step 18 — ContractFundsForm watcher-mode
+// Smoke for §20 / Cluster X Step 18: ContractFundsForm watcher-mode
 // branch (DEPOSIT / WITHDRAW depending on mode).
 
 import { strict as assert } from 'node:assert';

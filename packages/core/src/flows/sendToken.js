@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// sendToken — convenience wrapper for the SEND action (§Phase 1
+// sendToken: convenience wrapper for the SEND action (§Phase 1
 // authoring surface; protocol docs: xchain-documentation/protocol/
 // actions/SEND.md). Maps JS-friendly params to the protocol's
 // uppercase field names and forwards to submitAction.
@@ -35,7 +35,7 @@ import { submitAction } from './submitAction.js';
  * @property {import('../registry/index.js').ChainRegistry} chainRegistry
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
  * @property {string} chainId
- * @property {SourceRef | import('../schemas/address.js').Address} from   source address — Address record or explicit triple
+ * @property {SourceRef | import('../schemas/address.js').Address} from   source address (Address record or explicit triple)
  * @property {string} to                              DESTINATION
  * @property {string} tick                           TICK (or `^<id>` for TICK_ID)
  * @property {string | number} amount                 AMOUNT
@@ -47,7 +47,7 @@ import { submitAction } from './submitAction.js';
  * @property {(txid: string, opts?: object) => Promise<unknown>} [waitForTxid]
  * @property {object} [waitOpts]
  * @property {(phase: string, data: object) => void} [onProgress]
- * @property {(entry: { signedTxHex: string, txid: string, chainId: string, signedAt: number, summary: string, error: string }) => void | Promise<void>} [onBroadcastFailure]   Cluster G FOLLOWUP 1 — passes through to submitAction.
+ * @property {(entry: { signedTxHex: string, txid: string, chainId: string, signedAt: number, summary: string, error: string }) => void | Promise<void>} [onBroadcastFailure]   Cluster G FOLLOWUP 1; passes through to submitAction.
  */
 
 /**
@@ -71,7 +71,7 @@ export async function sendToken(opts) {
     };
     if (opts.memo !== undefined) params.MEMO = opts.memo;
 
-    const memoTail = opts.memo ? ` — "${opts.memo}"` : '';
+    const memoTail = opts.memo ? ` (memo: "${opts.memo}")` : '';
     const pendingTxMeta = opts.trackPendingTx === false ? undefined : {
         fromAddress: source.address,
         toAddress: opts.to,
@@ -134,10 +134,10 @@ export function normalizeSource(from, fnName = 'flow') {
     }
     if (source.source === 'watch-only') {
         throw new Error(
-            `${fnName}: from.source = "watch-only" — this address has no signer`,
+            `${fnName}: from.source = "watch-only"; this address has no signer`,
         );
     }
-    // HW sources ('trezor' / 'ledger') are valid here — the caller is
+    // HW sources ('trezor' / 'ledger') are valid here. The caller is
     // expected to supply a pre-built RemoteSigner via submitAction's
     // `signer` param so the action flow routes signing over the
     // renderer↔background bridge instead of the password-unlock path.
@@ -152,7 +152,7 @@ export function normalizeSource(from, fnName = 'flow') {
         : (typeof source.id === 'string' && source.id.length > 0 ? source.id : null);
     if (!addressId) {
         throw new Error(
-            `${fnName}: from.derivationPath is null — imported-WIF source must include an addressId (Address record's id)`,
+            `${fnName}: from.derivationPath is null; imported-WIF source must include an addressId (Address record's id)`,
         );
     }
     return { address, publicKey, derivationPath: null, addressId };

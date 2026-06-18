@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// §25.2 / Cluster J FOLLOWUP 1 — synthesized fixture data for demo
+// §25.2 / Cluster J FOLLOWUP 1: synthesized fixture data for demo
 // wallets so Home / History / TokenDetail surfaces feel populated
 // without requiring the user to fund the wallet.
 //
@@ -39,7 +39,7 @@ const DEMO_TOKEN_ICONS = {
     DOGINAL: 'https://upload.wikimedia.org/wikipedia/en/d/d0/Dogecoin_Logo.png',
 };
 //
-// Demo wallets are real BIP39 wallets — they have real addresses on
+// Demo wallets are real BIP39 wallets. They have real addresses on
 // real chains; only the on-chain balances are zero. The fixtures
 // here overlay synthetic SDK-shaped responses on top of the real
 // address records so the rest of the wallet code (`balancesFromSdk`,
@@ -69,7 +69,7 @@ const PER_CHAIN_DEFAULTS = /** @type {Record<string, BalanceFixture>} */ ({
             { tick: 'PEPECASH', displayName: 'PepeCash', divisibility: 8, quantity: '10000000000', fiatRate: 0.0012, imageUrl: DEMO_TOKEN_ICONS.PEPECASH }, // 100 PEPECASH
             { tick: 'BANANE', displayName: 'Banane', divisibility: 8, quantity: '20000000000', fiatRate: 0.04 }, // 200 BANANE
             { tick: 'RUSTBITS', displayName: 'Rustbits', divisibility: 8, quantity: '750000000', fiatRate: 2.50 }, // 7.5 RUSTBITS
-            // Indivisible — surfaced in NFTs because they carry imageUrl
+            // Indivisible; surfaced in NFTs because they carry imageUrl
             { tick: 'RAREPEPE', displayName: 'Rare Pepe', divisibility: 0, quantity: '1', fiatRate: 650, imageUrl: DEMO_TOKEN_ICONS.RAREPEPE },
             { tick: 'BITCRYSTAL', displayName: 'Bitcrystals', divisibility: 0, quantity: '1', fiatRate: 220, imageUrl: nftImg('BIT', '#1565C0', '#00838F') },
             { tick: 'XCPCARD', displayName: 'XCP Founders Card', divisibility: 0, quantity: '1', fiatRate: 120, imageUrl: nftImg('XCP', '#1E90C7', '#7B2C8F') },
@@ -88,13 +88,13 @@ const PER_CHAIN_DEFAULTS = /** @type {Record<string, BalanceFixture>} */ ({
             // populated) lives in demoExampleTis.json; holding it lets the
             // demo show a maxed-out token info surface.
             { tick: 'EXAMPLE', displayName: 'Example Token', divisibility: 8, quantity: '10000000000', fiatRate: 0.5, imageUrl: DEMO_TOKEN_ICONS.EXAMPLE }, // 100 EXAMPLE
-            // Divisible tokens — appear in Tokens tab
+            // Divisible tokens; appear in Tokens tab
             { tick: 'XCP', displayName: 'Counterparty', divisibility: 8, quantity: '500000000', fiatRate: 30 },
             // PEPECASH carries an image, so it appears in BOTH Tokens (row) and NFTs (tile)
             { tick: 'PEPECASH', displayName: 'PEPECASH', divisibility: 8, quantity: '10000000000', fiatRate: 0.0008, imageUrl: DEMO_TOKEN_ICONS.PEPECASH },
             { tick: 'USDX', displayName: 'USD Stablecoin (demo)', divisibility: 8, quantity: '25000000000', fiatRate: 1 },
             { tick: 'DEMOCOIN', displayName: 'Demo Coin', divisibility: 8, quantity: '100000000', fiatRate: 0.05 },
-            // Indivisible tokens — also appear in NFTs because they have an imageUrl
+            // Indivisible tokens; also appear in NFTs because they have an imageUrl
             { tick: 'RAREPEPE', displayName: 'Rare Pepe', divisibility: 0, quantity: '1', fiatRate: 500, imageUrl: DEMO_TOKEN_ICONS.RAREPEPE },
             { tick: 'BITCRYSTAL', displayName: 'Bitcrystals', divisibility: 0, quantity: '1', fiatRate: 200, imageUrl: nftImg('BIT', '#1565C0', '#00838F') },
             { tick: 'XCHAINLOGO', displayName: 'XChain Logo NFT', divisibility: 0, quantity: '1', fiatRate: 50, imageUrl: nftImg('XC', '#1E90C7', '#7B2C8F') },
@@ -110,7 +110,7 @@ const PER_CHAIN_DEFAULTS = /** @type {Record<string, BalanceFixture>} */ ({
             { tick: 'LITECRED', displayName: 'LiteCred Stablecoin', divisibility: 8, quantity: '15000000000', fiatRate: 1 }, // 150 LITECRED
             { tick: 'OMNILITE', displayName: 'OmniLite Token', divisibility: 8, quantity: '4200000000', fiatRate: 3.10 }, // 42 OMNILITE
             { tick: 'MWEB', displayName: 'MimbleWimble Token', divisibility: 8, quantity: '2500000000', fiatRate: 6 }, // 25 MWEB
-            // Indivisible — NFTs tab
+            // Indivisible (NFTs tab)
             { tick: 'LITEORD', displayName: 'Lite Ordinal #042', divisibility: 0, quantity: '1', fiatRate: 45, imageUrl: nftImg('LO42', '#0EA5E9', '#1E40AF') },
             { tick: 'MIMBLEPUNK', displayName: 'MimblePunk #7', divisibility: 0, quantity: '1', fiatRate: 95, imageUrl: nftImg('MP7', '#06B6D4', '#0369A1') },
         ],
@@ -122,7 +122,7 @@ const PER_CHAIN_DEFAULTS = /** @type {Record<string, BalanceFixture>} */ ({
             { tick: 'LITECRED', displayName: 'LiteCred Stablecoin (demo)', divisibility: 8, quantity: '50000000000', fiatRate: 1 },
             { tick: 'MWEB', displayName: 'MimbleWimble Token', divisibility: 8, quantity: '7500000000', fiatRate: 5 },
             { tick: 'LTCDOGE', displayName: 'LTC × DOGE Pair', divisibility: 8, quantity: '12500000000', fiatRate: 2 },
-            // Indivisible — NFTs tab (have imageUrl)
+            // Indivisible (NFTs tab, have imageUrl)
             { tick: 'LITEORD', displayName: 'Lite Ordinal #042', divisibility: 0, quantity: '1', fiatRate: 40, imageUrl: nftImg('LO42', '#0EA5E9', '#1E40AF') },
             { tick: 'MIMBLEPUNK', displayName: 'MimblePunk #7', divisibility: 0, quantity: '1', fiatRate: 80, imageUrl: nftImg('MP7', '#06B6D4', '#0369A1') },
         ],
@@ -134,7 +134,7 @@ const PER_CHAIN_DEFAULTS = /** @type {Record<string, BalanceFixture>} */ ({
             { tick: 'DOGI', displayName: 'Dogi Coin', divisibility: 8, quantity: '250000000000', fiatRate: 0.012 }, // 2500 DOGI
             { tick: 'WOW', displayName: 'Wow Such Token', divisibility: 8, quantity: '7500000000', fiatRate: 0.45 }, // 75 WOW
             { tick: 'DSHIB', displayName: 'Doge Shib', divisibility: 8, quantity: '5000000000000', fiatRate: 0.00009 }, // 50,000 DSHIB
-            // Indivisible — NFTs tab
+            // Indivisible (NFTs tab)
             { tick: 'DOGINAL', displayName: 'Doginal #1337', divisibility: 0, quantity: '1', fiatRate: 18, imageUrl: DEMO_TOKEN_ICONS.DOGINAL },
             { tick: 'MEMECARD', displayName: 'Meme Card: To The Moon', divisibility: 0, quantity: '1', fiatRate: 32, imageUrl: nftImg('MOON', '#EAB308', '#92400E') },
         ],
@@ -147,7 +147,7 @@ const PER_CHAIN_DEFAULTS = /** @type {Record<string, BalanceFixture>} */ ({
             { tick: 'WOW', displayName: 'Wow Such Token', divisibility: 8, quantity: '12500000000', fiatRate: 0.5 },
             { tick: 'DSHIB', displayName: 'Doge Shib', divisibility: 8, quantity: '7500000000000', fiatRate: 0.0001 },
             { tick: 'BARK', displayName: 'Bark Stablecoin (demo)', divisibility: 8, quantity: '20000000000', fiatRate: 1 },
-            // Indivisible — NFTs tab (have imageUrl)
+            // Indivisible (NFTs tab, have imageUrl)
             { tick: 'DOGINAL', displayName: 'Doginal #1337', divisibility: 0, quantity: '1', fiatRate: 15, imageUrl: DEMO_TOKEN_ICONS.DOGINAL },
             { tick: 'MEMECARD', displayName: 'Meme Card: To The Moon', divisibility: 0, quantity: '1', fiatRate: 30, imageUrl: nftImg('MOON', '#EAB308', '#92400E') },
         ],
@@ -213,21 +213,21 @@ export function synthesizeDemoHistory(chainId, address, opts = {}) {
     const indivisibleToken = (fixture.tokens || []).find((a) => a.divisibility === 0 && a.imageUrl)
         || (fixture.tokens || []).find((a) => a.divisibility === 0);
 
-    // Rows mirror the real `getAddressHistory` shape — top-level
+    // Rows mirror the real `getAddressHistory` shape: top-level
     // action_index / tx_hash / block_index / source / destination /
-    // tick / tick / amount — so History.jsx accepts them as entries
+    // tick / tick / amount; so History.jsx accepts them as entries
     // (it skips rows without action_index, and summarizeRow / search
     // read flat top-level fields). The `params` nest is preserved so
     // HomeTabs' demo activity list (which reads `r.params.*`) keeps
     // working unchanged.
     const rows = [];
 
-    // Native receive — newest, pending.
+    // Native receive (newest, pending).
     rows.push({
         action_index: 100001,
         tx_hash: `demo-${chainId}-incoming-1`,
         txHash: `demo-${chainId}-incoming-1`,
-        block_index: null, // pending — exercises the timeline pending state
+        block_index: null, // pending; exercises the timeline pending state
         blockIndex: null,
         timestamp: sec(180),
         action: 'SEND',
@@ -245,7 +245,7 @@ export function synthesizeDemoHistory(chainId, address, opts = {}) {
         },
     });
 
-    // Token receive — a friend tipped us some of the first divisible
+    // Token receive: a friend tipped us some of the first divisible
     // token on this chain. Exercises the "non-native receive" row in
     // Activity so the icon swaps to the token's image / tinted letter
     // instead of the chain icon.
@@ -274,7 +274,7 @@ export function synthesizeDemoHistory(chainId, address, opts = {}) {
         });
     }
 
-    // NFT / indivisible receive — someone shipped us a 1-of-1 collectible.
+    // NFT / indivisible receive: someone shipped us a 1-of-1 collectible.
     if (indivisibleToken) {
         rows.push({
             action_index: 100012,
@@ -408,7 +408,7 @@ export function synthesizeDemoHistory(chainId, address, opts = {}) {
             },
         },
         // Two ORDER_MATCH rows referencing the ORDER above (action_index
-        // 100005) via `order_action_index` — grouping collapses these
+        // 100005) via `order_action_index`; grouping collapses these
         // under the ORDER leader card in grouped mode, keeps them as
         // separate rows in flat mode. Gives the user something visible
         // to toggle between.
@@ -462,7 +462,7 @@ export function synthesizeDemoHistory(chainId, address, opts = {}) {
                 backward_quantity: '50000000',
             },
         },
-        // SWEEP — standalone, demonstrates another action type.
+        // SWEEP (standalone, demonstrates another action type).
         {
             action_index: 100009,
             tx_hash: `demo-${chainId}-sweep-1`,
@@ -492,8 +492,8 @@ export function synthesizeDemoHistory(chainId, address, opts = {}) {
 /**
  * Synthesized DeFi action entries for the demo wallet. Each row is a
  * single discrete on-chain DeFi action (a stake, a dispenser creation,
- * a contract deployment / execution) rather than a position snapshot —
- * lets the DeFi tab render as a History-style feed of recent actions.
+ * a contract deployment / execution) rather than a position snapshot.
+ * This lets the DeFi tab render as a History-style feed of recent actions.
  *
  * Stakes are XCHAIN-only because that's what the protocol actually
  * supports; dispensers and contracts can wrap any token. Title /
@@ -525,7 +525,7 @@ export function synthesizeDemoDefiPositions() {
             blockIndex: 12_385, timestamp: ago(60 * 60 * 5), confirms: 43,
             chain: 'BITCOIN', chainId: 'bitcoin-mainnet', tick: 'RUSTBITS',
         },
-        // Litecoin mainnet — stake doesn't exist outside Bitcoin in
+        // Litecoin mainnet: stake doesn't exist outside Bitcoin in
         // the current protocol; only dispensers and contracts on LTC.
         {
             id: 'demo-dispenser-litecred-mainnet',
@@ -535,7 +535,7 @@ export function synthesizeDemoDefiPositions() {
             blockIndex: 4_512_010, timestamp: ago(60 * 60 * 18), confirms: 96,
             chain: 'LITECOIN', chainId: 'litecoin-mainnet', tick: 'LITECRED',
         },
-        // Dogecoin mainnet — stake is Bitcoin-only.
+        // Dogecoin mainnet: stake is Bitcoin-only.
         {
             id: 'demo-dispenser-dogi-mainnet',
             kind: 'dispenser', action: 'DISPENSER', status: 'confirmed',
@@ -571,7 +571,7 @@ export function synthesizeDemoDefiPositions() {
             blockIndex: 12_395, timestamp: ago(60 * 60 * 4), confirms: 27,
             chain: 'BITCOIN', chainId: 'bitcoin-regtest', tick: 'BTC',
         },
-        // Litecoin regtest — stake is Bitcoin-only.
+        // Litecoin regtest: stake is Bitcoin-only.
         {
             id: 'demo-dispenser-litecred',
             kind: 'dispenser', action: 'DISPENSER', status: 'confirmed',
@@ -580,7 +580,7 @@ export function synthesizeDemoDefiPositions() {
             blockIndex: 7_810, timestamp: ago(60 * 60 * 30), confirms: 220,
             chain: 'LITECOIN', chainId: 'litecoin-regtest', tick: 'LITECRED',
         },
-        // Dogecoin regtest — stake is Bitcoin-only.
+        // Dogecoin regtest: stake is Bitcoin-only.
         {
             id: 'demo-dispenser-dogi',
             kind: 'dispenser', action: 'DISPENSER', status: 'confirmed',
@@ -602,7 +602,7 @@ export function synthesizeDemoDefiPositions() {
 
 /**
  * Synthesize the response shape `messaging.getLinksForAddress` returns
- * for a demo wallet — empty for now (cross-chain LINK fabrication is
+ * for a demo wallet (empty for now; cross-chain LINK fabrication is
  * a deeper exercise). Callers' .catch(() => []) path already handles
  * an empty list gracefully; this export exists so the shell can opt
  * out of the live call entirely without faking an SDK error.
@@ -625,15 +625,15 @@ const DEMO_COIN_UNIT_PRICE = { BTC: 0.00002, LTC: 0.004, DOGE: 0.6 };
  * by {@link synthesizeDemoHistory} so the demo wallet shows a populated
  * Marketplace instead of hitting a live explorer it has no backend for.
  *
- * The token is matched against the mainnet balance fixtures — searching
+ * The token is matched against the mainnet balance fixtures; searching
  * any token the demo wallet can hold (e.g. PEPECASH, RAREPEPE, XCP on
  * Bitcoin; OMNILITE, MWEB on Litecoin; DOGI, WOW on Dogecoin) returns
  * activity on that token's home chain. An unrecognized ticker returns
  * empty feeds, exactly as a real explorer would for a token with no
  * market.
  *
- * Each feed entry is already wrapped as `{ chainId, row }` — the shape
- * MarketActivity builds per-chain — so the caller can set state directly.
+ * Each feed entry is already wrapped as `{ chainId, row }`, the shape
+ * MarketActivity builds per-chain, so the caller can set state directly.
  *
  * @param {string} token  ticker the user searched for
  * @param {{ now?: number }} [opts]
@@ -648,7 +648,7 @@ export function synthesizeDemoMarketActivity(token, opts = {}) {
     const sec = (deltaSec) => Math.floor(now / 1000) - deltaSec;
 
     // Locate the mainnet chain whose fixture lists this token. Mainnet
-    // only — that's the network the demo balances (and the chain badge
+    // only; that's the network the demo balances (and the chain badge
     // the user is looking at) are on.
     let chainId = null;
     for (const [cid, fix] of Object.entries(PER_CHAIN_DEFAULTS)) {
@@ -659,7 +659,7 @@ export function synthesizeDemoMarketActivity(token, opts = {}) {
         }
     }
     // Featured / platform tokens (e.g. XCHAIN) and anything the demo wallet
-    // doesn't hold still get a demo market, homed on Bitcoin — so the
+    // doesn't hold still get a demo market, homed on Bitcoin, so the
     // Marketplace landing page is never empty in the demo.
     if (!chainId) {
         chainId = PER_CHAIN_DEFAULTS['bitcoin-mainnet']
@@ -703,14 +703,14 @@ export function synthesizeDemoMarketActivity(token, opts = {}) {
 
 /**
  * Synthesize the message list the §41.7.2 inbox renders for a demo
- * wallet — a couple of conversations against the owner's address, mixing
+ * wallet: a couple of conversations against the owner's address, mixing
  * incoming/outgoing ECIES (decrypted) messages plus one ECDH message that
  * stays encrypted (exercises the 🔒 placeholder path). Mirrors the demo
  * pattern used elsewhere so the inbox shows something instead of being
  * empty (the demo wallet has no on-chain message history to decrypt).
  *
- * Each row matches `getMessagingInbox`'s message shape — from / to /
- * timestamp / method / text / txid — so the inbox's conversation grouping
+ * Each row matches `getMessagingInbox`'s message shape (from / to /
+ * timestamp / method / text / txid), so the inbox's conversation grouping
  * and thread view accept them unchanged.
  *
  * @param {string} ownerAddress  the address whose inbox is being read
@@ -722,7 +722,7 @@ export function synthesizeDemoMessages(ownerAddress, opts = {}) {
     const now = typeof opts.now === 'number' ? opts.now : Date.now();
     const sec = (deltaSec) => Math.floor(now / 1000) - deltaSec;
 
-    // Illustrative counterparty addresses — AddressText truncates them in
+    // Illustrative counterparty addresses; AddressText truncates them in
     // the UI, so the exact value only needs to be stable + distinct.
     const alice = 'demo1alicexchaincounterpartyaddr00000000001';
     const bob = 'demo1bobxchaincounterpartyaddr000000000002';
@@ -738,16 +738,16 @@ export function synthesizeDemoMessages(ownerAddress, opts = {}) {
     });
 
     return [
-        // Conversation with Alice — most recent, ECIES (decrypts to text).
+        // Conversation with Alice (most recent, ECIES, decrypts to text).
         mk(alice, ownerAddress, 600, 1, 'Hey! Did you get the tokens I sent over?'),
-        mk(ownerAddress, alice, 540, 1, 'Yes, just received them — thank you!'),
+        mk(ownerAddress, alice, 540, 1, 'Yes, just received them. Thank you!'),
         mk(alice, ownerAddress, 480, 1, 'Perfect. Ping me if you want to swap some on the DEX.'),
 
-        // Conversation with Bob — one in, one out, ECIES.
-        mk(bob, ownerAddress, 7_200, 1, 'gm — are you joining the XChain call later?'),
+        // Conversation with Bob (one in, one out, ECIES).
+        mk(bob, ownerAddress, 7_200, 1, 'gm, are you joining the XChain call later?'),
         mk(ownerAddress, bob, 7_000, 1, 'gm! yeah, I will be there.'),
 
-        // An ECDH message we cannot decrypt without a session key — shows
+        // An ECDH message we cannot decrypt without a session key; shows
         // the encrypted placeholder rather than text.
         mk(bob, ownerAddress, 3_600, 2, null),
     ];

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §13 / G015 — root `docs/REPRODUCIBLE_BUILDS.md`.
+// Smoke for §13 / G015: root `docs/REPRODUCIBLE_BUILDS.md`.
 //
 // The desktop shell already ships a deep `packages/desktop/REPRODUCIBLE_BUILDS.md`
 // (covered by the desktop-packaging smoke). This smoke pins the new
@@ -85,4 +85,4 @@ assert.ok(/export const REPRODUCIBLE_BUILD_DOC = 'docs\/REPRODUCIBLE_BUILDS\.md'
 assert.ok(/export const REPRODUCIBLE_BUILD_DOC_DESKTOP = 'packages\/desktop\/REPRODUCIBLE_BUILDS\.md'/.test(buildInfoSrc),
     'buildInfo exposes REPRODUCIBLE_BUILD_DOC_DESKTOP for the deeper recipe');
 
-console.log('OK — root REPRODUCIBLE_BUILDS.md doc + buildInfo flip smoke');
+console.log('OK: root REPRODUCIBLE_BUILDS.md doc + buildInfo flip smoke');

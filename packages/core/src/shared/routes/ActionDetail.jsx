@@ -35,7 +35,7 @@ export function ActionDetail({ entry, walletId, chainTip, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
 
-    // Local peer cache — fetched once on mount when the entry is one
+    // Local peer cache: fetched once on mount when the entry is one
     // side of a cross-chain LINK pair. DetailCard handles loading +
     // error rendering off the same shape History uses for its inline
     // expansion.

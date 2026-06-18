@@ -16,8 +16,8 @@ import styles from './LayoutModeToggle.module.css';
  * Settings tile in the pancake drawer that lets the user pick how
  * clicking the extension toolbar icon opens the wallet:
  *
- *   POPUP    — classic 360×600 popup hovering under the toolbar icon
- *   SIDEBAR  — Chrome MV3 side panel, persistent on the right edge
+ *   POPUP   - classic 360×600 popup hovering under the toolbar icon
+ *   SIDEBAR - Chrome MV3 side panel, persistent on the right edge
  *              while browsing dApps
  *
  * This tile only renders inside the actual Chrome extension (it

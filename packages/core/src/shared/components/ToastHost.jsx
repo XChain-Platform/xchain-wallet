@@ -15,16 +15,16 @@ import { useHaptic } from '../hooks/useHaptic.js';
 // §37.2 toast foundation. A single shared host renders an action queue
 // at the bottom of the screen; any route can drop a toast via the
 // `useToast()` hook. Toasts auto-dismiss after `durationMs` (default
-// 8 s per spec) unless the user clicks the optional action button —
-// typically Undo, but the API is generic enough to also surface "Open
-// site" or "Retry" as later integrations land.
+// 8 s per spec) unless the user clicks the optional action button
+// (typically Undo, but the API is generic enough to also surface "Open
+// site" or "Retry" as later integrations land).
 //
 // The host is a context provider so the queue lives above route
 // re-renders: a toast survives navigation back to Home from the form
 // that triggered it (the user might dismiss the source surface and we
 // still owe them the Undo affordance).
 //
-// Cluster D FOLLOWUP 4 — at most `VISIBLE_LIMIT` toasts render at once.
+// Cluster D FOLLOWUP 4: at most `VISIBLE_LIMIT` toasts render at once.
 // Older entries stay in the queue with their auto-dismiss timers
 // running; as those fire and the queue shrinks, hidden toasts surface
 // in arrival order. This keeps the bottom-right column from growing
@@ -81,7 +81,7 @@ export function ToastHost({ children }) {
         const duration = Number.isFinite(input.durationMs) ? Math.max(0, input.durationMs) : 8000;
         const record = { ...input, id, durationMs: duration };
         setToasts((prev) => [...prev, record]);
-        // §37.3 — fire a haptic pulse keyed to the toast variant. The
+        // §37.3: fire a haptic pulse keyed to the toast variant. The
         // hook silently no-ops on non-vibration hosts and on
         // prefers-reduced-motion, so this is safe everywhere.
         if (record.variant === 'error') haptic.error();
@@ -140,7 +140,7 @@ export function ToastHost({ children }) {
                         onAction={() => {
                             if (typeof t.onAction === 'function') {
                                 Promise.resolve(t.onAction()).catch(() => {
-                                    /* swallow — caller surfaces its own error */
+                                    /* swallow; caller surfaces its own error */
                                 });
                             }
                             dismissToast(t.id);
@@ -187,7 +187,7 @@ function ToastItem({ toast, onAction, onDismiss }) {
 /**
  * Hook for routes / components that want to surface a toast. Falls back
  * to a no-op API when used outside `<ToastHost>` so a stray test
- * doesn't crash on a missing provider — production callers always sit
+ * doesn't crash on a missing provider; production callers always sit
  * inside the host.
  */
 export function useToast() {

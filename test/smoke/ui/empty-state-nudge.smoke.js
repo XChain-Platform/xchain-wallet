@@ -8,10 +8,10 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §27.7 / §28 / G077 — EmptyStateNudge component + integration
+// Smoke for §27.7 / §28 / G077: EmptyStateNudge component + integration
 // into BalanceList, History, and AddressList.
 //
-// (Cluster I FOLLOWUP 7 closed at v0.287.0 retired UnifiedBalanceList —
+// (Cluster I FOLLOWUP 7 closed at v0.287.0 retired UnifiedBalanceList;
 //  it had been an orphaned variant since the BalanceList consolidation;
 //  the previous "UnifiedBalanceList parity" assertions are gone.)
 //
@@ -93,7 +93,7 @@ assert.ok(
 );
 assert.ok(
     /onReceive=\{networkFilter === 'all' \? onReceive : undefined\}/.test(homeTabsSrc),
-    'HomeTabs only forwards onReceive when the filter is "all" — network-filtered empty states avoid the misleading CTA',
+    'HomeTabs only forwards onReceive when the filter is "all"; network-filtered empty states avoid the misleading CTA',
 );
 
 // --- 4. Home.jsx threads onReceive into HomeTabs --------------------------

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §27.6 / G071 — Token detail page + clickable BalanceRow
+// Smoke for §27.6 / G071: Token detail page + clickable BalanceRow
 // integration + web/extension App.jsx wiring + History initialSearchQuery.
 
 import { strict as assert } from 'node:assert';
@@ -41,7 +41,7 @@ for (const prop of ['walletId', 'chainId', 'tick', 'kind', 'displayName', 'divis
 }
 
 // Holders panel uses the existing messaging.getHoldersForToken endpoint
-// — no new host method required.
+//: no new host method required.
 assert.ok(
     /messaging\.getHoldersForToken\b/.test(td),
     'TokenDetail uses messaging.getHoldersForToken for the holders panel',
@@ -74,7 +74,7 @@ assert.ok(/\.rowClickable\b/.test(blCss),
     'BalanceList CSS has the .rowClickable variant');
 
 // (UnifiedBalanceList parity used to be section 3 here. Cluster I
-//  FOLLOWUP 7 retired UnifiedBalanceList at v0.287.0 — it had been
+//  FOLLOWUP 7 retired UnifiedBalanceList at v0.287.0: it had been
 //  orphaned since the BalanceList consolidation, with no caller mounting
 //  it in any shell. The previous parity assertions are gone.)
 

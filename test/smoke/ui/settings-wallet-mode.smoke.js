@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §20 / G039 — Wallet Mode panel (Step 1 of 3).
+// Smoke for §20 / G039: Wallet Mode panel (Step 1 of 3).
 //
 // Pins:
 //   - schemas/settings.js exports WALLET_MODES + WALLET_MODE_DEFAULT, the

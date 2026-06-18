@@ -8,18 +8,18 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// assetInfo — read-only wrapper over `sdk.getToken`. Backs the §27.6
+// assetInfo: read-only wrapper over `sdk.getToken`. Backs the §27.6
 // token detail richer metadata (description, creator, supply, lock
 // status, market price), the §27.5 collectibles image URL extraction,
-// and the §27.6 Token Information Standard (TIS) gallery — images,
-// audio, video, website, social links, files — when the token's
+// and the §27.6 Token Information Standard (TIS) gallery (images,
+// audio, video, website, social links, files) when the token's
 // description is a URL pointing at a TIS JSON document.
 //
 // xchain-explorer's `/api/token/{TICK}` returns a richly nested
 // payload (info / supply / locks / market / mints / callback / lists)
 // with the original column names. This wrapper normalizes it down to
 // the stable surface the wallet's UI needs without leaking the inner
-// shape across host boundaries — that way a future explorer schema
+// shape across host boundaries; that way a future explorer schema
 // addition (e.g. exposing `decimals` once xchain-explorer drops the
 // strip) doesn't require renderer-side changes to consume.
 //
@@ -27,7 +27,7 @@
 // the wallet fetches the JSON document and merges TIS v1.0.0 fields
 // (or legacy CoinDaddy fields converted via `legacyJsonToTis`) onto
 // the normalized TokenInfo. Raw `html` content from the TIS document
-// is explicitly dropped — the wallet popup holds keys, so we don't
+// is explicitly dropped; the wallet popup holds keys, so we don't
 // render author-supplied HTML even sandboxed.
 
 // Fully-populated reference TIS document for the demo EXAMPLE token.
@@ -86,7 +86,7 @@ import exampleTis from './demoExampleTis.json' with { type: 'json' };
  * @typedef {Object} TokenInfo
  * @property {string} chainId
  * @property {string} tick                               ticker (uppercase canonical)
- * @property {string | null} name                        TIS document `name` field — the artwork / display title; distinct from the ticker
+ * @property {string | null} name                        TIS document `name` field: the artwork / display title; distinct from the ticker
  * @property {string | null} description                 free-form description text (TIS body if present, else on-chain)
  * @property {string | null} creator                     issuer address
  * @property {string | null} totalSupply                 formatted decimal string ("1000.5")
@@ -105,7 +105,7 @@ import exampleTis from './demoExampleTis.json' with { type: 'json' };
  * @property {string[]} websites                         all website URLs published with the token (primary + alternates), in declaration order
  * @property {TisSocialEntry[]} socials                  social links (twitter / github / reddit / …)
  * @property {TisFileEntry[]} files                      arbitrary file attachments
- * @property {string | null} category                    primary (`main`-type) category — kept for backwards compatibility with the smoke pin
+ * @property {string | null} category                    primary (`main`-type) category; kept for backwards compatibility with the smoke pin
  * @property {TisCategory[]} categories                  full category list (main + sub + other)
  * @property {TisOwner | null} owner                     TIS owner identity (display name / title / organization). Distinct from `creator`, which is the on-chain issuer address.
  * @property {TisContact[]} contacts                     contact info: email / phone / fax / URL / postal address rows
@@ -192,7 +192,7 @@ export function descriptionJsonUrl(description) {
     if (semi > 0 && /^https?:\/\//i.test(t)) {
         t = t.slice(0, semi).trim();
     }
-    // Arweave gateway "/x.json" suffix trick — drop it; the gateway 404s.
+    // Arweave gateway "/x.json" suffix trick: drop it; the gateway 404s.
     t = t.replace(/^(https?:\/\/arweave\.net\/[^\/?#]+)\/x\.json$/i, '$1');
     if (/^ipfs:\/\//i.test(t)) {
         return 'https://ipfs.io/ipfs/' + t.slice('ipfs://'.length);
@@ -202,7 +202,7 @@ export function descriptionJsonUrl(description) {
     }
     if (/^https?:\/\/arweave\.net\//i.test(t)) return t;
     if (/^https?:\/\//i.test(t) && /\.json(?:[?#]|$)/i.test(t)) return t;
-    // Bare "host/path.json" — promote to https.
+    // Bare "host/path.json": promote to https.
     if (/^[^\s/]+\.[^\s/]+\/.+\.json(?:[?#]|$)/i.test(t)) {
         return 'https://' + t;
     }
@@ -339,7 +339,7 @@ function classifyByExtension(url) {
 function tisEntryToMedia(entry) {
     if (!entry) return null;
     const data = typeof entry === 'string' ? entry : entry.data;
-    // On-chain media reference — "action:<index>" of a FILE action,
+    // On-chain media reference: "action:<index>" of a FILE action,
     // preferred over `data` when both are present (TIS File Entry
     // Fields). Carried as `dataRef`; tokenInfoFor resolves it to the
     // configured explorer's raw FILE URL.
@@ -588,14 +588,14 @@ export function normalizeTokenInfo(chainId, tick, raw, tisBundle = null) {
     const marketFloor = isFiniteNum(row?.market?.floor) ? row.market.floor : null;
     // Divisibility lives at the top of the indexer row (or, in legacy
     // exports, as `decimals`). Real xchain-explorer currently strips
-    // this field — `bcformat` runs server-side so supply values come
+    // this field; `bcformat` runs server-side so supply values come
     // back pre-formatted. We surface whatever's present so dev / future
     // explorer-exposure consumers can read a single field.
     const divisibilityRaw = row?.divisibility ?? row?.decimals ?? null;
     const divisibility = (divisibilityRaw != null && Number.isFinite(Number(divisibilityRaw)))
         ? Number(divisibilityRaw)
         : null;
-    // Project registry memberships (explorer getToken `projects[]`) — each
+    // Project registry memberships (explorer getToken `projects[]`): each
     // entry names a project tick whose CURRENT roster includes this token.
     // Backs the "Official" banner; the registry's display policy is
     // "just show it" (Project_Registry.md), so no extra filtering here.
@@ -673,7 +673,7 @@ function isFiniteNum(v) {
  * Fetch a token's TIS document (or legacy CoinDaddy JSON) and convert it
  * into the wallet's media bundle. Returns null when the description
  * isn't a URL, the fetch fails, the response isn't JSON, or the document
- * is empty. Never raises — the renderer falls back to the on-chain
+ * is empty. Never raises; the renderer falls back to the on-chain
  * description string when this returns null.
  *
  * @param {object} args
@@ -696,16 +696,16 @@ export async function fetchTisBundle({ description, fetch: fetchImpl, signal }) 
 }
 
 // On-chain TIS document pointer: DESCRIPTION = "action:<index>" (same
-// chain) or "action:<COIN>:<index>" (sibling chain — base ticker, network
+// chain) or "action:<COIN>:<index>" (sibling chain, base ticker, network
 // tier implied by the token's network) naming a FILE action whose raw
-// bytes are the TIS JSON (Token_Information_Standard.md — On-Chain
+// bytes are the TIS JSON (Token_Information_Standard.md, On-Chain
 // Format). Same syntax as a file entry's `data_ref`, one level up.
 // Match groups: [1] = optional base coin, [2] = action index.
 export const TIS_ACTION_REF_RE = /^action:(?:(BTC|LTC|DOGE):)?([0-9]+)$/i;
 
 /**
  * Fetch + parse an on-chain TIS document via the explorer's raw FILE
- * endpoint. Never raises — resolves null on any miss so the renderer
+ * endpoint. Never raises; resolves null on any miss so the renderer
  * falls back to the plain description string.
  *
  * @param {object} args
@@ -717,7 +717,7 @@ export const TIS_ACTION_REF_RE = /^action:(?:(BTC|LTC|DOGE):)?([0-9]+)$/i;
 export async function fetchOnChainTisBundle({ sdk, actionIndex, coin = null }) {
     if (typeof sdk?.getGatedFileRaw !== 'function') return null;
     try {
-        // The raw endpoint serves non-gated FILE bytes too — for a JSON
+        // The raw endpoint serves non-gated FILE bytes too; for a JSON
         // document those bytes ARE the TIS text.
         const bytes = await sdk.getGatedFileRaw(String(actionIndex), coin);
         if (!bytes || !bytes.length) return null;
@@ -787,7 +787,7 @@ export async function tokenInfoFor({
     // When the SDK returned nothing (typical of the demo wallet whose
     // stub SDK has no real indexer behind it), fall back to a synthetic
     // row from the demo set. The fallback row's description is treated
-    // EXACTLY like a real on-chain description for the next step —
+    // EXACTLY like a real on-chain description for the next step;
     // demos can therefore point at a real TIS JSON URL and the wallet
     // will fetch + parse it to exercise the live rendering path.
     const haveRealRow = raw && (Array.isArray(raw) ? raw.length > 0 : true);
@@ -804,7 +804,7 @@ export async function tokenInfoFor({
         const resolvedFetch = fetchImpl
             || (typeof fetch === 'function' ? fetch : null);
         if (actionRef) {
-            // On-chain TIS document — resolve through the same explorer
+            // On-chain TIS document; resolve through the same explorer
             // the token row came from (no external fetch).
             tisBundle = await fetchOnChainTisBundle({ sdk, actionIndex: actionRef[2], coin: actionRef[1] || null });
         } else if (description && resolvedFetch) {
@@ -857,7 +857,7 @@ function demoRowFor(tick) {
     };
 }
 
-// Hand-rolled demo TIS documents — keyed by ticker, mirror the TIS v1.0.0
+// Hand-rolled demo TIS documents, keyed by ticker; mirrors the TIS v1.0.0
 // shape so they flow through `tisToMediaBundle` unchanged. URLs point at
 // publicly hosted, freely-redistributable media so an offline demo can
 // still showcase the gallery in a connected browser.
@@ -928,12 +928,12 @@ const DEMO_TIS_BY_TICK = {
         },
     },
     RAREPEPE: {
-        description: 'A classic Rare Pepe card from the Counterparty era — one of the original on-chain NFTs.',
+        description: 'A classic Rare Pepe card from the Counterparty era, one of the original on-chain NFTs.',
         owner: '1RarePepe2WalletDemoBitcoinAddressXyz',
         supply: { current: '300', max: '300' },
         locks: { description: true, max_supply: true, mint: true, mint_supply: true },
         tis: {
-            description: 'A classic Rare Pepe card from the Counterparty era — one of the original on-chain NFTs.',
+            description: 'A classic Rare Pepe card from the Counterparty era, one of the original on-chain NFTs.',
             images: [
                 { type: 'icon', data: 'https://rarepepedirectory.com/pepe/PEPECASH.png' },
                 { type: 'standard', data: 'https://rarepepedirectory.com/pepe/NAKAMOTOCARD.png' },
@@ -976,13 +976,13 @@ const DEMO_TIS_BY_TICK = {
         },
     },
     XCP: {
-        description: 'Counterparty (XCP) — the original Bitcoin-based token protocol whose conventions XChain extends.',
+        description: 'Counterparty (XCP): the original Bitcoin-based token protocol whose conventions XChain extends.',
         owner: null,
         supply: { current: '2649755.68', max: '2649755.68' },
         locks: { description: true, max_supply: true, mint: true, mint_supply: true },
         market: { price: 0.0001, floor: 0.00009 },
         tis: {
-            description: 'Counterparty (XCP) — the original Bitcoin-based token protocol whose conventions XChain extends.',
+            description: 'Counterparty (XCP): the original Bitcoin-based token protocol whose conventions XChain extends.',
             images: [
                 { type: 'icon', data: 'https://counterparty.io/static/images/counterparty-logo.png' },
             ],
@@ -995,13 +995,13 @@ const DEMO_TIS_BY_TICK = {
         },
     },
     PEPECASH: {
-        description: 'PEPECASH — the currency of the Rare Pepe ecosystem.',
+        description: 'PEPECASH, the currency of the Rare Pepe ecosystem.',
         owner: null,
         supply: { current: '700000000', max: '1000000000' },
         locks: { description: true, max_supply: true, mint: false, mint_supply: false },
         market: { price: 0.0000012, floor: 0.0000010 },
         tis: {
-            description: 'PEPECASH — the currency of the Rare Pepe ecosystem.',
+            description: 'PEPECASH, the currency of the Rare Pepe ecosystem.',
             images: [
                 { type: 'icon', data: 'https://rarepepedirectory.com/pepe/PEPECASH.png' },
             ],
@@ -1013,12 +1013,12 @@ const DEMO_TIS_BY_TICK = {
         },
     },
     DOGINAL: {
-        description: 'A Doginal — Dogecoin-inscribed digital collectible.',
+        description: 'A Doginal, a Dogecoin-inscribed digital collectible.',
         owner: null,
         supply: { current: '1', max: '1' },
         locks: { description: true, max_supply: true, mint: true, mint_supply: true },
         tis: {
-            description: 'A Doginal — Dogecoin-inscribed digital collectible.',
+            description: 'A Doginal, a Dogecoin-inscribed digital collectible.',
             images: [
                 { type: 'icon', data: 'https://upload.wikimedia.org/wikipedia/en/d/d0/Dogecoin_Logo.png' },
             ],

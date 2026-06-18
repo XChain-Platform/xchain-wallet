@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// broadcastQueries — thin read-only wrapper over `sdk.getBroadcasts`.
+// broadcastQueries: thin read-only wrapper over `sdk.getBroadcasts`.
 // Backs the §42.7.5 Operator dashboard's "Publishing activity" section
 // (Tier 2/3 oracle publishers issue PRICE-style BROADCASTs and the
 // dashboard surfaces them as the operator's recent feed updates).

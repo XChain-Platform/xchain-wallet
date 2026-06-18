@@ -23,11 +23,11 @@ const LICENSE_VERSION_KEY = 'xc:licenseAcceptedVersion';
 const LICENSE_SUMMARY = [
     { text: `By using ${branding.PRODUCT_NAME} you agree to the ${LICENSE_NAME}.` },
     {
-        text: 'The wallet is provided as-is — there are no warranties of any kind, and no remedy if you lose your seed phrase, passphrase, or hardware wallet. Cryptocurrency is irreversible. Anything you send is gone the moment a miner includes it in a block.',
+        text: 'The wallet is provided as-is, with no warranties of any kind and no remedy if you lose your seed phrase, passphrase, or hardware wallet. Cryptocurrency is irreversible. Anything you send is gone the moment a miner includes it in a block.',
         critical: true,
     },
     {
-        text: 'Your seed phrase never leaves this device. It is not uploaded, not transmitted, and not stored on any server. The team behind this software has no copy of it and no way to retrieve it. Backing it up is entirely your responsibility — write it down, store it somewhere safe, and never share it. If you lose this device AND your written copy, the keys are gone forever. Customer support cannot recover them. Nobody can.',
+        text: 'Your seed phrase never leaves this device. It is not uploaded, not transmitted, and not stored on any server. The team behind this software has no copy of it and no way to retrieve it. Backing it up is entirely your responsibility: write it down, store it somewhere safe, and never share it. If you lose this device AND your written copy, the keys are gone forever. Customer support cannot recover them. Nobody can.',
         critical: true,
     },
     { text: 'You are solely responsible for your private keys, your transactions, and any tax or legal consequences thereof. The wallet does not withhold or report taxes. You are the bank.' },
@@ -61,12 +61,12 @@ function markAccepted() {
 }
 
 /**
- * Welcome screen — the entry point for users with no wallet yet.
+ * Welcome screen: entry point for users with no wallet yet.
  * Dispatches to `CreateWallet`, `ImportWallet`, or (§40.13) the
  * FreeWallet-branded `ImportWallet` variant via the parent App's
  * onboarding sub-route state.
  *
- * §25.2 / G058 — also exposes a "Try in demo mode" button that creates a
+ * §25.2 / G058: also exposes a "Try in demo mode" button that creates a
  * throwaway BIP39 wallet with a random password (cached in session) and
  * routes the user straight into the unlocked Home view via `onDemoEntered`.
  *
@@ -83,7 +83,7 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onDemoE
     const isFull = variant === 'full';
     const [demoBusy, setDemoBusy] = useState(false);
     const [demoError, setDemoError] = useState(/** @type {string | null} */ (null));
-    // §25.1 / G061 — license-acceptance gate. Persisted to localStorage so
+    // §25.1 / G061: license-acceptance gate. Persisted to localStorage so
     // a returning user (e.g. after wiping a demo wallet) doesn't have to
     // re-accept. Cluster J FOLLOWUP 4: a `LICENSE_VERSION` constant tracks
     // the binding terms; if the stored version doesn't match the current
@@ -137,14 +137,14 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onDemoE
             ).join('');
             passwordBytes.fill(0);
             const mnemonic = cryptoLib.generateBip39Mnemonic(128);
-            // Cluster J FOLLOWUP 7 — demo wallets register chains on
+            // Cluster J FOLLOWUP 7: demo wallets register chains on
             // mainnet, testnet, AND regtest so the user can flip the
             // activeNetwork setting and see populated views on each.
             // No real fetches happen: Home / History both short-circuit
             // through synthesizeDemoBalances / synthesizeDemoHistory
             // when isDemoWallet returns true. If a future fetch path
             // forgets the demo guard it could leak the demo wallet's
-            // addresses to real endpoints — keep the guards.
+            // addresses to real endpoints; keep the guards.
             // `activeNetwork: 'regtest'` keeps the initial landing
             // experience the same as before; the user toggles in
             // Settings to see mainnet / testnet.

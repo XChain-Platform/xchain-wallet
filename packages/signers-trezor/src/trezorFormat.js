@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Trezor Connect envelope builder — pure data transform from the
+// Trezor Connect envelope builder: pure data transform from the
 // SDK's normalized PSBT decomposition (§17.3 / §18.1) into the
 // `signTransaction` arguments `@trezor/connect(-web)` expects. Keeps
 // all Trezor-specific knowledge (coin-name mapping, SPEND/PAYTO
@@ -16,7 +16,7 @@
 // shape) in one file so the signer class itself stays narrow.
 //
 // The wallet's Signer interface carries signingPaths alongside the
-// PSBT — each entry is `{ inputIndex, path, sighashType? }`. This
+// PSBT; each entry is `{ inputIndex, path, sighashType? }`. This
 // converter pairs paths with decomposed inputs by index.
 
 /**
@@ -150,7 +150,7 @@ const CHAIN_ID_TO_TREZOR_COIN = {
 /**
  * Map an XChain chainId to Trezor's coin short name. Shared between
  * the signer class (for `signMessage`) and format converter (for
- * `signTransaction`). Unsupported chains throw — there is no safe
+ * `signTransaction`). Unsupported chains throw because there is no safe
  * default for a signer.
  *
  * @param {string} chainId

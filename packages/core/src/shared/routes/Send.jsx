@@ -74,7 +74,7 @@ const chainRegistry = registryLib.defaultRegistry();
 // 'dogecoin'); the user-facing native ticker is the short symbol the SDK
 // emits as `b.native.tick` (BTC / LTC / DOGE). Uppercasing descriptor.coin
 // directly compares against the wrong string ('BITCOIN' !== 'BTC') and
-// breaks every "is this the native asset?" check downstream — most
+// breaks every "is this the native asset?" check downstream (most
 // visibly the SelectedTokenHero, which falls through to the letter-badge
 // + chain-overlay branch meant for tokens.
 const NATIVE_TICKER_BY_COIN = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
@@ -84,7 +84,7 @@ function nativeTickerFor(descriptor) {
 }
 
 /**
- * Send view — §29 authoring surface for the SEND action.
+ * Send view (§29): authoring surface for the SEND action.
  *
  * Flow:
  *   form      -> review    -> submitting -> done | error
@@ -98,7 +98,7 @@ function nativeTickerFor(descriptor) {
  *
  * The dev-SDK stub cannot encode / sign / broadcast; Send will surface
  * that error when the user hits Submit. Form + review paths still
- * exercise cleanly — good for UX review before real SDK lands.
+ * exercise cleanly; good for UX review before real SDK lands.
  */
 
 /**
@@ -106,7 +106,7 @@ function nativeTickerFor(descriptor) {
  * @param {string} props.walletId
  * @param {() => void} props.onBack
  * @param {{ address?: string, amount?: string, tick?: string, chainId?: string, memo?: string, feePriority?: 'low' | 'normal' | 'fast' }} [props.prefill]
- *        §47 Cluster L FOLLOWUP 1 — initial form values from a deep-link
+ *        §47 Cluster L FOLLOWUP 1: initial form values from a deep-link
  *        intent (parseXchainUri). Each field is applied once on mount;
  *        the user can override before submitting. Address comes from
  *        the URI path / `to=` param; chainId from the URI path or the
@@ -155,11 +155,11 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
-    // §37 / G125 — form-draft persistence. Persists only the user-visible
+    // §37 / G125: form-draft persistence. Persists only the user-visible
     // composition fields; password / mnemonic / passphrase NEVER touch
     // localStorage. The hook is keyed by walletId so a from-seed restore
     // doesn't surface a stranger's draft.
-    // Cluster P FOLLOWUP 6 — honor the user's privacy.formDraftTtlMs
+    // Cluster P FOLLOWUP 6: honor the user's privacy.formDraftTtlMs
     // setting (Off / 1h / 24h / 7d). Default 24h matches the prior
     // hardcoded behavior. `0` (Off) disables save() + evicts any
     // existing draft on load.
@@ -200,7 +200,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                     );
                     return;
                 }
-                // §47 Cluster L FOLLOWUP 1 — preserve a prefilled chainId
+                // §47 Cluster L FOLLOWUP 1: preserve a prefilled chainId
                 // if the route opened from a deep-link intent. Falls back
                 // to the first available chain when no prefill exists.
                 setChainId((prev) => prev || firstChain);
@@ -226,14 +226,14 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
             const rows = await messaging.listContacts();
             setContacts(Array.isArray(rows) ? rows : []);
         } catch {
-            /* silent — autocomplete just shows fewer hits */
+            /* silent; autocomplete just shows fewer hits */
         }
     }, [messaging]);
     useEffect(() => {
         let cancelled = false;
         messaging.listContacts()
             .then((rows) => { if (!cancelled) setContacts(Array.isArray(rows) ? rows : []); })
-            .catch(() => { /* silent — autocomplete just shows fewer hits */ });
+            .catch(() => { /* silent; autocomplete just shows fewer hits */ });
         return () => { cancelled = true; };
     }, [messaging]);
 
@@ -279,7 +279,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
         });
     }, [contacts, chainId, historyRows]);
 
-    // Contact rows that have an entry on the current chain — the
+    // Contact rows that have an entry on the current chain: the
     // picker and resolved-name chip both filter against this set.
     const chainCoinFor = useCallback((cid) => {
         const d = cid ? chainRegistry.get(cid) : null;
@@ -345,7 +345,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
         }
     }, [messaging, refreshContacts, saveContactName, toAddress, chainId, chainCoinFor]);
 
-    // §29.5 smart paste — BIP21 URI pre-fills amount/token/memo;
+    // §29.5 smart paste: BIP21 URI pre-fills amount/token/memo;
     // pasting a WIF surfaces "import this private key instead?" rather
     // than letting the user paste a private key into the To field.
     // Also runs §21.5 paste-integrity: hashes the pasted text, then
@@ -389,7 +389,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                 'That looks like a private key, not an address. Use Settings → Import private key to import it.',
             );
         } else {
-            // raw address / unknown — let the default paste happen.
+            // raw address / unknown; let the default paste happen.
             setPasteHint(null);
         }
         setPasteWarning(null);
@@ -397,11 +397,11 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
         // navigator.clipboard.readText is async and permission-gated;
         // skipped + ok results are silent.
         Promise.resolve().then(() => checkPasteIntegrity({ pastedText: text }))
-            .then((res) => { if (!res.ok) setPasteWarning(res.reason || 'Clipboard altered after paste — verify the address before sending.'); })
+            .then((res) => { if (!res.ok) setPasteWarning(res.reason || 'Clipboard altered after paste; verify the address before sending.'); })
             .catch(() => { /* silent */ });
     }, [chainId]);
 
-    // §21.4 test-send protection. Session-scoped acknowledgement set —
+    // §21.4 test-send protection. Session-scoped acknowledgement set;
     // marking an address tested suppresses the gate for the rest of
     // the session. Persistence across reloads is intentionally out of
     // scope (avoids a wallet-schema migration just to track a UX
@@ -437,7 +437,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
     // §21.4 test-send gate. Active when:
     //   - threshold > 0 (Settings → Safety → Test-send warning)
     //   - the send is a native-coin send (tick matches descriptor.coin
-    //     uppercased — the threshold is denominated in sats and only
+    //     uppercased; the threshold is denominated in sats and only
     //     translates cleanly for native sends; tick/token threshold is
     //     a future fiat-aware affordance)
     //   - amountSats exceeds the threshold
@@ -501,13 +501,13 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
     // the coin amount via fiatToCoin so the rest of the form (fee
     // estimate, simulator, Max guards) stays correct.
     //
-    // Commas are formatting only — strip them before storing, then
+    // Commas are formatting only; strip them before storing, then
     // restore the cursor by mapping its position from "non-comma chars
     // to the left" so typing across a thousands boundary doesn't fling
     // the caret around.
     const onAmountFieldChange = useCallback((rawValue, cursorPos) => {
         const stripped = String(rawValue).replace(/,/g, '');
-        // Reject anything that isn't a valid partial decimal — keeps
+        // Reject anything that isn't a valid partial decimal; keeps
         // the field from accepting "1.2.3" or random chars while still
         // allowing in-progress entries like "" / "." / "1.".
         if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
@@ -624,7 +624,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
     // §21.2 balance-change preview. Fetched on entering review against
     // the source address; the result feeds `decoder.simulateAction` and
     // renders inside `<BalanceChanges>` between the headline and details.
-    // Fetch failure is non-blocking — the section renders muted with a
+    // Fetch failure is non-blocking; the section renders muted with a
     // "(preview unavailable)" line and the user can still sign.
     const [previewBalances, setPreviewBalances] = useState(
         /** @type {{ loading: boolean, error: string | null, sdkShape: any | null }} */
@@ -633,7 +633,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
     useEffect(() => {
         // Fetch on review (for the simulator) AND on form (so Max + the
         // "Available: X" hint know what's spendable). Form-stage fetches
-        // are non-blocking — failure leaves Max disabled, the hint hidden.
+        // are non-blocking; failure leaves Max disabled, the hint hidden.
         if (stage !== 'review' && stage !== 'form') return undefined;
         if (!chainId || !fromAddress) return undefined;
         let cancelled = false;
@@ -672,7 +672,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
         prefill?.feePriority && ['low', 'normal', 'fast'].includes(prefill.feePriority),
     ));
 
-    // Step 5 of §44 — initial mode + custom rate seeded from
+    // Step 5 of §44: initial mode + custom rate seeded from
     // settings.fees[chainId]. Persisted preference flows from the §35
     // Fees panel's Strategy picker; user can still flip per-tx via the
     // FeeSelector without touching the saved default. Re-seeds when
@@ -680,7 +680,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
     useEffect(() => {
         if (!chainId || !settings?.fees) return;
         // Skip the very first run when a scanned URI carried a feePriority
-        // hint — that pick already seeded feePick and should beat the
+        // hint; that pick already seeded feePick and should beat the
         // saved default on initial render.
         if (prefillFeeConsumedRef.current) {
             prefillFeeConsumedRef.current = false;
@@ -715,7 +715,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
         }
     }, [chainId, settings]);
 
-    // Step 4 of §44 — async fetcher probes the shell's messaging
+    // Step 4 of §44: async fetcher probes the shell's messaging
     // layer for an SDK-backed `estimateFee` method; falls back to the
     // synchronous placeholder when the method isn't registered. The
     // sync helper still backs the initial render so the form stays
@@ -757,7 +757,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
     // source address, derived from the same SDK call the simulator
     // already runs. Drives Max + the "Available: X" hint. Lives below
     // the previewBalances + feeEstimate declarations because both are
-    // referenced in the factory bodies — the original placement above
+    // referenced in the factory bodies; the original placement above
     // those `useState`/`useMemo` calls hit a TDZ during render.
     const sourceBalance = useMemo(() => {
         if (!previewBalances.sdkShape) return null;
@@ -841,7 +841,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
     }
 
     const isHwSource = fromAddress?.source === 'trezor' || fromAddress?.source === 'ledger';
-    // §20 / G040 — watcher mode skips signing + broadcast and produces an
+    // §20 / G040: watcher mode skips signing + broadcast and produces an
     // unsigned PSBT for transport to a Signer-mode wallet. Read with the
     // explicit default fallback so v2 records without the field behave
     // like 'full' (the broadcast path).
@@ -855,10 +855,10 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
         setHwStatus(status);
     }, []);
 
-    // §18.5 / Cluster N FOLLOWUP 3 — risk classifier drives the explicit
+    // §18.5 / Cluster N FOLLOWUP 3: risk classifier drives the explicit
     // cross-check confirm checkbox on HW signs. Re-runs whenever the
     // risk inputs change (signer, amount, recipient, settings). HW path
-    // only — software signers never render the cross-check block.
+    // only; software signers never render the cross-check block.
     const [hwExplicitConfirmed, setHwExplicitConfirmed] = useState(false);
     const signRisk = useMemo(() => {
         if (!isHwSource) return { requireExplicitConfirm: false, reason: null };
@@ -902,7 +902,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
         if (!isWatcherMode) {
             if (!isHwSource && !signerReady && password.length === 0) return;
             if (isHwSource && hwStatus !== 'available') return;
-            // Cluster N FOLLOWUP 3 — block submit if the risk classifier
+            // Cluster N FOLLOWUP 3: block submit if the risk classifier
             // demands an explicit cross-check confirm and the user
             // hasn't checked the box.
             if (isHwSource && signRisk.requireExplicitConfirm && !hwExplicitConfirmed) return;
@@ -927,7 +927,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                 memo: memo.trim() || undefined,
                 rbf: rbfEnabled,
             };
-            // §20 / G040 — watcher mode encodes only. No password, no signer,
+            // §20 / G040: watcher mode encodes only. No password, no signer,
             // no broadcast. The result envelope carries `psbtHex` instead of
             // a `txid` and the done stage branches on that to render the
             // PSBT-export UI.
@@ -954,7 +954,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
             const rawMsg = err?.message || '';
             const isUserCancel = !isBadPassword && USER_CANCEL_RE.test(rawMsg);
             if (isUserCancel) {
-                // §30.5 — user-initiated cancel returns to the composing
+                // §30.5: user-initiated cancel returns to the composing
                 // form with a dismissible "Transaction cancelled." toast.
                 // Form values stay intact so the user can edit and retry.
                 setSubmitError(null);
@@ -1026,7 +1026,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
             try { navigator.clipboard?.writeText(txid); } catch { /* best effort */ }
         };
 
-        // §20 / G040 — watcher mode result. The submit returned an unsigned
+        // §20 / G040: watcher mode result. The submit returned an unsigned
         // PSBT instead of a broadcast txid; render the export UI (paste +
         // animated QR) so the user can transport it to a Signer-mode wallet.
         if (result?.psbtHex && !txid) {
@@ -1037,7 +1037,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
             <>
                 <div className={styles.successCard} role="status" aria-live="polite">
                     <div className={styles.successIcon} aria-hidden="true">✓</div>
-                    <h2 className={styles.successTitle}>Broadcast — pending</h2>
+                    <h2 className={styles.successTitle}>Broadcast pending</h2>
                     <p className={styles.successHint}>
                         Your transaction is on its way. It will confirm in the next
                         few blocks; you can leave this screen at any time.
@@ -1146,7 +1146,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                 {testSendGate ? (
                     <div role="alert" className={styles.testSendGate}>
                         <p className={styles.testSendTitle}>
-                            First send to this address — test it first?
+                            First send to this address. Test it first?
                         </p>
                         <p className={styles.testSendBody}>
                             You're sending {(testSendGate.amountSats / 1e8).toFixed(8)} {nativeTickerFor(descriptor)}
@@ -1166,7 +1166,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                                 variant="secondary"
                                 onClick={() => markTested(toAddress.trim())}
                             >
-                                I've verified — continue
+                                I've verified, continue
                             </Button>
                         </div>
                     </div>
@@ -1184,7 +1184,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                 {isWatcherMode ? (
                     <>
                         <p className={styles.hint}>
-                            Watcher mode — this wallet will build an unsigned transaction
+                            Watcher mode: this wallet will build an unsigned transaction
                             instead of signing and broadcasting. Bring the result
                             to your Signer-mode wallet to sign.
                         </p>
@@ -1225,7 +1225,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                             color: 'var(--xc-text-muted)',
                         }}
                     >
-                        <span aria-hidden="true">🔓</span> Wallet unlocked — no password needed.
+                        <span aria-hidden="true">🔓</span> Wallet unlocked. No password needed.
                     </p>
                 ) : (
                     <Input
@@ -1283,7 +1283,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
         );
     }
 
-    // Address-book picker — rendered in place of the form when the user
+    // Address-book picker: rendered in place of the form when the user
     // taps the book icon in the To field. Shows only contacts whose
     // `entries[].chain` matches the current chain's coin family (so a
     // DOGE send only surfaces Dogecoin contacts, etc.). Selecting a row
@@ -1301,7 +1301,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
             />
         );
         // Truly-empty path: no saved contacts on this chain at all.
-        // Render a single calm card with the empty message — skip the
+        // Render a single calm card with the empty message; skip the
         // outer surface and hint copy so the page doesn't show a
         // card-inside-a-card.
         if (chainContacts.length === 0) {
@@ -1623,7 +1623,7 @@ function DetailRow({ label, value }) {
 // Token with imageUrl = square image + chain-icon overlay. Token without
 // imageUrl = letter badge tinted by `tickerColor` + chain-icon overlay.
 // The prefill's imageUrl only applies when the form's current
-// (chainId, tick) still matches what the user picked — if they retype
+// (chainId, tick) still matches what the user picked; if they retype
 // the tick to something else, fall back to the letter-badge style.
 function SelectedTokenHero({ chainId, tick, descriptor, prefill, onChangeAsset }) {
     const tickTrim = (tick || '').trim();

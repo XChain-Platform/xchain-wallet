@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §20 / Cluster X Step 3 — extracted shared
+// Smoke for §20 / Cluster X Step 3: extracted shared
 // WatcherResultPanel component. Renders the unsigned PSBT hex +
 // animated QR (XCW or BBQr) for cross-device transport when a
 // watcher-mode wallet builds a PSBT. Originally a private component
@@ -60,7 +60,7 @@ assert.match(panelSrc, /onSendAnother/, 'accepts onSendAnother prop (Send.jsx le
 assert.match(panelSrc, /onDone/, 'accepts onDone prop');
 assert.match(
     panelSrc,
-    /title = 'Unsigned transaction — ready for signing'/,
+    /title = 'Unsigned transaction, ready for signing'/,
     'title prop has a default heading',
 );
 

@@ -24,7 +24,7 @@ import styles from './ManageToken.module.css';
 const chainRegistry = registryLib.defaultRegistry();
 
 /**
- * §40.5 — Manage Token. Issuer-side detail page driven from the My
+ * §40.5 Manage Token. Issuer-side detail page driven from the My
  * Tokens list. Distinct from §27.6 TokenDetail (which is the holder
  * POV with balance hero + send/receive). The single goal here is to
  * surface every capability §40.5 grants the issuer:
@@ -49,7 +49,7 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {string} props.walletId
  * @param {string} props.chainId
  * @param {string} props.tick                       canonical ticker (uppercase)
- * @param {number | null} [props.divisibility]      fallback only — primary source is `assetInfo.divisibility`. Threaded from MyTokens for the (rare) case where the explorer strips decimals.
+ * @param {number | null} [props.divisibility]      fallback only; primary source is `assetInfo.divisibility`. Threaded from MyTokens for the (rare) case where the explorer strips decimals.
  * @param {() => void} props.onBack
  * @param {() => void} [props.onMint]
  * @param {() => void} [props.onDestroy]
@@ -110,7 +110,7 @@ export function ManageToken({
         ? Number(assetInfo.divisibility)
         : divisibilityProp;
 
-    // Holders panel — single page, surfacing count + top 5. The full
+    // Holders panel: single page, surfacing count + top 5. The full
     // list lives behind `onViewHolders` (host-routed).
     const [holders, setHolders] = useState(/** @type {any[] | null} */ (null));
     const [holdersError, setHoldersError] = useState(/** @type {string | null} */ (null));
@@ -160,7 +160,7 @@ export function ManageToken({
         if (typeof onIssuerResolved === 'function') onIssuerResolved(owner || null);
     }, [owner, onIssuerResolved]);
 
-    // Owner gate — true when one of the wallet's addresses on this
+    // Owner gate: true when one of the wallet's addresses on this
     // chain matches the on-chain creator. Drives both the warning
     // banner above the action grid and the hiding of issuer-only
     // actions (Mint / Description / Transfer / Broadcast / Lock).
@@ -238,7 +238,7 @@ export function ManageToken({
         return () => { cancelled = true; };
     }, [messaging, walletId, chainId, tick]);
 
-    // Tab content (orders / swaps / activity) — loaded lazily on tab
+    // Tab content (orders / swaps / activity): loaded lazily on tab
     // activation so the page paints quickly even if any one of these
     // endpoints is slow.
     const [activeTab, setActiveTab] = useState(/** @type {'dispensers' | 'orders' | 'swaps' | 'holders' | 'activity'} */ ('dispensers'));
@@ -281,7 +281,7 @@ export function ManageToken({
         return () => { cancelled = true; };
     }, [activeTab, swaps, messaging, chainId, tick]);
 
-    // Genesis (first ISSUE) + subassets — small read-only metadata
+    // Genesis (first ISSUE) + subassets: small read-only metadata
     // section below the tabs. Fetched once on mount; both calls
     // tolerate missing fields and return null/[] when the SDK lacks
     // the underlying methods (dev mock falls through to []).
@@ -344,7 +344,7 @@ export function ManageToken({
         return Math.max(0, Math.min(1, s / m));
     }, [totalSupply, maxSupply]);
 
-    // Price chart — mirrors Home's PortfolioChart layout: single change
+    // Price chart: mirrors Home's PortfolioChart layout: single change
     // line (▲/▼ absolute + percent) over a 40px sparkline plus the
     // range-pill strip. Sparkline is synthesized off
     // `assetInfo.marketPrice` (native-coin denominated, per the indexer)
@@ -407,7 +407,7 @@ export function ManageToken({
     const primaryActions = visibleActions.slice(0, 3);
     const overflowActions = visibleActions.slice(3);
 
-    // "More" dropdown — mirrors Home.jsx's quickAction More pattern.
+    // "More" dropdown: mirrors Home.jsx's quickAction More pattern.
     // Close on outside click and Escape so the menu doesn't trap focus.
     const [moreOpen, setMoreOpen] = useState(false);
     const moreWrapRef = useRef(/** @type {HTMLDivElement | null} */ (null));
@@ -446,7 +446,7 @@ export function ManageToken({
     return (
         <Screen variant={variant} header={header}>
             <div className={styles.body}>
-                {/* Hero — identity (no Total Balance; this is the issuer view). */}
+                {/* Hero: identity (no Total Balance; this is the issuer view). */}
                 <section className={styles.hero} aria-label="Token identity">
                     {locked ? (
                         <span className={`${styles.lockBadge} ${styles.lockBadgeLocked}`}>
@@ -480,7 +480,7 @@ export function ManageToken({
                     </div>
                 </section>
 
-                {/* "Official token" banner — on a project registry's
+                {/* "Official token" banner: on a project registry's
                     current roster (owner-attested; Project_Registry.md). */}
                 {Array.isArray(assetInfo?.projects) && assetInfo.projects.length > 0 ? (
                     <p className={styles.officialBanner} role="status">
@@ -494,7 +494,7 @@ export function ManageToken({
                     </p>
                 ) : null}
 
-                {/* Market panel — stats strip + chart placeholder. The
+                {/* Market panel: stats strip + chart placeholder. The
                     chart slot is reserved for future supply / dispense-
                     price history; today it shows an empty-state hint so
                     the layout doesn't shift when data wires up later. */}
@@ -503,7 +503,7 @@ export function ManageToken({
                         <div className={styles.stat}>
                             <span className={styles.statLabel}>Supply</span>
                             <span className={styles.statValue}>
-                                {totalSupply != null ? formatSupplyValue(totalSupply, divisibility) : '—'}
+                                {totalSupply != null ? formatSupplyValue(totalSupply, divisibility) : '-'}
                             </span>
                             <span className={styles.statSub}>
                                 {maxSupply != null ? `of ${formatSupplyValue(maxSupply, divisibility)} cap` : 'no cap'}
@@ -512,7 +512,7 @@ export function ManageToken({
                         <div className={styles.stat}>
                             <span className={styles.statLabel}>You hold</span>
                             <span className={styles.statValue}>
-                                {yourBalance != null ? formatAmount(yourBalance, divisibility || 0) : '—'}
+                                {yourBalance != null ? formatAmount(yourBalance, divisibility || 0) : '-'}
                             </span>
                             {/* yourBalance comes from getWalletBalances
                                 in raw atomic units, so formatAmount is
@@ -526,14 +526,14 @@ export function ManageToken({
                         <div className={styles.stat}>
                             <span className={styles.statLabel}>Holders</span>
                             <span className={styles.statValue}>
-                                {holders != null ? holders.length.toLocaleString() : '—'}
+                                {holders != null ? holders.length.toLocaleString() : '-'}
                             </span>
                             <span className={styles.statSub}>&nbsp;</span>
                         </div>
                         <div className={styles.stat}>
                             <span className={styles.statLabel}>Open offers</span>
                             <span className={styles.statValue}>
-                                {listings != null ? listings.length.toLocaleString() : '—'}
+                                {listings != null ? listings.length.toLocaleString() : '-'}
                             </span>
                             <span className={styles.statSub}>&nbsp;</span>
                         </div>
@@ -545,7 +545,7 @@ export function ManageToken({
                     ) : null}
 
                     {/* Sparkline + change line + range pills. Same shape
-                        as Home's PortfolioChart — single change row
+                        as Home's PortfolioChart: single change row
                         above a 40px Sparkline, then the range strip. */}
                     {chartSeries ? (
                         <>
@@ -553,7 +553,7 @@ export function ManageToken({
                                 <div
                                     className={`${portfolioChartStyles.change} ${chartChange.delta > 0 ? portfolioChartStyles.changePositive : chartChange.delta < 0 ? portfolioChartStyles.changeNegative : portfolioChartStyles.changeNeutral}`}
                                 >
-                                    {chartChange.delta > 0 ? '▲' : chartChange.delta < 0 ? '▼' : '—'}{' '}
+                                    {chartChange.delta > 0 ? '▲' : chartChange.delta < 0 ? '▼' : '-'}{' '}
                                     {formatNativeAmount(Math.abs(chartChange.delta))} {nativeTick}
                                     {chartChange.pct != null && Number.isFinite(chartChange.pct)
                                         ? ` (${chartChange.pct > 0 ? '+' : ''}${chartChange.pct.toFixed(2)}%)`
@@ -583,7 +583,7 @@ export function ManageToken({
                     )}
                 </section>
 
-                {/* Owner-mismatch banner — surfaces when the wallet
+                {/* Owner-mismatch banner: surfaces when the wallet
                     holds the token but none of its addresses matches
                     the on-chain creator. Issuer-only actions are
                     auto-hidden below; the banner explains why. */}
@@ -595,7 +595,7 @@ export function ManageToken({
                     </p>
                 ) : null}
 
-                {/* Action buttons — same 3-primary + More pattern as Home. */}
+                {/* Action buttons: same 3-primary + More pattern as Home. */}
                 <div className={styles.manageGrid} role="group" aria-label="Manage actions">
                     {primaryActions.map((a) => (
                         <button
@@ -646,7 +646,7 @@ export function ManageToken({
                     ) : null}
                 </div>
 
-                {/* Tab strip + panels — matches TokenDetail's tab pattern. */}
+                {/* Tab strip + panels: matches TokenDetail's tab pattern. */}
                 <div className={styles.tabs} role="tablist">
                     {tabs.map((t) => (
                         <button
@@ -696,7 +696,7 @@ export function ManageToken({
                     ) : null}
                 </div>
 
-                {/* Genesis + subassets — small read-only metadata
+                {/* Genesis + subassets: small read-only metadata
                     section. Hidden when neither piece of data is
                     present (dev mock returns nothing). */}
                 {(genesisInfo || subassetTicks.length > 0) ? (
@@ -899,10 +899,10 @@ function HoldersPanel({ holders, error, onViewAll }) {
                     <li key={`${h.address || h.holder || i}`}>
                         <div className={styles.row}>
                             <span className={styles.rowMono}>
-                                {(h.address || h.holder || '—').replace(/^(.{6}).+(.{4})$/, '$1…$2')}
+                                {(h.address || h.holder || '-').replace(/^(.{6}).+(.{4})$/, '$1…$2')}
                             </span>
                             <span className={styles.rowSub}>
-                                {h.quantity != null ? Number(h.quantity).toLocaleString() : (h.amount != null ? Number(h.amount).toLocaleString() : '—')}
+                                {h.quantity != null ? Number(h.quantity).toLocaleString() : (h.amount != null ? Number(h.amount).toLocaleString() : '-')}
                             </span>
                         </div>
                     </li>
@@ -974,7 +974,7 @@ function HistoryRow({ as, chainId, tick, action, status, statusLabel, source, su
         ? { type: 'button', onClick, disabled }
         : null;
     // When a tick is given we lead the row with a 40px TickerIcon
-    // (letter avatar + chain pip) — used by OrdersPanel so each row
+    // (letter avatar + chain pip): used by OrdersPanel so each row
     // visually anchors on the token being traded. The small chain icon
     // in the header is suppressed in that mode since the TickerIcon
     // already carries the chain pip.
@@ -1081,11 +1081,11 @@ function formatSupplyValue(value, divisibility) {
 // Format a native-coin amount (BTC / LTC / DOGE) for the chart's change
 // line. Uses up to 8 decimal places, trimming trailing zeros, so small
 // price moves (~0.000012 BTC) still read clearly. Mirrors the spirit of
-// PortfolioChart's `formatFiat` — chart-anchored, no localized currency
+// PortfolioChart's `formatFiat`: chart-anchored, no localized currency
 // symbols since this side of the chart is native-tick-denominated.
 function formatNativeAmount(value) {
     const v = Number(value);
-    if (!Number.isFinite(v)) return '—';
+    if (!Number.isFinite(v)) return '-';
     if (v === 0) return '0';
     const abs = Math.abs(v);
     if (abs >= 1) return v.toLocaleString('en-US', { maximumFractionDigits: 4 });

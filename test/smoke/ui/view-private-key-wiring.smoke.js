@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §17.7 / G027 — ViewPrivateKey wired into both shells'
+// Smoke for §17.7 / G027: ViewPrivateKey wired into both shells'
 // App.jsx via the AddressList "Show key" affordance. Cluster E
 // Step 4 of 5.
 
@@ -31,7 +31,7 @@ assert.ok(/onShowPrivateKey/.test(al),
     'AddressList accepts an onShowPrivateKey prop');
 assert.ok(/Show key/.test(al),
     'AddressList renders a "Show key" affordance');
-// Multisig synthetic rows must NOT show the button — the gating
+// Multisig synthetic rows must NOT show the button; the gating
 // expression should require row.record AND !row.multisig.
 assert.ok(/onShowPrivateKey\s*&&\s*row\.record\s*&&\s*!row\.multisig/.test(al),
     'AddressList only shows the Show-key button for non-multisig rows with a record');

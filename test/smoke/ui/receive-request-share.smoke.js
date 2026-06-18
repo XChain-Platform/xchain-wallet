@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §29 Send/Receive — Step 5 — Receive request-payment +
+// Smoke for §29 Send/Receive, Step 5: Receive request-payment +
 // Share button.
 
 import { strict as assert } from 'node:assert';

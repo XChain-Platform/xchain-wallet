@@ -13,7 +13,7 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './ActionsMenu.module.css';
 
 /**
- * Actions menu — secondary authoring surface listed in §40.
+ * Actions menu: secondary authoring surface listed in §40.
  *
  * Home keeps the common three actions (Send / Receive / Create a token)
  * above the fold; everything else (standalone ISSUE §40.2, MINT §40.3,

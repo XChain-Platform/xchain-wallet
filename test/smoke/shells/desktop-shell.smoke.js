@@ -8,16 +8,16 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for Phase 2 — Step 16 (piece 5a) — Electron main-process
+// Smoke for Phase 2: Step 16 (piece 5a): Electron main-process
 // signing isolation (§9.3.2).
 //
 // Coverage:
 //
 //   1. Main-process files exist: index.js, messageHost.js, storage.js.
 //   2. Preload lives at `packages/desktop/preload.js` and exposes
-//      exactly `window.xchainWalletBridge.sendMessage` — no broader
+//      exactly `window.xchainWalletBridge.sendMessage`: no broader
 //      Node/Electron surface leaks into the renderer.
-//   3. Main reuses `createBackgroundHost` from extension — the
+//   3. Main reuses `createBackgroundHost` from extension: the
 //      contract mirrors the extension wire format per §9.3.2.
 //   4. FileStorageBackend round-trips a blob through the filesystem
 //      correctly (load null-on-missing, save+load returns same bytes,
@@ -70,7 +70,7 @@ for (const rel of [
 }
 
 // Confirm the old stub renderer/index.js (from the pre-Step-16
-// scaffold) is gone — leaving it behind confuses the bundler.
+// scaffold) is gone: leaving it behind confuses the bundler.
 assert.ok(
     !existsSync(join(desktop, 'renderer', 'index.js')),
     'old renderer/index.js stub removed (replaced by main.jsx + index.html)',
@@ -89,7 +89,7 @@ assert.ok(
 );
 assert.ok(
     /ipcRenderer\.invoke\(/.test(preload),
-    'preload uses ipcRenderer.invoke — not .send (we need a Promise reply)',
+    'preload uses ipcRenderer.invoke: not .send (we need a Promise reply)',
 );
 // Negative: preload must NOT import Node fs / path modules (which
 // would smuggle Node capabilities into the contextBridge surface).
@@ -100,7 +100,7 @@ assert.ok(
 );
 assert.ok(
     !/require\s*\(/.test(preload),
-    'preload does NOT use require() — contextBridge is the only renderer-facing API',
+    'preload does NOT use require(): contextBridge is the only renderer-facing API',
 );
 
 // --- 3. Main reuses createBackgroundHost ------------------------------
@@ -109,11 +109,11 @@ const mainIndex = readFileSync(join(desktop, 'main', 'index.js'), 'utf8');
 const msgHost = readFileSync(join(desktop, 'main', 'messageHost.js'), 'utf8');
 assert.ok(
     /createBackgroundHost/.test(msgHost),
-    'messageHost.js reuses createBackgroundHost from extension — §9.3.2 "core runs unmodified across shells"',
+    'messageHost.js reuses createBackgroundHost from extension: §9.3.2 "core runs unmodified across shells"',
 );
 assert.ok(
     /\.\.\/\.\.\/extension\/src\/background\/createBackgroundHost\.js/.test(msgHost),
-    'messageHost.js imports from the extension package via cross-package relative path (matches hostBridge.js convention — smoke-resolvable under Node)',
+    'messageHost.js imports from the extension package via cross-package relative path (matches hostBridge.js convention: smoke-resolvable under Node)',
 );
 assert.ok(
     /ipcMain\.handle\(IPC_CHANNEL/.test(mainIndex),
@@ -180,11 +180,11 @@ for (const fn of [
 ]) {
     assert.ok(
         new RegExp(`export function ${fn}\\b`).test(rendererMsg),
-        `renderer messaging.js exports ${fn} — popup/web parity`,
+        `renderer messaging.js exports ${fn}: popup/web parity`,
     );
 }
 
-// Equivalent fn set matches popup messaging — drift check.
+// Equivalent fn set matches popup messaging: drift check.
 const popupMsg = readFileSync(join(ext, 'src', 'popup', 'messaging.js'), 'utf8');
 const popupFns = new Set(
     [...popupMsg.matchAll(/^export function (\w+)/gm)].map((m) => m[1]),
@@ -192,12 +192,12 @@ const popupFns = new Set(
 const desktopFns = new Set(
     [...rendererMsg.matchAll(/^export function (\w+)/gm)].map((m) => m[1]),
 );
-// Desktop is allowed a subset — but any fn the desktop exports should
+// Desktop is allowed a subset: but any fn the desktop exports should
 // also exist in popup so shared routes never hit an undefined.
 for (const fn of desktopFns) {
     assert.ok(
         popupFns.has(fn),
-        `desktop messaging exports "${fn}" that popup messaging doesn't — shared routes may break`,
+        `desktop messaging exports "${fn}" that popup messaging doesn't: shared routes may break`,
     );
 }
 
@@ -239,7 +239,7 @@ assert.equal(
 assert.ok(pkg.dependencies['@xchain-wallet/core'], 'desktop deps on @xchain-wallet/core');
 assert.ok(
     pkg.dependencies['@xchain-wallet/extension'],
-    'desktop deps on @xchain-wallet/extension — reuses createBackgroundHost',
+    'desktop deps on @xchain-wallet/extension: reuses createBackgroundHost',
 );
 assert.ok(pkg.dependencies.react, 'desktop deps on react');
 assert.ok(pkg.devDependencies.electron, 'desktop devDeps on electron');
@@ -270,5 +270,5 @@ assert.ok(
 );
 
 console.log(
-    'OK — desktop shell smoke (main-process isolation scaffold §9.3.2: FileStorageBackend file round-trip, MessageHost reuses createBackgroundHost, preload exposes narrow bridge, renderer App.jsx mounts all shared routes under shell="desktop", messaging parity with popup/web, HW factories wired via WebHID + Trezor Connect)',
+    'OK: desktop shell smoke (main-process isolation scaffold §9.3.2: FileStorageBackend file round-trip, MessageHost reuses createBackgroundHost, preload exposes narrow bridge, renderer App.jsx mounts all shared routes under shell="desktop", messaging parity with popup/web, HW factories wired via WebHID + Trezor Connect)',
 );

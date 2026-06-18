@@ -35,7 +35,7 @@ const src = readFileSync(formPath, 'utf8');
 assert.ok(/export function ProjectRosterForm\b/.test(src),
     'ProjectRosterForm is a named export');
 
-// Stage machine — two signs with an indexing wait between them.
+// Stage machine: two signs with an indexing wait between them.
 for (const stage of ['compose', 'review-list', 'wait-index', 'review-link', 'done']) {
     assert.ok(src.includes(`'${stage}'`), `form tracks stage "${stage}"`);
 }
@@ -55,7 +55,7 @@ for (const call of [
     assert.ok(src.includes(call), `ProjectRosterForm calls ${call}`);
 }
 
-// The roster LIST is the TICK type (TYPE=1) — the registry shape.
+// The roster LIST is the TICK type (TYPE=1): the registry shape.
 assert.ok(/TYPE:\s*'1'/.test(src), 'roster LIST uses TYPE=1 (TICK list)');
 
 // Owner-validation surfaced, watcher mode blocked.
@@ -137,5 +137,5 @@ for (const [shell, appPath] of [
 }
 
 console.log(
-    'OK — project-roster smoke (ProjectRosterForm stage machine LIST → wait-index → LINK, TYPE=1 roster, owner gate + watcher block, getProjectForTick flow + 400→null, banner passthrough, bg handler, 3-shell messaging + App.jsx wiring)',
+    'OK: project-roster smoke (ProjectRosterForm stage machine LIST -> wait-index -> LINK, TYPE=1 roster, owner gate + watcher block, getProjectForTick flow + 400->null, banner passthrough, bg handler, 3-shell messaging + App.jsx wiring)',
 );

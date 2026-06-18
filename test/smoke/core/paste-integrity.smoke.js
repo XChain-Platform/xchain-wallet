@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §29 Send/Receive — Step 2 — pasteIntegrity helper.
+// Smoke for §29 Send/Receive, Step 2: pasteIntegrity helper.
 
 import { strict as assert } from 'node:assert';
 import {

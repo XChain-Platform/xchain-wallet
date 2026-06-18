@@ -8,10 +8,10 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §21.2 / §48 — signPsbt approval intent cross-check.
+// Smoke for §21.2 / §48: signPsbt approval intent cross-check.
 //
 // The dApp-bridge signPsbt approval used to show only a truncated raw hex
-// string — unverifiable, so a compromised dApp could swap in a drain PSBT
+// string (unverifiable), so a compromised dApp could swap in a drain PSBT
 // undetected. The approval now decodes the PSBT (via the psbt.parse host
 // route) into destinations + amounts + fee, marking which outputs return
 // to the user's own addresses. Source-level checks that this wiring is in

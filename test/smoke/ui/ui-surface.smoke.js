@@ -132,5 +132,5 @@ for (const shell of ['extension', 'web']) {
 }
 
 console.log(
-    `OK — ui surface smoke (${components.length} primitives, tokens.css, core exports map, 2 shell dep wirings)`,
+    `OK: ui surface smoke (${components.length} primitives, tokens.css, core exports map, 2 shell dep wirings)`,
 );

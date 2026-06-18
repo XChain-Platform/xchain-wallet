@@ -20,7 +20,7 @@
 //                          same id are no-ops.
 //   3. window-close        a user closing the popup without deciding
 //                          resolves the parked promise as
-//                          `{ approved: false }` — the bridge's
+//                          `{ approved: false }`: the bridge's
 //                          USER_REJECTED convention.
 //
 // Also drives the `approval.fetch` + `approval.resolve` host handlers
@@ -314,5 +314,5 @@ function makeBroker(fakeWindows, overrides = {}) {
 }
 
 console.log(
-    'OK — approval broker smoke (static wiring + lifecycle + window-close + host IPC round-trip)',
+    'OK: approval broker smoke (static wiring + lifecycle + window-close + host IPC round-trip)',
 );

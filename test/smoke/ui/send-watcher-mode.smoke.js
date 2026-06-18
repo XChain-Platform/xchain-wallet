@@ -8,10 +8,10 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §20 / G040 — Send.jsx watcher-mode branch (Step 2 of 3).
+// Smoke for §20 / G040: Send.jsx watcher-mode branch (Step 2 of 3).
 //
 // After Cluster X Step 3, the WatcherResultPanel is a shared component
-// — this smoke pins the Send.jsx integration only (hook + submit handler
+// This smoke pins the Send.jsx integration only (hook + submit handler
 // + done-stage routing). The component's render shape lives in the
 // dedicated `watcher-result-panel.smoke.js`.
 //
@@ -72,7 +72,7 @@ assert.match(flowSrc, /export async function buildSendPsbt\(opts\)/, 'flow expor
 assert.match(flowSrc, /sdk\.actions\.createAction\(\{ action: 'SEND', params \}\)/, 'creates SEND action string');
 assert.match(flowSrc, /encoder\.createTx\(\{/, 'calls encoder.createTx');
 assert.match(flowSrc, /psbtHex: encoded\.psbt,/, 'returns psbtHex');
-// Watcher mode never broadcasts — guard against accidental signing / broadcast.
+// Watcher mode never broadcasts. Guard against accidental signing / broadcast.
 assert.doesNotMatch(flowSrc, /import [\s\S]*signers\//, 'flow does not import any signer module');
 assert.doesNotMatch(flowSrc, /signer\.signPsbt/, 'no signer.signPsbt call in the flow');
 assert.doesNotMatch(flowSrc, /\.broadcastTx\(/, 'no broadcastTx call in the flow');
@@ -94,7 +94,7 @@ assert.notEqual(handlerIdx, -1, 'action.send.psbt handler registered');
 const handlerBlock = hostSrc.slice(handlerIdx, handlerIdx + 320);
 assert.match(handlerBlock, /chainRegistry, sdkRegistry/, 'handler uses chainRegistry + sdkRegistry deps only');
 assert.match(handlerBlock, /buildSendPsbt\(\{ \.\.\.req, chainRegistry, sdkRegistry \}\)/, 'handler forwards to buildSendPsbt');
-assert.doesNotMatch(handlerBlock, /\bvault\b/, 'handler does not require vault — no unlock');
+assert.doesNotMatch(handlerBlock, /\bvault\b/, 'handler does not require vault (no unlock)');
 
 // ─── 4. Three messaging shims -----------------------------------
 
@@ -117,8 +117,8 @@ for (const [name, src] of [
 
 // ─── 5. Send.jsx watcher branch ---------------------------------
 
-// §20 Cluster X Step 2 — walletMode derivation lifted to a shared hook
-// (`useWalletMode`). §20 Cluster X Step 3 — WatcherResultPanel extracted
+// §20 Cluster X Step 2: walletMode derivation lifted to a shared hook
+// (`useWalletMode`). §20 Cluster X Step 3: WatcherResultPanel extracted
 // to `shared/components/WatcherResultPanel.jsx`.
 assert.match(
     sendSrc,
@@ -147,10 +147,10 @@ assert.match(
 );
 assert.match(
     sendSrc,
-    /Watcher mode — this wallet will build an unsigned transaction/,
+    /Watcher mode: this wallet will build an unsigned transaction/,
     'review-stage hint copy explains watcher mode',
 );
-// §20 Cluster W FOLLOWUP 3 (closed at v0.239.0) — when the source address is
+// §20 Cluster W FOLLOWUP 3 (closed at v0.239.0): when the source address is
 // HW-paired AND watcher mode is on, an extra StatusMessage explains that the
 // pairing here is decorative and the same HW device must be paired on the
 // Signer-mode wallet to actually sign the PSBT.

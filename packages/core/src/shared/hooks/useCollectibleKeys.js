@@ -13,17 +13,17 @@ import { useMessaging } from '../useMessaging.js';
 import { fetchTokenInfo } from './useTokenInfo.js';
 
 /**
- * Canonical collectible (NFT-pattern) classification for balance rows —
+ * Canonical collectible (NFT-pattern) classification for balance rows.
  * protocol/NFT_Standard.md: a token is a collectible when DECIMALS = 0
  * AND LOCK_MAX_SUPPLY = 1. Mirrors sdk.nft.isNft; keep the two in sync.
  *
  * Divisibility rides on the balance row, so rows are pre-filtered to the
  * 0-decimal candidates; the supply lock comes from the shared token-info
- * lookup (module-cached — revisits and the per-card image lookups in
+ * lookup (module-cached: revisits and the per-card image lookups in
  * `CollectiblesView` reuse the same entries, so nothing fetches twice).
  *
  * A row only joins the returned set once its info has resolved AND shows
- * a locked cap — unknown/unfetchable infos stay excluded (conservative:
+ * a locked cap. Unknown/unfetchable infos stay excluded (conservative:
  * a tab tile asserts "this cannot inflate or split", so it must never
  * appear on a guess).
  *

@@ -10,7 +10,7 @@
 
 // Per-chain mock address prefixes used by every shell's dev-mock SDK
 // fallback (web's hostBridge, extension's background sdkFactory, desktop
-// when the real SDK is not yet pinned). Not cryptographically valid —
+// when the real SDK is not yet pinned). Not cryptographically valid;
 // just distinguishable so a Dogecoin "D…" address doesn't look like a
 // Bitcoin "1…" address while the wallet is running on the stub. The
 // real `xchain-sdk` performs proper version-byte derivation.

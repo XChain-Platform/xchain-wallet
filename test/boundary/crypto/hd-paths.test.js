@@ -24,7 +24,7 @@ describe('boundary/crypto/hd-paths', () => {
         expect(root.depth).toBe(0);
     });
 
-    it('depth 1 — single hardened child', () => {
+    it('depth 1: single hardened child', () => {
         const root = hdKeyFromSeed(SEED);
         const c = derive(root, "m/0'");
         // derive() returns a DerivedKey (plain object); depth is on
@@ -33,14 +33,14 @@ describe('boundary/crypto/hd-paths', () => {
         expect(c.publicKey.length).toBe(33);
     });
 
-    it('depth 5 — typical BIP44 leaf', () => {
+    it('depth 5: typical BIP44 leaf', () => {
         const root = hdKeyFromSeed(SEED);
         const c = derive(root, "m/44'/0'/0'/0/0");
         expect(c.path).toBe("m/44'/0'/0'/0/0");
         expect(c.privateKey.length).toBe(32);
     });
 
-    it('depth 8 — past typical leaf', () => {
+    it('depth 8: past typical leaf', () => {
         const root = hdKeyFromSeed(SEED);
         const c = derive(root, "m/44'/0'/0'/0/0/0/0/0");
         expect(c.publicKey.length).toBe(33);

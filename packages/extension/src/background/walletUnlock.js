@@ -8,11 +8,11 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// wallet.unlock handler — runs BEFORE the MessageHost attaches.
+// wallet.unlock handler; runs BEFORE the MessageHost attaches.
 //
 // The vault is encrypted with a master key derived from the user's
 // password via Argon2id. KDF params (salt, memory, iterations, parallelism)
-// live in the plaintext ChromeMetaBackend slot — they're not secret, and
+// live in the plaintext ChromeMetaBackend slot; they're not secret, and
 // storing them outside the ciphertext is the only way unlock can derive
 // the master key before touching the blob.
 //
@@ -25,13 +25,13 @@
 //   4. Persist the master key to the session backend.
 //   5. Cache the password in the signing-secret session slot (when a
 //      `signingSecretBackend` is supplied) so `ensureHost()` can rebuild
-//      the SignerPool after an MV3 service-worker restart — the master key
+//      the SignerPool after an MV3 service-worker restart; the master key
 //      alone can't (the seed is password-encrypted). See
 //      `signingSecretSession.js` for the security rationale.
 //   6. Fire `onUnlocked()` so background.js can call `ensureHost()` and
 //      attach the full MessageHost to chrome.runtime.onMessage.
 //
-// Never returns the master key or password to the popup — the session
+// Never returns the master key or password to the popup; the session
 // backends are the only place they live outside the service worker.
 
 import { crypto as cryptoLib, storage as storageLib } from '@xchain-wallet/core';
@@ -117,7 +117,7 @@ export async function handleWalletUnlock(request, deps) {
         }
 
         // Password was correct. Persist the master key to the session
-        // backend — that's what `ensureHost()` reads to build the host.
+        // backend (that's what `ensureHost()` reads to build the host).
         await deps.sessionBackend.save(masterKey);
         // Cache the password so the SignerPool can be rebuilt after a
         // service-worker restart (the master key can't decrypt seeds).

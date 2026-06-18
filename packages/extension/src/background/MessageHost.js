@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// MessageHost — request/response router for the extension's background
+// MessageHost: request/response router for the extension's background
 // service worker. Shells talk to core flows via typed messages:
 //
 //     request  = { type: string, request: unknown }
@@ -17,9 +17,9 @@
 // Core flows are registered as handlers against message types. The host
 // catches synchronous and async errors and serializes them into the
 // response envelope so the message transport (chrome.runtime) doesn't
-// swallow them — every call gets a structured reply.
+// swallow them; every call gets a structured reply.
 //
-// The host is transport-agnostic — `handle(message)` returns a Promise
+// The host is transport-agnostic. `handle(message)` returns a Promise
 // of the response envelope. See `ChromeRuntimeAdapter` for the MV3 wire-
 // up to `chrome.runtime.onMessage`.
 
@@ -33,7 +33,7 @@ export class UnknownMessageTypeError extends Error {
 
 export class InvalidMessageError extends Error {
     constructor(reason) {
-        super(`MessageHost: invalid message — ${reason}`);
+        super(`MessageHost: invalid message (${reason})`);
         this.name = 'InvalidMessageError';
     }
 }

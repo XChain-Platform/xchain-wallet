@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// PriceAlertForm — §46. A compact "notify me when {coin} goes
+// PriceAlertForm (§46). A compact "notify me when {coin} goes
 // {above|below} {price}" form, shared by the Settings → Notifications
 // manager and the native-coin TokenDetail "Set price alert" entry.
 //
@@ -16,7 +16,7 @@
 // COINGECKO_SUPPORTED_CHAINS), so the coin selector lists just those. When
 // `lockedChainId` is supplied (the TokenDetail entry already knows the
 // coin) the selector is hidden. A soft warning appears when the target is
-// already met given `currentPrice` — the alert is still valid, it'll just
+// already met given `currentPrice` (the alert is still valid, it'll just
 // fire on the next check.
 
 import { useMemo, useState } from 'react';
@@ -154,8 +154,8 @@ export function PriceAlertForm({ onCreate, fiatCurrency = 'usd', lockedChainId, 
             </div>
             {alreadyMet ? (
                 <span style={HINT}>
-                    {coinLabelForChain(chainId)} is already {direction === 'above' ? 'above' : 'below'} that price —
-                    this alert will fire on the next check.
+                    {coinLabelForChain(chainId)} is already {direction === 'above' ? 'above' : 'below'} that price.
+                    This alert will fire on the next check.
                 </span>
             ) : null}
             {err ? <span style={{ ...HINT, color: 'var(--xc-error, #c33)' }}>{err}</span> : null}
@@ -163,7 +163,7 @@ export function PriceAlertForm({ onCreate, fiatCurrency = 'usd', lockedChainId, 
     );
 }
 
-/** Keep prefilled targets readable — whole dollars for big prices, 2dp for small. */
+/** Keep prefilled targets readable: whole dollars for big prices, 2dp for small. */
 function roundForInput(value) {
     const n = Number(value);
     if (!Number.isFinite(n)) return value;

@@ -35,11 +35,11 @@ import styles from './HomeTabs.module.css';
 /**
  * Top-level tabbed view for Home.
  *
- *   Coins    — native rows (BTC / LTC / DOGE / …) only
- *   Tokens   — non-native, divisible (issuance tokens, stablecoins, …)
- *   NFTs     — non-native, indivisible (divisibility === 0)
- *   History  — chronological transaction stream (placeholder)
- *   DeFi     — staking, dispensers, contracts (placeholder)
+ *   Coins    - native rows (BTC / LTC / DOGE / …) only
+ *   Tokens   - non-native, divisible (issuance tokens, stablecoins, …)
+ *   NFTs     - non-native, indivisible (divisibility === 0)
+ *   History  - chronological transaction stream (placeholder)
+ *   DeFi     - staking, dispensers, contracts (placeholder)
  *
  * Network filter applies across every tab so flipping `BTC` filters
  * all tabs to BTC at once. Filter state owned here so it persists
@@ -48,11 +48,11 @@ import styles from './HomeTabs.module.css';
  * @param {object} props
  * @param {import('../../registry/index.js').ChainRegistry} props.chainRegistry
  * @param {Record<string, Array<{ balances: any | null }>>} props.balances
- * @param {number | null} [props.balancesFetchedAt]   Unix ms of the last successful balance fetch — drives the staleness label below the tab strip (Cluster G FOLLOWUP 5 / G155).
+ * @param {number | null} [props.balancesFetchedAt]   Unix ms of the last successful balance fetch. Drives the staleness label below the tab strip (Cluster G FOLLOWUP 5 / G155).
  * @param {string} props.networkFilter   'all' or a coin family
  * @param {{ threshold: number, cosignerCount: number, scheme: string } | null} [props.multisig]
  * @param {string} [props.multisigChainId]
- * @param {import('react').ReactNode} [props.actions]   slot rendered between the total-balance hero and the tab strip — used by Home for the Send / Receive / Swap / Buy quick-action row
+ * @param {import('react').ReactNode} [props.actions]   slot rendered between the total-balance hero and the tab strip; used by Home for the Send / Receive / Swap / Buy quick-action row
  * @param {() => void} [props.onReceive]   forwarded to empty-state nudges so the "No balances yet" cards can render a one-tap Receive CTA (G077)
  */
 export function HomeTabs({ chainRegistry, balances, balancesFetchedAt, walletId, networkFilter, tokenQuery = '', multisig, multisigChainId, actions, onReceive, onSelectToken, onSelectEntry, pinnedKeys, onTogglePin, hiddenKeys, onToggleHide }) {
@@ -89,7 +89,7 @@ export function HomeTabs({ chainRegistry, balances, balancesFetchedAt, walletId,
         });
     }, [tokens, tokenQueryTrim]);
     // NFTs = tokens matching the canonical NFT pattern (NFT_Standard.md:
-    // DECIMALS=0 AND LOCK_MAX_SUPPLY=1 — indivisible, supply can never
+    // DECIMALS=0 AND LOCK_MAX_SUPPLY=1 (indivisible, supply can never
     // inflate). Classification, not decoration: a divisible token with a
     // pretty icon (e.g. PEPECASH) belongs in Tokens, not here, and a true
     // collectible with no artwork still earns its tile (letter fallback).
@@ -116,7 +116,7 @@ export function HomeTabs({ chainRegistry, balances, balancesFetchedAt, walletId,
             {/* Hero rolls up coins + tokens + NFTs (everything that
                 lives in `filteredRows`). DeFi + Activity contribute
                 their own dollar amounts via separate flows once they
-                wire — for now they're not in the sum. */}
+                wire up; for now they're not in the sum. */}
             <TotalBalanceHero
                 rows={filteredRows}
                 networkFilter={networkFilter}
@@ -212,7 +212,7 @@ export function HomeTabs({ chainRegistry, balances, balancesFetchedAt, walletId,
                     ) : (
                         <Placeholder
                             title="Recent activity"
-                            body="Sends, receives, sign events, broadcasts, multisig rounds, and approval grants surface here in reverse-chronological order. Wiring lands next — for now the Pancake → History entry shows the full chronological feed."
+                            body="Sends, receives, sign events, broadcasts, multisig rounds, and approval grants surface here in reverse-chronological order. Wiring lands next; for now the Pancake → History entry shows the full chronological feed."
                         />
                     )
                 ) : null}
@@ -295,7 +295,7 @@ function relativeTime(epochSec) {
 }
 
 // Format a satoshi-string amount using the tick's divisibility. Plain
-// string math, no BigInt — these are demo values and stay small.
+// string math, no BigInt; these are demo values and stay small.
 function formatAmount(raw, divisibility) {
     const s = String(raw ?? '').trim();
     if (!s) return '';
@@ -356,7 +356,7 @@ function ActivityRow({ entry, walletAddresses, assetLookup, chainTip, onClick })
     const rawAmount = entry.raw?.amount ?? entry.raw?.AMOUNT ?? entry.raw?.quantity ?? entry.raw?.QUANTITY ?? '';
     const amount = rawAmount ? formatAmount(rawAmount, tokenInfo?.divisibility ?? 8) : '';
     const primary = amount ? `${amount}${tick ? ` ${tick}` : ''}` : (tick || '');
-    // Match the per-row quantity mask used by BalanceList — privacy
+    // Match the per-row quantity mask used by BalanceList; privacy
     // mode should opaque every financial figure the user sees, not
     // just balances on the Coins/Tokens tab.
     const displayPrimary = balancesHidden && primary ? '•••••' : primary;
@@ -436,7 +436,7 @@ function ActivityRow({ entry, walletAddresses, assetLookup, chainTip, onClick })
     );
 }
 
-// Demo activity feed — synthesizes per-chain rows, wraps each in the
+// Demo activity feed: synthesizes per-chain rows, wraps each in the
 // History entry shape so onSelectEntry can hand them to ActionDetail.
 function DemoActivityList({ chainIds, balances, networkFilter, walletId, onSelectEntry }) {
     void walletId;
@@ -469,7 +469,7 @@ function DemoActivityList({ chainIds, balances, networkFilter, walletId, onSelec
         return all.sort((a, b) => b.timestamp - a.timestamp);
     }, [chainIds, networkFilter]);
 
-    // Synthetic chain tip per chainId — max blockIndex across visible
+    // Synthetic chain tip per chainId: max blockIndex across visible
     // entries + a small buffer so the Confirms pill on the freshest
     // confirmed entry reads as a plausible number instead of "1".
     const chainTips = useMemo(() => {
@@ -506,7 +506,7 @@ function DemoActivityList({ chainIds, balances, networkFilter, walletId, onSelec
     );
 }
 
-// DeFi action list — three-line history-row style. Left side is always
+// DeFi action list: three-line history-row style. Left side is always
 // the XCHAIN product mark (the only thing stakeable on the protocol)
 // with the chain icon overlaid in the bottom-right; right side surfaces
 // the action label + status on line one, the primary subject (amount /

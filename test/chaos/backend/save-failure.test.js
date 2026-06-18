@@ -10,7 +10,7 @@
 
 // Chaos: backend.save() throws mid-flight. The Vault must surface
 // the error to the caller and NOT silently corrupt its in-memory
-// document — a subsequent successful save should write the same
+// document; a subsequent successful save should write the same
 // state the failed call attempted.
 
 import { describe, it, expect } from 'vitest';
@@ -69,7 +69,7 @@ describe('chaos/backend/save-failure', () => {
         });
         backend.failNextSave = true;
         await expect(v.wallets.put(w)).rejects.toThrow();
-        // Retry — backend will succeed this time. The write should
+        // Retry; backend will succeed this time. The write should
         // land cleanly with the same record.
         await v.wallets.put(w);
         await v.close();

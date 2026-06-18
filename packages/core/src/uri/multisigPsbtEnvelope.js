@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Multisig PSBT-QR envelope — §22.3 cosigner round-trip transport.
+// Multisig PSBT-QR envelope (§22.3): cosigner round-trip transport.
 // Phase 4 Step 20 of 23.
 //
 // The §20 chunked-QR layer (psbtQr.js) is byte-oriented; for the
@@ -310,7 +310,7 @@ export function validateEnvelope(value) {
         const expected = fingerprintSessionRef(ref);
         if (expected !== out.fingerprint) {
             throw new MultisigEnvelopeError(
-                'fingerprint does not match sessionRef — envelope is malformed or tampered',
+                'fingerprint does not match sessionRef; envelope is malformed or tampered',
             );
         }
         out.sessionRef = ref;

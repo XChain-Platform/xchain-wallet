@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// DuressPassphraseRow — §26.5 / G068 part 2 Safety panel row.
+// DuressPassphraseRow: §26.5 / G068 part 2 Safety panel row.
 //
 // Three states:
 //
@@ -18,7 +18,7 @@
 //                    and stored in localStorage. Plaintext is never
 //                    persisted.
 //
-//   configured       "Configured. Disable" — a single click wipes the
+//   configured       "Configured. Disable". A single click wipes the
 //                    stored hash. There is intentionally no "view"
 //                    affordance; the passphrase cannot be recovered
 //                    from storage.

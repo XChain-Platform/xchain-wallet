@@ -26,7 +26,7 @@ import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 
-// Protocol coin tickers per xchain-sdk VALID_COINS — mirrors
+// Protocol coin tickers per xchain-sdk VALID_COINS, mirroring
 // DispenserForm. `descriptor.coin` is long-form ('bitcoin' / ...).
 const PROTOCOL_COIN_TICKER = {
     bitcoin: 'BTC',
@@ -43,7 +43,7 @@ const PROTOCOL_COIN_TICKER = {
  *   - The ActionsMenu "Pay COINPAY" entry, which opens this form
  *     without a prefilled obligation and scans the wallet on mount.
  *
- * The form is deliberately read-only above the sign block — the user
+ * The form is deliberately read-only above the sign block; the user
  * doesn't pick an obligation's payee or amount, they confirm it.
  * Overpaying would be wasteful; underpaying would fail validation.
  *
@@ -134,7 +134,7 @@ export function CoinpayForm({
                         });
                     }
                 } catch {
-                    // Isolated failure per chain/address — other lookups still land.
+                    // Isolated failure per chain/address; other lookups still land.
                 }
             }));
             if (cancelled) return;
@@ -170,7 +170,7 @@ export function CoinpayForm({
         };
     }, [selected]);
 
-    // §20 / Cluster W FOLLOWUP 5 — watcher-mode encode-only branch.
+    // §20 / Cluster W FOLLOWUP 5: watcher-mode encode-only branch.
     const { isWatcherMode } = useWalletMode();
 
     async function handleSubmit(event) {
@@ -206,7 +206,7 @@ export function CoinpayForm({
                 // COINPAY action params per coinpayAction flow:
                 //   VERSION / ORDER_MATCH_ACTION_INDEX
                 // Encoder needs `customOutputs` so the buyer pays the
-                // matched seller's address — preserved through encoderOpts.
+                // matched seller's address, preserved through encoderOpts.
                 const params = {
                     VERSION: '0',
                     ORDER_MATCH_ACTION_INDEX: String(summary.actionIndex),
@@ -405,7 +405,7 @@ export function CoinpayForm({
 
                     {isWatcherMode ? (
                         <p className={styles.hint}>
-                            Watcher mode — this wallet will build an unsigned transaction.
+                            Watcher mode: this wallet will build an unsigned transaction.
                             Sign it on your Signer-mode wallet, then bring the
                             signed transaction to a Full-mode wallet to broadcast.
                         </p>

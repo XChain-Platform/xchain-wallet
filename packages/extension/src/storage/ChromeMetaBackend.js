@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// ChromeMetaBackend — plaintext JSON slot in `chrome.storage.local`.
+// ChromeMetaBackend: plaintext JSON slot in `chrome.storage.local`.
 //
 // Holds data the shell needs *before* the vault can be opened:
 //   - `kdfParams` for the vault-level Argon2id master-key derivation.

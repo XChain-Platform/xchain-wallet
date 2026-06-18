@@ -26,12 +26,12 @@ import styles from './IssueTokenForm.module.css';
 const chainRegistry = registryLib.defaultRegistry();
 
 /**
- * §41.7.4 Contacts. List + detail + create/edit in one route — the
+ * §41.7.4 Contacts. List + detail + create/edit in one route; the
  * UX is read-heavy enough that a separate detail route isn't worth
  * the navigation overhead. Modes:
- *   - 'list'   — table of contacts + Add button
- *   - 'detail' — read view of one contact + Send message / Edit / Delete
- *   - 'edit'   — form for new or existing contact
+ *   - 'list'   - table of contacts + Add button
+ *   - 'detail' - read view of one contact + Send message / Edit / Delete
+ *   - 'edit'   - form for new or existing contact
  *
  * On send-message the parent App.jsx navigates to ComposeMessage with
  * the contact's primary entry pre-filled.
@@ -98,7 +98,7 @@ export function ContactsList({ walletId, onSendMessage, onBack }) {
     function handleScanned(outcome) {
         // ScanRoute fires { kind: 'send', address, chainId? } for plain
         // addresses, BIP21, and xchain: send URIs. Receive / PSBT scans
-        // have no useful address to add — kick those back to the list
+        // have no useful address to add; kick those back to the list
         // with a toast so the user can try again.
         if (outcome && outcome.kind === 'send' && outcome.address) {
             setActiveId(null);
@@ -340,7 +340,7 @@ export function ContactsList({ walletId, onSendMessage, onBack }) {
                             <li key={i} style={{ padding: '0.25rem 0' }}>
                                 {d ? <ChainBadge descriptor={d} size="sm" /> : <span>{e.chain}</span>}
                                 {' '}<AddressText address={e.address} />
-                                {e.label ? <span style={{ color: 'var(--xc-fg-muted)', marginLeft: '0.5rem' }}>— {e.label}</span> : null}
+                                {e.label ? <span style={{ color: 'var(--xc-fg-muted)', marginLeft: '0.5rem' }}>({e.label})</span> : null}
                             </li>
                         );
                     })}
@@ -415,7 +415,7 @@ export function ContactsList({ walletId, onSendMessage, onBack }) {
 
 function chainIdFor(chain) {
     // Default to mainnet. Contacts don't currently distinguish network
-    // kinds — if a user has a testnet-only contact, entries.chain can
+    // kinds; if a user has a testnet-only contact, entries.chain can
     // still be 'bitcoin' and the wallet's own testnet addresses will
     // match when the entry address happens to be a testnet address.
     if (chain === 'bitcoin') return 'bitcoin-mainnet';

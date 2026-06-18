@@ -13,7 +13,7 @@
 // Variant follows AVAILABLE WIDTH, not container type:
 //   < THRESHOLD_PX  → `small`  (mobile portrait, narrow desktop window,
 //                                Chrome extension popup, future native
-//                                app with constrained width — anything
+//                                app with constrained width, or anything
 //                                where horizontal space is at a premium)
 //   ≥ THRESHOLD_PX  → `full`   (desktop browsers, tablets in landscape,
 //                                extension full-screen mode)
@@ -23,7 +23,7 @@
 // the *source* so the badge can show whether the user is in auto
 // mode or has forced an override.
 //
-// 640px threshold — every common phone in portrait sits below; every
+// 640px threshold: every common phone in portrait sits below; every
 // tablet in landscape and every desktop window the user is likely to
 // keep open sits above. Tweakable in one place.
 
@@ -34,7 +34,7 @@ const STORAGE_KEY = 'xc.devVariant';
 
 function normalize(v) {
     if (v === 'small' || v === 'full' || v === 'sidebar' || v === 'extension') return v;
-    if (v === 'popup') return 'extension';   // legacy alias — popup now means the chrome-extension dropdown
+    if (v === 'popup') return 'extension';   // legacy alias; popup now means the chrome-extension dropdown
     return null;
 }
 
@@ -123,7 +123,7 @@ export function useActiveVariant() {
 /**
  * Map the active variant to the shell value `<MessagingProvider>` expects.
  * `full` → `web`; `small` and `sidebar` → `popup` (both are narrow
- * surfaces; the small-viewport behaviour set applies — auto-lock,
+ * surfaces; the small-viewport behaviour set applies (auto-lock,
  * pancake-only nav, etc.).
  */
 export function shellForVariant(variant) {

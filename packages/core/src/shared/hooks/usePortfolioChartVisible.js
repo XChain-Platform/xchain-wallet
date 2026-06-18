@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 // Persisted, app-wide "show portfolio chart" toggle. Same shape as
-// useBalancesHidden — localStorage-backed, broadcast same-tab via a
+// useBalancesHidden: localStorage-backed, broadcast same-tab via a
 // CustomEvent and cross-tab via the `storage` event so every mount
 // stays in sync. Default is true; the user clicks the chart icon in
 // TotalBalanceHero to hide the PortfolioChart card, click again to

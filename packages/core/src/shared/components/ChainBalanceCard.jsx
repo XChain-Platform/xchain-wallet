@@ -81,7 +81,7 @@ export function ChainBalanceCard({ descriptor, entries, multisig }) {
 
             {allError ? (
                 <p className={styles.fallback}>
-                    Balance unavailable — {errors[0].error}
+                    Balance unavailable: {errors[0].error}
                 </p>
             ) : !native && totals.tokens.length === 0 ? (
                 <p className={styles.fallback}>No balances on this chain.</p>
@@ -155,8 +155,8 @@ function safeBigInt(v) {
 
 /**
  * Format an atomic-unit string with the configured divisibility.
- * Trailing zeros are preserved so 0.04210000 BTC reads as 0.04210000
- * — matches the BalanceList convention and BTC-native accounting
+ * Trailing zeros are preserved so 0.04210000 BTC reads as 0.04210000,
+ * matching the BalanceList convention and BTC-native accounting
  * expectations. Non-divisible (divisibility=0) tokens render as
  * plain integers.
  */

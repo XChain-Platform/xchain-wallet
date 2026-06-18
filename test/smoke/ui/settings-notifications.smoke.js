@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §35 Settings — Step 8 — Notifications panel.
+// Smoke for §35 Settings: Step 8: Notifications panel.
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
@@ -31,7 +31,7 @@ assert.match(
     'writes through nested notifications patch',
 );
 
-// §46 — the permission affordance reads the live browser permission and
+// §46: the permission affordance reads the live browser permission and
 // offers a request button (web + desktop renderer; hidden where the
 // Notification API is absent).
 assert.match(src, /Notification\.permission/, 'reads live Notification.permission');
@@ -60,7 +60,7 @@ assert.match(block, /kind:\s*'panel'/);
 assert.match(block, /Component:\s*NotificationsSection/);
 assert.match(block, /props:\s*\{\s*walletId:\s*activeWallet\?\.id\s*\}/, 'threads the active walletId into the section');
 
-// §46 price-alert manager — the toggle now has a real CRUD surface under
+// §46 price-alert manager: the toggle now has a real CRUD surface under
 // it, hard-gated on the privacy price-data opt-out.
 assert.match(src, /import \{ usePriceAlerts \}/, 'imports the usePriceAlerts hook');
 assert.match(src, /PriceAlertForm/, 'renders the shared PriceAlertForm');

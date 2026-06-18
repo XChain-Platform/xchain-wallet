@@ -100,7 +100,7 @@ for (const channel of expectedHandlers) {
     assert.ok(!bareHostRegister, `bridge handler ${channel} no longer calls host.register directly`);
 }
 
-// 5. Behavioural — the logConsole module accepts the new structured
+// 5. Behavioural: the logConsole module accepts the new structured
 //    record() calls without throwing and reflects them in entries().
 //    Verifies the API contract the surfaces above rely on.
 const { logConsole } = await import(
@@ -127,4 +127,4 @@ assert.equal(after.at(-1).level, 'warn',
     'logConsole.record preserves the level on the final bridge error entry');
 logConsole.clear();
 
-console.log('OK — logConsole emissions across vault / signer / encoder / bridge');
+console.log('OK: logConsole emissions across vault / signer / encoder / bridge');

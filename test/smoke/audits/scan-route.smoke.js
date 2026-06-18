@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// §24.3 / Cluster Y FOLLOWUP 1 smoke — dedicated scan-and-classify route.
+// §24.3 / Cluster Y FOLLOWUP 1 smoke: dedicated scan-and-classify route.
 //
 // Asserts:
 //   1. ScanRoute exists, mounts QrScanner + a paste fallback, and
@@ -42,7 +42,7 @@ const scanRouteSrc = readFileSync(
 assert.ok(/export function ScanRoute\(/.test(scanRouteSrc),
     'ScanRoute is exported');
 assert.ok(/import \{ detectQrContent \} from '\.\.\/\.\.\/uri\/detectQrContent\.js'/.test(scanRouteSrc),
-    'ScanRoute imports the existing detectQrContent classifier — no duplicate logic');
+    'ScanRoute imports the existing detectQrContent classifier (no duplicate logic)');
 assert.ok(/import \{ parseXchainUri \} from '\.\.\/\.\.\/uri\/xchainUri\.js'/.test(scanRouteSrc),
     'ScanRoute imports parseXchainUri for the richer xchain: intent split');
 assert.ok(/QrScanner onFrame=\{handleFrame\}/.test(scanRouteSrc),
@@ -54,7 +54,7 @@ assert.ok(/t\('scan\.classifyPaste'\)/.test(scanRouteSrc),
 assert.ok(/claimedRef\.current/.test(scanRouteSrc),
     'ScanRoute uses a claimedRef latch so a stream of QR frames only routes once');
 assert.ok(/t\('scan\.error\.wif'\)/.test(scanRouteSrc) && /t\('scan\.error\.mnemonic'\)/.test(scanRouteSrc),
-    'ScanRoute refuses to auto-route WIF / mnemonic — directs the user to Import Wallet instead (i18n: scan.error.wif/mnemonic)');
+    'ScanRoute refuses to auto-route WIF / mnemonic; directs the user to Import Wallet instead (i18n: scan.error.wif/mnemonic)');
 assert.ok(/t\('scan\.error\.xcwChunk',\s*\{\s*n:\s*detected\.n,\s*total:\s*detected\.total\s*\}\)/.test(scanRouteSrc),
     'ScanRoute punts XCW chunks back to PsbtSignForm (i18n: scan.error.xcwChunk with n/total vars)');
 
@@ -156,7 +156,7 @@ for (const shell of shells) {
         `${shell.name} App.jsx unlockedView union covers 'scan'`);
 }
 
-// --- 5. Runtime classification — send + receive + psbt + secrets ------
+// --- 5. Runtime classification: send + receive + psbt + secrets ------
 // (Node smokes can't import .jsx; we exercise the underlying classifier
 //  ScanRoute calls into to confirm the four outcome branches still
 //  produce the shapes the shell wiring expects.)
@@ -188,5 +188,5 @@ assert.ok(['wif', 'unknown', 'address'].includes(wif.type),
     'wif test string classifies into one of the documented branches');
 
 console.log(
-    'OK — scan-route smoke (§24.3 / Cluster Y FOLLOWUP 1 — ScanRoute mounts QrScanner + paste fallback over the existing detectQrContent classifier; BottomTabBar swaps Receive→Scan in PRIMARY_TABS and lists Receive in More; LeftNav grows a Scan row + VIEW_GROUPS entry; web/desktop/popup App.jsx all import ScanRoute and route send/receive/psbt outcomes to existing views; secret material is NOT auto-imported)',
+    'OK: scan-route smoke (§24.3 / Cluster Y FOLLOWUP 1: ScanRoute mounts QrScanner + paste fallback over the existing detectQrContent classifier; BottomTabBar swaps Receive->Scan in PRIMARY_TABS and lists Receive in More; LeftNav grows a Scan row + VIEW_GROUPS entry; web/desktop/popup App.jsx all import ScanRoute and route send/receive/psbt outcomes to existing views; secret material is NOT auto-imported)',
 );

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §30.4 / Cluster E FOLLOWUP 1 — HW signing path for PsbtSignForm.
+// Smoke for §30.4 / Cluster E FOLLOWUP 1: HW signing path for PsbtSignForm.
 //
 // Pins:
 //   - core/flows/signFlows.js exports `signPsbtFlow` with an injected
@@ -123,7 +123,7 @@ for (const [name, src] of [
 
 // Desktop shim now also has the prereq parsePsbtRequest + signPsbtUserInitiated
 // (PsbtSignForm was being routed in desktop App.jsx but couldn't actually
-// sign — the underlying shims were silently missing).
+// sign; the underlying shims were silently missing).
 assert.match(
     desktopShim,
     /export function parsePsbtRequest\(opts\)/,

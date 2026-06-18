@@ -22,7 +22,7 @@ version or run one as a network service, you must make your changes available
 under the same license.
 
 A separate commercial license is available for businesses that need terms without
-the AGPL's source-sharing requirement — contact legal@dankest.llc.`;
+the AGPL's source-sharing requirement. Contact legal@dankest.llc.`;
 
 export const LICENSE_TEXT = `                    GNU AFFERO GENERAL PUBLIC LICENSE
                        Version 3, 19 November 2007

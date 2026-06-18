@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// §24.2 / G053 smoke — full-layout left navigation.
+// §24.2 / G053 smoke: full-layout left navigation.
 //
 // Asserts:
 //   1. LeftNav.jsx + LeftNav.module.css exist; LeftNav and
@@ -119,7 +119,7 @@ for (const [label, src] of [['web', webApp], ['desktop', desktopApp]]) {
         `${label} App passes the active unlockedView into LeftNav`);
     // onLock is wired through a small handler that calls lockWallet();
     // accept either the inline arrow form (Step 1 ship) or the named
-    // handler form (Step 2 ship — both LeftNav and BottomTabBar share
+    // handler form (Step 2 ship; both LeftNav and BottomTabBar share
     // the lock callback).
     assert.ok(
         /onLock=\{\(\)\s*=>\s*\{[\s\S]*?lockWallet\(\)/.test(src)
@@ -133,5 +133,5 @@ assert.ok(!/LeftNav/.test(popupApp),
     'Extension popup intentionally does NOT mount LeftNav (always compact per §24.1)');
 
 console.log(
-    'OK — left-nav smoke (§24.2 / G053 LeftNav + FullLayoutWithNav exports; primary list Home/History/Send/Receive/Scan/DEX/Dispensers/Contracts/Messaging + Contacts secondary; Contracts gated on hasBtcAddress; active row aria-current="page"; 220px sidebar collapses below 900px; web + desktop App.jsx wrap unlocked tree, popup left compact)',
+    'OK: left-nav smoke (§24.2 / G053 LeftNav + FullLayoutWithNav exports; primary list Home/History/Send/Receive/Scan/DEX/Dispensers/Contracts/Messaging + Contacts secondary; Contracts gated on hasBtcAddress; active row aria-current="page"; 220px sidebar collapses below 900px; web + desktop App.jsx wrap unlocked tree, popup left compact)',
 );

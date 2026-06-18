@@ -8,13 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §25.2 / Cluster J FOLLOWUP 1 — synthesized fixture data
+// Smoke for §25.2 / Cluster J FOLLOWUP 1: synthesized fixture data
 // for the demo wallet (balances + history).
 //
 // Pins:
 //   - flows/demoFixtures.js exports synthesizeDemoBalances,
 //     synthesizeDemoHistory, synthesizeDemoLinks.
-//   - synthesizeDemoBalances mirrors getWalletBalances' shape — first
+//   - synthesizeDemoBalances mirrors getWalletBalances' shape; first
 //     address per chain gets a non-zero native + tokens, additional
 //     addresses get zero balances so the row still renders.
 //   - synthesizeDemoHistory returns 2 entries for known chains, [] for
@@ -107,7 +107,7 @@ assert.deepEqual(synthesizeDemoBalances({}), {}, 'empty input returns empty');
 assert.deepEqual(synthesizeDemoBalances(null), {}, 'null input returns empty');
 
 // Unknown chain still produces entries (with null balances) so the
-// shape is consistent — but we'll just verify it doesn't throw.
+// shape is consistent; we'll just verify it doesn't throw.
 {
     const out = synthesizeDemoBalances({ 'imaginary-chain': [{ address: 'x', label: '', addressType: 'p2pkh', derivationPath: null }] });
     assert.ok(out['imaginary-chain'], 'unknown chains still surface');
@@ -123,7 +123,7 @@ assert.deepEqual(synthesizeDemoBalances(null), {}, 'null input returns empty');
     assert.equal(entries[0].params.destination, 'bc1q...0',
         'incoming SEND destinations the user');
     assert.equal(entries[0].blockIndex, null,
-        'first entry is pending — exercises the timeline pending state');
+        'first entry is pending (exercises the timeline pending state)');
     assert.equal(entries[1].action, 'ISSUE', 'second entry is ISSUE');
     assert.equal(entries[1].params.source, 'bc1q...0', 'ISSUE source is the user');
     assert.ok(entries[1].blockIndex && Number.isInteger(entries[1].blockIndex),

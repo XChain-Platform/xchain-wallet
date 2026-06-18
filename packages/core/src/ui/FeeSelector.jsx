@@ -16,7 +16,7 @@ const SPEEDS_WITH_CUSTOM = [...TIER_SPEEDS, 'custom'];
 const SPEED_LABELS = { low: 'Low', normal: 'Normal', fast: 'Fast', custom: 'Custom' };
 
 /**
- * FeeSelector — §44.2 Low / Normal / Fast / Custom slider. Rendering
+ * FeeSelector (§44.2): Low / Normal / Fast / Custom slider. Rendering
  * is driven by `tiers` from
  * `flows/feeEstimate.estimateNativeSendFeeTiers`; selection writes
  * back via `onChange`.
@@ -27,7 +27,7 @@ const SPEED_LABELS = { low: 'Low', normal: 'Normal', fast: 'Fast', custom: 'Cust
  * equivalent) input appears in place of the readout so the rate can
  * be edited directly.
  *
- * The component is presentation-only — it does NOT compute fees
+ * The component is presentation-only: it does NOT compute fees
  * itself. Callers fetch tiers via `estimateNativeSendFeeTiers` and
  * pass them in; the selected tier (or custom rate) flows back via
  * `onChange({ mode, customRate? })`.
@@ -35,8 +35,8 @@ const SPEED_LABELS = { low: 'Low', normal: 'Normal', fast: 'Fast', custom: 'Cust
  * Props
  *   - tiers      `{ low, normal, fast, unit }` from estimateNativeSendFeeTiers
  *   - value      `{ mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }`
- *   - onChange   `(next) => void` — same shape as `value`
- *   - customEstimate  optional `FeeEstimate` for Custom mode — when provided,
+ *   - onChange   `(next) => void` (same shape as `value`)
+ *   - customEstimate  optional `FeeEstimate` for Custom mode. When provided,
  *                     its `coinAmount` + (via `formatFiat`) fiat figure render
  *                     in the same readout slot the tier modes use, so the live
  *                     fee stays visible as the user edits the rate.
@@ -122,8 +122,8 @@ export function FeeSelector({
                     disabled={disabled}
                     aria-label="Network fee"
                     aria-valuetext={isCustom
-                        ? `Custom — ${Number.isFinite(value?.customRate) ? value.customRate : ''} ${tiers.unit}`.trim()
-                        : `${SPEED_LABELS[sliderSpeed]} — ${activeEstimate?.coinAmount ?? ''}${activeEstimate?.etaMinutes ? ` · ~${activeEstimate.etaMinutes} min` : ''}`}
+                        ? `Custom: ${Number.isFinite(value?.customRate) ? value.customRate : ''} ${tiers.unit}`.trim()
+                        : `${SPEED_LABELS[sliderSpeed]}: ${activeEstimate?.coinAmount ?? ''}${activeEstimate?.etaMinutes ? ` · ~${activeEstimate.etaMinutes} min` : ''}`}
                     className={styles.slider}
                 />
                 <div

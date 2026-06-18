@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for Phase 4 — Step 17 of 23 — Multisig wallet creation
+// Smoke for Phase 4, Step 17 of 23: Multisig wallet creation
 // coordinator (§22 + §42.9).
 
 import { strict as assert } from 'node:assert';
@@ -54,7 +54,7 @@ assert.deepEqual(
 assert.equal(validateMultisigConfig(null).ok, false, 'rejects null');
 assert.equal(validateMultisigConfig({}).ok, false, 'rejects empty object');
 
-// buildMultisigConfig — happy path for P2WSH.
+// buildMultisigConfig: happy path for P2WSH.
 const cosignerA = {
     name: 'Alice',
     pubkey: '02'.padEnd(66, 'a'),
@@ -107,7 +107,7 @@ const cfgMusig2 = buildMultisigConfig({
 assert.ok(cfgMusig2.scriptTemplate.startsWith('musig2:'),
     'taproot-musig2 scriptTemplate is "musig2:<aggXOnly>"');
 
-// taproot-musig2 is n-of-n — a T<N config derives an N-key aggregate address
+// taproot-musig2 is n-of-n. A T<N config derives an N-key aggregate address
 // that can never be signed by fewer than N cosigners, so the funds are
 // permanently unspendable (proven on regtest). buildMultisigConfig must reject
 // it; true T-of-N belongs on p2wsh-multisig.
@@ -243,5 +243,5 @@ for (const [shell, appPath] of [
 }
 
 console.log(
-    'OK — multisig create smoke (schema + buildMultisigConfig + duplicate-pubkey guard + threshold > N guard + taproot-musig2 aggregated pubkey requirement + createMultisigConfig core flow guards + bg handler + 3-shell messaging exports + getActionByIndex de-duplication + MultisigCreate route with all three schemes + 3-shell App.jsx + ActionsMenu BTC gate)',
+    'OK: multisig create smoke (schema + buildMultisigConfig + duplicate-pubkey guard + threshold > N guard + taproot-musig2 aggregated pubkey requirement + createMultisigConfig core flow guards + bg handler + 3-shell messaging exports + getActionByIndex de-duplication + MultisigCreate route with all three schemes + 3-shell App.jsx + ActionsMenu BTC gate)',
 );

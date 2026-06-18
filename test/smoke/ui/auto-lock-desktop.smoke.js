@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Cluster O FOLLOWUP 1 smoke — auto-lock active for the desktop shell.
+// Cluster O FOLLOWUP 1 smoke: auto-lock active for the desktop shell.
 //
 // v0.204.0 wired `useAutoLock` for popup + web only; v0.205.0 made it
 // settings-driven; this FOLLOWUP extends the enable gate to include
@@ -20,7 +20,7 @@
 //      (popup + web + desktop) with the !locking guard preserved.
 //   2. The shared useAutoLock hook still wires window-level listeners
 //      for the activity events (mousemove / keydown / scroll / click /
-//      touchstart) — Electron renderer is Chromium so the same hook
+//      touchstart). Electron renderer is Chromium so the same hook
 //      works unchanged.
 //   3. The hook's header comment no longer claims web is the lone opt-out.
 
@@ -60,7 +60,7 @@ for (const ev of ['mousemove', 'keydown', 'scroll', 'click', 'touchstart']) {
 
 assert.ok(
     !/today: web/.test(hookSrc),
-    'useAutoLock header no longer claims "today: web" — all three shells opt in',
+    'useAutoLock header no longer claims "today: web"; all three shells opt in',
 );
 assert.ok(
     /All three shells \(popup, web, desktop\) opt in/.test(hookSrc),
@@ -68,5 +68,5 @@ assert.ok(
 );
 
 console.log(
-    'OK — auto-lock desktop smoke (Cluster O FOLLOWUP 1 — useAutoLock enable predicate covers desktop alongside popup + web; activity listeners unchanged; hook header reflects the new tri-shell behaviour)',
+    'OK: auto-lock desktop smoke (Cluster O FOLLOWUP 1; useAutoLock enable predicate covers desktop alongside popup + web; activity listeners unchanged; hook header reflects the new tri-shell behaviour)',
 );

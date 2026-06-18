@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// DispenserBadge — §41.6 "Dispenser available" marker for a ticker on
+// DispenserBadge (§41.6): "Dispenser available" marker for a ticker on
 // a given chain. Used in MarketsList rows so users can see at a glance
 // which tokens can also be bought via an open dispenser (Phase 2
 // §40.7.2's explorer surface).
@@ -16,7 +16,7 @@
 // Cache: module-level session-scoped Map keyed by `${chainId}::${tick}`
 // so the same (chain, tick) pair doesn't re-query when the row
 // re-renders (filter flips, watchlist toggles, etc.). Cleared only by
-// page reload; stale data is fine — "is there AT LEAST ONE open
+// page reload; stale data is fine: "is there AT LEAST ONE open
 // dispenser for this token" flips rarely on mainnet timescales.
 
 import { useEffect, useState } from 'react';
@@ -63,7 +63,7 @@ function resolveCount(messaging, chainId, tick) {
             return open;
         })
         .catch(() => {
-            // Isolated failure — cache as zero so we don't hammer the
+            // Isolated failure; cache as zero so we don't hammer the
             // explorer. User can reload the page to retry.
             CACHE.set(key, { state: 'ready', count: 0 });
             return 0;
@@ -115,7 +115,7 @@ export function DispenserBadge({ chainId, tick, label }) {
     );
 }
 
-/** @internal test hook — clear the module-level cache. */
+/** @internal test hook: clear the module-level cache. */
 export function __clearDispenserBadgeCache() {
     CACHE.clear();
 }

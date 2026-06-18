@@ -16,7 +16,7 @@
 // pick up the swap transparently.
 //
 // Lucide defaults: 24×24 viewBox, 2px stroke, currentColor, round
-// caps/joins — matches STROKE_PROPS exactly. Each migrated icon below
+// caps/joins (matches STROKE_PROPS exactly). Each migrated icon below
 // passes `size={18}` to land on the wallet's 18×18 render size.
 import {
     QrCode as LucideQrCode,
@@ -44,7 +44,7 @@ const STROKE_PROPS = {
     'aria-hidden': 'true',
 };
 
-// Lucide wrapper — matches the hand-rolled icons' 18×18 render + 2px
+// Lucide wrapper. Matches the hand-rolled icons' 18×18 render + 2px
 // stroke so swapping a single icon doesn't disturb surrounding layout.
 const LUCIDE_PROPS = {
     size: 18,

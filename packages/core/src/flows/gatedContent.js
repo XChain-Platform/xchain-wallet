@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Token-gated content flow — fetches a gated FILE's ciphertext from
+// Token-gated content flow. Fetches a gated FILE's ciphertext from
 // the explorer, finds the symmetric key in MESSAGEs addressed to the
 // holder's address, decrypts the file client-side. No on-chain
 // transaction is required to unlock.
@@ -29,7 +29,7 @@ import {
 } from './demoGatedContent.js';
 
 // @noble/hashes is pure-JS so this code path works in every shell
-// target — popup / extension service worker / web bundle / desktop
+// target (popup / extension service worker / web bundle / desktop
 // renderer. Node's `crypto` module isn't reachable from Vite's
 // browser builds, hence the swap.
 import { sha256 } from '@noble/hashes/sha2';
@@ -163,7 +163,7 @@ export async function unlockGatedFile({ sdk, address, wif, actionIndex, keyHash 
         throw err;
     }
 
-    // Decrypt — GCM auth tag mismatch surfaces as a typed SDK error.
+    // Decrypt. GCM auth tag mismatch surfaces as a typed SDK error.
     const plaintext = sdk.gatedFile.decryptFileBytes(ciphertext, key);
     PT_CACHE.set(ptKey(address, actionIndex), plaintext);
     return plaintext;
@@ -212,7 +212,7 @@ export async function unlockGatedPack({ sdk, address, wif, keyHash, fileEntries 
  * candidate to identify which gated FILE it unlocks.
  *
  * Pass the returned Buffer as the `message` field of `sdk.sendMessage`
- * (or `messaging.send`) — the messaging layer detects the Buffer and
+ * (or `messaging.send`). The messaging layer detects the Buffer and
  * encrypts via the binary ECIES path so the bytes survive intact.
  *
  * @param {{
@@ -260,7 +260,7 @@ export async function unlockGatedFileForAddress({
     if (!actionIndex) throw new Error('unlockGatedFileForAddress: actionIndex is required');
     if (!keyHash) throw new Error('unlockGatedFileForAddress: keyHash is required');
 
-    // Demo content short-circuit — bypass crypto entirely so the demo
+    // Demo content short-circuit: bypass crypto entirely so the demo
     // wallet can show what unlocked files look like without needing a
     // real key handoff or explorer ciphertext.
     if (isDemoGatedActionIndex(actionIndex)) {
@@ -335,7 +335,7 @@ export async function unlockGatedFileForAddress({
 export async function listGatedFiles({ sdk, tick }) {
     if (!tick) throw new Error('listGatedFiles: tick is required');
 
-    // Demo content short-circuit — known demo tickers serve in-memory
+    // Demo content short-circuit: known demo tickers serve in-memory
     // fixtures so the wallet's Unlock tab has something to render even
     // when no real explorer is wired up.
     const demoGroups = getDemoGatedGroupsForTick(tick);

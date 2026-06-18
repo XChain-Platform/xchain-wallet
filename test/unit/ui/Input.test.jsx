@@ -37,7 +37,7 @@ describe('<Input>', () => {
         const input = screen.getByLabelText('Email');
         expect(input).toHaveAttribute('aria-invalid', 'true');
         expect(screen.getByRole('alert')).toHaveTextContent('Required');
-        // Hint hidden when error is present (intentional — avoids dual messages).
+        // Hint hidden when error is present (intentional; avoids dual messages).
         expect(screen.queryByText('Use work email')).toBeNull();
     });
 

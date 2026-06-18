@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// @xchain-wallet/core/ui — React primitives for the shell layer.
+// @xchain-wallet/core/ui: React primitives for the shell layer.
 //
 // tokens.css is a sibling of this file; shells import it once at their
 // entry point: `import '@xchain-wallet/core/ui/tokens.css';`.

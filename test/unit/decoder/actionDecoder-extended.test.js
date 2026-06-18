@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Extended coverage for actionDecoder — ISSUE (all versions), MINT,
+// Extended coverage for actionDecoder: ISSUE (all versions), MINT,
 // DESTROY, BROADCAST (all versions), DISPENSER (all versions), DIVIDEND,
 // LIST (v0 + v1), AIRDROP (v0–v3), and BATCH.
 
@@ -18,7 +18,7 @@ import { defaultRegistry } from '../../../packages/core/src/registry/index.js';
 
 const chainRegistry = defaultRegistry();
 
-describe('decodeAction — extended', () => {
+describe('decodeAction extended', () => {
     describe('MINT', () => {
         it('produces a mint summary with destination', () => {
             const d = decodeAction({

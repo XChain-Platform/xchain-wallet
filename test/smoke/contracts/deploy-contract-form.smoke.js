@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for Phase 4 — Step 4 of 23 — DEPLOY authoring form (§42.6).
+// Smoke for Phase 4, Step 4 of 23: DEPLOY authoring form (§42.6).
 //
 // Asserts:
 //   1. DeployContractForm.jsx exists; single-component named export.
@@ -96,7 +96,7 @@ for (const label of ['Validate code', 'Estimate size', 'Suggest gas']) {
 
 assert.ok(/SignCredentials\b/.test(formSrc),
     'DeployContractForm uses SignCredentials on the review screen');
-// §20 Cluster X Step 19 — handler refactored from a ternary into an
+// §20 Cluster X Step 19: handler refactored from a ternary into an
 // if/else cascade (watcher-mode wins first). Accept either shape.
 assert.ok(
     /isHwSource\s*\n?\s*\?\s*await messaging\.deployActionHw/.test(formSrc)
@@ -141,7 +141,7 @@ await assert.rejects(
     'contractValidate guards chainId',
 );
 
-// Positive — contractValidate routes through sdk.contracts.validate
+// Positive: contractValidate routes through sdk.contracts.validate
 {
     let called = null;
     const fakeSdk = {
@@ -223,5 +223,5 @@ assert.ok(existsSync(monacoPath),
     'Monaco deferral captured at claude/reports/specs/2026-04-24_phase4-monaco-editor.md');
 
 console.log(
-    'OK — deploy contract form smoke (DeployContractForm shared route + deployAction / contractValidate / checkCodeSize / suggestGasLimit flows + four new background handlers + three-shell messaging helpers + ContractsList onDeploy button + three-shell contract-deploy sub-route + Monaco deferral captured)',
+    'OK: deploy contract form smoke (DeployContractForm shared route + deployAction / contractValidate / checkCodeSize / suggestGasLimit flows + four new background handlers + three-shell messaging helpers + ContractsList onDeploy button + three-shell contract-deploy sub-route + Monaco deferral captured)',
 );

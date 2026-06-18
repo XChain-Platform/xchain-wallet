@@ -50,7 +50,7 @@ const PROTOCOL_COIN_TICKER = {
 const FIAT_CODES = ['USD', 'CAD', 'AUD', 'MXN', 'GBP', 'JPY', 'CNY', 'CHF', 'BRL', 'INR', 'EUR', 'KRW'];
 
 /**
- * Dispenser authoring form — §40.7.1.
+ * Dispenser authoring form (§40.7.1).
  *
  * Opens a new DISPENSER (v0 Create) so a token owner can vend
  * `GIVE_AMOUNT` of their token every time a buyer sends
@@ -61,10 +61,10 @@ const FIAT_CODES = ['USD', 'CAD', 'AUD', 'MXN', 'GBP', 'JPY', 'CNY', 'CHF', 'BRL
  *   - GIVE_COIN + GET_COIN = the current chain's protocol ticker
  *     (BTC / LTC / DOGE). Dispensers do not cross chains.
  *   - GET_TICK = '' (coin-paid) when the buyer pays in the native
- *     coin — the primary §40.7.1 lane. The SDK validator from
+ *     coin (the primary §40.7.1 lane). The SDK validator from
  *     xchain-sdk@1.8.1 accepts an empty GET_TICK as long as
  *     GET_COIN is set.
- *   - GET_ADDRESS left empty — protocol defaults to SOURCE.
+ *   - GET_ADDRESS left empty; protocol defaults to SOURCE.
  *
  * Cancel + Edit (v1 / v2) are not exposed here; those land alongside
  * a dispenser-detail surface in a later step.
@@ -124,7 +124,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
-    // Cluster P FOLLOWUP 5 — form-draft persistence. Persists every
+    // Cluster P FOLLOWUP 5: form-draft persistence. Persists every
     // user-visible composition field (chain / source / give terms /
     // advanced fields). Password stays in component state.
     const formDraftTtlMs = Number.isFinite(settings?.privacy?.formDraftTtlMs)
@@ -327,7 +327,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             if (fiatCode) p.FIAT_CODE = fiatCode;
             if (fa) p.FIAT_AMOUNT = fa;
         } else if (fiatCode && fa) {
-            // Validator FIAT path — no oracle, but fiat code + amount set.
+            // Validator FIAT path: no oracle, but fiat code + amount set.
             p.GET_AMOUNT = trig || '0';
             p.FIAT_CODE = fiatCode;
             p.FIAT_AMOUNT = fa;
@@ -375,7 +375,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             return;
         }
         if (Number(esc) < Number(ga)) {
-            setFormError('Escrow is smaller than a single fill — the dispenser would never dispense.');
+            setFormError('Escrow is smaller than a single fill; the dispenser would never dispense.');
             return;
         }
         const oracle = oracleAddress.trim();
@@ -390,7 +390,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             return;
         }
         if (oracle && !fiatCode) {
-            setFormError('Oracle pricing requires a FIAT_CODE — pick a fiat currency under Advanced.');
+            setFormError('Oracle pricing requires a FIAT_CODE. Pick a fiat currency under Advanced.');
             return;
         }
         if (fa && !/^\d+\.\d{2}$/.test(fa)) {
@@ -425,7 +425,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     const [hwStatus, setHwStatus] = useState('idle');
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
 
-    // §20 / Cluster W FOLLOWUP 5 — watcher-mode encode-only branch.
+    // §20 / Cluster W FOLLOWUP 5: watcher-mode encode-only branch.
     const { isWatcherMode } = useWalletMode();
 
     async function handleSubmit(event) {
@@ -464,7 +464,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             setResult(res);
             setPassword('');
             setStage('done');
-            // Cluster P FOLLOWUP 5 — clear the draft on success.
+            // Cluster P FOLLOWUP 5: clear the draft on success.
             draft.clear();
             setDraftPending(false);
         } catch (err) {
@@ -574,7 +574,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>
-                        Watcher mode — this wallet will build an unsigned transaction.
+                        Watcher mode: this wallet will build an unsigned transaction.
                         Sign it on your Signer-mode wallet, then bring the
                         signed transaction to a Full-mode wallet to broadcast.
                     </p>
@@ -599,7 +599,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     <StatusMessage
                         variant="error"
                         recovery={
-                            // Cluster P FOLLOWUP 4 — encoder /
+                            // Cluster P FOLLOWUP 4: encoder /
                             // network / device errors are recoverable
                             // by returning to the form stage and
                             // adjusting an input or re-staging the HW
@@ -745,7 +745,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                             value={fiatCode}
                             onChange={(e) => setFiatCode(e.target.value)}
                         >
-                            <option value="">— none (coin-paid) —</option>
+                            <option value="">(none, coin-paid)</option>
                             {FIAT_CODES.map((c) => (
                                 <option key={c} value={c}>{c}</option>
                             ))}
@@ -773,7 +773,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             ) : null}
 
             {formError ? (
-                // Cluster P FOLLOWUP 4 — formError is field-level
+                // Cluster P FOLLOWUP 4: formError is field-level
                 // validation. Recovery is user-iteration over the
                 // Inputs above; no one-click affordance fits.
                 <StatusMessage variant="error">{formError}</StatusMessage>

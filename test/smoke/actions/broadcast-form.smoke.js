@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for Phase 2 — Step 20 (piece 6) — BROADCAST form (§40.6).
+// Smoke for Phase 2, Step 20 (piece 6): BROADCAST form (§40.6).
 //
 // Asserts:
 //   1. packages/core/src/shared/routes/BroadcastForm.jsx exists and
@@ -17,8 +17,8 @@
 //   2. Two-stage state machine (form → review/submitting → done).
 //   3. Review runs the composed BROADCAST params through
 //      decoder.decodeAction with action: "BROADCAST".
-//   4. Sign wires through messaging.broadcastAction — the new Step-20
-//      helper.
+//   4. Sign wires through messaging.broadcastAction (the new Step-20
+//      helper).
 //   5. Validation rejects the case where both feed name and text are
 //      empty (MESSAGE would be blank and the protocol validator would
 //      reject it).
@@ -27,7 +27,7 @@
 //      when VALUE + FEE both present, '2' when only FEE, else '0'.
 //   7. Core flow broadcastAction exists, is re-exported from
 //      @xchain-wallet/core flows, and guards required inputs.
-//   8. Decoder covers BROADCAST — v0 message, v1 oracle, v2 feed URL,
+//   8. Decoder covers BROADCAST: v0 message, v1 oracle, v2 feed URL,
 //      v3 feed results. Each summary differentiates the lane so the
 //      sign screen matches the user's intent.
 //   9. Background host registers action.broadcast; all three shell
@@ -173,7 +173,7 @@ assert.ok(
 // --- 8. Decoder coverage ----------------------------------------------
 
 {
-    // v0 — plain message
+    // v0: plain message
     const v0 = decoder.decodeAction({
         action: 'BROADCAST',
         params: { VERSION: '0', MESSAGE: 'hello world' },
@@ -188,7 +188,7 @@ assert.ok(
     });
     assert.ok(v0empty.warnings.some((w) => /Message is empty/.test(w)), 'v0 warns on empty MESSAGE');
 
-    // v1 — oracle
+    // v1: oracle
     const v1 = decoder.decodeAction({
         action: 'BROADCAST',
         params: { VERSION: '1', MESSAGE: 'BTC-USD', VALUE: '84860', FEE: '1' },
@@ -197,14 +197,14 @@ assert.ok(
     assert.ok(v1.details.some((d) => d.label === 'Feed'), 'v1 uses Feed label');
     assert.ok(v1.details.some((d) => d.label === 'Feed fee'), 'v1 surfaces Feed fee');
 
-    // v2 — feed URL
+    // v2: feed URL
     const v2 = decoder.decodeAction({
         action: 'BROADCAST',
         params: { VERSION: '2', MESSAGE: 'https://feeds.example/feed.json', FEE: '1' },
     });
     assert.ok(/Publish feed/.test(v2.summary), 'v2 summary identifies the feed lane');
 
-    // v3 — feed results
+    // v3: feed results
     const v3 = decoder.decodeAction({
         action: 'BROADCAST',
         params: { VERSION: '3', BROADCAST_ACTION_INDEX: '1234', VALUE: '7' },
@@ -280,5 +280,5 @@ for (const [shell, appPath] of [
 }
 
 console.log(
-    'OK — broadcast form smoke (BroadcastForm §40.6 + broadcastAction core flow + action.broadcast handler + three messaging helpers + ActionsMenu entry + popup/web/desktop wiring + decoder coverage for v0/v1/v2/v3)',
+    'OK: broadcast form smoke (BroadcastForm §40.6 + broadcastAction core flow + action.broadcast handler + three messaging helpers + ActionsMenu entry + popup/web/desktop wiring + decoder coverage for v0/v1/v2/v3)',
 );

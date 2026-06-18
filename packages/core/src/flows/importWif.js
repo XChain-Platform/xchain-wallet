@@ -8,13 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// importWif — §15.5. Add a single imported private key to an existing
+// importWif: §15.5. Add a single imported private key to an existing
 // HD wallet. Produces an Address record with source='imported-wif',
 // derivationPath=null, accountId=null; stores the encrypted WIF in the
 // wallet's `importedKeys` array under the SAME master key that
 // protects the seed (so one password unlocks both).
 //
-// Per §15.5.3 these keys are NOT recoverable from the mnemonic — the
+// Per §15.5.3 these keys are NOT recoverable from the mnemonic; the
 // caller (shell) is responsible for surfacing the backup-implications
 // warning before invoking this flow.
 
@@ -105,7 +105,7 @@ export async function importWif({
     if (!walletRecord) throw new WalletNotFoundError(walletId);
 
     // Validate WIF via SDK (checksum + network match) and derive the address
-    // before any expensive work — fast failure on bad input.
+    // before any expensive work; fast failure on bad input.
     const sdk = sdkRegistry.get(chainId);
     let keyInfo;
     try {

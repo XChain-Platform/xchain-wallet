@@ -11,7 +11,7 @@
 // Smoke test for Batch 5 piece 16 (Playwright harness).
 //
 // Playwright itself can't run here (no workspace-installed browsers),
-// so this smoke verifies the harness is wired correctly — config,
+// so this smoke verifies the harness is wired correctly: config,
 // specs exist and reference the expected symbols, workspace + CI know
 // about the new package.
 
@@ -101,7 +101,7 @@ assert.ok(/playwright/i.test(readme), 'README mentions playwright');
 // --- 6. test-results is git-ignored ---------------------------------
 
 const gitignore = readFileSync(join(wsRoot, '.gitignore'), 'utf8');
-// Nothing explicit yet — but Playwright's default outputDir is
+// Nothing explicit yet; Playwright's default outputDir is
 // `./test-results` inside e2e. Add a pattern so runs don't leak.
 assert.ok(
     /test-results/.test(gitignore) || /e2e\/test-results/.test(gitignore) || true,
@@ -112,7 +112,7 @@ assert.ok(
 
 // Sanity: every `getByRole({ name: ... })` target that a spec asserts
 // exists corresponds to a button label that actually renders.
-// Specs assert these labels — they must match the current UI copy.
+// Specs assert these labels; they must match the current UI copy.
 const expectedLabels = [
     'Create new wallet',
     'Import wallet',
@@ -143,5 +143,5 @@ for (const label of expectedLabels) {
 }
 
 console.log(
-    'OK — e2e harness smoke (workspace, playwright.config, onboarding + send specs, README, UI-label cross-check)',
+    'OK: e2e harness smoke (workspace, playwright.config, onboarding + send specs, README, UI-label cross-check)',
 );

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §56.3 Pre-launch — user-initiated track Step 3 — reduced-motion
+// Smoke for §56.3 Pre-launch, user-initiated track Step 3: reduced-motion
 // preference on AnimatedQrFrames. Static-text checks over the component
 // source, asserting the reduced-motion subscription, the auto-advance
 // suspension, and the manual prev/next affordance are all wired in.
@@ -92,5 +92,5 @@ assert.ok(
 );
 
 console.log(
-    'OK — AnimatedQrFrames reduced-motion smoke (matchMedia subscription + change listener with Safari fallback + interval suspension + prev/next manual controls + aria-labels + cadence label flip + wrapper aria announcement + data-reduced-motion attribute)',
+    'OK: AnimatedQrFrames reduced-motion smoke (matchMedia subscription + change listener with Safari fallback + interval suspension + prev/next manual controls + aria-labels + cadence label flip + wrapper aria announcement + data-reduced-motion attribute)',
 );

@@ -55,10 +55,10 @@ function nativeTickerFor(descriptor) {
 }
 
 /**
- * Receive view — pick a chain, show the newest persisted HD address as
+ * Receive view: pick a chain, show the newest persisted HD address as
  * a BIP21-encoded QR, copy-to-clipboard, and optionally derive a fresh
  * next-index address (prompts password, because seed decryption runs
- * Argon2id on each derivation — §26).
+ * Argon2id on each derivation per §26).
  *
  * Chain picker options are filtered to the chains this wallet has at
  * least one address on; a later piece may add "add a chain" when the
@@ -96,7 +96,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     // persisted MultisigConfig (Step 17) and the active chain is a
     // valid network for that config, we fetch and surface the
     // multisig output address alongside the regular single-key QR.
-    // §56.3 pre-launch Step 4 — multiple multisig configs per wallet.
+    // §56.3 pre-launch Step 4: multiple multisig configs per wallet.
     // Receive renders one section per config; the QR map keys QR data
     // URLs by config id so each section shows its own QR alongside
     // the badge + cosigner names.
@@ -150,7 +150,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     }, [walletId, accountId, activeChainId, messaging]);
 
     // Derive the multisig output address whenever chain changes, if
-    // this wallet has a MultisigConfig. Failures are non-fatal — we
+    // this wallet has a MultisigConfig. Failures are non-fatal; we
     // simply don't render the multisig panel (e.g. wallet has no
     // multisig config, or the active chain doesn't match the config's
     // network kind). The single-key flow continues to work either way.
@@ -212,12 +212,12 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         return () => { cancelled = true; };
     }, [multisigs, activeChainId]);
 
-    // Unified QR effect lives below — see the `qrUri` memo. Driven by
+    // Unified QR effect lives below; see the `qrUri` memo. Driven by
     // address + active chain + the optional amount/tick customization.
 
     const descriptor = activeChainId ? chainRegistry.get(activeChainId) : null;
 
-    // Inline payment-request fields — visible by default so customizing
+    // Inline payment-request fields, visible by default so customizing
     // the QR is a single-glance affair. As the amount changes, the QR
     // re-renders. Token tick seeds from a non-native ReceivePicker prefill
     // so the QR encodes the requested token without manual entry.
@@ -232,11 +232,11 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     const [feePick, setFeePick] = useState(/** @type {{ mode: 'low' | 'normal' | 'fast' }} */ ({ mode: 'normal' }));
     const [feeTiers, setFeeTiers] = useState(/** @type {any} */ (null));
 
-    // Fiat-aware amount entry — mirrors Send. Canonical `reqAmount` stays
+    // Fiat-aware amount entry, mirrors Send. Canonical `reqAmount` stays
     // coin-scale (it's what the QR/URI encodes); when the user toggles
     // to fiat mode we edit `fiatAmount` and derive the coin value via
     // priceLookup. Fiat support is only meaningful for the chain's
-    // native asset — we hide the toggle for non-native token requests.
+    // native asset; we hide the toggle for non-native token requests.
     const [amountInputMode, setAmountInputMode] = useState(/** @type {'coin' | 'fiat'} */ ('coin'));
     const [fiatAmount, setFiatAmount] = useState('');
     const amountInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
@@ -297,7 +297,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     }, [reqAmount, fiatRate]);
 
     // If the request switches to a non-native token mid-edit, fiat
-    // mode loses its rate — fall back to coin entry so the input
+    // mode loses its rate; fall back to coin entry so the input
     // doesn't show an empty fiat label with no toggle.
     useEffect(() => {
         if (!fiatRate && amountInputMode === 'fiat') {
@@ -322,7 +322,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     const nativeTicker = nativeTickerFor(descriptor);
 
     // QR content. When the user has set an amount (or has a token tick),
-    // encode an `xchain:CODE/send?to=…&amount=…&tick=…` URI — the receiver
+    // encode an `xchain:CODE/send?to=…&amount=…&tick=…` URI; the receiver
     // (another XChain wallet) lands on Send with chain + token + amount
     // pre-filled. When nothing is customized, fall back to a bare BIP21 URI
     // (`bitcoin:`/`litecoin:`/`dogecoin:`) so external wallets that only
@@ -345,7 +345,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 { chainRegistry },
             );
         } catch {
-            // Chain isn't mapped to a coin code yet — fall through to BIP21
+            // Chain isn't mapped to a coin code yet; fall through to BIP21
             // (BIP21 has no feePriority slot; receiver's preference is dropped).
             return uriLib.encodeBip21Uri({
                 scheme: descriptor.uriScheme,
@@ -417,7 +417,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         }
         // Mirror the Copy action first so the user always ends up with
         // the image on the clipboard, regardless of which share target
-        // they pick. Clipboard failures are non-fatal — proceed to share.
+        // they pick. Clipboard failures are non-fatal; proceed to share.
         try {
             await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
         } catch { /* keep going */ }

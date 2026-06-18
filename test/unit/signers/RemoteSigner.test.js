@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Unit tests for RemoteSigner — the Signer shim that forwards every
+// Unit tests for RemoteSigner: the Signer shim that forwards every
 // interface call over an injected transport function.
 
 import { describe, it, expect } from 'vitest';

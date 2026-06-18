@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for Cluster R FOLLOWUP 4 — locale picker + LocaleSync bootstrap.
+// Smoke for Cluster R FOLLOWUP 4: locale picker + LocaleSync bootstrap.
 //
 // Pins:
 //   - LocaleSync.jsx exists and reads useSettings + i18n surface

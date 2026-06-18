@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// §12 / Cluster S FOLLOWUP 5 smoke — test-dapp surfaces BLOCKED_BY_USER
+// §12 / Cluster S FOLLOWUP 5 smoke: test-dapp surfaces BLOCKED_BY_USER
 // + THROTTLED branches.
 //
 // The test-dapp under `packages/test-dapp/` is the developer's reference
@@ -30,7 +30,7 @@
 //   4. The throttled branch produces the "Retry in {seconds}s" message
 //      and forwards retryAfterMs / burst / windowMs.
 //   5. The blocked branch produces a static no-retry message
-//      ("Blocked by user — un-block in wallet Settings.").
+//      ("Blocked by user" message, no retry surface).
 //   6. example.ts exports `signActionWithRetry` that loops on THROTTLED
 //      results up to `maxRetries`, sleeping `retryAfterMs` between
 //      attempts.
@@ -136,8 +136,8 @@ assert.ok(
 // --- 5. Blocked branch is static, no retry surface --------------------
 
 assert.ok(
-    /Blocked by user — un-block in wallet Settings/.test(example),
-    'blocked message exact',
+    /Blocked by user[\s\S]{1,10}un-block in wallet Settings/.test(example),
+    'blocked message present',
 );
 
 // --- 6. signActionWithRetry helper ------------------------------------
@@ -183,5 +183,5 @@ for (const symbol of [
 }
 
 console.log(
-    'OK — test-dapp-error-scenarios smoke (Cluster S FOLLOWUP 5 — MockProviderOptions.blockedSite + .throttle short-circuit connect/signMessage/signAction/signPsbt/signIn; example.ts adds handleSignActionResult tagged outcome with 7 branches incl. blocked/throttled; signActionWithRetry loops on THROTTLED with maxRetries + injectable sleep; runErrorScenarios + ErrorScenarioReport demonstrate both branches; index.ts re-exports the new surface)',
+    'OK: test-dapp-error-scenarios smoke (Cluster S FOLLOWUP 5: MockProviderOptions.blockedSite + .throttle short-circuit connect/signMessage/signAction/signPsbt/signIn; example.ts adds handleSignActionResult tagged outcome with 7 branches incl. blocked/throttled; signActionWithRetry loops on THROTTLED with maxRetries + injectable sleep; runErrorScenarios + ErrorScenarioReport demonstrate both branches; index.ts re-exports the new surface)',
 );

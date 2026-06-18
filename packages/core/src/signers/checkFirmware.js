@@ -8,26 +8,26 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Firmware status check — §18.4. Given a (vendor, model, version)
+// Firmware status check: §18.4. Given a (vendor, model, version)
 // triple, consult the bundled manifest and return a status verdict
 // the UI can render directly.
 //
 // Status semantics:
-//   - 'ok'          — at or above `recommended`. No banner.
-//   - 'outdated'    — above `minimum` and below `recommended`, and
+//   - 'ok'          : at or above `recommended`. No banner.
+//   - 'outdated'    : above `minimum` and below `recommended`, and
 //                     not listed as known-vulnerable / unsupported.
 //                     Soft banner: "Update recommended."
-//   - 'vulnerable'  — version (or a matching prefix) in
+//   - 'vulnerable'  : version (or a matching prefix) in
 //                     `knownVulnerable`. Strong banner with details.
-//   - 'unsupported' — version (or matching prefix) in `unsupported`,
+//   - 'unsupported' : version (or matching prefix) in `unsupported`,
 //                     OR below `minimum`. Wallet refuses to sign until
 //                     firmware is updated.
-//   - 'unknown'     — vendor or model not present in the manifest.
+//   - 'unknown'     : vendor or model not present in the manifest.
 //                     Neutral banner instructing the user to verify
 //                     manually; sign path still allowed.
 //
 // The manifest is bundled at build time. A future enhancement fetches
-// it at runtime — see §18.4.
+// it at runtime (see §18.4).
 //
 // Version comparison is dotted-decimal semver-ish: "1.12.1" < "2.0.0".
 // Entries in `knownVulnerable` / `unsupported` may be:
@@ -35,7 +35,7 @@
 //   - Prefix (ends in "."): "1.11." matches "1.11.0", "1.11.2", "1.11.99"
 //   - Major-only:    "1.x"  matches "1.0.0", "1.42.7"
 //
-// The helper doesn't decide how to render the verdict — it just
+// The helper doesn't decide how to render the verdict. It just
 // returns a flat object (status, vendor, model, displayName,
 // recommended, updateUrl, detail). The UI composes copy.
 

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Cluster O FOLLOWUP 2 — peerAddressOfEntry now handles MESSAGE
+// Cluster O FOLLOWUP 2: peerAddressOfEntry now handles MESSAGE
 // incoming + ORDER_MATCH fill counterparties. The v0.207.0 version
 // returned the wallet's own address for any row whose `destination`
 // equalled `entry.address` (RECEIVE, MESSAGE incoming), making the
@@ -28,7 +28,7 @@ const read = (p) => readFileSync(join(root, p), 'utf8');
 const historySrc = read('packages/core/src/shared/routes/History.jsx');
 
 // 1. Header tags the FOLLOWUP id and notes the DIVIDEND / AIRDROP
-//    derived-recipient branch — the v0.328.0 close mounts these via
+//    derived-recipient branch; the v0.328.0 close mounts these via
 //    a sibling <RecipientsBlock> that fetches via SDK rather than
 //    extending peerAddressOfEntry to a per-recipient set.
 assert.ok(/Cluster O\s*\n\s*\* FOLLOWUP 2/.test(historySrc),
@@ -56,17 +56,17 @@ assert.ok(/src\.length > 0 && !isSelf\(src\)/.test(historySrc),
     'source is rejected when it equals the wallet self address');
 
 // 4. Functional regression check by reading the source as text and
-//    verifying the structural shape — the `isSelf` helper exists with
+//    verifying the structural shape: the `isSelf` helper exists with
 //    the documented signature.
 assert.ok(/const isSelf = \(a\) => typeof self === 'string' && self\.length > 0 && a === self;/.test(historySrc),
     'peerAddressOfEntry defines an isSelf helper that requires a non-empty self address');
 
 // 5. The function is still exported as `peerAddressOfEntry` (or rather
-//    declared in this file — it's local), with the same call signature
+//    declared in this file; it's local), with the same call signature
 //    so existing callers (SaveContactPrompt) keep working unchanged.
 assert.ok(/function peerAddressOfEntry\(entry\)/.test(historySrc),
     'peerAddressOfEntry keeps its (entry) signature');
 assert.ok(/peerAddressOfEntry\(entry\)/.test(historySrc),
     'peerAddressOfEntry is invoked from SaveContactPrompt');
 
-console.log('OK — Save-as-contact peer-extractor sweep (MESSAGE + ORDER_MATCH)');
+console.log('OK: Save-as-contact peer-extractor sweep (MESSAGE + ORDER_MATCH)');

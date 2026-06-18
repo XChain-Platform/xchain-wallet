@@ -8,14 +8,14 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Pre-host message dispatcher — answers a small set of types that
+// Pre-host message dispatcher: answers a small set of types that
 // must work BEFORE the MessageHost's vault-backed handlers come online:
 //
 //   - `session.status`  What state is the wallet in? (no-wallet / locked / unlocked)
 //   - `wallet.unlock`   Derive master key from password, open vault, seed session.
 //   - `wallet.lock`     Clear the session key and signal teardown.
-//   - `wallet.create`   Fresh install — onboard with a generated mnemonic.
-//   - `wallet.import`   Fresh install — onboard with an existing mnemonic.
+//   - `wallet.create`   Fresh install: onboard with a generated mnemonic.
+//   - `wallet.import`   Fresh install: onboard with an existing mnemonic.
 //
 // Anything outside `PRE_HOST_MESSAGE_TYPES` falls through to the host
 // listener. `ChromeRuntimeAdapter` imports that set to know which types
@@ -24,7 +24,7 @@
 //
 // The shell-agnostic `dispatchPreHost` + `handleSessionStatus` helpers
 // are exported so the desktop shell's ipcMain handler can route pre-host
-// messages identically — same handlers, same validation, same error
+// messages identically: same handlers, same validation, same error
 // shapes; only the backend classes differ (Chrome storage vs file +
 // keychain).
 

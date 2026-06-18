@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// AppearanceSection — §35.1 Appearance panel.
+// AppearanceSection (§35.1 Appearance panel).
 //
 // Live:
 //   - Theme picker: system / light / dark.

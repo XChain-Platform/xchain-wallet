@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// logConsole — §48.5 / G150. Process-wide ring buffer that captures
+// logConsole (§48.5 / G150). Process-wide ring buffer that captures
 // console.* output (and any explicit `record(...)` calls) so a
 // Developer Mode panel can surface recent logs without users having
 // to open DevTools. Useful for popup / desktop sessions where DevTools
@@ -16,7 +16,7 @@
 //
 // Surface:
 //
-//   logConsole.attach()                            — idempotently install
+//   logConsole.attach()                            - idempotently install
 //                                                    a console patch that
 //                                                    routes log/info/warn/
 //                                                    error into the buffer.
@@ -24,22 +24,22 @@
 //                                                    methods still run, so
 //                                                    DevTools also sees
 //                                                    the entries.
-//   logConsole.detach()                            — restore the original
+//   logConsole.detach()                            - restore the original
 //                                                    console methods (for
 //                                                    test cleanup).
-//   logConsole.record({ level, source, message }) — record a synthetic
+//   logConsole.record({ level, source, message }) - record a synthetic
 //                                                    entry from a flow /
 //                                                    bridge handler that
 //                                                    didn't go through
 //                                                    console.*.
-//   logConsole.entries()                           — snapshot of the
+//   logConsole.entries()                           - snapshot of the
 //                                                    current buffer
-//                                                    (oldest → newest).
-//   logConsole.subscribe(listener)                 — subscribe to
+//                                                    (oldest -> newest).
+//   logConsole.subscribe(listener)                 - subscribe to
 //                                                    additions; returns
 //                                                    an unsubscribe fn.
-//   logConsole.clear()                             — empty the buffer.
-//   logConsole.restore(entries)                    — Cluster Q FOLLOWUP 5.
+//   logConsole.clear()                             - empty the buffer.
+//   logConsole.restore(entries)                    - Cluster Q FOLLOWUP 5.
 //                                                    Splice persisted
 //                                                    entries into the
 //                                                    front of the buffer
@@ -51,22 +51,22 @@
 //                                                    Developer Mode panel
 //                                                    with stale rows.
 //   logConsole.attachMirror({save,sourceAllow?,
-//                            debounceMs?})         — Cluster Q FOLLOWUP 5.
+//                            debounceMs?})         - Cluster Q FOLLOWUP 5.
 //                                                    Subscribe a debounced
 //                                                    persistence sink.
 //                                                    Default sourceAllow
 //                                                    is the strict
 //                                                    vault/signer/encoder/
-//                                                    bridge prefix list —
+//                                                    bridge prefix list;
 //                                                    'console' entries are
 //                                                    NEVER mirrored
 //                                                    because they can
 //                                                    carry arbitrary
 //                                                    stringified args from
 //                                                    third-party code.
-//   logConsole.detachMirror()                      — remove the mirror.
+//   logConsole.detachMirror()                      - remove the mirror.
 //
-// Capacity defaults to 500 — enough to spot most session-level issues
+// Capacity defaults to 500; enough to spot most session-level issues
 // without keeping a megabyte of stringified payloads in memory.
 
 const DEFAULT_CAPACITY = 500;
@@ -112,7 +112,7 @@ function push(entry) {
         buffer.splice(0, buffer.length - capacity);
     }
     for (const listener of listeners) {
-        try { listener(entry); } catch { /* swallow — listeners can't crash producers */ }
+        try { listener(entry); } catch { /* swallow; listeners cannot crash producers */ }
     }
 }
 
@@ -172,8 +172,8 @@ function entries() {
 }
 
 /**
- * Cluster Q FOLLOWUP 5 — bounded snapshot for diagnostic dumps.
- * Returns a copy of the most-recent entries (oldest → newest) with
+ * Cluster Q FOLLOWUP 5: bounded snapshot for diagnostic dumps.
+ * Returns a copy of the most-recent entries (oldest to newest) with
  * each `message` truncated to `messageLimit` chars so a runaway log
  * line doesn't bloat a pasted bug report. The pure-array shape is
  * JSON-serialisable so the host can route it through any
@@ -222,9 +222,9 @@ function setCapacity(n) {
     }
 }
 
-// ─── Cluster Q FOLLOWUP 5 — persistent mirror ──────────────────────────
+// ─── Cluster Q FOLLOWUP 5: persistent mirror ──────────────────────────
 //
-// Default source allow-list. The "vault / signer / encoder / bridge —
+// Default source allow-list. The "vault / signer / encoder / bridge;
 // never console" rule from the FOLLOWUP guards the mirror against
 // leaking arbitrary console.* args (third-party code calling console.log
 // from a content-script context can include partial keys, addresses,
@@ -247,7 +247,7 @@ let mirror = null;
 
 /**
  * Splice persisted entries into the front of the live buffer in
- * chronological order without firing listeners. Idempotent — a duplicate
+ * chronological order without firing listeners. Idempotent; a duplicate
  * id from a previous restore (or an in-memory entry pushed while the
  * load was in flight) is dropped. Caller is expected to pass entries
  * sorted oldest → newest, but the merge tolerates an unsorted input.
@@ -286,7 +286,7 @@ function restore(persisted) {
 }
 
 /**
- * Install a debounced persistence sink. Idempotent — a second call
+ * Install a debounced persistence sink. Idempotent; a second call
  * detaches the previous mirror first. The sink only sees entries whose
  * source matches `sourceAllow`; the default whitelist excludes plain
  * console.* output for safety.
@@ -339,7 +339,7 @@ function attachMirror(opts) {
         try {
             await mirror?.save(snapshotEntries);
         } catch {
-            // Storage failed — tolerate; the buffer stays in memory.
+            // Storage failed; tolerate; the buffer stays in memory.
         }
     };
 

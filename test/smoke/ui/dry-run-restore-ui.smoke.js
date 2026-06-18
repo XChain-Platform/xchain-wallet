@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for Cluster B Step 4 — G038 — dry-run restore UI.
+// Smoke for Cluster B Step 4, G038: dry-run restore UI.
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';

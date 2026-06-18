@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// buildSendPsbt — §20 / G040. Watcher-mode helper that builds an
+// buildSendPsbt (§20 / G040): Watcher-mode helper that builds an
 // UNSIGNED PSBT for a SEND action without unlocking the wallet, calling
 // any signer, or broadcasting. The user transports the resulting hex to
 // a separate Signer-mode wallet (or any PSBT-capable signer), gets it
@@ -82,7 +82,7 @@ export async function buildSendPsbt(opts) {
     const encoder = sdk?.encoder;
     if (!encoder) {
         throw new Error(
-            `buildSendPsbt: SDK encoder not initialized for "${opts.chainId}" — call sdkRegistry.initActive([chainId]) first`,
+            `buildSendPsbt: SDK encoder not initialized for "${opts.chainId}". Call sdkRegistry.initActive([chainId]) first`,
         );
     }
 

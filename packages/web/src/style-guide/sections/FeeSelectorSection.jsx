@@ -12,7 +12,7 @@ import { useState } from 'react';
 import { FeeSelector } from '@xchain-wallet/core/ui';
 import { Section, Guidance, Markup, LiveExample } from '../StyleGuidePage.jsx';
 
-// Hand-rolled tier fixture — doc-page only. The shape matches what
+// Hand-rolled tier fixture (doc-page only). The shape matches what
 // `estimateNativeSendFeeTiers` returns, so the live FeeSelector below
 // renders the same way it would in Send.
 const SAMPLE_TIERS = {
@@ -32,14 +32,14 @@ export function FeeSelectorSection() {
             id="fee-selector"
             title="Fee selector"
             tag="CANONICAL fee-priority picker"
-            kicker="Low / Normal / Fast slider (optionally with Custom) over a native range input, styled with accent-color. Used anywhere the user expresses a fee preference — Send (typing the rate), Receive (encoding a preference into the QR), Settings defaults, etc."
+            kicker="Low / Normal / Fast slider (optionally with Custom) over a native range input, styled with accent-color. Used anywhere the user expresses a fee preference: Send (typing the rate), Receive (encoding a preference into the QR), Settings defaults, etc."
         >
             <Guidance
                 what={<>A 3- or 4-stop slider over <code>&lt;input type="range"&gt;</code>, with tier readout (coin amount + ETA + rate) below the track. Custom mode reveals a numeric input for the rate. Renders a placeholder ("Fee estimate unavailable for this chain.") when no <code>tiers</code> are passed.</>}
-                when={<>Any form that submits a transaction or encodes a fee preference. Always use this — never build a one-off fee picker. Pulling tiers from <code>estimateNativeSendFeeTiers</code> (sync seed) + <code>fetchNativeSendFeeTiers</code> (live SDK upgrade) gives the consistent BTC/LTC/DOGE handling.</>}
-                whenNot={<>Settings panels that store the user's default fee strategy use a simpler radio group (Low/Normal/Fast/Custom) rather than this slider — the slider implies "this transaction" intent; settings imply "future transactions".</>}
+                when={<>Any form that submits a transaction or encodes a fee preference. Always use this (never build a one-off fee picker). Pulling tiers from <code>estimateNativeSendFeeTiers</code> (sync seed) + <code>fetchNativeSendFeeTiers</code> (live SDK upgrade) gives the consistent BTC/LTC/DOGE handling.</>}
+                whenNot={<>Settings panels that store the user's default fee strategy use a simpler radio group (Low/Normal/Fast/Custom) rather than this slider. The slider implies "this transaction" intent; settings imply "future transactions".</>}
                 variants={<>
-                    <code>allowCustom</code> (default <code>true</code>, set <code>false</code> on Receive to omit the Custom stop and the sat/vB input). <code>label</code> renders inside the wrap so the label-to-slider gap matches the internal rhythm — don't pair the component with an external label. <code>disabled</code> for read-only review states.
+                    <code>allowCustom</code> (default <code>true</code>, set <code>false</code> on Receive to omit the Custom stop and the sat/vB input). <code>label</code> renders inside the wrap so the label-to-slider gap matches the internal rhythm; don't pair the component with an external label. <code>disabled</code> for read-only review states.
                 </>}
                 doRule={<>✓ Always pull tiers via the feeEstimate helpers · use <code>allowCustom={'{false}'}</code> on receive-style flows (custom sat/vB ages out before the QR is scanned) · pass the <code>label</code> prop instead of wrapping the component in your own labeled container</>}
                 dontRule={<>✗ Build your own tier picker · hard-code rates inline · hide the placeholder when tiers fail to load (leaving the slot empty makes the affordance undiscoverable)</>}
@@ -72,7 +72,7 @@ useEffect(() => {
 />`}
             </Markup>
 
-            <LiveExample label="Send variant — Low / Normal / Fast / Custom">
+            <LiveExample label="Send variant: Low / Normal / Fast / Custom">
                 <FeeSelector
                     tiers={SAMPLE_TIERS}
                     value={sendPick}
@@ -80,7 +80,7 @@ useEffect(() => {
                 />
             </LiveExample>
 
-            <LiveExample label="Receive variant — Low / Normal / Fast (no Custom)">
+            <LiveExample label="Receive variant: Low / Normal / Fast (no Custom)">
                 <FeeSelector
                     tiers={SAMPLE_TIERS}
                     value={receivePick}
@@ -89,7 +89,7 @@ useEffect(() => {
                 />
             </LiveExample>
 
-            <LiveExample label="With inline label — preferred over an external wrapper">
+            <LiveExample label="With inline label (preferred over an external wrapper)">
                 <FeeSelector
                     label="Fee priority"
                     tiers={SAMPLE_TIERS}
@@ -99,7 +99,7 @@ useEffect(() => {
                 />
             </LiveExample>
 
-            <LiveExample label="No tiers available — built-in placeholder">
+            <LiveExample label="No tiers available: built-in placeholder">
                 <FeeSelector
                     tiers={null}
                     value={{ mode: 'normal' }}

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §25.2 / Cluster J FOLLOWUP 6 — demo wallet auto-expire.
+// Smoke for §25.2 / Cluster J FOLLOWUP 6: demo wallet auto-expire.
 //
 // Pins:
 //   - flows/demoMode.js exports getDemoWalletExpiry, isDemoWalletExpired,

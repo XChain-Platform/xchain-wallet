@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Per-wallet last-view memory — §24 / G055. Persists the user's last
+// Per-wallet last-view memory (§24 / G055). Persists the user's last
 // `unlockedView` value to localStorage so unlocking the wallet returns
 // them to where they were instead of always landing on Home.
 //
@@ -27,7 +27,7 @@
 const NS = 'xc:lastView:';
 
 // View identifiers safe to resume without re-priming context state.
-// Keep in lockstep with the per-shell App.jsx switch — adding a new
+// Keep in lockstep with the per-shell App.jsx switch. Adding a new
 // view to this set is the only call site to touch when extending
 // resume coverage.
 export const RESUMABLE_VIEWS = Object.freeze([
@@ -69,7 +69,7 @@ function safeRemove(key) {
 /**
  * Read the saved last view for a wallet. Returns null when no value
  * is stored, the wallet id is missing, or the persisted view is no
- * longer in the resumable set (handles spec drift — a view the user
+ * longer in the resumable set (handles spec drift: a view the user
  * last visited that we have since removed should no-op, not crash).
  *
  * @param {string | null | undefined} walletId
@@ -84,7 +84,7 @@ export function readLastView(walletId) {
 
 /**
  * Persist the current view for a wallet. No-ops for non-resumable
- * views — only the safe set lands in storage so a future read can
+ * views. Only the safe set lands in storage so a future read can
  * trust the value.
  *
  * @param {string | null | undefined} walletId

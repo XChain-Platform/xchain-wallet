@@ -12,14 +12,14 @@ import { useEffect, useRef, useState } from 'react';
 
 /**
  * Camera-based QR scanner. Wraps the browser's native
- * `BarcodeDetector` API against a live `<video>` + `MediaStream` —
+ * `BarcodeDetector` API against a live `<video>` + `MediaStream`,
  * available in Chromium-based browsers (Chrome, Edge, modern Opera,
  * Chromium-based Electron) since ~2020. Falls back to a clear
  * "Camera scanning not supported on this browser" message elsewhere
  * so callers can prompt the user to use the paste-chunk path.
  *
  * The component emits each scanned string through `onFrame`; it
- * deliberately does NOT de-duplicate across scans — callers that
+ * deliberately does NOT de-duplicate across scans; callers that
  * feed a chunked transport (XCW `addChunkToCollector`) already
  * no-op on duplicate chunks, and the scanner has no opinion about
  * what payload shape is being transported.
@@ -61,7 +61,7 @@ export function QrScanner({ onFrame, autoStart = true, width = 320, alt = 'QR sc
 
         async function start() {
             try {
-                // Native types — populated via the BarcodeDetector
+                // Native types: populated via the BarcodeDetector
                 // constructor. Empty formats array means "detect any
                 // format the UA supports"; Chromium supports `qr_code`
                 // universally which is what we care about.
@@ -105,7 +105,7 @@ export function QrScanner({ onFrame, autoStart = true, width = 320, alt = 'QR sc
                         }
                     }
                 } catch {
-                    // Intermittent detector errors are non-fatal — try
+                    // Intermittent detector errors are non-fatal; try
                     // again next frame. The video may not be ready.
                 }
                 if (!cancelled) {
@@ -161,7 +161,7 @@ export function QrScanner({ onFrame, autoStart = true, width = 320, alt = 'QR sc
         return (
             <div
                 role="status"
-                aria-label={`${alt} — unsupported`}
+                aria-label={`${alt} (unsupported)`}
                 data-testid="qr-scanner-unsupported"
                 style={{
                     padding: '0.75rem',

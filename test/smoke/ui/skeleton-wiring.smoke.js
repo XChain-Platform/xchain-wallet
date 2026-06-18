@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §27.9 + §28 / G076 — `<Skeleton>` wired into balances +
+// Smoke for §27.9 + §28 / G076: `<Skeleton>` wired into balances +
 // history + address loading states. Replaces the "Loading…" plain-text
 // placeholders that the routes shipped with through v0.154.0.
 //

@@ -11,7 +11,7 @@
 // Fetch every token whose issuer (`owner_id` in the indexer) is the
 // supplied address. Wraps xchain-sdk's `getTokens(address, 'address')`,
 // which hits the explorer's `/{COIN}/api/tokens/{ADDRESS}/address`
-// endpoint — backed by `WHERE m.owner_id = ?` in xchain-explorer.
+// endpoint, backed by `WHERE m.owner_id = ?` in xchain-explorer.
 //
 // One address at a time. The renderer fans out across the wallet's
 // addresses for a given chain and aggregates the results.
@@ -51,7 +51,7 @@ export async function listOwnedTokens({ sdkRegistry, chainId, address, limit = 2
 
     // If the SDK has already enriched each token row with `youOwn` and
     // `hasOpenDispenser` (the dev-mock SDK does this), skip the
-    // balance + dispenser fan-out — those calls only exist to derive
+    // balance + dispenser fan-out; those calls only exist to derive
     // those two flags from the real explorer.
     const needsEnrichment = tokenRowsRaw.some(
         (r) => r && (r.youOwn === undefined || r.hasOpenDispenser === undefined),
@@ -71,7 +71,7 @@ export async function listOwnedTokens({ sdkRegistry, chainId, address, limit = 2
     // explorer's balance endpoint emits one row per (address, tick); a
     // row with a positive amount means the address still controls some
     // of that tick. If we can't read balances we leave `youOwn`
-    // undefined — the UI treats that as "unknown, don't hide".
+    // undefined (the UI treats that as "unknown, don't hide").
     const heldTicks = balancesRaw === null ? null : new Set();
     if (heldTicks) {
         // Accept either the explorer's flat array (real SDK) or the
@@ -161,7 +161,7 @@ export function normalizeTokenRow(raw) {
             divisibility: null, // bcformat is server-side; explorer strips decimals
         };
     }
-    // Keyed shape — accept both `divisibility` and the legacy `decimals`
+    // Keyed shape: accept both `divisibility` and the legacy `decimals`
     // alias since the explorer's row name is `m.decimals` even when
     // exposed as a raw field.
     const tick = typeof raw.tick === 'string' ? raw.tick : null;

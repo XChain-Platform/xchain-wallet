@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Unit: signers-trezor/trezorFormat.js — pure data transforms.
+// Unit: signers-trezor/trezorFormat.js: pure data transforms.
 
 import { describe, it, expect } from 'vitest';
 import {

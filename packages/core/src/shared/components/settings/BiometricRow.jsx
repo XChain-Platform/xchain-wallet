@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// BiometricRow — §35 Safety panel row that owns the §26 / G063 biometric
+// BiometricRow (§35): Safety panel row that owns the §26 / G063 biometric
 // unlock affordance. Three states:
 //
 //   not-supported    Platform authenticator absent / WebAuthn missing.
@@ -20,7 +20,7 @@
 //   supported-on     Credential registered. Shows a Disable button that
 //                    wipes the credential reference + ciphertext from
 //                    localStorage. (The platform credential itself can
-//                    only be cleared via OS settings — by design.)
+//                    only be cleared via OS settings, by design.)
 //
 // The component re-checks support + registration on mount and after any
 // state change so toggling between OS settings + the wallet stays in
@@ -103,7 +103,7 @@ export function BiometricRow() {
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
                     <span style={labelStyle}>Biometric unlock</span>
                     <span style={ROW_HINT}>
-                        Not available — this device or browser doesn&rsquo;t expose a
+                        Not available: this device or browser doesn&rsquo;t expose a
                         WebAuthn platform authenticator with PRF support.
                     </span>
                 </div>

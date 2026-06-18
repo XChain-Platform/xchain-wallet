@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for Cluster B Step 5 — Seed-phrase reveal flow.
+// Smoke for Cluster B Step 5: Seed-phrase reveal flow.
 // Exercises the pure flow shape; the cryptographic decryption itself
 // is exercised by the existing wallet-blob unit tests.
 

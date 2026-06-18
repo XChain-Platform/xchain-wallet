@@ -8,13 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// IndexedDBStorageBackend — §11.2 primary store for the web-app target.
+// IndexedDBStorageBackend: §11.2 primary store for the web-app target.
 // IndexedDB is the only persistent storage available to browser SPAs
 // that survives tab close (barring user-cleared site data); the
 // encrypted wallet blob lives here, keyed by origin (scoped to
 // wallet.xchain.io or the local dev origin in development).
 //
-// Bytes ↔ base64 at the wire boundary — IndexedDB supports storing
+// Bytes ↔ base64 at the wire boundary. IndexedDB supports storing
 // Uint8Array via structured clone, but round-trip bytes can surface
 // as slightly different typed-array flavors across browsers; base64
 // keeps the encoding explicit and debuggable in DevTools storage
@@ -137,7 +137,7 @@ function openIdbDatabase(idb, dbName, storeName) {
             // in Locked.jsx) races: the delete fires onblocked because
             // our long-lived backend connection is open, the page
             // reloads before the delete completes, and the new tab
-            // reopens before the queued delete fires — net effect, the
+            // reopens before the queued delete fires; net effect, the
             // wallet survives the wipe. Closing here lets the queued
             // delete proceed cleanly so the wipe → reload → fresh
             // Onboarding path works. In-flight transactions on this

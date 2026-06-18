@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Diagnostic dump — §50. One-shot collection of non-sensitive wallet
+// Diagnostic dump (§50). One-shot collection of non-sensitive wallet
 // state for user-pasted bug reports. The goal per §50.2 is "a blob
 // that makes bug reports productive without leaking anything
 // sensitive."
@@ -27,13 +27,13 @@
 //                  + kind, default endpoints, signer kinds, recent
 //                  errors (truncated), build metadata.
 //   HASH (Cluster L FOLLOWUP 3): user-supplied free-form text that
-//                  could identify the wallet — custom endpoint URLs.
+//                  could identify the wallet (custom endpoint URLs).
 //                  Replaced with `redacted:sha256:<8-hex>` so two
 //                  dumps from the same user remain comparable without
 //                  exposing the original string.
 //
 // Callers pass optional `recentErrors` (last N from the shell's
-// error hook), `signers` (installed signer kinds — just type/model,
+// error hook), `signers` (installed signer kinds: just type/model,
 // no device identifiers), `build` (bundle metadata), and environment
 // info (platform/os/browser). All optional; missing fields become
 // `null` in the output rather than throwing, so a diagnostic dump is
@@ -64,7 +64,7 @@ const REDACTED_HASH_PREFIX_LEN = 8;
  * @typedef {Object} DiagnosticBuild
  * @property {string} [buildId]
  * @property {string} [buildDate]
- * @property {string} [gitCommit]        short sha only — never include branch/tag privately
+ * @property {string} [gitCommit]        short sha only; never include branch/tag privately
  */
 
 /**
@@ -94,7 +94,7 @@ const REDACTED_HASH_PREFIX_LEN = 8;
  * @property {DiagnosticBuild} [build]
  * @property {DiagnosticSignerSummary[]} [signers]
  * @property {DiagnosticError[]} [recentErrors]
- * @property {DiagnosticLogEntry[]} [recentLogs]   Cluster Q FOLLOWUP 5 — pre-snapshotted from `logConsole.snapshot({ limit, messageLimit })` by the host so the flow doesn't reach into a process-specific buffer. Truncated + bounded by the caller.
+ * @property {DiagnosticLogEntry[]} [recentLogs]   Cluster Q FOLLOWUP 5. Pre-snapshotted from `logConsole.snapshot({ limit, messageLimit })` by the host so the flow doesn't reach into a process-specific buffer. Truncated + bounded by the caller.
  */
 
 /**
@@ -267,7 +267,7 @@ function sanitizeSettings(settings) {
     if (!settings || typeof settings !== 'object') return {};
     // Whitelist approach: pick only known non-sensitive fields. Any
     // future Settings additions default to being REDACTED until they
-    // land on this list — sensitive-by-default.
+    // land on this list (sensitive-by-default).
     const fees = {};
     for (const [chainId, fs] of Object.entries(settings.fees ?? {})) {
         fees[chainId] = {
@@ -283,7 +283,7 @@ function sanitizeSettings(settings) {
             triggerAmountSats: state.triggerAmountSats,
             lifetimeTxCount: state.lifetimeTxCount,
             // Intentionally redact `accumulatedSats` and
-            // `lifetimeDonatedSats` — both are small ints so exposure
+            // `lifetimeDonatedSats`. Both are small ints so exposure
             // is minor, but they're user-visible counters that add
             // nothing to a bug report and could identify the wallet.
         };
@@ -311,7 +311,7 @@ function sanitizeSettings(settings) {
     };
 }
 
-// Cluster Q FOLLOWUP 5 — defensive bound + truncation on logConsole
+// Cluster Q FOLLOWUP 5: defensive bound + truncation on logConsole
 // snapshots that crossed a process boundary. The caller is expected
 // to have already truncated each `message` via
 // `logConsole.snapshot({ messageLimit })`, but a stale shell or a

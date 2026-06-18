@@ -46,11 +46,11 @@ export function PillSegmentedSection() {
         >
             <Guidance
                 what={<>A flex row inside a pill-radius container (<code>border-radius: 999px</code>, 2px padding). Each segment is a transparent button; the active one swaps to <code>background: var(--xc-accent-primary); color: #FFFFFF</code>. Used on Receive's All / Coins / Tokens kind filter and TokenDetail's Media sub-tab strip.</>}
-                when={<>Inline filter switches (2–4 short options), sub-tab strips inside a tab panel. Anywhere a horizontal exclusive-choice picker fits — and the option labels are short enough to live on a single row.</>}
-                whenNot={<>Top-level page tabs use a different style (underline + larger text — see TokenDetail's main tab strip). More than 4 options → use a dropdown / chip-filter row. Multi-select → use a chip group, not a pill.</>}
-                sizing={<>Pill: <code>padding: 2px</code>, 2px gap between segments. Segment: <code>padding: var(--xc-space-1) var(--xc-space-3)</code>, font-size <code>--xc-text-sm</code>, weight 600. Use <code>flex-shrink: 0</code> on the pill when it shares a row with a search input — keeps the segments at their natural width and lets the search flex.</>}
+                when={<>Inline filter switches (2–4 short options), sub-tab strips inside a tab panel. Anywhere a horizontal exclusive-choice picker fits, provided the option labels are short enough to live on a single row.</>}
+                whenNot={<>Top-level page tabs use a different style (underline + larger text; see TokenDetail's main tab strip). More than 4 options → use a dropdown / chip-filter row. Multi-select → use a chip group, not a pill.</>}
+                sizing={<>Pill: <code>padding: 2px</code>, 2px gap between segments. Segment: <code>padding: var(--xc-space-1) var(--xc-space-3)</code>, font-size <code>--xc-text-sm</code>, weight 600. Use <code>flex-shrink: 0</code> on the pill when it shares a row with a search input; keeps the segments at their natural width and lets the search flex.</>}
                 doRule={<>✓ Keep labels to one word ("All", "Coins", "Tokens") or short two-word phrases · order options by frequency-of-use (left to right) · animate via CSS transition on background-color + color (160ms) so the active state slide reads cleanly</>}
-                dontRule={<>✗ Use this for page-level tabs (different look — keep it scoped to inline switches) · expand to 5+ segments (the pill stops scanning as one unit) · skip the accent-primary active state for a subtle inverse</>}
+                dontRule={<>✗ Use this for page-level tabs (different look; keep it scoped to inline switches) · expand to 5+ segments (the pill stops scanning as one unit) · skip the accent-primary active state for a subtle inverse</>}
                 supersedes={<>The inline kind-filter on the Send/Receive picker (<code>.kindSegments</code> in TokenPicker.module.css) and the Media sub-tab strip on TokenDetail. Lift to <code>&lt;PillSegmented&gt;</code> in <code>@xchain-wallet/core/ui</code> when a third caller appears.</>}
             />
 
@@ -71,7 +71,7 @@ export function PillSegmentedSection() {
 </div>`}
             </Markup>
 
-            <LiveExample label="3-option inline filter — Receive kind picker">
+            <LiveExample label="3-option inline filter: Receive kind picker">
                 <PillSegmented
                     value={kind}
                     onChange={setKind}

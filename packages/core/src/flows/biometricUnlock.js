@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Biometric unlock — §26 / G063. Uses WebAuthn with the PRF
+// Biometric unlock (§26 / G063). Uses WebAuthn with the PRF
 // (Pseudo-Random Function) extension to derive a 32-byte AES-GCM key
 // without persisting the password. The wallet password is encrypted at
 // registration time under that key and stored in localStorage; at
@@ -20,7 +20,7 @@
 //   - The encrypted password sits next to the credential ID in
 //     localStorage. Without the platform authenticator + user
 //     verification (face / fingerprint / device PIN) it cannot be
-//     decrypted — the PRF output is not derivable from anything in
+//     decrypted. The PRF output is not derivable from anything in
 //     localStorage alone.
 //   - PRF salt is randomized per registration and stored alongside the
 //     credential, so swapping credentials between vaults can't reuse
@@ -30,7 +30,7 @@
 //   - Disabling biometric unlock wipes the credential reference and
 //     ciphertext from localStorage. The platform authenticator's
 //     credential itself can only be cleared via OS settings (this is
-//     by design — we don't want a malicious page to delete a user's
+//     by design. We don't want a malicious page to delete a user's
 //     authenticators).
 //
 // Scope:
@@ -76,7 +76,7 @@ export class BiometricPrfUnavailableError extends Error {
  *   3. A platform authenticator is present (Touch ID / Windows Hello /
  *      Android biometric).
  *
- * PRF support cannot be probed in advance — we discover it at
+ * PRF support cannot be probed in advance. It is discovered at
  * registration time when `prf.results.first` is missing.
  *
  * @returns {Promise<boolean>}

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §23.5 / G051 — Cross-chain LINK threading in History.
+// Smoke for §23.5 / G051: Cross-chain LINK threading in History.
 //
 // Verify pass: implementation already shipped (linkQueries.js +
 // History.jsx peer cache + connector renderer + 🔗 filter +
@@ -64,7 +64,7 @@ assert.ok(/function sidesFromLink\(link, localChainId\)/.test(historySrc),
 assert.ok(/c1IsLocal/.test(historySrc) && /c2IsLocal/.test(historySrc),
     'sides resolver branches on which side maps to the local chain');
 
-// 3. Connector logic — vertical thread between adjacent rows that
+// 3. Connector logic: vertical thread between adjacent rows that
 //    share a linkActionIndex.
 assert.ok(/connectorByKey/.test(historySrc),
     'History computes connectorByKey for vertical threading');
@@ -88,4 +88,4 @@ assert.ok(/peerCacheKey\(/.test(historySrc),
 assert.ok(/§23\.5/.test(historySrc),
     'History header cites §23.5');
 
-console.log('OK — cross-chain LINK threading verify smoke');
+console.log('OK: cross-chain LINK threading verify smoke');

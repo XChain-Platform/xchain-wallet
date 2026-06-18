@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Unit: schemas/pendingAirdrop — createPendingAirdrop + validatePendingAirdrop.
+// Unit: schemas/pendingAirdrop. createPendingAirdrop + validatePendingAirdrop.
 
 import { describe, it, expect } from 'vitest';
 import {

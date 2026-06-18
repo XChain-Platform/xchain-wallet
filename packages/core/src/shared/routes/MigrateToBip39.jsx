@@ -20,7 +20,7 @@ import {
 } from '@xchain-wallet/core/ui';
 
 // Why-migrate explanation copy reads as a paragraph rather than a
-// caption — override the shared `.hint` (centred, muted) with a
+// caption. Override the shared `.hint` (centred, muted) with a
 // left-justified, full-contrast block so the content is comfortably
 // readable.
 const explainParagraphStyle = {
@@ -38,7 +38,7 @@ const chainRegistry = registryLib.defaultRegistry();
 const MIN_PASSWORD_LENGTH = 8;
 
 /**
- * Migrate-to-BIP39 wizard — §40.13.
+ * Migrate-to-BIP39 wizard (§40.13).
  *
  * Creates a new BIP39 wallet alongside an existing
  * counterwallet-legacy wallet, then hands the user back to the
@@ -46,7 +46,7 @@ const MIN_PASSWORD_LENGTH = 8;
  * through the normal Send flow.
  *
  * Phase 2 scope deliberately stops short of an automated one-shot
- * sweep — that requires a dedicated SweepForm surface that doesn't
+ * sweep; that requires a dedicated SweepForm surface that doesn't
  * exist yet. The wizard instead lists each legacy address with its
  * matching new-wallet destination so the user can sweep manually
  * once the flow is complete.
@@ -174,13 +174,13 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated }) {
                 </p>
                 <p style={explainParagraphStyle}>
                     This wizard creates a new BIP39 wallet. It does not touch
-                    your legacy wallet — that stays intact as a reference. After
+                    your legacy wallet (it stays intact as a reference). After
                     creation, you'll see a side-by-side list of your legacy
                     addresses and the new BIP39 destinations. Sweep balances
                     chain-by-chain via the normal Send flow when you're ready.
                 </p>
                 <p style={explainParagraphStyle}>
-                    Save your new BIP39 recovery phrase somewhere safe — it is
+                    Save your new BIP39 recovery phrase somewhere safe. It is
                     the only way to restore this wallet on another device.
                 </p>
                 <div className={styles.actions}>
@@ -200,7 +200,7 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated }) {
                 <p className={styles.hint}>
                     Your legacy wallet is untouched. To complete the migration,
                     sweep balances from each legacy address below to the
-                    matching new-wallet address — use Send (§40.1) or an
+                    matching new-wallet address. Use Send (§40.1) or an
                     advanced SWEEP action (§40.10) per chain. Your legacy
                     wallet stays available as long as you want.
                 </p>

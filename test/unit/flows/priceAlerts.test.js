@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Unit: flows/priceAlerts — CRUD round-trip against a real in-memory Vault.
+// Unit: flows/priceAlerts: CRUD round-trip against a real in-memory Vault.
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { Vault } from '../../../packages/core/src/storage/Vault.js';

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// createList — authors a LIST action (§40.9; protocol docs:
+// createList: authors a LIST action (§40.9; protocol docs:
 // xchain-documentation/protocol/actions/LIST.md). Mirrors
 // dividendAction / broadcastAction: takes vault + registries + chain +
 // source address + LIST params, forwards to submitAction.

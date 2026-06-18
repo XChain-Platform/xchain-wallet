@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// NotificationsSection — §35.1 Notifications panel + §46.
+// NotificationsSection: §35.1 Notifications panel + §46.
 //
 // Five toggles backed by `settings.notifications.*`. Toggling these flags
 // is the user *preference*; delivery is the §46 NotificationService
@@ -64,7 +64,7 @@ function PermissionRow() {
     if (permission === 'granted') {
         hint = 'Enabled';
     } else if (permission === 'denied') {
-        hint = 'Blocked — turn notifications back on for this app in your browser or system settings.';
+        hint = 'Blocked. Turn notifications back on for this app in your browser or system settings.';
     } else {
         action = (
             <button type="button" onClick={request} style={PERMISSION_BUTTON}>
@@ -114,7 +114,7 @@ const NOTIFICATION_FLAGS = /** @type {const} */ ([
 
 /**
  * @param {object} props
- * @param {string | null | undefined} [props.walletId]  active wallet — scopes the price-alert manager
+ * @param {string | null | undefined} [props.walletId]  active wallet; scopes the price-alert manager
  */
 export function NotificationsSection({ walletId } = {}) {
     const { settings, loading, error, update } = useSettings();
@@ -184,7 +184,7 @@ const LINK_BTN = {
 /**
  * Price-alert manager rendered under the priceAlerts toggle: the saved
  * alerts + an inline add form. Surfaces the two dependencies that keep an
- * alert from firing — the toggle being off, and (the key one) the privacy
+ * alert from firing: the toggle being off, and (the key one) the privacy
  * opt-out for native-coin price data, which the watcher hard-gates on.
  *
  * @param {object} props
@@ -210,7 +210,7 @@ function PriceAlertsManager({ walletId, settings, enabled }) {
             {priceDataOff ? (
                 <span style={ROW_HINT}>
                     Price alerts need <strong>Native coin price data</strong>, which is off. Turn it on in
-                    Settings → Privacy — until then, alerts won’t fire.
+                    Settings → Privacy. Until then, alerts won’t fire.
                 </span>
             ) : !enabled ? (
                 <span style={ROW_HINT}>Turn on Price alerts above to start receiving these.</span>

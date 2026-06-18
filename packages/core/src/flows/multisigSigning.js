@@ -8,21 +8,21 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// multisigSigning — §22.3 partial-signature tracking flows. Phase 4
+// multisigSigning: §22.3 partial-signature tracking flows. Phase 4
 // Step 19 of 23.
 //
 // State machine + persistence for multisig sign rounds. Step 19 owns
 // session lifecycle (start / contribute / aggregate / cancel /
 // finalize-stub); Step 20 wires QR transport on top; Step 21 wires HW
 // signers. The local-cosigner contribution path is also out of scope
-// for Step 19 — once Step 20's QR transport lands we'll know which
+// for Step 19. Once Step 20's QR transport lands we'll know which
 // signature primitive (PSBT-input vs. raw msgHash) the local key
 // produces, and the corresponding contribute helper can be wired up
 // without churning the persistence layer.
 //
 // Schemes diverge at round count:
 //   - p2sh-multisig / p2wsh-multisig: one round, classical ECDSA.
-//   - taproot-musig2: two rounds — collect public nonces (BIP327
+//   - taproot-musig2: two rounds (collect public nonces per BIP327
 //     round 1), aggregate them, collect partial sigs (round 2),
 //     aggregate into a single 64-byte Schnorr signature.
 //
@@ -191,7 +191,7 @@ export async function cancelMultisigSigningSession({ vault, sessionId }) {
 
 /**
  * MuSig2 round 1: append a cosigner's 66-byte publicNonce. Validates
- * shape only here — cryptographic aggregation happens in
+ * shape only here; cryptographic aggregation happens in
  * `aggregateMultisigSession` once threshold is met.
  *
  * @param {object} opts
@@ -316,7 +316,7 @@ export async function contributeMultisigSignature({ vault, sessionId, pubkey, si
  *      and advance to `'ready-to-finalize'`. The 64-byte Schnorr sig
  *      is persisted on `aggregatedSchnorrSig`.
  *
- * Idempotent — calling with an already-advanced session is a no-op.
+ * Idempotent: calling with an already-advanced session is a no-op.
  *
  * @param {object} opts
  * @param {import('../storage/Vault.js').Vault} opts.vault
@@ -336,7 +336,7 @@ export async function aggregateMultisigSession({ vault, sdkRegistry, sessionId }
         throw new Error(`aggregateMultisigSession: no SDK registered for chainId "${session.chainId}"`);
     }
     if (!sdk.musig2) {
-        throw new Error('aggregateMultisigSession: sdk.musig2 unavailable — bump xchain-sdk to 1.10+');
+        throw new Error('aggregateMultisigSession: sdk.musig2 unavailable; bump xchain-sdk to 1.10+');
     }
 
     // Round-1 → round-2 transition.
@@ -358,7 +358,7 @@ export async function aggregateMultisigSession({ vault, sdkRegistry, sessionId }
     if (session.status === 'collecting-sigs' && session.partialSigs.length >= session.threshold) {
         if (!session.aggNonce) {
             throw new Error(
-                'aggregateMultisigSession: cannot aggregate sigs without aggNonce — round 1 not completed',
+                'aggregateMultisigSession: cannot aggregate sigs without aggNonce (round 1 not completed)',
             );
         }
         const aggNonceBytes = hexToBytes(session.aggNonce);

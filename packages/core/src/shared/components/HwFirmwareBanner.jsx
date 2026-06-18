@@ -8,11 +8,11 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// HwFirmwareBanner — sign-flow warning banner that renders on top of every
+// HwFirmwareBanner: sign-flow warning banner that renders on top of every
 // HW-signed sign screen when the paired device's firmware is below the
 // recommended floor, in the known-vulnerable list, or unsupported. Sits
 // alongside the pairing-time `FirmwareBanner` in `PairSignerForm.jsx`,
-// but is meant for the sign path specifically — the user sees this every
+// but is meant for the sign path specifically. The user sees this every
 // time they're about to sign with an outdated device, not just at pair
 // time, so they can't forget about a vulnerable firmware after the
 // initial pair.
@@ -90,7 +90,7 @@ export function HwFirmwareBanner({ signerInfo }) {
 /**
  * Helper for callers that need to know whether the form's submit should
  * be hard-gated on a firmware update. Mirrors the verdict's `unsupported`
- * status — the user must update before this wallet release will sign.
+ * status. The user must update before this wallet release will sign.
  *
  * @param {{ vendor: string, model: string, firmwareVersion: string | null } | null | undefined} signerInfo
  * @returns {boolean}

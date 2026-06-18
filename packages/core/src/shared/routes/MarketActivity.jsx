@@ -20,7 +20,7 @@ import styles from './MarketActivity.module.css';
 const chainRegistry = registryLib.defaultRegistry();
 
 // Featured market shown on landing (same for everyone, independent of
-// holdings) — XChain's own token. Tapping the header swaps it for any
+// holdings): XChain's own token. Tapping the header swaps it for any
 // other coin/token via the shared picker.
 const FEATURED_MARKET = { tick: 'XCHAIN', displayName: 'XChain', chainId: null, imageUrl: null };
 
@@ -37,14 +37,14 @@ const byTimeDesc = (a, b) => {
 };
 
 /**
- * §41/§42 — Marketplace.
+ * §41/§42: Marketplace.
  *
  * Mirrors the Decentralized Exchange shape: you land on a pre-selected
  * market (the featured XChain token) and tap the token header to pull up
  * the full coin/token list (the shared {@link TokenPicker}) and switch
  * which market you're viewing. For the selected token it surfaces both
- * trading venues across every supported chain — fixed-price dispensers
- * AND the DEX — with open offers/orders and recent fills.
+ * trading venues across every supported chain: fixed-price dispensers
+ * and the DEX, with open offers/orders and recent fills.
  *
  * Distinct from §40.7.2 DispenserExplorer (open dispenser offers only):
  * this covers dispensers + DEX, open + filled.
@@ -78,7 +78,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
 
     const tick = (selected.tick || '').toUpperCase();
 
-    // Load the selected market — on landing and whenever the user picks a
+    // Load the selected market on landing and whenever the user picks a
     // different coin/token. Demo wallets are served fabricated feeds; real
     // wallets fan out across every supported chain in parallel.
     useEffect(() => {

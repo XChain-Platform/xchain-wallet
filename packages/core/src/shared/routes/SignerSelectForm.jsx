@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// SignerSelectForm — §17.6 / G023. Inline picker shown when adding an
+// SignerSelectForm (§17.6 / G023): inline picker shown when adding an
 // account or generating a new receive address on a wallet that has more
 // than one signer (software seed plus one or more paired hardware
 // devices).
@@ -16,7 +16,7 @@
 // Behavior:
 //
 //   - On mount, fetches `messaging.listSigners(walletId)` to enumerate
-//     paired SignerRecord entries (HW only — the software signer is
+//     paired SignerRecord entries (HW only; the software signer is
 //     implicit per wallet).
 //   - When zero HW signers exist, the component auto-resolves to the
 //     implicit software signer (calls `onChange(null)` once) and renders
@@ -52,7 +52,7 @@ export function SignerSelectForm({ walletId, value, onChange, disabled = false }
     useEffect(() => {
         let cancelled = false;
         if (typeof messaging.listSigners !== 'function') {
-            // Shell hasn't wired listSigners — treat as zero HW signers.
+            // Shell hasn't wired listSigners; treat as zero HW signers.
             setSigners([]);
             return () => { cancelled = true; };
         }
@@ -63,7 +63,7 @@ export function SignerSelectForm({ walletId, value, onChange, disabled = false }
             })
             .catch((err) => {
                 if (cancelled) return;
-                // Loading the registry failed — fall back to software so
+                // Loading the registry failed; fall back to software so
                 // the parent flow stays usable. Surface the error inline
                 // for diagnostic visibility.
                 setSigners([]);
@@ -82,7 +82,7 @@ export function SignerSelectForm({ walletId, value, onChange, disabled = false }
     }, [signers, value, onChange]);
 
     if (!signers || signers.length === 0) {
-        // Either still loading (we don't render a placeholder — the
+        // Either still loading (we don't render a placeholder; the
         // overall form does its own loading), or no HW signers exist
         // (auto-resolved above).
         return error ? <p style={ERROR_STYLE} role="alert">{error}</p> : null;
@@ -93,7 +93,7 @@ export function SignerSelectForm({ walletId, value, onChange, disabled = false }
         {
             id: null,
             label: 'Software wallet (this seed)',
-            sub: 'Derived from the wallet password — fast, no device.',
+            sub: 'Derived from the wallet password. Fast, no device needed.',
             kind: 'software',
         },
         ...signers.map((s) => ({

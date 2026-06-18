@@ -8,16 +8,16 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// StalenessLabel — §49.3 / G155.
+// StalenessLabel (§49.3 / G155).
 //
 // Renders "Last synced Xs ago" copy next to a balance or history
 // surface so the user can tell at a glance whether the data they're
-// looking at is live or cached. The component is purely presentational
-// — pass the timestamp of the last successful fetch (Unix ms) and a
+// looking at is live or cached. The component is purely presentational:
+// pass the timestamp of the last successful fetch (Unix ms) and a
 // label prefix; the staleness math runs locally on a self-refreshing
 // timer so the text updates without parent re-renders.
 //
-// Per §49.3 the wallet "never fabricates data" — so callers should pass
+// Per §49.3 the wallet "never fabricates data", so callers should pass
 // `lastSyncedAt = null` when they have no fetch history yet, and the
 // component renders nothing rather than misleading copy.
 

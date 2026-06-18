@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for Phase 4 — Step 6 of 23 — DEPOSIT + WITHDRAW forms (§42.5).
+// Smoke for Phase 4, Step 6 of 23: DEPOSIT + WITHDRAW forms (§42.5).
 
 import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
@@ -150,5 +150,5 @@ for (const [shell, appPath] of [
 }
 
 console.log(
-    'OK — contract funds form smoke (ContractFundsForm shared route with mode=deposit|withdraw + depositAction/withdrawAction flows + bg handlers + 3-shell messaging + three App.jsx sub-routes wired from ContractDetail)',
+    'OK: contract funds form smoke (ContractFundsForm shared route with mode=deposit|withdraw + depositAction/withdrawAction flows + bg handlers + 3-shell messaging + three App.jsx sub-routes wired from ContractDetail)',
 );

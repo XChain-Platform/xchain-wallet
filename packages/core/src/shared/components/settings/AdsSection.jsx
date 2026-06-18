@@ -8,11 +8,11 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// AdsSection — §35.1 + §36 Automatic Donation System panel.
+// AdsSection: §35.1 + §36 Automatic Donation System panel.
 //
 // Master ON/OFF + per-chain config (per-tx amount, trigger threshold,
 // donation address shown for verification, lifetime stats). Backed by
-// `settings.ads.{enabled, perChain[chainId]}` — schema v1.
+// `settings.ads.{enabled, perChain[chainId]}` (schema v1).
 //
 // Donation addresses come from each chain descriptor's
 // `adsDonationAddress`. Per the §35 gap audit / §0.25.0 changelog
@@ -95,7 +95,7 @@ export function AdsSection() {
             />
 
             {chainIds.length === 0 ? (
-                <Status text="No chain ADS profiles yet — they're seeded automatically when a chain is activated." />
+                <Status text="No chain ADS profiles yet. They're seeded automatically when a chain is activated." />
             ) : null}
 
             {chainIds.map((chainId) => {
@@ -161,7 +161,7 @@ export function AdsSection() {
                             <div style={ROW_HINT}>Donation address</div>
                             {isPlaceholder ? (
                                 <div style={{ ...ADDRESS_BOX, fontStyle: 'italic', color: 'var(--xc-text-muted)' }}>
-                                    Pending — real {displayName} donation address ships before mainnet GA.
+                                    Pending: real {displayName} donation address ships before mainnet GA.
                                 </div>
                             ) : (
                                 <div style={ADDRESS_BOX} aria-label={`${displayName} donation address`}>
@@ -186,7 +186,7 @@ export function AdsSection() {
                         </div>
                         {chainState.lifetimeDonatedSats > 0 ? (
                             <div style={{ ...SUBTLE, fontStyle: 'italic', textAlign: 'right' }}>
-                                You've donated {chainState.lifetimeDonatedSats.toLocaleString()} sats to XChain development — thank you.
+                                You've donated {chainState.lifetimeDonatedSats.toLocaleString()} sats to XChain development. Thank you.
                             </div>
                         ) : null}
                     </div>

@@ -24,14 +24,14 @@ export function AssetHeroSection() {
             id="asset-hero"
             title="Asset hero (Send)"
             tag="vertical, icon-only tap target"
-            kicker="A large centered token icon over a bold name. The icon itself is the only tappable element — the surrounding whitespace stays inert so the user can rest their thumb anywhere without accidentally re-opening the picker. Used at the top of the Send form."
+            kicker="A large centered token icon over a bold name. The icon itself is the only tappable element; the surrounding whitespace stays inert so the user can rest their thumb anywhere without accidentally re-opening the picker. Used at the top of the Send form."
         >
             <Guidance
                 what={<>An 88×88 icon (round wrap, raw published art with <code>object-fit: contain</code>) over a 20px bold display name. The icon wraps in a circular <code>&lt;button&gt;</code> when an <code>onChangeAsset</code> handler is provided; the name + outer container stay non-interactive.</>}
-                when={<>The top of a form that operates on a single chosen asset (Send, future Stake / Bridge flows). Use this when the asset's visual identity is the page's lead — the user is here to do something WITH this asset.</>}
+                when={<>The top of a form that operates on a single chosen asset (Send, future Stake / Bridge flows). Use this when the asset's visual identity is the page's lead: the user is here to do something WITH this asset.</>}
                 whenNot={<>List screens that show multiple assets in rows → use the stacked asset icon at row-scale. Bounded gray cards with chevron affordance → use the horizontal asset card variant.</>}
-                sizing={<>Icon wrap 88×88, name <code>--xc-text-xl</code> weight 700 with 4px top margin. Chain pip (non-native): 28×28, bottom-right of the icon. The button uses <code>filter: brightness(0.96)</code> on hover (no background fill — keeps the affordance round) and a circular focus ring <code>outline-offset: 4px</code>.</>}
-                doRule={<>✓ Make ONLY the icon clickable · use the published token image (or letter-chip fallback) without forcing <code>border-radius: 50%</code> on the image itself · add the chain pip for non-native tokens · keep the name centered and short — truncate with ellipsis if it overflows</>}
+                sizing={<>Icon wrap 88×88, name <code>--xc-text-xl</code> weight 700 with 4px top margin. Chain pip (non-native): 28×28, bottom-right of the icon. The button uses <code>filter: brightness(0.96)</code> on hover (no background fill; keeps the affordance round) and a circular focus ring <code>outline-offset: 4px</code>.</>}
+                doRule={<>✓ Make ONLY the icon clickable · use the published token image (or letter-chip fallback) without forcing <code>border-radius: 50%</code> on the image itself · add the chain pip for non-native tokens · keep the name centered and short (truncate with ellipsis if it overflows)</>}
                 dontRule={<>✗ Make the whole row a button (creates a navigation trap across the entire top of the form) · paint a background-fill on hover (rectangular hover under a round icon reads wrong) · use a filled circular crop on the image (loses original art shape)</>}
                 supersedes={<>The <code>SelectedTokenHero</code> component in <code>Send.jsx</code>. Lift to a shared <code>&lt;AssetHero&gt;</code> in <code>@xchain-wallet/core/ui</code> when a second caller appears (Bridge, Stake, etc.).</>}
             />
@@ -51,7 +51,7 @@ export function AssetHeroSection() {
 </div>`}
             </Markup>
 
-            <LiveExample label="Native — Bitcoin (no chain pip)">
+            <LiveExample label="Native: Bitcoin (no chain pip)">
                 <div className={styles.heroWrap}>
                     <button type="button" className={`${styles.iconWrap} ${styles.iconWrapInteractive}`} aria-label="Change asset (currently Bitcoin)">
                         <img src={BTC_ICON} className={styles.icon} alt="" />
@@ -60,7 +60,7 @@ export function AssetHeroSection() {
                 </div>
             </LiveExample>
 
-            <LiveExample label="Token — Pepe creature on Bitcoin (with chain pip)">
+            <LiveExample label="Token: Pepe creature on Bitcoin (with chain pip)">
                 <div className={styles.heroWrap}>
                     <button type="button" className={`${styles.iconWrap} ${styles.iconWrapInteractive}`} aria-label="Change asset (currently Pepe creature)">
                         <img src={PEPE_ICON} className={styles.icon} alt="" />

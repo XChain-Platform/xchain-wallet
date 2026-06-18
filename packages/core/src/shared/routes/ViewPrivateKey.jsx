@@ -28,14 +28,14 @@ import styles from './ViewPrivateKey.module.css';
 const chainRegistry = registryLib.defaultRegistry();
 
 /**
- * ViewPrivateKey — §17.7. Shows the WIF for an address the wallet
+ * ViewPrivateKey: §17.7. Shows the WIF for an address the wallet
  * owns, with the full security ceremony: password re-entry even
  * inside an unlocked session (§17.7.3), tap-to-reveal, automatic
  * hide on window blur, and a Copy button that auto-clears the
  * clipboard after 60 seconds.
  *
  * HW-wallet + watch-only addresses route to an informational panel
- * per §17.7.2 — no password prompt, no fake reveal. Protocol-level
+ * per §17.7.2: no password prompt, no fake reveal. Protocol-level
  * refusal is the `exportPrivateKey` flow's job; this component
  * short-circuits the UX so users don't even type a password to be
  * told "no."
@@ -55,7 +55,7 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
     const { settings } = useSettings();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
-    // §17.7.1 / G028 — clipboard auto-clear timeout, configurable from
+    // §17.7.1 / G028: clipboard auto-clear timeout, configurable from
     // Settings → Privacy. 0 disables the auto-clear. Records without
     // the field (older v2 settings) fall back to the spec default.
     const clipboardAutoClearSeconds = (() => {
@@ -84,7 +84,7 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
         }
     }, [stage]);
 
-    // §17.7.1 — auto-hide on window blur. Wipes the revealed flag
+    // §17.7.1: auto-hide on window blur. Wipes the revealed flag
     // but keeps the WIF in closure so the reveal button can bring
     // it back without re-entering the password within the session.
     useEffect(() => {
@@ -93,7 +93,7 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
         return () => window.removeEventListener('blur', handler);
     }, []);
 
-    // §17.7.1 / G028 — clipboard auto-clear. Timeout sourced from
+    // §17.7.1 / G028: clipboard auto-clear. Timeout sourced from
     // settings.privacy.clipboardAutoClearSeconds (0–600, 0 disables).
     useEffect(() => {
         if (clipboardStatus !== 'copied') return undefined;
@@ -132,7 +132,7 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
             } else if (name === 'NoKeyForAddressError') {
                 // The core flow's authoritative refusal. Shouldn't hit
                 // for HW/watch-only since we route those to the info
-                // panel — this fires if classifySource is wrong.
+                // panel; this fires if classifySource is wrong.
                 setSubmitError('This address has no exportable private key.');
             } else {
                 setSubmitError(err?.message || 'Export failed.');
@@ -195,7 +195,7 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
             <>
                 <h2 className={styles.infoTitle}>No private key for this address</h2>
                 <p className={styles.paragraph}>
-                    This is a watch-only address. The wallet only observes it — no
+                    This is a watch-only address. The wallet only observes it; no
                     private key is stored here and nothing can be signed from it.
                 </p>
                 <div className={styles.actions}>
@@ -215,7 +215,7 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
                         {' '}<AddressText address={address.address} />.
                         Anyone with it can spend from this address.
                     </li>
-                    <li>Do not share it with anyone — including XChain support.</li>
+                    <li>Do not share it with anyone, including XChain support.</li>
                     <li>
                         If you are screen-sharing or recording, <strong>cancel that now</strong>{' '}
                         before you reveal the key.
@@ -235,7 +235,7 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
                 </ul>
                 <div className={styles.actions}>
                     <Button variant="primary" onClick={() => setStage('password')}>
-                        I understand — continue
+                        I understand, continue
                     </Button>
                 </div>
             </>,
@@ -259,7 +259,7 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
                     ref={passwordRef}
                     type="password"
                     label="Password"
-                    hint="Required every time — even when the wallet is already unlocked."
+                    hint="Required every time, even when the wallet is already unlocked."
                     value={password}
                     onChange={(e) => {
                         setPassword(e.target.value);
@@ -335,7 +335,7 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
                 >
                     {clipboardStatus === 'copied'
                         ? (clipboardAutoClearSeconds > 0
-                            ? `Copied — auto-clears in ${clipboardAutoClearSeconds}s`
+                            ? `Copied (auto-clears in ${clipboardAutoClearSeconds}s)`
                             : 'Copied')
                         : 'Copy'}
                 </Button>

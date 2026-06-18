@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Vault — the wallet's persistent-state facade. Owns the in-memory
+// Vault: the wallet's persistent-state facade. Owns the in-memory
 // document, coordinates encrypt-on-save / decrypt-on-load through the
 // codec, and exposes typed per-collection handles.
 //
@@ -23,7 +23,7 @@
 //   - Every mutation auto-saves. Shells that want batching can set
 //     autoSave: false and call vault.save() explicitly.
 //   - Reads migrate records forward via the schema migration harness.
-//     Migrations run lazily — the on-disk record stays at its stored
+//     Migrations run lazily; the on-disk record stays at its stored
 //     version until the next write.
 //   - AAD is optional; when supplied it's passed through to AEAD
 //     unchanged on both save and load.
@@ -71,7 +71,7 @@ export class VaultStateError extends Error {
 
 export class VaultValidationError extends Error {
     constructor(collection, errors) {
-        super(`Vault: invalid ${collection} record — ${errors.join('; ')}`);
+        super(`Vault: invalid ${collection} record: ${errors.join('; ')}`);
         this.name = 'VaultValidationError';
         this.collection = collection;
         this.errors = errors;
@@ -177,7 +177,7 @@ export class Vault {
 
     /**
      * Clear persisted state and forget the in-memory document. Leaves
-     * the vault in a closed state — callers must `open()` again.
+     * the vault in a closed state. Callers must `open()` again.
      */
     async clear() {
         await this._backend.clear();

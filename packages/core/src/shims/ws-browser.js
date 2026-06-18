@@ -21,7 +21,7 @@
 // Vite configs in `packages/web` and `packages/extension` alias
 // `ws` -> this file.
 //
-// Kept tiny on purpose — every method the SDK actually calls is
+// Kept tiny on purpose. Every method the SDK actually calls is
 // implemented; nothing else. If the SDK grows a new WebSocket call
 // site (per-message deflate, pings, etc.) and it fails here, add the
 // method. Don't try to be a general-purpose `ws` polyfill.
@@ -62,7 +62,7 @@ class BrowserWsShim {
             // Node's `ws` passes raw data (Buffer | ArrayBuffer | string).
             // Native browser WS gives a MessageEvent whose `.data` is
             // a string for JSON text messages. The SDK calls
-            // JSON.parse(data.toString()) — both forms satisfy that.
+            // JSON.parse(data.toString()); both forms satisfy that.
             this._emit('message', event.data);
         });
         this._ws.addEventListener('close', (event) => {
@@ -129,7 +129,7 @@ class BrowserWsShim {
 
     terminate() {
         // `ws` drops the socket without the close frame; browser
-        // WebSocket has no equivalent — close(1000) is the best we can do.
+        // WebSocket has no equivalent; close(1000) is the best we can do.
         this._ws.close(1000);
     }
 

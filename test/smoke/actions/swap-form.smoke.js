@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Phase 3 Step 10 smoke — SWAP form (§41.5).
+// Phase 3 Step 10 smoke: SWAP form (§41.5).
 //
 // Asserts:
 //   1. swapAction flow exported from @xchain-wallet/core with input guards.
@@ -143,7 +143,7 @@ assert.ok(/onSellOwnership/.test(manageSrc), 'ManageToken accepts onSellOwnershi
 assert.ok(/id:\s*['"]sell-ownership['"]/.test(manageSrc), 'ManageToken renders the Sell-name action');
 
 // SellOwnershipForm builds an ownership ORDER (GIVE_OWNERSHIP=1) and submits
-// via orderAction — supports native-coin (GET_TICK omitted) + token prices.
+// via orderAction; supports native-coin (GET_TICK omitted) + token prices.
 const sellSrc = readFileSync(join(sharedRoutes, 'SellOwnershipForm.jsx'), 'utf8');
 assert.ok(/export function SellOwnershipForm\b/.test(sellSrc), 'SellOwnershipForm is a named export');
 assert.ok(/GIVE_OWNERSHIP:\s*'1'/.test(sellSrc), 'SellOwnershipForm escrows ownership (GIVE_OWNERSHIP=1)');
@@ -169,5 +169,5 @@ for (const [shell, appPath] of [
 }
 
 console.log(
-    'OK — swap-form smoke (§41.5 SWAP: swapAction core flow + input guards + ownership trading; SwapForm rejects native-coin + same-ticker; branches swap/Hw behind SignCredentials; background handlers + 3-shell messaging + 3-shell App.jsx + ActionsMenu entry; ManageToken "Sell name" → ORDER-based SellOwnershipForm (native coin + token) across 3 shells)',
+    'OK: swap-form smoke (§41.5 SWAP: swapAction core flow + input guards + ownership trading; SwapForm rejects native-coin + same-ticker; branches swap/Hw behind SignCredentials; background handlers + 3-shell messaging + 3-shell App.jsx + ActionsMenu entry; ManageToken "Sell name" → ORDER-based SellOwnershipForm (native coin + token) across 3 shells)',
 );

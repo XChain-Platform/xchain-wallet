@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Unit: TrezorSigner — all non-hardware-transport methods via a mocked Connect.
+// Unit: TrezorSigner: all non-hardware-transport methods via a mocked Connect.
 
 import { describe, it, expect, vi } from 'vitest';
 import {
@@ -118,7 +118,7 @@ describe('TrezorSigner.getStatus', () => {
     });
 
     it('returns "available" when device_id is absent (device gives no id)', async () => {
-        // When the observed device reports no id, we can't mismatch — treat as available.
+        // When the observed device reports no id, we can't mismatch: treat as available.
         const s = makeSigner({
             getFeatures: vi.fn().mockResolvedValue({ success: true, payload: { internal_model: 'T2T1' } }),
         });

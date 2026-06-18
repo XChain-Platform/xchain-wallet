@@ -16,7 +16,7 @@ import { clearLastView } from '../utils/lastViewMemory.js';
 import styles from './DemoBanner.module.css';
 
 /**
- * §25.2 / G059 — persistent banner shown across the unlocked tree when
+ * §25.2 / G059: persistent banner shown across the unlocked tree when
  * the active wallet is the throwaway demo wallet. Renders nothing for
  * normal wallets. Exposes a one-tap "Exit demo & wipe" affordance that
  * calls `wallet.remove`, clears the localStorage flag, and refreshes
@@ -51,7 +51,7 @@ export function DemoBanner({ activeWalletId, onExited }) {
                 await messaging.sendMessage('wallet.remove', { walletId: activeWalletId });
             }
             flowsLib.clearDemoWalletId();
-            // Cluster U FOLLOWUP 5 — drop the resume-last-view memory
+            // Cluster U FOLLOWUP 5: drop the resume-last-view memory
             // alongside the demo wallet itself.
             clearLastView(activeWalletId);
             if (typeof onExited === 'function') onExited();
@@ -62,7 +62,7 @@ export function DemoBanner({ activeWalletId, onExited }) {
         }
     }
 
-    // Cluster J FOLLOWUP 6 — auto-expire. When the demo wallet's TTL
+    // Cluster J FOLLOWUP 6: auto-expire. When the demo wallet's TTL
     // has elapsed, fire a one-shot wipe + onExited so the user lands
     // back on Welcome rather than seeing a stale "throwaway wallet"
     // banner indefinitely. The check runs on mount + on a 60s
@@ -78,12 +78,12 @@ export function DemoBanner({ activeWalletId, onExited }) {
         tick();
         const id = setInterval(tick, 60_000);
         return () => clearInterval(id);
-        // handleExit is stable enough — re-running on busy flips would
+        // handleExit is stable enough; re-running on busy flips would
         // double-fire the exit. Intentionally omit it from deps.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isDemo, activeWalletId, autoWiped, busy]);
 
-    // Visible banner suppressed — Exit-demo affordance is moving to the
+    // Visible banner suppressed. Exit-demo affordance is moving to the
     // Demo Wallet picker / detail surface. The component still mounts so
     // the 24h auto-expire useEffect above keeps wiping stale demo wallets.
     void expiry; void handleExit; void error;

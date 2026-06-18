@@ -33,11 +33,11 @@ const POLL_INTERVAL_MS = 10_000;
 // 8192 bytes (MAX_ACTION_DATA_LENGTH), and the action string + script
 // overhead eat into that budget. Cap the raw file below the ceiling so
 // the encoder doesn't reject it after the user has already signed
-// nothing — fail early, in the picker.
+// nothing; fail early, in the picker.
 const MAX_FILE_BYTES = 7000;
 
 // Protocol coin tickers for the LINK serialization (same map as
-// LinkForm — the descriptor's `coin` is long-form).
+// LinkForm; the descriptor's `coin` is long-form).
 const PROTOCOL_COIN_TICKER = {
     bitcoin: 'BTC',
     litecoin: 'LTC',
@@ -45,8 +45,8 @@ const PROTOCOL_COIN_TICKER = {
 };
 
 /**
- * Attach artwork to a token — the NFT content-attachment pattern
- * (NFT_Standard.md): upload the artwork as an on-chain FILE, then
+ * Attach artwork to a token (the NFT content-attachment pattern,
+ * NFT_Standard.md): upload the artwork as an on-chain FILE, then
  * LINK it to the token's original ISSUE. The indexer only honours a
  * LINK signed by the token's current owner, which is what makes the
  * attachment official.
@@ -55,11 +55,11 @@ const PROTOCOL_COIN_TICKER = {
  * needs the FILE's ACTION_INDEX), so this is a bespoke stage machine
  * mirroring AirdropForm's LIST → wait-index → AIRDROP shape:
  *
- *   compose      — pick the file, optional title
- *   review-file  — confirm + sign the FILE upload
- *   wait-index   — poll the explorer for the FILE's ACTION_INDEX
- *   review-link  — confirm + sign the LINK (owner-validated)
- *   done         — both txids shown
+ *   compose:      pick the file, optional title
+ *   review-file:  confirm + sign the FILE upload
+ *   wait-index:   poll the explorer for the FILE's ACTION_INDEX
+ *   review-link:  confirm + sign the LINK (owner-validated)
+ *   done:         both txids shown
  *
  * Unlike AirdropForm there is no crash-safe resume record: if the
  * wallet closes mid-flow the FILE is already on-chain and the user
@@ -70,7 +70,7 @@ const PROTOCOL_COIN_TICKER = {
  * @param {string} props.walletId
  * @param {string} props.chainId          chain the token lives on
  * @param {string} props.tick             canonical ticker (uppercase)
- * @param {string | null} [props.issuerAddress]   the token's current owner — preferred signing address
+ * @param {string | null} [props.issuerAddress]   the token's current owner (preferred signing address)
  * @param {() => void} props.onBack
  */
 export function AttachContentForm({ walletId, chainId, tick, issuerAddress = null, onBack }) {
@@ -85,7 +85,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [fromAddressId, setFromAddressId] = useState(/** @type {string | null} */ (null));
 
-    // The token's ISSUE action index — the LINK's second leg. Fetched
+    // The token's ISSUE action index (the LINK's second leg). Fetched
     // from the same genesis endpoint ManageToken renders.
     const [issueActionIndex, setIssueActionIndex] = useState(/** @type {string | null} */ (null));
     const [genesisChecked, setGenesisChecked] = useState(false);
@@ -104,7 +104,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         ('compose'),
     );
     // Optional continuation: also author the token's information document
-    // on-chain (TIS On-Chain Format) and point DESCRIPTION at it — two
+    // on-chain (TIS On-Chain Format) and point DESCRIPTION at it. Two
     // more signatures (FILE for the JSON doc, then an ISSUE v1 update).
     const [setAsTokenInfo, setSetAsTokenInfo] = useState(false);
     const [tisTxid, setTisTxid] = useState(/** @type {string | null} */ (null));
@@ -151,7 +151,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         return () => { cancelled = true; };
     }, [messaging, chainId, tick]);
 
-    // Signing address — the token's owner when the wallet holds it
+    // Signing address: the token's owner when the wallet holds it
     // (the LINK is only honoured from the owner), else the newest
     // external HD address so the FILE leg still works.
     useEffect(() => {
@@ -182,7 +182,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         }
     }, [stage]);
 
-    // Wait-index polling — same shape as AirdropForm's LIST wait.
+    // Wait-index polling (same shape as AirdropForm's LIST wait).
     useEffect(() => {
         if (stage !== 'wait-index' || !fileTxid) return undefined;
         let cancelled = false;
@@ -209,7 +209,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         return () => { cancelled = true; clearInterval(handle); };
     }, [stage, fileTxid, chainId, messaging]);
 
-    // Second wait — the TIS document FILE's action index, needed by the
+    // Second wait: the TIS document FILE's action index, needed by the
     // ISSUE v1 description update.
     useEffect(() => {
         if (stage !== 'wait-tis' || !tisTxid) return undefined;
@@ -244,7 +244,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
     }, [chainId, fromAddressId, addressesByChain]);
 
-    // Owner mismatch — the LINK leg will be recorded but not honoured
+    // Owner mismatch: the LINK leg will be recorded but not honoured
     // unless it's signed by the token's current owner.
     const ownerMismatch = !!(issuerAddress && fromAddress && fromAddress.address !== issuerAddress);
 
@@ -253,7 +253,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
     const { isWatcherMode } = useWalletMode();
 
-    // Thumbnail for image files — small enough (≤7 KB) that a data
+    // Thumbnail for image files; small enough (≤7 KB) that a data
     // URL is fine.
     const previewUrl = useMemo(() => {
         if (!fileMeta || !/^image\//.test(fileMeta.type)) return null;
@@ -276,7 +276,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         }
         if (bytes.length > MAX_FILE_BYTES) {
             setFormError(
-                `That file is ${(bytes.length / 1024).toFixed(1)} KB — files stored on-chain must stay under about ${Math.floor(MAX_FILE_BYTES / 1024)} KB. For larger artwork, put an image URL in the token's description instead.`,
+                `That file is ${(bytes.length / 1024).toFixed(1)} KB. Files stored on-chain must stay under about ${Math.floor(MAX_FILE_BYTES / 1024)} KB. For larger artwork, put an image URL in the token's description instead.`,
             );
             return;
         }
@@ -320,8 +320,8 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         if (!issueActionIndex) {
             setFormError(
                 genesisChecked
-                    ? `The creation record for ${tick} isn't indexed yet — try again in a minute.`
-                    : 'Still looking up the token\'s creation record — one moment.',
+                    ? `The creation record for ${tick} isn't indexed yet. Try again in a minute.`
+                    : 'Still looking up the token\'s creation record. One moment.',
             );
             return;
         }
@@ -341,7 +341,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         setSubmitting(true);
         setSubmitError(null);
         try {
-            // Latin-1 binary string — the encoder rebuilds the exact
+            // Latin-1 binary string; the encoder rebuilds the exact
             // bytes via Buffer.from(rawData, 'binary').
             let rawData = '';
             for (let i = 0; i < fileMeta.bytes.length; i += 1) {
@@ -436,7 +436,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         }
     }
 
-    // The token's information document — minimal TIS JSON (same shape as
+    // The token's information document: minimal TIS JSON (same shape as
     // sdk.nft.tisDocument; Token_Information_Standard.md On-Chain Format):
     // NFT intent + the artwork referenced by its on-chain action index.
     const tisJson = useMemo(() => {
@@ -462,7 +462,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         setSubmitting(true);
         setSubmitError(null);
         try {
-            // JSON.stringify output may contain non-ASCII (title) — encode
+            // JSON.stringify output may contain non-ASCII (title); encode
             // to UTF-8 bytes first, then to the Latin-1 binary string the
             // encoder expects.
             const utf8 = new TextEncoder().encode(tisJson);
@@ -529,7 +529,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                     source: fromAddress.source,
                     signerId: fromAddress.signerId,
                 },
-                // ISSUE v1 — edit description (owner-only at the indexer).
+                // ISSUE v1: edit description (owner-only at the indexer).
                 params: {
                     VERSION: '1',
                     TICK: String(tick).toUpperCase(),
@@ -578,7 +578,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
             <>
                 <h2 className={styles.successTitle}>Not available in watcher mode</h2>
                 <p className={styles.hint}>
-                    Attaching artwork is a two-phase action — the wallet
+                    Attaching artwork is a two-phase action. The wallet
                     broadcasts the file, waits for it to be indexed, then
                     broadcasts the link that makes it official. A
                     watcher-mode wallet can't observe the file landing
@@ -621,8 +621,8 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 ) : null}
                 <p className={styles.hint}>
                     {descTxid
-                        ? `Once everything confirms, ${tick}'s picture and info live entirely on the chain — the explorer and wallets read them with no website involved.`
-                        : `Once the link confirms, the artwork shows up wherever ${tick} is displayed — the explorer and wallets read it straight from the chain.`}
+                        ? `Once everything confirms, ${tick}'s picture and info live entirely on the chain. The explorer and wallets read them with no website involved.`
+                        : `Once the link confirms, the artwork shows up wherever ${tick} is displayed. The explorer and wallets read it straight from the chain.`}
                 </p>
                 <div className={styles.actions}>
                     <Button variant="primary" onClick={onBack}>Done</Button>
@@ -648,14 +648,14 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                     </dd>
                 </dl>
                 <p className={styles.hint}>
-                    Waiting for the file to be confirmed and indexed —
+                    Waiting for the file to be confirmed and indexed.
                     usually one or two blocks. Then one more signature links
                     it to {tick} and makes it official.
                 </p>
                 {slow ? (
                     <p className={styles.hint}>
                         This is taking longer than usual. If you close this
-                        screen the file stays on-chain — you can finish the
+                        screen the file stays on-chain; you can finish the
                         pairing later from Actions → Link.
                     </p>
                 ) : null}
@@ -697,7 +697,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         return wrap(
             <form onSubmit={handleSignTis} noValidate>
                 <p className={styles.summary}>
-                    Store {tick}'s information on the chain — a small document
+                    Store {tick}'s information on the chain: a small document
                     naming the token and pointing at the artwork you just
                     attached.
                 </p>
@@ -754,7 +754,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         return wrap(
             <form onSubmit={handleSignDescribe} noValidate>
                 <p className={styles.summary}>
-                    Point {tick}'s description at the on-chain token info —
+                    Point {tick}'s description at the on-chain token info.
                     this is what the explorer and wallets will read.
                 </p>
                 <dl className={styles.detailsList}>
@@ -888,7 +888,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         return wrap(
             <form onSubmit={handleSignLink} noValidate>
                 <p className={styles.summary}>
-                    Link the uploaded file to {tick} — this makes it the
+                    Link the uploaded file to {tick}. This makes it the
                     token's official artwork.
                 </p>
                 <dl className={styles.detailsList}>
@@ -985,7 +985,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 </dl>
             ) : (
                 <p className={styles.hint}>
-                    Keep it small — on-chain files must stay under about
+                    Keep it small. On-chain files must stay under about
                     {' '}{Math.floor(MAX_FILE_BYTES / 1024)} KB. A compact
                     image (SVG, small PNG/JPEG/WebP) works best. For larger
                     artwork, put an image URL in the token's description
@@ -1021,7 +1021,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                     onChange={(e) => setSetAsTokenInfo(e.target.checked)}
                 />
                 <span>
-                    Also make this {tick}'s picture everywhere — stores the
+                    Also make this {tick}'s picture everywhere. This stores the
                     token's info on the chain and points its description at
                     it (two more signatures)
                 </span>
@@ -1029,7 +1029,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
             {ownerMismatch ? (
                 <div role="alert" className={styles.warnings}>
                     <p className={styles.warning}>
-                        This wallet doesn't hold the token's owner address —
+                        This wallet doesn't hold the token's owner address.
                         the final link step will only be honoured if signed
                         by the current owner.
                     </p>
@@ -1051,7 +1051,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     );
 }
 
-// Resolve the ACTION_INDEX from whatever shape the explorer returns —
+// Resolve the ACTION_INDEX from whatever shape the explorer returns.
 // a merged action row (`action_index` / `actionIndex`) or the
 // transactions endpoint's `{ tx_hash, actions: [...] }` wrapper.
 function extractActionIndex(resp) {

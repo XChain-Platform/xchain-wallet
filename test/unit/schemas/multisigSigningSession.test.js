@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Unit: schemas/multisigSigningSession — create, validate, pendingCosignerPubkeys, progressSummary.
+// Unit: schemas/multisigSigningSession (create, validate, pendingCosignerPubkeys, progressSummary).
 
 import { describe, it, expect } from 'vitest';
 import {

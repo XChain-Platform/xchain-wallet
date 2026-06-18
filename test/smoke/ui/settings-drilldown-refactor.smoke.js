@@ -86,7 +86,7 @@ for (const fn of ['privacySummary', 'safetySummary', 'feesSummary', 'endpointsSu
     assert.match(src, new RegExp(`function ${fn}\\(`), `${fn} helper defined`);
 }
 
-// ─── 6. Summary semantics — sample assertions ────────────────────
+// ─── 6. Summary semantics: sample assertions ─────────────────────
 
 // privacy: counts the on flags
 assert.match(src, /flags\.filter\(\(k\) => Boolean\(p\[k\]\)\)\.length/, 'privacy summary counts on flags');

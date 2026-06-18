@@ -8,13 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for Phase 2 — Step 13 (piece 4b) — TrezorSigner class +
-// per-target transport factories, plus HW Sign Step 2 — live
+// Smoke for Phase 2: Step 13 (piece 4b): TrezorSigner class +
+// per-target transport factories, plus HW Sign Step 2: live
 // signPsbt + signMessage wiring through the Trezor envelope builder.
 //
 // Coverage strategy:
 //   1. Run the TrezorSigner class against a hand-written mock Connect
-//      — no hardware, no @trezor/connect-web dependency exercised by
+//     : no hardware, no @trezor/connect-web dependency exercised by
 //      the smoke. Covers the shape the class demands of the transport.
 //   2. Static-check the factories: extension ships the real path,
 //      web re-exports it via a cross-package relative import.
@@ -39,7 +39,7 @@ const wsRoot = join(here, '..', '..', '..');
 const core = join(wsRoot, 'packages', 'core');
 const ext = join(wsRoot, 'packages', 'extension');
 const web = join(wsRoot, 'packages', 'web');
-// §9 / G001 — TrezorSigner.js + trezorFormat.js moved to the standalone
+// §9 / G001: TrezorSigner.js + trezorFormat.js moved to the standalone
 // signers-trezor workspace package; the back-compat shim in
 // `core/src/signers/index.js` keeps the `signers.TrezorSigner` runtime
 // re-export working, so the in-process import above still resolves.
@@ -160,7 +160,7 @@ const mismatchSigner = new TrezorSigner({
 assert.equal(
     await mismatchSigner.getStatus(),
     'disconnected',
-    'different device_id returns "disconnected" — protects against swapped device',
+    'different device_id returns "disconnected": protects against swapped device',
 );
 
 const failConnect = makeMockConnect({
@@ -270,7 +270,7 @@ assert.equal(pk.fingerprint, '3735928559', 'fingerprint stringified');
 
 // --- 6. signPsbt + signMessage live wiring (HW Sign Step 2) ----------
 
-// 6a. signPsbt without an sdkRegistry is rejected — consistent with
+// 6a. signPsbt without an sdkRegistry is rejected: consistent with
 //     SoftwareSigner's own posture.
 await assert.rejects(
     signer.signPsbt({ psbtHex: 'deadbeef', chainId: 'bitcoin-mainnet', signingPaths: [{ inputIndex: 0, path: "m/84'/0'/0'/0/0" }] }),
@@ -524,7 +524,7 @@ assert.ok(
 // --- 9. Factory files + package.json deps -----------------------------
 //
 // Step 18 hoisted the pair sequence into core's `signerFactories/`
-// module — shell factories are now thin bindings that lazy-import the
+// module: shell factories are now thin bindings that lazy-import the
 // HW SDK and delegate to `makeTrezorFactory({ getConnect })`. The
 // extension + web + desktop bindings all share the same core logic;
 // only transport init (manifest, connectSrc, permission wiring) is
@@ -546,11 +546,11 @@ assert.ok(
 );
 assert.ok(
     !/@trezor\/connect-web/.test(stripComments(coreFactorySrc)),
-    'core builder does NOT import @trezor/connect-web — DI keeps core decoupled',
+    'core builder does NOT import @trezor/connect-web: DI keeps core decoupled',
 );
 assert.ok(
     /pairingInfo/.test(coreFactorySrc),
-    'core builder returns pairingInfo — caller persists via flows.registerSigner',
+    'core builder returns pairingInfo: caller persists via flows.registerSigner',
 );
 
 function stripComments(src) {
@@ -665,14 +665,14 @@ const trezorSrc = readFileSync(
 );
 assert.ok(
     !/from ['"]@trezor\/connect-web['"]/.test(trezorSrc),
-    'TrezorSigner class does NOT import @trezor/connect-web — DI keeps the package decoupled',
+    'TrezorSigner class does NOT import @trezor/connect-web: DI keeps the package decoupled',
 );
 assert.ok(
     !/import ['"]@trezor/.test(trezorSrc),
     'TrezorSigner class has no Trezor SDK imports at all',
 );
 
-// §9 / G001 — TrezorSigner now lives in @xchain-wallet/signers-trezor;
+// §9 / G001: TrezorSigner now lives in @xchain-wallet/signers-trezor;
 // back-compat shim in core/src/signers/index.js keeps the runtime
 // re-export reachable (in-process `signers.TrezorSigner` above) and
 // the ENOENT-prone direct path read is gone.
@@ -698,5 +698,5 @@ for (const sym of ['pathToAddressN', 'toTrezorSignTransaction', 'chainIdToTrezor
 }
 
 console.log(
-    'OK — trezor signer smoke (class conforms to Signer interface against DI mock; getStatus / getAddresses / getPublicKey covered; signPsbt pipes through sdk.decomposePsbt → Trezor envelope builder → connect.signTransaction; signMessage wired; legacy lane emits refTxs; factories declared in both shells; core has zero Trezor SDK imports)',
+    'OK: trezor signer smoke (class conforms to Signer interface against DI mock; getStatus / getAddresses / getPublicKey covered; signPsbt pipes through sdk.decomposePsbt → Trezor envelope builder → connect.signTransaction; signMessage wired; legacy lane emits refTxs; factories declared in both shells; core has zero Trezor SDK imports)',
 );

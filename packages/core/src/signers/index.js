@@ -19,7 +19,7 @@ export {
 export { SoftwareSigner } from './SoftwareSigner.js';
 export { SignerPool } from './SignerPool.js';
 
-// §9 / G001 — TrezorSigner now lives in @xchain-wallet/signers-trezor.
+// §9 / G001: TrezorSigner now lives in @xchain-wallet/signers-trezor.
 // Cross-package relative path (matches the shell-factory convention)
 // keeps the back-compat surface working without depending on pnpm
 // workspace symlinks at smoke-test time.
@@ -30,7 +30,7 @@ export {
     firmwareVersionFromFeatures,
 } from '../../../signers-trezor/src/TrezorSigner.js';
 
-// §9 / G002 — LedgerSigner now lives in @xchain-wallet/signers-ledger.
+// §9 / G002: LedgerSigner now lives in @xchain-wallet/signers-ledger.
 // Same back-compat shim as @xchain-wallet/signers-trezor above.
 export {
     LedgerSigner,

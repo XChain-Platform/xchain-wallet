@@ -81,4 +81,4 @@ assert.ok(/messaging\.activateChainRequest\(/.test(sectionSrc),
 assert.ok(/disabled=\{disabled \|\| open\}/.test(sectionSrc) || /disabled=\{!developerMode\}/.test(sectionSrc),
     'DeveloperModeSection greys out the Activate button when Developer Mode is off');
 
-console.log('OK — activateChain flow + host + messaging shims + Settings UI smoke');
+console.log('OK: activateChain flow + host + messaging shims + Settings UI smoke');

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Contact record — §11.3.4. Address-book entry. One contact may span
+// Contact record (§11.3.4). Address-book entry. One contact may span
 // multiple chains via the `entries` array.
 
 import {

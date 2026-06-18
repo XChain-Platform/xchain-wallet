@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Cross-chain templates registry — §42.8.4. Bundled JSON templates
+// Cross-chain templates registry (§42.8.4). Bundled JSON templates
 // describe pre-baked multi-action flows the user can launch into the
 // Parallel composer (§42.8.2) with rows pre-filled.
 //
@@ -18,7 +18,7 @@
 // `validateCrossChainTemplate` so a malformed file fails loudly
 // rather than rendering a broken composer.
 //
-// JSON imports use Vite's native handling — Vite turns the JSON into
+// JSON imports use Vite's native handling; Vite turns the JSON into
 // a JS object at build time. Node smokes don't load this file
 // directly because Node 18 lacks JSON-module support without
 // `--experimental-json-modules`; the smoke tests read the JSON
@@ -40,7 +40,7 @@ const RAW_TEMPLATES = [
 
 /**
  * Validated, frozen list of bundled templates. Throws at module-load
- * time if any template is malformed — fail-fast keeps the wallet
+ * time if any template is malformed; fail-fast keeps the wallet
  * from rendering a broken composer.
  *
  * @type {ReadonlyArray<import('./validate.js').CrossChainTemplate>}
@@ -61,7 +61,7 @@ export const CROSS_CHAIN_TEMPLATES = (() => {
 
 /**
  * Look up a single template by id. Returns null when no template
- * matches — callers render an "unknown template" hint rather than
+ * matches; callers render an "unknown template" hint rather than
  * crashing.
  *
  * @param {string} id

@@ -32,7 +32,7 @@ import styles from './IssueTokenForm.module.css';
 const chainRegistry = registryLib.defaultRegistry();
 
 /**
- * Mint form — §40.3.
+ * Mint form (§40.3).
  *
  * Mints additional supply of an existing mintable token the user owns.
  * Per-mint-limit enforcement and owner checks happen at the protocol
@@ -190,7 +190,7 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
     const [hwStatus, setHwStatus] = useState('idle');
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
 
-    // §20 / Cluster W FOLLOWUP 5 — watcher-mode wallets route through
+    // §20 / Cluster W FOLLOWUP 5: watcher-mode wallets route through
     // the encode-only buildActionPsbt flow; no vault unlock, no signer.
     const { isWatcherMode } = useWalletMode();
 
@@ -328,7 +328,7 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>
-                        Watcher mode — this wallet will build an unsigned transaction.
+                        Watcher mode: this wallet will build an unsigned transaction.
                         Sign it on your Signer-mode wallet, then bring the
                         signed transaction to a Full-mode wallet to broadcast.
                     </p>

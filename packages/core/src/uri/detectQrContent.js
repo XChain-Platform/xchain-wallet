@@ -8,12 +8,12 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// QR content detector — §32.2. Classifies a scanned string into one of
+// QR content detector (§32.2): classifies a scanned string into one of
 // the shapes the wallet knows how to act on. First-match-wins; order
 // is tuned so the specific formats (BIP21, xchain:, PSBT, WIF) are
 // tried before the loose "probable address" fallback.
 //
-// This is string-level classification only — no network calls, no SDK.
+// This is string-level classification only (no network calls, no SDK).
 // Callers receive the tentative type and are responsible for the final
 // validation step (e.g., hand the address to `sdk.wallet.validateAddress`
 // before spending to it).
@@ -69,7 +69,7 @@ export function detectQrContent(input, opts = {}) {
                 content: parsed.content,
             };
         } catch {
-            // malformed XCW — fall through
+            // malformed XCW; fall through
         }
     }
 
@@ -118,7 +118,7 @@ export function detectQrContent(input, opts = {}) {
         return { type: 'psbt-hex', psbtHex: raw.toLowerCase() };
     }
 
-    // --- Step 3: WIF — base58check-decodable with 33- or 34-byte payload ---
+    // --- Step 3: WIF (base58check-decodable with 33- or 34-byte payload) ---
     try {
         const decoded = decodeWif(raw);
         return { type: 'wif', wif: raw, decoded };

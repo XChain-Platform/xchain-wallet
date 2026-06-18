@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §18.5 / Cluster N FOLLOWUP 3 — sign-flow risk classifier
+// Smoke for §18.5 / Cluster N FOLLOWUP 3: sign-flow risk classifier
 // drives the HW cross-check explicit-confirm checkbox.
 //
 // Pins:
@@ -114,7 +114,7 @@ assert.deepEqual(
     assert.match(r.reason, /large amount/i);
 }
 
-// Amount under threshold — no confirm.
+// Amount under threshold: no confirm.
 {
     const r = classifySignRisk({
         signerKind: 'trezor',

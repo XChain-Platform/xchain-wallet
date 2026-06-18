@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// §53 / Cluster K FOLLOWUP 2 smoke — focus-visible sweep on
+// §53 / Cluster K FOLLOWUP 2 smoke: focus-visible sweep on
 // interactive primitives that previously relied on the browser-default
 // focus ring.
 //
@@ -49,9 +49,9 @@ const targets = [
 for (const [path, klass] of targets) {
     const src = readFileSync(path, 'utf8');
     const re = new RegExp(`\\.${klass}\\b[\\s\\S]{0,80}?:focus-visible[\\s\\S]{0,200}?--xc-focus-ring`);
-    assert.ok(re.test(src), `${path} — .${klass}:focus-visible references --xc-focus-ring`);
+    assert.ok(re.test(src), `${path}: .${klass}:focus-visible references --xc-focus-ring`);
 }
 
 console.log(
-    'OK — focus-visible-sweep smoke (§53 / Cluster K FOLLOWUP 2 — explicit :focus-visible rules on AlertsOverlay.close, BackupReminderCard.dismissBtn, HwSignBlock.refresh, QueuedBroadcastBanner.{broadcast,discard}Btn, RawPsbtViewer.{toggle,copyBtn}, ReachabilityBanner.retry, FeeSelector.tier — all keyed to --xc-focus-ring)',
+    'OK: focus-visible-sweep smoke (§53 / Cluster K FOLLOWUP 2: explicit :focus-visible rules on AlertsOverlay.close, BackupReminderCard.dismissBtn, HwSignBlock.refresh, QueuedBroadcastBanner.{broadcast,discard}Btn, RawPsbtViewer.{toggle,copyBtn}, ReachabilityBanner.retry, FeeSelector.tier, all keyed to --xc-focus-ring)',
 );

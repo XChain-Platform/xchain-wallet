@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for Phase 4 — Step 18 of 23 — Multisig address derivation +
+// Smoke for Phase 4, Step 18 of 23: Multisig address derivation +
 // Receive integration (§22 + §42.9).
 
 import { strict as assert } from 'node:assert';
@@ -93,7 +93,7 @@ await assert.rejects(
     /xchain-sdk to \^1\.11\.0/,
 );
 
-// Happy path — SDK returns an address; flow assembles the result.
+// Happy path: SDK returns an address; flow assembles the result.
 const happy = await flows.receiveMultisigAddress({
     vault: {
         wallets: {
@@ -190,5 +190,5 @@ for (const [shell, pkgPath] of [
 }
 
 console.log(
-    'OK — multisig address smoke (receiveMultisigAddress flow guards + missing multisig config error + missing SDK 1.11 hint + happy-path result shape + bg handler + 3-shell messaging exports + Receive route integration with N-of-M indicator + scheme label + cosigner names + SDK pin bumped to ^1.11.0)',
+    'OK: multisig address smoke (receiveMultisigAddress flow guards + missing multisig config error + missing SDK 1.11 hint + happy-path result shape + bg handler + 3-shell messaging exports + Receive route integration with N-of-M indicator + scheme label + cosigner names + SDK pin bumped to ^1.11.0)',
 );

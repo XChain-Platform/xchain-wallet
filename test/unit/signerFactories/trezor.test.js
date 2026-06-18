@@ -8,8 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Unit: core/signerFactories/trezor — makeTrezorFactory DI builder.
-// No real Trezor hardware — mocked entirely.
+// Unit: core/signerFactories/trezor - makeTrezorFactory DI builder.
+// No real Trezor hardware; mocked entirely.
 
 import { describe, it, expect, vi } from 'vitest';
 import { makeTrezorFactory } from '../../../packages/core/src/signerFactories/trezor.js';

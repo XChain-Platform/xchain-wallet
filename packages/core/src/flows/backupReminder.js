@@ -8,16 +8,16 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// §19.7 / G034 + G062 — Backup reminder state.
+// §19.7 / G034 + G062: Backup reminder state.
 //
 // Tracks whether each wallet has been "backup-verified" (either via the
 // §19.2 word-quiz at creation time, or via a successful encrypted-backup
 // export). The verified-at timestamp is stored in localStorage keyed by
 // walletId so the data survives reload without churning the vault schema.
 // Reminder cadence comes from `settings.backupReminders`:
-//   'off'        — never re-prompt verified wallets
-//   'monthly'    — re-prompt 30+ days after the last verify
-//   'quarterly'  — re-prompt 90+ days after the last verify
+//   'off'        - never re-prompt verified wallets
+//   'monthly'    - re-prompt 30+ days after the last verify
+//   'quarterly'  - re-prompt 90+ days after the last verify
 
 const STORAGE_KEY = 'xc:backupVerifiedAt';
 const SESSION_DISMISS_KEY = 'xc:backupReminderDismissedUntil';
@@ -40,7 +40,7 @@ function readStore() {
 function writeStore(map) {
     try {
         globalThis.localStorage?.setItem(STORAGE_KEY, JSON.stringify(map));
-    } catch { /* localStorage unavailable — best-effort */ }
+    } catch { /* localStorage unavailable; best-effort */ }
 }
 
 /**
@@ -94,7 +94,7 @@ function isCurrentlyDismissed(walletId) {
  * @property {string} walletId
  * @property {string | null | undefined} walletCreatedAt   ISO timestamp from Wallet.createdAt
  * @property {{ backupReminders?: 'off' | 'monthly' | 'quarterly' } | null | undefined} settings
- * @property {number} [now]                                 epoch ms — injectable for tests
+ * @property {number} [now]                                 epoch ms (injectable for tests)
  */
 
 /**
@@ -127,7 +127,7 @@ export function computeBackupReminderState(input) {
         return {
             kind: 'gentle',
             headline: cadence === 'monthly' ? 'Monthly backup check' : 'Quarterly backup check',
-            body: 'It\'s been a while — re-verify your recovery phrase or export a fresh encrypted backup.',
+            body: 'Time to re-verify your recovery phrase or export a fresh encrypted backup.',
             dismissable: true,
         };
     }

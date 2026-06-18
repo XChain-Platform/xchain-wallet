@@ -8,11 +8,11 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Cluster I FOLLOWUP 6 — TxStatusTimeline now accepts an optional
+// Cluster I FOLLOWUP 6: TxStatusTimeline now accepts an optional
 // `chainTip` prop and surfaces a confirmation count on confirmed rows.
 // History.jsx derives a per-chain tip from the max blockIndex across
-// loaded entries (a lower bound — there is no dedicated chain-tip
-// endpoint yet) and threads it through EntryRow → DetailCard.
+// loaded entries (a lower bound; there is no dedicated chain-tip
+// endpoint yet) and threads it through EntryRow to DetailCard.
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
@@ -64,10 +64,10 @@ assert.ok(/<TxStatusTimeline entry=\{entry\} chainTip=\{chainTip\} \/>/.test(his
     'DetailCard forwards chainTip to TxStatusTimeline');
 
 // 6. Both EntryRow occurrences in the row-render branches receive
-//    chainTip — group-member rows AND top-level rows.
+//    chainTip: group-member rows AND top-level rows.
 const entryRowMentions = (historySrc.match(/<EntryRow\b/g) || []).length;
 const entryRowChainTipMentions = (historySrc.match(/chainTip=\{chainTipByChainId\[entry\.chainId\]\}/g) || []).length;
 assert.equal(entryRowChainTipMentions, entryRowMentions,
     `every <EntryRow> in History.jsx receives chainTip (got ${entryRowChainTipMentions} of ${entryRowMentions})`);
 
-console.log('OK — TxStatusTimeline confirmations + History.jsx wiring');
+console.log('OK: TxStatusTimeline confirmations + History.jsx wiring');

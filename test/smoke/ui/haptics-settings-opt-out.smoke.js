@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §37.3 / G120 / Cluster P FOLLOWUP 1 — haptic settings
+// Smoke for §37.3 / G120 / Cluster P FOLLOWUP 1: haptic settings
 // opt-out. Adds a `settings.privacy.hapticsEnabled` field (v2-tolerant,
 // default true) that suppresses every `useHaptic` pulse alongside the
 // OS-level reduced-motion preference.

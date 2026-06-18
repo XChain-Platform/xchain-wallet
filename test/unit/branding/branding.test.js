@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Unit: branding/branding.js — product identity constants + URL helpers.
+// Unit: branding/branding.js: product identity constants + URL helpers.
 
 import { describe, it, expect } from 'vitest';
 import {

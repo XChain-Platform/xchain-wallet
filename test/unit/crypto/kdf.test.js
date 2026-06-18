@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 // Unit tests for the wallet's KDF primitive (Argon2id via @noble/hashes).
-// Argon2id is intentionally slow — these tests use the floor parameters
+// Argon2id is intentionally slow. These tests use the floor parameters
 // to keep total test time reasonable.
 
 import { describe, it, expect } from 'vitest';

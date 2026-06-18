@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Ledger hw-app-btc envelope builder — pure data transform from the
+// Ledger hw-app-btc envelope builder: pure data transform from the
 // SDK's normalized PSBT decomposition (§17.4 / §18.2) into the
 // `createPaymentTransaction` arguments `@ledgerhq/hw-app-btc`
 // expects. Paired with LedgerSigner.signPsbt.
@@ -302,7 +302,7 @@ export function addressTypeFromPath(path) {
  * 65 bytes: [header][r:32][s:32] where the header byte encodes both
  * the recovery id and the address type. This function composes the
  * header from the address type implied by the path, concatenates the
- * 32-byte r + s, and base64-encodes the result — matching xchain-sdk's
+ * 32-byte r + s, and base64-encodes the result, matching xchain-sdk's
  * `auth.signMessage` output so verification can round-trip.
  *
  * @param {{ v: number, r: string, s: string }} sig

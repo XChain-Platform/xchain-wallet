@@ -13,7 +13,7 @@
 // WHY THIS EXISTS
 // ---------------
 // The #1 latent-crash class in this wallet is a component used in JSX but
-// never imported — `<ScreenHeader>` without its import → `ReferenceError:
+// never imported (`<ScreenHeader>` without its import → `ReferenceError:
 // ScreenHeader is not defined` → white screen. A botched import-organizer
 // dropped that import from 35 route files at once, and the "green" smoke
 // suite (source-regex assertions that never render) sailed right past it.
@@ -23,26 +23,26 @@
 // COMPLEMENTS THE RENDER HARNESS
 // ------------------------------
 // `routes-render.test.jsx` actually mounts the 73 top-level routes (+ an
-// effects flush + interaction) and catches a broad set of crash types —
+// effects flush + interaction) and catches a broad set of crash types;
 // but only for components it reaches. This test is the breadth axis: a
 // STATIC AST scan over EVERY `.jsx` in the wallet (~194 files, incl. the
 // components/ui that routes only render transitively, and screens hidden
 // behind data/interaction the harness never reaches). It catches exactly
-// one bug class — undefined JSX component — but everywhere.
+// one bug class (undefined JSX component) but everywhere.
 //
 // HOW IT WORKS
 // ------------
 // Parse each file with Babel and walk every JSXOpeningElement. For a
 // capitalized element name (lowercase = intrinsic HTML), resolve the
 // leftmost identifier (`<Icon.Foo>` → `Icon`) and ask Babel's scope
-// whether it's bound anywhere up the lexical chain — imports, local decls,
+// whether it's bound anywhere up the lexical chain (imports, local decls,
 // params, destructuring all count. `noGlobals: true` means a stray JS
 // builtin name can't mask a missing component import. React/Fragment are
 // always OK (automatic JSX runtime needs no import). Zero false positives
 // on the current tree; if a legit new pattern trips it, extend ALWAYS_OK
 // rather than loosening the check.
 //
-// Sources are pulled via `import.meta.glob({ query: '?raw' })` — compile-
+// Sources are pulled via `import.meta.glob({ query: '?raw' })`, compile-
 // time, path-relative, so no fs/cwd fragility and no share reads (a single
 // in-process scan, never the per-file spawn storm the smokes suffer).
 
@@ -74,7 +74,7 @@ const PARSER_PLUGINS = [
     'dynamicImport',
 ];
 
-// Automatic JSX runtime (vite react plugin) injects these — no import needed.
+// Automatic JSX runtime (vite react plugin) injects these; no import needed.
 const ALWAYS_OK = new Set(['React', 'Fragment']);
 
 function scan(code) {
@@ -113,7 +113,7 @@ describe('every JSX component reference is imported or declared', () => {
 
     for (const [key, code] of entries) {
         it(display(key), () => {
-            // A file we can't parse blinds the guard — let it throw and
+            // A file we can't parse blinds the guard; let it throw and
             // surface as a failure rather than silently passing.
             const hits = scan(code);
             // Empty array on success; on failure the message names the

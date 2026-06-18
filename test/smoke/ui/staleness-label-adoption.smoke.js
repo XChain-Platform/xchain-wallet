@@ -8,12 +8,12 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §49.3 / G155 / Cluster G FOLLOWUP 5 — StalenessLabel adoption
+// Smoke for §49.3 / G155 / Cluster G FOLLOWUP 5: StalenessLabel adoption
 // across BalanceList (via Home → HomeTabs), History, and TokenDetail.
 //
 // Verifies that each surface tracks its own lastFetchedAt timestamp and
 // renders <StalenessLabel> only after a successful fetch (never before
-// — §49.3: never fabricate data).
+// (§49.3: never fabricate data).
 
 import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';

@@ -8,18 +8,18 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// §25.2 / G058 + G059 — Demo mode bookkeeping. Tracks the "this wallet
+// §25.2 / G058 + G059: Demo mode bookkeeping. Tracks the "this wallet
 // is the throwaway demo" flag in localStorage so the shell can render a
 // persistent banner and offer a one-tap "Exit demo + wipe" affordance.
 //
 // The demo wallet itself is created via the regular `messaging.createWallet`
 // path with a randomly-generated mnemonic + password (kept in the
-// session-password cache). Marking it as demo here is just metadata —
+// session-password cache). Marking it as demo here is just metadata;
 // no schema bump, no host-handler changes. When the user exits demo
 // mode the shell calls the existing `wallet.remove` flow and then
 // `clearDemoWalletId()`.
 //
-// Cluster J FOLLOWUP 6 — auto-expire. `markDemoWallet` records the
+// Cluster J FOLLOWUP 6: auto-expire. `markDemoWallet` records the
 // walletId AND a creation timestamp. `getDemoWalletExpiry` returns the
 // epoch-ms past which the demo wallet should be auto-wiped (default
 // 24 hours from creation; overridable via `markDemoWallet(walletId, ttl)`).
@@ -105,7 +105,7 @@ export function getDemoWalletExpiry() {
 }
 
 /**
- * Cluster J FOLLOWUP 6 — true when the demo wallet exists AND its TTL
+ * Cluster J FOLLOWUP 6: true when the demo wallet exists AND its TTL
  * has elapsed. Used by the shell to trigger an auto-exit on the next
  * mount of the demo banner / wallet picker.
  *

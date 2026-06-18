@@ -8,24 +8,24 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// electron-updater wiring — §40.12 Step 19.
+// electron-updater wiring (§40.12 Step 19).
 //
 // Checks for updates against the URL declared in
 // electron-builder.config.cjs's `publish` block (currently
 // https://downloads.xchain.io/wallet/desktop/). electron-updater fetches
 // `latest.yml` (Windows) / `latest-mac.yml` (macOS) / `latest-linux.yml`
-// (Linux) from that URL, compares against the running version, and —
-// if newer — downloads the artifact into the userData dir, verifies
+// (Linux) from that URL, compares against the running version, and if
+// newer, downloads the artifact into the userData dir, verifies
 // the SHA512 from the yml manifest, and swaps it in on next launch.
 //
 // Signing check: electron-updater on Windows + macOS validates that
 // the downloaded artifact is signed with the same publisher as the
 // currently-installed app before letting the user install. Linux
 // (.AppImage / .deb) relies on us shipping the SHA512 in the YML
-// manifest — that's the only integrity check the user gets. See
+// manifest; that's the only integrity check the user gets. See
 // REPRODUCIBLE_BUILDS.md "Update trust chain" for the full model.
 //
-// This module is deliberately thin — just bootstraps the updater,
+// This module is deliberately thin: it bootstraps the updater,
 // registers a small set of renderer-visible events, and exposes a
 // `checkForUpdates()` helper. Richer UX (auto-download toggle,
 // release-notes viewer, "remind me later") lands in a dedicated UI
@@ -34,7 +34,7 @@
 //
 // Dev mode: if running from `electron .` against source (not a packaged
 // app), electron-updater's `isUpdaterActive()` returns false and we
-// no-op. That's the correct posture — we don't want dev builds
+// no-op. That's the correct posture; we don't want dev builds
 // accidentally trying to self-update against the prod URL.
 
 /**
@@ -45,7 +45,7 @@
 
 /**
  * Wire electron-updater against the app's configured publish URL.
- * `loader` is injected for tests — production passes a loader that
+ * `loader` is injected for tests; production passes a loader that
  * dynamic-imports `electron-updater`.
  *
  * @param {Object} opts
@@ -76,7 +76,7 @@ export async function attachUpdater({ loader = defaultLoader, onEvent }) {
         };
     }
 
-    // We don't auto-download — the user clicks "install" from the
+    // We don't auto-download; the user clicks "install" from the
     // in-app notification, then autoUpdater.downloadUpdate() runs +
     // we relay progress events back.
     autoUpdater.autoDownload = false;

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Unit: schemas/validate — primitive validators and check/result helpers.
+// Unit: schemas/validate: primitive validators and check/result helpers.
 
 import { describe, it, expect } from 'vitest';
 import {

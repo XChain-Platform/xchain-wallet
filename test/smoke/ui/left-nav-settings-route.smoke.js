@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// §24 Cluster Y FOLLOWUPs 2+3 smoke — Settings entry-point + wallet-name
+// §24 Cluster Y FOLLOWUPs 2+3 smoke: Settings entry-point + wallet-name
 // surfacing in LeftNav / BottomTabBar.
 //
 // Asserts:
@@ -94,5 +94,5 @@ for (const [label, src] of [['web', webApp], ['desktop', desktopApp]]) {
 }
 
 console.log(
-    "OK — left-nav settings-route smoke (§24 Cluster Y FOLLOWUPs 2+3 Settings.initialSubpageId, VIEW_GROUPS.settings includes connected-sites alias, Settings footer aria-current, web + desktop App.jsx track walletList, route 'settings'/'connected-sites' top-level, walletName + onOpenSettings threaded through both navs)",
+    "OK: left-nav settings-route smoke (§24 Cluster Y FOLLOWUPs 2+3 Settings.initialSubpageId, VIEW_GROUPS.settings includes connected-sites alias, Settings footer aria-current, web + desktop App.jsx track walletList, route 'settings'/'connected-sites' top-level, walletName + onOpenSettings threaded through both navs)",
 );

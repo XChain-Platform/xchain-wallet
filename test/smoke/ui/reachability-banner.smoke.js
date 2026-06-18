@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §49.1 / §49.2 / G152 + G153 — reachability poll + banner.
+// Smoke for §49.1 / §49.2 / G152 + G153: reachability poll + banner.
 // Cluster G Step 1 of 2.
 
 import { strict as assert } from 'node:assert';
@@ -49,7 +49,7 @@ assert.ok(/export function ReachabilityBanner\b/.test(banner),
     'ReachabilityBanner is a named export');
 assert.ok(/useReachability/.test(banner),
     'ReachabilityBanner consumes useReachability');
-// Must hide when overall is normal — otherwise normal users see a banner forever.
+// Must hide when overall is normal: otherwise normal users see a banner forever.
 assert.ok(/overall !== ['"]degraded['"] && overall !== ['"]offline['"]/.test(banner),
     'ReachabilityBanner hides when overall is normal');
 assert.ok(/role="status"/.test(banner),

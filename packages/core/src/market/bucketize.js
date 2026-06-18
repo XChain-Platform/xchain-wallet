@@ -8,10 +8,10 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Market chart bucketing helpers — §41.3.1.
+// Market chart bucketing helpers (§41.3.1).
 //
 // The explorer's getMarketHistory endpoint returns individual order-
-// match events (one row per fill) — it is NOT pre-aggregated into
+// match events (one row per fill). It is NOT pre-aggregated into
 // OHLC candles. The wallet aggregates client-side so the user can
 // flip between periods (1m / 5m / 15m / 1h / 4h / 1d / 1w) without
 // a round-trip per period change.
@@ -119,7 +119,7 @@ function parseRow(row, tick1, tick2) {
     const getAmt = Number(row.get_amount ?? row.getAmount);
     if (!Number.isFinite(giveAmt) || giveAmt <= 0) return null;
     if (!Number.isFinite(getAmt) || getAmt <= 0) return null;
-    // Extract timestamp — explorer serialises as `timestamp` (unix
+    // Extract timestamp. Explorer serialises as `timestamp` (unix
     // seconds) or `block_time`; fall back to `created_at` ISO strings.
     let ts = null;
     if (Number.isFinite(Number(row.timestamp))) ts = Number(row.timestamp);

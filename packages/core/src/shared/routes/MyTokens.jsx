@@ -22,12 +22,12 @@ import { TickerIcon } from '../components/TickerIcon.jsx';
 import styles from './MyTokens.module.css';
 
 /**
- * §40.5 — "My Tokens". Lists every token issued by one of the active
+ * §40.5: "My Tokens". Lists every token issued by one of the active
  * wallet's addresses. Hosts the Issue-new-token affordance, and each
  * row drills into TokenDetail, which carries the owner-only actions
  * (Mint, Destroy, Lock supply, …).
  *
- * Data source: messaging.getOwnedTokens({ chainId, address }) — wraps
+ * Data source: messaging.getOwnedTokens({ chainId, address }), wraps
  * xchain-sdk's `getTokens(address, 'address')`, which the explorer
  * filters by `WHERE m.owner_id = ?`.
  *

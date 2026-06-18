@@ -8,14 +8,14 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// pickQuizPositions — §19.2 backup-verification helper.
+// pickQuizPositions (§19.2): backup-verification helper.
 //
 // Picks N random non-adjacent positions out of `totalWords` (skipping
 // position 1, which the user just read as the first row of the recovery-
 // phrase grid). Used by `CreateWallet.jsx`'s verify stage to build the
 // word-quiz blanks.
 //
-// Cluster H FOLLOWUP 6 — count scales with mnemonic length so 24-word
+// Cluster H FOLLOWUP 6: count scales with mnemonic length so 24-word
 // users get proportional coverage:
 //   12 words → 3 positions
 //   24 words → 4 positions

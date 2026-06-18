@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Recipient novelty check — §21.4 test-send protection.
+// Recipient novelty check (§21.4 test-send protection).
 //
 // Pure helper. The Send route already fetches contacts + send history
 // for autocomplete (Step 1). This function reuses that data to decide
@@ -16,7 +16,7 @@
 // before. When `everSentTo` is false AND `knownAsContact` is false,
 // Send.jsx may surface the test-send banner.
 //
-// Returns boolean signals only — the threshold + UX decision lives
+// Returns boolean signals only; the threshold + UX decision lives
 // in the calling shell.
 
 const HISTORY_ADDR_FIELDS = ['destination', 'DESTINATION', 'recipient'];

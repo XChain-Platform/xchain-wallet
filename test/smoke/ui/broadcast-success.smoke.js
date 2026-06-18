@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §37 / §29 / G124 — Send.jsx broadcast success confirmation.
+// Smoke for §37 / §29 / G124: Send.jsx broadcast success confirmation.
 
 import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
@@ -30,8 +30,8 @@ const css = readFileSync(sendCss, 'utf8');
 assert.ok(/stage === 'done'/.test(send), 'Send still gates on stage === "done"');
 assert.ok(/className=\{styles\.successCard\}/.test(send),
     'Done stage renders the styles.successCard wrapper');
-assert.ok(/Broadcast — pending/.test(send),
-    'Done stage uses "Broadcast — pending" copy (§28.4 status timeline language)');
+assert.ok(/Broadcast pending/.test(send),
+    'Done stage uses "Broadcast pending" copy (§28.4 status timeline language)');
 assert.ok(/role="status"\s+aria-live="polite"/.test(send),
     'Done stage announces success via role=status + aria-live=polite');
 

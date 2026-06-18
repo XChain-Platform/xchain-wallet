@@ -8,13 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// MV3 service-worker entry — the manifest's `background.service_worker`
+// MV3 service-worker entry; the manifest's `background.service_worker`
 // points at this file (bundled to dist/background.js).
 //
 // Responsibilities:
 //   1. Stand up a Vault against ChromeStorageBackend / ChromeSessionBackend
 //   2. Build a ChainRegistry + SDKRegistry (SDK factory injected by the
-//      packaged bundle — the SDK is CJS and shells bundle their own
+//      packaged bundle; the SDK is CJS and shells bundle their own
 //      version via createRequire / native ESM)
 //   3. Build the MessageHost via `createBackgroundHost`
 //   4. Attach to `chrome.runtime.onMessage`
@@ -56,7 +56,7 @@ import {
 // Apply the user's saved layout mode (popup vs sidepanel) at worker
 // boot, then watch storage for live changes from the in-wallet
 // settings UI. The user's preference is honoured the next time they
-// click the toolbar icon — no extension reload needed.
+// click the toolbar icon; no extension reload needed.
 (async () => {
     const mode = await readLayoutMode();
     await applyLayoutMode(mode);
@@ -64,7 +64,7 @@ import {
 attachLayoutModeListener();
 
 // --- Lazy wiring --------------------------------------------------------
-// The service worker starts with no master key — it's in ChromeSessionBackend
+// The service worker starts with no master key; it's in ChromeSessionBackend
 // only if the user has unlocked the wallet in this browser session. Until
 // that happens, MessageHost handlers that require a Vault will fail; the
 // popup is responsible for prompting unlock before issuing any operation.
@@ -91,7 +91,7 @@ export const sdkResolved = resolveSdkFactory({ devMockFactory: createDevMockSdk 
     })
     .catch(() => 'dev-mock');
 
-// Module-scoped so the broker survives across unlock / lock cycles —
+// Module-scoped so the broker survives across unlock / lock cycles;
 // rejecting any pending approval on window-close continues to work even
 // if no wallet is unlocked.
 const approvalBroker = new ApprovalBroker();
@@ -99,17 +99,17 @@ const approvalBroker = new ApprovalBroker();
 let host = null;
 let vault = null;
 let detachHost = null;
-// §46 — live notification watcher. Module-scoped so it survives across the
+// §46: live notification watcher. Module-scoped so it survives across the
 // keepalive's repeated ensureHost() calls; recreated from scratch when the MV3
 // worker is evicted and cold-restarts.
 let notificationService = null;
-// §46 price-alert poll watcher — paired with notificationService, same
+// §46 price-alert poll watcher, paired with notificationService; same
 // guard + cold-restart semantics.
 let priceAlertWatcher = null;
 
 // §46 delivery adapter for the extension: chrome.notifications works with the
 // popup closed (it's the service worker firing, not a page). type 'basic'
-// requires an iconUrl — reuse the packaged action icon.
+// requires an iconUrl; reuse the packaged action icon.
 function chromeNotify({ kind, title, body }) {
     try {
         if (typeof chrome === 'undefined' || !chrome.notifications || !chrome.notifications.create) return;
@@ -175,7 +175,7 @@ async function ensureHost() {
         sdkRegistry,
         signerPool,
         approvals: approvalBroker,
-        // §43.2 / Cluster F FOLLOWUP 1 — fan-out for bridge events so
+        // §43.2 / Cluster F FOLLOWUP 1: fan-out for bridge events so
         // dApps subscribed via provider.on(...) get accountsChanged /
         // chainChanged / disconnect when the wallet mutates connected
         // site state. Background uses chrome.tabs to find tabs sitting
@@ -183,7 +183,7 @@ async function ensureHost() {
         bridgeEvents: typeof chrome !== 'undefined' && chrome.tabs
             ? createBridgeEventBroadcaster({ tabs: chrome.tabs, runtime: chrome.runtime })
             : undefined,
-        // §50 / Cluster L FOLLOWUP 4 — shell-specific diagnostic env + build.
+        // §50 / Cluster L FOLLOWUP 4: shell-specific diagnostic env + build.
         getDiagnosticContext: async () => ({
             env: {
                 shell: 'extension',
@@ -202,7 +202,7 @@ async function ensureHost() {
     });
     detachHost = attachChromeRuntime(host);
 
-    // §46 — start the live notification watcher once a vault is open. Guarded
+    // §46: start the live notification watcher once a vault is open. Guarded
     // so the keepalive's repeat ensureHost() calls don't double-start; a cold
     // worker restart rebuilds it (module state was lost) and the SDK WS client
     // reconnects + replays its subscriptions.
@@ -226,7 +226,7 @@ async function ensureHost() {
         });
     }
 
-    // §46 — start the price-alert poll watcher. Its own oracle instance
+    // §46: start the price-alert poll watcher. Its own oracle instance
     // (in-memory cache, 5-min cadence ≈ the oracle's spot TTL). The watcher
     // hard-gates on settings.privacy.priceDataEnabled + notifications.priceAlerts
     // and makes zero network calls when no alert is armed.
@@ -271,22 +271,22 @@ function tearDownHost() {
     if (signerPool) {
         try { signerPool.lockAll(); } catch (_err) { /* best-effort */ }
     }
-    // Replace rather than null — sessionMeta passes the pool by
-    // reference at construction time; swapping in a fresh empty pool
+    // Replace rather than null; sessionMeta passes the pool by
+    // reference at construction time. Swapping in a fresh empty pool
     // keeps that reference stable for the next unlock.
     signerPool = new signersLib.SignerPool();
     host = null;
 }
 
 // Pre-host listener runs before the vault is open so the popup can ask
-// "no-wallet / locked / unlocked?" and perform `wallet.unlock` — both
-// of which need to work when the vault is still encrypted. The host
+// "no-wallet / locked / unlocked?" and perform `wallet.unlock`. Both
+// of those need to work when the vault is still encrypted. The host
 // listener (attached inside `ensureHost` once a session key is present)
 // picks up everything else. See sessionMeta.PRE_HOST_MESSAGE_TYPES.
 attachSessionMetaListener({
     chainRegistry,
     get sdkRegistry() { return sdkRegistry; },
-    // Function-form so dispatchPreHost grabs the *current* pool — it
+    // Function-form so dispatchPreHost grabs the *current* pool; it
     // gets swapped on tearDownHost so the reference can change between
     // unlock cycles. (See sessionMeta.js handling of `signerPool`.)
     signerPool: () => signerPool,
@@ -299,14 +299,14 @@ attachSessionMetaListener({
     },
 });
 
-// Signer bridge — always on, independent of vault unlock state. The
+// Signer bridge: always on, independent of vault unlock state. The
 // popup opens a long-lived 'signer-bridge' port when the user pairs
 // a HW device; this listener wraps the port as a transport in
 // `signerBridge` so `action.send.hw` / `signer.status` handlers can
 // route sign requests to the renderer-hosted signer.
 attachSignerBridgeListener();
 
-// §46 — MV3 keepalive. Chrome evicts an idle service worker after ~30s, which
+// §46: MV3 keepalive. Chrome evicts an idle service worker after ~30s, which
 // would silently tear down the notification WebSocket. A periodic alarm wakes
 // the worker; the wake re-runs this module (rebuilding the host + watcher) and,
 // on an already-warm worker, ensureHost() re-subscribes any addresses the WS
@@ -321,7 +321,7 @@ if (typeof chrome !== 'undefined' && chrome.alarms) {
     });
 }
 
-// Kick ensureHost on startup — no-ops when there's no session.
+// Kick ensureHost on startup; no-ops when there's no session.
 ensureHost().catch((err) => {
     console.error('[xchain] background init failed:', err);
 });

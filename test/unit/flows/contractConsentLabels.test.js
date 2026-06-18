@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Phase F — pure mapping tests for the inline consent disclosure
+// Phase F: pure mapping tests for the inline consent disclosure
 // labels. permissionsToVerbs + bpsToPercent are the only logic the
 // ContractConsentPanel relies on, so a regression here is a regression
 // in what users are shown a contract is allowed to do before they sign.

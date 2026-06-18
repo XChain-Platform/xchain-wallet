@@ -31,7 +31,7 @@ import styles from './Home.module.css';
 const chainRegistry = registryLib.defaultRegistry();
 
 /**
- * Home screen — landing view for an unlocked wallet. Header shows the
+ * Home screen: landing view for an unlocked wallet. Header shows the
  * wallet name + Lock button; body renders a per-chain balance card
  * grid; footer exposes Send / Receive / Create-a-token action buttons.
  *
@@ -51,8 +51,8 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {() => void} [props.onLocked]        refresh upstream state machine
  * @param {() => void} [props.onSend]          navigate to Send sub-route
  * @param {() => void} [props.onReceive]       navigate to Receive sub-route
- * @param {() => void} [props.onSwap]          navigate to SwapForm sub-route — quick action #3
- * @param {() => void} [props.onExchange]      navigate to the Decentralized Exchange list with BTC preselected — quick action #4
+ * @param {() => void} [props.onSwap]          navigate to SwapForm sub-route (quick action #3)
+ * @param {() => void} [props.onExchange]      navigate to the Decentralized Exchange list with BTC preselected (quick action #4)
  * @param {() => void} [props.onCreateToken]   navigate to Token Wizard sub-route (§40.1)
  * @param {() => void} [props.onActions]       navigate to the Token Actions menu (§40.2+)
  * @param {() => void} [props.onMyTokens]      navigate to the My Tokens page (tokens this wallet has issued)
@@ -61,10 +61,10 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {(id: string) => void} [props.onResumeAirdrop]  navigate to AirdropForm with a pending id
  * @param {(ref: { chainId: string, address: string, orderMatchActionIndex: string }) => void} [props.onResumeCoinpay]  navigate to CoinpayForm with a pending obligation (§41.4)
  * @param {() => void} [props.onMessaging]     navigate to the Messaging inbox (§41.7.2)
- * @param {() => void} [props.onContracts]     navigate to the Contracts list (§42.2) — BTC-only, App.jsx gates the prop
- * @param {() => void} [props.onStaking]       navigate to the Staking dashboard (§42.7.4) — BTC-only, App.jsx gates the prop
+ * @param {() => void} [props.onContracts]     navigate to the Contracts list (§42.2); BTC-only, App.jsx gates the prop
+ * @param {() => void} [props.onStaking]       navigate to the Staking dashboard (§42.7.4); BTC-only, App.jsx gates the prop
  * @param {() => void} [props.onHistory]       navigate to the History route (§23 + §23.5 cross-chain threading)
- * @param {() => void} [props.onSignPsbt]      navigate to the PSBT-sign route (§30.4) — surfaced as the marquee CTA when `settings.walletMode === 'signer'` (§20 / G041)
+ * @param {() => void} [props.onSignPsbt]      navigate to the PSBT-sign route (§30.4); surfaced as the marquee CTA when `settings.walletMode === 'signer'` (§20 / G041)
  * @param {() => void} [props.onSignMessage]   navigate to the user-initiated message-sign route (§17.4)
  * @param {() => void} [props.onVerifySignature]   navigate to the signature-verify route (§17.5)
  * @param {() => void} [props.onMigrateToBip39]           navigate to the §40.13 migration wizard when the active wallet is counterwallet-legacy
@@ -96,7 +96,7 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
     const [balances, setBalances] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
     );
-    // Cluster G FOLLOWUP 5 — Unix-ms timestamp of the most recent
+    // Cluster G FOLLOWUP 5: Unix-ms timestamp of the most recent
     // successful balance fetch; null until the first one completes.
     // Threaded into HomeTabs → StalenessLabel so the user can tell
     // when the balance view was last live.
@@ -125,14 +125,14 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
     const networkFilter = networkFilterProp ?? networkFilterLocal;
     const setNetworkFilter = onNetworkFilterChangeProp ?? setNetworkFilterLocal;
     // Free-text token filter follows the same parent-vs-local pattern as
-    // the network filter — popped into the header's filter popover.
+    // the network filter; popped into the header's filter popover.
     const [tokenQueryLocal, setTokenQueryLocal] = useState('');
     const tokenQuery = tokenQueryProp ?? tokenQueryLocal;
     const setTokenQuery = onTokenQueryChangeProp ?? setTokenQueryLocal;
     const [settingsOpen, setSettingsOpen] = useState(false);
 
     // 4th quick-action button is a "More" dropdown matching the
-    // ActionDetail / TokenDetail pattern — Buy lives inside the menu
+    // ActionDetail / TokenDetail pattern. Buy lives inside the menu
     // so the primary row stays at Send / Receive / Swap / More.
     const [homeMoreOpen, setHomeMoreOpen] = useState(false);
     const homeMoreWrapRef = useRef(/** @type {HTMLDivElement | null} */ (null));
@@ -150,14 +150,14 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
             window.removeEventListener('keydown', onKey);
         };
     }, [homeMoreOpen]);
-    // Cluster H FOLLOWUP 7 — when "Back up now" lands the user in
+    // Cluster H FOLLOWUP 7: when "Back up now" lands the user in
     // Settings, this captures which subpage to deep-link into so the
     // user doesn't land on the Settings root + have to re-find Backup.
     const [settingsSubpage, setSettingsSubpage] = useState(/** @type {string | null} */ (null));
-    // §27.3 / G072 — pinned tokens. Loaded from Settings on unlock; toggled
+    // §27.3 / G072: pinned tokens. Loaded from Settings on unlock; toggled
     // optimistically in the UI then persisted via messaging.updateSettings.
     const [pinnedTokens, setPinnedTokens] = useState(/** @type {string[]} */ ([]));
-    // §27.4 / G073 — hidden tokens. Same pattern as pinned. Hidden rows
+    // §27.4 / G073: hidden tokens. Same pattern as pinned. Hidden rows
     // collapse into the "Show N hidden tokens" footer of each tab.
     const [hiddenTokens, setHiddenTokens] = useState(/** @type {string[]} */ ([]));
     // Per-row pin / hide buttons are gated on user opt-in. Default is off
@@ -166,13 +166,13 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
     const [showPinAffordance, setShowPinAffordance] = useState(false);
     const [showHideAffordance, setShowHideAffordance] = useState(false);
     const { showToast } = useToast();
-    // Cluster I FOLLOWUP 2 — auto-hide-spam toast. We only ever nudge
+    // Cluster I FOLLOWUP 2: auto-hide-spam toast. We only ever nudge
     // once per (wallet, mount) tuple. Re-prompting on every balance
     // refresh would be noisy; the user explicitly opting Hide / dismissing
     // the toast counts as "they decided" for the rest of the session.
     const spamNudgedForWalletRef = useRef(/** @type {string | null} */ (null));
 
-    // §27.3 + §27.4 / G072 + G073 — load pinnedTokens + hiddenTokens from Settings on mount.
+    // §27.3 + §27.4 / G072 + G073: load pinnedTokens + hiddenTokens from Settings on mount.
     useEffect(() => {
         let cancelled = false;
         if (typeof messaging?.getSettings !== 'function') return undefined;
@@ -184,7 +184,7 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
             setHiddenTokens(hides);
             setShowPinAffordance(s?.showPinAffordance === true);
             setShowHideAffordance(s?.showHideAffordance === true);
-        }).catch(() => { /* tolerate — empty pin list is a fine default */ });
+        }).catch(() => { /* tolerate missing settings; empty pin list is a fine default */ });
         return () => { cancelled = true; };
     }, [messaging]);
 
@@ -216,7 +216,7 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
         });
     }, [messaging]);
 
-    // Cluster I FOLLOWUP 2 — auto-hide-spam nudge. After the first
+    // Cluster I FOLLOWUP 2: auto-hide-spam nudge. After the first
     // balance load that yields candidate spam rows, surface a one-shot
     // toast with a Hide-all action. The candidate set excludes anything
     // the user already hid; if it's empty after that filter, we say
@@ -232,7 +232,7 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
         if (fresh.length === 0) return;
         spamNudgedForWalletRef.current = activeWalletId;
         showToast({
-            message: `${fresh.length} likely-spam token${fresh.length === 1 ? '' : 's'} detected — bulk-hide?`,
+            message: `${fresh.length} likely-spam token${fresh.length === 1 ? '' : 's'} detected. Bulk-hide?`,
             actionLabel: `Hide ${fresh.length}`,
             durationMs: 12000,
             onAction: () => {
@@ -313,7 +313,7 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
 
     // Per-wallet load: balances, multisig indicator, pending airdrops,
     // pending COINPAY obligations. Reruns when the active wallet OR
-    // active BIP44 account changes — switching either flushes stale
+    // active BIP44 account changes. Switching either flushes stale
     // state and refetches. When `activeAccountId` is null (data layer
     // returned no accounts for this wallet, or pre-load), the calls
     // fall back to wallet-wide aggregation.
@@ -332,7 +332,7 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
         (async () => {
             try {
                 let b;
-                // Cluster J FOLLOWUP 1 — synthesize fabricated balances
+                // Cluster J FOLLOWUP 1: synthesize fabricated balances
                 // for the demo wallet so Home / Send / Receive feel
                 // populated. Uses the wallet's real address records so
                 // the rest of the app sees the same address-rooted
@@ -440,13 +440,13 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
         1,
         Math.min(1440, Number(settings?.autolockMinutes) || 5),
     );
-    // §20 / G041 — wallet-mode aware. The hook's return is the wrapper
+    // §20 / G041: wallet-mode aware. The hook's return is the wrapper
     // `{ settings, loading, error, refresh, update }`, so the actual
     // Settings record lives at `.settings`. Read with the explicit
     // default so v2 records without the field behave like 'full'.
     const walletMode = settings.settings?.walletMode || WALLET_MODE_DEFAULT;
     const isSignerMode = walletMode === 'signer';
-    // §26 / G064 — auto-lock runs in every shell. The hook listens for
+    // §26 / G064: auto-lock runs in every shell. The hook listens for
     // user-input events on `window`, which is identical in the Electron
     // renderer and the browser, so a user-idle desktop wallet now locks
     // on the same cadence as web + popup. Cluster O FOLLOWUP 1 closes
@@ -454,7 +454,7 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
     // `powerMonitor.getSystemIdleTime()` driver in the desktop main
     // process so the wallet locks on OS-level lock / sleep too.
     // Demo wallets use a randomly-generated 64-char hex password that
-    // lives only in the session-password cache — there's no human-typed
+    // lives only in the session-password cache; there is no human-typed
     // password to fall back on. Auto-locking a demo wallet strands the
     // user (no recoverable password, only the nuclear "wipe wallet
     // data" escape on the Locked screen). Skip auto-lock when the
@@ -606,7 +606,7 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
         );
     }
 
-    // §20 / G041 — signer-mode home variant. The wallet only signs PSBTs
+    // §20 / G041: signer-mode home variant. The wallet only signs PSBTs
     // pasted in from a paired Watcher wallet; balances, history, send,
     // and receive are not relevant. Render a stripped-down body with the
     // sign / verify CTAs and a banner explaining the role. Header stays
@@ -618,7 +618,7 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
                     {loadError ? (
                         <div role="alert" className={styles.error}>{loadError}</div>
                     ) : null}
-                    {/* §25.2 / Cluster J FOLLOWUP 2 — banner gated to popup
+                    {/* §25.2 / Cluster J FOLLOWUP 2: banner gated to popup
                         shells. Web + desktop mount the same banner inside
                         FullLayoutWithNav.header so it persists across
                         every unlocked view, not just Home. */}
@@ -651,7 +651,7 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
                     </div>
                 ) : null}
 
-                {/* Inline notice removed — surfaces in the Alerts panel
+                {/* Inline notice removed; now surfaces in the Alerts panel
                     of the pancake menu instead so the main view stays
                     focused on balances + work, not status banners. */}
 
@@ -669,7 +669,7 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
                                 </span>
                                 <span className={styles.pendingAirdropHint}>
                                     {rec.stage === 'waiting-index'
-                                        ? 'LIST broadcast — waiting for index'
+                                        ? 'LIST broadcast, waiting for index'
                                         : 'Ready to sign AIRDROP'}
                                 </span>
                             </button>
@@ -963,12 +963,12 @@ function extractObligationRows(resp) {
 }
 
 /**
- * §20 / G041 — Signer-mode landing body. Renders an explanatory banner
+ * §20 / G041: Signer-mode landing body. Renders an explanatory banner
  * and three role-appropriate CTAs (Sign a PSBT / Sign a message / Verify
- * a signature). Send + Receive + balances are intentionally absent — a
+ * a signature). Send + Receive + balances are intentionally absent. A
  * signer-mode wallet doesn't broadcast, watch chains, or expose receive
  * addresses; its sole role is to sign PSBTs pasted in from a paired
- * Watcher wallet (cf. G040 — Send.jsx watcher branch).
+ * Watcher wallet (cf. G040, Send.jsx watcher branch).
  *
  * @param {object} props
  * @param {() => void} [props.onSignPsbt]
@@ -993,7 +993,7 @@ function SignerHomeBody({ onSignPsbt, onSignMessage, onVerifySignature }) {
                 }}
             >
                 <strong style={{ color: 'var(--xc-text)' }}>Signer mode</strong>
-                <span> — this wallet only signs transactions from a paired Watcher
+                <span> This wallet only signs transactions from a paired Watcher
                 wallet. Send / Receive / balances are not available.
                 Switch the wallet's mode in Settings → Wallet Mode if you
                 want full-wallet behaviour back.</span>

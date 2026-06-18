@@ -8,9 +8,9 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Runtime chain-registry refresh from hub — §9.7 / G007.
+// Runtime chain-registry refresh from hub: §9.7 / G007.
 //
-// Wallet-side scaffolding only — the hub-side endpoint is not yet
+// Wallet-side scaffolding only; the hub-side endpoint is not yet
 // implemented (today's hub serves JSON-RPC + `/hub-db/snapshot/*`
 // REST; a `/api/v1/chain-registry` endpoint that returns the
 // canonical descriptor set is pending). Until that ships, this flow
@@ -34,13 +34,13 @@
 //
 // Each descriptor must round-trip `validateChainDescriptor` from the
 // registry validator before the wallet replaces a bundled entry; an
-// invalid descriptor is logged + skipped (never throws — a malformed
+// invalid descriptor is logged + skipped (never throws; a malformed
 // hub response should not wedge the wallet).
 //
 // Hot-swap into the running ChainRegistry instance is intentionally
-// NOT yet wired — that mutates state shared across active flows
+// NOT yet wired: that mutates state shared across active flows
 // (Send / Sign / History). The safe model is "validate + cache,
-// surface in diagnostics, apply on next service-worker restart" —
+// surface in diagnostics, apply on next service-worker restart";
 // design discussion lives in Cluster U FOLLOWUP.
 
 const DEFAULT_HUB_PATH = '/api/v1/chain-registry';
@@ -113,7 +113,7 @@ export async function refreshChainRegistry({ hubUrl, fetcher, timeoutMs }) {
 }
 
 /**
- * In-memory status holder — populated by the background's boot-time
+ * In-memory status holder, populated by the background's boot-time
  * refresh + manual Settings refreshes. Settings UI reads this via
  * the `chainRegistry.status` host handler.
  */

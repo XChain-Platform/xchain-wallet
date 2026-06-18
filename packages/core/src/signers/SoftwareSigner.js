@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// SoftwareSigner — §17.2. Wraps the wallet's HD seed plus any imported
+// SoftwareSigner (§17.2). Wraps the wallet's HD seed plus any imported
 // WIFs. Unlock decrypts the seed blob with Argon2id + AES-GCM; HD
 // derivation uses BIP32 over the chain registry's path templates.
 // Address encoding, PSBT signing, and message signing are delegated to
@@ -40,9 +40,9 @@ import { logConsole } from '../shared/utils/logConsole.js';
  * @property {string} encryptedSeed                         base64 ciphertext from Wallet.encryptedSeed; empty string legal when format='wif-only'
  * @property {import('../crypto/kdf.js').KdfParams} kdfParams
  * @property {Uint8Array} [aad]                             extra authenticated data passed at encrypt time
- * @property {boolean} [passphraseEnabled]                  §15.6 — BIP39 passphrase required at unlock (BIP39 only)
+ * @property {boolean} [passphraseEnabled]                  §15.6: BIP39 passphrase required at unlock (BIP39 only)
  * @property {'bip39' | 'counterwallet-legacy' | 'wif-only'} [format]    Wallet.format; defaults to 'bip39'
- * @property {Array<{ encryptedWif: string }>} [importedKeys]            §15.4 — wif-only unlock validates password by decrypting the first entry
+ * @property {Array<{ encryptedWif: string }>} [importedKeys]            §15.4: wif-only unlock validates password by decrypting the first entry
  */
 
 /**
@@ -99,9 +99,9 @@ export class SoftwareSigner extends Signer {
      * and produce a seed suitable for BIP32. Routing by
      * `walletEncryption.format`:
      *
-     *   - `'bip39'` (default) — PBKDF2-stretched 64-byte seed via
+     *   - `'bip39'` (default): PBKDF2-stretched 64-byte seed via
      *     BIP39, with the optional 25th-word passphrase (§15.6).
-     *   - `'counterwallet-legacy'` — 16-byte raw seed via §15.2. No
+     *   - `'counterwallet-legacy'`: 16-byte raw seed via §15.2. No
      *     passphrase concept; BIP39 passphrase must be omitted.
      *
      * Throws on bad password (the AEAD tag check fails) or if the
@@ -192,7 +192,7 @@ export class SoftwareSigner extends Signer {
             throw new Error(`SoftwareSigner.unlock: unsupported wallet format "${format}"`);
         }
 
-        // Seed-backed wallets can also carry importedKeys (§15.5 — WIFs
+        // Seed-backed wallets can also carry importedKeys (§15.5, WIFs
         // imported INTO an existing HD wallet). Decrypt them now so
         // signPsbt / signMessage / exportWifForAddress can route to
         // them without a second KDF round.
@@ -344,7 +344,7 @@ export class SoftwareSigner extends Signer {
      * For imported-WIF keys the script type is recorded on the Address
      * record rather than a path; the caller wiring (signMessageFlow)
      * resolves this by passing `addressType` through a separate path
-     * if needed, but for v1 we default to plain p2pkh — matches how
+     * if needed, but for v1 we default to plain p2pkh (matches how
      * WIFs imported without path context were typically used.
      *
      * @param {import('./Signer.js').SignMessageParams} params
@@ -475,13 +475,13 @@ export class SoftwareSigner extends Signer {
     }
 
     /**
-     * §22.3 MuSig2 round 1 — generate this signer's publicNonce for
+     * §22.3 MuSig2 round 1: generate this signer's publicNonce for
      * the multisig session described by `sessionRef`. Wraps
      * `sdk.musig2.aggregateKeys` (to bind the nonce to the aggregated
      * x-only pubkey) and `sdk.musig2.generateNonce`. The nonce is
      * bound to a deterministic `sessionId` derived from the signer's
      * privKey + the session fingerprint, so round 2 can re-cache the
-     * secret nonce without persisting secret state — see
+     * secret nonce without persisting secret state; see
      * `signMusig2Round2`.
      *
      * @param {import('./Signer.js').SignMusig2Round1Params} params
@@ -493,7 +493,7 @@ export class SoftwareSigner extends Signer {
     }
 
     /**
-     * §22.3 MuSig2 round 2 — produce a 32-byte partial signature given
+     * §22.3 MuSig2 round 2: produce a 32-byte partial signature given
      * the aggregated nonce from round 1. The deterministic sessionId
      * means re-running `generateNonce` re-caches the same secret
      * nonce inside the SDK module, so `partialSign` can find it. The
@@ -542,7 +542,7 @@ export class SoftwareSigner extends Signer {
         const sdk = this._sdkRegistry.get(chainId);
         if (!sdk || !sdk.musig2) {
             throw new Error(
-                `SoftwareSigner.signMusig2Round1: sdk.musig2 unavailable on chainId "${chainId}" — bump xchain-sdk to 1.10+`,
+                `SoftwareSigner.signMusig2Round1: sdk.musig2 unavailable on chainId "${chainId}"; bump xchain-sdk to 1.10+`,
             );
         }
         if (typeof path !== 'string' || !path.startsWith('m/')) {
@@ -566,7 +566,7 @@ export class SoftwareSigner extends Signer {
             // privKey + fingerprint + path so two cosigners on the
             // same wallet (theoretical) get distinct nonces, and the
             // same cosigner across two MuSig2 sessions also gets
-            // distinct nonces — both are necessary BIP327 properties.
+            // distinct nonces (both are necessary BIP327 properties).
             const sessionId = sha256(
                 concatBytes(
                     new TextEncoder().encode(`xcw-musig2:${path}:`),
@@ -664,7 +664,7 @@ export class SoftwareSigner extends Signer {
         const sdk = this._sdkRegistry.get(chainId);
         if (!sdk?.wallet || typeof sdk.wallet.signMultisigPsbt !== 'function') {
             throw new Error(
-                `SoftwareSigner.signMultisigPsbt: sdk.wallet.signMultisigPsbt unavailable on chainId "${chainId}" — bump xchain-sdk to ^1.13.0`,
+                `SoftwareSigner.signMultisigPsbt: sdk.wallet.signMultisigPsbt unavailable on chainId "${chainId}"; bump xchain-sdk to ^1.13.0`,
             );
         }
         const { psbtHex: signedPsbtHex } = sdk.wallet.signMultisigPsbt(psbtHex, wif);
@@ -677,7 +677,7 @@ export class SoftwareSigner extends Signer {
     }
 
     /**
-     * Derive a public key at the given path. Chain-agnostic — the
+     * Derive a public key at the given path. Chain-agnostic: the
      * caller supplies the concrete path (resolve via ChainRegistry
      * before calling).
      *
@@ -754,7 +754,7 @@ function assertSessionRefShape(ref) {
 // Decrypt every entry in `importedKeys` into a Map<addressId,
 // Uint8Array> keyed by addressId. The plaintext bytes are the WIF's
 // UTF-8 encoding; we keep them as bytes (not strings) so lock() can
-// zero them. The caller controls the master key lifetime — we use it
+// zero them. The caller controls the master key lifetime; we use it
 // for this one batch then zero it ourselves.
 async function decryptImportedKeys(masterKey, importedRecords) {
     /** @type {Map<string, Uint8Array>} */
@@ -769,7 +769,7 @@ async function decryptImportedKeys(masterKey, importedRecords) {
 
 // All entries in a signingPaths array must identify the same key.
 // Multi-key signing (different keys across inputs of one tx) is a
-// future enhancement — when it lands, this check moves to routing
+// future enhancement; when it lands, this check moves to routing
 // different inputs to different WIFs.
 function assertSameSigningSource(signingPaths, method) {
     const paths = new Set(
@@ -798,7 +798,7 @@ function assertEntryShape(entry, method) {
 }
 
 // Map BIP44 purpose number → SDK signMessage opts. Paths outside the
-// standard purposes (44/49/84) default to plain p2pkh signing — the
+// standard purposes (44/49/84) default to plain p2pkh signing; the
 // SDK's behavior when no opts are supplied.
 function signMessageOptsFromPath(path) {
     const m = /^m\/(\d+)'/.exec(path);

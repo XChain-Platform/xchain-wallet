@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// exportPrivateKey — §17.7. Returns the WIF for an address owned by
+// exportPrivateKey (§17.7). Returns the WIF for an address owned by
 // this wallet. Parity with FreeWallet: a self-custody wallet that hides
 // its own key material from the owner is hiding the thing the user
 // fundamentally controls.
@@ -19,14 +19,14 @@
 //                   outside the encrypted seed blob.
 //   - `imported-wif` decrypt the matching entry from
 //                    `Wallet.importedKeys` under the wallet master key.
-//   - `trezor` / `ledger` / `watch-only` — refuse: no key available
-//                   in this wallet. The UI surfaces this as an absent
+//   - `trezor` / `ledger` / `watch-only`: refuse (no key available
+//                   in this wallet). The UI surfaces this as an absent
 //                   "Show private key" button (§17.7.2); callers that
 //                   do invoke the flow get a structured error.
 //
 // The spec's other guardrails (password-every-time, tap-to-reveal,
-// auto-hide on blur, clipboard auto-clear) live in the shell UI — this
-// flow is the pure primitive that returns a WIF string.
+// auto-hide on blur, clipboard auto-clear) live in the shell UI.
+// This flow is the pure primitive that returns a WIF string.
 
 import {
     base64ToBytes,
@@ -149,7 +149,7 @@ export async function exportPrivateKey({
         try {
             // Password probe. For seed-backed wallets we decrypt the
             // seed blob; for wif-only wallets (no seed) we probe the
-            // target importedKey itself — if it decrypts cleanly, the
+            // target importedKey itself. If it decrypts cleanly, the
             // password is correct, and we reuse the decrypted bytes
             // below. Either way a wrong password surfaces as a typed
             // WrongPasswordError instead of a bare AEAD failure.
@@ -191,7 +191,7 @@ export async function exportPrivateKey({
         }
     }
 
-    // HD case — unlock the wallet (this is the expensive Argon2id step)
+    // HD case: unlock the wallet (this is the expensive Argon2id step)
     // and derive a WIF at the address's recorded path.
     if (!addressRecord.derivationPath) {
         throw new Error(

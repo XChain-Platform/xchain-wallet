@@ -157,5 +157,5 @@ try {
 assert.ok(threw, 'resolveSdkFactory rejects when no devMockFactory passed');
 
 console.log(
-    'OK — sdk wiring smoke (web + extension factories, hostBridge + background sdkResolved, fallback warn once, dep declared)',
+    'OK: sdk wiring smoke (web + extension factories, hostBridge + background sdkResolved, fallback warn once, dep declared)',
 );

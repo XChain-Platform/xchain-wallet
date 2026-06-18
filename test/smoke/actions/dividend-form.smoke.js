@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for Phase 2 — Step 23 (piece 8) — DIVIDEND authoring form
+// Smoke for Phase 2, Step 23 (piece 8): DIVIDEND authoring form
 // (§40.8).
 //
 // Asserts:
@@ -319,5 +319,5 @@ for (const [shell, appPath] of [
 }
 
 console.log(
-    'OK — dividend form smoke (DividendForm §40.8 + dividendAction core flow + action.dividend handler + holdersFor explorer passthrough + three-shell messaging helpers + ActionsMenu Pay dividend entry + popup/web/desktop wiring + decoder DIVIDEND case + holder-count preview with source-address exclusion)',
+    'OK: dividend form smoke (DividendForm §40.8 + dividendAction core flow + action.dividend handler + holdersFor explorer passthrough + three-shell messaging helpers + ActionsMenu Pay dividend entry + popup/web/desktop wiring + decoder DIVIDEND case + holder-count preview with source-address exclusion)',
 );

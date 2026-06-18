@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Internal — the "encrypt mnemonic + persist wallet + derive initial
+// Internal: "encrypt mnemonic + persist wallet + derive initial
 // addresses" pipeline shared by createWallet (fresh BIP39) and
 // importMnemonic (user-supplied BIP39 or Counterwallet).
 //
@@ -37,7 +37,7 @@ import { unlockWalletRecord } from './unlockWallet.js';
  * @property {import('../registry/index.js').ChainRegistry} chainRegistry
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
  * @property {string[]} activeChainIds
- * @property {'mainnet' | 'testnet' | 'regtest'} [activeNetwork]   optional — passed to `ensureSettings` so a fresh wallet's settings record is created with this network selected. Existing settings (e.g. second wallet created in an already-configured vault) preserve their stored value. Defaults: caller should pass an inferred value (typically the networkKind of activeChainIds[0]) so the wallet lands on the network its chains are on.
+ * @property {'mainnet' | 'testnet' | 'regtest'} [activeNetwork]   optional. Passed to `ensureSettings` so a fresh wallet's settings record is created with this network selected. Existing settings (e.g. second wallet created in an already-configured vault) preserve their stored value. Defaults: caller should pass an inferred value (typically the networkKind of activeChainIds[0]) so the wallet lands on the network its chains are on.
  */
 
 /**
@@ -140,7 +140,7 @@ export async function persistHdWallet({
         }
 
         // 7. Seed per-chain Settings entries (fees + ADS) for any
-        //    active chain not already configured. Idempotent — a user's
+        //    active chain not already configured. Idempotent: a user's
         //    customized fee strategy on an earlier wallet is preserved
         //    if they create a second wallet in the same vault.
         await ensureSettings(vault, chainRegistry, activeChainIds, { activeNetwork });

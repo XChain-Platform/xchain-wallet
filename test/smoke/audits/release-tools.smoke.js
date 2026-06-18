@@ -8,11 +8,11 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §51 / G003 — `tools/release/` scaffolding.
+// Smoke for §51 / G003: `tools/release/` scaffolding.
 //
 // The full GPG-signing path lands when the release key is published
 // (G180). This smoke pins the scaffolding shape so a future edit
-// cannot silently drop a piece — directory + scripts + README, plus
+// cannot silently drop a piece (directory + scripts + README), plus
 // the friendly "GPG key not configured" exit path that the scripts
 // promise pre-G180.
 
@@ -91,7 +91,7 @@ assert.ok(/gpg --verify/.test(verifySrc),
 assert.ok(/sha256sum -c|shasum -a 256 -c/.test(verifySrc),
     'verify.sh runs sha256sum -c (or shasum -a 256 -c)');
 
-// 4. Runtime — verify.sh --recompute writes a deterministic manifest
+// 4. Runtime: verify.sh --recompute writes a deterministic manifest
 //    over a tiny fake artifact set; sign.sh without GPG key set exits
 //    with code 1 and the documented diagnostic.
 const stage = mkdtempSync(join(tmpdir(), 'xc-release-tools-'));
@@ -152,4 +152,4 @@ try {
     rmSync(stage, { recursive: true, force: true });
 }
 
-console.log('OK — tools/release/ scaffolding smoke');
+console.log('OK: tools/release/ scaffolding smoke');

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// §27.4 / Cluster I FOLLOWUP 2 smoke — auto-hide-spam toast.
+// §27.4 / Cluster I FOLLOWUP 2 smoke: auto-hide-spam toast.
 //
 // Asserts:
 //   1. Home.jsx imports buildBalanceRows + detectSpamCandidates from
@@ -77,7 +77,7 @@ assert.ok(/export function detectSpamCandidates\(rows\)/.test(balanceListSrc),
 
 // Re-import the classifier directly to confirm runtime behaviour (no
 // JSX round-trip needed because the function lives next to the JSX
-// component in the same module — ESM gives us the export).
+// component in the same module (ESM gives us the export).
 // We can't import .jsx in Node smokes, so instead we eval the small
 // detectSpamCandidates region. Easier: extract the regex region and
 // pin contract-level invariants by reading the source.
@@ -89,5 +89,5 @@ assert.ok(/r\.fiatRate === null && r\.divisibility > 0/.test(balanceListSrc),
     'classifier flags sub-divisible no-fiat-rate rows that round to dust');
 
 console.log(
-    'OK — auto-hide-spam smoke (§27.4 / Cluster I FOLLOWUP 2 — Home.jsx mounts a one-shot useEffect over the balance load that runs detectSpamCandidates against buildBalanceRows; filters out already-hidden keys; surfaces a useToast nudge with Hide N action + onAction that bulk-merges hiddenTokens via messaging.updateSettings; per-wallet ref guard prevents re-prompting on mid-session rebalances)',
+    'OK: auto-hide-spam smoke (§27.4 / Cluster I FOLLOWUP 2) Home.jsx mounts a one-shot useEffect over the balance load that runs detectSpamCandidates against buildBalanceRows; filters out already-hidden keys; surfaces a useToast nudge with Hide N action + onAction that bulk-merges hiddenTokens via messaging.updateSettings; per-wallet ref guard prevents re-prompting on mid-session rebalances',
 );

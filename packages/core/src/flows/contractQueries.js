@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// contractQueries — thin wrappers around the SDK's VM/contract explorer
+// contractQueries: thin wrappers around the SDK's VM/contract explorer
 // methods for the §42.2 Contracts browse surface and §42.3 detail
 // surfaces. Single-chain read-only queries; no vault, no signing.
 //
@@ -21,7 +21,7 @@
 // "My interactions" is a client-side composition: merging deposits
 // made by the user's addresses + withdrawals they've initiated gives
 // a set of CONTRACT_ACTION_INDEX values they've funded or withdrawn
-// against. Executions-by-address is a follow-up — the SDK's
+// against. Executions-by-address is a follow-up: the SDK's
 // getExecutions is currently contract-scoped (takes contractActionIndex
 // as its QUERY), not address-scoped. The explorer's underlying route
 // supports ['block','address','contract'] types, but widening the SDK
@@ -76,8 +76,8 @@ export async function contractsBrowseAll({ sdkRegistry, chainId, opts }) {
 
 /**
  * List DEPOSIT actions for a given address (query, type=address). Used
- * to compose "My interactions" — the set of contracts this address has
- * sent tokens to.
+ * to compose "My interactions" (the set of contracts this address has
+ * sent tokens to).
  * @param {ContractQueryOpts} params
  */
 export async function depositsForAddress({ sdkRegistry, chainId, address, opts }) {

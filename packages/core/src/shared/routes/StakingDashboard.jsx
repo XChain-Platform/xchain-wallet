@@ -27,7 +27,7 @@ const chainRegistry = registryLib.defaultRegistry();
 const STAKING_COIN = 'bitcoin';
 
 /**
- * Staking dashboard — §42.7.4.
+ * Staking dashboard (§42.7.4).
  *
  * Read-only central view for stakers. Shows (per BTC chain the wallet
  * has an address on):
@@ -40,7 +40,7 @@ const STAKING_COIN = 'bitcoin';
  *
  * The four write-side action buttons (Unstake / Delegate / Revoke /
  * Claim) render disabled when their respective `on*` props are absent
- * — Steps 8–10 thread real handlers through as their forms land,
+ * Steps 8–10 thread real handlers through as their forms land,
  * following the pattern established in Step 3's ContractDetail.
  *
  * Multiple BTC chains (mainnet / testnet / regtest) each render as
@@ -221,13 +221,13 @@ export function StakingDashboard({
                                     <strong>Your stake:</strong>{' '}
                                     {primaryStake
                                         ? formatAmount(primaryStake)
-                                        : '— (not staked on this chain)'}
+                                        : '(not staked on this chain)'}
                                 </div>
                                 <div>
                                     <strong>Delegated pubkey:</strong>{' '}
                                     {primaryDelegation
                                         ? <>{shortPubkey(primaryDelegation.signing_pubkey || primaryDelegation.SIGNING_PUBKEY)}{' '}{ageLabel(primaryDelegation.block_index)}</>
-                                        : '— (none)'}
+                                        : '(none)'}
                                 </div>
                                 <div>
                                     <strong>Pending rewards:</strong>{' '}
@@ -309,7 +309,7 @@ export function StakingDashboard({
                                         {state.rewards.slice(0, 10).map((r, i) => (
                                             <li key={String(r.action_index ?? i) + ':' + i} className={styles.entryDescription}>
                                                 {formatRewardAmount(r)} XCP
-                                                {' '}at block {r.block_index || '—'}
+                                                {r.block_index ? ` at block ${r.block_index}` : ''}
                                                 {r.status ? ` · ${r.status}` : ''}
                                             </li>
                                         ))}
@@ -340,7 +340,7 @@ function extractRows(resp) {
 }
 
 function formatAmount(stake) {
-    const amt = stake?.amount ?? stake?.AMOUNT ?? stake?.quantity ?? '—';
+    const amt = stake?.amount ?? stake?.AMOUNT ?? stake?.quantity ?? '?';
     return `${amt} XCP`;
 }
 
@@ -358,11 +358,11 @@ function splitRewards(rows) {
 }
 
 function formatRewardAmount(row) {
-    return row?.amount ?? row?.AMOUNT ?? row?.reward ?? '—';
+    return row?.amount ?? row?.AMOUNT ?? row?.reward ?? '0';
 }
 
 function shortPubkey(pk) {
-    if (!pk || typeof pk !== 'string') return '—';
+    if (!pk || typeof pk !== 'string') return '(none)';
     return pk.length > 16 ? `${pk.slice(0, 8)}…${pk.slice(-4)}` : pk;
 }
 

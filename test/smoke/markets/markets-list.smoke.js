@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Phase 3 Step 1 smoke — Markets list scaffold (§41.2).
+// Phase 3 Step 1 smoke: Markets list scaffold (§41.2).
 //
 // Static wiring checks (shared route, messaging helpers × 3 shells,
 // background handlers, vault collection, App.jsx sub-routes, Home
@@ -176,7 +176,7 @@ function makeStubVault() {
 }
 
 const vault = makeStubVault();
-// Save one entry — returns a fresh record.
+// Save one entry (returns a fresh record).
 const saved = await flows.saveWatchlistEntry({
     vault, walletId: 'w1', chainId: 'bitcoin-mainnet', tick1: 'MYTOKEN', tick2: 'BTC',
 });
@@ -184,14 +184,14 @@ assert.equal(saved.tick1, 'MYTOKEN');
 assert.equal(saved.tick2, 'BTC');
 assert.equal(typeof saved.id, 'string');
 
-// Re-save the same pair — idempotent, returns the same id.
+// Re-save the same pair (idempotent, returns the same id).
 const again = await flows.saveWatchlistEntry({
     vault, walletId: 'w1', chainId: 'bitcoin-mainnet', tick1: 'MYTOKEN', tick2: 'BTC',
 });
 assert.equal(again.id, saved.id, 'saveWatchlistEntry is idempotent by (walletId, chainId, tick1, tick2)');
 assert.equal(vault._rows().length, 1);
 
-// Add one for a different wallet — scoped to that wallet.
+// Add one for a different wallet (scoped to that wallet).
 await flows.saveWatchlistEntry({
     vault, walletId: 'w2', chainId: 'bitcoin-mainnet', tick1: 'COOL', tick2: 'BTC',
 });
@@ -218,5 +218,5 @@ assert.equal(schemas.validateWatchlistEntry(bad).ok, false,
     'validation rejects empty tick1');
 
 console.log(
-    'OK — markets-list smoke (MarketsList §41.2 shared route + watchlist schema/flow/vault/codec plumbing + markets.* and watchlist.* background handlers + 8 messaging exports × 3 shells + Home onMarkets prop + "markets" + reserved "market" sub-routes in popup/web/desktop + runtime watchlist CRUD idempotence / per-wallet scoping / delete via stub vault)',
+    'OK: markets-list smoke (MarketsList §41.2 shared route + watchlist schema/flow/vault/codec plumbing + markets.* and watchlist.* background handlers + 8 messaging exports × 3 shells + Home onMarkets prop + "markets" + reserved "market" sub-routes in popup/web/desktop + runtime watchlist CRUD idempotence / per-wallet scoping / delete via stub vault)',
 );

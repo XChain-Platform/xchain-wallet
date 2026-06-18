@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for Phase 2 — Step 22a (piece 7b part 1) — "My dispensers"
+// Smoke for Phase 2, Step 22a (piece 7b part 1): "My dispensers"
 // list view + dispenser detail page + cancel action (§40.7.1 /
 // §40.7.2).
 //
@@ -267,5 +267,5 @@ for (const [shell, appPath] of [
 }
 
 console.log(
-    'OK — dispensers list smoke (DispensersList + DispenserDetail shared routes + five explorer passthroughs + messaging helpers in popup/web/desktop + ActionsMenu "My dispensers" entry + list→detail nav state + v1 cancel lane reused from Step 21)',
+    'OK: dispensers list smoke (DispensersList + DispenserDetail shared routes + five explorer passthroughs + messaging helpers in popup/web/desktop + ActionsMenu "My dispensers" entry + list→detail nav state + v1 cancel lane reused from Step 21)',
 );

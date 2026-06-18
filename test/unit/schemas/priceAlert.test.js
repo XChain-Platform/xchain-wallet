@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Unit: schemas/priceAlert — createPriceAlert + validatePriceAlert + priceAlertKey.
+// Unit: schemas/priceAlert. createPriceAlert + validatePriceAlert + priceAlertKey.
 
 import { describe, it, expect } from 'vitest';
 import {

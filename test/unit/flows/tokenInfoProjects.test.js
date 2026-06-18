@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// normalizeTokenInfo `projects` passthrough — the explorer's getToken
+// normalizeTokenInfo `projects` passthrough. The explorer's getToken
 // `projects[]` (project ticks whose CURRENT roster includes this token)
 // backs the "Official token" banner on TokenDetail + ManageToken.
 

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §26 Lock & Panic — Step 6 — G068 part 2 — UI wiring of
+// Smoke for §26 Lock & Panic, Step 6, G068 part 2: UI wiring of
 // the duress passphrase: Locked.jsx silent-arm + Settings → Safety
 // row mounting.
 
@@ -60,14 +60,14 @@ assert.match(
     /isBadPassword[\s\S]*tripDuressIfMatch\(password\)/,
     'duress trip lives inside the bad-password branch',
 );
-// Trip must NOT run on the success path — duress passphrase that
+// Trip must NOT run on the success path; a duress passphrase that
 // happens to match the real password must NOT arm panic mode.
 assert.equal(
     /messaging\.unlockWallet\(password\);[\s\S]{0,200}tripDuressIfMatch/.test(lockedSrc),
     false,
     'duress is not tripped on the success path',
 );
-// Lockout still increments after a duress trip — observer must not
+// Lockout still increments after a duress trip; observer must not
 // see any difference.
 assert.match(
     lockedSrc,

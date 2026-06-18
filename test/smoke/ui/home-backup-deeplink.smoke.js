@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §19.5 / Cluster H FOLLOWUP 7 — Home "Back up now" routes
+// Smoke for §19.5 / Cluster H FOLLOWUP 7: Home "Back up now" routes
 // to the Backup section instead of dropping the user at the Settings root.
 //
 // Pins:
@@ -20,7 +20,7 @@
 //   - Closing Settings via Home's onBack resets the subpage to null
 //     so a later menu→settings opens at the root, not Backup.
 //
-// Settings.jsx already accepts `initialSubpageId` (existing) — this
+// Settings.jsx already accepts `initialSubpageId` (existing). This
 // smoke pins that contract so a future rename in Settings doesn't
 // silently break the deep-link.
 
@@ -82,7 +82,7 @@ assert.match(
 assert.match(
     settingsSrc,
     /id: 'backup'/,
-    'Settings sections include id "backup" — Home\'s deep-link is valid',
+    'Settings sections include id "backup" (Home\'s deep-link is valid)',
 );
 
 console.log('home-backup-deeplink smoke OK');

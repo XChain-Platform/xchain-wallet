@@ -85,7 +85,7 @@ export function TokenDetail({
     const descriptor = chainRegistry.get(chainId);
     const isNative = kind === 'native';
 
-    // §27.6 / Cluster I FOLLOWUP 3 + Cluster C FOLLOWUP 3 — pull
+    // §27.6 / Cluster I FOLLOWUP 3 + Cluster C FOLLOWUP 3: pull
     // description / creator / supply / locks / market / extracted
     // imageUrl. Skipped for native coins (BTC / LTC / DOGE) since
     // they're not XChain-issued tokens.
@@ -102,7 +102,7 @@ export function TokenDetail({
     const [holders, setHolders] = useState(/** @type {any[] | null} */ (null));
     const [holdersError, setHoldersError] = useState(/** @type {string | null} */ (null));
     const [holdersLoading, setHoldersLoading] = useState(false);
-    // Cluster G FOLLOWUP 5 — Unix ms of the last holders fetch; drives a
+    // Cluster G FOLLOWUP 5: Unix ms of the last holders fetch; drives a
     // staleness label inside the holders panel so the user can tell at
     // a glance whether the listing is live.
     const [holdersFetchedAt, setHoldersFetchedAt] = useState(
@@ -145,7 +145,7 @@ export function TokenDetail({
     useEffect(() => {
         if (!holdersOpen || gatedGroups !== null || isNative) return undefined;
         if (typeof messaging.listGatedContent !== 'function') {
-            // Older host build without gated-content support — skip silently
+            // Older host build without gated-content support; skip silently
             // (no error UI), since pre-feature tokens have no gated entries.
             setGatedGroups([]);
             return undefined;
@@ -216,10 +216,10 @@ export function TokenDetail({
     const hasMarketData = (isNative && showNativeStats) || (!isNative && assetInfo?.marketPrice != null);
 
     // Tabs match the Home layout pattern (Coins / Tokens / NFTs / DeFi /
-    // Activity) — same tab strip styling, different content. Info first
+    // Activity) with the same tab strip styling, different content. Info first
     // (description / creator), then Market (price + chart), Metadata, and
     // Holders for tokens.
-    // Native coins skip tabs entirely — the chart + info table live
+    // Native coins skip tabs entirely; the chart + info table live
     // stacked in a single scrollable view since there are only two
     // things to show. Tokens have tabs (Info / Market / Holders) since
     // the Holders list can be long and the description can be too.
@@ -290,7 +290,7 @@ export function TokenDetail({
     // balance hero treatment). For BTC the code is the tick ticker;
     // for fiat the code is the wallet's preferred currency.
     const assetAmount = formatAmount(quantity, divisibility);
-    const fiatAmount = fiatAvailable ? formatFiatNumber(fiat, fiatCurrency) : '—';
+    const fiatAmount = fiatAvailable ? formatFiatNumber(fiat, fiatCurrency) : 'N/A';
     const showFiatPrimary = primaryUnit === 'fiat' && fiatAvailable;
     const primaryAmount = showFiatPrimary ? fiatAmount : assetAmount;
     const primaryCode = showFiatPrimary ? fiatCurrency : tick;
@@ -300,7 +300,7 @@ export function TokenDetail({
     return (
         <Screen variant={variant} header={header}>
             <div className={isFull ? styles.bodyFull : styles.bodyPopup}>
-                {/* Token balance hero — gradient block, same style as
+                {/* Token balance hero: gradient block, same style as
                     Home's TotalBalanceHero. Top row carries the label,
                     a swap button for flipping tick ↔ fiat as primary,
                     and the hide-balance eye. Big number = primary,
@@ -384,10 +384,10 @@ export function TokenDetail({
                     </div>
                 </section>
 
-                {/* "Official token" banner — the token is on a project
+                {/* "Official token" banner: the token is on a project
                     registry's current roster (owner-attested on-chain;
                     Project_Registry.md). Display policy is "just show
-                    it" — every attesting project is listed. */}
+                    it" (every attesting project is listed). */}
                 {Array.isArray(assetInfo?.projects) && assetInfo.projects.length > 0 ? (
                     <p className={styles.officialBanner} role="status">
                         This token is an official token in the{' '}
@@ -400,7 +400,7 @@ export function TokenDetail({
                     </p>
                 ) : null}
 
-                {/* Market section — stats strip + sparkline. Sits above
+                {/* Market section: stats strip + sparkline. Sits above
                     the quick actions and is collapsible via the chart-icon
                     button in the balance hero (same hook the Home portfolio
                     chart uses, so the toggle persists across both surfaces). */}
@@ -430,7 +430,7 @@ export function TokenDetail({
                     />
                 ) : null}
 
-                {/* Quick actions — Send / Receive / Swap / Buy, matching
+                {/* Quick actions: Send / Receive / Swap / Buy, matching
                     Home's 4-up grid. */}
                 <div className={styles.quickActions} role="group" aria-label="Quick actions">
                     <button type="button" className={styles.quickAction} onClick={onSend} disabled={!onSend}>
@@ -480,7 +480,7 @@ export function TokenDetail({
                     </div>
                 </div>
 
-                {/* Tabs — matches HomeTabs visual rhythm. Native coins
+                {/* Tabs: matches HomeTabs visual rhythm. Native coins
                     get a single Details tab; tokens add About / Media /
                     Unlock so the per-asset content surfaces in tab form
                     rather than stacking. */}
@@ -567,7 +567,7 @@ export function TokenDetail({
 }
 
 /**
- * §46 — context-first "Set price alert" entry on the native-coin detail
+ * §46: context-first "Set price alert" entry on the native-coin detail
  * page. Collapsed to a single button; expands to the shared PriceAlertForm
  * pinned to this coin and prefilled with the live price. Renders nothing
  * when the shell doesn't expose the price-alert routes.
@@ -625,23 +625,23 @@ function NativePriceAlertEntry({ walletId, chainId, currentPrice, fiatCurrency }
 }
 
 function MarketPanel({ isNative, nativePrice, showSparkline, assetInfo, tick, chainId, fiatRate, fiatCurrency }) {
-    // Always render the KPI strip with the same shape — placeholders
-    // ("—") fill in for missing data so the structure stays consistent
+    // Always render the KPI strip with the same shape. Placeholders
+    // fill in for missing data so the structure stays consistent
     // whether the price oracle is disabled, still loading, or simply
     // doesn't have data for this tick (e.g. testnet, regtest).
 
-    // Range picker — mirrors the PortfolioChart buttons on Home. Native
+    // Range picker: mirrors the PortfolioChart buttons on Home. Native
     // coins have a 7d CoinGecko sparkline (168 hourly points), so 24h /
     // 7d are slices of the real series; 30d / 90d / All synthesize the
     // same way single tokens do (the line still ends at current price).
     const [rangeId, setRangeId] = useState('30d');
     const range = CHART_RANGES.find((r) => r.id === rangeId) || CHART_RANGES[2];
 
-    let priceCell = '—';
-    let marketCapCell = '—';
-    let floorCell = '—';
+    let priceCell = 'N/A';
+    let marketCapCell = 'N/A';
+    let floorCell = 'N/A';
     let pctTone24h;
-    let pct24h = '—';
+    let pct24h = 'N/A';
     let sparkline = null;
     let hint = null;
 
@@ -668,7 +668,7 @@ function MarketPanel({ isNative, nativePrice, showSparkline, assetInfo, tick, ch
                 sparkline = resampleSeriesTo(src, range.points);
             } else if (e.priceFiat != null) {
                 // No real series available for this range (or sparkline
-                // fetch failed) — synthesize a walk seeded by chain +
+                // fetch failed); synthesize a walk seeded by chain +
                 // change so the chart always renders something. The line
                 // still ends at the actual current price.
                 const synth = synthesizeTokenChart(
@@ -714,7 +714,7 @@ function MarketPanel({ isNative, nativePrice, showSparkline, assetInfo, tick, ch
         );
     }
 
-    // Token path — try assetInfo.marketPrice first (XCP-denominated
+    // Token path: try assetInfo.marketPrice first (XCP-denominated
     // price from the indexer); if unavailable, fall back to fiatRate
     // passed in from the balance fixture so the demo wallet still
     // gets a populated chart + 24h cell. Both paths feed into the
@@ -820,7 +820,7 @@ function DetailsPanel({
                             {balanceHidden
                                 ? '•••••'
                                 : fiat == null
-                                    ? '—'
+                                    ? 'N/A'
                                     : `${formatFiatNumber(fiat, fiatCurrency)} ${(fiatCurrency || 'USD').toUpperCase()}`}
                         </td>
                     </tr>
@@ -850,7 +850,7 @@ function DetailsPanel({
     );
 }
 
-// Info tab — TIS-sourced content for non-native tokens. Mirrors the
+// Info tab: TIS-sourced content for non-native tokens. Mirrors the
 // per-section layout the explorer uses (artwork title, media gallery,
 // description, owner identity, contact rows, categories, links, files,
 // PGP signature) so a token's published metadata renders in one place.
@@ -945,7 +945,7 @@ function DnsBlock({ dns }) {
     );
 }
 
-// Media tab — images, audio, video published with the token's TIS
+// Media tab: images, audio, video published with the token's TIS
 // document. Pure visual surface; everything textual lives in the
 // About tab so a user can browse the artwork without being asked to
 // also read prose.
@@ -1009,7 +1009,7 @@ function MediaPanel({ isNative, assetInfo }) {
             </div>
         );
     }
-    // Single media type — no need for a subtab strip; render directly.
+    // Single media type. No need for a subtab strip; render directly.
     if (subtabs.length === 1) {
         return <MediaSubpanel kind={subtabs[0].id} images={images} audio={audio} video={video} files={files} />;
     }
@@ -1316,7 +1316,7 @@ function SocialIcon({ platform }) {
 }
 
 /**
- * §27.6 — links + files block. Renders the token's website, primary
+ * §27.6: links + files block. Renders the token's website, primary
  * social links, and file attachments below the media gallery. Returns
  * null when the TIS document carries none of these so the section
  * disappears entirely for tokens without rich metadata.
@@ -1324,7 +1324,7 @@ function SocialIcon({ platform }) {
 function LinksAndFiles({ assetInfo }) {
     // Prefer the `websites` array (primary + alternates) but fall back to
     // the singular `website` field for older bundles that haven't been
-    // re-normalized. Files live in the Media tab's Files subtab now —
+    // re-normalized. Files live in the Media tab's Files subtab now;
     // they're not rendered here.
     const websites = Array.isArray(assetInfo?.websites) && assetInfo.websites.length > 0
         ? assetInfo.websites
@@ -1375,7 +1375,7 @@ function LinksAndFiles({ assetInfo }) {
     );
 }
 
-// Native-coin total supplies are well-known constants — no oracle call
+// Native-coin total supplies are well-known constants; no oracle call
 // needed. Tokens read from assetInfo (XCP indexer).
 const NATIVE_SUPPLY_BY_COIN = {
     bitcoin: '21,000,000 BTC',
@@ -1386,15 +1386,15 @@ const NATIVE_SUPPLY_BY_COIN = {
 function formatTotalSupply(isNative, chainId, assetInfo) {
     if (isNative) {
         const coin = chainId.split('-')[0];
-        return NATIVE_SUPPLY_BY_COIN[coin] || '—';
+        return NATIVE_SUPPLY_BY_COIN[coin] || 'N/A';
     }
-    if (assetInfo?.totalSupply == null) return '—';
+    if (assetInfo?.totalSupply == null) return 'N/A';
     return assetInfo.maxSupply
         ? `${assetInfo.totalSupply} / ${assetInfo.maxSupply}`
         : String(assetInfo.totalSupply);
 }
 
-// Token-gated content panel — renders the list of gated FILEs published
+// Token-gated content panel: renders the list of gated FILEs published
 // for this token, grouped by KEY_HASH so packs (multi-file shares-one-key
 // drops) appear as a single header with member files underneath. Each
 // group has an Unlock button that pops an inline form (pick address,
@@ -1406,7 +1406,7 @@ function GatedContentPanel({ walletId, chainId, tick, groups, loading, error, pa
     const [addressesError, setAddressesError] = useState(/** @type {string | null} */ (null));
     const [addressesLoading, setAddressesLoading] = useState(false);
 
-    // Load the user's addresses for this chain on demand — only fired
+    // Load the user's addresses for this chain on demand; only fired
     // when the first Unlock button is clicked so panels for tokens with
     // no gated content (or that the user never tries to unlock) skip
     // the round-trip entirely.
@@ -1536,7 +1536,7 @@ function GatedGroupCard({
             // revoking. 60s is generous but cheap.
             setTimeout(() => URL.revokeObjectURL(url), 60_000);
         } catch (_e) {
-            // Decoding failures are silent — the file row stays clickable
+            // Decoding failures are silent; the file row stays clickable
             // so the user can try again.
         }
     }
@@ -1554,7 +1554,7 @@ function GatedGroupCard({
             openFile(plain, file);
             return;
         }
-        // Demo content — the backend short-circuit (flows/gatedContent.js)
+        // Demo content: the backend short-circuit (flows/gatedContent.js)
         // returns hardcoded plaintext for `demo:` action indices without
         // touching the vault, so we can unlock the whole group inline
         // without a password prompt or address picker.
@@ -1587,7 +1587,7 @@ function GatedGroupCard({
             }
             return;
         }
-        // Real content — open password prompt. The holding address is
+        // Real content: open password prompt. The holding address is
         // discovered automatically on submit (handleUnlock iterates the
         // user's addresses to find whichever one received the seller's
         // key handoff for this group's KEY_HASH).
@@ -1687,7 +1687,7 @@ function GatedGroupCard({
             } else if (code === 'GATED_FILE_KEY_MISSING') {
                 setUnlockError('No key handoff found on any of your addresses. Ask the seller to re-send.');
             } else if (code === 'GATED_FILE_NOT_FOUND') {
-                setUnlockError('Ciphertext not available from the explorer yet — try again in a moment.');
+                setUnlockError('Ciphertext not available from the explorer yet. Try again in a moment.');
             } else {
                 setUnlockError(err?.message || 'Failed to unlock.');
             }
@@ -1733,7 +1733,7 @@ function GatedGroupCard({
                                 }}
                                 aria-label={ownsToken
                                     ? `Unlock and open ${f.name || 'gated file'}`
-                                    : `Locked — purchase required to access ${f.name || 'gated file'}`}
+                                    : `Locked: purchase required to access ${f.name || 'gated file'}`}
                             >
                                 <span className={styles.fileLinkIcon} aria-hidden="true">
                                     <Icon.FileTypeIcon type={f.type} />
@@ -1822,7 +1822,7 @@ function GatedGroupCard({
 // MIME types (image/*, text/*, application/json, application/pdf) open
 // inline in a new tab; everything else downloads via the `download`
 // attribute. The plaintext bytes live entirely in-memory via a Blob
-// URL — no network round-trip and no on-disk artifact unless the user
+// URL. No network round-trip and no on-disk artifact unless the user
 // chooses to save the download.
 function UnlockedFileLink({ name, type, plaintextBase64 }) {
     const mime = String(type || '').toLowerCase();
@@ -1887,7 +1887,7 @@ function HoldersPanel({ holders, holdersLoading, holdersError, holdersFetchedAt,
                 {holders.slice(0, 25).map((h, i) => (
                     <li key={`${h.address || ''}:${i}`} className={styles.holdersRow}>
                         <span className={styles.holdersAddr}>
-                            {shorten(h.address || h.ADDRESS || '—')}
+                            {shorten(h.address || h.ADDRESS || 'unknown')}
                         </span>
                         <span className={styles.holdersQty}>
                             {formatAmount(String(h.quantity ?? h.QUANTITY ?? '0'), divisibility)}
@@ -1912,7 +1912,7 @@ function StatCell({ label, value, tone }) {
 }
 
 function formatCompactFiat(usd) {
-    if (usd === null || usd === undefined || !isFinite(usd)) return '—';
+    if (usd === null || usd === undefined || !isFinite(usd)) return 'N/A';
     const abs = Math.abs(usd);
     if (abs >= 1e12) return `$${(usd / 1e12).toFixed(2)}T`;
     if (abs >= 1e9) return `$${(usd / 1e9).toFixed(2)}B`;
@@ -1922,7 +1922,7 @@ function formatCompactFiat(usd) {
 }
 
 function formatPct(pct) {
-    if (pct === null || pct === undefined || !isFinite(pct)) return '—';
+    if (pct === null || pct === undefined || !isFinite(pct)) return 'N/A';
     const sign = pct > 0 ? '+' : '';
     return `${sign}${pct.toFixed(2)}%`;
 }
@@ -1993,7 +1993,7 @@ function fiatValue(quantityStr, divisibility, fiatRate) {
 }
 
 function formatFiat(usd) {
-    if (usd === null || usd === undefined) return '—';
+    if (usd === null || usd === undefined) return 'N/A';
     if (usd === 0) return '$0.00';
     if (usd > 0 && usd < 0.01) return '<$0.01';
     return '$' + usd.toLocaleString('en-US', {
@@ -2010,7 +2010,7 @@ function formatFiat(usd) {
 // conventions render correctly; falls back to a plain-number rendering
 // if the code is unknown to Intl.
 function formatFiatNumber(value, currency) {
-    if (value === null || value === undefined) return '—';
+    if (value === null || value === undefined) return 'N/A';
     const code = String(currency || 'USD').toUpperCase();
     try {
         const formatter = new Intl.NumberFormat('en-US', {
@@ -2032,7 +2032,7 @@ function formatFiatNumber(value, currency) {
 // ResizeObserver and applying a CSS transform: scale(...) when the
 // content is wider than the container. Avoids the wrapping that the
 // old `word-break: break-all` rule produced on long fiat balances
-// (e.g. JPY which can run 9+ digits). Scales down only — never up —
+// (e.g. JPY which can run 9+ digits). Scales down only, never up;
 // so short values render at their natural size.
 function AutoShrinkText({ children }) {
     const containerRef = useRef(null);
@@ -2053,7 +2053,7 @@ function AutoShrinkText({ children }) {
             const iw = i.scrollWidth;
             if (iw <= 0 || cw <= 0) { setScale(1); return; }
             // 2px safety margin absorbs subpixel rounding in transform
-            // scaling — without it the trailing glyph can clip by a
+            // scaling; without it the trailing glyph can clip by a
             // fraction of a pixel ("USD" → "US", "BTC" → "BT+half C").
             const target = Math.max(0, cw - 2);
             setScale(iw > target ? target / iw : 1);

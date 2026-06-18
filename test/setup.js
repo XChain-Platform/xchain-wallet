@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Vitest setup file — loaded before each test file, once per worker.
+// Vitest setup file. Loaded before each test file, once per worker.
 //
 // Three things happen here:
 //   1. `@testing-library/jest-dom` extends the Vitest matcher API
@@ -20,7 +20,7 @@
 //   3. React Testing Library's auto-cleanup hooks into the global
 //      `afterEach`, but vitest is configured with `globals: false`,
 //      so the cleanup never registers on its own. Wire it explicitly
-//      so rendered components are torn down between tests — otherwise
+//      so rendered components are torn down between tests; otherwise
 //      successive render() calls accumulate in the same jsdom and
 //      `getByRole` finds duplicates across test boundaries.
 

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// contractStakeAction — STAKE v3 / UNSTAKE v1 / DELEGATE v1 composer for the
+// contractStakeAction: STAKE v3 / UNSTAKE v1 / DELEGATE v1 composer for the
 // "Stake on a Contract" form. Mirrors stakeAction.js (capability staking v1/v2)
 // but routes to the contract-targeted protocol surface: any token, per-contract
 // cooldown, contract-decided slash semantics. See:

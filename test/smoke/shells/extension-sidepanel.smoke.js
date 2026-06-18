@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §24 / G056 — Extension sidebar mode (Chrome Side Panel).
+// Smoke for §24 / G056: Extension sidebar mode (Chrome Side Panel).
 //
 // Verify pass: the implementation already shipped (manifest +
 // layoutMode controller + LayoutModeToggle UI). This smoke pins the
@@ -86,4 +86,4 @@ assert.ok(/pick\('popup'\)/.test(toggleSrc) && /pick\('sidepanel'\)/.test(toggle
 assert.ok(/aria-checked=/.test(toggleSrc),
     'toggle is accessibly marked with aria-checked');
 
-console.log('OK — extension sidebar mode (Chrome Side Panel) smoke');
+console.log('OK: extension sidebar mode (Chrome Side Panel) smoke');

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// signerPortProtocol — shared RPC plumbing for the renderer↔background
+// signerPortProtocol: shared RPC plumbing for the renderer↔background
 // signer bridge. Implements the protocol on top of a neutral
 // `{ postMessage, onMessage }` port adapter so the same code works for
 // chrome.runtime ports (extension), postMessage pipes (web workers),
@@ -106,7 +106,7 @@ export function createBackgroundTransport(port) {
  * Renderer-side: bind a port to a signer registry. Forwards every
  * `request` message through `getSigner(signerId).<op>(payload)` and
  * posts back a matching `response`. `getSigner` returns null / undef
- * when the signer isn't registered — reply with an error so the
+ * when the signer isn't registered; reply with an error so the
  * background can surface "signer not available" cleanly.
  *
  * @param {PortLike} port
@@ -145,7 +145,7 @@ export function bindRendererPortBridge(port, { getSigner }) {
         try {
             port.postMessage({ kind: 'register', signerIds: Array.from(signerIds) });
         } catch {
-            // Port might not be open yet — callers should retry, but
+            // Port might not be open yet; callers should retry, but
             // swallowing here is fine for first-announce-at-boot paths.
         }
     }

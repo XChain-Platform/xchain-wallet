@@ -126,7 +126,7 @@ assert.ok(
 
 async function buildHost() {
     // Real Vault with a random 32-byte master key; we don't care about
-    // password derivation here — these handlers never touch the password.
+    // password derivation here; these handlers never touch the password.
     const masterKey = new Uint8Array(32);
     crypto.getRandomValues(masterKey);
 
@@ -144,7 +144,7 @@ async function buildHost() {
         origin: 'created',
         format: 'bip39',
         passphraseEnabled: false,
-        encryptedSeed: 'c3R1Yg==', // "stub" base64 — decrypted seed never needed here
+        encryptedSeed: 'c3R1Yg==', // "stub" base64; decrypted seed never needed here
         kdfParams,
     });
     await vault.wallets.put(wallet);
@@ -261,7 +261,7 @@ async function call(host, type, request) {
     assert.equal(
         byChain['bitcoin-mainnet'].length,
         4,
-        'includes BTC external + internal (no filtering here — it is a full listing)',
+        'includes BTC external + internal (no filtering here; it is a full listing)',
     );
     assert.equal(byChain['dogecoin-mainnet'].length, 1);
     // Records from the other wallet must be absent.
@@ -272,7 +272,7 @@ async function call(host, type, request) {
     );
 }
 
-// 2b. addresses.newest — picks highest external HD index, skips change=1.
+// 2b. addresses.newest: picks highest external HD index, skips change=1.
 {
     const { host, wallet } = await buildHost();
     const newest = await call(host, 'addresses.newest', {
@@ -307,7 +307,7 @@ async function call(host, type, request) {
     assert.ok(threw, 'missing chainId rejected');
 }
 
-// 2e. BIP21 URI round-trip — prove the Receive QR payload we'd encode
+// 2e. BIP21 URI round-trip: prove the Receive QR payload we'd encode
 //     parses back to the same address.
 {
     const descriptor = registryLib.defaultRegistry().get('bitcoin-mainnet');
@@ -322,5 +322,5 @@ async function call(host, type, request) {
 }
 
 console.log(
-    'OK — receive view smoke (static wiring + addresses.byChain / addresses.newest round-trips + BIP21 encode/parse)',
+    'OK: receive view smoke (static wiring + addresses.byChain / addresses.newest round-trips + BIP21 encode/parse)',
 );

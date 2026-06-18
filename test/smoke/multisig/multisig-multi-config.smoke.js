@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §56.3 Pre-launch Step 4 of 7 — Per-address multisig
+// Smoke for §56.3 Pre-launch Step 4 of 7: Per-address multisig
 // configs (closes FOLLOWUP 3 from 2026-04-24_phase4-close.md).
 
 import { strict as assert } from 'node:assert';
@@ -214,7 +214,7 @@ assert.ok(/duplicate id/.test(errs),
         ],
     });
     assert.equal(r2.wallet.multisigs.length, 2,
-        'second config appends — wallet now has two configs');
+        'second config appends; wallet now has two configs');
     assert.notEqual(r1.config.id, r2.config.id,
         'each config gets a distinct id');
 
@@ -342,5 +342,5 @@ assert.ok(/for \(const m of multisigs\)/.test(addressList),
     'AddressList synthesizes one row per config');
 
 console.log(
-    'OK — multisig multi-config smoke (Wallet v2 + MultisigConfig v2 + buildMultisigConfig auto-id + caller-id pass-through + v1→v2 wallet migration with synthetic legacy- id + empty-array fallback + standalone MultisigConfig migration + duplicate-id validator guard + createMultisigConfig appends to multisigs[] + duplicate scriptTemplate guard + multisigConfigId routing on receiveMultisigAddress + listMultisigReceiveAddresses returns all + bg multisig.listAddresses handler + 3-shell listMultisigReceiveAddresses helpers + Receive multi-section render + AddressList multi-row render)',
+    'OK: multisig multi-config smoke (Wallet v2 + MultisigConfig v2 + buildMultisigConfig auto-id + caller-id pass-through + v1 to v2 wallet migration with synthetic legacy-id + empty-array fallback + standalone MultisigConfig migration + duplicate-id validator guard + createMultisigConfig appends to multisigs[] + duplicate scriptTemplate guard + multisigConfigId routing on receiveMultisigAddress + listMultisigReceiveAddresses returns all + bg multisig.listAddresses handler + 3-shell listMultisigReceiveAddresses helpers + Receive multi-section render + AddressList multi-row render)',
 );

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Watchlist CRUD flows — §41.2. Thin wrappers around the vault's
+// Watchlist CRUD flows (§41.2). Thin wrappers around the vault's
 // watchlistEntries collection, mirroring the pendingAirdrops flow
 // shape. The MarketsList UI reads via listWatchlistForWallet, the
 // star button writes via saveWatchlistEntry / clearWatchlistEntry.

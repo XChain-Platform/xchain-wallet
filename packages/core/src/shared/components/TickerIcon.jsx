@@ -26,7 +26,7 @@ const chainRegistry = registryLib.defaultRegistry();
  * plus the small chain icon as a pip in the bottom-right corner.
  *
  * Mirrors the Receive asset card's icon-with-chain-pip pattern at any
- * size — pass `size` for the main icon's px dimension; the pip scales
+ * size: pass `size` for the main icon's px dimension; the pip scales
  * proportionally.
  *
  * @param {object} props

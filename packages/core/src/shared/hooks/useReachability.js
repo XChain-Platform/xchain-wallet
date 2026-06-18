@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// useReachability — §49.1 / G153 polling hook.
+// useReachability: §49.1 / G153 polling hook.
 //
 // Polls `messaging.checkReachabilityRequest({ chainIds })` on an
 // interval (default 30s) and exposes the latest result, the timestamp
@@ -16,7 +16,7 @@
 // be mounted once near the app root so every banner / staleness label
 // reads from a single source of truth.
 //
-// chainIds default to the keys of `settings.fees` — that's the same
+// chainIds default to the keys of `settings.fees`, the same
 // "active chain" definition `bridge.getActiveChains` uses (§43.2),
 // keeping the user's view consistent with what dApps see.
 
@@ -54,7 +54,7 @@ export function useReachability(opts = {}) {
             : (settings?.fees && typeof settings.fees === 'object'
                 ? Object.keys(settings.fees).sort()
                 : []);
-        // Drop chains that aren't on the user's active network — no
+        // Drop chains that aren't on the user's active network. No
         // point probing testnet endpoints when the user only sees
         // mainnet. The filter helper tolerates an undefined settings
         // record (returns []).
@@ -71,7 +71,7 @@ export function useReachability(opts = {}) {
 
     const probe = useCallback(async () => {
         if (typeof messaging?.checkReachabilityRequest !== 'function') {
-            // No host endpoint — leave state at "unknown" so the
+            // No host endpoint. Leave state at "unknown" so the
             // banner can hide rather than fabricate "offline".
             return;
         }
@@ -85,7 +85,7 @@ export function useReachability(opts = {}) {
             setLastChecked(Date.now());
         } catch (err) {
             if (cancelledRef.current) return;
-            // A failed probe is itself a strong "offline" signal — but
+            // A failed probe is itself a strong "offline" signal, but
             // only for the duration of this poll. The next probe gets a
             // fresh shot.
             setOverall('offline');

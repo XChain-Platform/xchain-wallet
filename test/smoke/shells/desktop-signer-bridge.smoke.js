@@ -11,7 +11,7 @@
 // Runtime smoke for the desktop main-process signer-bridge listener
 // (HW Sign follow-up slice 4 / §40.12 HW-on-desktop). Exercises
 // `attachSignerBridgeListener` against a fake ipcMain + fake
-// webContents — no Electron, no real processes. Proves:
+// webContents (no Electron, no real processes). Proves:
 //
 //   - First ipc message from a webContents lazily creates a per-
 //     sender PortLike + transport.
@@ -103,7 +103,7 @@ const transport = bgSignerBridge.getTransport('sig-desk-1');
 assert.equal(typeof transport, 'function',
     'register populates signerBridge with a transport for sig-desk-1');
 
-// --- 2. Transport round-trip — background request reaches webContents
+// --- 2. Transport round-trip: background request reaches webContents
 
 const pending = transport({ op: 'status', payload: { signerId: 'sig-desk-1' } });
 // The sent queue should now hold a `request` frame.
@@ -130,7 +130,7 @@ assert.equal(
     'unregister clears signerBridge for sig-desk-1',
 );
 
-// --- 4. Window destroy — rejects in-flight + clears registry -----
+// --- 4. Window destroy: rejects in-flight + clears registry -----
 
 resetRegistry();
 const ipc2 = createFakeIpcMain();
@@ -142,7 +142,7 @@ ipc2._emit('xchain-wallet:signer-bridge', { sender: wc2 }, {
 const transport2 = bgSignerBridge.getTransport('sig-destroy');
 assert.equal(typeof transport2, 'function', 'sig-destroy is registered');
 const inflight = transport2({ op: 'signPsbt', payload: { signerId: 'sig-destroy' } });
-// Destroy mid-flight — should reject the pending promise.
+// Destroy mid-flight; should reject the pending promise.
 wc2._destroy();
 await assert.rejects(inflight, /signer bridge disconnected/,
     'destroyed webContents rejects in-flight requests');
@@ -175,5 +175,5 @@ detach1();
 resetRegistry();
 
 console.log(
-    'OK — desktop signer bridge smoke (fake ipcMain + webContents round-trip: lazy per-sender entry, register populates signerBridge, transport postMessage reaches webContents.send, response correlator resolves, unregister clears registry, webContents destroy rejects in-flight with "signer bridge disconnected" + clears owned ids, detach() drops all state)',
+    'OK: desktop signer bridge smoke (fake ipcMain + webContents round-trip: lazy per-sender entry, register populates signerBridge, transport postMessage reaches webContents.send, response correlator resolves, unregister clears registry, webContents destroy rejects in-flight with "signer bridge disconnected" + clears owned ids, detach() drops all state)',
 );

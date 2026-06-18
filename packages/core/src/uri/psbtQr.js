@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// XCW chunked PSBT-over-QR transport — §20.3.
+// XCW chunked PSBT-over-QR transport (§20.3).
 //
 // Wire format per chunk:
 //
@@ -18,7 +18,7 @@
 //                    chunk so a receiver scanning out-of-order can
 //                    allocate the right number of slots up front.
 //   • crc32-hex      lowercase 8-char hex of CRC32 over the decoded
-//                    base64 bytes — per-chunk integrity, detects a
+//                    base64 bytes: per-chunk integrity, detects a
 //                    flipped bit before it reaches the PSBT parser.
 //   • base64-bytes   chunk content.
 //
@@ -31,7 +31,7 @@
 // The SHA256 lives on chunk 1 so the first-scanned chunk establishes
 // the integrity target; subsequent chunks are validated against it
 // after reassembly. (Putting the hash on every chunk would save a
-// byte elsewhere but would mean we trust the LATEST-scanned hash —
+// byte elsewhere but would mean we trust the LATEST-scanned hash.
 // exactly the wrong property. See §20.3 spec: "overall reassembled
 // PSBT is verified against an overall SHA256 hash included in chunk 1".)
 //
@@ -177,7 +177,7 @@ export function createXcwCollector() {
 
 /**
  * Feed a chunk into a collector. Returns the updated state (same
- * object for convenience — not a copy).
+ * object for convenience (not a copy).
  *
  * @param {XcwCollectorState} state
  * @param {string} frame
@@ -301,7 +301,7 @@ function bytesEqual(a, b) {
     return true;
 }
 
-// CRC32 — classic IEEE polynomial, table-driven. Kept inline to avoid
+// CRC32: classic IEEE polynomial, table-driven. Kept inline to avoid
 // a dependency for such a small surface.
 const CRC32_TABLE = (() => {
     const t = new Uint32Array(256);

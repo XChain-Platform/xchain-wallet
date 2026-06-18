@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// §24.3 / G054 smoke — mobile bottom-tab bar + bottom-sheet drawer.
+// §24.3 / G054 smoke: mobile bottom-tab bar + bottom-sheet drawer.
 //
 // Asserts:
 //   1. BottomTabBar.jsx + BottomTabBar.module.css exist; BottomTabBar
@@ -148,5 +148,5 @@ assert.ok(!/BottomTabBar/.test(popupApp),
     'Extension popup intentionally does NOT mount BottomTabBar (always compact per §24.1)');
 
 console.log(
-    'OK — bottom-tab-bar smoke (§24.3 / G054 BottomTabBar with Home/History/Send/Scan primary tabs + More-toggled sheet listing Receive/DEX/Dispensers/Contracts(BTC-gated)/Messaging/Contacts + Switch wallet/Settings/Lock; 56px fixed bar with iOS safe-area inset; FullLayoutWithNav.bottomBar slot collapses above 600px; web + desktop App.jsx wire it through; popup left compact)',
+    'OK: bottom-tab-bar smoke (§24.3 / G054 BottomTabBar with Home/History/Send/Scan primary tabs + More-toggled sheet listing Receive/DEX/Dispensers/Contracts(BTC-gated)/Messaging/Contacts + Switch wallet/Settings/Lock; 56px fixed bar with iOS safe-area inset; FullLayoutWithNav.bottomBar slot collapses above 600px; web + desktop App.jsx wire it through; popup left compact)',
 );

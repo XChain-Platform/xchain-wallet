@@ -32,7 +32,7 @@ const chainRegistry = registryLib.defaultRegistry();
 
 // Rest-fields carry a '...' prefix in the SDK's field list (see
 // xchain-sdk/src/formatSelector.js). The form splits array input on
-// newlines/commas — same convention as AirdropForm's paste box.
+// newlines/commas, same convention as AirdropForm's paste box.
 const REST_PREFIX = '...';
 
 // VERSION is auto-selected by the SDK's FormatSelector, never
@@ -50,12 +50,12 @@ const ACTIONS_WITH_DEDICATED_FORMS = new Set([
 ]);
 
 /**
- * Advanced Actions form — §40.10.
+ * Advanced Actions form (§40.10).
  *
  * Generic "submit any XChain action" surface for power users and for
  * action kinds without a dedicated form (FILE beyond collectibles,
  * ADDRESS, CALLBACK, SLEEP, raw MESSAGE). Fields are
- * driven entirely by the SDK's schema introspection — the form has no
+ * driven entirely by the SDK's schema introspection; the form has no
  * per-action knowledge beyond generic rendering rules for rest-fields
  * + auto-fields.
  *
@@ -178,7 +178,7 @@ export function AdvancedActionsForm({ walletId, onBack }) {
                 if (cancelled) return;
                 setFormats(fmts || {});
                 const filtered = (fls || []).filter((f) => !AUTO_FIELDS.has(baseFieldName(f)));
-                // Deduplicate — multi-version formats repeat rest-field
+                // Deduplicate: multi-version formats repeat rest-field
                 // slots across versions; we only want one input per
                 // canonical name.
                 const seen = new Set();
@@ -197,7 +197,7 @@ export function AdvancedActionsForm({ walletId, onBack }) {
         return () => { cancelled = true; };
     }, [chainId, action, messaging]);
 
-    // Live validation — runs on every keystroke. The SDK validator is
+    // Live validation: runs on every keystroke. The SDK validator is
     // in-memory only (no network), so the cost is negligible.
     useEffect(() => {
         if (!chainId || !action || fields.length === 0) {
@@ -205,7 +205,7 @@ export function AdvancedActionsForm({ walletId, onBack }) {
             return;
         }
         const populated = buildParams(fields, values, version);
-        // Only validate if at least one field is filled — empty forms
+        // Only validate if at least one field is filled. Empty forms
         // shouldn't splash red on first load.
         const anyFilled = Object.values(populated).some(
             (v) => v !== '' && (!Array.isArray(v) || v.length > 0),
@@ -214,7 +214,7 @@ export function AdvancedActionsForm({ walletId, onBack }) {
         let cancelled = false;
         messaging.validateAction({ chainId, action, params: populated })
             .then((res) => { if (!cancelled) setValidation(res); })
-            .catch(() => { /* validation is advisory — swallow network hiccups */ });
+            .catch(() => { /* validation is advisory; swallow network hiccups */ });
         return () => { cancelled = true; };
     }, [chainId, action, fields, values, version, messaging]);
 
@@ -273,7 +273,7 @@ export function AdvancedActionsForm({ walletId, onBack }) {
     const [hwStatus, setHwStatus] = useState('idle');
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
 
-    // §20 / Cluster W FOLLOWUP 5 — watcher-mode encode-only branch.
+    // §20 / Cluster W FOLLOWUP 5: watcher-mode encode-only branch.
     // The user-chosen `action` is passed straight into actionData.
     const { isWatcherMode } = useWalletMode();
 
@@ -411,7 +411,7 @@ export function AdvancedActionsForm({ walletId, onBack }) {
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>
-                        Watcher mode — this wallet will build an unsigned transaction.
+                        Watcher mode: this wallet will build an unsigned transaction.
                         Sign it on your Signer-mode wallet, then bring the
                         signed transaction to a Full-mode wallet to broadcast.
                     </p>
@@ -488,7 +488,7 @@ export function AdvancedActionsForm({ walletId, onBack }) {
                     value={action}
                     onChange={(e) => setAction(e.target.value)}
                 >
-                    <option value="">— Pick an action —</option>
+                    <option value="">Pick an action</option>
                     {(actions || []).map((a) => (
                         <option key={a} value={a}>
                             {a}
@@ -511,7 +511,7 @@ export function AdvancedActionsForm({ walletId, onBack }) {
                         <option value="">Auto-select (recommended)</option>
                         {Object.keys(formats).map((v) => (
                             <option key={v} value={v}>
-                                v{v} — {formats[v]}
+                                v{v}: {formats[v]}
                             </option>
                         ))}
                     </select>
@@ -540,7 +540,7 @@ export function AdvancedActionsForm({ walletId, onBack }) {
                                 spellCheck={false}
                                 autoCapitalize="none"
                                 autoCorrect="off"
-                                aria-label={`${base} — list values, one per line or comma-separated`}
+                                aria-label={`${base}: list values, one per line or comma-separated`}
                             />
                         </label>
                     );

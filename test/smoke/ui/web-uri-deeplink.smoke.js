@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// §47 / Cluster L FOLLOWUP 1 smoke — web `?uri=` deep-link routing.
+// §47 / Cluster L FOLLOWUP 1 smoke: web `?uri=` deep-link routing.
 //
 // v0.191.0's `navigator.registerProtocolHandler('web+xchain', '/?uri=%s')`
 // registers the SPA as the handler for `xchain:` URIs. This FOLLOWUP
@@ -102,5 +102,5 @@ assert.ok(
 );
 
 console.log(
-    "OK — web-uri-deeplink smoke (§47 Cluster L FOLLOWUP 1 — Send.prefill prop seeds address/amount/tick/chainId/memo; first-chain auto-select preserves prefill; web App.jsx reads ?uri= → parseXchainUri → setSendPrefill + setUnlockedView; history.replaceState strips the param; back-navigation clears the prefill)",
+    "OK: web-uri-deeplink smoke (§47 Cluster L FOLLOWUP 1: Send.prefill prop seeds address/amount/tick/chainId/memo; first-chain auto-select preserves prefill; web App.jsx reads ?uri= → parseXchainUri → setSendPrefill + setUnlockedView; history.replaceState strips the param; back-navigation clears the prefill)",
 );

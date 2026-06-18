@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// §9 / G001 — `@xchain-wallet/signers-trezor` package entry point.
+// §9 / G001: `@xchain-wallet/signers-trezor` package entry point.
 //
 // Trezor-specific signer implementation extracted from
 // `@xchain-wallet/core/signers/`. The base `Signer` class and shared
@@ -20,7 +20,7 @@
 // `@xchain-wallet/core/signers/index.js` (kept for now so existing
 // shell imports that go through `core` keep working). The factory
 // (`makeTrezorFactory`) still lives in `@xchain-wallet/core/signerFactories`
-// — it owns the post-init pair sequence, which is shell-agnostic.
+// It owns the post-init pair sequence, which is shell-agnostic.
 
 export {
     TrezorSigner,

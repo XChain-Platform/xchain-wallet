@@ -33,7 +33,7 @@ import styles from './AmountField.module.css';
  * @param {import('react').RefObject<HTMLInputElement>} [props.inputRef]
  * @param {() => void} [props.onMax]                         when omitted, the inline Max button is hidden
  * @param {boolean} [props.maxDisabled]                      grey out the Max button (e.g. while balance is loading)
- * @param {import('react').ReactNode} [props.balanceText]    right-hand footer text — typically "X.XX BTC available". Omit when meaningless (e.g. Receive).
+ * @param {import('react').ReactNode} [props.balanceText]    right-hand footer text, typically "X.XX BTC available". Omit when meaningless (e.g. Receive).
  */
 export function AmountField({
     amount,

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for Phase 4 — Step 2 of 23 — Contracts nav item + browse
+// Smoke for Phase 4, Step 2 of 23: Contracts nav item + browse
 // landing (§42.2).
 //
 // Asserts:
@@ -175,7 +175,7 @@ await assert.rejects(
     'withdrawalsForAddress guards address',
 );
 
-// Positive path — contractsForSource calls sdk.getContracts(addr, 'source', opts).
+// Positive path: contractsForSource calls sdk.getContracts(addr, 'source', opts).
 {
     let called = null;
     const fakeSdk = { getContracts: (...args) => { called = args; return { data: [] }; } };
@@ -275,5 +275,5 @@ assert.ok(/\{onContracts \?/.test(homeSrc),
     'Home renders the Contracts button only when onContracts is passed');
 
 console.log(
-    'OK — contracts list smoke (ContractsList shared route + five explorer passthroughs + messaging helpers in popup/web/desktop + BTC-address gate via useBtcAddressesPresent + Home onContracts wiring)',
+    'OK: contracts list smoke (ContractsList shared route + five explorer passthroughs + messaging helpers in popup/web/desktop + BTC-address gate via useBtcAddressesPresent + Home onContracts wiring)',
 );

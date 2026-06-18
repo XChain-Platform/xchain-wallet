@@ -8,20 +8,20 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// dispenserAction — convenience wrapper for the DISPENSER action
+// dispenserAction: convenience wrapper for the DISPENSER action
 // (§40.7; protocol docs: xchain-documentation/protocol/actions/
 // DISPENSER.md). Mirrors broadcastAction: takes vault + registries +
 // chain + source address + DISPENSER params, forwards to submitAction.
 //
 // DISPENSER has three lanes:
-//   v0 Create — open a new dispenser (GIVE_* + GET_* fields).
-//   v1 Cancel — close an existing dispenser via DISPENSER_ACTION_INDEX.
-//   v2 Edit   — refill / reschedule / update lists via DISPENSER_ACTION_INDEX.
+//   v0 Create: open a new dispenser (GIVE_* + GET_* fields).
+//   v1 Cancel: close an existing dispenser via DISPENSER_ACTION_INDEX.
+//   v2 Edit:   refill / reschedule / update lists via DISPENSER_ACTION_INDEX.
 //
 // The SDK validator enforces version-specific field requirements (see
 // xchain-sdk@1.8.1's _validateDispenser). This flow only guards the
-// baseline shape so bad callers get a loud error before we hit the
-// signer — SDK validation is the authoritative rule set.
+// baseline shape so bad callers get a loud error before the signer.
+// SDK validation is the authoritative rule set.
 
 import { submitAction } from './submitAction.js';
 import { normalizeSource } from './sendToken.js';
@@ -65,7 +65,7 @@ export async function dispenserAction(opts) {
     const giveOwn = Number(opts.params.GIVE_OWNERSHIP || 0) === 1;
 
     if (!isIndexOp) {
-        // Create mode — match the SDK validator's baseline: GIVE_TICK +
+        // Create mode: match the SDK validator's baseline: GIVE_TICK +
         // GIVE_AMOUNT + GET_AMOUNT + one of (GET_TICK, GET_COIN). GIVE_AMOUNT
         // drops out for an ownership dispenser.
         if (typeof opts.params.GIVE_TICK !== 'string' || opts.params.GIVE_TICK.length === 0) {

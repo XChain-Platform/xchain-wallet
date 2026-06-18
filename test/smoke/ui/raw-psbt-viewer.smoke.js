@@ -8,17 +8,17 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §21 — Step 6 — RawPsbtViewer reveal (Developer Mode).
+// Smoke for §21, Step 6: RawPsbtViewer reveal (Developer Mode).
 //
 // Closes Settings FOLLOWUP 6 from the §35 close report. Asserts:
 //   - <RawPsbtViewer> exists with the expected public API
 //   - Returns null when developerMode=false (the only way the gate
-//     short-circuits — caller never gets a stray reveal block)
+//     short-circuits; caller never gets a stray reveal block)
 //   - SignApproval wires it for both signPsbt (with hex) and
 //     signAction (with action fields), gated behind a freshly-fetched
 //     developerMode setting
 //   - Send.jsx wires it into the review stage with the action fields
-//     it has at review time (no PSBT yet — encode happens on submit),
+//     it has at review time (no PSBT yet; encode happens on submit),
 //     gated behind the existing useDeveloperMode hook
 //   - approval-side messaging exposes getSettings
 

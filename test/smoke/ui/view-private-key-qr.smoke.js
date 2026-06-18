@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §17.7 / Cluster E FOLLOWUP 5 — renderQR for ViewPrivateKey.
+// Smoke for §17.7 / Cluster E FOLLOWUP 5: renderQR for ViewPrivateKey.
 //
 // Pins:
 //   - shared/components/KeyQR.jsx exists, named export, lazy `qrcode`-backed

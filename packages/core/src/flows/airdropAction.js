@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// airdropAction — authors an AIRDROP action (§40.9; protocol docs:
+// airdropAction: authors an AIRDROP action (§40.9; protocol docs:
 // xchain-documentation/protocol/actions/AIRDROP.md). Mirrors
 // dividendAction / broadcastAction: takes vault + registries + chain +
 // source address + AIRDROP params, forwards to submitAction.

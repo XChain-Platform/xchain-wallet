@@ -8,16 +8,16 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// SafetySection — §35.1 Safety panel.
+// SafetySection (§35.1 Safety panel).
 //
 // Live rows:
 //   - Auto-lock timeout (minutes)
 //   - Test-send warning threshold (sats; 0 disables)
-//   - Panic mode toggle — schema slot ships v2; full §26.5 duress-PIN
+//   - Panic mode toggle: schema slot ships v2; full §26.5 duress-PIN
 //     wiring lands later, the toggle gates that behavior when present.
 //   - Backup reminders cadence (off / monthly / quarterly)
 //
-// The undo-send grace row was removed v0.132.0 — the feature was
+// The undo-send grace row was removed v0.132.0. The feature was
 // scrapped (a cancellable countdown delays every broadcast and rewards
 // rage-clicking with a no-op). The `settings.grace.undoSendSeconds`
 // schema field stays around as a dead slot until a future v3 migration
@@ -109,7 +109,7 @@ export function SafetySection() {
             <DuressPassphraseRow />
             <ToggleRow
                 label="Auto-arm panic mode"
-                hint="Reserved — duress-passphrase / shortcut auto-arming lands in a follow-up step. The persisted preference is honoured when that wiring ships; the Activate button above always works regardless."
+                hint="Reserved. Duress-passphrase / shortcut auto-arming lands in a follow-up step. The persisted preference is honoured when that wiring ships; the Activate button above always works regardless."
                 checked={Boolean(settings.panicMode?.enabled)}
                 onChange={(v) => {
                     update({ panicMode: { enabled: v } }).catch((err) => {

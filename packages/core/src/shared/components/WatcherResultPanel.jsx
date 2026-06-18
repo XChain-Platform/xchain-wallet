@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// WatcherResultPanel — §20 / G040 + Cluster W FOLLOWUP 4 + Cluster X
+// WatcherResultPanel (§20 / G040 + Cluster W FOLLOWUP 4 + Cluster X
 // Step 3. Renders the unsigned PSBT hex + animated QR (XCW or BBQr)
 // for cross-device transport when a watcher-mode wallet builds a PSBT.
 //
@@ -21,10 +21,10 @@
 //   { psbtHex, encoding?, fromAddress?, chainId? }
 //
 // CTAs:
-//   onBuildAnother — "Build another" secondary button (composes
+//   onBuildAnother: "Build another" secondary button (composes
 //                    another action of the same kind without leaving
 //                    the form)
-//   onDone         — "Done" primary button (back to wherever the
+//   onDone:         "Done" primary button (back to wherever the
 //                    form was launched from)
 //
 // (Send.jsx still passes `onSendAnother` for back-compat; the prop is
@@ -49,7 +49,7 @@ export function WatcherResultPanel({
     onBuildAnother,
     onSendAnother,
     onDone,
-    title = 'Unsigned transaction — ready for signing',
+    title = 'Unsigned transaction, ready for signing',
 }) {
     const psbtHex = result?.psbtHex || '';
     const [qrFormat, setQrFormat] = useState('xcw');
@@ -74,7 +74,7 @@ export function WatcherResultPanel({
             <div className={styles.successCard} role="status" aria-live="polite">
                 <h2 className={styles.successTitle}>{title}</h2>
                 <p className={styles.successHint}>
-                    Take this transaction to your Signer-mode wallet — paste the hex,
+                    Take this transaction to your Signer-mode wallet. Paste the hex,
                     or scan the animated QR. Sign there, then paste the signed
                     transaction into a Full-mode wallet to broadcast.
                 </p>

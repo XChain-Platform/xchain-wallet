@@ -12,7 +12,7 @@ import { Icon } from '@xchain-wallet/core/ui';
 import styles from './LeftNav.module.css';
 
 /**
- * §24.2 / G053 — full-layout left navigation. Renders a fixed-width
+ * §24.2 / G053: full-layout left navigation. Renders a fixed-width
  * sidebar listing primary surfaces (Home, History, Send, Receive,
  * Scan, DEX, Dispensers, Contracts, Messaging) plus a contacts row,
  * a wallet switcher, Settings, and Lock. Active row gets
@@ -27,7 +27,7 @@ import styles from './LeftNav.module.css';
  * mappings so the active highlight survives drilldowns:
  *   - 'token-detail' / 'addresses' / 'wallet-picker' / 'account-picker'
  *     / 'wallet-details' / 'wallet-rename' / 'add-account' / 'add-wallet'
- *     all highlight Home — they're entered from there.
+ *     all highlight Home (they're entered from there).
  *   - 'compose-message' highlights Messaging.
  *   - 'dispenser-explorer' / 'dispenser-detail' / 'dispenser' highlight
  *     Dispensers.
@@ -192,7 +192,7 @@ export function LeftNav({
  *
  * The `header` slot (§49 / Cluster G FOLLOWUP 4) renders persistent
  * banners (queued broadcasts, …) above the route content so they
- * survive route changes — Home no longer has to mount them itself.
+ * survive route changes, so Home no longer has to mount them itself.
  *
  * @param {object} props
  * @param {import('react').ReactNode} props.nav

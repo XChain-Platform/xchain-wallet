@@ -8,12 +8,12 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// makeTrezorFactory — shell-agnostic Trezor pairing logic (§40.12,
+// makeTrezorFactory: shell-agnostic Trezor pairing logic (§40.12,
 // Phase 2 Step 18).
 //
 // Core owns the "what to do with an initialized TrezorConnect" part;
 // each shell (extension / web / desktop) owns the "how to get an
-// initialized TrezorConnect" part via DI — the shells differ in
+// initialized TrezorConnect" part via DI; the shells differ in
 // manifest URL, `connectSrc` (default vs locally-bundled iframe), and
 // lazy-import strategy, but the post-init pair sequence is identical.
 //

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §35 Settings — Step 6 — Privacy panel.
+// Smoke for §35 Settings, Step 6: Privacy panel.
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
@@ -27,7 +27,7 @@ assert.match(src, /import \{ useSettings \}/, 'imports useSettings');
 assert.match(
     src,
     /update\(\{\s*privacy:\s*\{\s*\[field\]:\s*next\s*\}\s*\}\)/,
-    'privacy writes go through update({ privacy: { [field]: next } }) — nested merge',
+    'privacy writes go through update({ privacy: { [field]: next } }), nested merge',
 );
 
 // All five live toggles (v2 added blurOnBlur + labelsSurviveRestore)

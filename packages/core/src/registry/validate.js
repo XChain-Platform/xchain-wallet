@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Validator for ChainDescriptor — §9.7. Shape matches the spec; callers
+// Validator for ChainDescriptor (§9.7). Shape matches the spec; callers
 // use this to accept user-submitted descriptors (Developer Mode) before
 // installing them into the registry.
 
@@ -28,7 +28,7 @@ import {
 
 // §5.5 + §36.3: donation addresses are TBD per chain at launch. Any
 // descriptor with this literal string in `adsDonationAddress` is
-// treated as "not configured" — the ADS resolver refuses to submit a
+// treated as "not configured": the ADS resolver refuses to submit a
 // donation output for that chain, and the submitAction integration
 // advances the accumulator as if ADS were disabled. A grep-replace
 // before mainnet release physically can't be missed because the

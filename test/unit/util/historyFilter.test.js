@@ -157,7 +157,7 @@ describe('shared/utils/historyFilter', () => {
         it('excludes pending entries when a date range is set', () => {
             const from = 1700100000 * 1000;
             const out = applyHistoryFilters(all, { dateFromMs: from });
-            // e3 is pending (blockIndex 0) — but it has a timestamp, so
+            // e3 is pending (blockIndex 0) but it has a timestamp, so
             // it survives this filter. The util only excludes entries
             // with NO timestamp. Document the actual behavior.
             expect(out.map((e) => e.actionIndex)).toEqual(['4', '3', '2']);

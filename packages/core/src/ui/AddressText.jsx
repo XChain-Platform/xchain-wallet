@@ -17,7 +17,7 @@ import styles from './AddressText.module.css';
  *   characters render as `first6…last6`. Full address available via
  *   `title` and `aria-label`.
  *
- * - When `highlight` is set, the address renders as three spans —
+ * - When `highlight` is set, the address renders as three spans:
  *   first 6 (head, accent) / middle (muted) / last 6 (tail, accent).
  *   This is the §21.5 "checksum-positional highlighting" treatment.
  *   Combines with `truncate`: the head and tail still mark the
@@ -33,7 +33,7 @@ import styles from './AddressText.module.css';
 export function AddressText({ address, truncate = true, highlight = false, size = 'md' }) {
     const cls = `${styles.addr} ${styles[size]}`;
     if (typeof address !== 'string' || address.length === 0) {
-        return <span className={cls}>—</span>;
+        return <span className={cls}>…</span>;
     }
     if (address.length <= 14) {
         return (

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §52 / G004 — `tools/regtest/` scaffolding.
+// Smoke for §52 / G004: `tools/regtest/` scaffolding.
 //
 // The actual stack lives upstream in `xchain-node`; the scripts here
 // are the wallet's thin glue. This smoke pins the directory + script
@@ -65,14 +65,14 @@ assert.ok(/§52/.test(readme), 'README cites §52');
 assert.ok(/G163/.test(readme), 'README cites the paired G163 row');
 assert.ok(/xchain-node/.test(readme), 'README points at the upstream xchain-node orchestrator');
 
-// 3. Each script's shape — bash shebang, set -euo pipefail, env-var docs.
+// 3. Each script's shape: bash shebang, set -euo pipefail, env-var docs.
 const bootstrap = read('tools/regtest/bootstrap.sh');
 assert.ok(/^#!\/usr\/bin\/env bash/.test(bootstrap), 'bootstrap.sh has bash shebang');
 assert.ok(/set -euo pipefail/.test(bootstrap), 'bootstrap.sh has strict-mode guard');
 assert.ok(/XCHAIN_REGTEST_BASE_URL/.test(bootstrap),
     'bootstrap.sh reads the canonical base-URL env var');
 // All seven services from the README's Inputs table appear in the
-// SERVICES array — keeping these in lockstep matters because the
+// SERVICES array; keeping these in lockstep matters because the
 // wallet's tests depend on every one being up.
 for (const svc of [
     'bitcoin-regtest', 'dogecoin-regtest', 'litecoin-regtest',
@@ -100,7 +100,7 @@ assert.ok(/xchain-node\.sh.*stop/.test(down),
 assert.ok(/XCHAIN_PLATFORM_DIR/.test(down),
     'down.sh honours the platform-dir override env var');
 
-// 4. Runtime — bootstrap.sh against a deliberately unreachable base
+// 4. Runtime: bootstrap.sh against a deliberately unreachable base
 //    URL exits 1 with the documented diagnostic. Picked an
 //    RFC-5737-reserved IP so we never accidentally hit a real host.
 const probe = spawnSync('bash', [join(root, 'tools/regtest/bootstrap.sh')], {
@@ -140,4 +140,4 @@ const e2eReadme = read('test/e2e/README.md');
 assert.ok(/regtest/i.test(e2eReadme),
     'test/e2e/README mentions regtest (so devs know where to look)');
 
-console.log('OK — tools/regtest/ scaffolding smoke');
+console.log('OK: tools/regtest/ scaffolding smoke');

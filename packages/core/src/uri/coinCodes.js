@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Coin codes — the platform-wide short identifier that folds coin + network
+// Coin codes: the platform-wide short identifier that folds coin + network
 // into a single token. Convention: BTC/LTC/DOGE for mainnet, T-prefix for
 // testnet (TBTC/TLTC/TDOGE), R-prefix for regtest (RBTC/RLTC/RDOGE).
 // Already used in explorer/encoder/hub URL paths and surfaced to users in
@@ -79,7 +79,7 @@ export function chainIdForCoinCode(code, chainRegistry) {
 /**
  * Cheap predicate used by parseXchainUri to decide between the new
  * `xchain:<CODE>/<action>` opaque form and the legacy BIP21-style
- * `xchain:<address>` form. Does NOT need the registry — it just checks
+ * `xchain:<address>` form. Does NOT need the registry; it just checks
  * the code shape against the bundled coin set.
  *
  * @param {string} code

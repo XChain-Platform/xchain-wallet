@@ -11,7 +11,7 @@
 // @xchain-wallet/web
 //
 // Browser SPA shell. Consumes @xchain-wallet/core and
-// @xchain-wallet/extension (for the shared background host factory —
+// @xchain-wallet/extension (for the shared background host factory;
 // see hostBridge.js).
 // See SPEC.md §9.2, §8.1 (target matrix), §9.3.3 (web key isolation).
 

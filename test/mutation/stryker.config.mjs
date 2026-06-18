@@ -13,7 +13,7 @@
 // Mutates the wallet's small-but-load-bearing slice (crypto + util)
 // and runs the unit suite against each mutant. A mutant is "killed"
 // when at least one test fails; a "survived" mutant means the test
-// suite doesn't catch the change — usually means we need to add a
+// suite doesn't catch the change. That usually means we need to add a
 // targeted unit test for that mutation.
 //
 //   pnpm test:mutation

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Inject script — runs in the page's JavaScript context. Defines
+// Inject script: runs in the page's JavaScript context. Defines
 // `window.xchain` per §43.2 as a thin RPC shim that forwards every
 // method call to the content script via `window.postMessage`. The
 // content script (isolated world) bridges to the background service

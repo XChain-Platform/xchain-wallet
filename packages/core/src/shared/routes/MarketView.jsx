@@ -31,7 +31,7 @@ import receivePickerStyles from './TokenPicker.module.css';
 const chainRegistry = registryLib.defaultRegistry();
 
 /**
- * Market view — §41.3. Trading surface for a single market.
+ * Market view (§41.3). Trading surface for a single market.
  *
  * Four panels laid out in the spec's ASCII mock:
  *
@@ -48,8 +48,8 @@ const chainRegistry = registryLib.defaultRegistry();
  * end-to-end passthrough without waiting for the charting libs.
  *
  * Popup vs full variant:
- *   - `full` (extension full-screen, web, desktop) — four-panel grid.
- *   - `popup` — stacks panels vertically; the popup form-factor is
+ *   - `full` (extension full-screen, web, desktop): four-panel grid.
+ *   - `popup`: stacks panels vertically; the popup form-factor is
  *     too narrow for a trading grid, but all panels remain reachable.
  *
  * @param {object} props
@@ -65,7 +65,7 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
     const isFull = variant === 'full';
     // Demo wallets get sample feeds so the trading surface is fully
     // populated without live liquidity. Real wallets show live data and
-    // the panels' own empty states — never fabricated prices/trades.
+    // the panels' own empty states, never fabricated prices/trades.
     const demo = flowsLib.isDemoWallet(walletId);
 
     const [summary, setSummary] = useState(/** @type {any | null} */ (null));
@@ -88,9 +88,9 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
     const descriptor = chainRegistry.get(chainId);
 
     // Header 24h stats (last / change / high / low / volume) derive from
-    // the live getMarketHistory feed — the same data the chart + trades
+    // the live getMarketHistory feed, the same data the chart + trades
     // panel render. Demo wallets fall back to sample matches; real wallets
-    // show real stats, or blanks ("—") when the market has no fills yet.
+    // show real stats, or blanks (empty) when the market has no fills yet.
     const [historyRows, setHistoryRows] = useState(/** @type {any[]} */ ([]));
     useEffect(() => {
         let cancelled = false;
@@ -346,7 +346,7 @@ function derive24hStats(rows, tick1, tick2) {
 }
 
 function formatPrice(n) {
-    if (!Number.isFinite(n)) return '—';
+    if (!Number.isFinite(n)) return '-';
     if (n === 0) return '0';
     if (n >= 1) return n.toFixed(4);
     if (n >= 0.01) return n.toFixed(6);

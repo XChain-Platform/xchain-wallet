@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for Phase 2 — Step 19 (piece 5d) — electron-builder packaging,
+// Smoke for Phase 2 / Step 19 (piece 5d): electron-builder packaging,
 // Level-2 reproducible pre-signing artifact, URI scheme registration,
 // and electron-updater wiring (§40.12, §51).
 //
@@ -111,7 +111,7 @@ assert.equal(config.npmRebuild, false, 'npmRebuild disabled (no native deps)');
 assert.equal(
     config.buildDependenciesFromSource,
     false,
-    'buildDependenciesFromSource disabled — prebuilt Electron is a known trust anchor',
+    'buildDependenciesFromSource disabled: prebuilt Electron is a known trust anchor',
 );
 
 assert.ok(Array.isArray(config.protocols), 'protocols declared');
@@ -131,7 +131,7 @@ assert.equal(
 assert.equal(
     config.mac.identity,
     null,
-    'mac.identity is null when CSC_IDENTITY_NAME unset — unsigned dev builds work without certs',
+    'mac.identity is null when CSC_IDENTITY_NAME unset: unsigned dev builds work without certs',
 );
 assert.ok(
     Array.isArray(config.mac.target) && config.mac.target.some((t) => t.target === 'dmg'),
@@ -217,7 +217,7 @@ assert.equal(classifyDeepLink('http://example.com'), null, 'unknown scheme → n
 assert.equal(classifyDeepLink('not a url at all'), null, 'non-URI → null');
 
 {
-    // §47.4 / G145 — `xchain:` URIs are now parsed via `parseXchainUri`
+    // §47.4 / G145: `xchain:` URIs are now parsed via `parseXchainUri`
     // and `parsed` carries the intent shape instead of being null. The
     // renderer can act on the structured intent directly. A malformed
     // URI still falls back to `parsed: null` (covered below).
@@ -431,7 +431,7 @@ assert.ok(
 );
 assert.ok(
     /connect-src 'self'/.test(csp),
-    "connect-src stays 'self' — renderer itself never fetches from connect.trezor.io",
+    "connect-src stays 'self': renderer itself never fetches from connect.trezor.io",
 );
 
 // --- 8. REPRODUCIBLE_BUILDS.md sections -------------------------------
@@ -473,5 +473,5 @@ function makeFakeApp() {
 }
 
 console.log(
-    'OK — desktop packaging smoke (Step 19 §40.12 / §51: electron-builder config — appId, protocols, asar, reproducibility flags, mac/win/linux targets, env-driven signing, electron-updater generic provider at downloads.xchain.io; Tier-1/Tier-2 URI scheme registration — xchain always, bitcoin/litecoin/dogecoin opt-in; BIP21 classification of coin URIs, xchain: pass-through, malformed URI handling; electron-updater wiring — dev-mode short-circuit, event forwarding, error handling; main/index.js delegates to protocol.js + updater.js; Dockerfile with digest-pinned base + SHA256-pinned Node + UID-mapped user; build.sh + reproduce.sh with SOURCE_DATE_EPOCH derivation + frozen lockfile + SHA256 manifest; CSP frame-src allowlists connect.trezor.io; REPRODUCIBLE_BUILDS.md documents the verification protocol)',
+    'OK: desktop packaging smoke (Step 19 §40.12 / §51: electron-builder config (appId, protocols, asar, reproducibility flags, mac/win/linux targets, env-driven signing, electron-updater generic provider at downloads.xchain.io); Tier-1/Tier-2 URI scheme registration (xchain always, bitcoin/litecoin/dogecoin opt-in); BIP21 classification of coin URIs, xchain: pass-through, malformed URI handling; electron-updater wiring (dev-mode short-circuit, event forwarding, error handling); main/index.js delegates to protocol.js + updater.js; Dockerfile with digest-pinned base + SHA256-pinned Node + UID-mapped user; build.sh + reproduce.sh with SOURCE_DATE_EPOCH derivation + frozen lockfile + SHA256 manifest; CSP frame-src allowlists connect.trezor.io; REPRODUCIBLE_BUILDS.md documents the verification protocol)',
 );

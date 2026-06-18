@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Counterwallet 12-word legacy mnemonic — §15.2. Import-only support
+// Counterwallet 12-word legacy mnemonic (§15.2). Import-only support
 // for FreeWallet migrants. No new wallets are ever created in this
 // format; the BIP39 path in ./mnemonic.js is the sole generation
 // surface.
@@ -36,7 +36,7 @@ const WORD_INDEX = (() => {
     return m;
 })();
 
-// Mathematical modulo — matches the upstream `_mod` helper. Needed
+// Mathematical modulo: matches the upstream `_mod` helper. Needed
 // because `(w2 - w1) % n` in JS can be negative.
 const modMath = (a, b) => a - Math.floor(a / b) * b;
 
@@ -73,7 +73,7 @@ export function isValidCounterwalletMnemonic(mnemonic) {
  * Convert a Counterwallet mnemonic to the 16-byte seed (the raw bytes
  * that would be passed to BIP32 `HDKey.fromMasterSeed`). Note: this
  * intentionally returns *raw bytes*, not a BIP39-style 64-byte seed.
- * Counterwallet's seed derivation has no PBKDF2 stretching — the 32 hex
+ * Counterwallet's seed derivation has no PBKDF2 stretching. The 32 hex
  * characters from the word decoding are themselves the seed, decoded
  * from hex to 16 bytes.
  *
@@ -94,7 +94,7 @@ export function counterwalletMnemonicToSeedBytes(mnemonic) {
         const w3 = WORD_INDEX.get(words[3 * i + 2]);
         // x = w1 + n*(w2-w1 mod n) + n^2*(w3-w2 mod n)
         // Use BigInt so the intermediate (n*n*anything) doesn't exceed
-        // Number.MAX_SAFE_INTEGER (1626^2 * 1625 ≈ 4.3e9 — fits, but
+        // Number.MAX_SAFE_INTEGER (1626^2 * 1625 ≈ 4.3e9, fits, but
         // BigInt keeps the code obviously correct).
         const nb = BigInt(n);
         const x =

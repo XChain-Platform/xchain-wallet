@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// messageAction — convenience wrapper for the MESSAGE action (§41.7.3;
+// messageAction: convenience wrapper for the MESSAGE action (§41.7.3;
 // protocol docs: xchain-documentation/protocol/actions/MESSAGE.md).
 // Handles ECIES encryption before signing: looks up the recipient's
 // pubkey via the SDK explorer client, encrypts in-process, builds
@@ -17,15 +17,15 @@
 // When the recipient has no on-chain pubkey yet (no XChain tx from
 // that address is indexed), ECIES encryption is impossible. The
 // caller can fall back to MESSAGE v3 (plaintext) by passing
-// `method: null` — that skips the pubkey lookup and builds the
+// `method: null` skips the pubkey lookup and builds the
 // unencrypted format. The caller is responsible for presenting this
 // as a warning in the UI per spec §41.7.3.
 //
 // MESSAGE format summary (from xchain-sdk formats.js):
 //   v0: ECDH key-exchange request
 //   v1: ECDH key-exchange response
-//   v2: `VERSION|COIN|DESTINATION|ENCRYPTED_MESSAGE` — encrypted body
-//   v3: `VERSION|COIN|DESTINATION|PLAINTEXT_MESSAGE` — unencrypted
+//   v2: `VERSION|COIN|DESTINATION|ENCRYPTED_MESSAGE` (encrypted body)
+//   v3: `VERSION|COIN|DESTINATION|PLAINTEXT_MESSAGE` (unencrypted)
 //
 // Phase 3 Step 13 uses v2 (ECIES) or v3 (plaintext fallback); v0 and
 // v1 are ECDH session-setup and out of Phase 3 scope.
@@ -42,7 +42,7 @@ const PROTOCOL_COIN_TICKER = {
 export class PubkeyNotFoundError extends Error {
     /** @param {string} address */
     constructor(address) {
-        super(`messageAction: no public key indexed for ${address} — recipient must have sent at least one XChain transaction before you can send them an ECIES-encrypted message.`);
+        super(`messageAction: no public key indexed for ${address}. The recipient must have sent at least one XChain transaction before you can send them an ECIES-encrypted message.`);
         this.name = 'PubkeyNotFoundError';
         this.address = address;
     }
@@ -148,7 +148,7 @@ export async function messageAction(opts) {
 }
 
 /**
- * Pubkey query flow — wraps `sdk.getPublicKey`. Used by compose
+ * Pubkey query flow. Wraps `sdk.getPublicKey`. Used by compose
  * surfaces to preview whether a recipient address has an on-chain
  * pubkey before the user commits to the send.
  *

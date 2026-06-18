@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §37.2 / Cluster D FOLLOWUP 1 — Disconnect-site undo toast.
+// Smoke for §37.2 / Cluster D FOLLOWUP 1: Disconnect-site undo toast.
 //
 // Pins:
 //   - createBackgroundHost registers `sites.restore` (vault-only, validates

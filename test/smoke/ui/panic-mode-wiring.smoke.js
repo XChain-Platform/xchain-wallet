@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §26 Lock & Panic — Step 5 — G068 part 1 — sign-path
+// Smoke for §26 Lock & Panic, Step 5, G068 part 1: sign-path
 // gating + Settings → Safety wiring.
 
 import { strict as assert } from 'node:assert';
@@ -94,7 +94,7 @@ assert.match(
     'toggle relabelled as Auto-arm reservation',
 );
 
-// PanicModeRow must NOT be gated on settings.panicMode.enabled —
+// PanicModeRow must NOT be gated on settings.panicMode.enabled;
 // activation must always be available for emergencies.
 assert.equal(
     /settings\.panicMode\?\.enabled \? <PanicModeRow/.test(safetySrc),

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// §9 / G002 smoke — `@xchain-wallet/signers-ledger` standalone package.
+// §9 / G002 smoke: `@xchain-wallet/signers-ledger` standalone package.
 //
 // Mirrors signers-trezor-package.smoke.js. Asserts:
 //   1. packages/signers-ledger/ exists with a workspace package.json
@@ -17,8 +17,8 @@
 //      and have been REMOVED from packages/core/src/signers/.
 //   3. LedgerSigner.js reaches the shared Signer base via a relative
 //      cross-package path.
-//   4. core/src/signers/index.js still exports LedgerSigner — back-compat
-//      re-export — pointed at the new location via relative path.
+//   4. core/src/signers/index.js still exports LedgerSigner (back-compat
+//      re-export) pointed at the new location via relative path.
 //   5. The new package's `src/index.js` re-exports the canonical surface.
 
 import { strict as assert } from 'node:assert';
@@ -120,5 +120,5 @@ for (const sym of [
 }
 
 console.log(
-    'OK — signers-ledger package smoke (§9 / G002 standalone workspace package; LedgerSigner.js + ledgerFormat.js moved out of core; cross-package Signer import via relative path; @noble/hashes declared as a runtime dep; core back-compat re-export; canonical entry exposes LedgerSigner + helpers + ledgerFormat builders)',
+    'OK: signers-ledger package smoke (§9 / G002 standalone workspace package; LedgerSigner.js + ledgerFormat.js moved out of core; cross-package Signer import via relative path; @noble/hashes declared as a runtime dep; core back-compat re-export; canonical entry exposes LedgerSigner + helpers + ledgerFormat builders)',
 );

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Phase 3 Step 7 smoke — Open orders + cancel (§41.3.5).
+// Phase 3 Step 7 smoke: Open orders + cancel (§41.3.5).
 
 import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
@@ -39,5 +39,5 @@ assert.ok(/variant="danger"/.test(src),
     'Cancel button renders as danger variant');
 
 console.log(
-    'OK — open-orders smoke (OpenOrdersPanel §41.3.5 fetches getMarketOrders per wallet address; polls every 5s with visibilitychange pause; cancel path branches cancelOrder/cancelOrderHw on isHwSource behind SignCredentials; danger-variant Cancel button)',
+    'OK: open-orders smoke (OpenOrdersPanel §41.3.5 fetches getMarketOrders per wallet address; polls every 5s with visibilitychange pause; cancel path branches cancelOrder/cancelOrderHw on isHwSource behind SignCredentials; danger-variant Cancel button)',
 );

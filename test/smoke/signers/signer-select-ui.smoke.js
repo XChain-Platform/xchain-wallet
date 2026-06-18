@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §17.6 / G023 — SignerSelectForm + AddAccount/Receive
+// Smoke for §17.6 / G023: SignerSelectForm + AddAccount/Receive
 // integration + host-side `pickSignerFromRequest` helper.
 //
 // Verifies:
@@ -156,7 +156,7 @@ assert.ok(
     'receive.getAddress handler routes through pickSignerFromRequest',
 );
 
-// --- 5. Messaging surfaces — both shells expose listSigners --------------
+// --- 5. Messaging surfaces: both shells expose listSigners ---------------
 
 for (const [shell, msgPath] of [
     ['popup', join(ext, 'src', 'popup', 'messaging.js')],

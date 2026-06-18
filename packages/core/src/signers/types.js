@@ -8,8 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Shared JSDoc typedefs for the signer subsystem. No runtime exports
-// — this module exists so cross-file `@typedef` references resolve in
+// Shared JSDoc typedefs for the signer subsystem. No runtime exports.
+// This module exists so cross-file `@typedef` references resolve in
 // editors without each file redefining the shapes.
 //
 // Mirror of the normalized PSBT decomposition returned by

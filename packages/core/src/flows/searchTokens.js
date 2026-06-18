@@ -15,12 +15,12 @@
 //
 // Wraps xchain-sdk's `getTokens(query, 'token')`, which hits the
 // explorer's `/{COIN}/api/tokens/{QUERY}/token` endpoint. That endpoint
-// does a `LIKE '%QUERY%'` against the `index_tickers.tick` column —
+// does a `LIKE '%QUERY%'` against the `index_tickers.tick` column;
 // good enough for type-ahead today; if it gets slow we can swap to a
 // dedicated prefix endpoint without touching the renderer.
 //
 // Returns a flat, renderer-friendly list. Empty array on any failure
-// (network error, unconfigured SDK, dev-mock fallback) — the picker
+// (network error, unconfigured SDK, dev-mock fallback): the picker
 // just shows fewer rows rather than surfacing an error.
 
 /**

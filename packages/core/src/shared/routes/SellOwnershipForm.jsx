@@ -36,11 +36,11 @@ const PROTOCOL_COIN_TICKER = {
 };
 
 /**
- * Sell-ownership surface — lists a token's ownership (the asset name) for
+ * Sell-ownership surface: lists a token's ownership (the asset name) for
  * sale with GIVE_OWNERSHIP=1, via either mechanism:
- *   - ORDER — an open offer matched by a counterparty; native-coin payment
+ *   - ORDER: an open offer matched by a counterparty; native-coin payment
  *     settles via COINPAY, token payment settles atomically;
- *   - DISPENSER — an instant fixed-price buy (single-shot for ownership).
+ *   - DISPENSER: an instant fixed-price buy (single-shot for ownership).
  * Both take the same fields here; only the action + submit handler differ.
  * Either side of the price can be native coin (GET_TICK empty) or a token.
  *
@@ -134,7 +134,7 @@ export function SellOwnershipForm({ walletId, onBack, chainId, tick, initialFrom
         if (getMode === 'token') {
             const gt = getTick.trim().toUpperCase();
             if (gt && gt === coinTicker) {
-                return `Pick "Native coin" to sell for ${coinTicker} — the token field is for selling against another token.`;
+                return `Pick "Native coin" to sell for ${coinTicker}. The token field is for selling against another token.`;
             }
             if (gt && gt === tokenUpper) {
                 return 'The price token must differ from the token being sold.';
@@ -286,7 +286,7 @@ export function SellOwnershipForm({ walletId, onBack, chainId, tick, initialFrom
             </dl>
 
             <p className={styles.hint} style={{ marginTop: 0 }}>
-                You're selling the entire ownership of {tokenUpper} — single sale, no partial fills.
+                You're selling the entire ownership of {tokenUpper}. Single sale, no partial fills.
             </p>
 
             <div
@@ -314,8 +314,8 @@ export function SellOwnershipForm({ walletId, onBack, chainId, tick, initialFrom
             </div>
             <p className={styles.hint} style={{ marginTop: 0 }}>
                 {mechanism === 'order'
-                    ? 'Open order — anyone can take the offer at your price; cancel before it matches.'
-                    : 'Instant buy — a dispenser sells the name to the first buyer who pays your price.'}
+                    ? 'Open order: anyone can take the offer at your price; cancel before it matches.'
+                    : 'Instant buy: a dispenser sells the name to the first buyer who pays your price.'}
             </p>
 
             <div
@@ -389,7 +389,7 @@ export function SellOwnershipForm({ walletId, onBack, chainId, tick, initialFrom
             {fromAddress ? (
                 isWatcherMode ? (
                     <p className={styles.hint}>
-                        Watcher mode — this wallet will build an unsigned transaction. Sign it on your
+                        Watcher mode. This wallet will build an unsigned transaction. Sign it on your
                         Signer-mode wallet, then broadcast from a Full-mode wallet.
                     </p>
                 ) : (

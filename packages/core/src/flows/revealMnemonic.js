@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// revealMnemonic — §19.3. Decrypts the wallet's encrypted seed blob
+// revealMnemonic (§19.3). Decrypts the wallet's encrypted seed blob
 // and returns the BIP39 (or Counterwallet-legacy) mnemonic string. The
 // shell UI is responsible for the user-facing guardrails: tap-to-reveal,
 // auto-hide on blur, no clipboard write, mandatory password every time.
@@ -18,7 +18,7 @@
 // (12–24 space-separated words for BIP39; 12 words for Counterwallet
 // legacy; both formats are handled identically downstream).
 //
-// Wif-only wallets throw `NoMnemonicForWifOnlyError` — by definition
+// Wif-only wallets throw `NoMnemonicForWifOnlyError` because by definition
 // they have no mnemonic to reveal.
 
 import { decryptWalletSeed } from '../crypto/walletBlob.js';

@@ -8,13 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// signerBridge — background-side registry of live transport functions
+// signerBridge: background-side registry of live transport functions
 // keyed by signerId. Populated by the renderer (popup / full-screen /
 // web) when it opens a long-lived `chrome.runtime.connect({ name:
 // 'signer-bridge' })` port and posts a `signer.register` message
 // naming its live signer id.
 //
-// The physical port wiring is not wired up yet — see
+// The physical port wiring is not wired up yet. See
 // `renderer/signer-bridge.js` (stub) + `background/signerBridge.js`
 // port listener (stub) TODO. Until then, the registry stays empty
 // and `action.send.hw` rejects with "signer bridge not connected".
@@ -47,7 +47,7 @@
 //     'signer.sign.response'
 //
 // When a port disconnects (tab closed, wallet locked), the registry
-// drops all transports that were registered by that port — any
+// drops all transports that were registered by that port; any
 // in-flight sign request rejects with "signer bridge disconnected".
 
 /** @type {Map<string, import('@xchain-wallet/core/signers/RemoteSigner.js').RemoteSignerTransport>} */
@@ -97,7 +97,7 @@ export function clearAll() {
     transports.clear();
 }
 
-/** Diagnostic — registered signer ids. */
+/** Diagnostic: registered signer ids. */
 export function registeredIds() {
     return Array.from(transports.keys());
 }

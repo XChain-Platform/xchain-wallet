@@ -8,27 +8,27 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Electron preload — the single bridge between renderer and main.
+// Electron preload: the single bridge between renderer and main.
 //
 // §9.3.2: "keys never cross the contextBridge IPC boundary into the
 // renderer." This preload upholds that by exposing exactly three narrow
 // APIs via contextBridge. Nothing about Node, the filesystem, Electron
 // internals, or native modules is exposed to the renderer.
 //
-//   - `xchainWalletBridge.sendMessage(message)` — request/response for
+//   - `xchainWalletBridge.sendMessage(message)`: request/response for
 //     every MessageHost call (unlock, sendToken, etc.). Mirrors the
 //     extension popup + web shell wire format.
 //
-//   - `xchainWalletSignerBridge.{postMessage,onMessage,onDisconnect}`
-//     — duplex port for the hardware-signer RPC. Renderer-hosted
+//   - `xchainWalletSignerBridge.{postMessage,onMessage,onDisconnect}`:
+//     duplex port for the hardware-signer RPC. Renderer-hosted
 //     Trezor/Ledger signers expose their status + sign methods back
 //     to the main process over this channel. Shaped as a neutral
 //     {postMessage, onMessage} adapter so the desktop renderer +
 //     main reuse the same `signerPortProtocol` helpers the extension
 //     uses over `chrome.runtime.connect` ports.
 //
-//   - `xchainWalletWindow.openDetached({ initialView, initialContext })`
-//     — §24.6 / Cluster Y FOLLOWUP 4 detach-pending-tx. The renderer
+//   - `xchainWalletWindow.openDetached({ initialView, initialContext })`:
+//     §24.6 / Cluster Y FOLLOWUP 4 detach-pending-tx. The renderer
 //     asks main to spawn a fresh BrowserWindow pre-routed to the
 //     specified view + context (e.g. a pending tx detail).
 

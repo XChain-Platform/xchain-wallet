@@ -8,12 +8,12 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// originAutoApprove — §48.6 / G151. Helpers that decide whether a
+// originAutoApprove (§48.6 / G151): Helpers that decide whether a
 // dApp bridge `connect` request from a given origin should be
 // auto-approved without prompting the user.
 //
 // Scope: connect-only. Sign requests (signMessage, signAction,
-// signPsbt, signIn) ALWAYS go through the approval prompt — the
+// signPsbt, signIn) ALWAYS go through the approval prompt: the
 // password is required to unwrap the seed and we deliberately never
 // cache it. Auto-approve is a developer ergonomics affordance, not a
 // security override.
@@ -22,7 +22,7 @@
 //   - settings.developerMode === true
 //   - settings.autoApproveLocalhost === true (v2-tolerant optional field)
 //   - origin parses as `localhost`, `127.0.0.1`, or `[::1]` on http(s),
-//     any port (Vite dev servers spin up random ports — we don't pin one).
+//     any port (Vite dev servers spin up random ports; we don't pin one).
 //
 // Anything else returns false. The caller falls back to the normal
 // approvals prompt.

@@ -8,8 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Unit: core/signerFactories/ledger — makeLedgerFactory DI builder.
-// No real Ledger transport — mocked entirely.
+// Unit: core/signerFactories/ledger: makeLedgerFactory DI builder.
+// No real Ledger transport; mocked entirely.
 
 import { describe, it, expect, vi } from 'vitest';
 import { makeLedgerFactory } from '../../../packages/core/src/signerFactories/ledger.js';

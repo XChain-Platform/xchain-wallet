@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for Phase 4 — Step 16 of 23 — Cross-chain templates
+// Smoke for Phase 4, Step 16 of 23: Cross-chain templates
 // (§42.8.4).
 
 import { strict as assert } from 'node:assert';
@@ -133,5 +133,5 @@ for (const [shell, appPath] of [
 }
 
 console.log(
-    'OK — cross-chain templates smoke (validator + 3 bundled reference templates: launch-token-with-metadata / bridge-token-pair / cross-chain-airdrop + CrossChainTemplates list route + ParallelComposer initialRows prefill prop + 3-shell App.jsx prefill plumbing + ActionsMenu entry)',
+    'OK: cross-chain templates smoke (validator + 3 bundled reference templates: launch-token-with-metadata / bridge-token-pair / cross-chain-airdrop + CrossChainTemplates list route + ParallelComposer initialRows prefill prop + 3-shell App.jsx prefill plumbing + ActionsMenu entry)',
 );

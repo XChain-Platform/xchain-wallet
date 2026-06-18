@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §12 / Cluster S FOLLOWUP 2 — persistent throttle state
+// Smoke for §12 / Cluster S FOLLOWUP 2: persistent throttle state
 // across service-worker restarts.
 //
 // Pins:
@@ -163,7 +163,7 @@ assert.match(
     'host hydrates the throttle via seed() after load',
 );
 
-// Don't reference the default/SDK-default constants — only the export shape.
+// Don't reference the default/SDK-default constants; only the export shape.
 void SIGN_THROTTLE_DEFAULT_BURST;
 
 console.log('sign-throttle-persistence smoke OK');

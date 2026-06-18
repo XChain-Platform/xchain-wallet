@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for Phase 4 — Step 12 of 23 — History route + §23.5
+// Smoke for Phase 4, Step 12 of 23: History route + §23.5
 // cross-chain thread rendering.
 
 import { strict as assert } from 'node:assert';
@@ -127,5 +127,5 @@ for (const [shell, appPath] of [
 }
 
 console.log(
-    'OK — history smoke (History route §23 + §23.5 cross-chain threading: 🔗 badges + vertical connector + dual-side detail card + Cross-chain filter + linksForAddress flow + bg handler + 3-shell messaging + Home prop + 3-shell App.jsx sub-route)',
+    'OK: history smoke (History route §23 + §23.5 cross-chain threading: 🔗 badges + vertical connector + dual-side detail card + Cross-chain filter + linksForAddress flow + bg handler + 3-shell messaging + Home prop + 3-shell App.jsx sub-route)',
 );

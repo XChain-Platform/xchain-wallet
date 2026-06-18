@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Fuzz: iconForLabel is a TOTAL function — for any input, it returns
+// Fuzz: iconForLabel is a TOTAL function: for any input, it returns
 // either a function (icon component) or null. It must never throw.
 
 import { describe, it } from 'vitest';
@@ -18,7 +18,7 @@ import { iconForLabel } from '../../../packages/core/src/ui/icons/index.jsx';
 const RUNS = Number(process.env.FUZZ_ITERATIONS || 200);
 
 describe('fuzz/icon-for-label', () => {
-    it('returns null or a function for any input — never throws', () => {
+    it('returns null or a function for any input, never throws', () => {
         fc.assert(
             fc.property(fc.anything(), (input) => {
                 const out = iconForLabel(input);

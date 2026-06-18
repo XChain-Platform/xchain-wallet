@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// SignerPool — keeps unlocked SoftwareSigners in memory for the
+// SignerPool: keeps unlocked SoftwareSigners in memory for the
 // lifetime of an unlocked session. Populated once at `wallet.unlock`
 // using the password the user just typed; subsequent HD-derive ops
 // (account.create, receive.getAddress, action.send for software
@@ -76,7 +76,7 @@ export class SignerPool {
                 this._signers.set(w.id, signer);
             } catch {
                 // Bad password for this wallet, or other unlock
-                // failure — skip it. The op-level fallback (password
+                // failure; skip it. The op-level fallback (password
                 // prompt) will surface the real error if the user
                 // tries to use that wallet.
             }

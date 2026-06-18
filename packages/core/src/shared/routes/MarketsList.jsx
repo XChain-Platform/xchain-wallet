@@ -33,7 +33,7 @@ function nativeTickerFor(descriptor) {
 }
 
 /**
- * Markets list — §41.2.
+ * Markets list (§41.2).
  *
  * Flow: the user picks a coin or token via the picker (`onChangeAsset`).
  * Once a `selectedAsset` is set, the page shows every market pair on
@@ -122,8 +122,8 @@ export function MarketsList({
 
     const displayMarkets = useMemo(() => {
         const selTick = selectedAsset?.tick.toUpperCase() || '';
-        // Side of each pair the user didn't pick — the "other" side
-        // we display as the row's primary ticker. Used for filtering.
+        // Side of each pair the user didn't pick (the "other" side)
+        // displayed as the row's primary ticker. Used for filtering.
         const otherOf = (m) => (m.tick2.toUpperCase() === selTick ? m.tick1
             : m.tick1.toUpperCase() === selTick ? m.tick2
             : m.tick1);
@@ -374,7 +374,7 @@ export function MarketsList({
 function MarketRow({ chainId, selectedTick, tick1, tick2, lastPrice, change24h, depth, starred, onOpen, onToggleStar, first }) {
     const descriptor = chainRegistry.get(chainId);
     const selUpper = String(selectedTick || '').toUpperCase();
-    // Show the icon for the OTHER side of the pair — the side the user
+    // Show the icon for the OTHER side of the pair, the side the user
     // didn't pick. Falls back to tick1 if neither side matches.
     const otherTick = tick2.toUpperCase() === selUpper ? tick1
         : tick1.toUpperCase() === selUpper ? tick2
@@ -383,7 +383,7 @@ function MarketRow({ chainId, selectedTick, tick1, tick2, lastPrice, change24h, 
     const changeColor = Number.isFinite(changeNum)
         ? (changeNum > 0 ? 'var(--xc-success, #16a34a)' : changeNum < 0 ? 'var(--xc-danger, #dc2626)' : 'var(--xc-text-muted)')
         : 'var(--xc-text-muted)';
-    // Depth intensity — same accent hue, more saturated background as
+    // Depth intensity: same accent hue, more saturated background as
     // depth grows. Five tiers tuned to feel meaningful from 1 → 30+.
     const depthPct = typeof depth === 'number' && Number.isFinite(depth)
         ? (depth <= 1 ? 8

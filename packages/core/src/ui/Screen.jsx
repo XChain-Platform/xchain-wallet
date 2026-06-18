@@ -15,13 +15,13 @@ const MAIN_ID = 'xc-main';
 /**
  * Top-level layout wrapper.
  *
- *   `variant="small"` — narrow viewport, fixed 360×600 (Chrome
+ *   `variant="small"`: narrow viewport, fixed 360×600 (Chrome
  *                        extension popup, mobile browser, narrow
  *                        desktop window).
- *   `variant="full"`  — wide viewport, flexible (extension full-screen
+ *   `variant="full"`:  wide viewport, flexible (extension full-screen
  *                        tab, desktop browser, tablet landscape).
  *
- * §53.2 / G168 — header / main / footer use the right semantic elements
+ * §53.2 / G168: header / main / footer use the right semantic elements
  * so screen readers can navigate by landmark instead of having to walk
  * the entire DOM each screen.
  *

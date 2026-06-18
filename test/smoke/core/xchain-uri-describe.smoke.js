@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// §47 / Cluster L FOLLOWUP 5 smoke — describeXchainIntent localized labels.
+// §47 / Cluster L FOLLOWUP 5 smoke: describeXchainIntent localized labels.
 //
 // `describeXchainIntent(intent, { i18n })` renders a human-readable sentence
 // for a parsed `xchain:` URI. Used by confirmation prompts and deep-link
@@ -146,7 +146,7 @@ assert.equal(
 );
 assert.equal(
     describeXchainIntent({ kind: 'send', address: '14characteraddr' }, { i18n }),
-    // 15 chars — gets truncated
+    // 15 chars, gets truncated
     'Send to 14char…addr',
 );
 
@@ -207,7 +207,7 @@ assert.equal(
 );
 
 // BIP21 amount without tick (tick resolved from chain registry by the
-// caller, not here) degrades to the sendTo template — the caller's
+// caller, not here) degrades to the sendTo template; the caller's
 // confirmation surface still shows the raw amount field separately.
 const bip21Uri = 'xchain:bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh?amount=0.5';
 assert.equal(
@@ -250,5 +250,5 @@ for (const key of requiredKeys) {
 }
 
 console.log(
-    "OK — xchain-uri-describe smoke (Cluster L FOLLOWUP 5 — describeXchainIntent renders 13 send/receive variants based on intent fields; address middle-truncated head6/tail4 over 14 chars; locale switch picks up translated copy with en fallback; deps.i18n.t required; round-trips through parseXchainUri for path-style + BIP21 + garbage)",
+    "OK: xchain-uri-describe smoke (Cluster L FOLLOWUP 5: describeXchainIntent renders 13 send/receive variants based on intent fields; address middle-truncated head6/tail4 over 14 chars; locale switch picks up translated copy with en fallback; deps.i18n.t required; round-trips through parseXchainUri for path-style + BIP21 + garbage)",
 );

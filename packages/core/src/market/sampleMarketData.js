@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// TEMP — designer/dev sample feed for the market detail panels.
+// TEMP: designer/dev sample feed for the market detail panels.
 //
 // Produces a deterministic but plausible orderbook + match history for
 // any (tick1, tick2) pair so the chart, orderbook, and recent-trades
@@ -28,7 +28,7 @@ function hashTicks(tick1, tick2) {
     return h >>> 0;
 }
 
-// mulberry32 — small seeded RNG
+// mulberry32: small seeded RNG
 function makeRng(seed) {
     let s = seed >>> 0;
     return () => {

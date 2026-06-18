@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §29 Send/Receive — Step 4 — Send.jsx wires Max + fiat
+// Smoke for §29 Send/Receive, Step 4; Send.jsx wires Max + fiat
 // toggle + real fee estimate into the simulator.
 
 import { strict as assert } from 'node:assert';

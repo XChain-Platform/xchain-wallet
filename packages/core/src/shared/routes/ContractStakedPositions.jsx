@@ -14,14 +14,14 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './History.module.css';
 
 /**
- * ContractStakedPositions — unified "your locked positions" view for contract-targeted stakes.
+ * ContractStakedPositions: unified "your locked positions" view for contract-targeted stakes.
  *
  * Surfaces every contract_stakes + contract_unstakes row owned by any of the wallet's
  * addresses on the given chain, grouped by contract. For each position the user can see:
  *   - Target contract index
  *   - Token + amount staked
  *   - Cooldown duration (from the contract metadata)
- *   - Slash destination (prominent — per the spec's UX requirement)
+ *   - Slash destination (prominent, per the spec's UX requirement)
  *   - Active stake vs. cooldown-in-progress state
  *   - Per-position actions: Unstake (if active), Delegate (rotate key)
  *
@@ -67,7 +67,7 @@ export function ContractStakedPositions({ walletId, chainId, onBack, onStakeToCo
 
                 // Fetch stakes / unstakes / slash events for each wallet address.
                 // Backed by flows/stakingQueries.js wrappers; until the explorer/SDK
-                // surface lands, these messaging calls will throw — handled below.
+                // surface lands, these messaging calls will throw (handled below).
                 const allStakes = [];
                 const allUnstakes = [];
                 const allSlash = [];
@@ -177,7 +177,7 @@ export function ContractStakedPositions({ walletId, chainId, onBack, onStakeToCo
                             {g.stakes.map((row, i) => (
                                 <div key={String(row.action_index) + ':' + i} style={{ marginBottom: '0.35rem' }}>
                                     <strong>{row.tick}:</strong> {row.amount}
-                                    {' '}— pubkey <code style={{ fontSize: '0.75rem' }}>
+                                    {', pubkey: '}<code style={{ fontSize: '0.75rem' }}>
                                         {String(row.signing_pubkey || '').slice(0, 16)}…
                                     </code>
                                     {' '}from <AddressText address={String(row._ownerAddress)} />
@@ -190,7 +190,7 @@ export function ContractStakedPositions({ walletId, chainId, onBack, onStakeToCo
                             {g.unstakes.map((row, i) => (
                                 <div key={'u:' + String(row.action_index) + ':' + i} style={{ marginBottom: '0.35rem', color: '#9a6c00' }}>
                                     <strong>In cooldown:</strong> {row.amount} {row.tick}
-                                    {' '}— releases at block {String(row.cooldown_end_block)}
+                                    {', releases at block '}{String(row.cooldown_end_block)}
                                     {' '}(slashable until then)
                                 </div>
                             ))}

@@ -144,7 +144,7 @@ function AppInner() {
         setFormReturnView(null);
         setUnlockedView(target);
     };
-    // Prefill helpers — surface (chainId, tick) to forms when launched
+    // Prefill helpers: surface (chainId, tick) to forms when launched
     // from ManageToken so the LockedTokenContext chip renders instead
     // of the ticker / chain picker.
     const fromManage = formReturnView === 'manage-token';
@@ -184,7 +184,7 @@ function AppInner() {
     const [resumeAirdropId, setResumeAirdropId] = useState(
         /** @type {string | null} */ (null),
     );
-    // §17.7 / G027 — staged address handed to <ViewPrivateKey> when the
+    // §17.7 / G027: staged address handed to <ViewPrivateKey> when the
     // user picks "Show key" from the addresses list.
     const [privateKeyAddress, setPrivateKeyAddress] = useState(
         /** @type {any | null} */ (null),
@@ -195,7 +195,7 @@ function AppInner() {
     const [composePrefill, setComposePrefill] = useState(
         /** @type {{ chainId?: string, fromAddressId?: string, toAddress?: string } | null} */ (null),
     );
-    // §47 / Cluster L FOLLOWUP 2 — `web+xchain:` deep links arriving via
+    // §47 / Cluster L FOLLOWUP 2: `web+xchain:` deep links arriving via
     // the manifest's `protocol_handlers` route to popup.html?uri=<uri>.
     // Parsed on mount, prefill goes into the Send route, then the param
     // is stripped via history.replaceState.
@@ -262,7 +262,7 @@ function AppInner() {
 
     useEffect(() => { refresh(); }, [refresh]);
 
-    // §47 / Cluster L FOLLOWUP 2 — consume `?uri=` from popup.html's
+    // §47 / Cluster L FOLLOWUP 2: consume `?uri=` from popup.html's
     // location.search when the popup boots. Manifest's
     // `protocol_handlers` block routes `web+xchain:` clicks here. Strip
     // the param via history.replaceState so a re-open or refresh doesn't
@@ -350,11 +350,11 @@ function AppInner() {
         if (activeWalletId && id) writeActiveAccount(activeWalletId, id);
     };
 
-    // §42.2 Contracts nav — show only when a BTC wallet address exists
+    // §42.2 Contracts nav: show only when a BTC wallet address exists
     // (VM actions are BTC-only at launch per BITCOIN_ACTIONS).
     const hasBtcAddress = useBtcAddressesPresent(activeWalletId);
 
-    // §24 / G055 — resume the user's last view on unlock (persisted
+    // §24 / G055: resume the user's last view on unlock (persisted
     // per-wallet in localStorage). Restricted to context-free views;
     // anything that needs a prefilled state object falls through to
     // Home. See `lastViewMemory.RESUMABLE_VIEWS` for the set.
@@ -1526,7 +1526,7 @@ function buildActionEntries({
         {
             id: 'issue',
             label: 'Issue token',
-            description: 'Advanced ISSUE form — every field exposed (§40.2).',
+            description: 'Advanced ISSUE form with every field exposed (§40.2).',
             onSelect: onIssue,
         },
         {
@@ -1538,13 +1538,13 @@ function buildActionEntries({
         {
             id: 'destroy',
             label: 'Destroy',
-            description: 'Burn part of your balance — irreversible (§40.4).',
+            description: 'Burn part of your balance (irreversible, §40.4).',
             onSelect: onDestroy,
         },
         {
             id: 'lock',
             label: 'Lock supply',
-            description: 'Freeze supply + minting for a token you own — permanent (§40.5).',
+            description: 'Freeze supply + minting for a token you own (permanent, §40.5).',
             onSelect: onLock,
         },
         {
@@ -1574,7 +1574,7 @@ function buildActionEntries({
         {
             id: 'dispensers-list',
             label: 'My dispensers',
-            description: 'Manage dispensers you have opened — view + cancel (§40.7.1).',
+            description: 'Manage dispensers you have opened: view + cancel (§40.7.1).',
             onSelect: onMyDispensers,
         },
         {
@@ -1592,7 +1592,7 @@ function buildActionEntries({
         {
             id: 'airdrop',
             label: 'Airdrop tokens',
-            description: 'Distribute a token to a pasted or uploaded list of addresses — signs a LIST then an AIRDROP (§40.9).',
+            description: 'Distribute a token to a pasted or uploaded list of addresses; signs a LIST then an AIRDROP (§40.9).',
             onSelect: onAirdrop,
         },
         {
@@ -1604,7 +1604,7 @@ function buildActionEntries({
         {
             id: 'swap',
             label: 'Swap tokens',
-            description: 'Atomic token-pair swap — no native coin, no COINPAY follow-up (§41.5).',
+            description: 'Atomic token-pair swap with no native coin and no COINPAY follow-up (§41.5).',
             onSelect: onSwap,
         },
         {
@@ -1616,7 +1616,7 @@ function buildActionEntries({
         {
             id: 'parallel',
             label: 'Parallel cross-chain actions',
-            description: 'Compose multiple independent actions across any chains and sign them sequentially (§42.8.2). Not atomic — failures do not roll back.',
+            description: 'Compose multiple independent actions across any chains and sign them sequentially (§42.8.2). Not atomic; failures do not roll back.',
             onSelect: onParallel,
         },
         {
@@ -1646,7 +1646,7 @@ function buildActionEntries({
         {
             id: 'contacts',
             label: 'Contacts',
-            description: 'Local address book — label counterparties, quick-compose to saved recipients (§41.7.4).',
+            description: 'Local address book: label counterparties, quick-compose to saved recipients (§41.7.4).',
             onSelect: onContacts,
         },
         {
@@ -1670,7 +1670,7 @@ function buildActionEntries({
         {
             id: 'advanced',
             label: 'Advanced action',
-            description: 'Submit any action the SDK supports — power-user surface for ADDRESS / CALLBACK / SLEEP / raw MESSAGE (§40.10).',
+            description: 'Submit any action the SDK supports. Power-user surface for ADDRESS / CALLBACK / SLEEP / raw MESSAGE (§40.10).',
             onSelect: onAdvanced,
         },
         {

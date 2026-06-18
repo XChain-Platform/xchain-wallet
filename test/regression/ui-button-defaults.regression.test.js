@@ -8,14 +8,14 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Regression suite — UI button defaults.
+// Regression suite: UI button defaults.
 //
-//   [P1] 2026-04-25 — Secondary buttons rendered with dark text on a
+//   [P1] 2026-04-25: Secondary buttons rendered with dark text on a
 //        light surface, making them look non-functional. Fix: every
 //        variant now uses #FFFFFF text on a coloured fill; ghost
 //        gained a slate fill so its white text is legible.
 //
-//   [P1] 2026-04-25 — Buttons could wrap to two lines under tight
+//   [P1] 2026-04-25: Buttons could wrap to two lines under tight
 //        widths (e.g., the popup viewport). Fix: `white-space: nowrap`
 //        on the base .btn class.
 

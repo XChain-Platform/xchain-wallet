@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §29 Send/Receive — Step 1 — recentDestinations helper.
+// Smoke for §29 Send/Receive, Step 1: recentDestinations helper.
 
 import { strict as assert } from 'node:assert';
 import {
@@ -77,7 +77,7 @@ const historyRows = [
     { action: 'SEND', destination: 'bc1qnew', timestamp: 5000 },
     { action: 'SEND', destination: 'bc1qmid', timestamp: 3000 },
     { action: 'SEND', destination: 'bc1qold', timestamp: 1500 },
-    { action: 'ISSUE', tick: 'XCP', timestamp: 9000 }, // ignored — not a send
+    { action: 'ISSUE', tick: 'XCP', timestamp: 9000 }, // ignored (not a send)
     { action: 'SEND', DESTINATION: 'bc1qcaps', timestamp: 4000 }, // case variant
     { action: 'SEND', recipient: 'bc1qrecipient', timestamp: 2000 }, // alt field
 ];

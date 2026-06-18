@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §44 Fee UX — Step 4 — async fetchNativeSendFeeTiers.
+// Smoke for §44 Fee UX, Step 4: async fetchNativeSendFeeTiers.
 
 import { strict as assert } from 'node:assert';
 import { fetchNativeSendFeeTiers } from '../../../packages/core/src/flows/feeEstimate.js';

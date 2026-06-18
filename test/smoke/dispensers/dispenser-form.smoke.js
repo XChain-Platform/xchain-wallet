@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for Phase 2 — Step 21 (piece 7a) — DISPENSER authoring form
+// Smoke for Phase 2: Step 21 (piece 7a): DISPENSER authoring form
 // (§40.7.1).
 //
 // Asserts:
@@ -129,7 +129,7 @@ assert.ok(/VERSION:\s*'0'/.test(src), 'DispenserForm pins VERSION=0 (create)');
 assert.ok(/GIVE_COIN\b/.test(src), 'DispenserForm sets GIVE_COIN');
 assert.ok(/GET_COIN\b/.test(src), 'DispenserForm sets GET_COIN');
 assert.ok(/PROTOCOL_COIN_TICKER/.test(src), 'DispenserForm maps descriptor.coin → protocol ticker');
-// GET_TICK should NOT be assigned anywhere in the composer — the §40.7.1
+// GET_TICK should NOT be assigned anywhere in the composer: the §40.7.1
 // primary lane is coin-paid (empty GET_TICK). The SDK validator from
 // 1.8.1 treats that as a valid coin-paid create.
 assert.ok(
@@ -214,7 +214,7 @@ assert.ok(
 // --- 8. Decoder coverage ----------------------------------------------
 
 {
-    // v0 — coin-paid (primary §40.7.1 lane; empty GET_TICK)
+    // v0: coin-paid (primary §40.7.1 lane; empty GET_TICK)
     const v0 = decoder.decodeAction({
         action: 'DISPENSER',
         params: {
@@ -238,7 +238,7 @@ assert.ok(
         'v0 coin-paid does not warn about ambiguous payment',
     );
 
-    // v0 — escrow < give warning
+    // v0: escrow < give warning
     const v0small = decoder.decodeAction({
         action: 'DISPENSER',
         params: {
@@ -252,7 +252,7 @@ assert.ok(
         'v0 warns when escrow < give',
     );
 
-    // v0 — oracle without FIAT_CODE warning
+    // v0: oracle without FIAT_CODE warning
     const v0bareOracle = decoder.decodeAction({
         action: 'DISPENSER',
         params: {
@@ -267,7 +267,7 @@ assert.ok(
         'v0 warns when oracle set without FIAT_CODE',
     );
 
-    // v1 — Cancel
+    // v1: Cancel
     const v1 = decoder.decodeAction({
         action: 'DISPENSER',
         params: { VERSION: '1', DISPENSER_ACTION_INDEX: '1234' },
@@ -279,7 +279,7 @@ assert.ok(
         'v1 warns about close delay',
     );
 
-    // v2 — Edit
+    // v2: Edit
     const v2 = decoder.decodeAction({
         action: 'DISPENSER',
         params: { VERSION: '2', DISPENSER_ACTION_INDEX: '1234', GIVE_ESCROW: '100' },
@@ -367,5 +367,5 @@ for (const [shell, appPath] of [
 }
 
 console.log(
-    'OK — dispenser form smoke (DispenserForm §40.7.1 + dispenserAction core flow + action.dispenser handler + three messaging helpers + ActionsMenu entry + popup/web/desktop wiring + decoder coverage for v0 coin-paid + v0 oracle-warn + v0 low-escrow-warn + v1 cancel + v2 edit + MEMO pipe/semicolon warn)',
+    'OK: dispenser form smoke (DispenserForm §40.7.1 + dispenserAction core flow + action.dispenser handler + three messaging helpers + ActionsMenu entry + popup/web/desktop wiring + decoder coverage for v0 coin-paid + v0 oracle-warn + v0 low-escrow-warn + v1 cancel + v2 edit + MEMO pipe/semicolon warn)',
 );

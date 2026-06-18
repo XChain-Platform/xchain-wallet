@@ -8,10 +8,10 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// resolveSigner — background-side helper that inspects an address (or
+// resolveSigner: background-side helper that inspects an address (or
 // address id) and figures out how it should be signed. Returns a
 // descriptor that tells the caller which code path to take rather
-// than constructing the signer itself — the background owns the
+// than constructing the signer itself. The background owns the
 // password (for software) and the transport function (for HW), so it
 // does the final construction.
 //
@@ -24,7 +24,7 @@
 //     SignerRecord for metadata (displayName, kind, model).
 //
 // Separating "which kind?" from "build it" keeps this helper pure
-// and testable — callers supply their own transport factory.
+// and testable. Callers supply their own transport factory.
 
 import { RemoteSigner } from '../signers/RemoteSigner.js';
 
@@ -59,7 +59,7 @@ export class SignerResolutionError extends Error {
  * pairing (§17.6) carry `source: 'trezor' | 'ledger'` and a
  * `signerId` pointing at the SignerRecord.
  *
- * Watch-only addresses are not signable — callers that reach this
+ * Watch-only addresses are not signable. Callers that reach this
  * helper on a watch-only path have a bug, so we throw loud.
  *
  * @param {Object} opts
@@ -75,7 +75,7 @@ export async function resolveSigner({ vault, address }) {
     const source = address.source;
     if (source === 'watch-only') {
         throw new SignerResolutionError(
-            `resolveSigner: address "${address.address}" is watch-only — no signer available`,
+            `resolveSigner: address "${address.address}" is watch-only (no signer available)`,
             { addressId: address.id, source },
         );
     }
@@ -112,7 +112,7 @@ export async function resolveSigner({ vault, address }) {
 
 /**
  * Construct a `RemoteSigner` for an HW descriptor. Separated from
- * `resolveSigner` so callers can inject the transport function — the
+ * `resolveSigner` so callers can inject the transport function. The
  * background owns the transport (it wraps a renderer-side messaging
  * channel), and tests swap it with a mock that drives a real
  * TrezorSigner / LedgerSigner directly.

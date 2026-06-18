@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Onboarding golden path — §39 Phase 1 delivery contract.
+// Onboarding golden path (§39 Phase 1 delivery contract).
 //
 // Exercises every state the in-page App.jsx can reach without the
 // real xchain-sdk bundled:
@@ -24,7 +24,7 @@
 
 import { expect, test } from '@playwright/test';
 
-// BIP39 test vector from SLIP-0039 spec — known-good 12-word phrase.
+// BIP39 test vector from SLIP-0039 spec (known-good 12-word phrase).
 const KNOWN_BIP39 =
     'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
 
@@ -55,7 +55,7 @@ test.describe('onboarding', () => {
         await page.getByLabel(/i have written down my recovery phrase/i).check();
         await page.getByRole('button', { name: 'Create wallet' }).click();
 
-        // Home — reached after KDF + vault save
+        // Home: reached after KDF + vault save
         await expect(
             page.getByRole('button', { name: 'Lock' }),
         ).toBeVisible({ timeout: 60_000 });
@@ -65,7 +65,7 @@ test.describe('onboarding', () => {
         await page.getByRole('button', { name: 'Lock' }).click();
         await expect(page.getByText(/wallet locked/i)).toBeVisible();
 
-        // Unlock round-trip — proves kdfParams persisted correctly
+        // Unlock round-trip: proves kdfParams persisted correctly
         await page.getByLabel('Password').fill('password1234');
         await page.getByRole('button', { name: 'Unlock' }).click();
         await expect(
@@ -116,7 +116,7 @@ test.describe('onboarding', () => {
             .getByRole('button', { name: 'Import wallet' })
             .click();
 
-        // 13 words — not a valid BIP39 count.
+        // 13 words: not a valid BIP39 count.
         await page.getByLabel('Recovery phrase').fill(
             'word '.repeat(13).trim(),
         );

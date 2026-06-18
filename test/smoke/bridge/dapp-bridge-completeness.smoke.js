@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §43 dApp Bridge completeness — Cluster F (G126 / G128 /
+// Smoke for §43 dApp Bridge completeness: Cluster F (G126 / G128 /
 // G129 / G130). The provider, content-script relay, background
 // handlers, and web-app extension banner all already exist; this
 // smoke pins their wiring so they don't quietly regress.
@@ -52,7 +52,7 @@ for (const method of [
         `xchainProvider exposes ${method}`,
     );
 }
-// Subscribe-side machinery is what makes on/off actually useful — the
+// Subscribe-side machinery is what makes on/off actually useful. The
 // provider must keep a listeners map and react to xchain-inject-event
 // messages from the content script.
 assert.ok(/listeners/.test(provider), 'xchainProvider keeps a listeners map');
@@ -84,7 +84,7 @@ for (const route of [
     const bare = new RegExp(`host\\.register\\(\\s*['"]${escaped}['"]`).test(handlers);
     assert.ok(wrapped || bare, `background registers ${route}`);
 }
-// Permission gating must run on the read methods — getAddresses /
+// Permission gating must run on the read methods: getAddresses /
 // getBalances / getActiveChains all sit behind requireSite.
 assert.ok(/requireSite/.test(handlers),
     'bridge handlers gate read methods behind requireSite');

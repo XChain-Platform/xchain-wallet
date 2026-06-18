@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §20 / G041 — Home.jsx signer-mode variant (Step 3 of 3).
+// Smoke for §20 / G041: Home.jsx signer-mode variant (Step 3 of 3).
 //
 // Pins:
 //   - Home.jsx imports WALLET_MODE_DEFAULT and derives `walletMode` /
@@ -23,8 +23,8 @@
 //     its prop is undefined.
 //   - Extension popup + web App.jsx pass `onSignPsbt` / `onSignMessage`
 //     / `onVerifySignature` through to Home. Desktop intentionally does
-//     not wire those props yet — the routes aren't implemented on that
-//     shell — so the CTAs render disabled (tracked as Cluster W FOLLOWUP).
+//     not wire those props yet because the routes aren't implemented on that
+//     shell, so the CTAs render disabled (tracked as Cluster W FOLLOWUP).
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';

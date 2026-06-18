@@ -8,16 +8,16 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// importMnemonic — §15.4. Import a user-supplied 12/24-word BIP39
+// importMnemonic (§15.4). Import a user-supplied 12/24-word BIP39
 // mnemonic, or a 12-word Counterwallet-legacy mnemonic (for FreeWallet
 // migration). Creates the Wallet + first Account + initial address per
 // active chain, matching the shape produced by createWallet so the two
 // paths are interchangeable downstream.
 //
 // Out of scope for this flow (separate §15.4 paths):
-//   - Single WIF import — produces a wallet with one imported-WIF
+//   - Single WIF import: produces a wallet with one imported-WIF
 //     address and no HD. Different schema shape, different flow.
-//   - .xchain-wallet encrypted backup file — decrypts to a full state,
+//   - .xchain-wallet encrypted backup file: decrypts to a full state,
 //     not a fresh wallet; restore rather than import.
 
 import { isValidBip39Mnemonic } from '../crypto/mnemonic.js';
@@ -30,7 +30,7 @@ import { persistHdWallet } from './_persistHdWallet.js';
 export class InvalidMnemonicError extends Error {
     constructor(format, errors) {
         super(
-            `importMnemonic: ${format} validation failed — ${errors.join('; ')}`,
+            `importMnemonic: ${format} validation failed (${errors.join('; ')})`,
         );
         this.name = 'InvalidMnemonicError';
         this.format = format;
@@ -41,7 +41,7 @@ export class InvalidMnemonicError extends Error {
 export class UnknownMnemonicFormatError extends Error {
     constructor() {
         super(
-            'importMnemonic: mnemonic did not validate as BIP39 or Counterwallet — check for typos or wrong wordlist',
+            'importMnemonic: mnemonic did not validate as BIP39 or Counterwallet; check for typos or wrong wordlist',
         );
         this.name = 'UnknownMnemonicFormatError';
     }
@@ -136,7 +136,7 @@ export async function importMnemonic({
 
     const normalized = normalizeMnemonic(mnemonic);
 
-    // Resolve format — explicit caller request takes precedence and is
+    // Resolve format: explicit caller request takes precedence and is
     // validated against the normalized input; otherwise auto-detect.
     let resolvedFormat;
     if (format) {
@@ -167,7 +167,7 @@ export async function importMnemonic({
     const resolvedOrigin = origin ?? DEFAULT_ORIGIN_BY_FORMAT[resolvedFormat];
 
     // Infer activeNetwork from the first chain when caller didn't supply
-    // one. Mirrors createWallet — see effectiveNetwork rationale there.
+    // one. Mirrors createWallet (see effectiveNetwork rationale there).
     const effectiveActiveNetwork = activeNetwork
         ?? chainRegistry.descriptorFor(activeChainIds[0])?.networkKind;
 

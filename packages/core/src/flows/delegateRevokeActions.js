@@ -10,10 +10,10 @@
 
 // DELEGATE composers (rotate + revoke) for the §42.7.2 delegation-lane
 // authoring surfaces. The wire-level DELEGATE action has four versions:
-//   v0 — capability rotate     (VERSION|NEW_SIGNING_PUBKEY)
-//   v1 — contract rotate       (VERSION|NEW_SIGNING_PUBKEY|TARGET_CONTRACT_INDEX|TICK)
-//   v2 — capability revoke     (VERSION|SIGNING_PUBKEY)
-//   v3 — contract revoke       (VERSION|SIGNING_PUBKEY|TARGET_CONTRACT_INDEX|TICK)
+//   v0: capability rotate     (VERSION|NEW_SIGNING_PUBKEY)
+//   v1: contract rotate       (VERSION|NEW_SIGNING_PUBKEY|TARGET_CONTRACT_INDEX|TICK)
+//   v2: capability revoke     (VERSION|SIGNING_PUBKEY)
+//   v3: contract revoke       (VERSION|SIGNING_PUBKEY|TARGET_CONTRACT_INDEX|TICK)
 // The capability variants (v0/v2) are exposed here as `delegateAction`
 // and `revokeDelegationAction` (the UI label for v2 stays "Revoke
 // delegation" for clarity even though both share the DELEGATE wire

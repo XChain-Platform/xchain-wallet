@@ -10,7 +10,7 @@
 
 // Lightweight hand-written validators. Each schema file composes these
 // into a `validate(record) -> { ok, errors }` function. Deliberately not
-// using a schema library — the runtime shape is stable, the check
+// using a schema library; the runtime shape is stable, the check
 // surface is small, and keeping this dep-free makes `core` portable to
 // any shell target.
 

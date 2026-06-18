@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Unit: schemas/connectedSite — createConnectedSite + validateConnectedSite.
+// Unit: schemas/connectedSite: createConnectedSite + validateConnectedSite.
 
 import { describe, it, expect } from 'vitest';
 import {
@@ -190,7 +190,7 @@ describe('validateConnectedSite', () => {
         expect(r.ok).toBe(true);
     });
 
-    it('rejects malformed session history entry — invalid timestamp', () => {
+    it('rejects malformed session history entry: invalid timestamp', () => {
         const cs = createConnectedSite(BASE_INPUT);
         const r = validateConnectedSite({
             ...cs,
@@ -199,7 +199,7 @@ describe('validateConnectedSite', () => {
         expect(r.ok).toBe(false);
     });
 
-    it('rejects malformed session history entry — empty action', () => {
+    it('rejects malformed session history entry: empty action', () => {
         const cs = createConnectedSite(BASE_INPUT);
         const r = validateConnectedSite({
             ...cs,
@@ -208,7 +208,7 @@ describe('validateConnectedSite', () => {
         expect(r.ok).toBe(false);
     });
 
-    it('rejects malformed session history entry — non-boolean approved', () => {
+    it('rejects malformed session history entry: non-boolean approved', () => {
         const cs = createConnectedSite(BASE_INPUT);
         const r = validateConnectedSite({
             ...cs,

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// §56.3 Pre-launch Step 5 — static a11y audit. Scans every .jsx file
+// §56.3 Pre-launch Step 5: static a11y audit. Scans every .jsx file
 // under packages/core/src/shared/ and packages/core/src/ui/ for the
 // common WCAG-AA gaps that mechanical inspection can catch:
 //
@@ -20,7 +20,7 @@
 //   6. <img onClick=…> without an interactive role.
 //
 // Designed to run from Node (no React render needed). The rules are
-// pattern-based and deliberately conservative — false positives are
+// pattern-based and deliberately conservative. False positives are
 // fixed by adding the missing attribute, false negatives are caught
 // by a future axe-core runtime pass when @axe-core/react lands.
 //
@@ -102,12 +102,12 @@ function stripJsxComments(src) {
 function exprHasStringLiteral(src) {
     // Inside a JSX expression `{...}`, accept any single-quoted /
     // double-quoted / template-literal-with-text string as a label
-    // — that's what the screen reader will announce.
+    // that's what the screen reader will announce.
     if (/'[^']{2,}'/.test(src)) return true;
     if (/"[^"]{2,}"/.test(src)) return true;
     if (/`[^`]{2,}`/.test(src)) return true;
-    // Bare identifier references — `{p.label}`, `{name}`,
-    // `{title}` — are almost always rendered text. False negatives
+    // Bare identifier references such as `{p.label}`, `{name}`,
+    // and `{title}` are almost always rendered text. False negatives
     // exist (e.g. `{styles.iconCls}`) but those are vanishingly rare
     // for direct button-child use.
     if (/^\{\s*[A-Za-z_$][A-Za-z0-9_$.]*\s*\}$/.test(src.trim())) return true;
@@ -116,7 +116,7 @@ function exprHasStringLiteral(src) {
 
 function findIdReferencedLabel(src, id) {
     // Scan for `<label htmlFor="${id}">…` anywhere in the file. A
-    // single match is enough — assistive tech only needs one label
+    // single match is enough; assistive tech only needs one label
     // association.
     const re = new RegExp(`<label[^>]*\\bhtmlFor\\s*=\\s*"${id}"`, 'i');
     return re.test(src);
@@ -125,7 +125,7 @@ function findIdReferencedLabel(src, id) {
 function fileHasAnyHtmlForLabel(src) {
     // Components that build their own htmlFor wiring with dynamic
     // ids (the wallet's <Input> primitive uses `useId()`) get a
-    // pass — we know the label↔input association is set up, just
+    // pass. We know the label↔input association is set up, just
     // not via a literal id we can match.
     return /<label[^>]*\bhtmlFor\s*=\s*\{/.test(src);
 }
@@ -204,7 +204,7 @@ function auditFile(file, rawSrc) {
                     file,
                     line: startLine,
                     rule: RULES.BUTTON_NEEDS_TEXT_OR_ARIA,
-                    message: 'self-closing <button> with no aria-label / title — icon-only button without an accessible name',
+                    message: 'self-closing <button> with no aria-label / title (icon-only button without an accessible name)',
                     snippet,
                 });
             } else if (!isSelfClose) {
@@ -217,7 +217,7 @@ function auditFile(file, rawSrc) {
                     const inner = after.slice(0, closeIdx).trim();
                     const hasStaticText = /[A-Za-z0-9]{2,}/.test(inner.replace(/\{[^}]*\}/g, ''));
                     // Look inside any expression braces for a string
-                    // literal — `{busy ? 'Loading…' : 'Save'}` counts
+                    // literal: `{busy ? 'Loading…' : 'Save'}` counts
                     // as labeled text.
                     const exprBlocks = inner.match(/\{[\s\S]*?\}/g) || [];
                     const hasDynamicText = exprBlocks.some(exprHasStringLiteral);

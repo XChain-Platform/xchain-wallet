@@ -8,9 +8,9 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// §24.6 / G057 smoke — desktop multi-window support.
+// §24.6 / G057 smoke: desktop multi-window support.
 //
-// Asserts (static-source level — Electron isn't booted in smokes):
+// Asserts (static-source level; Electron isn't booted in smokes):
 //   1. packages/desktop/main/index.js no longer holds a singleton
 //      `mainWindow`; instead a `windows` Set tracks every open
 //      BrowserWindow, and `liveWindows()` filters out destroyed ones.
@@ -93,5 +93,5 @@ assert.ok(/app\.on\('activate',\s*\(\)\s*=>\s*\{\s*if \(BrowserWindow\.getAllWin
     'app.activate (dock click on macOS) creates a window when none exist');
 
 console.log(
-    'OK — desktop-multi-window smoke (§24.6 / G057 windows Set replaces singleton mainWindow; createWindow factory + register-on-add / unregister-on-closed; File → New Window menu (Cmd/Ctrl+N) calls createWindow; deep-link forwarder + updater event multiplex over live windows; activate-hook reopens when none remain)',
+    'OK: desktop-multi-window smoke (§24.6 / G057 windows Set replaces singleton mainWindow; createWindow factory + register-on-add / unregister-on-closed; File > New Window menu (Cmd/Ctrl+N) calls createWindow; deep-link forwarder + updater event multiplex over live windows; activate-hook reopens when none remain)',
 );

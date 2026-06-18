@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Unit: LedgerSigner — all non-hardware-transport methods via a mocked app.
+// Unit: LedgerSigner: all non-hardware-transport methods via a mocked app.
 
 import { describe, it, expect, vi } from 'vitest';
 import {

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §35 Settings — schema v1 → v2 migration.
+// Smoke for §35 Settings: schema v1 to v2 migration.
 //
 // Adds reducedMotion, privacy.{blurOnBlur, labelsSurviveRestore},
 // grace.testSendThresholdSats, panicMode.enabled, backupReminders.

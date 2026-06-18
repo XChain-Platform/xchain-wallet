@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Native-coin price oracle — third-party data fetch for BTC / LTC / DOGE
+// Native-coin price oracle: third-party data fetch for BTC / LTC / DOGE
 // mainnet price, market cap, 24h change, and 7-day sparkline. Used by
 // the TokenDetail stats strip + chart.
 //
@@ -37,7 +37,7 @@ const SPOT_TTL_MS = 5 * 60 * 1000;
 const SPARKLINE_TTL_MS = 60 * 60 * 1000;
 
 // CoinGecko's coin-id namespace. All networks (mainnet / testnet /
-// regtest) map to the same id per coin — the price of Bitcoin is the
+// regtest) map to the same id per coin. The price of Bitcoin is the
 // same regardless of which network the user is currently holding it
 // on. Testnet / regtest coins are economically worthless, but it's
 // still useful to surface "what would this be worth on mainnet" on
@@ -72,7 +72,7 @@ const COINGECKO_ID_BY_CHAIN = {
 
 /**
  * Build a price-oracle instance. The instance holds its own in-memory
- * cache and never persists to disk — restart the SW / reload the
+ * cache and never persists to disk. Restarting the SW or reloading the
  * page = empty cache. That's a deliberate privacy choice; we don't
  * want yesterday's "what coin did the user check?" sitting in storage.
  *
@@ -103,7 +103,7 @@ export function createPriceOracle({ fetch, now = () => Date.now() }) {
         const out = {};
 
         // Partition: chains we know how to look up vs. chains we don't.
-        // Unknown chains get a null entry — UI shows "no price data".
+        // Unknown chains get a null entry; UI shows "no price data".
         const lookups = [];
         for (const id of chainIds) {
             const cgId = COINGECKO_ID_BY_CHAIN[id];
@@ -117,7 +117,7 @@ export function createPriceOracle({ fetch, now = () => Date.now() }) {
 
         // For each lookup, see if the cache is fresh enough for the
         // user's request. A request that needs sparkline data may be
-        // satisfied from a spot-only cached entry only partially — in
+        // satisfied from a spot-only cached entry only partially; in
         // that case we re-fetch to bring the sparkline in.
         const tNow = now();
         const stale = [];
@@ -132,7 +132,7 @@ export function createPriceOracle({ fetch, now = () => Date.now() }) {
         }
         if (stale.length === 0) return { prices: out };
 
-        // One batched spot call covers every stale chain — that's the
+        // One batched spot call covers every stale chain. That's the
         // whole privacy mitigation: one request, not N.
         let spotErr = null;
         try {
@@ -156,15 +156,15 @@ export function createPriceOracle({ fetch, now = () => Date.now() }) {
             }
         } catch (err) {
             spotErr = err && err.message ? String(err.message) : String(err);
-            // Surface cached entries even on failure — better than blank
-            // panels. New stale chains stay absent from `out`.
+            // Surface cached entries even on failure (better than blank
+            // panels). New stale chains stay absent from `out`.
             for (const lk of stale) {
                 const cached = cache.get(cacheKey(lk.chainId, vsCurrency));
                 if (cached) out[lk.chainId] = cached;
             }
         }
 
-        // Sparkline pass — only when requested, and only for chains
+        // Sparkline pass: only when requested, and only for chains
         // whose cached entry lacks sparkline data. Each chain costs one
         // request, so this is the expensive path; the 1-hour TTL means
         // a typical user pays it once per coin per session.

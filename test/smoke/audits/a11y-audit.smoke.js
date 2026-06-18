@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §56.3 Pre-launch Step 5 of 7 — Static a11y audit gate.
+// Smoke for §56.3 Pre-launch Step 5 of 7: Static a11y audit gate.
 // Asserts the audit script returns zero violations across every
 // shared route + UI primitive.
 
@@ -22,7 +22,7 @@ assert.equal(violations.length, 0,
     }`);
 
 console.log(
-    `OK — a11y audit smoke (0 violations across shared/ + ui/ JSX surfaces; ${
+    `OK: a11y audit smoke (0 violations across shared/ + ui/ JSX surfaces; ${
         violations.length === 0 ? 'rules: button label / img alt / input label / textarea label / div onClick role+tabIndex' : ''
     })`,
 );

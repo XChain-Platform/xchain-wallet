@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// PsbtSignForm — §30.4 / G088 (closes paired G042).
+// PsbtSignForm (§30.4 / G088, closes paired G042).
 //
 // User-initiated PSBT paste-in. Mirrors SignMessageForm's structure but
 // the input is an opaque PSBT (hex / base64) instead of a string.
@@ -24,16 +24,16 @@
 //      HW path: when the chosen address is sourced from a paired
 //      Trezor/Ledger (Cluster E FOLLOWUP 1), the password input is
 //      replaced with `<HwSignBlock>` and the form calls
-//      `messaging.signPsbtUserInitiatedHw` — background routes the
+//      `messaging.signPsbtUserInitiatedHw`; background routes the
 //      sign call through the renderer-hosted signer transport.
 //   4. Result page exposes the signed PSBT hex with a Copy button plus
-//      an in-wallet Broadcast button (Cluster W FOLLOWUP 1) — enough
+//      an in-wallet Broadcast button (Cluster W FOLLOWUP 1), enough
 //      to round-trip into Sparrow / Specter / Coldcard or finalize on
 //      this wallet directly.
 //
 // Out of scope for the V1 paste-in (tracked in FOLLOWUPS.md):
 //   - Multi-signer aware preview when the PSBT carries inputs the
-//     wallet doesn't own — current preview shows them but the sign
+//     wallet doesn't own. Current preview shows them but the sign
 //     attempt only covers wallet-owned inputs.
 //
 // QR scan (Cluster E FOLLOWUP 4): the "Scan PSBT" button mounts the
@@ -83,8 +83,8 @@ function arrayBufferToHex(buf) {
 const chainRegistry = registryLib.defaultRegistry();
 
 const HEX_RE = /^[0-9a-fA-F]+$/;
-// Base64-encoded PSBT magic bytes (`psbt` + 0xff) start with `cHNid` —
-// reliable signal that an opaque blob is a base64 PSBT rather than hex.
+// Base64-encoded PSBT magic bytes (`psbt` + 0xff) start with `cHNid`.
+// Reliable signal that an opaque blob is a base64 PSBT rather than hex.
 const BASE64_PSBT_PREFIX = 'cHNid';
 
 /**
@@ -92,9 +92,9 @@ const BASE64_PSBT_PREFIX = 'cHNid';
  * input doesn't look like a hex / base64 / BBQr PSBT.
  *
  * Recognized input forms:
- *   • hex          — 0-9a-f, even-length
- *   • base64       — starts with the standard PSBT magic ("cHNidP")
- *   • BBQr (H / B / Z) — single or multi-frame, line-separated
+ *   • hex: 0-9a-f, even-length
+ *   • base64: starts with the standard PSBT magic ("cHNidP")
+ *   • BBQr (H / B / Z): single or multi-frame, line-separated
  *                    (§20.4 / G043). All three encodings decode now;
  *                    UR is recognized but not yet supported and
  *                    surfaces null here so the caller's detector can
@@ -108,7 +108,7 @@ export function normalizePsbtInput(raw) {
     const trimmedRaw = raw.trim();
     if (trimmedRaw.length === 0) return null;
 
-    // BBQr — multi-frame inputs may arrive as one big paste with line
+    // BBQr: multi-frame inputs may arrive as one big paste with line
     // breaks between frames. Split on whitespace, detect each line,
     // and route to the BBQr decoder if every non-empty line looks
     // like a BBQr frame.
@@ -171,7 +171,7 @@ export function PsbtSignForm({ walletId, onBack }) {
     const [signedPsbtHex, setSignedPsbtHex] = useState(
         /** @type {string | null} */ (null),
     );
-    // §20 / G040 FOLLOWUP 1 — capture the broadcastable txHex + txid from
+    // §20 / G040 FOLLOWUP 1: capture the broadcastable txHex + txid from
     // the sign result so the result page can offer in-wallet broadcast.
     const [signedTxHex, setSignedTxHex] = useState(/** @type {string} */ (''));
     const [broadcastState, setBroadcastState] = useState(
@@ -182,7 +182,7 @@ export function PsbtSignForm({ walletId, onBack }) {
 
     const psbtHex = useMemo(() => normalizePsbtInput(pasted), [pasted]);
 
-    // §20.4 / G043 — when a paste fails to normalize, check whether it
+    // §20.4 / G043: when a paste fails to normalize, check whether it
     // matched a known-but-unsupported QR format (UR) so the error
     // message tells the user *why* instead of saying "not hex or
     // base64". The first non-empty token is enough for UR; BBQr-Z
@@ -196,8 +196,8 @@ export function PsbtSignForm({ walletId, onBack }) {
         const generic = describeUnsupportedFormat(fmt);
         if (generic) return generic;
         if (fmt === 'bbqr') {
-            // Format detected as BBQr but normalize returned null —
-            // most likely a malformed frame, an incomplete multi-frame
+            // Format detected as BBQr but normalize returned null.
+            // Most likely a malformed frame, an incomplete multi-frame
             // capture, or a future encoding the wallet doesn't yet
             // support. Try a one-frame decode to surface the
             // BBQr-specific error message.
@@ -208,7 +208,7 @@ export function PsbtSignForm({ walletId, onBack }) {
         return null;
     }, [pasted, psbtHex]);
 
-    // §20.4 / Cluster E FOLLOWUP 4 — camera QR scan. Two transports:
+    // §20.4 / Cluster E FOLLOWUP 4: camera QR scan. Two transports:
     //   • XCW: each frame accrues into an XCW collector; the wallet
     //     emits the SHA-256-verified PSBT bytes once the chunk count
     //     matches the announced total.
@@ -254,13 +254,13 @@ export function PsbtSignForm({ walletId, onBack }) {
             return;
         }
         if (fmt === 'hex' || fmt === 'base64') {
-            // A single QR carrying the whole PSBT — stop scanning.
+            // A single QR carrying the whole PSBT. Stop scanning.
             setPasted(text);
             setScannerOpen(false);
             if (error) setError(null);
             return;
         }
-        // Unrecognized / UR / unsupported — silently ignore so the
+        // Unrecognized / UR / unsupported: silently ignore so the
         // scanner can keep running without flashing errors at every
         // unrelated QR the camera spots.
     }, [error]);
@@ -271,7 +271,7 @@ export function PsbtSignForm({ walletId, onBack }) {
         if (scannerOpen) setXcwCollector(createXcwCollector());
     }, [scannerOpen]);
 
-    // .psbt file drop / picker — binary blobs are read as ArrayBuffer and
+    // .psbt file drop / picker: binary blobs are read as ArrayBuffer and
     // converted to hex before being routed through the same paste pipeline.
     const drop = useDropZone({
         accept: ['.psbt', 'application/octet-stream', 'text/plain'],
@@ -327,7 +327,7 @@ export function PsbtSignForm({ walletId, onBack }) {
     }, [chainId, addressesByChain]);
 
     // Re-parse whenever the user pastes a fresh blob OR switches chains
-    // — same PSBT under a different chain's SDK can produce different
+    // The same PSBT under a different chain's SDK can produce different
     // address attribution (e.g. testnet vs mainnet).
     useEffect(() => {
         if (!psbtHex || !chainId) {
@@ -376,7 +376,7 @@ export function PsbtSignForm({ walletId, onBack }) {
         [addressOptions, addressId],
     );
 
-    // §30.4 / Cluster E FOLLOWUP 1 — HW source detection. When the chosen
+    // §30.4 / Cluster E FOLLOWUP 1: HW source detection. When the chosen
     // signing address is paired to a Trezor / Ledger, the password input
     // is suppressed in favor of <HwSignBlock> and the submit branches to
     // the messaging.signPsbtUserInitiatedHw shim.
@@ -389,7 +389,7 @@ export function PsbtSignForm({ walletId, onBack }) {
     const onHwStatusChange = useCallback(({ status }) => {
         setHwStatus(status);
     }, []);
-    // Reset HW status whenever the chosen address changes — the previous
+    // Reset HW status whenever the chosen address changes. The previous
     // signer's poll loop tears down inside HwSignBlock, but this keeps
     // the parent's submit-gate from briefly inheriting the old status.
     useEffect(() => {
@@ -397,7 +397,7 @@ export function PsbtSignForm({ walletId, onBack }) {
     }, [addressId, isHwSource]);
 
     // How many of the parsed PSBT's inputs match the chosen signer? The
-    // sign attempt will cover exactly these — the rest stay unsigned for
+    // sign attempt will cover exactly these; the rest stay unsigned for
     // a downstream cosigner.
     const ownedInputCount = useMemo(() => {
         if (!decomposed || !selectedAddress) return 0;
@@ -556,7 +556,7 @@ export function PsbtSignForm({ walletId, onBack }) {
                         }}
                     >
                         <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>
-                            Broadcast — pending
+                            Broadcast (pending)
                         </span>
                         <span style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)' }}>
                             Transaction ID
@@ -733,7 +733,7 @@ export function PsbtSignForm({ walletId, onBack }) {
                         id="psbt-sign-paste"
                         value={pasted}
                         onChange={(e) => { setPasted(e.target.value); if (error) setError(null); }}
-                        placeholder="Paste transaction hex (70736274ff…) or base64 (cHNid…) — or drop a .psbt file"
+                        placeholder="Paste transaction hex (70736274ff…) or base64 (cHNid…), or drop a .psbt file"
                         rows={6}
                         aria-label="Unsigned transaction (hex or base64)"
                         style={{
@@ -827,7 +827,7 @@ export function PsbtSignForm({ walletId, onBack }) {
                 </div>
             ) : signerReady ? (
                 <p style={{ margin: 'var(--xc-space-2) 0 0', display: 'flex', alignItems: 'center', gap: 'var(--xc-space-1)', fontSize: 'var(--xc-text-sm)', color: 'var(--xc-text-muted)' }}>
-                    <span aria-hidden="true">🔓</span> Wallet unlocked — no password needed.
+                    <span aria-hidden="true">🔓</span> Wallet unlocked. No password needed.
                 </p>
             ) : (
                 <Input

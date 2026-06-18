@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Wallet record — §11.3.1. Persists one entry per HD seed (or imported
+// Wallet record (§11.3.1). Persists one entry per HD seed (or imported
 // mnemonic / WIF-only wallet). Encrypted seed material is stored with the
 // record; the master key that decrypts it is derived from the user's
 // password via Argon2id (§11.4).
@@ -75,7 +75,7 @@ export const WALLET_FORMATS = /** @type {const} */ ([
  * @property {string} encryptedSeed   base64 ciphertext
  * @property {KdfParams} kdfParams
  * @property {ImportedKey[]} importedKeys
- * @property {import('./multisigConfig.js').MultisigConfig[]} multisigs   §22 — multiple per wallet (BTC-only at launch)
+ * @property {import('./multisigConfig.js').MultisigConfig[]} multisigs   §22: multiple per wallet (BTC-only at launch)
  */
 
 /**

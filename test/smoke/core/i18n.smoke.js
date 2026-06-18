@@ -11,7 +11,7 @@
 // Smoke test for Batch 5 piece 17 (i18n scaffold).
 //
 // Covers:
-//   1. Dictionary completeness — every key a live screen references
+//   1. Dictionary completeness: every key a live screen references
 //      exists in en.js. Catches accidental inline-string drift.
 //   2. t() lookup, interpolation, missing-key fallback.
 //   3. format() pure substitution.
@@ -77,7 +77,7 @@ for (const key of requiredKeys) {
 }
 
 // No duplicate values that would hint at copy-paste errors (relaxed
-// check — only flags 2+ keys that are exactly the same sentence).
+// check: only flags 2+ keys that are exactly the same sentence).
 const counts = {};
 for (const [key, val] of Object.entries(en)) {
     counts[val] = (counts[val] || []);
@@ -102,13 +102,13 @@ assert.equal(
 );
 assert.equal(
     t('home.balanceUnavailable', { reason: 'SDK not wired' }),
-    'Balance unavailable — SDK not wired',
+    'Balance unavailable: SDK not wired',
 );
 
 // Missing vars render literally so translators can spot them.
 assert.equal(
     t('home.balanceUnavailable'),
-    'Balance unavailable — {reason}',
+    'Balance unavailable: {reason}',
 );
 
 // Unknown keys return the key (so devs see missing-string tokens).
@@ -169,5 +169,5 @@ assert.ok(
 );
 
 console.log(
-    `OK — i18n smoke (${Object.keys(en).length} en keys, lookup/interpolate/fallback, ${availableLocales().length} locales registered, subscribe round-trip)`,
+    `OK: i18n smoke (${Object.keys(en).length} en keys, lookup/interpolate/fallback, ${availableLocales().length} locales registered, subscribe round-trip)`,
 );

@@ -8,11 +8,11 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Market query flows — §41.2 + §41.3. Passthroughs to the SDK's
+// Market query flows: §41.2 + §41.3. Passthroughs to the SDK's
 // explorer-client methods for the DEX surfaces. Single-chain read-
 // only queries; no vault, no signing.
 //
-// All methods return whatever the explorer returns — the wallet
+// All methods return whatever the explorer returns. The wallet
 // renders what's present and tolerates missing fields (indexer
 // state varies, especially for newer markets).
 
@@ -34,7 +34,7 @@ export async function getMarkets({ sdkRegistry, chainId, tick }) {
 }
 
 /**
- * Fetch the summary for a specific market — last price, 24h change,
+ * Fetch the summary for a specific market (last price, 24h change,
  * cumulative depth. Used for watchlist row hydration + the market
  * detail header.
  *
@@ -126,7 +126,7 @@ export async function swapsForToken({ sdkRegistry, chainId, tick, opts }) {
 }
 
 /**
- * Recent on-chain history for a token — every action that mentions
+ * Recent on-chain history for a token: every action that mentions
  * the tick. Powers §40.5 ManageToken's Activity tab.
  *
  * @param {SdkCtx & { tick: string, opts?: object }} params
@@ -140,7 +140,7 @@ export async function historyForToken({ sdkRegistry, chainId, tick, opts }) {
 }
 
 /**
- * Genesis (ISSUE) action for a token — the first issuance row, which
+ * Genesis (ISSUE) action for a token: the first issuance row, which
  * carries the creator address, originating block, and tx hash. Used
  * by ManageToken's Genesis sub-section.
  *

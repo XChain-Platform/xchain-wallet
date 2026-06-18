@@ -23,15 +23,15 @@ import styles from './ActionsMenu.module.css';
 const chainRegistry = registryLib.defaultRegistry();
 
 /**
- * "My dispensers" — §40.7.1 / §40.7.2 owner-facing list view.
+ * "My dispensers": §40.7.1 / §40.7.2 owner-facing list view.
  *
  * Loads every dispenser this wallet's addresses have opened, grouped by
  * chain. Each entry links to DispenserDetail for management (cancel /
  * edit). Explorer-side data is still thin (no live escrow balance / fill
- * count) — the row surfaces what's available and defers live state to
+ * count); the row surfaces what's available and defers live state to
  * the detail page.
  *
- * Indexer TODO at `xchain-explorer/src/db.js` `getDispensers()` — once
+ * Indexer TODO at `xchain-explorer/src/db.js` `getDispensers()`: once
  * escrow balance + dispense count land, this component can surface
  * "remaining fills" inline; for now that detail waits for the detail
  * page.
@@ -61,7 +61,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onB
         /** @type {Record<string, { loading: boolean, rows: any[], error: string | null }>} */ ({}),
     );
 
-    // Phase 1 — load the wallet's addresses so we know which chains to
+    // Phase 1: load the wallet's addresses so we know which chains to
     // query and which source addresses to union over.
     useEffect(() => {
         let cancelled = false;
@@ -91,7 +91,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onB
         return map;
     }, [addressesByChain]);
 
-    // Phase 2 — for each chain with addresses, fan out one explorer
+    // Phase 2: for each chain with addresses, fan out one explorer
     // query per address and merge the results. A per-chain error
     // surfaces inline; other chains keep loading.
     useEffect(() => {

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Cluster H FOLLOWUP 2 — image-QR decode for the ImportWallet
+// Cluster H FOLLOWUP 2: image-QR decode for the ImportWallet
 // drop-zone. v0.173.0's mnemonic dropzone rejected anything that
 // wasn't `text/*` or `.txt` / `.asc`. This sweep extends the dropzone
 // to recognise PNG / JPEG image drops, render them to an off-screen
@@ -68,9 +68,9 @@ assert.ok(/new globalThis\.BarcodeDetector\(\{ formats: \['qr_code'\] \}\)/.test
 assert.ok(/URL\.revokeObjectURL\(url\)/.test(importSrc),
     'decodeImageQrFile releases the object URL in finally');
 
-// 6. Image dimensions are guarded — a 0×0 PNG would otherwise raise
+// 6. Image dimensions are guarded: a 0x0 PNG would otherwise raise
 //    InvalidStateError on the canvas paint.
 assert.ok(/canvas\.width === 0 \|\| canvas\.height === 0/.test(importSrc),
     'decodeImageQrFile rejects 0×0 images before painting');
 
-console.log('OK — ImportWallet image-QR drop branch (PNG / JPEG)');
+console.log('OK: ImportWallet image-QR drop branch (PNG / JPEG)');

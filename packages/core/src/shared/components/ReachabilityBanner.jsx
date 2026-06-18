@@ -8,19 +8,19 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// ReachabilityBanner — §49.1 / §49.2 / G152.
+// ReachabilityBanner: §49.1 / §49.2 / G152.
 //
 // Mounted near the app root above the route surface. Hidden when the
 // last reachability poll reported `'normal'`; renders a status banner
 // when the wallet is in degraded or offline mode. The banner itself
-// drives no UI gating — features that need encoder/hub already disable
+// drives no UI gating; features that need encoder/hub already disable
 // themselves with their own per-feature affordances. The banner is the
 // "you're not getting fresh data" notice the spec calls out.
 //
 // Polls via `useReachability` so a single network round-trip per
 // `intervalMs` services every banner / staleness label / etc. that
 // shares this hook (the hook returns identical state to every caller
-// once Messaging caches kick in — until then each mount probes
+// once Messaging caches kick in; until then each mount probes
 // independently; that's tolerable given typical mount counts).
 
 import { useReachability } from '../hooks/useReachability.js';

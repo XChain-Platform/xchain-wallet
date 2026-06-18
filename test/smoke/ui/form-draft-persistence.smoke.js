@@ -85,4 +85,4 @@ assert.ok(!/draft\.save[\s\S]{0,200}password/.test(sigSrc),
 assert.ok(/draft\.clear\(\)/.test(sigSrc),
     'SignMessageForm clears the draft after a successful sign');
 
-console.log('OK — useFormDraft + Send / SignMessageForm wiring smoke');
+console.log('OK: useFormDraft + Send / SignMessageForm wiring smoke');

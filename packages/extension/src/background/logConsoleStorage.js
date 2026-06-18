@@ -8,13 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// logConsoleStorage — §48.5 / Cluster Q FOLLOWUP 5.
+// logConsoleStorage (§48.5 / Cluster Q FOLLOWUP 5).
 //
 // Persistence layer for the logConsole ring buffer so a service-worker /
 // renderer crash doesn't wipe the diagnostic context the dApp Bridge,
 // signer, vault, and encoder emissions accrued in the seconds before the
 // crash. Without this, a user filing a bug report after a hang gets a
-// dump that's been cleared to bare-metal — exactly when the recent
+// dump that's been cleared to bare-metal: exactly when the recent
 // emissions matter most.
 //
 // Mirrors the broadcastQueueStorage / signThrottleStorage pattern:
@@ -29,7 +29,7 @@
 // corrupt persisted blob can't crash the background process at boot.
 //
 // Source whitelist: enforced upstream by `logConsole.attachMirror`'s
-// default `sourceAllow` predicate. This adapter is dumb storage —
+// default `sourceAllow` predicate. This adapter is dumb storage:
 // whatever the mirror passes in, we persist.
 
 const STORAGE_KEY = 'xchain.logConsole';
@@ -122,7 +122,7 @@ function localStorageAdapter() {
                     JSON.stringify({ entries: coerceEntries(entries) }),
                 );
             } catch (_e) {
-                // Quota / privacy mode — tolerate so the live buffer stays
+                // Quota / privacy mode: tolerate so the live buffer stays
                 // serviceable.
             }
         },
@@ -135,7 +135,7 @@ function localStorageAdapter() {
 const ALLOWED_LEVELS = new Set(['log', 'info', 'warn', 'error']);
 
 /**
- * Defensive coerce — only entries with the canonical shape survive.
+ * Defensive coerce: only entries with the canonical shape survive.
  * Accepts either a raw array or an envelope `{ entries: LogEntry[] }`.
  *
  * @param {unknown} v

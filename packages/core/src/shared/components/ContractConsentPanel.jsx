@@ -14,10 +14,10 @@ import {
 } from '../utils/contractConsentLabels.js';
 
 /**
- * Phase F — inline consent disclosure for the EXECUTE / DEPOSIT /
+ * Phase F: inline consent disclosure for the EXECUTE / DEPOSIT /
  * WITHDRAW review screens.
  *
- * Renders a FRAGMENT of `<dt>/<dd>` pairs — NOT a standalone block — so
+ * Renders a FRAGMENT of `<dt>/<dd>` pairs (NOT a standalone block), so
  * the caller drops it straight into its existing review `<dl>` after
  * the last action-specific row (operator decision: consent shown inline
  * in the review, not as a separate stage). To inherit the caller's
@@ -42,7 +42,7 @@ export function ContractConsentPanel({ manifest, labelClassName, valueClassName 
     const permissions = manifest?.permissions ?? null;
     const maxTakeBps = manifest?.maxTakeBps ?? null;
 
-    // Undeclared manifest — soft caution, no hard block.
+    // Undeclared manifest: soft caution, no hard block.
     if (permissions === null) {
         return (
             <>
@@ -69,7 +69,7 @@ export function ContractConsentPanel({ manifest, labelClassName, valueClassName 
                         ))}
                     </ul>
                 ) : (
-                    'Nothing — this contract declared it can take no actions on your behalf.'
+                    'Nothing: this contract declared it can take no actions on your behalf.'
                 )}
             </dd>
             <dt className={labelClassName}>Max fee it can take</dt>

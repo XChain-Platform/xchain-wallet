@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// useDeveloperMode — convenience accessor that returns the live
+// useDeveloperMode: convenience accessor that returns the live
 // `settings.developerMode` flag. Returns `false` while settings are
 // loading or unavailable so caller logic that gates feature reveal
 // (regtest chains, raw PSBT inspector, custom-endpoint UI) defaults

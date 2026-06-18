@@ -8,13 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §37 / Cluster P FOLLOWUP 6 — form-draft retention surfaced
+// Smoke for §37 / Cluster P FOLLOWUP 6: form-draft retention surfaced
 // in Settings → Privacy.
 //
 // Pins:
 //   - schemas/settings.js exports FORM_DRAFT_TTL_OFF / _1H / _24H / _7D /
 //     _DEFAULT / _OPTIONS constants and validates privacy.formDraftTtlMs
-//     against the options list (v2-tolerant — undefined OK, anything
+//     against the options list (v2-tolerant: undefined OK, anything
 //     outside the allowed set rejects).
 //   - useFormDraft accepts ttlMs=0 as a kill switch: load() returns null +
 //     evicts any persisted entry, save() no-ops, clear() still works.
