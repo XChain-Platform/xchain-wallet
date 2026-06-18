@@ -29,20 +29,20 @@ import styles from './IssueTokenForm.module.css';
 const chainRegistry = registryLib.defaultRegistry();
 
 /**
- * Dispenser detail page — §40.7.1 management surface for a single
+ * Dispenser detail page (§40.7.1): management surface for a single
  * dispenser. Step 22a surfaces:
  *
  *   - Static metadata (rate, give/get coins + ticks, creator, memo,
  *     block + status) pulled via `dispensers.byActionIndex`.
  *   - Recent dispense events (fills) via `dispenses.query` with
- *     type='source' scoped to the dispenser's source address — the
+ *     type='source' scoped to the dispenser's source address (the
  *     explorer doesn't yet have a by-dispenser-action-index dispense
- *     query.
+ *     query).
  *   - For owners (source address is one of the wallet's addresses),
  *     a "Cancel dispenser" button that runs Step 21's v1 lane via
  *     `messaging.dispenserAction` with a password re-prompt.
  *
- * Live escrow balance + remaining-fills counts are deferred — the
+ * Live escrow balance + remaining-fills counts are deferred; the
  * indexer surface doesn't expose them yet (see xchain-explorer/src/
  * db.js getDispensers TODO).
  *
@@ -95,7 +95,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     const descriptor = chainRegistry.get(chainId);
 
     // Load the dispenser action + wallet addresses (to detect ownership)
-    // in parallel. Recent dispenses come on a best-effort basis —
+    // in parallel. Recent dispenses come on a best-effort basis;
     // failure there still lets the user see the dispenser metadata.
     useEffect(() => {
         let cancelled = false;
@@ -196,11 +196,10 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     //     broadcasts through the standard pipeline.
     //   - Coin-paid (dispenser.get_coin set, dispenser.get_tick empty):
     //     triggered by a bare native-coin payment to the dispenser
-    //     address — "no XChain action needed from the buyer" per
-    //     DISPENSER.md. The wallet doesn't yet have a bare-coin-send
-    //     path, so this lane renders a pay-here instruction panel that
-    //     works with any native coin wallet (including this one, via
-    //     future native-send infrastructure).
+    //     address per DISPENSER.md ("no XChain action needed from the buyer").
+    //     The wallet doesn't yet have a bare-coin-send path, so this lane
+    //     renders a pay-here instruction panel that works with any native
+    //     coin wallet (including this one, via future native-send infra).
     const getTick = dispenser?.get_tick || '';
     const getCoin = dispenser?.get_coin || '';
     const getAmount = dispenser?.get_amount;
@@ -223,7 +222,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         if (!Number.isFinite(base)) return null;
         // Protocol `GET_AMOUNT` is a string; multiplying with floats is
         // precision-risky for small satoshi fractions, but the detail
-        // page is display-only — downstream SEND composition sends the
+        // page is display-only. Downstream SEND composition sends the
         // exact stringified value and relies on the SDK for precision.
         return (base * fillsNum).toString();
     }, [getAmount, fillsNum]);
@@ -241,7 +240,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             setCopied(label);
             setTimeout(() => setCopied(null), 1500);
         } catch {
-            /* swallow — older browsers or locked-down contexts */
+            /* swallow; older browsers or locked-down contexts */
         }
     }
 
@@ -411,7 +410,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         return wrap(
             <form onSubmit={handleBuy} noValidate>
                 <p className={styles.summary}>
-                    Buy {fillsNum} fill{fillsNum === 1 ? '' : 's'} — pay {totalPayAmount} {getTick}
+                    Buy {fillsNum} fill{fillsNum === 1 ? '' : 's'}: pay {totalPayAmount} {getTick}
                     {' '}→ receive ~{totalReceive} {giveTick}
                 </p>
                 <dl className={styles.detailsList}>
@@ -435,7 +434,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 <p className={styles.hint}>
                     The dispenser triggers when this SEND confirms. If the dispenser closes
                     or runs out before confirmation, the payment reaches the creator but
-                    no {giveTick} is released — an inherent risk of UTXO-chain buys.
+                    no {giveTick} is released. This is an inherent risk of UTXO-chain buys.
                 </p>
                 <SignCredentials
                         unlocked={signerReady}
@@ -564,7 +563,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     </>
                 ) : null}
                 <dt className={styles.detailsLabel}>Status</dt>
-                <dd className={styles.detailsValue}>{String(dispenser?.status || '—')}</dd>
+                <dd className={styles.detailsValue}>{String(dispenser?.status || 'unknown')}</dd>
                 {dispenser?.block_index ? (
                     <>
                         <dt className={styles.detailsLabel}>Opened at block</dt>
@@ -651,7 +650,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 <section style={{ marginTop: '1rem', padding: '0.75rem', border: '1px solid var(--xc-border)', borderRadius: '4px' }}>
                     <p className={styles.successLabel}>Pay to buy</p>
                     <p className={styles.hint}>
-                        This dispenser accepts bare {getCoin} payments — any {getCoin} wallet
+                        This dispenser accepts bare {getCoin} payments. Any {getCoin} wallet
                         can trigger a fill. Send exactly {getAmount} {getCoin} per fill to
                         the dispenser address.
                     </p>
@@ -715,7 +714,7 @@ function DetailRow({ label, value }) {
 }
 
 function rateLabel(row) {
-    if (!row) return '—';
+    if (!row) return 'unknown';
     const give = `${row.give_amount ?? '?'} ${row.give_tick || '?'}`;
     const coin = row.get_coin || '';
     const tick = row.get_tick || '';

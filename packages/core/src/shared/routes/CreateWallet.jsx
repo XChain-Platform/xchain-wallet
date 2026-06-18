@@ -23,22 +23,22 @@ const MIN_PASSWORD_LENGTH = 8;
 /**
  * Multi-stage create-wallet flow (§15.3 + §19.2).
  *
- *   stage = 'password'  — name + password + confirm
+ *   stage = 'password'  - name + password + confirm
  *           ↓ (generate mnemonic in-memory)
- *   stage = 'mnemonic'  — display + "I've saved it" checkbox
- *           ↓ (persist via importMnemonic — same code path as real import)
- *   stage = 'persisting'— show a spinner while Argon2id KDF runs
- *           ↓ (onCreated refreshes App → state becomes unlocked → Home)
+ *   stage = 'mnemonic'  - display + "I've saved it" checkbox
+ *           ↓ (persist via importMnemonic, same code path as real import)
+ *   stage = 'persisting'- show a spinner while Argon2id KDF runs
+ *           ↓ (onCreated refreshes App -> state becomes unlocked -> Home)
  *
  * Routing the persist through `importMnemonic` (rather than a separate
  * `createWallet` flow) means the generated mnemonic is only committed
- * AFTER the user confirms they've saved it — a user who closes the tab
+ * AFTER the user confirms they've saved it. A user who closes the tab
  * / popup during the display stage leaves no vault behind.
  *
  * @param {object} props
  * @param {() => void} props.onBack
  * @param {() => void} props.onCreated
- * @param {'fresh' | 'add'} [props.mode]   'fresh' → first wallet (pre-host `wallet.import`); 'add' → adds to an open vault (`wallet.add.import`). Defaults to 'fresh'.
+ * @param {'fresh' | 'add'} [props.mode]   'fresh' = first wallet (pre-host `wallet.import`); 'add' = adds to an open vault (`wallet.add.import`). Defaults to 'fresh'.
  */
 export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
     const { messaging, shell } = useMessaging();
@@ -48,10 +48,10 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
     const [stage, setStage] = useState(
         /** @type {'password'|'mnemonic'|'verify'|'persisting'|'ads-consent'} */ ('password'),
     );
-    // §19.2 / G033 — verification quiz state. `quizPositions` is a sorted
+    // §19.2 / G033: verification quiz state. `quizPositions` is a sorted
     // list of 1-based word indices the user must type back; `quizAnswers`
     // is keyed by that index. Computed once when the user clicks
-    // "Verify" — re-renders shouldn't reshuffle.
+    // "Verify" so re-renders don't reshuffle.
     const [quizPositions, setQuizPositions] = useState(/** @type {number[]} */ ([]));
     const [quizAnswers, setQuizAnswers] = useState(/** @type {Record<number, string>} */ ({}));
     const [quizError, setQuizError] = useState(/** @type {string | null} */ (null));
@@ -60,9 +60,9 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
     const [name, setName] = useState('Main Wallet');
     const [password, setPassword] = useState('');
     const [confirm, setConfirm] = useState('');
-    // §15.1 — 12-word default, 24-word opt-in. 12 → 128-bit entropy, 24 → 256-bit.
+    // §15.1: 12-word default, 24-word opt-in. 12 words = 128-bit entropy, 24 = 256-bit.
     const [wordCount, setWordCount] = useState(/** @type {12 | 24} */ (12));
-    // §15.6 — optional 25th-word BIP39 passphrase. Empty string means "not used".
+    // §15.6: optional 25th-word BIP39 passphrase. Empty string means "not used".
     const [showPassphrase, setShowPassphrase] = useState(false);
     const [bip39Passphrase, setBip39Passphrase] = useState('');
     const [bip39PassphraseConfirm, setBip39PassphraseConfirm] = useState('');
@@ -127,7 +127,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
     }
 
     // pickQuizPositions lives in `shared/utils/pickQuizPositions.js`
-    // — see Cluster H FOLLOWUP 6 for the targetCount-scaling rationale.
+    // (see Cluster H FOLLOWUP 6 for the targetCount-scaling rationale).
 
     function handleStartVerify() {
         if (!mnemonic || !saved) return;
@@ -180,16 +180,16 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                 const r = await messaging.importMnemonic({ password, mnemonic, name, bip39Passphrase: passphraseArg });
                 createdWalletId = r?.wallet?.id || r?.walletId || null;
             }
-            // §19.7 / G034 — record that the user just verified the seed
+            // §19.7 / G034: record that the user just verified the seed
             // via the §19.2 word-quiz, so Home's BackupReminderCard knows
             // not to nag them.
             if (createdWalletId) {
                 try { flowsLib.markBackupVerified(createdWalletId); } catch { /* best-effort */ }
             }
-            // §36.1 ADS consent — one-time screen during wallet
+            // §36.1 ADS consent: one-time screen during wallet
             // creation. ADS_DEFAULT_ENABLED is true so "Enable" is a
             // no-op write; "Decline" persists ads.enabled = false. The
-            // user can flip in Settings → ADS afterwards either way.
+            // user can flip in Settings -> ADS afterwards either way.
             setStage('ads-consent');
         } catch (err) {
             setPersistError(err?.message || 'Failed to create wallet.');
@@ -243,8 +243,8 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                     </h1>
                     <p className={subtitleClass}>
                         The wallet can add a small donation to each transaction you send,
-                        helping fund XChain Platform development. This is entirely optional —
-                        you can change it any time in Settings → Automatic Donation System.
+                        helping fund XChain Platform development. This is entirely optional;
+                        you can change it any time in Settings &rarr; Automatic Donation System.
                     </p>
                 </header>
                 <ul style={{
@@ -259,7 +259,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                 }}>
                     <li>Default: 1 sat per transaction (sent when accumulated &gt; 1,000 sats)</li>
                     <li>Configurable per chain (Bitcoin / Litecoin / Dogecoin)</li>
-                    <li>No donation line on sign screens — runs invisibly after setup</li>
+                    <li>No donation line on sign screens; runs invisibly after setup</li>
                 </ul>
                 {adsError ? (
                     <div role="alert" className={styles.error}>{adsError}</div>
@@ -304,7 +304,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                     </h1>
                     <p className={subtitleClass}>
                         {isFull
-                            ? "Type the words at the positions below. We'll check them against the phrase you just wrote down — there's no second chance to copy it after this step."
+                            ? "Type the words at the positions below. We'll check them against the phrase you just wrote down. There's no second chance to copy it after this step."
                             : 'Type the words at these positions to confirm.'}
                     </p>
                 </header>
@@ -377,7 +377,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                     </h1>
                     <p className={subtitleClass}>
                         {isFull
-                            ? `These ${wordCount === 24 ? 'twenty-four' : 'twelve'} words are the ONLY way to recover your wallet if you lose access to this device. Write them down on paper and store them somewhere safe — never type them into a website, email, or photo.`
+                            ? `These ${wordCount === 24 ? 'twenty-four' : 'twelve'} words are the ONLY way to recover your wallet if you lose access to this device. Write them down on paper and store them somewhere safe. Never type them into a website, email, or photo.`
                             : `Write these ${wordCount} words down and store them somewhere safe. They're the only way to recover your wallet.`}
                     </p>
                 </header>
@@ -391,8 +391,8 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                     />
                     <span className={styles.copyHint} aria-live="polite">
                         {clipboardCopied
-                            ? 'Copied — clipboard auto-clears in 60 s. Paste it into a password manager, then write it on paper.'
-                            : 'Paper is safest. If you copy, paste into a password manager — clipboard auto-clears after 60 s.'}
+                            ? 'Copied. Clipboard auto-clears in 60 s. Paste it into a password manager, then write it on paper.'
+                            : 'Paper is safest. If you copy, paste into a password manager; clipboard auto-clears after 60 s.'}
                     </span>
                 </div>
                 <label className={styles.confirmRow}>
@@ -448,7 +448,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                 </h1>
                 <p className={subtitleClass}>
                     {isFull
-                        ? "Your password encrypts the wallet on this device. It can't be recovered — if you forget it, use the recovery phrase on the next screen to restore access."
+                        ? "Your password encrypts the wallet on this device. It can't be recovered. If you forget it, use the recovery phrase on the next screen to restore access."
                         : 'Your password encrypts the wallet on this device.'}
                 </p>
             </header>
@@ -492,7 +492,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                         onChange={() => setWordCount(12)}
                     />
                     <span className={styles.wordCountLabel}>12 words</span>
-                    <span className={styles.wordCountHint}>Default — 128-bit entropy</span>
+                    <span className={styles.wordCountHint}>Default (128-bit entropy)</span>
                 </label>
                 <label className={styles.wordCountOption}>
                     <input
@@ -522,21 +522,21 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                     <span>Add a BIP39 passphrase (advanced)</span>
                     <InfoTip
                         aria="BIP39 passphrase help"
-                        label="An optional 25th word that mixes with your seed to derive a different wallet. Anyone who learns your recovery phrase but not the passphrase sees an empty decoy. Forget the passphrase and the funds are gone — it cannot be reset. Hardware wallets handle passphrases on the device itself (Trezor Suite / Ledger Live); this option only applies to software wallets created here."
+                        label="An optional 25th word that mixes with your seed to derive a different wallet. Anyone who learns your recovery phrase but not the passphrase sees an empty decoy. If you forget the passphrase the funds are gone; it cannot be reset. Hardware wallets handle passphrases on the device itself (Trezor Suite / Ledger Live); this option only applies to software wallets created here."
                     />
                 </label>
                 {showPassphrase ? (
                     <>
                         <p className={styles.advancedWarning}>
-                            The passphrase becomes a permanent part of your wallet —
-                            you will need BOTH your recovery phrase AND this
+                            The passphrase becomes a permanent part of your wallet.
+                            You will need BOTH your recovery phrase AND this
                             passphrase to recover. If you forget it, your wallet is
                             unrecoverable. It is not stored anywhere and cannot be reset.
                         </p>
                         <Input
                             type="password"
                             label="BIP39 passphrase"
-                            hint="Optional — leave blank to skip."
+                            hint="Optional. Leave blank to skip."
                             value={bip39Passphrase}
                             onChange={(e) => {
                                 setBip39Passphrase(e.target.value);

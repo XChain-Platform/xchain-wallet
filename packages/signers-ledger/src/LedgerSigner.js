@@ -8,10 +8,10 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// LedgerSigner — §17.4. Wraps a Ledger Bitcoin app client (from
+// LedgerSigner (§17.4): wraps a Ledger Bitcoin app client (from
 // `@ledgerhq/hw-app-btc`) talking over an injected Transport. Mirrors
 // TrezorSigner's DI posture: the class itself imports nothing from
-// Ledger's SDK — both `app` and `transport` are passed in by the
+// Ledger's SDK; both `app` and `transport` are passed in by the
 // per-target factory, so core stays testable without hardware.
 //
 // Per-target transports (§18.2):
@@ -30,7 +30,7 @@
 //     the account-0 xpub and the class takes it as a parameter.
 //   - Apps are per-coin. The factory constructs one Btc client per
 //     chain family (BTC / LTC / DOGE / testnet all use the Bitcoin
-//     app, parameterized by `currency`). The signer's `chainId` →
+//     app, parameterized by `currency`). The signer's `chainId` ->
 //     `currency` mapping mirrors Trezor's `chainIdToTrezorCoin`.
 //
 // HW Sign Step 3 wires signPsbt + signMessage: signPsbt pipes the PSBT
@@ -42,7 +42,7 @@
 // Bitcoin-message signature xchain-sdk's `auth.verifyMessage`
 // accepts.
 
-// §9 / G002 — this module lives in `@xchain-wallet/signers-ledger`
+// §9 / G002: this module lives in `@xchain-wallet/signers-ledger`
 // (its own workspace package). The base `Signer` class is shared
 // across vendors and stays in `@xchain-wallet/core/signers/Signer.js`;
 // we reach it via a relative cross-package path so Node smoke tests
@@ -60,7 +60,7 @@ import {
  * Minimal shape of the injected Ledger Bitcoin app instance.
  * Production code passes a real `@ledgerhq/hw-app-btc` client; tests
  * pass a hand-written fake. Every method TrezorSigner calls is
- * listed — keeping this narrow is what makes the mock surface tiny.
+ * listed; keeping this narrow is what makes the mock surface tiny.
  *
  * @typedef {Object} LedgerBtcApp
  * @property {() => Promise<{ name: string, version: string, flags?: number }>} getAppAndVersion
@@ -108,7 +108,7 @@ export class LedgerSigner extends Signer {
      * @param {string} opts.model              Matches firmware-manifest keys (nanoS, nanoSP, nanoX, stax)
      * @param {string} opts.deviceIdentifier
      * @param {LedgerBtcApp} opts.app          Ledger Bitcoin app client
-     * @param {import('../sdk/index.js').SDKRegistry} [opts.sdkRegistry]   Optional — required for signPsbt
+     * @param {import('../sdk/index.js').SDKRegistry} [opts.sdkRegistry]   Optional; required for signPsbt
      */
     constructor({ id, displayName, model, deviceIdentifier, app, sdkRegistry }) {
         super();
@@ -136,10 +136,10 @@ export class LedgerSigner extends Signer {
 
     /**
      * Reads the currently-open app + version from the device. Returns:
-     *   - `'available'` — expected app open; device responsive
-     *   - `'wrong-app'` — device responsive but a different app open;
+     *   - `'available'`: expected app open; device responsive
+     *   - `'wrong-app'`: device responsive but a different app open;
      *                    UI should prompt the user to open the right one
-     *   - `'disconnected'` — `getAppAndVersion` throws (cable unplugged,
+     *   - `'disconnected'`: `getAppAndVersion` throws (cable unplugged,
      *                       PIN locked, transport error)
      *
      * `expectedApp` is optional: pass the chainId you care about, or
@@ -168,7 +168,7 @@ export class LedgerSigner extends Signer {
 
     /**
      * Derive a range of addresses. One `getWalletPublicKey` call per
-     * index — the user confirms on-device the first time the app is
+     * index. The user confirms on-device the first time the app is
      * addressed per session (Ledger caches the "unlocked" state while
      * the app is open).
      *
@@ -220,7 +220,7 @@ export class LedgerSigner extends Signer {
             publicKey: res.publicKey,
             chainCode: res.chainCode,
             // Ledger's getWalletPublicKey does not expose a BIP32
-            // fingerprint directly — it's derivable from the pubkey
+            // fingerprint directly. It's derivable from the pubkey
             // via hash160, but that computation lives at a higher
             // layer (xchain-sdk or a dedicated helper). Returning an
             // empty string here keeps the return shape aligned with
@@ -234,8 +234,8 @@ export class LedgerSigner extends Signer {
      * translates via `toLedgerCreatePayment` into the Ledger envelope,
      * splits each input's prev-tx hex via `app.splitTransaction`, and
      * returns the signed raw transaction the device produces.
-     * `signedPsbtHex` is returned empty — Ledger hands back a fully
-     * serialized tx, not a PSBT.
+     * `signedPsbtHex` is returned empty because Ledger hands back a
+     * fully serialized tx, not a PSBT.
      *
      * @param {import('./Signer.js').SignPsbtParams} params
      * @returns {Promise<import('./Signer.js').SignPsbtReturn>}
@@ -322,14 +322,14 @@ export class LedgerSigner extends Signer {
     /** @returns {Promise<import('./Signer.js').SignMusig2Round1Return>} */
     async signMusig2Round1() {
         throw new Error(
-            'LedgerSigner.signMusig2Round1: hardware MuSig2 is not supported on this Ledger Bitcoin app — update firmware to use MuSig2 on this device, or use the wallet\'s software signer for the MuSig2 cosigner.',
+            'LedgerSigner.signMusig2Round1: hardware MuSig2 is not supported on this Ledger Bitcoin app. Update firmware to use MuSig2 on this device, or use the wallet\'s software signer for the MuSig2 cosigner.',
         );
     }
 
     /** @returns {Promise<import('./Signer.js').SignMusig2Round2Return>} */
     async signMusig2Round2() {
         throw new Error(
-            'LedgerSigner.signMusig2Round2: hardware MuSig2 is not supported on this Ledger Bitcoin app — update firmware to use MuSig2 on this device, or use the wallet\'s software signer for the MuSig2 cosigner.',
+            'LedgerSigner.signMusig2Round2: hardware MuSig2 is not supported on this Ledger Bitcoin app. Update firmware to use MuSig2 on this device, or use the wallet\'s software signer for the MuSig2 cosigner.',
         );
     }
 
@@ -340,7 +340,7 @@ export class LedgerSigner extends Signer {
     /** @returns {Promise<import('./Signer.js').SignMultisigClassicalReturn>} */
     async signMultisigClassical() {
         throw new Error(
-            'LedgerSigner.signMultisigClassical: classical multisig signing on Ledger is not yet wired — use the wallet\'s software signer for this cosigner, or wait for the §22 hardware-multisig PSBT path.',
+            'LedgerSigner.signMultisigClassical: classical multisig signing on Ledger is not yet wired. Use the wallet\'s software signer for this cosigner, or wait for the §22 hardware-multisig PSBT path.',
         );
     }
 
@@ -353,7 +353,7 @@ export class LedgerSigner extends Signer {
     /** @returns {Promise<import('./Signer.js').SignMultisigPsbtReturn>} */
     async signMultisigPsbt() {
         throw new Error(
-            'LedgerSigner.signMultisigPsbt: hardware multisig PSBT signing on Ledger requires a registered wallet policy (Bitcoin app ≥ 2.1.0 registerWallet flow) which this wallet hasn\'t provisioned yet. Use the wallet\'s software signer for this cosigner.',
+            'LedgerSigner.signMultisigPsbt: hardware multisig PSBT signing on Ledger requires a registered wallet policy (Bitcoin app >= 2.1.0 registerWallet flow) which this wallet hasn\'t provisioned yet. Use the wallet\'s software signer for this cosigner.',
         );
     }
 }
@@ -438,7 +438,7 @@ export async function deriveLedgerDeviceIdentifier(publicKeyHex) {
         throw new Error('deriveLedgerDeviceIdentifier: publicKeyHex is required');
     }
     // Pure-JS SHA-256 via `@noble/hashes` so this works on any
-    // origin — `crypto.subtle.digest` is gated on secure context, but
+    // origin. `crypto.subtle.digest` is gated on secure context, but
     // a wallet served over plain HTTP from a LAN host should still be
     // able to identify a paired Ledger.
     const bytes = hexToBytes(publicKeyHex);
@@ -465,8 +465,8 @@ function hexToBytes(hex) {
 /**
  * Map Ledger's reported model flag (when the wallet exposes it via
  * transport.deviceModel) to a firmware-manifest key. If the flag
- * isn't supplied, fall back to 'nanoX' — the most common modern
- * Ledger — and leave the pairing flow free to correct it.
+ * isn't supplied, fall back to 'nanoX' (the most common modern
+ * Ledger) and leave the pairing flow free to correct it.
  *
  * @param {unknown} deviceModel
  * @returns {string}

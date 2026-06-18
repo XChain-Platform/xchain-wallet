@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// PrivacySection — §35.1 Privacy panel.
+// PrivacySection (§35.1 Privacy panel).
 //
 // All five §35.1 toggles backed by `settings.privacy.*` (schema v2):
 //   - Tor routing
@@ -22,7 +22,7 @@
 //     wiring is shell-level work pending separately)
 //
 // Plus one numeric input (§17.7.1 / G028):
-//   - Clipboard auto-clear seconds — 0–600, 0 disables. Read by
+//   - Clipboard auto-clear seconds: 0–600, 0 disables. Read by
 //     ViewPrivateKey to time its post-copy clipboard wipe.
 
 import { useSettings } from '../../hooks/useSettings.js';
@@ -112,19 +112,19 @@ export function PrivacySection() {
             />
             <ToggleRow
                 label="Native coin price data"
-                hint="Sends a request to api.coingecko.com to display USD price, market cap, 24-hour change, and a 7-day chart for Bitcoin, Litecoin, and Dogecoin on the coin detail page. Reveals to that third party that you’re using this wallet. Disable to hide the stats strip and chart with zero network calls."
+                hint="Sends a request to api.coingecko.com to display USD price, market cap, 24-hour change, and a 7-day chart for Bitcoin, Litecoin, and Dogecoin on the coin detail page. Reveals to that third party that you're using this wallet. Disable to hide the stats strip and chart with zero network calls."
                 checked={settings.privacy.priceDataEnabled !== false}
                 onChange={(v) => onToggle('priceDataEnabled', v)}
             />
             <ToggleRow
                 label="Fetch token metadata"
-                hint="When a token's description points at a Token Information Standard (TIS) JSON document, the wallet downloads it and renders the embedded artwork, audio, video, website, and social links on the token detail page. Reveals to the host of that document (and any embedded media URLs — IPFS gateways, third-party CDNs) that you're looking at this token. Disable to render only the indexer-supplied fields with zero extra network calls."
+                hint="When a token's description points at a Token Information Standard (TIS) JSON document, the wallet downloads it and renders the embedded artwork, audio, video, website, and social links on the token detail page. Reveals to the host of that document (and any embedded media URLs, including IPFS gateways and third-party CDNs) that you're looking at this token. Disable to render only the indexer-supplied fields with zero extra network calls."
                 checked={settings.privacy.metadataFetchEnabled !== false}
                 onChange={(v) => onToggle('metadataFetchEnabled', v)}
             />
             <ToggleRow
                 label="Always require hardware cross-check confirm"
-                hint="Forces the explicit “I’ve verified path + address” checkbox on every hardware-wallet sign, regardless of amount or recipient. The wallet already requires it for risky signs (large amounts, first-time recipients, multisig). Turn this on to require it on every HW sign."
+                hint={`Forces the explicit "I've verified path + address" checkbox on every hardware-wallet sign, regardless of amount or recipient. The wallet already requires it for risky signs (large amounts, first-time recipients, multisig). Turn this on to require it on every HW sign.`}
                 checked={settings.privacy.alwaysRequireHwExplicitConfirm === true}
                 onChange={(v) => onToggle('alwaysRequireHwExplicitConfirm', v)}
             />
@@ -155,7 +155,7 @@ export function PrivacySection() {
     );
 }
 
-// Cluster P FOLLOWUP 6 — form-draft retention dropdown.
+// Cluster P FOLLOWUP 6: form-draft retention dropdown.
 function FormDraftTtlRow({ settings, update }) {
     const current = Number.isFinite(settings?.privacy?.formDraftTtlMs)
         ? Number(settings.privacy.formDraftTtlMs)

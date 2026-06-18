@@ -67,7 +67,7 @@ const KIND_TITLE = {
  * Result envelope matches SignApprovalResult:
  *   `{ approved: true, walletId, password, bip39Passphrase?, savePermanent? }`
  *
- * Wrong-password detection happens server-side — the bridge handler
+ * Wrong-password detection happens server-side; the bridge handler
  * passes the password to the signer flow, and if decryption fails the
  * caller dApp sees a structured error. We surface that back to the
  * user here without closing the window so they can retry.
@@ -107,7 +107,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
 
     // §21.3 / §48.4 raw-view gate. The approval window doesn't sit
     // inside the shared MessagingProvider, so it can't use the
-    // `useDeveloperMode` hook directly — fetch settings once on mount.
+    // `useDeveloperMode` hook directly; fetch settings once on mount.
     // Defaults to `false` so a fetch failure or cold start hides the
     // raw view (consistent with the spec's "developer mode hidden by
     // default" stance).
@@ -123,12 +123,12 @@ export function SignApproval({ id, kind, payload, onReject }) {
         return () => { cancelled = true; };
     }, []);
 
-    // §21.2 balance-change preview — only meaningful for the
+    // §21.2 balance-change preview: only meaningful for the
     // `signAction` kind (signMessage / signPsbt / signIn don't move
     // value). Source address: prefer `payload.payload.from.address`
     // when the dApp passes it; otherwise fall back to the wallet's
     // first address on the requested chain. Fetch failures degrade
-    // gracefully — the section reads "(preview unavailable)" so the
+    // gracefully; the section reads "(preview unavailable)" so the
     // user can still approve.
     const [previewBalances, setPreviewBalances] = useState(
         /** @type {{ loading: boolean, error: string | null, sdkShape: any | null, fromAddress: string | null }} */
@@ -226,7 +226,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
         if (!chainId || !psbtHexForSign) {
             setPsbtIntent({
                 loading: false,
-                error: !chainId ? 'No chain specified — cannot decode this transaction.' : null,
+                error: !chainId ? 'No chain specified. Cannot decode this transaction.' : null,
                 decomposed: null,
                 ownAddresses: new Set(),
             });
@@ -278,7 +278,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
     // §21.7 button-label conventions. Action / PSBT signing reads
     // "Approve & Sign on <chain>" so the user sees which chain is
     // about to commit a signature; mitigates approval-drift between
-    // tabs (§21.3). Message / sign-in keep "Approve" — no signature
+    // tabs (§21.3). Message / sign-in keep "Approve"; no signature
     // commits balance, so the chain suffix would mislead.
     const chainName = descriptor?.displayName || '';
     const approveLabel =
@@ -290,7 +290,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
                 ? 'Sign in'
                 : 'Approve';
 
-    // §21.3 dApp Source block — Origin + App name (when the dApp
+    // §21.3 dApp Source block: Origin + App name (when the dApp
     // attached one). Only renders when an origin is present; in
     // practice every dApp request carries one, but user-initiated
     // sign flows that re-use this screen wouldn't.
@@ -409,7 +409,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
                     ref={inputRef}
                     type="password"
                     label="Password"
-                    hint="Required to sign — your password stays in this window."
+                    hint="Required to sign. Your password stays in this window."
                     value={password}
                     onChange={(e) => {
                         setPassword(e.target.value);
@@ -522,7 +522,7 @@ function SignSummary({ kind, payload }) {
 }
 
 /**
- * §21.2 / §48 — decoded signPsbt intent. Renders the transaction's real
+ * §21.2 / §48: decoded signPsbt intent. Renders the transaction's real
  * destinations and amounts so the user can cross-check what they're
  * signing against the dApp's stated intent, instead of trusting an opaque
  * hex string. Outputs paying the user's own addresses are labelled as
@@ -638,4 +638,3 @@ function ellipsizeMiddle(s, head = 12, tail = 8) {
         ? `${str.slice(0, head)}…${str.slice(-tail)}`
         : str;
 }
-

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// §18.5 / Cluster N FOLLOWUP 3 — sign-flow risk classifier.
+// §18.5 / Cluster N FOLLOWUP 3: sign-flow risk classifier.
 //
 // Decides when the Hardware Wallet sign block should require an
 // explicit "I've verified the path and address" checkbox before the
@@ -26,7 +26,7 @@
 //      cosigner is meaningfully different from a single-sig send.
 //
 // A user can also force always-on via `settings.privacy.alwaysRequire-
-// HwExplicitConfirm` — that's the FOLLOWUP's "Settings toggle" half.
+// HwExplicitConfirm`. That's the FOLLOWUP's "Settings toggle" half.
 //
 // Pure function: no I/O, no side effects. Caller computes the inputs
 // (the form already has them) and passes them in.
@@ -72,31 +72,31 @@ export function classifySignRisk(input = {}) {
         return { requireExplicitConfirm: false, reason: null };
     }
 
-    // Settings toggle — always-on regardless of risk classification.
+    // Settings toggle: always-on regardless of risk classification.
     if (settings?.alwaysRequireHwExplicitConfirm === true) {
         return {
             requireExplicitConfirm: true,
-            reason: 'You’ve set the wallet to always require explicit cross-check confirm on hardware signs.',
+            reason: "You've set the wallet to always require explicit cross-check confirm on hardware signs.",
         };
     }
 
-    // Multisig coordinator approval — always confirm.
+    // Multisig coordinator approval: always confirm.
     if (multisig === true) {
         return {
             requireExplicitConfirm: true,
-            reason: 'Multisig contributions deserve an explicit cross-check — your cosigners trust this signature.',
+            reason: "Multisig contributions deserve an explicit cross-check. Your cosigners trust this signature.",
         };
     }
 
-    // Recipient novelty — first time signing a send to this address.
+    // Recipient novelty: first time signing a send to this address.
     if (recipientNovel === true) {
         return {
             requireExplicitConfirm: true,
-            reason: 'First-time recipient — confirm the address on your device matches what’s shown here.',
+            reason: "First-time recipient. Confirm the address on your device matches what's shown here.",
         };
     }
 
-    // Large amount — `testSendThresholdSats` is the user-configured
+    // Large amount: `testSendThresholdSats` is the user-configured
     // "above this is large enough to need extra confirmation" knob.
     // 0 disables the threshold entirely.
     const threshold = Number.isFinite(settings?.testSendThresholdSats)
@@ -107,7 +107,7 @@ export function classifySignRisk(input = {}) {
         if (Number.isFinite(amount) && amount >= threshold) {
             return {
                 requireExplicitConfirm: true,
-                reason: `Large amount (${amount.toLocaleString()} sats) — confirm both path and address on your device.`,
+                reason: `Large amount (${amount.toLocaleString()} sats). Confirm both path and address on your device.`,
             };
         }
     }

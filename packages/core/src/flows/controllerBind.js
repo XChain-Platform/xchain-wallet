@@ -8,22 +8,22 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Phase F — controller-bind param builders.
+// Phase F: controller-bind param builders.
 //
 // `core` deliberately doesn't import the SDK (see SDKRegistry.js), so
 // the renderer's ControllerBindForm can't call `sdk.controller.*`
-// directly — only the background host holds SDK instances. This flow is
+// directly. Only the background host holds SDK instances. This flow is
 // the thin host-side bridge: it picks the right `sdk.controller.*`
-// builder for the requested target (token → ISSUE v6, address →
+// builder for the requested target (token -> ISSUE v6, address ->
 // ADDRESS v1) + operation (bind / unbind), and returns the resulting
 // `{ action, params }` for the form to submit through the normal
-// `advancedAction` (createAction → sign → broadcast) path.
+// `advancedAction` (createAction -> sign -> broadcast) path.
 //
 // GRACEFUL DEGRADATION: the SDK's `controller` helper ships under
 // Phase F Part 2 and may not exist in the installed SDK yet. When it's
 // absent (or a builder is missing) this flow throws a clear,
 // user-actionable error rather than a cryptic `undefined is not a
-// function` — the form surfaces it as the submit error and stays on the
+// function`. The form surfaces it as the submit error and stays on the
 // review screen.
 
 /**
@@ -123,7 +123,7 @@ export function controllerBindParams(opts) {
 }
 
 /**
- * The canonical action-class list — used to populate the form's
+ * The canonical action-class list, used to populate the form's
  * dropdown. Mirrors `sdk.controller.actionClasses()` when the SDK is
  * present; otherwise falls back to the locked-fact list so the form
  * still renders (the actual submit then degrades with a clear error).

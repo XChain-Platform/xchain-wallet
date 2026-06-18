@@ -10,15 +10,15 @@
 
 // UNSTAKE + COLLECT composers for the §42.7.2 (unstake-lane) +
 // §42.7.3 (rewards) authoring surfaces. Both actions are trivially
-// small — UNSTAKE is `VERSION|SIGNING_PUBKEY`, COLLECT is
-// `VERSION` — so they share a file and the UI combines them in
+// small: UNSTAKE is `VERSION|SIGNING_PUBKEY`, COLLECT is
+// `VERSION`, so they share a file and the UI combines them in
 // StakingActionForm.jsx via a `mode` prop (same pattern as §42.5
 // ContractFundsForm).
 //
 // Capability-staking model (capability-staking-model.md §3): UNSTAKE
 // addresses a specific signing pubkey, not a tier. The indexer
 // deactivates every active stake row for that pubkey (the original
-// v1 + any v2 top-ups). Partial unstake isn't a protocol concept —
+// v1 + any v2 top-ups). Partial unstake isn't a protocol concept;
 // the full balance for the pubkey is returned after the cooldown.
 
 import { submitAction } from './submitAction.js';
@@ -145,4 +145,3 @@ export async function collectAction(opts) {
         onProgress: opts.onProgress,
     });
 }
-

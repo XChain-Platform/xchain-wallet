@@ -8,15 +8,15 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Trezor Connect factory — Electron desktop renderer.
+// Trezor Connect factory: Electron desktop renderer.
 //
 // Same shape as the extension binding (`packages/extension/src/signers/
 // trezorFactory.js`): lazy-import `@trezor/connect-web`, init with the
 // XChain manifest, bind core's `makeTrezorFactory` to the resulting
 // connect instance. The only desktop-specific hook is the future
-// `connectSrc` override — Step 19 will bundle the Connect iframe
+// `connectSrc` override (Step 19 will bundle the Connect iframe
 // tokens alongside the app so signing never reaches out to
-// connect.trezor.io. Until then we use the default (network-bound)
+// connect.trezor.io). Until then we use the default (network-bound)
 // connectSrc; real-device verification in Electron will exercise this
 // path once Step 19 ships.
 //
@@ -26,7 +26,7 @@
 import { makeTrezorFactory } from '@xchain-wallet/core/signerFactories';
 
 /**
- * Trezor Connect manifest — must match a domain Trezor whitelists or
+ * Trezor Connect manifest. Must match a domain Trezor whitelists or
  * the popup blocks. Desktop uses the same manifest as extension/web
  * for now; a separate desktop manifest is a Step-19 follow-up.
  */

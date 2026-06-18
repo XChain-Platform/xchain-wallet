@@ -14,17 +14,17 @@
 // cache, in-page wallet host); its only structural defense against an XSS
 // payload exfiltrating that material is a CSP that forbids inline/injected
 // script and outbound posts to attacker-controlled origins. Previously the
-// SPA shipped none and relied entirely on a server-sent header — which ops
+// SPA shipped none and relied entirely on a server-sent header, which ops
 // can forget and which never applies when the bundle is opened from disk
 // or served by a misconfigured host. This policy is injected into the
 // built index.html (see vite.config.js) so it travels with the app.
 //
 // Notes on specific directives:
 //   - script-src 'self': bundled ES modules only. No 'unsafe-inline' and
-//     no 'unsafe-eval' — the crypto stack (@noble/hashes argon2id) is pure
+//     no 'unsafe-eval'; the crypto stack (@noble/hashes argon2id) is pure
 //     JS, so no wasm-unsafe-eval is required.
 //   - style-src 'unsafe-inline': the UI uses React inline style attributes
-//     (style={{…}}) and runtime-injected <style> tags extensively. Inline
+//     (style={{...}}) and runtime-injected <style> tags extensively. Inline
 //     styles cannot exfiltrate data, so this is a low-risk allowance.
 //   - connect-src is deliberately broad (https:/wss: + localhost): the
 //     wallet talks to user-configured explorer/hub/coin-node endpoints
@@ -32,7 +32,7 @@
 //     The XSS-defining directives (script-src/object-src/base-uri) are the
 //     load-bearing ones; connect-src is best-effort.
 //   - frame-ancestors is set here for defense-in-depth but is IGNORED in a
-//     <meta> CSP — the fronting server (Apache) must also send it as a
+//     <meta> CSP. The fronting server (Apache) must also send it as a
 //     header to actually prevent framing.
 //   - img/font allow data: + blob: for QR codes and the favicon.
 
