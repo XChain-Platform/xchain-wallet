@@ -1072,6 +1072,7 @@ function AppInner() {
                 return (
                     <MessagingInbox
                         walletId={activeWalletId}
+                        activeAccountId={activeAccountId || undefined}
                         onCompose={(prefill) => {
                             setComposePrefill(prefill || null);
                             setUnlockedView('compose-message');

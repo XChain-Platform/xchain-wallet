@@ -63,6 +63,49 @@ import { exportPrivateKey } from './exportPrivateKey.js';
  * @property {MessagingInboxMessage[]} messages
  */
 
+// Resolve the WIF + address + chainId for one address record, then fetch
+// and decrypt its MESSAGE history. Shared by the single-address inbox and
+// the per-account sweep. Auth-class failures (wrong password / no key)
+// propagate; the callers decide whether to abort.
+async function fetchInboxForAddress({
+    vault, walletId, password, bip39Passphrase,
+    chainRegistry, sdkRegistry, addressId, type, passthroughOpts, injectedSigner,
+}) {
+    let wif; let address; let chainId;
+    if (injectedSigner) {
+        const addressRecord = await vault.addresses.get(addressId);
+        if (!addressRecord) throw new Error(`getMessagingInbox: address "${addressId}" not found`);
+        chainId = chainRegistry.chainIdFor(addressRecord.chain, addressRecord.network);
+        if (!chainId) {
+            throw new Error(
+                `getMessagingInbox: no registered chain for ${addressRecord.chain}/${addressRecord.network}`,
+            );
+        }
+        address = addressRecord.address;
+        wif = addressRecord.source === 'imported-wif'
+            ? injectedSigner.exportWifForAddressId(addressId)
+            : injectedSigner.exportWifForPath({ chainId, path: addressRecord.derivationPath });
+    } else {
+        ({ wif, address, chainId } = await exportPrivateKey({
+            vault, walletId, password, bip39Passphrase, chainRegistry, sdkRegistry, addressId,
+        }));
+    }
+
+    const sdk = sdkRegistry.get(chainId);
+    const messages = await sdk.getMessagesForAddress(
+        address,
+        { ...(passthroughOpts || {}), wif, type },
+    );
+    return { address, chainId, messages: Array.isArray(messages) ? messages : [] };
+}
+
+// Errors that are deterministic across every address in a sweep (the
+// password is wrong, the wallet can't derive keys) and so should abort
+// the whole sweep rather than be tolerated per-address.
+const SWEEP_FATAL_ERRORS = new Set([
+    'WrongPasswordError', 'InvalidPasswordError', 'NoKeyForAddressError',
+]);
+
 /**
  * @param {GetMessagingInboxOpts} opts
  * @returns {Promise<GetMessagingInboxResult>}
@@ -92,48 +135,86 @@ export async function getMessagingInbox({
         throw new Error('getMessagingInbox: addressId is required');
     }
 
-    // Unlocked session: derive the address WIF straight from the pooled
-    // SoftwareSigner (no password / no Argon2id). Falls back to the
-    // password-gated exportPrivateKey when no signer was supplied.
-    let wif; let address; let chainId;
-    if (injectedSigner) {
-        const addressRecord = await vault.addresses.get(addressId);
-        if (!addressRecord) throw new Error(`getMessagingInbox: address "${addressId}" not found`);
-        chainId = chainRegistry.chainIdFor(addressRecord.chain, addressRecord.network);
-        if (!chainId) {
-            throw new Error(
-                `getMessagingInbox: no registered chain for ${addressRecord.chain}/${addressRecord.network}`,
-            );
-        }
-        address = addressRecord.address;
-        wif = addressRecord.source === 'imported-wif'
-            ? injectedSigner.exportWifForAddressId(addressId)
-            : injectedSigner.exportWifForPath({ chainId, path: addressRecord.derivationPath });
-    } else {
-        ({ wif, address, chainId } = await exportPrivateKey({
-            vault,
-            walletId,
-            password,
-            bip39Passphrase,
-            chainRegistry,
-            sdkRegistry,
-            addressId,
-        }));
+    return fetchInboxForAddress({
+        vault, walletId, password, bip39Passphrase,
+        chainRegistry, sdkRegistry, addressId, type, passthroughOpts, injectedSigner,
+    });
+}
+
+/**
+ * @typedef {Object} GetMessagingInboxSweepResult
+ * @property {string[]} addresses          every owner address swept (decrypt succeeded)
+ * @property {MessagingInboxMessage[]} messages   merged + de-duped across all addresses
+ * @property {Array<{ addressId: string, error: string }>} errors   per-address non-fatal failures
+ */
+
+/**
+ * Per-account sweep: fetch + decrypt MESSAGE history for every address in
+ * the account's receive (/0/) + dispenser (/2/) union (the caller passes
+ * the address-id list) and merge the results into one inbox. Messages are
+ * de-duped by txid (a self-message addressed between two of the account's
+ * own addresses would otherwise appear twice). A per-address transport
+ * failure is recorded in `errors` and skipped; an auth-class failure
+ * aborts the whole sweep (it would fail identically for every address).
+ *
+ * @param {Omit<GetMessagingInboxOpts, 'addressId'> & { addressIds: string[] }} opts
+ * @returns {Promise<GetMessagingInboxSweepResult>}
+ */
+export async function getMessagingInboxSweep({
+    vault,
+    walletId,
+    password,
+    bip39Passphrase,
+    chainRegistry,
+    sdkRegistry,
+    addressIds,
+    type = 'all',
+    opts: passthroughOpts,
+    signer: injectedSigner,
+}) {
+    if (!vault) throw new Error('getMessagingInboxSweep: vault is required');
+    if (typeof walletId !== 'string' || walletId.length === 0) {
+        throw new Error('getMessagingInboxSweep: walletId is required');
+    }
+    if (!injectedSigner && (typeof password !== 'string' || password.length === 0)) {
+        throw new Error('getMessagingInboxSweep: either `password` or `signer` is required');
+    }
+    if (!chainRegistry) throw new Error('getMessagingInboxSweep: chainRegistry is required');
+    if (!sdkRegistry) throw new Error('getMessagingInboxSweep: sdkRegistry is required');
+    if (!Array.isArray(addressIds) || addressIds.length === 0) {
+        throw new Error('getMessagingInboxSweep: addressIds must be a non-empty array');
     }
 
-    const sdk = sdkRegistry.get(chainId);
-    const messages = await sdk.getMessagesForAddress(
-        address,
-        {
-            ...(passthroughOpts || {}),
-            wif,
-            type,
-        },
-    );
+    const addresses = [];
+    const errors = [];
+    /** @type {MessagingInboxMessage[]} */
+    const merged = [];
+    const seenTxids = new Set();
 
-    return {
-        address,
-        chainId,
-        messages: Array.isArray(messages) ? messages : [],
-    };
+    for (const addressId of addressIds) {
+        if (typeof addressId !== 'string' || addressId.length === 0) continue;
+        let result;
+        try {
+            result = await fetchInboxForAddress({
+                vault, walletId, password, bip39Passphrase,
+                chainRegistry, sdkRegistry, addressId, type, passthroughOpts, injectedSigner,
+            });
+        } catch (err) {
+            if (err && SWEEP_FATAL_ERRORS.has(err.name)) throw err;
+            errors.push({ addressId, error: err?.message || String(err) });
+            continue;
+        }
+        addresses.push(result.address);
+        for (const msg of result.messages) {
+            const txid = msg && msg.txid;
+            if (txid) {
+                if (seenTxids.has(txid)) continue;
+                seenTxids.add(txid);
+            }
+            merged.push(msg);
+        }
+    }
+
+    merged.sort((a, b) => (Number(b?.timestamp) || 0) - (Number(a?.timestamp) || 0));
+    return { addresses, messages: merged, errors };
 }

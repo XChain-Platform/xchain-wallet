@@ -43,7 +43,7 @@ export { swapAction } from './swapAction.js';
 export { linkAction } from './linkAction.js';
 export { fileAction } from './fileAction.js';
 export { getProjectForTick } from './projectQueries.js';
-export { getMessagingInbox } from './messagingInbox.js';
+export { getMessagingInbox, getMessagingInboxSweep } from './messagingInbox.js';
 export {
     unlockGatedFile,
     unlockGatedPack,

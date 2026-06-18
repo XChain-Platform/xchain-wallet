@@ -62,6 +62,7 @@ const {
     getCoinpayObligationsForAddress,
     getCoinpaysForAddress,
     getMessagingInbox,
+    getMessagingInboxSweep,
     unlockGatedFileForAddress,
     listGatedFiles,
     messageAction,
@@ -1848,6 +1849,12 @@ export function createBackgroundHost(deps) {
     // actions for one of the wallet's own addresses.
     host.register('messaging.inbox', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
         return getMessagingInbox({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+    });
+
+    // Per-account sweep: merge MESSAGE history across the account's
+    // receive + dispenser address union (caller passes addressIds).
+    host.register('messaging.inboxSweep', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        return getMessagingInboxSweep({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
     });
 
     // Token-gated content — list and unlock.

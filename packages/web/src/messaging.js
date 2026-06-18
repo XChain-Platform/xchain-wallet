@@ -956,6 +956,7 @@ export function getProjectForToken(opts) { return /** @type {any} */ (sendMessag
 // §41.7.2 Messaging inbox
 /** @param {object} opts */
 export function getMessagingInbox(opts) { return /** @type {any} */ (sendMessage('messaging.inbox', opts)); }
+export function getMessagingInboxSweep(opts) { return /** @type {any} */ (sendMessage('messaging.inboxSweep', opts)); }
 /** Whether the active wallet can sign without a password right now (unlocked session with a pooled signer). */
 export function signerReady(opts) { return /** @type {any} */ (sendMessage('wallet.signerReady', opts)); }
 

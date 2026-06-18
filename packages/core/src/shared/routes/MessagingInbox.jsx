@@ -8,13 +8,12 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     Screen,
     ScreenHeader,
     Button,
     Input,
-    ChainBadge,
     AddressText,
  Icon,} from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
@@ -25,37 +24,41 @@ import styles from './IssueTokenForm.module.css';
 const chainRegistry = registryLib.defaultRegistry();
 
 /**
- * §41.7.2 Messaging inbox. Two-pane layout:
- *   Conversations (left) + selected-thread (right)
+ * §41.7.2 Messaging inbox, scoped to the active account.
  *
- * Auth model: password-per-unlock. The inbox is metadata-empty until
- * the user picks an owning address and enters their password; the
- * background handler derives the WIF for that address and returns
- * decrypted ECIES messages (method 1). ECDH (2) and AES (3) come
- * back as encrypted — Phase 3 surfaces them but doesn't try to
- * decrypt them (those need a session store, out of scope).
+ * The inbox sweeps the account's full address union (receive /0/ +
+ * dispenser /2/ addresses, all seed-enumerable under one BIP44 account)
+ * and merges every address's MESSAGE history into one conversation list.
+ * A dispenser owner who received a MESSAGE at a dispenser sub-address
+ * sees it here alongside their receive-address mail, without hunting per
+ * address. (Change /1/ addresses are internal and never messaged, so they
+ * are skipped.)
  *
- * Compose is a separate route (§41.7.3 / Step 13). This view is
- * read-only.
+ * Auth model: password-per-unlock. The inbox is empty until the user
+ * confirms and (if locked) enters their password; the background derives
+ * the WIF per address and returns decrypted ECIES (method 1) messages.
+ * ECDH (2) and AES (3) come back encrypted (session store out of scope).
+ *
+ * Compose is a separate route (§41.7.3). This view is read-only.
  *
  * @param {object} props
  * @param {string} props.walletId
+ * @param {string} [props.activeAccountId]   scope the sweep to this account
  * @param {(prefill?: { chainId?: string, fromAddressId?: string, toAddress?: string }) => void} [props.onCompose]
  * @param {() => void} props.onBack
  */
-export function MessagingInbox({ walletId, onCompose, onBack }) {
+export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
-    // Unlocked session → read the inbox without a password (the background
-    // derives the WIF from the pooled signer). Locked → password prompt.
+    // Unlocked session → read without a password (background derives the
+    // WIF per address from the pooled signer). Locked → password prompt.
     const signerReady = useSignerReady(walletId);
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
     );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
-    const [selectedAddrId, setSelectedAddrId] = useState(/** @type {string | null} */ (null));
     const [password, setPassword] = useState('');
     const [unlockError, setUnlockError] = useState(/** @type {string | null} */ (null));
     const [stage, setStage] = useState(
@@ -72,25 +75,19 @@ export function MessagingInbox({ walletId, onCompose, onBack }) {
 
     useEffect(() => {
         let cancelled = false;
-        messaging.getAddressesByChain(walletId)
+        messaging.getAddressesByChain(walletId, activeAccountId)
             .then((byChain) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain);
                 if (!byChain || Object.keys(byChain).length === 0) {
-                    setLoadError('No addresses yet — use Receive to generate one before reading messages.');
-                    return;
+                    setLoadError('No addresses yet. Use Receive to generate one before reading messages.');
                 }
-                const firstChainId = Object.keys(byChain)[0];
-                const firstAddr = (byChain[firstChainId] || []).find(
-                    (a) => a.source === 'hd' || a.source === 'imported-wif',
-                );
-                if (firstAddr) setSelectedAddrId(firstAddr.id);
             })
             .catch((err) => {
                 if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
             });
         return () => { cancelled = true; };
-    }, [walletId, messaging]);
+    }, [walletId, messaging, activeAccountId]);
 
     useEffect(() => {
         if (stage === 'password') {
@@ -117,43 +114,51 @@ export function MessagingInbox({ walletId, onCompose, onBack }) {
         return () => { cancelled = true; };
     }, [messaging]);
 
-    const ownerAddress = useMemo(() => {
-        if (!addressesByChain || !selectedAddrId) return null;
-        for (const addrs of Object.values(addressesByChain)) {
-            const match = addrs.find((a) => a.id === selectedAddrId);
-            if (match) return match;
-        }
-        return null;
-    }, [addressesByChain, selectedAddrId]);
-
-    const ownerChainId = useMemo(() => {
-        if (!addressesByChain || !selectedAddrId) return null;
+    // The account's decryptable, messageable addresses: receive (/0/) +
+    // dispenser (/2/) on every chain. Change (/1/) is internal and skipped.
+    const sweepAddrs = useMemo(() => {
+        if (!addressesByChain) return [];
+        /** @type {Array<{ id: string, address: string, chainId: string, role: string }>} */
+        const out = [];
         for (const [chainId, addrs] of Object.entries(addressesByChain)) {
-            if (addrs.some((a) => a.id === selectedAddrId)) return chainId;
+            for (const a of (addrs || [])) {
+                const decryptable = a.source === 'hd' || a.source === 'imported-wif';
+                const role = a.role || 'receive';
+                if (decryptable && role !== 'change') {
+                    out.push({ id: a.id, address: a.address, chainId, role });
+                }
+            }
         }
-        return null;
-    }, [addressesByChain, selectedAddrId]);
+        return out;
+    }, [addressesByChain]);
 
-    // Load the inbox. `pw` is null on the unlocked-session path (the
-    // background uses the pooled signer); a string on the password path.
+    const ownerSet = useMemo(() => new Set(sweepAddrs.map((a) => a.address)), [sweepAddrs]);
+    const addrInfoByAddress = useMemo(() => {
+        /** @type {Record<string, { id: string, chainId: string }>} */
+        const m = {};
+        for (const a of sweepAddrs) m[a.address] = { id: a.id, chainId: a.chainId };
+        return m;
+    }, [sweepAddrs]);
+
+    // Load the merged inbox. `pw` is null on the unlocked-session path; a
+    // string on the password path.
     async function fetchInbox(pw) {
-        if (!selectedAddrId) return;
+        if (sweepAddrs.length === 0) return;
         setStage('submitting');
         setUnlockError(null);
 
-        // Demo wallet: no on-chain message history to decrypt, so fabricate
-        // a couple of conversations locally.
+        // Demo wallet: no on-chain history, fabricate a couple of threads.
         if (flowsLib.isDemoWallet(walletId)) {
-            setMessages(flowsLib.synthesizeDemoMessages(ownerAddress?.address));
+            setMessages(flowsLib.synthesizeDemoMessages(sweepAddrs[0]?.address));
             setStage('inbox');
             setPassword('');
             return;
         }
 
         try {
-            const result = await messaging.getMessagingInbox({
+            const result = await messaging.getMessagingInboxSweep({
                 walletId,
-                addressId: selectedAddrId,
+                addressIds: sweepAddrs.map((a) => a.id),
                 type: 'all',
                 ...(pw ? { password: pw } : {}),
             });
@@ -165,12 +170,10 @@ export function MessagingInbox({ walletId, onCompose, onBack }) {
             if (name === 'WrongPasswordError' || name === 'InvalidPasswordError') {
                 setUnlockError('Incorrect password.');
             } else if (name === 'NoKeyForAddressError') {
-                setUnlockError('This address has no decryption key in the wallet.');
+                setUnlockError('This account has no decryption key in the wallet.');
             } else {
                 setUnlockError(err?.message || 'Failed to load messages.');
             }
-            // Fall back to the password prompt (covers the rare unlocked-but-
-            // empty-pool case where the no-password read failed).
             setStage('password');
             setTimeout(() => { passwordRef.current?.focus(); passwordRef.current?.select(); }, 0);
         }
@@ -182,21 +185,35 @@ export function MessagingInbox({ walletId, onCompose, onBack }) {
         fetchInbox(password);
     }
 
-    // From the address-picker "Continue": skip the password step entirely
-    // when the session can read without one.
     function handleContinue() {
-        if (!selectedAddrId) return;
+        if (sweepAddrs.length === 0) return;
         if (signerReady) fetchInbox(null);
         else setStage('password');
     }
 
-    const conversations = useMemo(() => buildConversations(messages, ownerAddress?.address), [messages, ownerAddress]);
+    const conversations = useMemo(
+        () => buildConversations(messages, ownerSet),
+        [messages, ownerSet],
+    );
     const thread = useMemo(() => {
         if (!selectedCounterparty) return [];
         return messages
-            .filter((m) => counterpartyOf(m, ownerAddress?.address) === selectedCounterparty)
+            .filter((m) => counterpartyOf(m, ownerSet) === selectedCounterparty)
             .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
-    }, [messages, selectedCounterparty, ownerAddress]);
+    }, [messages, selectedCounterparty, ownerSet]);
+
+    // Reply context: derive the from-address + chain from the owner side of
+    // the selected thread's most recent message, so a Reply originates from
+    // the account address the conversation actually used.
+    const replyContext = useMemo(() => {
+        const latest = thread[thread.length - 1];
+        if (!latest) return null;
+        const ownerAddr = ownerSet.has(latest.from)
+            ? latest.from
+            : (ownerSet.has(latest.to) ? latest.to : null);
+        const info = ownerAddr ? addrInfoByAddress[ownerAddr] : null;
+        return info ? { chainId: info.chainId, fromAddressId: info.id } : null;
+    }, [thread, ownerSet, addrInfoByAddress]);
 
     const header = <ScreenHeader onBack={onBack} title="Messaging" titleIcon={<Icon.MessageIcon />} />;
 
@@ -207,52 +224,33 @@ export function MessagingInbox({ walletId, onCompose, onBack }) {
     );
 
     if (loadError) {
-        return wrap(
-            <>
-                <div role="alert" className={styles.error}>{loadError}</div>
-                <div className={styles.actions}>
-                </div>
-            </>,
-        );
+        return wrap(<div role="alert" className={styles.error}>{loadError}</div>);
     }
 
     if (!addressesByChain) {
         return wrap(<p className={styles.hint}>Loading wallet…</p>);
     }
 
+    if (sweepAddrs.length === 0) {
+        return wrap(
+            <p className={styles.hint}>
+                This account has no addresses that can receive messages yet. Use
+                Receive to generate one first.
+            </p>,
+        );
+    }
+
     if (stage === 'pick') {
         return wrap(
             <>
                 <p style={{ margin: '0 0 0.5rem' }}>
-                    Pick the address whose inbox you want to read. Each
-                    address has its own on-chain message history.
+                    Read messages across this account. The inbox covers all{' '}
+                    {sweepAddrs.length} of the account's addresses (receive and
+                    dispenser), merged into one conversation list.
                 </p>
-                <label className={styles.fieldLabel}>
-                    <span>Inbox for</span>
-                    <select
-                        className={styles.select}
-                        value={selectedAddrId || ''}
-                        onChange={(e) => setSelectedAddrId(e.target.value)}
-                    >
-                        {Object.entries(addressesByChain).flatMap(([chainId, addrs]) => {
-                            const d = chainRegistry.get(chainId);
-                            return addrs
-                                .filter((a) => a.source === 'hd' || a.source === 'imported-wif')
-                                .map((a) => (
-                                    <option key={a.id} value={a.id}>
-                                        {d?.displayName || chainId} — {a.address}
-                                    </option>
-                                ));
-                        })}
-                    </select>
-                </label>
                 <div className={styles.actions}>
-                    <Button
-                        variant="primary"
-                        onClick={handleContinue}
-                        disabled={!selectedAddrId}
-                    >
-                        Continue
+                    <Button variant="primary" onClick={handleContinue}>
+                        {signerReady ? 'Open inbox' : 'Continue'}
                     </Button>
                 </div>
             </>,
@@ -263,8 +261,7 @@ export function MessagingInbox({ walletId, onCompose, onBack }) {
         return wrap(
             <form onSubmit={handleUnlock} noValidate>
                 <p style={{ margin: '0 0 0.5rem' }}>
-                    Enter your wallet password to decrypt messages for{' '}
-                    {ownerAddress ? <AddressText address={ownerAddress.address} /> : 'this address'}.
+                    Enter your wallet password to decrypt this account's messages.
                 </p>
                 <Input
                     ref={passwordRef}
@@ -298,18 +295,12 @@ export function MessagingInbox({ walletId, onCompose, onBack }) {
     }
 
     // stage === 'inbox'
-    const descriptor = ownerChainId ? chainRegistry.get(ownerChainId) : null;
-
     return wrap(
         <>
             <dl className={styles.detailsList}>
-                <dt className={styles.detailsLabel}>Chain</dt>
+                <dt className={styles.detailsLabel}>Account inbox</dt>
                 <dd className={styles.detailsValue}>
-                    {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : ownerChainId}
-                </dd>
-                <dt className={styles.detailsLabel}>Address</dt>
-                <dd className={styles.detailsValue}>
-                    {ownerAddress ? <AddressText address={ownerAddress.address} /> : null}
+                    {sweepAddrs.length} address{sweepAddrs.length === 1 ? '' : 'es'} swept
                 </dd>
                 <dt className={styles.detailsLabel}>Messages</dt>
                 <dd className={styles.detailsValue}>{messages.length}</dd>
@@ -331,7 +322,7 @@ export function MessagingInbox({ walletId, onCompose, onBack }) {
                 <section aria-label="Conversations">
                     <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>Conversations</p>
                     {conversations.length === 0 ? (
-                        <p className={styles.hint}>No messages on this address yet.</p>
+                        <p className={styles.hint}>No messages for this account yet.</p>
                     ) : (
                         <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
                             {conversations.map((c) => (
@@ -369,7 +360,7 @@ export function MessagingInbox({ walletId, onCompose, onBack }) {
                                         </div>
                                         <div style={{ fontSize: '0.75rem', color: 'var(--xc-fg-muted)' }}>
                                             {c.count} message{c.count === 1 ? '' : 's'} ·{' '}
-                                            {c.lastTimestamp ? formatDate(c.lastTimestamp) : '—'}
+                                            {c.lastTimestamp ? formatDate(c.lastTimestamp) : '-'}
                                         </div>
                                     </button>
                                 </li>
@@ -391,7 +382,7 @@ export function MessagingInbox({ walletId, onCompose, onBack }) {
                     ) : (
                         <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
                             {thread.map((m, idx) => {
-                                const isOutgoing = m.from === ownerAddress?.address;
+                                const isOutgoing = ownerSet.has(m.from);
                                 return (
                                     <li
                                         key={m.txid || `row-${idx}`}
@@ -408,7 +399,7 @@ export function MessagingInbox({ walletId, onCompose, onBack }) {
                                         <div style={{ fontSize: '0.75rem', color: 'var(--xc-fg-muted)', marginBottom: '0.25rem' }}>
                                             {isOutgoing ? 'You' : <AddressText address={m.from || ''} />}
                                             {' · '}
-                                            {m.timestamp ? formatDate(m.timestamp) : '—'}
+                                            {m.timestamp ? formatDate(m.timestamp) : '-'}
                                             {m.method ? ` · ${methodLabel(m.method)}` : null}
                                         </div>
                                         <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
@@ -427,8 +418,8 @@ export function MessagingInbox({ walletId, onCompose, onBack }) {
                     <Button
                         variant="primary"
                         onClick={() => onCompose({
-                            chainId: ownerChainId || undefined,
-                            fromAddressId: selectedAddrId || undefined,
+                            chainId: replyContext?.chainId || undefined,
+                            fromAddressId: replyContext?.fromAddressId || undefined,
                             toAddress: selectedCounterparty || undefined,
                         })}
                     >
@@ -443,26 +434,26 @@ export function MessagingInbox({ walletId, onCompose, onBack }) {
                         setStage('pick');
                     }}
                 >
-                    Switch address
+                    Reload
                 </Button>
             </div>
         </>,
     );
 }
 
-function counterpartyOf(msg, ownerAddress) {
-    if (!msg || !ownerAddress) return null;
-    if (msg.from && msg.from !== ownerAddress) return msg.from;
-    if (msg.to && msg.to !== ownerAddress) return msg.to;
+function counterpartyOf(msg, ownerSet) {
+    if (!msg || !ownerSet) return null;
+    if (msg.from && !ownerSet.has(msg.from)) return msg.from;
+    if (msg.to && !ownerSet.has(msg.to)) return msg.to;
     return null;
 }
 
-function buildConversations(messages, ownerAddress) {
-    if (!ownerAddress) return [];
+function buildConversations(messages, ownerSet) {
+    if (!ownerSet || ownerSet.size === 0) return [];
     /** @type {Map<string, { counterparty: string, count: number, lastTimestamp: number | null }>} */
     const acc = new Map();
     for (const msg of messages) {
-        const cp = counterpartyOf(msg, ownerAddress);
+        const cp = counterpartyOf(msg, ownerSet);
         if (!cp) continue;
         const existing = acc.get(cp);
         const ts = Number.isFinite(Number(msg.timestamp)) ? Number(msg.timestamp) : null;
@@ -489,7 +480,7 @@ function methodLabel(method) {
 
 function encryptedPlaceholder(method) {
     if (method === 2 || method === 3) {
-        return '🔒 Encrypted (session key required — open a session with the sender before reading).';
+        return '🔒 Encrypted (session key required). Open a session with the sender to read it.';
     }
     return '🔒 Encrypted (decryption failed).';
 }
@@ -504,6 +495,6 @@ function formatDate(unixSeconds) {
             minute: '2-digit',
         });
     } catch {
-        return '—';
+        return '-';
     }
 }
