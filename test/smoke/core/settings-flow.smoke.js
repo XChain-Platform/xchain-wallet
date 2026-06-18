@@ -80,7 +80,7 @@ function makeVault() {
     await flows.updateSettings(vault, { privacy: { torRouting: true } });
     const s = await flows.getSettings(vault);
     assert.equal(s.privacy.torRouting, true);
-    assert.equal(s.privacy.changeAddressRotation, true, 'sibling default preserved');
+    assert.equal(s.privacy.changeAddressRotation, false, 'sibling default preserved');
     assert.equal(s.privacy.hideSmallBalances, false, 'sibling default preserved');
 }
 

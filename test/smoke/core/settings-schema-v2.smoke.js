@@ -126,7 +126,7 @@ await flows.updateSettings(vault, {
 const persisted = await flows.getSettings(vault);
 assert.equal(persisted.reducedMotion, 'always');
 assert.equal(persisted.privacy.blurOnBlur, true);
-assert.equal(persisted.privacy.changeAddressRotation, true, 'untouched privacy default preserved');
+assert.equal(persisted.privacy.changeAddressRotation, false, 'untouched privacy default preserved');
 assert.equal(persisted.grace.testSendThresholdSats, 100000);
 assert.equal(persisted.grace.undoSendSeconds, 5, 'untouched grace field preserved');
 assert.equal(persisted.panicMode.enabled, true);

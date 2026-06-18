@@ -106,7 +106,10 @@ export const settingsMigrations = {
         reducedMotion: typeof r.reducedMotion === 'string' ? r.reducedMotion : 'auto',
         privacy: {
             torRouting: Boolean(r.privacy?.torRouting),
-            changeAddressRotation: r.privacy?.changeAddressRotation !== false,
+            // Default OFF when the field is absent, matching the new-wallet
+            // default (createDefaultSettings). An explicit prior choice
+            // (true/false) is preserved; only an unset value flips to off.
+            changeAddressRotation: r.privacy?.changeAddressRotation === true,
             hideSmallBalances: Boolean(r.privacy?.hideSmallBalances),
             blurOnBlur: Boolean(r.privacy?.blurOnBlur),
             labelsSurviveRestore: Boolean(r.privacy?.labelsSurviveRestore),

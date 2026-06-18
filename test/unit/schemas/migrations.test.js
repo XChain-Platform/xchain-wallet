@@ -240,6 +240,27 @@ describe('settingsMigrations: v1 to v2', () => {
         const r = settingsMigrations[1](makeV1Settings({ backupReminders: 'monthly' }));
         expect(r.backupReminders).toBe('monthly');
     });
+
+    it('defaults changeAddressRotation to false when the field is absent', () => {
+        const r = settingsMigrations[1](makeV1Settings({
+            privacy: { torRouting: false, hideSmallBalances: false },
+        }));
+        expect(r.privacy.changeAddressRotation).toBe(false);
+    });
+
+    it('preserves an explicit changeAddressRotation: true', () => {
+        const r = settingsMigrations[1](makeV1Settings({
+            privacy: { torRouting: false, changeAddressRotation: true, hideSmallBalances: false },
+        }));
+        expect(r.privacy.changeAddressRotation).toBe(true);
+    });
+
+    it('preserves an explicit changeAddressRotation: false', () => {
+        const r = settingsMigrations[1](makeV1Settings({
+            privacy: { torRouting: false, changeAddressRotation: false, hideSmallBalances: false },
+        }));
+        expect(r.privacy.changeAddressRotation).toBe(false);
+    });
 });
 
 describe('migrateSettings', () => {
