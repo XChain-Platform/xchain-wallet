@@ -47,24 +47,34 @@ assert.ok(
     'Home threads balancesFetchedAt into <HomeTabs>',
 );
 
-// --- 2. HomeTabs renders <StalenessLabel> -------------------------------
+// --- 2. HomeTabs threads balancesFetchedAt into the balance hero --------
+// The staleness label moved out of the tab strip and into
+// <TotalBalanceHero>, which sits above the tabs and always reflects the
+// rolled-up balance freshness. HomeTabs now just forwards the timestamp.
 
 const homeTabsSrc = readFileSync(join(components, 'HomeTabs.jsx'), 'utf8');
-assert.ok(
-    /from\s*['"]\.\/StalenessLabel\.jsx['"]/.test(homeTabsSrc),
-    'HomeTabs imports StalenessLabel',
-);
 assert.ok(
     /\bbalancesFetchedAt\b/.test(homeTabsSrc),
     'HomeTabs accepts balancesFetchedAt prop',
 );
 assert.ok(
-    /<StalenessLabel\s+lastSyncedAt=\{balancesFetchedAt\}/.test(homeTabsSrc),
-    'HomeTabs renders <StalenessLabel> bound to balancesFetchedAt',
+    /<TotalBalanceHero[\s\S]+?lastSyncedAt=\{balancesFetchedAt\}/.test(homeTabsSrc),
+    'HomeTabs threads balancesFetchedAt into <TotalBalanceHero lastSyncedAt={...}>',
+);
+
+const heroSrc = readFileSync(join(components, 'TotalBalanceHero.jsx'), 'utf8');
+assert.ok(
+    /from\s*['"]\.\/StalenessLabel\.jsx['"]/.test(heroSrc),
+    'TotalBalanceHero imports StalenessLabel',
 );
 assert.ok(
-    /active === 'coins' \|\| active === 'tokens' \|\| active === 'nfts'/.test(homeTabsSrc),
-    'HomeTabs gates the staleness label to balance-driven tabs only (skips Activity / DeFi placeholders)',
+    /<StalenessLabel\s+lastSyncedAt=\{lastSyncedAt\}/.test(heroSrc),
+    'TotalBalanceHero renders <StalenessLabel> bound to lastSyncedAt',
+);
+assert.ok(
+    /const hasSync = typeof lastSyncedAt === 'number' && lastSyncedAt > 0/.test(heroSrc)
+        && /hasSync \?/.test(heroSrc),
+    'TotalBalanceHero only renders the staleness label after a successful fetch (hasSync gate)',
 );
 
 // --- 3. History.jsx tracks historyFetchedAt -----------------------------
@@ -117,8 +127,8 @@ assert.ok(
     'TokenDetail renders <StalenessLabel> bound to holdersFetchedAt',
 );
 assert.ok(
-    /holdersFetchedAt && !holdersLoading && !holdersError/.test(tdSrc),
-    'TokenDetail only renders the staleness label after a successful holders load',
+    /\{holdersFetchedAt \?/.test(tdSrc),
+    'TokenDetail only renders the staleness label once holdersFetchedAt is stamped (post-success)',
 );
 
 console.log('staleness-label-adoption smoke OK');

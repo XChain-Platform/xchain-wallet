@@ -38,10 +38,10 @@ const chainRegistry = registryLib.defaultRegistry();
  * wallet's `getMultisigReceiveAddress` output on the BTC chain carry
  * the `<MultisigBadge>` indicator inline.
  *
- * Filters:
- *   - Chain chips (toggle each chainId on/off; re-uses the History
- *     route's chip CSS for consistency)
- *   - "Multisig only": keep only the multisig receive address row
+ * Filtering is prop-driven by the shell: `networkFilter` narrows to a
+ * single network and `tokenQuery` matches address/label text. (The
+ * earlier in-component chain-chip + "Multisig only" filter bar was
+ * removed in favour of these shell-level controls.)
  *
  * @param {object} props
  * @param {string} props.walletId

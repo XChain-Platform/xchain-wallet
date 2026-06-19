@@ -45,12 +45,11 @@ assert.ok(/MultisigBadge/.test(route),
     'AddressList imports MultisigBadge');
 assert.ok(/<MultisigBadge[\s\S]*?threshold=\{(?:row\.)?multisig\.threshold\}/.test(route),
     'AddressList renders the badge inline on matching rows');
-assert.ok(/Multisig only/.test(route),
-    'AddressList exposes a "Multisig only" filter chip');
-assert.ok(/multisigOnly/.test(route),
-    'AddressList tracks a multisigOnly filter state');
-assert.ok(/aria-label="Address filters"/.test(route),
-    'AddressList filter bar is labeled for assistive tech');
+// The in-component filter bar (chain chips + a "Multisig only" chip) was
+// removed; filtering is now prop-driven from the shell (networkFilter +
+// tokenQuery), so the route honours those instead of owning chip state.
+assert.ok(/networkFilter/.test(route),
+    'AddressList honours the networkFilter prop (replaces the removed chip bar)');
 assert.ok(/aria-label="Wallet addresses"/.test(route),
     'AddressList row container is labeled');
 assert.ok(/Multisig receive/.test(route),
@@ -86,5 +85,5 @@ for (const [shell, appPath] of [
 }
 
 console.log(
-    'OK: address-list smoke (AddressList route exists + getAddressesByChain aggregation + getMultisigReceiveAddress prefetch + MultisigBadge on matching rows + "Multisig only" filter + synthetic multisig row when not persisted + Home.onAddresses nav prop + 3-shell App.jsx wiring of \'addresses\' sub-route)',
+    'OK: address-list smoke (AddressList route exists + getAddressesByChain aggregation + getMultisigReceiveAddress prefetch + MultisigBadge on matching rows + prop-driven networkFilter + synthetic multisig row when not persisted + Home.onAddresses nav prop + 3-shell App.jsx wiring of \'addresses\' sub-route)',
 );

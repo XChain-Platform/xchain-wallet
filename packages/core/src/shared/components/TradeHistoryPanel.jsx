@@ -16,11 +16,11 @@
 // completed fills for this market. "Buy" means the user received
 // tick1 (gave tick2); "Sell" means the user gave tick1.
 //
-// Fetch strategy: on-demand (only when expanded) plus a manual
-// Refresh button. Trade history grows slowly and this panel is
-// secondary to the active-trading surface above it, so there's no
-// no polling. We avoid adding another 5s timer alongside the
-// orderbook and open-orders pollers.
+// Fetch strategy: load once on mount plus a manual Refresh button.
+// Trade history grows slowly and this panel is secondary to the
+// active-trading surface above it, so there's no polling. We avoid
+// adding another 5s timer alongside the orderbook and open-orders
+// pollers.
 
 import { useCallback, useEffect, useState } from 'react';
 import { AddressText } from '@xchain-wallet/core/ui';

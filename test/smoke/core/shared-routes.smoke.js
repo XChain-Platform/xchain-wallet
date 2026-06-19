@@ -121,10 +121,12 @@ const routeMessagingCalls = {
         'messaging.sendToken',
         'messaging.getAddressesByChain',
     ],
+    // QR-first Receive reads existing addresses only; the inline
+    // generateReceiveAddress derive flow was dropped from the screen
+    // (the messaging export is still asserted in part 7 for other callers).
     Receive: [
         'messaging.getAddressesByChain',
         'messaging.getNewestAddress',
-        'messaging.generateReceiveAddress',
     ],
     TokenWizard: [
         'messaging.getAddressesByChain',
@@ -175,9 +177,14 @@ for (const route of [
 }
 
 const webApp = readFileSync(join(web, 'src', 'App.jsx'), 'utf8');
+// The web SPA renders at either popup ('web') or full-page ('full')
+// width, so it derives the shell from the layout variant via
+// shellForVariant(variant) instead of hard-coding "web".
 assert.ok(
-    webApp.includes('MessagingProvider') && webApp.includes('shell="web"'),
-    'web App.jsx wraps in <MessagingProvider shell="web">',
+    webApp.includes('MessagingProvider')
+        && /<MessagingProvider\s+shell=\{shell\}/.test(webApp)
+        && /shell = shellForVariant\(variant\)/.test(webApp),
+    'web App.jsx wraps in <MessagingProvider shell={shellForVariant(variant)}>',
 );
 assert.ok(
     /import\s+\*\s+as\s+messaging/.test(webApp),
@@ -244,12 +251,15 @@ const requiredExports = [
     'sendToken',
 ];
 for (const fn of requiredExports) {
+    // Tolerate `export async function` (the web shell's messaging
+    // helpers are async wrappers over the local API).
+    const exported = new RegExp(`export (?:async )?function ${fn}\\b`);
     assert.ok(
-        new RegExp(`export function ${fn}\\b`).test(popupMsg),
+        exported.test(popupMsg),
         `popup messaging.js exports ${fn}`,
     );
     assert.ok(
-        new RegExp(`export function ${fn}\\b`).test(webMsg),
+        exported.test(webMsg),
         `web messaging.js exports ${fn}`,
     );
 }

@@ -10,6 +10,7 @@
 
 import { useId, useMemo } from 'react';
 import styles from './FeeSelector.module.css';
+import { InfoTip } from './InfoTip.jsx';
 
 const TIER_SPEEDS = ['low', 'normal', 'fast'];
 const SPEEDS_WITH_CUSTOM = [...TIER_SPEEDS, 'custom'];
@@ -60,6 +61,22 @@ export function FeeSelector({
     const SPEEDS = allowCustom ? SPEEDS_WITH_CUSTOM : TIER_SPEEDS;
     const MAX_INDEX = SPEEDS.length - 1;
 
+    // Group label + contextual help. Rendered above both the empty
+    // state and the slider so the "what does this mean" affordance is
+    // always next to the control (§37 / G122 InfoTip integration).
+    const labelBlock = label ? (
+        <div
+            className={styles.label}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--xc-space-1)' }}
+        >
+            {label}
+            <InfoTip
+                aria="Network fee help"
+                label="Pick how fast this transaction confirms. Faster fees cost more; Custom sets an exact rate."
+            />
+        </div>
+    ) : null;
+
     const tierList = useMemo(() => {
         if (!tiers) return [];
         return TIER_SPEEDS
@@ -70,7 +87,7 @@ export function FeeSelector({
     if (!tiers || tierList.length === 0) {
         return (
             <div className={styles.wrap}>
-                {label ? <div className={styles.label}>{label}</div> : null}
+                {labelBlock}
                 <p className={styles.placeholder}>Fee estimate unavailable for this chain.</p>
             </div>
         );
@@ -110,7 +127,7 @@ export function FeeSelector({
 
     return (
         <div className={styles.wrap}>
-            {label ? <div className={styles.label}>{label}</div> : null}
+            {labelBlock}
             <div className={styles.sliderBlock} data-active-speed={sliderSpeed}>
                 <input
                     type="range"

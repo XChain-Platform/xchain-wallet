@@ -28,66 +28,71 @@ const recvCss = readFileSync(
     'utf8',
 );
 
+// QR-first redesign: the request-payment fields are now inline (no
+// "Request payment" accordion, no memo/expiry). The user sets an amount
+// (and optional token tick) and the QR re-renders to encode it; sharing
+// hands off the QR *image* via the Web Share API rather than a URI.
+
 // --- imports ----------------------------------------------------------
 
 assert.match(recvSrc, /useMemo/, 'useMemo imported');
+assert.match(recvSrc, /import QRCode from 'qrcode'/, 'QRCode imported');
 
-// --- request payment state -------------------------------------------
+// --- inline payment-request state ------------------------------------
 
-for (const s of ['reqOpen', 'reqAmount', 'reqTick', 'reqMemo', 'reqExpiryMinutes', 'reqQrDataUrl']) {
+for (const s of ['reqAmount', 'reqTick', 'amountInputMode', 'fiatAmount']) {
     assert.match(recvSrc, new RegExp(`\\b${s}\\b`), `state: ${s}`);
 }
 
 // --- request URI memo ------------------------------------------------
 
-assert.match(recvSrc, /requestUri = useMemo/, 'requestUri memo');
+assert.match(recvSrc, /qrUri = useMemo/, 'qrUri memo');
 assert.match(
     recvSrc,
-    /uriLib\.encodeBip21Uri\(\{[\s\S]*amount:\s*reqAmount\.trim\(\)/,
-    'request URI uses entered amount',
+    /uriLib\.buildXchainUri\(/,
+    'encodes an xchain: send URI carrying the requested amount + tick',
+);
+assert.match(recvSrc, /amount: amount \|\| undefined/, 'request URI uses the entered amount');
+assert.match(recvSrc, /tick: tick \|\| undefined/, 'request URI carries the token tick');
+assert.match(
+    recvSrc,
+    /uriLib\.encodeBip21Uri\(/,
+    'falls back to a bare BIP21 URI for non-xchain wallets',
+);
+
+// --- QR generation ---------------------------------------------------
+
+assert.match(recvSrc, /QRCode\.toDataURL\(qrUri/, 'request URI rendered to QR');
+
+// --- QR image copy + share -------------------------------------------
+
+assert.match(recvSrc, /copyQrImage = useCallback/, 'copy callback memoized');
+assert.match(recvSrc, /shareQrImage = useCallback/, 'share callback memoized');
+assert.match(
+    recvSrc,
+    /navigator\.clipboard\.write\(\[new ClipboardItem/,
+    'copies the QR PNG to the clipboard as an image',
 );
 assert.match(
     recvSrc,
-    /params\.tick\s*=\s*reqTick\.trim\(\)\.toUpperCase\(\)/,
-    'tick param uppercased',
+    /navigator\.share\(\{[\s\S]*?files: \[file\]/,
+    'shares the QR image file via the Web Share API',
 );
+assert.match(recvSrc, /canShareFiles/, 'feature-detects file-share support');
 assert.match(
     recvSrc,
-    /params\.expiry\s*=\s*expiresAt/,
-    'expiry param computed from minutes',
+    /navigator\.canShare\(\{ files:/,
+    'probes navigator.canShare with a file before offering Share',
 );
 
-// --- QR generation for the request URI ------------------------------
+// --- buttons ---------------------------------------------------------
 
-assert.match(recvSrc, /QRCode\.toDataURL\(requestUri/, 'request URI rendered to QR');
+assert.match(recvSrc, /Copy QR/, 'Copy QR button');
+assert.match(recvSrc, /Share QR/, 'Share QR button (shown when file-share is supported)');
 
-// --- Share button + handler -----------------------------------------
+// --- CSS hooks -------------------------------------------------------
 
-assert.match(recvSrc, /onShare = useCallback/, 'share callback memoized');
-assert.match(recvSrc, /navigator\.share\(/, 'attempts Web Share API');
-assert.match(recvSrc, /navigator\.clipboard\?\.writeText/, 'falls back to clipboard');
-assert.match(recvSrc, /shareStatus/, 'inline status state');
-
-// Share button rendered next to the bare-address Copy button (always
-// present on a loaded address).
-assert.match(
-    recvSrc,
-    /<Button[\s\S]*onClick=\{\(\) => onShare\(uriLib\.encodeBip21Uri/,
-    'bare-address share button wired',
-);
-
-// --- request panel UI ------------------------------------------------
-
-assert.match(recvSrc, /styles\.requestPanel/, 'panel CSS hook');
-assert.match(recvSrc, /styles\.requestToggle/);
-assert.match(recvSrc, /styles\.requestForm/);
-assert.match(recvSrc, /styles\.requestUri/);
-assert.match(recvSrc, /styles\.requestActions/);
-assert.match(recvSrc, /aria-expanded=\{reqOpen\}/, 'accordion aria-expanded');
-assert.match(recvSrc, /Request payment/i, 'panel toggle label');
-
-// CSS hooks
-for (const cls of ['requestPanel', 'requestToggle', 'requestForm', 'requestUri', 'requestActions']) {
+for (const cls of ['qrBox', 'qr', 'qrActions', 'assetCard']) {
     assert.match(recvCss, new RegExp(`\\.${cls}\\s*\\{`), `CSS hook .${cls}`);
 }
 

@@ -54,7 +54,7 @@ assert.ok(/const chainTipByChainId = useMemo/.test(historySrc),
     'History.jsx memoizes chainTipByChainId');
 assert.ok(/chainTip=\{chainTipByChainId\[entry\.chainId\]\}/.test(historySrc),
     'History.jsx threads chainTip into EntryRow');
-assert.ok(/function EntryRow\(\{ entry, selected, showConnector, onClick, peerCache, isFull, chainTip, walletId \}\)/.test(historySrc),
+assert.ok(/function EntryRow\(\{[^}]*\bchainTip\b[^}]*\bwalletId\b[^}]*\}\)/.test(historySrc),
     'EntryRow declares the chainTip prop');
 assert.ok(/<DetailCard entry=\{entry\} peerCache=\{peerCache\} isFull=\{isFull\} chainTip=\{chainTip\} walletId=\{walletId\} \/>/.test(historySrc),
     'EntryRow forwards chainTip to DetailCard');

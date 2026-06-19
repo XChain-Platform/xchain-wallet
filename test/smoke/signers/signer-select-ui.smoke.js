@@ -80,22 +80,15 @@ assert.ok(
     'AddAccountForm threads signerId into messaging.createAccount',
 );
 
+// The QR-first Receive redesign removed the inline "derive next address"
+// form, and with it the SignerSelectForm picker on the Receive screen.
+// The picker component, the receive.getAddress handler's signer routing
+// (asserted in part 4), and the messaging surface all remain; only the
+// Receive screen no longer mounts the picker.
 const receiveSrc = readFileSync(join(sharedRoutes, 'Receive.jsx'), 'utf8');
 assert.ok(
-    /import\s*\{\s*SignerSelectForm\s*\}\s*from\s*['"]\.\/SignerSelectForm\.jsx['"]/.test(receiveSrc),
-    'Receive imports SignerSelectForm',
-);
-assert.ok(
-    /<SignerSelectForm\b/.test(receiveSrc),
-    'Receive renders <SignerSelectForm> inside the derive-next form',
-);
-assert.ok(
-    /usingHwSigner/.test(receiveSrc),
-    'Receive distinguishes the HW path so it can skip the password input',
-);
-assert.ok(
-    /signerId\s*:\s*genSignerId\s*\|\|\s*undefined/.test(receiveSrc),
-    'Receive threads signerId into messaging.generateReceiveAddress',
+    !/<SignerSelectForm\b/.test(receiveSrc),
+    'Receive no longer mounts SignerSelectForm (inline derive flow dropped)',
 );
 
 // --- 3. Core flows accept an optional signer + derive Address.source ------

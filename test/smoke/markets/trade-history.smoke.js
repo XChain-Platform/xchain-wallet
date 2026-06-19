@@ -31,8 +31,12 @@ assert.ok(/messaging\.getAddressesByChain\(/.test(src),
     'TradeHistoryPanel fans out across wallet addresses on the chain');
 assert.ok(/address: addr\.address/.test(src),
     'TradeHistoryPanel passes the user address filter to getMarketHistory');
-assert.ok(/aria-expanded=/.test(src) && /setExpanded/.test(src),
-    'TradeHistoryPanel has a collapsible toggle with aria-expanded');
+// The panel was simplified from a collapsible disclosure to an
+// always-open panel that loads on mount (no aria-expanded / setExpanded).
+assert.ok(!/aria-expanded=/.test(src) && !/setExpanded/.test(src),
+    'TradeHistoryPanel is always-open (no collapsible toggle)');
+assert.ok(/useEffect\([\s\S]{0,40}reload\(\);/.test(src),
+    'TradeHistoryPanel loads its history on mount via reload()');
 assert.ok(/onOpenTx/.test(src),
     'TradeHistoryPanel reserves an onOpenTx callback for tx detail');
 assert.ok(/Refresh/.test(src),

@@ -1081,6 +1081,35 @@
     padding: 0 var(--xc-space-4);
 }
 
+.resultsHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--xc-space-2);
+    margin-bottom: var(--xc-space-2);
+}
+
+.exportTrigger {
+    font-size: var(--xc-text-sm);
+    font-weight: 500;
+    color: var(--xc-text);
+    background: var(--xc-surface-2);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-2);
+    padding: var(--xc-space-1) var(--xc-space-3);
+    cursor: pointer;
+}
+
+.exportTrigger:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.exportTrigger:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
 .error {
     color: var(--xc-error, #b00);
     font-size: var(--xc-text-sm);

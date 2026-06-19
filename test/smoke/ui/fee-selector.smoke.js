@@ -40,35 +40,37 @@ assert.match(
     'ui/index re-exports FeeSelector',
 );
 
-// --- ARIA radiogroup ---------------------------------------------------
+// --- slider control ----------------------------------------------------
+// The fee picker is a range slider with discrete Low / Normal / Fast /
+// Custom stops (chosen over a radiogroup; it is a11y-valid via a labelled
+// range input + aria-valuetext that announces the active tier).
 
-assert.match(cmp, /role="radiogroup"/, 'tier list is a radiogroup');
-assert.match(cmp, /role="radio"/, 'tier buttons are radios');
-assert.match(cmp, /aria-checked=\{active\}/, 'aria-checked bound to active state');
-assert.match(cmp, /aria-labelledby=\{labelId\}/, 'group labelled by label span');
-assert.match(cmp, /aria-label=\{`Custom fee rate/, 'custom input labelled');
+assert.match(cmp, /type="range"/, 'fee control is a range slider');
+assert.match(cmp, /aria-label="Network fee"/, 'slider is labelled "Network fee"');
+assert.match(cmp, /aria-valuetext=/, 'slider announces the active tier via aria-valuetext');
+assert.match(cmp, /aria-label=\{SPEED_LABELS\[s\]\}/, 'each discrete tick is labelled by speed');
+assert.match(cmp, /aria-label=\{`Custom fee rate/, 'custom rate input labelled');
 
 // --- presets render from `tiers` prop ----------------------------------
 
-assert.match(cmp, /tiers\.low/);
-assert.match(cmp, /tiers\.normal/);
-assert.match(cmp, /tiers\.fast/);
+assert.match(cmp, /TIER_SPEEDS = \['low', 'normal', 'fast'\]/, 'three preset tiers');
+assert.match(cmp, /tiers\[speed\]/, 'tier estimates read from the tiers prop');
 
 // --- selection wiring --------------------------------------------------
 
 assert.match(
     cmp,
-    /onChange\(\{\s*mode:\s*speed\s*\}\)/,
-    'tier click writes mode',
+    /onChange\(\{ mode: speed \}\)/,
+    'tier pick writes mode',
 );
 assert.match(
     cmp,
-    /onChange\(\{\s*mode:\s*'custom'/,
-    'custom toggle writes mode + customRate',
+    /onChange\(\{ mode: 'custom', customRate: seedCustomRate\(\) \}\)/,
+    'landing on Custom seeds a starting rate',
 );
 assert.match(
     cmp,
-    /onChange\(\{\s*mode:\s*'custom',\s*customRate:/,
+    /onChange\(\{ mode: 'custom', customRate: Number\.isFinite\(n\) \? n : 0 \}\)/,
     'custom rate change writes back',
 );
 
@@ -76,22 +78,13 @@ assert.match(
 
 assert.match(cmp, /Fee estimate unavailable for this chain\./, 'empty-state copy');
 
-// --- placeholder badge -------------------------------------------------
+// --- contextual help (§37 / G122 InfoTip) ------------------------------
 
-assert.match(
-    cmp,
-    /placeholderBadge \?/,
-    'placeholder badge is conditional',
-);
-assert.match(
-    cmp,
-    /Placeholder rates/,
-    'placeholder copy present',
-);
+assert.match(cmp, /aria="Network fee help"/, 'fee selector carries the Network-fee InfoTip');
 
 // --- CSS hooks ---------------------------------------------------------
 
-for (const cls of ['wrap', 'label', 'tiers', 'tier', 'tierActive', 'tierName', 'tierRate', 'tierFee', 'tierEta', 'customRow', 'customInput', 'customUnit', 'placeholder']) {
+for (const cls of ['wrap', 'label', 'sliderBlock', 'slider', 'sliderTicks', 'sliderTick', 'sliderTickActive', 'sliderReadout', 'customRow', 'customInput', 'customUnit', 'placeholder']) {
     assert.match(css, new RegExp(`\\.${cls}\\b`), `CSS hook .${cls}`);
 }
 

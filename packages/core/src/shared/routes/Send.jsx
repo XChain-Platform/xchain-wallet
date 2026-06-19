@@ -1559,6 +1559,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
             />
             {feeTiers ? (
                 <FeeSelector
+                    label="Network fee"
                     tiers={feeTiers}
                     value={feePick}
                     onChange={setFeePick}
@@ -1583,6 +1584,31 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                     autoComplete="off"
                     error={/[|;]/.test(memo) ? 'Cannot contain | or ; characters.' : undefined}
                 />
+                {/* §44.3 per-send RBF toggle. Default seeds from
+                    settings.fees[chainId].rbfByDefault (see the effect
+                    above); the live value flows into the send payload as
+                    `rbf: rbfEnabled`. */}
+                <label className={styles.rbfRow}>
+                    <span className={styles.rbfLabel}>
+                        <span>
+                            Replace-by-fee
+                            <InfoTip
+                                aria="Replace-by-fee help"
+                                label="Replace-by-fee (BIP125) lets you re-broadcast this transaction later at a higher fee, speeding up or cancelling it before it confirms."
+                            />
+                        </span>
+                        <span className={styles.rbfHint}>
+                            Keep this on to allow speeding up or cancelling the transaction before it confirms.
+                        </span>
+                    </span>
+                    <input
+                        type="checkbox"
+                        role="switch"
+                        aria-label="Replace-by-fee enabled"
+                        checked={rbfEnabled}
+                        onChange={(e) => setRbfEnabled(e.target.checked)}
+                    />
+                </label>
             </details>
             {formError ? (
                 <StatusMessage
