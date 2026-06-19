@@ -15,6 +15,7 @@ import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useAutoLock } from '../hooks/useAutoLock.js';
 import { useSettings } from '../hooks/useSettings.js';
+import { useProofVerification } from '../hooks/useProofVerification.js';
 import { HomeTabs } from '../components/HomeTabs.jsx';
 import { buildBalanceRows, detectSpamCandidates } from '../components/BalanceList.jsx';
 import { useToast } from '../components/ToastHost.jsx';
@@ -467,6 +468,13 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
         idleMs: autolockMinutes * 60 * 1000,
     });
 
+    // §7/§8: SPV proof verification. Off for demo wallets (synthetic
+    // balances have no real proofs) and when the user opts out via
+    // `verifyProofs` (default on). The map is keyed `chainId:tick` and
+    // fills in progressively; HomeTabs badges the Tokens rows from it.
+    const verifyProofsEnabled = settings.settings?.verifyProofs !== false && !isDemoActive;
+    const verifyMap = useProofVerification({ messaging, balances, enabled: verifyProofsEnabled });
+
     const activeWallet = wallets && activeWalletId
         ? wallets.find((w) => w.id === activeWalletId)
         : null;
@@ -655,6 +663,7 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
                         onTogglePin={showPinAffordance ? handleTogglePin : undefined}
                         hiddenKeys={new Set(hiddenTokens)}
                         onToggleHide={showHideAffordance ? handleToggleHide : undefined}
+                        verifyMap={verifyMap}
                         actions={(
                             <div className={styles.quickActions} role="group" aria-label="Quick actions">
                                 <button

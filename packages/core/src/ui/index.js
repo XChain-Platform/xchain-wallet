@@ -25,6 +25,7 @@ export { AddressText } from './AddressText.jsx';
 export { CopyButton } from './CopyButton.jsx';
 export { AnimatedQrFrames } from './AnimatedQrFrames.jsx';
 export { MultisigBadge } from './MultisigBadge.jsx';
+export { VerifiedBadge } from './VerifiedBadge.jsx';
 export { QrScanner } from './QrScanner.jsx';
 export { ChainPicker } from './ChainPicker.jsx';
 export { Skeleton } from './Skeleton.jsx';

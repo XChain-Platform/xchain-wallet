@@ -233,6 +233,10 @@ export {
     walletBalances,
 } from './balances.js';
 export {
+    verifyAddressBalance,
+    verifyAddressAction,
+} from './verifyBalances.js';
+export {
     reconcileAddressSigners,
     AmbiguousSignerMatchError,
 } from './reconcileAddressSigners.js';

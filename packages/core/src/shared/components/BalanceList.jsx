@@ -10,7 +10,7 @@
 
 import { useMemo, useState } from 'react';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
-import { MultisigBadge, Icon } from '@xchain-wallet/core/ui';
+import { MultisigBadge, VerifiedBadge, Icon } from '@xchain-wallet/core/ui';
 import { EmptyStateNudge } from './EmptyStateNudge.jsx';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import styles from './BalanceList.module.css';
@@ -34,6 +34,7 @@ import styles from './BalanceList.module.css';
  * @param {(key: string, nextPinned: boolean) => void} [props.onTogglePin]   per-row pin/unpin callback; when supplied each row renders a star button
  * @param {Set<string> | null} [props.hiddenKeys]    `chainId:tick` keys hidden by the user. Hidden rows collapse into the Hidden footer section (§27.4 / G073).
  * @param {(key: string, nextHidden: boolean) => void} [props.onToggleHide]  per-row hide/unhide callback; when supplied, each row gains a "hide" entry in its overflow menu
+ * @param {Record<string, { status: 'verified' | 'failed' | 'unavailable' | 'pending', reason: string | null }> | null} [props.verifyMap]   SPV proof verdict per `chainId:tick`; token rows render a `<VerifiedBadge>` when an entry exists (§7/§8). Native rows are never badged.
  */
 export function BalanceList({
     rows,
@@ -47,6 +48,7 @@ export function BalanceList({
     onTogglePin,
     hiddenKeys,
     onToggleHide,
+    verifyMap,
 }) {
     const [hiddenExpanded, setHiddenExpanded] = useState(false);
     if (!rows || rows.length === 0) {
@@ -90,6 +92,7 @@ export function BalanceList({
                         onTogglePin={onTogglePin}
                         hidden={false}
                         onToggleHide={onToggleHide}
+                        verify={verifyMap ? verifyMap[key] : null}
                     />
                 );
             })}
@@ -117,6 +120,7 @@ export function BalanceList({
                                 onTogglePin={onTogglePin}
                                 hidden
                                 onToggleHide={onToggleHide}
+                                verify={verifyMap ? verifyMap[key] : null}
                             />
                         );
                     }) : null}
@@ -126,7 +130,7 @@ export function BalanceList({
     );
 }
 
-function BalanceRowEl({ row, multisig, onSelect, pinned, onTogglePin, hidden, onToggleHide }) {
+function BalanceRowEl({ row, multisig, onSelect, pinned, onTogglePin, hidden, onToggleHide, verify }) {
     const isNative = row.kind === 'native';
     const chainIconUrl = branding.chainIconSmallUrl(row.chainId);
     // App-wide privacy toggle: when on, replace the per-row qty and
@@ -214,6 +218,9 @@ function BalanceRowEl({ row, multisig, onSelect, pinned, onTogglePin, hidden, on
                             scheme={multisig.scheme}
                             size="sm"
                         />
+                    ) : null}
+                    {!isNative && verify ? (
+                        <VerifiedBadge status={verify.status} reason={verify.reason} size="sm" />
                     ) : null}
                 </div>
                 <div className={styles.subtitle}>{subtitle}</div>

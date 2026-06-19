@@ -10,7 +10,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Screen,
-    ScreenHeader, Button, Icon, Skeleton } from '@xchain-wallet/core/ui';
+    ScreenHeader, Button, Icon, Skeleton, VerifiedBadge } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import {
@@ -21,6 +21,8 @@ import {
 } from '../../flows/rbfReplace.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
+import { useSettings } from '../hooks/useSettings.js';
+import { useActionProofVerification } from '../hooks/useProofVerification.js';
 import { EmptyStateNudge } from '../components/EmptyStateNudge.jsx';
 import { useToast } from '../components/ToastHost.jsx';
 import { groupHistoryEntries } from '../utils/historyGrouping.js';
@@ -396,6 +398,26 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         searchQuery, actionTypeFilter, statusFilter, dateFrom, dateTo,
         walletAddressSet,
     ]);
+
+    // §7/§8: SPV action verification. Verify only visible, confirmed
+    // entries that carry a numeric action index (an unconfirmed action has
+    // no checkpointable block yet). Off for demo wallets and when the user
+    // opts out via `verifyProofs` (default on). The map is keyed by
+    // entry.key; EntryRow badges from it.
+    const proofSettings = useSettings();
+    const verifyProofsEnabled = proofSettings.settings?.verifyProofs !== false
+        && !flowsLib.isDemoWallet(walletId);
+    const verifyItems = useMemo(
+        () => visibleEntries
+            .filter((e) => Number(e.blockIndex) > 0 && e.actionIndex != null && e.actionIndex !== '')
+            .map((e) => ({ key: e.key, chainId: e.chainId, actionIndex: e.actionIndex })),
+        [visibleEntries],
+    );
+    const actionVerifyMap = useActionProofVerification({
+        messaging,
+        items: verifyItems,
+        enabled: verifyProofsEnabled,
+    });
 
     const filtersActive = (
         searchQuery
@@ -806,6 +828,24 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 )
             ) : null}
 
+            {(visibleEntries.length > 0 || historyFetchedAt) ? (
+                <div className={styles.resultsHeader}>
+                    {historyFetchedAt && loadingChains.size === 0 ? (
+                        <StalenessLabel lastSyncedAt={historyFetchedAt} />
+                    ) : <span />}
+                    <button
+                        type="button"
+                        className={styles.exportTrigger}
+                        aria-haspopup="dialog"
+                        aria-expanded={exportModalOpen}
+                        onClick={() => setExportModalOpen(true)}
+                        disabled={entries.length === 0}
+                    >
+                        Export…
+                    </button>
+                </div>
+            ) : null}
+
             <ul className={styles.timeline}>
                 {groupedItems.map((item) => {
                     if (item.kind === 'group') {
@@ -835,6 +875,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                                                     isFull={isFull}
                                                     chainTip={chainTipByChainId[entry.chainId]}
                                                     walletId={walletId}
+                                                    verify={actionVerifyMap[entry.key]}
                                                 />
                                             ))}
                                         </ul>
@@ -855,6 +896,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                             isFull={isFull}
                             chainTip={chainTipByChainId[entry.chainId]}
                             walletId={walletId}
+                            verify={actionVerifyMap[entry.key]}
                         />
                     );
                 })}
@@ -1970,7 +2012,7 @@ function coinOfChainId(chainId) {
  * One history row. Used both for top-level entries and for member rows
  * inside an expanded group card.
  */
-export function EntryRow({ entry, selected, showConnector, onClick, peerCache, isFull, chainTip, walletId }) {
+export function EntryRow({ entry, selected, showConnector, onClick, peerCache, isFull, chainTip, walletId, verify }) {
     const d = chainRegistry.get(entry.chainId);
     return (
         <li data-history-key={entry.key}>
@@ -2004,6 +2046,9 @@ export function EntryRow({ entry, selected, showConnector, onClick, peerCache, i
                         </span>
                     ) : null}
                     <StatusPill status={classifyEntryStatus(entry)} />
+                    {verify ? (
+                        <VerifiedBadge status={verify.status} reason={verify.reason} size="sm" />
+                    ) : null}
                 </span>
                 <span className={styles.rowSourceAddress}>
                     {entry.source || '-'}

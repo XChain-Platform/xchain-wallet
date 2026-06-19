@@ -180,6 +180,29 @@ export function getAddressBalances(chainId, address) {
 }
 
 /**
+ * §7/§8 SPV: verify a single token balance against a quorum-signed
+ * checkpoint. Resolves to a normalized `{ status, amount, height, reason }`
+ * verdict (never rejects for a failed proof).
+ *
+ * @param {{ chainId: string, address: string, tick: string, atHeight?: number | string }} req
+ * @returns {Promise<{ status: string, amount: string | null, height: number | null, reason: string | null }>}
+ */
+export function verifyBalance(req) {
+    return /** @type {any} */ (sendMessage('balances.verify', req));
+}
+
+/**
+ * §7/§8 SPV: verify a single action's inclusion against a quorum-signed
+ * checkpoint.
+ *
+ * @param {{ chainId: string, actionIndex: number | string }} req
+ * @returns {Promise<{ status: string, height: number | null, reason: string | null }>}
+ */
+export function verifyAction(req) {
+    return /** @type {any} */ (sendMessage('history.verify', req));
+}
+
+/**
  * @param {string} walletId
  * @param {string} [accountId]   when supplied, restrict to a single BIP44 account
  * @returns {Promise<Record<string, Array<{ address: string, label: string, addressType: string, derivationPath: string | null }>>>}

@@ -151,6 +151,8 @@ const {
     walletBalances,
     addressBalances,
     addressHistory,
+    verifyAddressBalance,
+    verifyAddressAction,
     getActiveNetwork,
     createPriceOracle,
     getMarkets,
@@ -2379,6 +2381,18 @@ export function createBackgroundHost(deps) {
 
     host.register('history.address', async (req, { sdkRegistry }) => {
         return addressHistory({ ...req, sdkRegistry });
+    });
+
+    // §7/§8 SPV proof verification. Verifies a token balance / action
+    // against a quorum-signed checkpoint via the SDK light client. Never
+    // throws to the caller (the flow normalizes transport problems to an
+    // `unavailable` verdict).
+    host.register('balances.verify', async (req, { sdkRegistry }) => {
+        return verifyAddressBalance({ ...req, sdkRegistry });
+    });
+
+    host.register('history.verify', async (req, { sdkRegistry }) => {
+        return verifyAddressAction({ ...req, sdkRegistry });
     });
 
     // Native-coin price oracle. Single shared instance per host so the
