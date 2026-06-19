@@ -13,59 +13,82 @@
     color: var(--xc-text-muted);
 }
 
-.tiers {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
-    gap: var(--xc-space-1);
-}
-
-.tier {
+.sliderBlock {
     display: flex;
     flex-direction: column;
-    align-items: center;
-    gap: 2px;
-    padding: var(--xc-space-2) var(--xc-space-1);
-    background: var(--xc-bg-card, var(--xc-bg));
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
+    gap: var(--xc-space-1);
+    padding: 0;
+}
+
+.slider {
+    width: 100%;
+    accent-color: var(--xc-accent-primary);
     cursor: pointer;
-    font: inherit;
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    transition: border-color 0.15s, color 0.15s;
 }
 
-.tier:focus-visible {
+.slider:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
+    outline-offset: 4px;
+    border-radius: 2px;
 }
 
-.tier:disabled {
+.slider:disabled {
     opacity: 0.5;
     cursor: not-allowed;
 }
 
-.tierActive {
-    border-color: var(--xc-accent-primary);
-    color: var(--xc-text);
+.sliderTicks {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--xc-space-1);
 }
 
-.tierName {
-    font-weight: 600;
-    font-size: var(--xc-text-sm);
-}
-
-.tierRate {
+.sliderTick {
+    background: transparent;
+    border: none;
+    padding: 0;
+    font: inherit;
+    cursor: pointer;
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
+    text-align: center;
 }
 
-.tierFee {
-    font-size: var(--xc-text-xs);
+.sliderTick:first-child { text-align: start; }
+.sliderTick:last-child { text-align: end; }
+
+.sliderTick:disabled { cursor: not-allowed; }
+
+.sliderTickActive {
     color: var(--xc-text);
+    font-weight: 600;
 }
 
-.tierEta {
+.sliderReadout {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--xc-space-2);
+    padding-top: var(--xc-space-1);
+}
+
+.sliderReadoutPrimary {
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text);
+    font-weight: 500;
+}
+
+.sliderReadoutEta {
+    color: var(--xc-text-muted);
+    font-weight: 400;
+}
+
+.sliderReadoutFiat {
+    color: var(--xc-text-muted);
+    font-weight: 400;
+}
+
+.sliderReadoutRate {
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
 }

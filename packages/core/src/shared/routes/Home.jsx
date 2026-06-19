@@ -120,6 +120,9 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
     const [networkFilterLocal, setNetworkFilterLocal] = useState('all');
     const networkFilter = networkFilterProp ?? networkFilterLocal;
     const setNetworkFilter = onNetworkFilterChangeProp ?? setNetworkFilterLocal;
+    // BTC-only gate: multisig is Bitcoin-only at launch (spec 10.3), so the
+    // multisig badge data only flows when Bitcoin is in view.
+    const isBtc = networkFilter === 'bitcoin' || networkFilter === 'all';
     // Free-text token filter follows the same parent-vs-local pattern as
     // the network filter; popped into the header's filter popover.
     const [tokenQueryLocal, setTokenQueryLocal] = useState('');
@@ -632,11 +635,7 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
                     />
                 ) : null}
 
-                {balances ? (() => {
-                    // BTC-only gate: multisig badges apply only to the Bitcoin
-                    // chain card at launch (§10.3). Other chain cards receive null.
-                    const isBtc = networkFilter === 'bitcoin' || networkFilter === 'all';
-                    return (
+                {balances ? (
                     <HomeTabs
                         chainRegistry={chainRegistry}
                         balances={balances}
@@ -726,8 +725,7 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
                             </div>
                         )}
                     />
-                    );
-                })() : null}
+                ) : null}
 
 
                 {balances && Object.keys(balances).length === 0 ? (

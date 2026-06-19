@@ -43,7 +43,7 @@ const targets = [
     [join(components, 'RawPsbtViewer.module.css'), 'toggle'],
     [join(components, 'RawPsbtViewer.module.css'), 'copyBtn'],
     [join(components, 'ReachabilityBanner.module.css'), 'retry'],
-    [join(ui, 'FeeSelector.module.css'), 'tier'],
+    [join(ui, 'FeeSelector.module.css'), 'slider'],
 ];
 
 for (const [path, klass] of targets) {
