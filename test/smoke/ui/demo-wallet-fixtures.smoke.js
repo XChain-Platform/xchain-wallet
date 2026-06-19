@@ -17,7 +17,7 @@
 //   - synthesizeDemoBalances mirrors getWalletBalances' shape; first
 //     address per chain gets a non-zero native + tokens, additional
 //     addresses get zero balances so the row still renders.
-//   - synthesizeDemoHistory returns 2 entries for known chains, [] for
+//   - synthesizeDemoHistory returns multiple entries for known chains, [] for
 //     unknown chains.
 //   - synthesizeDemoLinks returns []. (Cross-chain LINK fabrication is
 //     deferred; History's .catch(() => []) path already accepts an
@@ -118,17 +118,18 @@ assert.deepEqual(synthesizeDemoBalances(null), {}, 'null input returns empty');
 
 {
     const entries = synthesizeDemoHistory('bitcoin-mainnet', 'bc1q...0', { now: 1_700_000_000_000 });
-    assert.equal(entries.length, 2, 'two history entries for known chains');
+    assert.equal(entries.length, 11, 'rich history fixture for known chains');
     assert.equal(entries[0].action, 'SEND', 'first entry is incoming SEND');
     assert.equal(entries[0].params.destination, 'bc1q...0',
         'incoming SEND destinations the user');
     assert.equal(entries[0].blockIndex, null,
         'first entry is pending (exercises the timeline pending state)');
-    assert.equal(entries[1].action, 'ISSUE', 'second entry is ISSUE');
-    assert.equal(entries[1].params.source, 'bc1q...0', 'ISSUE source is the user');
-    assert.ok(entries[1].blockIndex && Number.isInteger(entries[1].blockIndex),
+    const issueEntry = entries.find((e) => e.action === 'ISSUE');
+    assert.ok(issueEntry, 'ISSUE entry present in history');
+    assert.equal(issueEntry.params.source, 'bc1q...0', 'ISSUE source is the user');
+    assert.ok(issueEntry.blockIndex && Number.isInteger(issueEntry.blockIndex),
         'ISSUE has a confirmed blockIndex');
-    assert.ok(entries[0].timestamp > entries[1].timestamp,
+    assert.ok(entries[0].timestamp > issueEntry.timestamp,
         'incoming SEND is more recent than ISSUE');
 }
 

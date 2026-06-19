@@ -120,7 +120,7 @@ assert.ok(/err\.retryAfterMs = result\.retryAfterMs/.test(handlersSrc),
 const signMethods = ['signMessage', 'signAction', 'signPsbt', 'signIn'];
 for (const method of signMethods) {
     const re = new RegExp(
-        `host\\.register\\('bridge\\.${method}',[\\s\\S]*?assertNotThrottled\\(signThrottle, req\\)`,
+        `register\\('bridge\\.${method}',[\\s\\S]*?assertNotThrottled\\(signThrottle, req\\)`,
     );
     assert.ok(re.test(handlersSrc),
         `bridge.${method} calls assertNotThrottled before approvals`);
@@ -133,7 +133,7 @@ const noThrottleMethods = [
 ];
 for (const method of noThrottleMethods) {
     const block = handlersSrc.match(
-        new RegExp(`host\\.register\\('bridge\\.${method}'[\\s\\S]*?\\n    \\}\\);`),
+        new RegExp(`register\\('bridge\\.${method}'[\\s\\S]*?\\n    \\}\\);`),
     );
     assert.ok(block, `bridge.${method} handler block found`);
     assert.ok(!/assertNotThrottled/.test(block[0]),

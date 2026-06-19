@@ -153,7 +153,7 @@ assert.ok(
     'background host registers action.destroy',
 );
 assert.ok(
-    /destroyToken\(\{\s*\.\.\.req,\s*vault,\s*chainRegistry,\s*sdkRegistry\s*\}\)/.test(bg),
+    /destroyToken\(\{\s*\.\.\.req,\s*signer:[^}]+vault,\s*chainRegistry,\s*sdkRegistry\s*\}\)/.test(bg),
     'action.destroy handler forwards deps to destroyToken',
 );
 

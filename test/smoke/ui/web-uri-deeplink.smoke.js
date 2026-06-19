@@ -42,7 +42,7 @@ const sendSrc = readFileSync(
     join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', 'Send.jsx'),
     'utf8',
 );
-assert.ok(/export function Send\(\{ walletId, onBack, prefill = null \}\)/.test(sendSrc),
+assert.ok(/export function Send\(\{ walletId, onBack, prefill = null\b/.test(sendSrc),
     'Send accepts a prefill prop (default null)');
 for (const field of ['address', 'amount', 'tick', 'chainId', 'memo']) {
     assert.ok(
@@ -97,7 +97,7 @@ assert.ok(
     'Send route in App.jsx receives prefill={sendPrefill}',
 );
 assert.ok(
-    /onBack=\{\(\)\s*=>\s*\{\s*\n\s*setSendPrefill\(null\);\s*\n\s*setUnlockedView\('home'\);/.test(webApp),
+    /onBack=\{\(\)\s*=>\s*\{\s*\n\s*setSendPrefill\(null\);\s*\n\s*setUnlockedView\(sendBackTo\);/.test(webApp),
     'Send onBack clears the prefill so a fresh navigate to Send is clean',
 );
 

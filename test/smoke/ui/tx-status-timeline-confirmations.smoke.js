@@ -54,11 +54,11 @@ assert.ok(/const chainTipByChainId = useMemo/.test(historySrc),
     'History.jsx memoizes chainTipByChainId');
 assert.ok(/chainTip=\{chainTipByChainId\[entry\.chainId\]\}/.test(historySrc),
     'History.jsx threads chainTip into EntryRow');
-assert.ok(/function EntryRow\(\{ entry, selected, showConnector, onClick, peerCache, isFull, chainTip \}\)/.test(historySrc),
+assert.ok(/function EntryRow\(\{ entry, selected, showConnector, onClick, peerCache, isFull, chainTip, walletId \}\)/.test(historySrc),
     'EntryRow declares the chainTip prop');
-assert.ok(/<DetailCard entry=\{entry\} peerCache=\{peerCache\} isFull=\{isFull\} chainTip=\{chainTip\} \/>/.test(historySrc),
+assert.ok(/<DetailCard entry=\{entry\} peerCache=\{peerCache\} isFull=\{isFull\} chainTip=\{chainTip\} walletId=\{walletId\} \/>/.test(historySrc),
     'EntryRow forwards chainTip to DetailCard');
-assert.ok(/function DetailCard\(\{ entry, peerCache, chainTip \}\)/.test(historySrc),
+assert.ok(/function DetailCard\(\{ entry, peerCache, chainTip, walletId \}\)/.test(historySrc),
     'DetailCard declares the chainTip prop');
 assert.ok(/<TxStatusTimeline entry=\{entry\} chainTip=\{chainTip\} \/>/.test(historySrc),
     'DetailCard forwards chainTip to TxStatusTimeline');

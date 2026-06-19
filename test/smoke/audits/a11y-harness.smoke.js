@@ -47,12 +47,12 @@ assert.ok(
 // Every Phase-1 screen should have a scan case.
 const requiredCases = [
     'onboarding welcome',
-    'create wallet - password stage',
-    'create wallet - mnemonic display stage',
+    'create wallet: password stage',
+    'create wallet: mnemonic display stage',
     'import wallet',
     'home (unlocked)',
     'locked',
-    'send - form stage',
+    'send: form stage',
 ];
 for (const name of requiredCases) {
     assert.ok(

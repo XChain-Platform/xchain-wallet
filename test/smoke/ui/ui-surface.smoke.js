@@ -28,9 +28,11 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const pkgRoot = join(here, '..', '..', '..');
+// This smoke lives at test/smoke/ui/; the core package it inspects is at
+// packages/core. Resolve pkgRoot explicitly rather than by bare `..` math.
+const wsRoot = join(here, '..', '..', '..');
+const pkgRoot = join(wsRoot, 'packages', 'core');
 const uiDir = join(pkgRoot, 'src', 'ui');
-const wsRoot = join(pkgRoot, '..', '..');
 
 // --- tokens.css ---------------------------------------------------------
 const tokens = readFileSync(join(uiDir, 'tokens.css'), 'utf8');

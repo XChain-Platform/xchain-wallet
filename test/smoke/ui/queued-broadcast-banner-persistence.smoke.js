@@ -71,8 +71,11 @@ assert.ok(
     !/<>\s*\n?\s*\{activeWalletId \? <QueuedBroadcastBanner walletId=\{activeWalletId\}/.test(webApp),
     'web App no longer mounts QueuedBroadcastBanner above the Home fallback',
 );
+// The header slot now holds a fragment with multiple children (AppHeader,
+// DemoBanner, QueuedBroadcastBanner, ReachabilityBanner); assert the banner
+// appears inside the activeWalletId-guarded header= prop.
 assert.ok(
-    /header=\{\s*\n?\s*activeWalletId \? <QueuedBroadcastBanner walletId=\{activeWalletId\} \/> : null/.test(webApp),
+    /header=\{[\s\S]{0,2000}activeWalletId[\s\S]{0,3000}<QueuedBroadcastBanner walletId=\{activeWalletId\}/.test(webApp),
     'web App routes the banner through FullLayoutWithNav.header',
 );
 
@@ -87,7 +90,7 @@ assert.ok(
     'desktop App imports QueuedBroadcastBanner',
 );
 assert.ok(
-    /header=\{\s*\n?\s*activeWalletId \? <QueuedBroadcastBanner walletId=\{activeWalletId\} \/> : null/.test(desktopApp),
+    /header=\{[\s\S]{0,2000}activeWalletId[\s\S]{0,3000}<QueuedBroadcastBanner walletId=\{activeWalletId\}/.test(desktopApp),
     'desktop App routes the banner through FullLayoutWithNav.header',
 );
 

@@ -48,7 +48,7 @@ const popupAppSrc = readFileSync(
 assert.match(formSrc, /export function VerifySignatureForm/, 'exports VerifySignatureForm');
 assert.match(formSrc, /messaging\.verifyMessageRequest/, 'calls verifyMessageRequest');
 assert.match(formSrc, /<ChainPicker/, 'has chain picker');
-assert.match(formSrc, /chainRegistry\.list\(\)/, 'chains come from registry, not wallet');
+assert.match(formSrc, /chainRegistry\.supportedChains\(\)/, 'chains come from registry, not wallet');
 assert.match(formSrc, /label="Address"/, 'has address input');
 assert.match(formSrc, /id="verify-message"/, 'message textarea present');
 assert.match(formSrc, /id="verify-signature"/, 'signature textarea present');

@@ -117,9 +117,14 @@ const navCssPath = join(core, 'src', 'shared', 'components', 'LeftNav.module.css
 const navCssSrc = readFileSync(navCssPath, 'utf8');
 assert.ok(/\.bottomBarSlot\b[\s\S]*?display:\s*contents/.test(navCssSrc),
     'bottomBar slot uses display:contents so the fixed bar stays at viewport');
-assert.ok(/@media\s*\(\s*min-width:\s*601px\s*\)\s*\{[\s\S]*?\.bottomBarSlot\s*\{[\s\S]*?display:\s*none/.test(navCssSrc),
+// Visibility is now JS-gated (FullLayoutWithNav passes null for bottomBar on
+// non-small variants); CSS uses display:contents so the fixed bar sits at
+// the viewport level when the slot IS rendered. No viewport media query.
+assert.ok(/\.bottomBarSlot\s*\{[\s\S]*?display:\s*contents/.test(navCssSrc),
     'bottomBar slot collapses above 600px');
-assert.ok(/@media\s*\(\s*max-width:\s*600px\s*\)\s*\{[\s\S]*?\.layoutWithBottomBar > \.main\s*\{[\s\S]*?padding-bottom:\s*calc\(56px/.test(navCssSrc),
+// Padding is applied via a class on the layout div (JS-added when bottomBar
+// is non-null) rather than a viewport-keyed media query.
+assert.ok(/\.layoutWithBottomBar > \.main\s*\{[\s\S]*?padding-bottom:\s*calc\(56px/.test(navCssSrc),
     'main pane reserves 56px bottom-padding below 600px when bottomBar is present');
 
 const webApp = readFileSync(
@@ -140,7 +145,9 @@ for (const [label, src] of [['web', webApp], ['desktop', desktopApp]]) {
         /import\s*\{\s*BottomTabBar\s*\}\s*from\s*'@xchain-wallet\/core\/shared\/components\/BottomTabBar\.jsx'/.test(src),
         `${label} App imports BottomTabBar`,
     );
-    assert.ok(/bottomBar=\{\s*<BottomTabBar/.test(src),
+    // The bottomBar slot is wrapped in a variant guard so only small-layout
+    // renders get the bar; allow for the ternary between bottomBar={ and <BottomTabBar.
+    assert.ok(/bottomBar=\{[\s\S]{0,200}<BottomTabBar/.test(src),
         `${label} App passes <BottomTabBar> into FullLayoutWithNav.bottomBar`);
 }
 

@@ -103,8 +103,8 @@ assert.ok(
 // --- 7. Send onBack clears the prefill -----------------------------
 
 assert.ok(
-    /onBack=\{\(\)\s*=>\s*\{\s*\n\s*setSendPrefill\(null\);\s*\n\s*setUnlockedView\('home'\);/.test(popup),
-    'Send onBack clears sendPrefill before navigating Home',
+    /onBack=\{\(\)\s*=>\s*\{\s*\n\s*setSendPrefill\(null\);\s*\n\s*setUnlockedView\(sendBackTo\);/.test(popup),
+    'Send onBack clears sendPrefill before navigating its return target',
 );
 
 console.log(

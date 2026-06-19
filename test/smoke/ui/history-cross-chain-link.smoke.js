@@ -72,12 +72,12 @@ assert.ok(/cur\.link\.linkActionIndex[\s\S]*===[\s\S]*prev\.link\.linkActionInde
     'connector fires when consecutive rows share linkActionIndex');
 
 // 4. 🔗 Cross-chain filter UI.
-assert.ok(/🔗 Cross-chain actions/.test(historySrc),
-    'History exposes the "🔗 Cross-chain actions" filter chip');
+assert.ok(/🔗/.test(historySrc) && /Cross-chain only/.test(historySrc),
+    'History exposes the 🔗 badge and "Cross-chain only" filter chip');
 
 // 5. Dual-side DetailCard renders peer info on row click.
-assert.ok(/function DetailCard\(\{ entry, peerCache, chainTip \}\)/.test(historySrc),
-    'DetailCard accepts entry + peerCache + chainTip');
+assert.ok(/function DetailCard\(\{ entry, peerCache, chainTip, walletId \}\)/.test(historySrc),
+    'DetailCard accepts entry + peerCache + chainTip + walletId');
 assert.ok(/peerCache\[peerKey\]/.test(historySrc),
     'DetailCard reads the peer entry from the cache');
 assert.ok(/peerCacheKey\(/.test(historySrc),

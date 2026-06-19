@@ -46,7 +46,7 @@ const sharedRoutes = join(core, 'src', 'shared', 'routes');
 
 const onboarding = readFileSync(join(sharedRoutes, 'Onboarding.jsx'), 'utf8');
 assert.ok(/onImportFromFreeWallet/.test(onboarding), 'Onboarding declares onImportFromFreeWallet prop');
-assert.ok(/Coming from FreeWallet/.test(onboarding), 'Onboarding renders "Coming from FreeWallet" label');
+assert.ok(/From FreeWallet/.test(onboarding), 'Onboarding renders "From FreeWallet" label');
 
 // --- 2. ImportWallet freewallet variant ------------------------------
 
@@ -97,7 +97,7 @@ assert.ok(
     /activeWallet\?\.format\s*===\s*['"]counterwallet-legacy['"]/.test(home),
     'Home.jsx gates the legacy banner on active wallet format',
 );
-assert.ok(/legacyBanner/.test(home), 'Home.jsx renders the legacyBanner class');
+assert.ok(/legacy-format/.test(home), 'Home.jsx registers the legacy-format alert entry');
 
 const homeCss = readFileSync(join(sharedRoutes, 'Home.module.css'), 'utf8');
 assert.ok(/\.legacyBanner\b/.test(homeCss), 'Home.module.css defines .legacyBanner');

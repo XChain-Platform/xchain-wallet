@@ -144,17 +144,17 @@ for (const [shell, appPath] of [
     // History
     const histIdx = app.indexOf("unlockedView === 'history'");
     assert.ok(histIdx >= 0, `${shell} App.jsx tracks the history sub-route`);
-    const histBlock = app.slice(histIdx, histIdx + 400);
+    const histBlock = app.slice(histIdx, histIdx + 700);
     assert.ok(
-        /onReceive=\{\(\)\s*=>\s*setUnlockedView\('receive'\)\}/.test(histBlock),
+        /onReceive=\{\(\)\s*=>\s*\{\s*setReceivePrefill\(null\);\s*setUnlockedView\('receive'\);\s*\}\}/.test(histBlock),
         `${shell} App.jsx wires onReceive into <History>`,
     );
     // AddressList
     const addrIdx = app.indexOf("unlockedView === 'addresses'");
     assert.ok(addrIdx >= 0, `${shell} App.jsx tracks the addresses sub-route`);
-    const addrBlock = app.slice(addrIdx, addrIdx + 400);
+    const addrBlock = app.slice(addrIdx, addrIdx + 700);
     assert.ok(
-        /onReceive=\{\(\)\s*=>\s*setUnlockedView\('receive'\)\}/.test(addrBlock),
+        /onReceive=\{\(\)\s*=>\s*\{\s*setReceivePrefill\(null\);\s*setUnlockedView\('receive'\);\s*\}\}/.test(addrBlock),
         `${shell} App.jsx wires onReceive into <AddressList>`,
     );
 }

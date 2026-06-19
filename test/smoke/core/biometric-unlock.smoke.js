@@ -55,7 +55,9 @@ globalThis.PublicKeyCredential = class {
     static async isUserVerifyingPlatformAuthenticatorAvailable() { return true; }
 };
 
-globalThis.navigator = {
+// Node 21+ exposes a read-only `navigator` getter, so a plain assignment
+// throws. Define it as a configurable property to install the WebAuthn mock.
+Object.defineProperty(globalThis, 'navigator', { configurable: true, value: {
     credentials: {
         async create(opts) {
             createCount += 1;
@@ -70,7 +72,7 @@ globalThis.navigator = {
             return fakeCredential(CRED_ID, PRF_OUTPUT);
         },
     },
-};
+} });
 globalThis.window = { location: { hostname: 'localhost' } };
 
 const flow = await import(

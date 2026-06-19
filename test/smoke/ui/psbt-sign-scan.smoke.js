@@ -112,12 +112,12 @@ assert.match(
 
 assert.match(
     formSrc,
-    /\{scannerOpen \? 'Close scanner' : 'Scan PSBT'\}/,
+    /\{scannerOpen \? 'Close scanner' : 'Scan transaction'\}/,
     'Scan-toggle button label flips on scannerOpen',
 );
 assert.match(
     formSrc,
-    /<QrScanner onFrame=\{handleScannerFrame\} alt="PSBT QR scanner"/,
+    /<QrScanner onFrame=\{handleScannerFrame\} alt="Transaction QR scanner"/,
     'QrScanner is mounted with handleScannerFrame + alt label',
 );
 assert.match(

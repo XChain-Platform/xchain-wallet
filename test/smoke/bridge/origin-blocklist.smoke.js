@@ -107,7 +107,7 @@ assert.ok(/bridgeError\('BLOCKED_BY_USER', req\.origin\)/.test(handlersSrc),
 const guardedMethods = ['connect', 'signMessage', 'signAction', 'signPsbt', 'signIn'];
 for (const method of guardedMethods) {
     const re = new RegExp(
-        `host\\.register\\('bridge\\.${method}',[\\s\\S]*?await assertNotBlocked\\(req, deps\\)`,
+        `register\\('bridge\\.${method}',[\\s\\S]*?await assertNotBlocked\\(req, deps\\)`,
     );
     assert.ok(re.test(handlersSrc),
         `bridge.${method} calls assertNotBlocked`);
@@ -152,7 +152,7 @@ assert.ok(/Blocked origins/.test(sectionSrc),
     'subsection heading renders');
 assert.ok(/BlockedOriginsPanel/.test(sectionSrc),
     'BlockedOriginsPanel component defined / mounted');
-assert.ok(/placeholder="https:\/\/example\.com"/.test(sectionSrc),
+assert.ok(/placeholder="https:\/\/example\.com/.test(sectionSrc),
     'manual-block input has an origin placeholder');
 assert.ok(/onSubmit=\{onManualBlockSubmit\}/.test(sectionSrc),
     'manual-block form wires submit handler');

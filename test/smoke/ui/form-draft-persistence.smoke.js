@@ -62,7 +62,7 @@ assert.ok(/try \{[\s\S]*localStorage\.setItem\(probe, '1'\)/.test(hookSrc),
 // 7. Send.jsx wires the hook + restore banner + clear-on-success.
 assert.ok(/from '\.\.\/hooks\/useFormDraft\.js'/.test(sendSrc),
     'Send.jsx imports useFormDraft');
-assert.ok(/useFormDraft\(\{ view: 'send', walletId \}\)/.test(sendSrc),
+assert.ok(/useFormDraft\(\{ view: 'send', walletId\b/.test(sendSrc),
     'Send.jsx initialises useFormDraft with view=send and walletId');
 assert.ok(/draft\.save\(\{ chainId, toAddress, tick, amount, memo \}\)/.test(sendSrc),
     'Send.jsx auto-saves the user-visible composition fields');
@@ -76,7 +76,7 @@ assert.ok(/draftBanner/.test(sendSrc),
 // 8. SignMessageForm wires the hook similarly.
 assert.ok(/from '\.\.\/hooks\/useFormDraft\.js'/.test(sigSrc),
     'SignMessageForm imports useFormDraft');
-assert.ok(/useFormDraft\(\{ view: 'sign-message', walletId \}\)/.test(sigSrc),
+assert.ok(/useFormDraft\(\{ view: 'sign-message', walletId\b/.test(sigSrc),
     'SignMessageForm initialises useFormDraft with view=sign-message and walletId');
 assert.ok(/draft\.save\(\{ chainId, addressId, message \}\)/.test(sigSrc),
     'SignMessageForm auto-saves chain / address / message');

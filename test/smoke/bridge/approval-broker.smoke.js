@@ -90,7 +90,7 @@ const popupMsg = readFileSync(
     'utf8',
 );
 assert.ok(
-    popupMsg.includes("from '../../../packages/core/shared/chromeMessaging.js'"),
+    popupMsg.includes("from '../shared/chromeMessaging.js'"),
     'popup/messaging.js re-imports from shared',
 );
 

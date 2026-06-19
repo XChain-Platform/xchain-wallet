@@ -67,7 +67,7 @@ assert.match(
 // Watcher-mode submit must not trip the password / HW gates.
 assert.match(
     formSrc,
-    /if \(!isWatcherMode && !isHwSource && password\.length === 0\) return;/,
+    /if \(!isWatcherMode && !isHwSource && \(!signerReady && password\.length === 0\)\) return;/,
     'password gate skipped in watcher mode',
 );
 assert.match(

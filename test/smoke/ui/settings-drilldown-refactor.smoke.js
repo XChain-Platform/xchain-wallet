@@ -66,7 +66,7 @@ for (const id of expectedPanels) {
 
 assert.match(src, /\[subpageId, setSubpageId\]\s*=\s*useState/, 'subpageId state added');
 assert.match(src, /if \(subpageId\)\s*\{/, 'subpage branch in render');
-assert.match(src, /aria-label="Back to settings"/, 'subpage header has back-to-settings affordance');
+assert.match(src, /backLabel="Back to settings"/, 'subpage header has back-to-settings affordance');
 assert.match(src, /<SectionComponent \{\.\.\.\(section\.props \|\| \{\}\)\} \/>/, 'subpage renders the section component with its props');
 
 // ─── 3. DrillRow primitive renders summary + chevron ─────────────

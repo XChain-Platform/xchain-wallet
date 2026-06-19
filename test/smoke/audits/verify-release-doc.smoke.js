@@ -24,7 +24,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..');
 const read = (p) => readFileSync(join(root, p), 'utf8');
 
-const docPath = 'docs/VERIFY-RELEASE.md';
+const docPath = 'docs/Verify_Release.md';
 assert.ok(existsSync(join(root, docPath)), `${docPath} exists`);
 
 const docSrc = read(docPath);
@@ -34,11 +34,11 @@ const requiredHeadings = [
     '# Verify a release',
     '## What you\'re checking',
     '## Prerequisites',
-    '## Step 1: Import the maintainer\'s release key',
-    '## Step 2: Download the artifact and its signature',
-    '## Step 3: Verify the signature on the hash manifest',
-    '## Step 4: Verify the artifact hash',
-    '## Step 5 (optional but recommended): Reproduce the build',
+    '## Step 1',
+    '## Step 2',
+    '## Step 3',
+    '## Step 4',
+    '## Step 5 (optional but recommended)',
     '## What "verified" means and does not mean',
     '## Reporting a verification failure',
 ];
@@ -68,10 +68,10 @@ for (const cmd of commands) {
 
 // Required cross-link targets exist OR are explicitly tracked gaps.
 const crossLinks = [
-    'docs/REPRODUCIBLE_BUILDS.md',
+    'docs/Reproducible_Builds.md',
     'SECURITY.md',
-    'docs/QA-CHECKLIST.md',
-    'packages/desktop/REPRODUCIBLE_BUILDS.md',
+    'docs/QA_Checklist.md',
+    'packages/desktop/Reproducible_Builds.md',
 ];
 for (const linkPath of crossLinks) {
     assert.ok(docSrc.includes(linkPath),

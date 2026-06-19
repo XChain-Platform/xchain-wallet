@@ -164,7 +164,7 @@ assert.match(
 );
 assert.match(
     formSrc,
-    /\(isHwSource \? hwStatus !== 'available' : password\.length === 0\)/,
+    /\(isHwSource \? hwStatus !== 'available' : \(!signerReady && password\.length === 0\)\)/,
     'PsbtSignForm gates submit on HW status when HW, password length when software',
 );
 assert.match(

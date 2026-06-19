@@ -74,13 +74,13 @@ for (const term of requiredTerms) {
 
 // Cross-link to upstream protocol glossary so the wallet doc does not
 // duplicate ACTION / encoding-type / etc.
-assert.ok(/xchain-documentation/.test(docSrc) && /KEY_TERMS\.md/.test(docSrc),
-    'glossary cross-links upstream xchain-documentation/KEY_TERMS.md');
+assert.ok(/xchain-documentation/.test(docSrc) && /Key_Terms\.md/.test(docSrc),
+    'glossary cross-links upstream xchain-documentation/Key_Terms.md');
 
 // Cross-links to companion wallet docs that the glossary references
 // must exist (REPRODUCIBLE_BUILDS, BRIDGE).
 const companions = [
-    'docs/REPRODUCIBLE_BUILDS.md',
+    'docs/Reproducible_Builds.md',
     'docs/BRIDGE.md',
 ];
 for (const linkPath of companions) {

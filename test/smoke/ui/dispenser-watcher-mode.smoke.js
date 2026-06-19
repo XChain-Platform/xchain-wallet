@@ -30,7 +30,7 @@ assert.match(
     /messaging\.buildActionPsbtRequest\(\{[\s\S]+?action: 'DISPENSER'/,
     'submit handler routes through buildActionPsbtRequest with action DISPENSER',
 );
-assert.match(formSrc, /if \(!isWatcherMode && !hw && password\.length === 0\) return;/);
+assert.match(formSrc, /if \(!isWatcherMode && !hw && \(!signerReady && password\.length === 0\)\) return;/);
 assert.match(formSrc, /if \(result\?\.psbtHex && !txid\) \{[\s\S]+?<WatcherResultPanel/);
 assert.match(formSrc, /\{isWatcherMode \? \([\s\S]+?Watcher mode/);
 assert.match(formSrc, /Create unsigned transaction/);

@@ -26,7 +26,7 @@ const root = join(here, '..', '..', '..');
 const read = (p) => readFileSync(join(root, p), 'utf8');
 
 // 1. Doc exists + the desktop deeper-doc still exists alongside it.
-const rootDoc = 'docs/REPRODUCIBLE_BUILDS.md';
+const rootDoc = 'docs/Reproducible_Builds.md';
 const desktopDoc = 'packages/desktop/REPRODUCIBLE_BUILDS.md';
 assert.ok(existsSync(join(root, rootDoc)), `${rootDoc} exists`);
 assert.ok(existsSync(join(root, desktopDoc)), `${desktopDoc} still exists`);
@@ -54,8 +54,8 @@ for (const target of ['Desktop', 'Extension', 'Web']) {
 
 // 4. Cross-links to deeper / related docs resolve.
 const crossLinks = [
-    'packages/desktop/REPRODUCIBLE_BUILDS.md',
-    'docs/VERIFY-RELEASE.md',
+    'packages/desktop/Reproducible_Builds.md',
+    'docs/Verify_Release.md',
     'SECURITY.md',
 ];
 for (const linkPath of crossLinks) {
@@ -63,7 +63,7 @@ for (const linkPath of crossLinks) {
         `root repro doc references ${linkPath}`);
 }
 // All cross-link targets exist OR are explicitly tracked as gaps.
-// Desktop doc and SECURITY.md must exist; VERIFY-RELEASE.md is the
+// Desktop doc and SECURITY.md must exist; Verify_Release.md is the
 // next step in this cluster and lands in v0.222.0.
 assert.ok(existsSync(join(root, 'packages/desktop/REPRODUCIBLE_BUILDS.md')),
     'desktop repro doc target exists');

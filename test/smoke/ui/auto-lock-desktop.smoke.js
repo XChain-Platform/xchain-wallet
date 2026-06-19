@@ -38,8 +38,10 @@ const homeSrc = readFileSync(
     join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', 'Home.jsx'),
     'utf8',
 );
+// Allow for additional &&-chained guards after !locking (e.g. !isDemoActive)
+// without requiring them to be listed here.
 assert.ok(
-    /useAutoLock\(handleLock,\s*\{\s*\n\s*enabled:\s*\(shell === 'popup' \|\| shell === 'web' \|\| shell === 'desktop'\) && !locking,/.test(homeSrc),
+    /useAutoLock\(handleLock,\s*\{\s*\n\s*enabled:\s*\(shell === 'popup' \|\| shell === 'web' \|\| shell === 'desktop'\)[\s\S]{0,100}&& !locking/.test(homeSrc),
     'Home.useAutoLock enable predicate covers popup + web + desktop and preserves !locking',
 );
 

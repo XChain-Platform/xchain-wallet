@@ -45,29 +45,29 @@ assert.match(
 );
 assert.match(
     histSrc,
-    /\{replaceable\.ok \? <RbfActions entry=\{entry\} \/> : null\}/,
-    'RbfActions only render for replaceable entries',
+    /if \(replaceable\.ok\) \{/,
+    'RBF menu options only added for replaceable entries',
 );
 
 // --- RbfActions component shape --------------------------------------
 
-assert.match(histSrc, /function RbfActions\(\{ entry \}\)/, 'RbfActions component defined');
+assert.match(histSrc, /async function runRbf\(strategy\)/, 'runRbf handler defined');
 assert.match(histSrc, /useMessaging\(\)/, 'reads messaging from hook');
 assert.match(
     histSrc,
-    /replaceFromHistoryEntry\(\{[\s\S]*messaging,[\s\S]*entry,[\s\S]*strategy,/,
+    /replaceFromHistoryEntry\(\{ messaging, entry, strategy \}\)/,
     'flow invocation wires entry + strategy',
 );
 assert.match(histSrc, /Speed up/, 'speed-up button label');
 assert.match(histSrc, /Cancel/, 'cancel button label');
 assert.match(
     histSrc,
-    /run\('speedup'\)/,
+    /runRbf\('speedup'\)/,
     'speed-up button runs with speedup strategy',
 );
 assert.match(
     histSrc,
-    /run\('cancel'\)/,
+    /runRbf\('cancel'\)/,
     'cancel button runs with cancel strategy',
 );
 

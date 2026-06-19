@@ -171,7 +171,7 @@ assert.ok(
     'background host registers wallet.exportPrivateKey',
 );
 assert.ok(
-    /exportPrivateKey\(\{\s*\.\.\.req,\s*vault,\s*chainRegistry,\s*sdkRegistry\s*\}\)/.test(bg),
+    /exportPrivateKey\(\{\s*\.\.\.req,\s*signer:[^}]+vault,\s*chainRegistry,\s*sdkRegistry\s*\}\)/.test(bg),
     'handler forwards deps to the core flow',
 );
 

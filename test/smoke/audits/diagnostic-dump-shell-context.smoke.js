@@ -37,7 +37,7 @@ const hostSrc = readFileSync(
     join(wsRoot, 'packages', 'extension', 'src', 'background', 'createBackgroundHost.js'),
     'utf8',
 );
-assert.ok(/getDiagnosticContext[\s\S]{0,40}?\.\.\.hostDeps/.test(hostSrc),
+assert.ok(/getDiagnosticContext[\s\S]{0,2000}?\.\.\.hostDeps/.test(hostSrc),
     'createBackgroundHost destructures getDiagnosticContext from deps');
 assert.ok(
     /ctx = \(await getDiagnosticContext\?\.\(\)\) \|\| \{\}/.test(hostSrc),

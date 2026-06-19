@@ -29,7 +29,7 @@ assert.match(
     formSrc,
     /messaging\.buildActionPsbtRequest\(\{[\s\S]+?action: 'DIVIDEND'/,
 );
-assert.match(formSrc, /if \(!isWatcherMode && !isHwSource && password\.length === 0\) return;/);
+assert.match(formSrc, /if \(!isWatcherMode && !isHwSource && \(!signerReady && password\.length === 0\)\) return;/);
 assert.match(formSrc, /if \(result\?\.psbtHex && !txid\) \{[\s\S]+?<WatcherResultPanel/);
 assert.match(formSrc, /\{isWatcherMode \? \([\s\S]+?Watcher mode/);
 assert.match(formSrc, /Create unsigned transaction/);

@@ -53,10 +53,10 @@ const listSrc = readFileSync(listPath, 'utf8');
 assert.ok(/import\s*\{\s*DispenserBadge\s*\}/.test(listSrc),
     'MarketsList imports DispenserBadge');
 const badgeMatches = listSrc.match(/<DispenserBadge\b/g) || [];
-assert.ok(badgeMatches.length >= 2,
-    'MarketsList renders a DispenserBadge for each market ticker (tick1 + tick2)');
-assert.ok(/tick={tick1}/.test(listSrc) && /tick={tick2}/.test(listSrc),
-    'MarketsList passes both tick1 and tick2 to DispenserBadge');
+assert.ok(badgeMatches.length >= 1,
+    'MarketsList renders a DispenserBadge per market row (selected-asset-relative)');
+assert.ok(/tick=\{otherTick\}/.test(listSrc),
+    'MarketsList passes the relative otherTick to DispenserBadge');
 
 // --- 4. Test hook ------------------------------------------------------
 

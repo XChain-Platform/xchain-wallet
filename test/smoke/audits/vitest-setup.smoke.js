@@ -34,25 +34,25 @@ import { dirname, join } from 'node:path';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const corePkg = join(here, '..', '..', '..');
-const wsRoot = join(corePkg, '..', '..');
+const wsRoot = corePkg;
 
-// --- 1. vitest.config.js -------------------------------------------
+// --- 1. vitest config -------------------------------------------
 
-const vitestCfg = readFileSync(join(corePkg, 'vitest.config.js'), 'utf8');
+const vitestCfg = readFileSync(join(corePkg, 'test', 'vitest', 'unit.config.js'), 'utf8');
 assert.ok(/environment:\s*'jsdom'/.test(vitestCfg), 'jsdom test env declared');
 assert.ok(
     /import react from '@vitejs\/plugin-react'/.test(vitestCfg),
     'vitest config pulls in @vitejs/plugin-react',
 );
 assert.ok(
-    /include:\s*\[\s*'test\/\*\*\/\*\.test\.\{js,jsx\}'/.test(vitestCfg),
+    /include:\s*\[\s*'test\/unit\/\*\*\/\*\.test\.\{js,jsx\}'/.test(vitestCfg),
     'include pattern scopes to *.test.{js,jsx}',
 );
 assert.ok(
-    /exclude:\s*\[\s*'test\/\*\*\/\*\.smoke\.js'/.test(vitestCfg),
+    /exclude:\s*\[[\s\S]*?'test\/\*\*\/\*\.smoke\.js'/.test(vitestCfg),
     'excludes *.smoke.js so Node-script smokes stay independent',
 );
-assert.ok(/setupFiles:\s*\['\.\/test\/setup\.js'\]/.test(vitestCfg), 'setup file wired');
+assert.ok(/setupFiles:\s*\['\.\/test\/unit\/setup\.js'\]/.test(vitestCfg), 'setup file wired');
 assert.ok(/provider:\s*'v8'/.test(vitestCfg), 'uses v8 coverage provider');
 
 // --- 2. test/setup.js ----------------------------------------------
@@ -106,12 +106,14 @@ assert.ok(
     `expected ≥10 Node-script smokes, got ${smokeFiles.length}`,
 );
 
-// --- 6. core/package.json scripts + devDeps ------------------------
+// --- 6. workspace package.json scripts + devDeps ------------------------
 
 const pkg = JSON.parse(readFileSync(join(corePkg, 'package.json'), 'utf8'));
-assert.equal(pkg.scripts?.test, 'vitest run');
-assert.equal(pkg.scripts?.['test:coverage'], 'vitest run --coverage');
-assert.equal(pkg.scripts?.['test:smoke'], 'node test/_run-smokes.js');
+assert.ok(pkg.scripts?.['test:unit'] && /vitest run/.test(pkg.scripts['test:unit']),
+    'test:unit script invokes vitest run');
+assert.ok(pkg.scripts?.['test:unit:coverage'] && /vitest run/.test(pkg.scripts['test:unit:coverage']),
+    'test:unit:coverage script invokes vitest run with coverage');
+assert.equal(pkg.scripts?.['test:smoke'], 'node test/smoke/_run-smokes.js');
 for (const dep of [
     'vitest',
     '@vitest/coverage-v8',
@@ -129,10 +131,10 @@ for (const dep of [
 // --- 7. _run-smokes.js picks up *.smoke.js -------------------------
 
 assert.ok(
-    existsSync(join(testDir, '_run-smokes.js')),
+    existsSync(join(testDir, 'smoke', '_run-smokes.js')),
     '_run-smokes.js runner present',
 );
-const runner = readFileSync(join(testDir, '_run-smokes.js'), 'utf8');
+const runner = readFileSync(join(testDir, 'smoke', '_run-smokes.js'), 'utf8');
 assert.ok(/\.smoke\.js/.test(runner), 'runner targets *.smoke.js');
 
 // --- 8. .gitignore coverage ---------------------------------------

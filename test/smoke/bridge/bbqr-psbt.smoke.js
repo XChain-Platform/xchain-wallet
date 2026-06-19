@@ -217,7 +217,7 @@ assert.ok(/frames\.every\(\(f\) => detectQrFrameFormat\(f\) === 'bbqr'\)/.test(f
     'normalizePsbtInput dispatches BBQr-only inputs to decodeBbqrPsbt');
 assert.ok(/unsupportedFormatHint/.test(formSrc),
     'PsbtSignForm computes a format-specific hint for unsupported pastes');
-assert.ok(/hex, base64, or BBQr PSBT/.test(formSrc),
+assert.ok(/hex, base64, or BBQr transaction/.test(formSrc),
     'fallback error mentions BBQr alongside hex / base64');
 
 console.log('OK: BBQr PSBT decode + format detector + PsbtSignForm wiring smoke');

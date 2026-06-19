@@ -30,8 +30,13 @@ assert.ok(/Cluster J FOLLOWUP 7/.test(onboardingSrc),
     'Onboarding.jsx tags Cluster J FOLLOWUP 7');
 
 // 2. handleEnterDemo passes regtest chain ids (all three) to
-//    importMnemonic.
-assert.ok(/activeChainIds: \['bitcoin-regtest', 'litecoin-regtest', 'dogecoin-regtest'\]/.test(onboardingSrc),
+//    importMnemonic. The array may also contain mainnet / testnet ids;
+//    the key invariant is that all three regtest ids are present.
+assert.ok(/activeChainIds:[\s\S]*?'bitcoin-regtest'/.test(onboardingSrc),
+    'handleEnterDemo includes bitcoin-regtest in activeChainIds');
+assert.ok(/activeChainIds:[\s\S]*?'litecoin-regtest'/.test(onboardingSrc),
+    'handleEnterDemo includes litecoin-regtest in activeChainIds');
+assert.ok(/activeChainIds:[\s\S]*?'dogecoin-regtest'/.test(onboardingSrc),
     'handleEnterDemo passes the three regtest chain ids to importMnemonic');
 
 // 3. The same call still passes name: 'Demo Wallet' so the rest of

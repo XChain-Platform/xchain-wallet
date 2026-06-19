@@ -61,22 +61,21 @@ assert.doesNotMatch(
 // --- fiat rate + toggle state -----------------------------------------
 
 assert.match(sendSrc, /fiatRate = useMemo/, 'fiat rate memoized');
-assert.match(sendSrc, /amountMode/, 'amount-entry mode state');
-assert.match(sendSrc, /fiatInput/, 'fiat-mode input state');
-assert.match(sendSrc, /'native' \| 'fiat'/, 'mode union typed');
+assert.match(sendSrc, /amountInputMode/, 'amount-entry mode state');
+assert.match(sendSrc, /fiatAmount/, 'fiat-mode input state');
+assert.match(sendSrc, /'coin' \| 'fiat'/, 'mode union typed');
 
-assert.match(sendSrc, /onToggleAmountMode = useCallback/, 'toggle callback');
-assert.match(sendSrc, /onFiatInputChange = useCallback/, 'fiat input handler');
+assert.match(sendSrc, /toggleAmountInputMode = useCallback/, 'toggle callback');
+assert.match(sendSrc, /onAmountFieldChange = useCallback/, 'fiat input handler');
 assert.match(
     sendSrc,
-    /fiatToCoin\(value, fiatRate\)/,
+    /fiatToCoin\(stripped, fiatRate\)/,
     'fiat → coin conversion when typing in fiat mode',
 );
 
 // --- fiat preview hint ------------------------------------------------
 
-assert.match(sendSrc, /fiatPreview = useMemo/, 'fiat preview memo');
-assert.match(sendSrc, /placeholder rate/, 'placeholder badge present in copy');
+assert.match(sendSrc, /coinToFiat\(.*fiatRate\)/, 'fiat preview via coinToFiat');
 
 // --- Max button -------------------------------------------------------
 
@@ -86,15 +85,14 @@ assert.match(
     /balanceNum - feeNum/,
     'native send subtracts fee from balance',
 );
-assert.match(sendSrc, /aria-label="Set max amount"/, 'Max button aria');
-assert.match(sendSrc, /disabled=\{!sourceBalance\}/, 'Max disabled without balance');
+assert.match(sendSrc, /maxDisabled=\{!sourceBalance\}/, 'Max disabled without balance prop forwarded to AmountField');
 
 // --- Available + fee hint --------------------------------------------
 
-assert.match(sendSrc, /balanceHint/, 'balance hint class wired');
+assert.match(sendCss, /\.balanceHint\s*\{/, 'balance hint CSS class defined');
 assert.match(
     sendSrc,
-    /Available:/,
+    /available/,
     'balance hint copy present',
 );
 

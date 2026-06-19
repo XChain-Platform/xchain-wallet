@@ -59,7 +59,7 @@ assert.ok(app.includes('<ImportWallet'), 'App.jsx renders ImportWallet');
 const sharedRoutes = join(webPkg, '..', 'core', 'src', 'shared', 'routes');
 const create = readFileSync(join(sharedRoutes, 'CreateWallet.jsx'), 'utf8');
 assert.ok(
-    /messaging\.importMnemonic\(\{ password, mnemonic, name \}\)/.test(create),
+    /messaging\.importMnemonic\(\{ password, mnemonic, name/.test(create),
     'shared CreateWallet persists via messaging.importMnemonic (post-confirm commit)',
 );
 assert.ok(
@@ -77,7 +77,7 @@ assert.ok(
 const msg = readFileSync(join(webPkg, 'src', 'messaging.js'), 'utf8');
 for (const fn of ['createWallet', 'importMnemonic']) {
     assert.ok(
-        new RegExp(`export function ${fn}\\b`).test(msg),
+        new RegExp(`export(?:\\s+async)?\\s+function\\s+${fn}\\b`).test(msg),
         `messaging.js exports ${fn}`,
     );
 }

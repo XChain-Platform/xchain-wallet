@@ -27,6 +27,6 @@ assert.match(formSrc, /import \{ useWalletMode \} from '\.\.\/hooks\/useWalletMo
 assert.match(formSrc, /import \{ WatcherResultPanel \} from '\.\.\/components\/WatcherResultPanel\.jsx';/);
 assert.match(formSrc, /const \{ isWatcherMode \} = useWalletMode\(\);/);
 assert.match(formSrc, /actionData: \{ action: 'DELEGATE'/);
-assert.match(formSrc, /messaging\.buildActionPsbtRequest\(\{[\s\S]+?action, params: actionParams/);
+assert.match(formSrc, /messaging\.buildActionPsbtRequest\(\{[\s\S]+?action: 'DELEGATE', params: wireParams/);
 assert.match(formSrc, /Create unsigned transaction/);
 console.log('delegation-watcher-mode smoke OK');

@@ -45,7 +45,7 @@ assert.match(
 );
 assert.match(
     formSrc,
-    /if \(!isWatcherMode && !isHwSource && password\.length === 0\) return;/,
+    /if \(!isWatcherMode && !isHwSource && \(!signerReady && password\.length === 0\)\) return;/,
     'password gate skipped in watcher mode',
 );
 assert.match(

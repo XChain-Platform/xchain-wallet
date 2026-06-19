@@ -30,7 +30,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
 
 const contributing = readFileSync(join(wsRoot, 'CONTRIBUTING.md'), 'utf8');
-const qaChecklist = readFileSync(join(wsRoot, 'docs', 'QA-CHECKLIST.md'), 'utf8');
+const qaChecklist = readFileSync(join(wsRoot, 'docs', 'QA_Checklist.md'), 'utf8');
 
 // ─── 1. CONTRIBUTING.md governance ─────────────────────────────────────
 
@@ -59,10 +59,10 @@ assert.match(qaChecklist, /^## Documentation parity check$/m,
 const docsToCover = [
     'ARCHITECTURE.md',
     'BRIDGE.md',
-    'REPRODUCIBLE_BUILDS.md',
-    'VERIFY-RELEASE.md',
+    'Reproducible_Builds.md',
+    'Verify_Release.md',
     'GLOSSARY.md',
-    'THREAT_MODEL.md',
+    'Threat_Model.md',
     'MAINTAINERS.md',
     'SECURITY.md',
     'CONTRIBUTING.md',
@@ -81,10 +81,10 @@ for (const doc of docsToCover) {
 const docPaths = {
     'ARCHITECTURE.md': join(wsRoot, 'docs', 'ARCHITECTURE.md'),
     'BRIDGE.md': join(wsRoot, 'docs', 'BRIDGE.md'),
-    'REPRODUCIBLE_BUILDS.md': join(wsRoot, 'docs', 'REPRODUCIBLE_BUILDS.md'),
-    'VERIFY-RELEASE.md': join(wsRoot, 'docs', 'VERIFY-RELEASE.md'),
+    'Reproducible_Builds.md': join(wsRoot, 'docs', 'Reproducible_Builds.md'),
+    'Verify_Release.md': join(wsRoot, 'docs', 'Verify_Release.md'),
     'GLOSSARY.md': join(wsRoot, 'docs', 'GLOSSARY.md'),
-    'THREAT_MODEL.md': join(wsRoot, 'docs', 'THREAT_MODEL.md'),
+    'Threat_Model.md': join(wsRoot, 'docs', 'Threat_Model.md'),
     'MAINTAINERS.md': join(wsRoot, 'MAINTAINERS.md'),
     'SECURITY.md': join(wsRoot, 'SECURITY.md'),
     'CONTRIBUTING.md': join(wsRoot, 'CONTRIBUTING.md'),

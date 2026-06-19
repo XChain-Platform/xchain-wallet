@@ -100,8 +100,8 @@ assert.match(
 
 // useMemo passes the dApp action + params through the simulator.
 assert.match(signSrc, /decoderLib\.simulateAction\(/);
-assert.match(signSrc, /action: payload\?\.action,/);
-assert.match(signSrc, /params: payload\?\.payload \|\| \{\}/);
+assert.match(signSrc, /action: resolvedPayload\?\.action,/);
+assert.match(signSrc, /params: resolvedPayload\?\.payload \|\| \{\}/);
 assert.match(signSrc, /balances: decoderLib\.balancesFromSdk\(previewBalances\.sdkShape\)/);
 assert.match(signSrc, /feeEstimate:\s*'0'/);
 

@@ -61,7 +61,7 @@ for (const call of [
 ]) {
     assert.ok(home.includes(call), `shared Home.jsx wires ${call}`);
 }
-for (const symbol of ['useAutoLock', 'ChainBalanceCard']) {
+for (const symbol of ['useAutoLock', 'HomeTabs']) {
     assert.ok(home.includes(symbol), `shared Home.jsx imports ${symbol}`);
 }
 assert.ok(

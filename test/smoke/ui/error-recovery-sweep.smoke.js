@@ -36,7 +36,7 @@ assert.ok(/Cluster P FOLLOWUP 4/.test(issueSrc),
 assert.ok(/\(isWatcherMode \|\| isHwSource\) && submitError \?[\s\S]{0,500}<StatusMessage[\s\S]{0,800}\{ label: 'Edit', onAction: \(\) => \{ setSubmitError\(null\); setStage\('form'\); \} \}/.test(issueSrc),
     'IssueTokenForm wraps post-submit error in StatusMessage with an Edit recovery');
 // formError is wrapped in StatusMessage (consistency upgrade); no recovery affordance.
-assert.ok(/formError \?[\s\S]{0,500}<StatusMessage variant="error">\{formError\}<\/StatusMessage>/.test(issueSrc),
+assert.ok(/formError \?[\s\S]{0,700}<StatusMessage variant="error">\{formError\}<\/StatusMessage>/.test(issueSrc),
     'IssueTokenForm wraps formError in StatusMessage');
 // Inline div role="alert" for those two error sites is gone (modulo
 // the warnings + chain-empty fallback row, which are not recovery

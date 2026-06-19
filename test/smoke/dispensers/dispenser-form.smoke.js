@@ -320,7 +320,7 @@ assert.ok(
     'background host registers action.dispenser',
 );
 assert.ok(
-    /dispenserAction\(\{\s*\.\.\.req,\s*vault,\s*chainRegistry,\s*sdkRegistry\s*\}\)/.test(bg),
+    /dispenserAction\(\{\s*\.\.\.req,\s*signer:[^}]+vault,\s*chainRegistry,\s*sdkRegistry\s*\}\)/.test(bg),
     'action.dispenser handler forwards deps to dispenserAction',
 );
 

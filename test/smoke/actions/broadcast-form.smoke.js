@@ -233,7 +233,7 @@ assert.ok(
     'background host registers action.broadcast',
 );
 assert.ok(
-    /broadcastAction\(\{\s*\.\.\.req,\s*vault,\s*chainRegistry,\s*sdkRegistry\s*\}\)/.test(bg),
+    /broadcastAction\(\{\s*\.\.\.req,\s*signer:[^}]+vault,\s*chainRegistry,\s*sdkRegistry\s*\}\)/.test(bg),
     'action.broadcast handler forwards deps to broadcastAction',
 );
 

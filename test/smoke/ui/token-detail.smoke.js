@@ -53,13 +53,27 @@ assert.ok(
     'TokenDetail gates the holders panel on the !isNative branch',
 );
 
-// Spec-named sections are present.
-for (const label of ['Your balance', 'Metadata', 'Actions', 'Holders']) {
-    assert.ok(
-        new RegExp(`>${label}<|"${label}"`).test(td),
-        `TokenDetail renders the "${label}" section`,
-    );
-}
+// Spec-named sections are present (labels were updated in the tabbed redesign).
+// "Your balance" became "Total balance" inside the balance hero span.
+assert.ok(
+    />Total balance</.test(td),
+    'TokenDetail renders the "Total balance" section (was "Your balance")',
+);
+// "Metadata" is now the "Details" tab.
+assert.ok(
+    /label:\s*'Details'/.test(td),
+    'TokenDetail renders the "Details" tab (was "Metadata")',
+);
+// "Actions" is now the quick-actions group (aria-label="Quick actions").
+assert.ok(
+    /aria-label="Quick actions"/.test(td),
+    'TokenDetail renders the "Quick actions" section (was "Actions")',
+);
+// "Holders" section is still present via HoldersPanel component and tab id.
+assert.ok(
+    /HoldersPanel\b/.test(td),
+    'TokenDetail renders the Holders section (HoldersPanel component)',
+);
 
 // --- 2. BalanceList: clickable rows + onSelectToken prop ------------------
 

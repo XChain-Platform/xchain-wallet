@@ -26,9 +26,9 @@ const wsRoot = join(here, '..', '..', '..');
 
 // --- 1. Threat model doc --------------------------------------------
 
-const threatModel = readFileSync(join(wsRoot, 'docs', 'THREAT_MODEL.md'), 'utf8');
+const threatModel = readFileSync(join(wsRoot, 'docs', 'Threat_Model.md'), 'utf8');
 for (const section of [
-    'Protected tokens',
+    'Protected assets',
     'Explicitly in scope',
     'Explicitly out of scope',
     'Attacker scenarios',

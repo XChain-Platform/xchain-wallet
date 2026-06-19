@@ -56,7 +56,10 @@ assert.ok(
 // Shape we want: detect user cancel, clear submitError, clear password,
 // setStage('form'), call showToast. Verify each lever is present in the
 // catch branch (without pinning exact line ordering).
-const catchBlockMatch = send.match(/\}\s*catch\s*\(\s*err\s*\)\s*\{[\s\S]*?\n\s{4,8}\}/);
+// Anchor on `const isBadPassword` (unique to the handleSubmit catch) so we
+// don't accidentally grab the earlier saveContact catch block, which grew
+// when Send.jsx was refactored and moved above the submit handler.
+const catchBlockMatch = send.match(/\}\s*catch\s*\(\s*err\s*\)\s*\{\s*\n\s+const isBadPassword[\s\S]{0,1500}?\n\s{4,8}\}/);
 assert.ok(catchBlockMatch, 'Send.jsx still has a catch (err) block in handleSubmit');
 const catchSrc = catchBlockMatch[0];
 assert.ok(

@@ -244,9 +244,9 @@ const createSrc = readFileSync(
     join(wsRoot, 'packages', 'extension', 'src', 'background', 'createBackgroundHost.js'),
     'utf8',
 );
-assert.ok(/bridgeEvents,\s*\.\.\.hostDeps\s*\}\s*=\s*deps/.test(createSrc),
+assert.ok(/bridgeEvents,[\s\S]{0,2000}?\.\.\.hostDeps\s*\}\s*=\s*deps/.test(createSrc),
     'createBackgroundHost destructures bridgeEvents');
-assert.ok(/registerBridgeHandlers\(host,\s*\{\s*approvals,\s*events:\s*bridgeEvents\s*\}\)/.test(createSrc),
+assert.ok(/registerBridgeHandlers\(host,\s*\{[^)]*events:\s*bridgeEvents[^)]*\}/.test(createSrc),
     'createBackgroundHost forwards bridgeEvents → events into registerBridgeHandlers');
 
 // --- 8. background.js wires the broadcaster --------------------------

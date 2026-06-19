@@ -50,7 +50,7 @@ await assert.rejects(
 );
 await assert.rejects(
     async () => flows.getMessagingInbox({ vault: {}, walletId: 'w1' }),
-    /password is required/,
+    /password.*required|signer.*required/,
 );
 await assert.rejects(
     async () => flows.getMessagingInbox({ vault: {}, walletId: 'w1', password: 'pw' }),
@@ -77,8 +77,8 @@ assert.ok(existsSync(inboxPath), 'MessagingInbox.jsx exists');
 const src = readFileSync(inboxPath, 'utf8');
 assert.ok(/export function MessagingInbox\b/.test(src),
     'MessagingInbox is a named export');
-assert.ok(/messaging\.getMessagingInbox\s*\(/.test(src),
-    'MessagingInbox calls messaging.getMessagingInbox');
+assert.ok(/messaging\.getMessagingInboxSweep\s*\(/.test(src),
+    'MessagingInbox calls messaging.getMessagingInboxSweep');
 for (const stage of ['pick', 'password', 'submitting', 'inbox']) {
     assert.ok(src.includes(`'${stage}'`),
         `MessagingInbox tracks stage "${stage}"`);

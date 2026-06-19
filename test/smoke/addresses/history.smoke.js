@@ -37,9 +37,9 @@ assert.ok(/export function History\b/.test(src),
 assert.ok(/🔗/.test(src), 'History renders the 🔗 LINK badge');
 assert.ok(/connector/i.test(src),
     'History renders a vertical connector between threaded rows');
-assert.ok(/Cross-chain actions/.test(src),
-    'History exposes the "Cross-chain actions" filter view');
-assert.ok(/detailDual/.test(src),
+assert.ok(/Cross-chain only/.test(src),
+    'History exposes the "Cross-chain only" filter view');
+assert.ok(/detailSide/.test(src),
     'History renders a dual-side (side-by-side) detail card layout');
 
 // Read-side data sources fan out via three messaging methods.
@@ -120,7 +120,7 @@ for (const [shell, appPath] of [
         `${shell} App.jsx imports the History component`);
     assert.ok(app.includes("'history'"),
         `${shell} tracks 'history' sub-route`);
-    assert.ok(/onHistory=\{activeWalletId \? \(\) =>\s*setUnlockedView\('history'\)/.test(app),
+    assert.ok(/onHistory=\{activeWalletId \?/.test(app) && /setUnlockedView\('history'\)/.test(app),
         `${shell} wires Home.onHistory → 'history' sub-route`);
     assert.ok(/<History\b[\s\S]*?walletId=\{activeWalletId\}/.test(app),
         `${shell} App.jsx mounts <History> with the active walletId`);
