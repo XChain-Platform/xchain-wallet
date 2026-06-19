@@ -25,6 +25,8 @@ import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
+import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
+import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -90,6 +92,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
     const [getAmount, setGetAmount] = useState('');
     const [getOwnership, setGetOwnership] = useState(false);
     const [memo, setMemo] = useState('');
+    const [payFeeInNativeCoin, setPayFeeInNativeCoin] = useState(false);
     const [password, setPassword] = useState('');
 
     const [stage, setStage] = useState(
@@ -219,6 +222,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                     signerId: fromAddress.signerId,
                 },
                 params,
+                payFeeInNativeCoin: payFeeInNativeCoin || undefined,
             };
             let r;
             if (isWatcherMode) {
@@ -226,6 +230,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                     chainId,
                     from: base.from,
                     actionData: { action: 'SWAP', params },
+                    encoderOpts: { payFeeInNativeCoin: payFeeInNativeCoin || undefined },
                 });
             } else if (hw) {
                 r = await messaging.swapActionHw({ ...base, signerId: fromAddress.signerId });
@@ -235,8 +240,17 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
             setResult(r);
             setStage('done');
         } catch (err) {
-            const bad = err?.name === 'InvalidPasswordError';
-            setSubmitError(bad ? 'Incorrect password.' : err?.message || 'Sign failed.');
+            const isBadPassword = err?.name === 'InvalidPasswordError';
+            const isNativeFeeErr = err?.name === 'NativeFeeForfeitError';
+            setSubmitError(
+                isBadPassword
+                    ? 'Incorrect password.'
+                    : isNativeFeeErr && err?.reason === 'unsupported'
+                        ? `Paying the protocol fee in ${coinTicker || 'the native coin'} is not available for this action. Turn it off to pay in XCHAIN.`
+                    : isNativeFeeErr
+                        ? 'The native-coin fee price is temporarily unavailable. Try again in a moment, or turn off native-coin fee payment.'
+                    : err?.message || 'Sign failed.',
+            );
             setStage('form');
             if (!isWatcherMode && !hw) {
                 passwordRef.current?.focus();
@@ -407,6 +421,12 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                 onChange={(e) => setMemo(e.target.value)}
             />
 
+            <NativeFeeToggle
+                checked={payFeeInNativeCoin}
+                onChange={setPayFeeInNativeCoin}
+                coinTicker={coinTicker}
+            />
+
             {validationError ? (
                 <p role="alert" className={styles.error} style={{ marginTop: '0.5rem' }}>
                     {validationError}
@@ -425,6 +445,12 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                             <AddressText address={fromAddress.address} />
                         </dd>
                     </dl>
+
+                    {payFeeInNativeCoin ? (
+                        <div role="alert" className={styles.warnings}>
+                            <p className={styles.warning}>{NATIVE_FEE_WARNING}</p>
+                        </div>
+                    ) : null}
 
                     {isWatcherMode ? (
                         <p className={styles.hint}>

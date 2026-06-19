@@ -29,6 +29,11 @@ import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useFormDraft } from '../hooks/useFormDraft.js';
 import { useSettings } from '../hooks/useSettings.js';
 import styles from './IssueTokenForm.module.css';
+import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
+import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
+
+// Native coin ticker per protocol coin (label for the native-fee toggle).
+const PROTOCOL_COIN_TICKER = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -73,6 +78,7 @@ export function IssueTokenForm({ walletId, onBack }) {
     const [description, setDescription] = useState('');
     const [lockSupply, setLockSupply] = useState(false);
     const [transferTo, setTransferTo] = useState('');
+    const [payFeeInNativeCoin, setPayFeeInNativeCoin] = useState(false);
     const [password, setPassword] = useState('');
 
     const [stage, setStage] = useState(
@@ -96,12 +102,12 @@ export function IssueTokenForm({ walletId, onBack }) {
         if (stage !== 'form' || !draftPending) return;
         draft.save({
             chainId, fromAddressId, ticker, supply, divisible,
-            description, lockSupply, transferTo,
+            description, lockSupply, transferTo, payFeeInNativeCoin,
         });
     }, [
         stage, draftPending, draft,
         chainId, fromAddressId, ticker, supply, divisible,
-        description, lockSupply, transferTo,
+        description, lockSupply, transferTo, payFeeInNativeCoin,
     ]);
     const restoreDraft = useCallback(() => {
         const v = draft.load();
@@ -114,6 +120,7 @@ export function IssueTokenForm({ walletId, onBack }) {
         if (typeof v.description === 'string') setDescription(v.description);
         if (typeof v.lockSupply === 'boolean') setLockSupply(v.lockSupply);
         if (typeof v.transferTo === 'string') setTransferTo(v.transferTo);
+        if (typeof v.payFeeInNativeCoin === 'boolean') setPayFeeInNativeCoin(v.payFeeInNativeCoin);
         setDraftPending(true);
     }, [draft]);
     const dismissDraft = useCallback(() => {
@@ -166,6 +173,7 @@ export function IssueTokenForm({ walletId, onBack }) {
     }, [stage]);
 
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
+    const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
     const fromAddress = useMemo(() => {
         if (!chainId || !fromAddressId || !addressesByChain) return null;
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
@@ -256,6 +264,7 @@ export function IssueTokenForm({ walletId, onBack }) {
                     signerId: fromAddress.signerId,
                 },
                 params: actionParams,
+                payFeeInNativeCoin: payFeeInNativeCoin || undefined,
             };
             let res;
             if (isWatcherMode) {
@@ -263,6 +272,7 @@ export function IssueTokenForm({ walletId, onBack }) {
                     chainId,
                     from: base.from,
                     actionData: { action: 'ISSUE', params: actionParams },
+                    encoderOpts: { payFeeInNativeCoin: payFeeInNativeCoin || undefined },
                 });
             } else if (isHwSource) {
                 res = await messaging.issueTokenHw({ ...base, signerId: fromAddress.signerId });
@@ -279,9 +289,14 @@ export function IssueTokenForm({ walletId, onBack }) {
             setDraftPending(false);
         } catch (err) {
             const isBadPassword = err?.name === 'InvalidPasswordError';
+            const isNativeFeeErr = err?.name === 'NativeFeeForfeitError';
             setSubmitError(
                 isBadPassword
                     ? 'Incorrect password.'
+                    : isNativeFeeErr && err?.reason === 'unsupported'
+                        ? `Paying the protocol fee in ${coinTicker || 'the native coin'} is not available for this action. Turn it off to pay in XCHAIN.`
+                    : isNativeFeeErr
+                        ? 'The native-coin fee price is temporarily unavailable. Try again in a moment, or turn off native-coin fee payment.'
                     : err?.message || 'Issue failed.',
             );
             setStage('review');
@@ -369,6 +384,11 @@ export function IssueTokenForm({ walletId, onBack }) {
                         <DetailRow key={d.label} label={d.label} value={d.value} />
                     ))}
                 </dl>
+                {payFeeInNativeCoin ? (
+                    <div role="alert" className={styles.warnings}>
+                        <p className={styles.warning}>{NATIVE_FEE_WARNING}</p>
+                    </div>
+                ) : null}
                 {decoded && decoded.warnings.length > 0 ? (
                     <div role="alert" className={styles.warnings}>
                         {decoded.warnings.map((w, i) => (
@@ -539,6 +559,11 @@ export function IssueTokenForm({ walletId, onBack }) {
                 autoComplete="off"
                 autoCapitalize="none"
                 autoCorrect="off"
+            />
+            <NativeFeeToggle
+                checked={payFeeInNativeCoin}
+                onChange={setPayFeeInNativeCoin}
+                coinTicker={coinTicker}
             />
             {formError ? (
                 // Cluster P FOLLOWUP 4: formError surfaces field-level

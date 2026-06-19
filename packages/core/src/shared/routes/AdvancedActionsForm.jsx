@@ -9,6 +9,8 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
+import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 import {
     Screen,
     ScreenHeader,
@@ -29,6 +31,8 @@ import { useWalletMode } from '../hooks/useWalletMode.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+
+const PROTOCOL_COIN_TICKER = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
 
 // Rest-fields carry a '...' prefix in the SDK's field list (see
 // xchain-sdk/src/formatSelector.js). The form splits array input on
@@ -93,6 +97,8 @@ export function AdvancedActionsForm({ walletId, onBack }) {
     const [validation, setValidation] = useState(
         /** @type {{ valid: boolean, errors: any[] } | null} */ (null),
     );
+
+    const [payFeeInNativeCoin, setPayFeeInNativeCoin] = useState(false);
 
     const [stage, setStage] = useState(
         /** @type {'compose' | 'review' | 'submitting' | 'done'} */ ('compose'),
@@ -225,6 +231,7 @@ export function AdvancedActionsForm({ walletId, onBack }) {
     }, [stage]);
 
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
+    const coinTicker = descriptor ? (PROTOCOL_COIN_TICKER[descriptor.coin] || '') : '';
     const fromAddress = useMemo(() => {
         if (!chainId || !fromAddressId || !addressesByChain) return null;
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
@@ -305,20 +312,34 @@ export function AdvancedActionsForm({ walletId, onBack }) {
                     chainId,
                     from: base.from,
                     actionData: { action, params: actionParams },
+                    encoderOpts: { payFeeInNativeCoin: payFeeInNativeCoin || undefined },
                 });
             } else if (isHwSource) {
-                res = await messaging.advancedActionHw({ ...base, signerId: fromAddress.signerId });
+                res = await messaging.advancedActionHw({
+                    ...base,
+                    signerId: fromAddress.signerId,
+                    payFeeInNativeCoin: payFeeInNativeCoin || undefined,
+                });
             } else {
-                res = await messaging.advancedAction({ ...base, password });
+                res = await messaging.advancedAction({
+                    ...base,
+                    password,
+                    payFeeInNativeCoin: payFeeInNativeCoin || undefined,
+                });
             }
             setResult(res);
             setPassword('');
             setStage('done');
         } catch (err) {
             const isBadPassword = err?.name === 'InvalidPasswordError';
+            const isNativeFeeErr = err?.name === 'NativeFeeForfeitError';
             setSubmitError(
                 isBadPassword
                     ? 'Incorrect password.'
+                    : isNativeFeeErr && err?.reason === 'unsupported'
+                        ? `Paying the protocol fee in ${coinTicker || 'the native coin'} is not available for this action. Turn it off to pay in XCHAIN.`
+                    : isNativeFeeErr
+                        ? 'The native-coin fee price is temporarily unavailable. Try again in a moment, or turn off native-coin fee payment.'
                     : err?.message || 'Action failed.',
             );
             setStage('review');
@@ -402,6 +423,11 @@ export function AdvancedActionsForm({ walletId, onBack }) {
                         <DetailRow key={d.label} label={d.label} value={d.value} />
                     ))}
                 </dl>
+                {payFeeInNativeCoin ? (
+                    <div role="alert" className={styles.warnings}>
+                        <p className={styles.warning}>{NATIVE_FEE_WARNING}</p>
+                    </div>
+                ) : null}
                 {decoded && decoded.warnings.length > 0 ? (
                     <div role="alert" className={styles.warnings}>
                         {decoded.warnings.map((w, i) => (
@@ -570,6 +596,12 @@ export function AdvancedActionsForm({ walletId, onBack }) {
                     ))}
                 </div>
             ) : null}
+
+            <NativeFeeToggle
+                checked={payFeeInNativeCoin}
+                onChange={setPayFeeInNativeCoin}
+                coinTicker={coinTicker}
+            />
 
             {formError ? (
                 <div role="alert" className={styles.error}>{formError}</div>

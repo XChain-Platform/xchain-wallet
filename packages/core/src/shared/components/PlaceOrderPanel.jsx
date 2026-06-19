@@ -32,8 +32,12 @@ import { useMessaging } from '../useMessaging.js';
 import { isHwSource } from './SignCredentials.jsx';
 import { buildBalanceRows } from './BalanceList.jsx';
 import { formatWithThousands } from '../utils/amountFormat.js';
+import { NativeFeeToggle } from './NativeFeeToggle.jsx';
+import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 
 const chainRegistry = registryLib.defaultRegistry();
+
+const PROTOCOL_COIN_TICKER = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
 
 const EXPIRATION_PRESETS = [
     { id: '1d', label: '1 day', blocks: 144 },
@@ -71,6 +75,8 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+
+    const [payFeeInNativeCoin, setPayFeeInNativeCoin] = useState(false);
 
     const [hwStatus, setHwStatus] = useState('idle');
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
@@ -126,6 +132,9 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
     }, [addressesByChain, chainId, fromAddressId]);
 
     const hw = isHwSource(fromAddress);
+
+    const descriptor = chainRegistry.get(chainId);
+    const coinTicker = descriptor ? (PROTOCOL_COIN_TICKER[descriptor.coin] || '') : '';
 
     const total = useMemo(() => {
         const p = Number(price);
@@ -216,6 +225,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                     signerId: fromAddress.signerId,
                 },
                 params: buildParams(),
+                payFeeInNativeCoin: payFeeInNativeCoin || undefined,
             };
             const res = hw
                 ? await messaging.orderActionHw({ ...base, signerId: fromAddress.signerId })
@@ -225,12 +235,19 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
             setStage('done');
             onOrderPlaced?.();
         } catch (err) {
-            const isBadPassword = err?.name === 'InvalidPasswordError';
-            setSubmitError(
-                isBadPassword
-                    ? 'Incorrect password.'
-                    : err?.message || 'Order placement failed.',
-            );
+            let errorMessage;
+            if (err?.name === 'InvalidPasswordError') {
+                errorMessage = 'Incorrect password.';
+            } else if (err?.name === 'NativeFeeForfeitError') {
+                if (err?.reason === 'unsupported') {
+                    errorMessage = `Paying the protocol fee in ${coinTicker || 'the native coin'} is not available for this action. Turn it off to pay in XCHAIN.`;
+                } else {
+                    errorMessage = 'The native-coin fee price is temporarily unavailable. Try again in a moment, or turn off native-coin fee payment.';
+                }
+            } else {
+                errorMessage = err?.message || 'Order placement failed.';
+            }
+            setSubmitError(errorMessage);
             setStage('form');
             if (!hw) {
                 passwordRef.current?.focus();
@@ -419,11 +436,24 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                     {summary}
                 </p>
             ) : null}
+            <NativeFeeToggle
+                checked={payFeeInNativeCoin}
+                onChange={setPayFeeInNativeCoin}
+                coinTicker={coinTicker}
+            />
             {/* Password input intentionally omitted. The wallet is
                 already unlocked at this point, and forcing a re-entry
                 here breaks the in-context trading flow. The submit
                 handler passes the empty password through; signing will
                 fail loudly if the wallet has actually re-locked. */}
+            {payFeeInNativeCoin ? (
+                <p
+                    role="alert"
+                    style={{ margin: '0.5rem 0 0', color: 'var(--xc-text-muted)', fontSize: '0.75rem' }}
+                >
+                    {NATIVE_FEE_WARNING}
+                </p>
+            ) : null}
             {submitError ? (
                 <p role="alert" style={{ margin: '0.5rem 0 0', color: '#ef5350', fontSize: '0.75rem' }}>
                     {submitError}

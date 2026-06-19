@@ -119,6 +119,7 @@ export async function dispenserAction(opts) {
             ...(opts.fee !== undefined && { fee: opts.fee }),
             ...(opts.feePerKb !== undefined && { feePerKb: opts.feePerKb }),
             ...(opts.rbf !== undefined && { rbf: opts.rbf }),
+            ...(opts.payFeeInNativeCoin !== undefined && { payFeeInNativeCoin: opts.payFeeInNativeCoin }),
         },
         signingPaths: [source.derivationPath
             ? { inputIndex: 0, path: source.derivationPath }

@@ -30,6 +30,8 @@ import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useFormDraft } from '../hooks/useFormDraft.js';
 import { useSettings } from '../hooks/useSettings.js';
 import styles from './IssueTokenForm.module.css';
+import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
+import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -115,6 +117,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     const [fiatAmount, setFiatAmount] = useState('');
     const [showAdvanced, setShowAdvanced] = useState(false);
     const [password, setPassword] = useState('');
+    const [payFeeInNativeCoin, setPayFeeInNativeCoin] = useState(false);
 
     const [stage, setStage] = useState(
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
@@ -137,13 +140,13 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         draft.save({
             chainId, fromAddressId, ticker, giveAmount, escrow,
             triggerPrice, oracleAddress, fiatCode, fiatAmount,
-            showAdvanced,
+            showAdvanced, payFeeInNativeCoin,
         });
     }, [
         stage, draftPending, draft,
         chainId, fromAddressId, ticker, giveAmount, escrow,
         triggerPrice, oracleAddress, fiatCode, fiatAmount,
-        showAdvanced,
+        showAdvanced, payFeeInNativeCoin,
     ]);
     const restoreDraft = useCallback(() => {
         const v = draft.load();
@@ -158,6 +161,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         if (typeof v.fiatCode === 'string') setFiatCode(v.fiatCode);
         if (typeof v.fiatAmount === 'string') setFiatAmount(v.fiatAmount);
         if (typeof v.showAdvanced === 'boolean') setShowAdvanced(v.showAdvanced);
+        if (typeof v.payFeeInNativeCoin === 'boolean') setPayFeeInNativeCoin(v.payFeeInNativeCoin);
         setDraftPending(true);
     }, [draft]);
     const dismissDraft = useCallback(() => {
@@ -448,6 +452,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     signerId: fromAddress.signerId,
                 },
                 params: actionParams,
+                payFeeInNativeCoin: payFeeInNativeCoin || undefined,
             };
             let res;
             if (isWatcherMode) {
@@ -455,6 +460,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     chainId,
                     from: base.from,
                     actionData: { action: 'DISPENSER', params: actionParams },
+                    encoderOpts: { payFeeInNativeCoin: payFeeInNativeCoin || undefined },
                 });
             } else if (hw) {
                 res = await messaging.dispenserActionHw({ ...base, signerId: fromAddress.signerId });
@@ -469,11 +475,17 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             setDraftPending(false);
         } catch (err) {
             const isBadPassword = err?.name === 'InvalidPasswordError';
-            setSubmitError(
-                isBadPassword
-                    ? 'Incorrect password.'
-                    : err?.message || 'Dispenser creation failed.',
-            );
+            let submitMsg;
+            if (isBadPassword) {
+                submitMsg = 'Incorrect password.';
+            } else if (err?.name === 'NativeFeeForfeitError' && err?.reason === 'unsupported') {
+                submitMsg = `Paying the protocol fee in ${coinTicker || 'the native coin'} is not available for this action. Turn it off to pay in XCHAIN.`;
+            } else if (err?.name === 'NativeFeeForfeitError') {
+                submitMsg = 'The native-coin fee price is temporarily unavailable. Try again in a moment, or turn off native-coin fee payment.';
+            } else {
+                submitMsg = err?.message || 'Dispenser creation failed.';
+            }
+            setSubmitError(submitMsg);
             setStage('review');
             if (!isWatcherMode && !hw) {
                 passwordRef.current?.focus();
@@ -565,6 +577,11 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                         <DetailRow key={d.label} label={d.label} value={d.value} />
                     ))}
                 </dl>
+                {payFeeInNativeCoin ? (
+                    <div role="alert" className={styles.warnings}>
+                        <p className={styles.warning}>{NATIVE_FEE_WARNING}</p>
+                    </div>
+                ) : null}
                 {decoded && decoded.warnings.length > 0 ? (
                     <div role="alert" className={styles.warnings}>
                         {decoded.warnings.map((w, i) => (
@@ -771,6 +788,12 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     />
                 </>
             ) : null}
+
+            <NativeFeeToggle
+                checked={payFeeInNativeCoin}
+                onChange={setPayFeeInNativeCoin}
+                coinTicker={coinTicker}
+            />
 
             {formError ? (
                 // Cluster P FOLLOWUP 4: formError is field-level
