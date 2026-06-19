@@ -43,8 +43,9 @@ export function AlertsOverlay({ alerts, onClose }) {
             aria-modal="true"
             aria-label="Wallet alerts"
             onClick={onClose}
+            tabIndex={-1}
         >
-            <div className={styles.panel} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.panel} onClick={(e) => e.stopPropagation()} role="presentation" tabIndex={-1}>
                 <header className={styles.header}>
                     <span className={styles.title}>
                         Alerts

@@ -188,7 +188,7 @@
     font-weight: 600;
     color: var(--xc-text);
     background: var(--xc-danger-bg);
-    border-left: 3px solid var(--xc-danger);
+    border-inline-start: 3px solid var(--xc-danger);
     padding: var(--xc-space-2) var(--xc-space-3);
     border-radius: 0 var(--xc-radius-sm) var(--xc-radius-sm) 0;
     margin: var(--xc-space-2) 0;

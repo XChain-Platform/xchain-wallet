@@ -1965,8 +1965,8 @@ function buildActionEntries({
         },
         {
             id: 'broadcast',
-            label: 'Broadcast',
-            description: 'Publish text, oracle value, or feed reference on-chain.',
+            label: 'Post a message',
+            description: 'Publish a public message or data value on-chain.',
             onSelect: onBroadcast,
         },
         {
@@ -2001,14 +2001,14 @@ function buildActionEntries({
         },
         {
             id: 'coinpay',
-            label: 'Pay COINPAY',
-            description: 'Settle a pending token/coin order match by paying the native-coin leg.',
+            label: 'Complete a trade',
+            description: 'Finish a trade by paying the coin amount you owe.',
             onSelect: onPayCoinpay,
         },
         {
             id: 'swap',
             label: 'Swap tokens',
-            description: 'Atomic token-pair swap: no native coin, no follow-up payment needed.',
+            description: 'Trade one token directly for another, with no coin needed and nothing to pay later.',
             onSelect: onSwap,
         },
         {

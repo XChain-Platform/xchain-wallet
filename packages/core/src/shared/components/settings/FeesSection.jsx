@@ -115,7 +115,7 @@ export function FeesSection() {
                         {fees.strategy === 'custom' ? (
                             <div style={FIELD_ROW}>
                                 <span style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)' }}>
-                                    sats / KB
+                                    Fee rate (satoshis per kilobyte)
                                 </span>
                                 <input
                                     type="number"
@@ -132,15 +132,15 @@ export function FeesSection() {
                                         });
                                     }}
                                     onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-                                    aria-label={`${displayName} custom fee rate`}
+                                    aria-label={`${displayName} fee rate in satoshis per kilobyte`}
                                     style={{ ...INPUT, width: 120, textAlign: 'right' }}
                                 />
                             </div>
                         ) : null}
 
                         <ToggleRow
-                            label="RBF by default"
-                            hint="Replace-by-fee opt-in stays sticky for outgoing sends on this chain."
+                            label="Allow speeding up later"
+                            hint="Lets you raise the fee on a slow transaction after you send it."
                             checked={Boolean(fees.rbfByDefault)}
                             onChange={(v) => onPatch(chainId, {
                                 strategy: fees.strategy,
@@ -150,7 +150,7 @@ export function FeesSection() {
                             disabled={!descriptor?.feeStrategy?.rbfSupported}
                         />
                         {!descriptor?.feeStrategy?.rbfSupported ? (
-                            <div style={ROW_HINT}>RBF is not supported on {displayName}.</div>
+                            <div style={ROW_HINT}>Speeding up later is not supported on {displayName}.</div>
                         ) : null}
                     </div>
                 );

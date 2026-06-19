@@ -76,6 +76,7 @@ export function RawPsbtViewer({ developerMode, psbtHex, actionFields }) {
                             value={psbtHex}
                             rows={4}
                             spellCheck={false}
+                            aria-label="Unsigned transaction hex"
                         />
                     </section>
                 ) : null}

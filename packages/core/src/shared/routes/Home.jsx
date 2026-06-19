@@ -632,7 +632,11 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
                     />
                 ) : null}
 
-                {balances ? (
+                {balances ? (() => {
+                    // BTC-only gate: multisig badges apply only to the Bitcoin
+                    // chain card at launch (§10.3). Other chain cards receive null.
+                    const isBtc = networkFilter === 'bitcoin' || networkFilter === 'all';
+                    return (
                     <HomeTabs
                         chainRegistry={chainRegistry}
                         balances={balances}
@@ -643,7 +647,7 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
                         coinFamilies={coinFamilies}
                         onNetworkFilterChange={setNetworkFilter}
                         onTokenQueryChange={setTokenQuery}
-                        multisig={multisig}
+                        multisig={isBtc ? multisig : null}
                         multisigChainId={chainRegistry.byCoin('bitcoin')[0]?.id}
                         onReceive={onReceive}
                         onSelectToken={onSelectToken}
@@ -722,7 +726,8 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
                             </div>
                         )}
                     />
-                ) : null}
+                    );
+                })() : null}
 
 
                 {balances && Object.keys(balances).length === 0 ? (

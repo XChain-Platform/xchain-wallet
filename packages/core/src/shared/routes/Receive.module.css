@@ -24,7 +24,7 @@
     margin-bottom: var(--xc-space-3);
     color: var(--xc-text);
     font-family: inherit;
-    text-align: left;
+    text-align: start;
     cursor: pointer;
     appearance: none;
     transition: border-color 120ms ease, background-color 120ms ease;

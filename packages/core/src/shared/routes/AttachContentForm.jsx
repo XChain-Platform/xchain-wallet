@@ -965,6 +965,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                     accept="image/*,audio/*,.svg,.json,.txt"
                     onChange={handleFilePick}
                     style={{ display: 'none' }}
+                    aria-label="Choose file to attach"
                 />
                 <Button
                     type="button"

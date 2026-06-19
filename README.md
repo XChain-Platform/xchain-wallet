@@ -5,7 +5,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-0.333.0-blue" alt="Version">
-  <img src="https://img.shields.io/badge/tests-92%20smokes%20%2B%20Playwright%20E2E-brightgreen" alt="Tests">
+  <img src="https://img.shields.io/badge/tests-295%20smokes%20%2B%20Playwright%20E2E-brightgreen" alt="Tests">
   <img src="https://img.shields.io/badge/node-%3E%3D22-green" alt="Node">
   <img src="https://img.shields.io/badge/license-Dankest%20Community-orange" alt="License">
 </p>
@@ -113,7 +113,7 @@ pnpm --filter @xchain-wallet/desktop reproduce      # rebuild and verify against
 ### Run the smoke suite
 
 ```bash
-pnpm --filter @xchain-wallet/core test             # 92 vitest smokes (UI surfaces, signers, bridge, audits)
+pnpm test:smoke                                    # 295 smoke tests (plain Node: UI surfaces, signers, bridge, audits)
 pnpm --filter @xchain-wallet/e2e test              # Playwright E2E against the web shell
 ```
 
@@ -157,7 +157,7 @@ Per-package scripts (run with `pnpm --filter <pkg> <script>`):
 
 | Package | Command | Description |
 |---|---|---|
-| root | `pnpm test:unit` | Vitest unit suite (92 smokes) |
+| root | `pnpm test:unit` | Vitest unit suite |
 | root | `pnpm test:unit:watch` | Vitest in watch mode |
 | root | `pnpm test:unit:coverage` | Vitest with v8 coverage |
 | root | `pnpm test:smoke` | Direct node runner for headless smokes |
@@ -185,7 +185,7 @@ Per-package scripts (run with `pnpm --filter <pkg> <script>`):
 | Smoke - Flows & decoder | 6 | sdk-wiring, sdk-bundle, action-decoder, decoder, freewallet-migration, unlock-flow |
 | Smoke - Audits | 4 | a11y-audit, repro-build-audit, extension-manifest-audit, release-gates |
 | Smoke - Other | ~6 | i18n, branding, phase-scope, shared-routes, ui-surface, vitest-setup |
-| **Smoke total** | **92** | All run on every commit; CI fails on any regression |
+| **Smoke total** | **295** | All run on every commit; CI fails on any regression |
 | Playwright E2E | 3 specs | Onboarding round-trip, Send-form review, axe-core a11y scan of every Phase-1 screen |
 | Repro-build verification | Manual | Run `packages/desktop/scripts/reproduce.sh <tag>` twice on a clean dev machine; diff `RELEASE_HASHES.txt` |
 

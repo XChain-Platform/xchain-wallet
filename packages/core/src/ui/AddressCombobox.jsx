@@ -111,6 +111,7 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
                 aria-controls={listboxId}
                 aria-autocomplete="list"
                 aria-activedescendant={activeId}
+                placeholder="Address"
                 value={value}
                 onChange={(e) => {
                     onChange(e);

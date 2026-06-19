@@ -87,8 +87,8 @@
 
 .actionsBarFull {
     max-width: 560px;
-    margin-left: auto;
-    margin-right: auto;
+    margin-inline-start: auto;
+    margin-inline-end: auto;
 }
 
 .summary {
@@ -99,7 +99,7 @@
     line-height: 1.4;
 }
 
-/* §21.3 collapsible Details disclosure — closed by default. The
+/* §21.3 collapsible Details disclosure: closed by default. The
    detailsList grid moves inside; this wrapper holds the toggle. */
 .details {
     margin: 0 0 var(--xc-space-4);
@@ -241,7 +241,7 @@
 /* The shared Input component carries `margin-bottom: var(--xc-space-3)`
    on its wrapper (Input.module.css). Inside the Send form's amount
    block we want the footer (USD / balance / Max) flush under the
-   field, so zero that out via a structural selector — overriding the
+   field, so zero that out via a structural selector; overriding the
    CSS-module class name from outside isn't reachable. */
 .amountBlock > div:first-child,
 .amountFieldWrap > div:first-child {
@@ -253,7 +253,7 @@
 }
 
 /* Bumps font-size/padding on the underlying <input> and label inside
-   Input — used for the To and Amount fields so they read as the
+   Input, used for the To and Amount fields so they read as the
    primary entry surfaces of the form. */
 .bigField :global(input) {
     font-size: var(--xc-text-lg);
@@ -268,9 +268,9 @@
 
 .inlineContactsButton {
     position: absolute;
-    right: 4px;
+    inset-inline-end: 4px;
     /* Stretch the button between the bottom of the label area and the
-       bottom of the input — both anchors are CSS-known (Input.field has
+       bottom of the input. Both anchors are CSS-known (Input.field has
        gap space-1 below the text-sm label, and margin-bottom space-3
        under the input). flex-centering inside lands the icon at the
        input's vertical midpoint regardless of font-size / line-height
@@ -342,7 +342,7 @@
     background: transparent;
     border: none;
     width: 100%;
-    text-align: left;
+    text-align: start;
     color: var(--xc-text);
 }
 
@@ -433,11 +433,11 @@
 
 .amountMaxInline {
     position: absolute;
-    right: var(--xc-space-2);
+    inset-inline-end: var(--xc-space-2);
     /* Stretch between the bottom of the label area and the bottom of
        the input (Input.field has gap space-1 below the label and
        margin-bottom space-3 below the input). The bigField label is
-       text-md / weight 600 — 1rem × 1.5 line-height matches. */
+       text-md / weight 600; 1rem x 1.5 line-height matches. */
     top: calc(1rem * 1.5 + var(--xc-space-2));
     bottom: var(--xc-space-3);
     display: inline-flex;
@@ -524,7 +524,7 @@
 
 /* §37 / §29 Success confirmation card after broadcast (G124). The
  * existing .successTitle / .successLabel / .txid carry the original
- * "Sent" layout — the card adds the visual hierarchy spec'd in §29.5
+ * "Sent" layout; the card adds the visual hierarchy spec'd in §29.5
  * (icon + summary + txid + explorer link + Send-another / Done CTAs). */
 .successCard {
     display: flex;
@@ -693,7 +693,7 @@
 
 .heroChainOverlay {
     position: absolute;
-    right: -2px;
+    inset-inline-end: -2px;
     bottom: -2px;
     width: 32px;
     height: 32px;

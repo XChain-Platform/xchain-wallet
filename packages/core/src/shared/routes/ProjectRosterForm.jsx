@@ -624,6 +624,7 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                 rows={6}
                 spellCheck={false}
                 autoCapitalize="characters"
+                aria-label="Tokens (one per line)"
                 style={{
                     width: '100%',
                     fontFamily: 'var(--xc-font-mono, monospace)',

@@ -137,6 +137,8 @@ export function BottomTabBar({
                         className={styles.scrim}
                         onClick={() => setSheetOpen(false)}
                         aria-hidden="true"
+                        role="presentation"
+                        tabIndex={-1}
                     />
                     <div
                         id="xc-bottom-sheet"

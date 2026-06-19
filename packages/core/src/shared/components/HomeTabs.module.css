@@ -108,7 +108,7 @@
     text-align: justify;
 }
 
-/* Demo activity / defi list — single rounded card with row dividers,
+/* Demo activity / defi list: single rounded card with row dividers,
    matching the Tokens / Coins list layout so all five tabs share the
    same visual rhythm. */
 .demoList {
@@ -136,7 +136,7 @@
     height: 16px;
 }
 
-/* Square token icon — used for any non-native token (XCHAIN, XCP, NFTs,
+/* Square token icon for any non-native token (XCHAIN, XCP, NFTs,
    etc.) so the visual cleanly separates "this row is about a token"
    from "this row is about a native coin" (which uses the circular
    chain icon via balanceStyles.iconImg). Sized 48px to fill the same
@@ -190,11 +190,11 @@
 }
 .demoRow:first-of-type { border-top: none; }
 
-/* Button variant of `.demoRow` — used by DeFi so each row can navigate
-   to ActionDetail on click. Resets default button chrome and lines up
-   with `.demoRow` so the visual stays identical. Divider lives on the
-   button (not the parent `<li>`) so we can anchor on the list's first
-   `<li>` to skip the top border — same trick the Activity list uses. */
+/* Button variant of `.demoRow` for DeFi rows that navigate to ActionDetail
+   on click. Resets default button chrome and lines up with `.demoRow` so
+   the visual stays identical. Divider lives on the button (not the parent
+   `<li>`) so we can anchor on the list's first `<li>` to skip the top
+   border, the same trick the Activity list uses. */
 .demoRowButton {
     appearance: none;
     background: transparent;
@@ -208,7 +208,7 @@
     padding: var(--xc-space-3);
     cursor: pointer;
     color: inherit;
-    text-align: left;
+    text-align: start;
     font-family: inherit;
     font-size: inherit;
 }
@@ -275,7 +275,7 @@
 
 /* Action label on the row's first line. Plain bold uppercase text
    (no pill background) so the leading edge aligns flush with the
-   primary line below and the meta line below that — matches the
+   primary line below and the meta line below that, matching the
    History row's `.actionBadge` treatment. */
 .demoActionTag {
     font-size: var(--xc-text-sm);
@@ -332,7 +332,7 @@
     color: var(--xc-text-muted);
 }
 
-/* Confirmation count pill — mirrors History.module.css `.confirmationsPill`
+/* Confirmation count pill. Mirrors History.module.css `.confirmationsPill`
    so a DeFi row's meta line reads identically to the History timeline. */
 .confirmationsPill {
     display: inline-flex;
@@ -348,7 +348,7 @@
     text-transform: uppercase;
 }
 
-/* Trailing-edge relative timestamp — mirrors History's `.rowRelativeTime`. */
+/* Trailing-edge relative timestamp. Mirrors History's `.rowRelativeTime`. */
 .rowRelativeTime {
     margin-inline-start: auto;
     color: var(--xc-text-muted);

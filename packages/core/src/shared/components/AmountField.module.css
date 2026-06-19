@@ -36,7 +36,7 @@
 
 .amountMaxInline {
     position: absolute;
-    right: var(--xc-space-2);
+    inset-inline-end: var(--xc-space-2);
     /* Stretch between the bottom of the label area and the bottom of
        the input. */
     top: calc(1rem * 1.5 + var(--xc-space-2));

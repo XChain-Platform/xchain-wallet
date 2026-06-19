@@ -1,4 +1,4 @@
-/* Match TokenDetail's body sizing — Screen.body provides the outer
+/* Match TokenDetail's body sizing. Screen.body provides the outer
    space-4 padding; we just cap the inner column at 1080px and stack. */
 .body {
     display: flex;
@@ -10,9 +10,9 @@
     box-sizing: border-box;
 }
 
-/* Unified filter card — search, chain picker, and the collapsible
-   advanced-filters panel all live in one bordered container so the
-   mobile view reads as one block instead of three stacked widgets. */
+/* Unified filter card containing search, chain picker, and the collapsible
+   advanced-filters panel in one bordered container so the mobile view reads
+   as one block instead of three stacked widgets. */
 .filterCard {
     display: flex;
     flex-direction: column;
@@ -92,7 +92,7 @@
     font-weight: 600;
 }
 
-/* Chain picker — full-width button + popover listbox so each option
+/* Chain picker: full-width button + popover listbox so each option
    can render its own chain logo (native <select>/<option> can't). */
 .chainPickerWrap {
     position: relative;
@@ -212,7 +212,7 @@
     color: var(--xc-accent-primary);
 }
 
-/* Bottom row of the filter card — Additional details disclosure on
+/* Bottom row of the filter card. Additional details disclosure on
    the left, Grouped / Flat seg group anchored to the right. */
 .filterFooter {
     display: flex;
@@ -225,7 +225,7 @@
     width: auto;
 }
 
-/* Filters disclosure — clickable row at the bottom of the form that
+/* Filters disclosure: clickable row at the bottom of the form that
    expands the advanced filters panel. */
 .filterDisclosure {
     appearance: none;
@@ -253,7 +253,7 @@
     color: var(--xc-text);
 }
 
-/* Advanced filter panel — fieldsets stacked, each with a small label
+/* Advanced filter panel: fieldsets stacked, each with a small label
    above and a chip-wrap (or input row) below. */
 .morePanel {
     display: flex;
@@ -326,7 +326,7 @@
 .dateInput {
     flex: 1 1 0;
     min-width: 0;
-    /* Keep the native calendar picker indicator — appearance:none
+    /* Keep the native calendar picker indicator; appearance:none
        would strip it. The indicator naturally renders on the right
        in LTR; we just give it a hover hint and a normalized color. */
     height: 36px;
@@ -471,7 +471,7 @@
     gap: var(--xc-space-2);
 }
 
-/* Plain chain icon for row headers — no pill / no tinted background.
+/* Plain chain icon for row headers: no pill, no tinted background.
    Just the raw 16px logo so the row reads as icon + action label. */
 .rowChainIcon {
     width: 16px;
@@ -563,7 +563,7 @@
 }
 
 /* Confirmation count pill rendered next to the block number on line 3.
-   Uses the accent color so it pops against the row's muted meta line —
+   Uses the accent color so it pops against the row's muted meta line;
    confirmations are a key on-chain finality signal and shouldn't blend
    into the rest of the meta text. */
 .confirmationsPill {
@@ -604,7 +604,7 @@
 
 /* ───── ActionDetail page layout ───── */
 
-/* Outer wrap — stacks the action-details hero, the explorer-button
+/* Outer wrap: stacks the action-details hero, the explorer-button
    row, and the Status / Raw / Peer sections with consistent spacing.
    `gap` matches the inter-button gap inside `.detailActions` so the
    vertical rhythm between the hero card and the button row equals the
@@ -616,7 +616,7 @@
 }
 
 /* One gray card per section. The page no longer wraps in a blue
-   accent-bordered container — each section is its own surface.
+   accent-bordered container; each section is its own surface.
    Vertical padding kept tight (space-1) so the card hugs its inner
    table / panel; horizontal padding stays at space-3 for breathing
    room against the card edge. */
@@ -630,7 +630,7 @@
     gap: var(--xc-space-2);
 }
 
-/* Hero variant — zero card padding so the table inside runs flush
+/* Hero variant: zero card padding so the table inside runs flush
    to the card edges. The row-divider lines reach the full width and
    the inner cells re-introduce their own horizontal padding so the
    text still has breathing room. */
@@ -643,7 +643,7 @@
     padding: var(--xc-space-2) var(--xc-space-3);
 }
 
-/* Card-header treatment for each section's title — full-strength text,
+/* Card-header treatment for each section's title: full-strength text,
    bigger than the muted in-body labels, with a thin divider below it
    so it reads as a banded header at the top of the gray card. */
 .detailSectionHeading {
@@ -660,7 +660,7 @@
 /* Key/value table used by the Action details section. Keys (th) are
    small + uppercase + muted; values (td) are monospace + wrap on any
    character so a long tx hash / address never breaks the layout. */
-/* The whole `<tbody>` is one CSS-Grid container with two columns —
+/* The whole `<tbody>` is one CSS-Grid container with two columns:
    `auto minmax(0, 1fr)`. Every `<tr>` uses `display: contents` so its
    `<th>` and `<td>` become direct grid items. That way the `auto`
    column is sized to the widest label across ALL rows (so the value
@@ -683,7 +683,7 @@
        stepped at the column boundary. */
     align-items: start;
     width: 100%;
-    /* No column-gap — visual gap between label and value comes from
+    /* No column-gap: visual gap between label and value comes from
        cell padding so the row-divider border lines stay continuous
        across the column boundary. */
     column-gap: 0;
@@ -693,7 +693,7 @@
     display: contents;
 }
 
-/* Row dividers — applied to th + td of every row except the first.
+/* Row dividers: applied to th + td of every row except the first.
    Because there's no column-gap, the two cells' borders meet at the
    column boundary and read as one continuous line. */
 .detailsTable tr + tr > th,
@@ -746,7 +746,7 @@
     text-transform: uppercase;
 }
 
-/* Uppercase status bubble used inside the details table — reuses the
+/* Uppercase status bubble used inside the details table. Reuses the
    .statusPillSuccess / Error / Pending color classes for fill + text. */
 .statusBubble {
     display: inline-flex;
@@ -774,7 +774,7 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     /* `min-width: 0` lets the flex item shrink past its intrinsic
-       content width — without it the text refuses to collapse and
+       content width; without it the text refuses to collapse and
        pushes the parent past the cell boundary. */
     min-width: 0;
     flex: 0 1 auto;
@@ -811,10 +811,10 @@
     height: 14px;
 }
 
-/* Explorer button row — equal-width columns that span the full row.
+/* Explorer button row: equal-width columns that span the full row.
    `auto-fit` + `minmax(0, 1fr)` divides the available width by the
-   number of buttons actually rendered: 3 buttons → each 1/3, 2 → 1/2,
-   1 → full width. The row always reads as a balanced strip. */
+   number of buttons actually rendered: 3 buttons -> each 1/3, 2 -> 1/2,
+   1 -> full width. The row always reads as a balanced strip. */
 .detailActions {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
@@ -867,9 +867,9 @@
     display: block;
 }
 
-/* Naked favicon used by the explorer buttons — no circular
-   icon-wrap background; sits at the same vertical position as the
-   wrapped icons on the sibling buttons. */
+/* Naked favicon used by the explorer buttons: no circular icon-wrap
+   background; sits at the same vertical position as the wrapped icons
+   on the sibling buttons. */
 .detailActionFavicon {
     width: 32px;
     height: 32px;
@@ -878,7 +878,7 @@
 }
 
 /* The XChain button uses the bundled product favicon, which has more
-   padding around its glyph than the third-party favicons — bump its
+   padding around its glyph than the third-party favicons. Bump its
    render size up so it visually matches Mempool / Blockstream
    instead of looking smaller. */
 .detailAction[href*="explorer.xchain.io"] .detailActionFavicon {
@@ -886,7 +886,7 @@
     height: 42px;
 }
 
-/* "More" action — last button on the row, hosts a popover menu with
+/* "More" action: last button on the row, hosts a popover menu with
    follow-up options (Save as contact, etc.) anchored to the button.
    Wrapper is a flex container so the inner button stretches to the
    grid row's height; without this the button shrinks to its content
@@ -987,7 +987,7 @@
     border-bottom-color: var(--xc-accent-primary);
 }
 
-/* Peer block inside the Raw tab — small label + JSON pre below the
+/* Peer block inside the Raw tab: small label + JSON pre below the
    local raw data so the cross-chain partner is still visible. */
 .detailPeerBlock {
     margin-top: var(--xc-space-3);
@@ -1056,7 +1056,7 @@
 .rawJsonCopy {
     position: absolute;
     top: 0;
-    right: 0;
+    inset-inline-end: 0;
     z-index: 1;
     background: color-mix(in srgb, var(--xc-surface-raised) 88%, transparent);
     border-radius: var(--xc-radius-sm);
@@ -1113,7 +1113,7 @@
     line-height: 1.3;
 }
 
-/* §31.4 — Save-as-contact prompt inside the history detail card. */
+/* §31.4: Save-as-contact prompt inside the history detail card. */
 .saveContactRow {
     display: flex;
     margin-top: var(--xc-space-2);
@@ -1214,7 +1214,7 @@
     overflow: hidden;
 }
 
-/* Group header row inside the wrap — strip per-row chrome so the
+/* Group header row inside the wrap: strip per-row chrome so the
    header merges into the wrapper card visually. */
 .groupCardWrap > .groupCard {
     margin: 0;
@@ -1234,7 +1234,7 @@
     border-bottom: 1px solid var(--xc-border);
 }
 
-/* Member rows inside the expanded wrap — strip per-row chrome and
+/* Member rows inside the expanded wrap: strip per-row chrome and
    separate them with thin dividers so the stack reads as one card. */
 .groupCardWrap > .groupMembers > li > .row {
     margin: 0;
@@ -1252,7 +1252,7 @@
     border-top: 1px solid var(--xc-border);
 }
 
-/* Chevron toggle on the group header — uses the shared DoubleChevron
+/* Chevron toggle on the group header. Uses the shared DoubleChevron
    component (matching the Additional-details disclosure). Points down
    when collapsed, up when expanded. Pushed to the far right edge of
    the meta line. */
@@ -1263,4 +1263,3 @@
     margin-inline-start: auto;
     color: var(--xc-text-muted);
 }
-

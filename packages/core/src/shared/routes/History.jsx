@@ -713,21 +713,29 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         <CheckboxPicker
                             options={[
                                 { id: 'crosschain', label: 'Cross-chain only' },
-                                ...(multisigAddress ? [{ id: 'multisig', label: 'Multisig only' }] : []),
                             ]}
                             selected={new Set([
                                 ...(crossChainOnly ? ['crosschain'] : []),
-                                ...(multisigOnly ? ['multisig'] : []),
                             ])}
                             onToggle={(id) => {
                                 if (id === 'crosschain') setCrossChainOnly((v) => !v);
-                                else if (id === 'multisig') setMultisigOnly((v) => !v);
                             }}
                             allLabel="No special filters"
                             summaryNoun="filter"
                             iconForId={specialFilterIcon}
                             menuHeader="Special"
                         />
+
+                        {multisigAddress ? (
+                            <button
+                                type="button"
+                                className={`${styles.chip} ${multisigOnly ? styles.chipActive : ''}`}
+                                aria-pressed={multisigOnly}
+                                onClick={() => setMultisigOnly((v) => !v)}
+                            >
+                                Multisig only
+                            </button>
+                        ) : null}
 
                     </div>
                 ) : null}
@@ -1267,7 +1275,7 @@ export function DetailCard({ entry, peerCache, chainTip, walletId }) {
                                     Peer · {entry.link.peerCoinTicker} #{entry.link.peerActionIndex}
                                 </h4>
                                 {peer?.loading ? (
-                                    <p className={styles.empty}>Loading peer ACTION…</p>
+                                    <p className={styles.empty}>Loading the linked transaction…</p>
                                 ) : peer?.error ? (
                                     <p className={styles.error}>Couldn't load peer: {peer.error}</p>
                                 ) : peer?.action ? (
@@ -2699,6 +2707,7 @@ function ExportModal({
             style={MODAL_SCRIM}
             onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
             role="presentation"
+            tabIndex={-1}
         >
             <div
                 style={MODAL_CARD}
@@ -2781,6 +2790,7 @@ function ExportModal({
                             value={fromDate}
                             onChange={(e) => setFromDate(e.target.value)}
                             style={{ marginLeft: 'auto' }}
+                            aria-label="From date"
                         />
                     </label>
                     <label style={MODAL_LABEL}>
@@ -2790,6 +2800,7 @@ function ExportModal({
                             value={toDate}
                             onChange={(e) => setToDate(e.target.value)}
                             style={{ marginLeft: 'auto' }}
+                            aria-label="To date"
                         />
                     </label>
                 </fieldset>

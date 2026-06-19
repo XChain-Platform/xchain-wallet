@@ -4,7 +4,7 @@
 }
 .maxButton {
     position: absolute;
-    right: var(--xc-space-2);
+    inset-inline-end: var(--xc-space-2);
     top: 50%;
     transform: translateY(-50%);
     margin-top: 14px;
@@ -23,7 +23,7 @@
 .maxButton:hover { background: var(--xc-bg-muted); }
 .iconButton {
     position: absolute;
-    right: var(--xc-space-2);
+    inset-inline-end: var(--xc-space-2);
     top: 50%;
     transform: translateY(-50%);
     margin-top: 14px;
