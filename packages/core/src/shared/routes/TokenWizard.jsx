@@ -22,9 +22,14 @@ import {
     decoder as decoderLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
+import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 import styles from './TokenWizard.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+
+// Native coin ticker per protocol coin (label for the native-fee toggle).
+const PROTOCOL_COIN_TICKER = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
 
 /**
  * Token Creation Wizard (§40.1).
@@ -90,6 +95,7 @@ export function TokenWizard({ walletId, onBack }) {
     const [perAddressMax, setPerAddressMax] = useState('');
     const [mintStartBlock, setMintStartBlock] = useState('');
     const [mintStopBlock, setMintStopBlock] = useState('');
+    const [payFeeInNativeCoin, setPayFeeInNativeCoin] = useState(false);
 
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
     const [password, setPassword] = useState('');
@@ -143,6 +149,7 @@ export function TokenWizard({ walletId, onBack }) {
     }, [stage]);
 
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
+    const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
     const fromAddress = useMemo(() => {
         if (!chainId || !fromAddressId || !addressesByChain) return null;
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
@@ -248,15 +255,21 @@ export function TokenWizard({ walletId, onBack }) {
                     addressId: fromAddress.id,
                 } : null,
                 params: actionParams,
+                payFeeInNativeCoin: payFeeInNativeCoin || undefined,
             });
             setResult(res);
             setPassword('');
             setStage('done');
         } catch (err) {
             const isBadPassword = err?.name === 'InvalidPasswordError';
+            const isNativeFeeErr = err?.name === 'NativeFeeForfeitError';
             setSubmitError(
                 isBadPassword
                     ? 'Incorrect password.'
+                    : isNativeFeeErr && err?.reason === 'unsupported'
+                        ? `Paying the protocol fee in ${coinTicker || 'the native coin'} is not available for this action. Turn it off to pay in XCHAIN.`
+                    : isNativeFeeErr
+                        ? 'The native-coin fee price is temporarily unavailable. Try again in a moment, or turn off native-coin fee payment.'
                     : err?.message || 'Sign failed.',
             );
             setStage('preview');
@@ -319,6 +332,7 @@ export function TokenWizard({ walletId, onBack }) {
             perAddressMax, setPerAddressMax,
             mintStartBlock, setMintStartBlock,
             mintStopBlock, setMintStopBlock,
+            payFeeInNativeCoin, setPayFeeInNativeCoin, coinTicker,
             formError,
             onBack: () => setStage('chain'),
             onSubmit: handleDetailsSubmit,
@@ -366,6 +380,11 @@ export function TokenWizard({ walletId, onBack }) {
                     <DetailRow key={d.label} label={d.label} value={d.value} />
                 ))}
             </dl>
+            {payFeeInNativeCoin ? (
+                <div role="alert" className={styles.warnings}>
+                    <p className={styles.warning}>{NATIVE_FEE_WARNING}</p>
+                </div>
+            ) : null}
             {decoded && decoded.warnings.length > 0 ? (
                 <div role="alert" className={styles.warnings}>
                     {decoded.warnings.map((w, i) => (
@@ -724,6 +743,7 @@ function renderDetailsStage({
     perAddressMax, setPerAddressMax,
     mintStartBlock, setMintStartBlock,
     mintStopBlock, setMintStopBlock,
+    payFeeInNativeCoin, setPayFeeInNativeCoin, coinTicker,
     formError, onBack, onSubmit,
 }) {
     const show = TEMPLATE_FIELDS[template] || TEMPLATE_FIELDS.custom;
@@ -875,6 +895,11 @@ function renderDetailsStage({
                     autoCorrect="off"
                 />
             ) : null}
+            <NativeFeeToggle
+                checked={payFeeInNativeCoin}
+                onChange={setPayFeeInNativeCoin}
+                coinTicker={coinTicker}
+            />
             {formError ? (
                 <div role="alert" className={styles.error}>{formError}</div>
             ) : null}
