@@ -36,13 +36,13 @@ const aboutSrc = readFileSync(
 
 assert.match(
     buildInfoSrc,
-    /export const VERIFY_RELEASE_DOC = 'docs\/VERIFY-RELEASE\.md'/,
+    /export const VERIFY_RELEASE_DOC = 'docs\/Verify_Release\.md'/,
     'buildInfo exports VERIFY_RELEASE_DOC',
 );
 
-const docPath = join(wsRoot, 'docs', 'VERIFY-RELEASE.md');
+const docPath = join(wsRoot, 'docs', 'Verify_Release.md');
 assert.ok(existsSync(docPath),
-    'docs/VERIFY-RELEASE.md actually exists at the path the constant claims');
+    'docs/Verify_Release.md actually exists at the path the constant claims');
 
 assert.match(
     aboutSrc,

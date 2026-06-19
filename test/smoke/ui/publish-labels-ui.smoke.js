@@ -165,7 +165,7 @@ const followups = join(
 assert.ok(existsSync(followups), 'claude/reports/xchain-wallet/FOLLOWUPS.md exists');
 const fSrc = readFileSync(followups, 'utf8');
 assert.ok(
-    /§17\/§19 Sign \/ Verify \/ Backup: closed at v0\.154\.0/.test(fSrc),
+    /§17\/§19 Sign \/ Verify \/ Backup\b[^a-zA-Z0-9]+closed at v0\.154\.0/.test(fSrc),
     'FOLLOWUPS.md has the §17/§19 Cluster B closing header at v0.154.0',
 );
 assert.ok(

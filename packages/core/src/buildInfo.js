@@ -47,7 +47,7 @@ export const RELEASE_SIGNATURES_PUBLISHED = false;
 // -> manifest download -> GPG verify -> artifact hash check -> optional
 // reproduce). Surfaced in the About panel next to the reproducible-
 // build doc so users land on the right doc with one click.
-export const VERIFY_RELEASE_DOC = 'docs/VERIFY-RELEASE.md';
+export const VERIFY_RELEASE_DOC = 'docs/Verify_Release.md';
 
 // Update channel: currently only "development". Production / beta
 // channels land at v1.0 GA per spec §51.

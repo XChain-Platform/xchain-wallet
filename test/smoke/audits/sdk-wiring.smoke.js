@@ -111,9 +111,13 @@ assert.ok(extPkg.dependencies?.['xchain-sdk'], 'extension depends on xchain-sdk'
 
 // --- 3. resolveSdkFactory fallback behaviour -------------------------
 
-// Load the web resolver directly. xchain-sdk isn't installed under the
-// Node test harness, so the import fails and we should land on the dev
-// mock. Capture the console.warn to verify the diagnostic hint fires.
+// Load the web resolver directly. `xchain-sdk` is linked into the
+// monorepo (package.json `link:../../../xchain-sdk`), so under the Node
+// harness the resolver's `import('xchain-sdk')` may now succeed and
+// return the real factory. (A bare probe here would resolve from a
+// different module context, so branch on the resolver's actual result.)
+// Either way the resolver must behave consistently: the real factory
+// when xchain-sdk loads, or the dev-mock fallback + one-shot warn.
 const { resolveSdkFactory } = await import(
     '../../../packages/web/src/sdkFactory.js'
 );
@@ -124,26 +128,30 @@ console.warn = (...args) => { warnings.push(args.join(' ')); };
 const devMock = () => ({ wallet: {}, auth: {} });
 try {
     const resultA = await resolveSdkFactory({ devMockFactory: devMock });
-    assert.equal(resultA.source, 'dev-mock');
-    assert.equal(resultA.factory, devMock, 'returns the same devMock reference');
+    if (resultA.source === 'real') {
+        assert.notEqual(resultA.factory, devMock, 'real factory is not the dev mock');
+        assert.ok(typeof resultA.factory === 'function', 'real source yields a factory');
+    } else {
+        assert.equal(resultA.source, 'dev-mock');
+        assert.equal(resultA.factory, devMock, 'returns the same devMock reference');
 
-    // Second call: warn should NOT fire again (single-shot diagnostic).
-    const warnCountAfterA = warnings.length;
-    const resultB = await resolveSdkFactory({ devMockFactory: devMock });
-    assert.equal(resultB.source, 'dev-mock');
-    assert.equal(
-        warnings.length,
-        warnCountAfterA,
-        'warn fires once across repeated fallbacks',
-    );
+        // Second call: warn should NOT fire again (single-shot diagnostic).
+        const warnCountAfterA = warnings.length;
+        const resultB = await resolveSdkFactory({ devMockFactory: devMock });
+        assert.equal(resultB.source, 'dev-mock');
+        assert.equal(
+            warnings.length,
+            warnCountAfterA,
+            'warn fires once across repeated fallbacks',
+        );
+        assert.ok(
+            warnings.some((w) => /xchain-sdk unavailable/.test(w)),
+            'fallback warning mentions xchain-sdk unavailable',
+        );
+    }
 } finally {
     console.warn = originalWarn;
 }
-
-assert.ok(
-    warnings.some((w) => /xchain-sdk unavailable/.test(w)),
-    'fallback warning mentions xchain-sdk unavailable',
-);
 
 // --- 4. Safety guard on missing devMockFactory ----------------------
 

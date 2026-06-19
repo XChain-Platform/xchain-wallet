@@ -270,15 +270,15 @@ RTL locale lays out correctly without per-file edits.
 
 <!-- BEGIN auto-generated glossary appendix -->
 
-## Appendix — Machine-derived terms
+## Appendix: Machine-derived terms
 
 The entries in this appendix are auto-generated from canonical
-source files. Do **not** edit by hand — run
+source files. Do **not** edit by hand; run
 `node tools/glossary/generate-appendix.js` to refresh from source.
 Sources:
 
-- `packages/bridge-spec/src/index.ts` — `BridgeErrorCode` union
-- `packages/core/src/schemas/connectedSite.js` — `SitePermissions` keys
+- `packages/bridge-spec/src/index.ts`: `BridgeErrorCode` union
+- `packages/core/src/schemas/connectedSite.js`: `SitePermissions` keys
 
 ### Bridge error codes
 
