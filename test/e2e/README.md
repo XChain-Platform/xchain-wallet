@@ -19,6 +19,9 @@ test/e2e/
 │                      lives here because jsdom can't compute styles)
 ```
 
+The a11y suite asserts zero violations at the **WCAG 2.1 Level A + AA** tag
+severity, scanned via `@axe-core/playwright`.
+
 ## Run
 
 ```bash
