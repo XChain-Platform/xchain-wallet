@@ -11,7 +11,6 @@ If you're reporting a security issue, **stop here** and read `SECURITY.md` inste
 - Project README: `README.md` (architecture overview, shell matrix, scripts)
 - Threat model: `docs/Threat_Model.md` (assets, in-scope vs out-of-scope, attacker scenarios)
 - Disclosure policy: `SECURITY.md` (private vulnerability reporting)
-- Code of Conduct: `CODE_OF_CONDUCT.md`
 - License: `LICENSE.md` + `NOTICE.md` (GNU Affero General Public License v3.0 (AGPL-3.0))
 
 ---
@@ -208,12 +207,6 @@ For security bugs, see `SECURITY.md`; these go through a private channel.
 ## Asking questions
 
 The fastest channel today is the Issues tab with the `question` label. We're a small team; please search existing issues first.
-
----
-
-## Code of Conduct
-
-We follow our [Code of Conduct](./CODE_OF_CONDUCT.md), adapted from the Contributor Covenant 2.1. Be kind, assume good faith, and disagree without being a jerk.
 
 ---
 
