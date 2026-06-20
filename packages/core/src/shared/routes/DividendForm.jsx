@@ -269,7 +269,6 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
     const [hwStatus, setHwStatus] = useState('idle');
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
 
-    // §20 / Cluster W FOLLOWUP 5: watcher-mode encode-only branch.
     const { isWatcherMode } = useWalletMode();
 
     async function handleSubmit(event) {

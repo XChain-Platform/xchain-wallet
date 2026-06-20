@@ -31,7 +31,6 @@
     const EVENT_SOURCE = 'xchain-inject-event';
     const INJECT_PATH = 'inject/xchainProvider.js';
 
-    // Step 1: inject the provider script into the page's main world.
     try {
         const script = document.createElement('script');
         script.src = chrome.runtime.getURL(INJECT_PATH);
@@ -47,8 +46,6 @@
         console.warn('[xchain] inject failed:', e);
     }
 
-    // Step 2: relay page postMessages → background; background replies
-    // → page postMessages.
     window.addEventListener('message', (event) => {
         if (event.source !== window) return;
         const data = event.data;

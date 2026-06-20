@@ -155,8 +155,6 @@ export function LinkForm({ walletId, onBack }) {
     const ticker2 = descriptor2 ? PROTOCOL_COIN_TICKER[descriptor2.coin] || '' : '';
     const hw = isHwSource(fromAddress);
 
-    // Debounced fetch of decoded ACTION metadata for each side so the
-    // user sees what they're linking before signing.
     useEffect(() => {
         if (!chain1Id || !/^\d+$/.test(actionIndex1)) return;
         const key = `${chain1Id}:${actionIndex1}`;
@@ -202,7 +200,6 @@ export function LinkForm({ walletId, onBack }) {
         return null;
     }, [ticker1, ticker2, actionIndex1, actionIndex2]);
 
-    // §20 / Cluster W FOLLOWUP 5: watcher-mode encode-only branch.
     const { isWatcherMode } = useWalletMode();
 
     async function handleSubmit(event) {
@@ -241,8 +238,6 @@ export function LinkForm({ walletId, onBack }) {
             };
             let r;
             if (isWatcherMode) {
-                // LINK action params per linkAction flow:
-                // VERSION / COIN1 / COIN1_ACTION_INDEX / COIN2 / COIN2_ACTION_INDEX / MEMO.
                 const linkParams = {
                     VERSION: '0',
                     COIN1: String(ticker1).toUpperCase(),

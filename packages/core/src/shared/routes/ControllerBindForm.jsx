@@ -187,7 +187,6 @@ export function ControllerBindForm({ walletId, chainId, tick, onBack }) {
         setStage('submitting');
         setSubmitError(null);
         try {
-            // Build params host-side via the SDK's controller helper.
             const { action, params } = await messaging.buildControllerBindParams({
                 chainId,
                 target,

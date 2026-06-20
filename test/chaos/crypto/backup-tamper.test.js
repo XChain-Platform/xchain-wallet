@@ -35,7 +35,6 @@ describe('chaos/crypto/backup-tamper', () => {
         const env = await encodeBackupEnvelope({
             password: 'p', payload: { secret: 42 }, walletName: 'A', kdfParams: KDF,
         });
-        // Flip the LAST base64 char in payload (always present).
         const last = env.payload[env.payload.length - 1] === 'A' ? 'B' : 'A';
         env.payload = env.payload.slice(0, -1) + last;
         await expect(

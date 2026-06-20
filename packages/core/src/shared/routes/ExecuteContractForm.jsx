@@ -123,7 +123,6 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, on
     const [hwStatus, setHwStatus] = useState('idle');
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
 
-    // §20 / Cluster W FOLLOWUP 5: watcher-mode encode-only branch.
     const { isWatcherMode } = useWalletMode();
 
     // Phase F: permissions-manifest consent disclosure, shown inline in

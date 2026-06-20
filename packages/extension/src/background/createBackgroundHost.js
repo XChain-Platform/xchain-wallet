@@ -611,7 +611,6 @@ export function createBackgroundHost(deps) {
         })();
     }
 
-    // --- Wallet management ---------------------------------------------------
 
     host.register('wallet.list', async (_req, { vault }) => {
         const wallets = await vault.wallets.list();
@@ -681,19 +680,16 @@ export function createBackgroundHost(deps) {
         };
     });
 
-    // Rename a wallet: updates the Wallet record's `name` field.
     host.register('wallet.rename', async (req, { vault }) => {
         const updated = await renameWallet({ ...req, vault });
         return { wallet: toSafeWallet(updated) };
     });
 
-    // Rename an account: updates the Account record's `name` field.
     host.register('account.rename', async (req, { vault }) => {
         const updated = await renameAccount({ ...req, vault });
         return { account: updated };
     });
 
-    // List BIP44 accounts under a wallet, sorted ascending by index.
     host.register('account.list', async (req, { vault }) => {
         const walletId = req?.walletId;
         if (typeof walletId !== 'string' || !walletId) return [];
@@ -780,7 +776,6 @@ export function createBackgroundHost(deps) {
         });
     });
 
-    // --- Settings ------------------------------------------------------------
 
     host.register('settings.get', async (_req, { vault, chainRegistry }) => {
         // Cluster S FOLLOWUP 1: opportunistic throttle-limits cache
@@ -1190,7 +1185,6 @@ export function createBackgroundHost(deps) {
         });
     });
 
-    // --- Receive -------------------------------------------------------------
 
     host.register('receive.getAddress', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
         // §17.6 / G023: when `req.signerId` names a paired HW signer
@@ -1240,7 +1234,6 @@ export function createBackgroundHost(deps) {
         return newestAddress(req, { vault, chainRegistry });
     });
 
-    // --- Actions -------------------------------------------------------------
 
     host.register('action.send', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
         const walletId = req?.walletId;
@@ -2316,13 +2309,6 @@ export function createBackgroundHost(deps) {
         return validateActionDryRun({ ...req, sdkRegistry });
     });
 
-    // --- Signer registry -----------------------------------------------------
-    //
-    // Hardware-signer pairing runs in the popup/web renderer context
-    // (Trezor Connect needs a tab; Ledger WebHID needs a user gesture),
-    // so the renderer does the device dance and then asks the
-    // background to persist the resulting SignerRecord. listSigners +
-    // unregisterSigner round out the CRUD surface.
 
     host.register('signer.register', async (req, { vault }) => {
         return registerSigner({ ...req, vault });
@@ -2344,18 +2330,11 @@ export function createBackgroundHost(deps) {
         return { deleted: await unregisterSigner(vault, signerId) };
     });
 
-    // --- Private key export (§17.7) -----------------------------------
-    //
-    // Returns the WIF for an address owned by this wallet. The flow
-    // itself refuses hardware + watch-only addresses; the UI caller
-    // (ViewPrivateKey.jsx) already gates on `Address.source`, but the
-    // flow's guard is the authoritative line.
 
     host.register('wallet.exportPrivateKey', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
         return exportPrivateKey({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
     });
 
-    // --- Reads ---------------------------------------------------------------
 
     host.register('balances.wallet', async (req, { vault, chainRegistry, sdkRegistry }) => {
         // Thread the user's active network into the aggregator so chains
@@ -2425,13 +2404,6 @@ export function createBackgroundHost(deps) {
         }
     });
 
-    // --- Approval broker IPC -------------------------------------------------
-    // The approval window opens from chrome.windows.create and queries
-    // the broker for its parked request, then reports the user's decision
-    // back. Gated on `approvals.fetch` / `approvals.resolve` being
-    // present: the default `rejectAllApprovals` doesn't implement them,
-    // so callers that haven't wired a real broker (tests, early scaffolds)
-    // get an `UnknownMessageTypeError` that's easy to spot.
     if (approvals && typeof approvals.fetch === 'function') {
         host.register('approval.fetch', async (req) => {
             const id = /** @type {any} */ (req)?.id;
@@ -2462,11 +2434,6 @@ export function createBackgroundHost(deps) {
         });
     }
 
-    // --- dApp bridge ---------------------------------------------------------
-    // §43 surface. Shells wire Approvals to pipe user-prompts through a
-    // popup window; the default rejects everything with
-    // USER_APPROVAL_REQUIRED, giving dApps a structured error instead of
-    // a hang when the shell's approval popup isn't wired yet.
     registerBridgeHandlers(host, { approvals, events: bridgeEvents, signThrottle });
 
     return host;

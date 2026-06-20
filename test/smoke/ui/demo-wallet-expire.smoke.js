@@ -76,7 +76,6 @@ class FakeLocalStorage {
 }
 globalThis.localStorage = new FakeLocalStorage();
 
-// Mark with default TTL.
 markDemoWallet('demo-123', { now: 1_700_000_000_000 });
 assert.equal(getDemoWalletId(), 'demo-123', 'walletId stored');
 assert.equal(isDemoWallet('demo-123'), true);
@@ -87,7 +86,6 @@ assert.equal(expiry.ttlMs, DEMO_DEFAULT_TTL_MS, 'TTL defaults to 24h');
 assert.equal(expiry.expiresAt, 1_700_000_000_000 + DEMO_DEFAULT_TTL_MS,
     'expiresAt = createdAt + ttlMs');
 
-// Not expired yet.
 assert.equal(isDemoWalletExpired({ now: 1_700_000_000_000 + 1_000 }), false,
     'not expired right after creation');
 assert.equal(isDemoWalletExpired({ now: 1_700_000_000_000 + DEMO_DEFAULT_TTL_MS - 1 }), false,
@@ -97,23 +95,19 @@ assert.equal(isDemoWalletExpired({ now: 1_700_000_000_000 + DEMO_DEFAULT_TTL_MS 
 assert.equal(isDemoWalletExpired({ now: 1_700_000_000_000 + DEMO_DEFAULT_TTL_MS + 1 }), true,
     'expired strictly after');
 
-// Custom TTL override.
 markDemoWallet('demo-456', { ttlMs: 60_000, now: 1_700_000_000_000 });
 const customExpiry = getDemoWalletExpiry();
 assert.equal(customExpiry.ttlMs, 60_000, 'custom TTL applied');
 
-// Negative / non-finite TTL falls back to default.
 markDemoWallet('demo-789', { ttlMs: -1, now: 1_700_000_000_000 });
 const fallbackExpiry = getDemoWalletExpiry();
 assert.equal(fallbackExpiry.ttlMs, DEMO_DEFAULT_TTL_MS,
     'invalid TTL falls back to default');
 
-// clearDemoWalletId wipes all three keys.
 clearDemoWalletId();
 assert.equal(getDemoWalletId(), null, 'walletId cleared');
 assert.equal(getDemoWalletExpiry(), null, 'expiry cleared');
 
-// isDemoWalletExpired requires both presence + expiry.
 assert.equal(isDemoWalletExpired({ now: Date.now() + 100 * DEMO_DEFAULT_TTL_MS }), false,
     'no demo → not expired');
 

@@ -189,7 +189,6 @@ await assert.rejects(
     /holdersFor: tick is required/,
 );
 
-// Positive path for holdersFor: invokes sdk.getHolders(tick, opts).
 {
     let called = null;
     const fakeSdk = {

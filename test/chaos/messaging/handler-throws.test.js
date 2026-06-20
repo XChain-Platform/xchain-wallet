@@ -14,10 +14,8 @@
 
 import { describe, it, expect } from 'vitest';
 
-// Minimal in-page host that mirrors the wallet's createBackgroundHost
-// contract: register(name, handler) + send(name, payload). The real
-// host adds dedup, queueing, pending-call accounting; for this chaos
-// test the surface we care about is: handler throw → caller .catch().
+// Minimal in-page host: register(name, handler) + send(name, payload).
+// The real host adds dedup/queueing; all we test here is handler throw → caller .catch().
 function createHost() {
     const handlers = new Map();
     return {

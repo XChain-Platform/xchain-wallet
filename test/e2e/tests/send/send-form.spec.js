@@ -34,18 +34,15 @@ test.describe('send form', () => {
     test('review + back preserves form state', async ({ page }) => {
         await page.getByRole('button', { name: 'Send' }).click();
 
-        // Form stage
         await page.getByLabel('To').fill('bc1qtestrecipient00000000000000000000000000');
         await page.getByLabel('Amount').fill('0.01');
         await page.getByLabel('Memo').fill('e2e test');
         await page.getByRole('button', { name: 'Review' }).click();
 
-        // Review stage: summary rows present
         await expect(page.getByText('Review')).toBeVisible();
         await expect(page.getByText('bc1qtestrecipient', { exact: false })).toBeVisible();
         await expect(page.getByText('e2e test')).toBeVisible();
 
-        // Back keeps the form state
         await page.getByRole('button', { name: 'Back' }).click();
         await expect(page.getByLabel('To')).toHaveValue(
             'bc1qtestrecipient00000000000000000000000000',
@@ -81,11 +78,9 @@ test.describe('send form', () => {
         await page.getByLabel('Amount').fill('0.001');
         await page.getByRole('button', { name: 'Review' }).click();
 
-        // At Review: enter password + hit Send.
         await page.getByLabel('Password').fill('sendpassword123');
         await page.getByRole('button', { name: 'Send' }).click();
 
-        // Stub SDK errors at the encoder; surfaced inline, not a hang.
         await expect(page.getByRole('alert')).toContainText(
             /xchain-sdk|not yet wired|encoder|createAction/i,
             { timeout: 30_000 },

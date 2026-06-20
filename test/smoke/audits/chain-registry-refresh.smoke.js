@@ -36,7 +36,6 @@ const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..');
 const read = (p) => readFileSync(join(root, p), 'utf8');
 
-// 1. Module + barrel exports.
 const flowPath = 'packages/core/src/flows/refreshChainRegistry.js';
 assert.ok(existsSync(join(root, flowPath)), `${flowPath} exists`);
 const flowSrc = read(flowPath);
@@ -48,11 +47,9 @@ const barrelSrc = read('packages/core/src/flows/index.js');
 assert.ok(/refreshChainRegistry/.test(barrelSrc) && /refreshChainRegistry\.js/.test(barrelSrc),
     'flows barrel re-exports refreshChainRegistry');
 
-// 2. Runtime: exercise happy path + failure modes.
 const flowUrl = `file://${join(root, flowPath)}`;
 const { refreshChainRegistry, createChainRegistryStatus } = await import(flowUrl);
 
-// Happy path: stub fetcher returns 200 + valid JSON.
 const mockOk = () => ({
     ok: true,
     json: async () => ({
@@ -77,7 +74,6 @@ const trailing = await refreshChainRegistry({ hubUrl: 'https://hub.xchain.io/', 
 assert.equal(trailing.hubUrl, 'https://hub.xchain.io/api/v1/chain-registry',
     'trailing slash on hubUrl does not double-up the path');
 
-// Non-2xx response.
 const fail500 = await refreshChainRegistry({
     hubUrl: 'https://hub.xchain.io',
     fetcher: () => ({ ok: false, status: 500 }),
@@ -93,7 +89,6 @@ const fail404 = await refreshChainRegistry({
 assert.equal(fail404.ok, false);
 assert.match(fail404.error, /HTTP 404/);
 
-// Malformed JSON.
 const malformed = await refreshChainRegistry({
     hubUrl: 'https://hub.xchain.io',
     fetcher: () => ({ ok: true, json: async () => { throw new Error('boom'); } }),
@@ -101,7 +96,6 @@ const malformed = await refreshChainRegistry({
 assert.equal(malformed.ok, false);
 assert.match(malformed.error, /malformed JSON/);
 
-// Body missing descriptors[].
 const noDescriptors = await refreshChainRegistry({
     hubUrl: 'https://hub.xchain.io',
     fetcher: () => ({ ok: true, json: async () => ({ generatedAt: '...' }) }),
@@ -109,7 +103,6 @@ const noDescriptors = await refreshChainRegistry({
 assert.equal(noDescriptors.ok, false);
 assert.match(noDescriptors.error, /missing descriptors/);
 
-// Fetcher throws (network error).
 const networkErr = await refreshChainRegistry({
     hubUrl: 'https://hub.xchain.io',
     fetcher: () => { throw new Error('ENETUNREACH'); },
@@ -117,12 +110,10 @@ const networkErr = await refreshChainRegistry({
 assert.equal(networkErr.ok, false);
 assert.match(networkErr.error, /ENETUNREACH/);
 
-// Invalid hubUrl.
 const invalid = await refreshChainRegistry({ hubUrl: 'not a url' });
 assert.equal(invalid.ok, false);
 assert.match(invalid.error, /invalid hubUrl/);
 
-// Status holder.
 const status = createChainRegistryStatus();
 assert.equal(status.get(), null, 'fresh status holder is null');
 status.update(happy);
@@ -130,7 +121,6 @@ assert.deepEqual(status.get(), happy, 'update + get round-trips');
 status.clear();
 assert.equal(status.get(), null);
 
-// 3. Background host wires the new handlers + the boot-time refresh.
 const hostSrc = read('packages/extension/src/background/createBackgroundHost.js');
 assert.ok(/refreshChainRegistry,\s*\n\s*createChainRegistryStatus,/.test(hostSrc),
     'host destructures both new flows');
@@ -145,7 +135,6 @@ assert.ok(/function pickHubUrlFromRegistry\(/.test(hostSrc),
 assert.ok(/d\?\.networkKind === 'mainnet'/.test(hostSrc),
     'helper picks the mainnet hub URL (most authoritative)');
 
-// 4. Three messaging shims expose the new pair.
 const shims = [
     'packages/extension/src/popup/messaging.js',
     'packages/web/src/messaging.js',
@@ -162,7 +151,6 @@ for (const shimPath of shims) {
         `${shimPath} routes both messages`);
 }
 
-// 5. Settings UI renders the refresh row.
 const sectionSrc = read('packages/core/src/shared/components/settings/NetworkEndpointsSection.jsx');
 assert.ok(/function ChainRegistryRefreshRow\(/.test(sectionSrc),
     'NetworkEndpointsSection defines ChainRegistryRefreshRow');

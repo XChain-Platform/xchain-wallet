@@ -51,7 +51,6 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
     const [mnemonic, setMnemonic] = useState('');
     const [password, setPassword] = useState('');
     const [confirm, setConfirm] = useState('');
-    // Encrypted-backup lane state.
     const [backupContent, setBackupContent] = useState('');
     const [backupPassword, setBackupPassword] = useState('');
     const [backupOverwrite, setBackupOverwrite] = useState(false);
@@ -64,8 +63,6 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
     const [bip39Passphrase, setBip39Passphrase] = useState('');
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [busy, setBusy] = useState(false);
-    // §15.4 G022: QR-scan + drag-drop affordances. `scanning` toggles the
-    // <QrScanner> block; `dragOver` lights up the drop zone styling.
     const [scanning, setScanning] = useState(false);
     const [dragOver, setDragOver] = useState(false);
     const textareaRef = useRef(/** @type {HTMLTextAreaElement | null} */ (null));
@@ -264,12 +261,6 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
     const mnemonicClass = isFull ? styles.mnemonicFull : styles.mnemonicPopup;
     const actionsClass = isFull ? styles.actionsFull : styles.actionsPopup;
 
-    // Errors that originate from the field-level validators (mismatched
-    // confirm, too-short password) AND errors that come back from the
-    // import flow (KDF failure, malformed mnemonic, missing crypto.subtle
-    // on insecure-context HTTP, etc.) all funnel through `error`. Show
-    // them in a single top-of-form alert box so a runtime failure is
-    // never visually attached to whichever input the user typed last.
     const laneSwitcher = !isFreeWallet ? (
         <div className={styles.laneSwitcher} role="tablist" aria-label="Import lane">
             <button

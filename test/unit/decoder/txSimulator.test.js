@@ -16,7 +16,6 @@ import { defaultRegistry } from '../../../packages/core/src/registry/index.js';
 
 const chainRegistry = defaultRegistry();
 
-// Convenient balance builder.
 function balances(coinTick, coinAmt, tokens = []) {
     return [
         { tick: coinTick, amount: coinAmt, isCoin: true },
@@ -161,7 +160,6 @@ describe('simulateAction', () => {
             });
             expect(r.sideEffects.some((se) => se.kind === 'token-create')).toBe(true);
             expect(r.sideEffects.some((se) => se.kind === 'supply')).toBe(true);
-            // Source should have gained MINT_SUPPLY.
             const d = r.deltas.find((d) => d.tick === 'NEWTOKEN');
             expect(d.after).toBe('10000');
         });
@@ -415,7 +413,6 @@ describe('simulateAction', () => {
                 chainId: 'litecoin-mainnet',
                 chainRegistry,
             });
-            // Fee row should use LTC coin tick.
             const feeRow = r.deltas.find((d) => d.isFee);
             expect(feeRow.tick).toBe('LTC');
         });

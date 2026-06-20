@@ -32,7 +32,6 @@ import styles from './IssueTokenForm.module.css';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 
-// Native coin ticker per protocol coin (label for the native-fee toggle).
 const PROTOCOL_COIN_TICKER = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -89,10 +88,6 @@ export function IssueTokenForm({ walletId, onBack }) {
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
-    // Cluster P FOLLOWUP 5: form-draft persistence sweep. Persists the
-    // user-visible composition fields; password stays in component
-    // state. Honors privacy.formDraftTtlMs (Off / 1h / 24h / 7d) the
-    // same way Send + SignMessageForm do.
     const formDraftTtlMs = Number.isFinite(settings?.privacy?.formDraftTtlMs)
         ? Number(settings.privacy.formDraftTtlMs)
         : undefined;
@@ -282,9 +277,6 @@ export function IssueTokenForm({ walletId, onBack }) {
             setResult(res);
             setPassword('');
             setStage('done');
-            // Cluster P FOLLOWUP 5: clear the draft once the action
-            // succeeds so a subsequent Issue starts fresh rather than
-            // restoring the just-broadcast draft.
             draft.clear();
             setDraftPending(false);
         } catch (err) {
@@ -337,9 +329,6 @@ export function IssueTokenForm({ walletId, onBack }) {
 
     if (stage === 'done') {
         const txid = result?.txid || result?.broadcast?.txid;
-        // §20 / Cluster W FOLLOWUP 5: watcher-mode result envelope carries
-        // psbtHex instead of a txid. Render the shared WatcherResultPanel
-        // so the user can transport the unsigned PSBT to a Signer-mode wallet.
         if (result?.psbtHex && !txid) {
             return wrap(
                 <WatcherResultPanel

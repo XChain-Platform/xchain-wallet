@@ -8,13 +8,6 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// AlertsRoute: full-screen wallet alerts page. The routed (page)
-// counterpart to AlertsOverlay, opened from the pancake menu's Alerts
-// row. Mirrors MenuRoute: a normal <Screen> with a Back-titled header
-// instead of a modal overlay, so it behaves like any other menu
-// destination (Decentralized Exchange, Marketplace, ...). Reuses
-// AlertsOverlay.module.css for the alert-row styling.
-
 import { Screen, ScreenHeader } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from '../components/AlertsOverlay.module.css';

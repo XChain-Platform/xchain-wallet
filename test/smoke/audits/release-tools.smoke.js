@@ -39,7 +39,6 @@ for (const p of files) {
     assert.ok(existsSync(join(root, p)), `${p} exists`);
 }
 
-// Both scripts are executable.
 for (const p of ['tools/release/sign.sh', 'tools/release/verify.sh']) {
     const st = statSync(join(root, p));
     assert.ok((st.mode & 0o111) !== 0,

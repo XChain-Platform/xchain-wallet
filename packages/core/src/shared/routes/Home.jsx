@@ -131,9 +131,6 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
     const setTokenQuery = onTokenQueryChangeProp ?? setTokenQueryLocal;
     const [settingsOpen, setSettingsOpen] = useState(false);
 
-    // 4th quick-action button is a "More" dropdown matching the
-    // ActionDetail / TokenDetail pattern. Buy lives inside the menu
-    // so the primary row stays at Send / Receive / Swap / More.
     const [homeMoreOpen, setHomeMoreOpen] = useState(false);
     const homeMoreWrapRef = useRef(/** @type {HTMLDivElement | null} */ (null));
     useEffect(() => {
@@ -172,7 +169,6 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
     // the toast counts as "they decided" for the rest of the session.
     const spamNudgedForWalletRef = useRef(/** @type {string | null} */ (null));
 
-    // §27.3 + §27.4 / G072 + G073: load pinnedTokens + hiddenTokens from Settings on mount.
     useEffect(() => {
         let cancelled = false;
         if (typeof messaging?.getSettings !== 'function') return undefined;

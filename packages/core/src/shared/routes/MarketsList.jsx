@@ -78,7 +78,6 @@ export function MarketsList({
         loadWatchlist();
     }, [loadWatchlist]);
 
-    // Fetch markets on the selected asset's chain whenever the asset changes.
     useEffect(() => {
         if (!selectedAsset) {
             setMarkets([]);

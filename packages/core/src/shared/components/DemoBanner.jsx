@@ -51,8 +51,6 @@ export function DemoBanner({ activeWalletId, onExited }) {
                 await messaging.sendMessage('wallet.remove', { walletId: activeWalletId });
             }
             flowsLib.clearDemoWalletId();
-            // Cluster U FOLLOWUP 5: drop the resume-last-view memory
-            // alongside the demo wallet itself.
             clearLastView(activeWalletId);
             if (typeof onExited === 'function') onExited();
         } catch (err) {

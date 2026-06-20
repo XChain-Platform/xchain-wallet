@@ -136,7 +136,6 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         return () => { cancelled = true; };
     }, [walletId, chainId, messaging]);
 
-    // Resolve the token's ISSUE action index.
     useEffect(() => {
         if (typeof messaging?.getGenesisForToken !== 'function') { setGenesisChecked(true); return undefined; }
         let cancelled = false;
@@ -182,7 +181,6 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         }
     }, [stage]);
 
-    // Wait-index polling (same shape as AirdropForm's LIST wait).
     useEffect(() => {
         if (stage !== 'wait-index' || !fileTxid) return undefined;
         let cancelled = false;

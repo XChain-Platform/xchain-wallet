@@ -478,7 +478,6 @@ export function registerBridgeHandlers(host, opts = {}) {
     });
 }
 
-// --- helpers ---------------------------------------------------------------
 
 function assertOrigin(req) {
     if (!req || typeof req.origin !== 'string' || !req.origin) {

@@ -32,13 +32,11 @@ test.describe('onboarding', () => {
     test('create → lock → unlock round-trip', async ({ page }) => {
         await page.goto('/');
 
-        // Welcome / Onboarding
         await expect(
             page.getByRole('heading', { name: 'XChain Wallet' }),
         ).toBeVisible();
         await page.getByRole('button', { name: 'Create new wallet' }).click();
 
-        // Password stage
         await expect(
             page.getByRole('heading', { name: 'Create a new wallet' }),
         ).toBeVisible();
@@ -47,7 +45,6 @@ test.describe('onboarding', () => {
         await page.getByLabel('Confirm password').fill('password1234');
         await page.getByRole('button', { name: 'Next' }).click();
 
-        // Mnemonic display stage
         await expect(
             page.getByRole('heading', { name: /write down your recovery phrase/i }),
         ).toBeVisible();
@@ -55,17 +52,14 @@ test.describe('onboarding', () => {
         await page.getByLabel(/i have written down my recovery phrase/i).check();
         await page.getByRole('button', { name: 'Create wallet' }).click();
 
-        // Home: reached after KDF + vault save
         await expect(
             page.getByRole('button', { name: 'Lock' }),
         ).toBeVisible({ timeout: 60_000 });
         await expect(page.getByRole('button', { name: 'Send' })).toBeEnabled();
 
-        // Lock
         await page.getByRole('button', { name: 'Lock' }).click();
         await expect(page.getByText(/wallet locked/i)).toBeVisible();
 
-        // Unlock round-trip: proves kdfParams persisted correctly
         await page.getByLabel('Password').fill('password1234');
         await page.getByRole('button', { name: 'Unlock' }).click();
         await expect(
@@ -74,7 +68,6 @@ test.describe('onboarding', () => {
     });
 
     test('wrong password surfaces inline', async ({ page }) => {
-        // Seed a wallet first.
         await page.goto('/');
         await page.getByRole('button', { name: 'Create new wallet' }).click();
         await page.getByLabel('Password', { exact: true }).fill('rightpassword');
@@ -87,7 +80,6 @@ test.describe('onboarding', () => {
         ).toBeVisible({ timeout: 60_000 });
         await page.getByRole('button', { name: 'Lock' }).click();
 
-        // Wrong password
         await page.getByLabel('Password').fill('WRONG');
         await page.getByRole('button', { name: 'Unlock' }).click();
         await expect(page.getByRole('alert')).toHaveText(/incorrect password/i);
@@ -116,7 +108,6 @@ test.describe('onboarding', () => {
             .getByRole('button', { name: 'Import wallet' })
             .click();
 
-        // 13 words: not a valid BIP39 count.
         await page.getByLabel('Recovery phrase').fill(
             'word '.repeat(13).trim(),
         );

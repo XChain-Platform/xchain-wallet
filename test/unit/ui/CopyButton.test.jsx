@@ -57,7 +57,6 @@ describe('<CopyButton>', () => {
         clipboard.writeText = vi.fn().mockRejectedValue(new Error('blocked'));
         render(<CopyButton value="x" />);
         fireEvent.click(screen.getByRole('button'));
-        // No error thrown; label never flipped to Copied.
         await waitFor(() => {
             expect(clipboard.writeText).toHaveBeenCalled();
         });

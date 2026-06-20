@@ -26,8 +26,6 @@ import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 
-// Protocol coin tickers per xchain-sdk VALID_COINS, mirroring
-// DispenserForm. `descriptor.coin` is long-form ('bitcoin' / ...).
 const PROTOCOL_COIN_TICKER = {
     bitcoin: 'BTC',
     litecoin: 'LTC',
@@ -203,10 +201,6 @@ export function CoinpayForm({
             };
             let r;
             if (isWatcherMode) {
-                // COINPAY action params per coinpayAction flow:
-                //   VERSION / ORDER_MATCH_ACTION_INDEX
-                // Encoder needs `customOutputs` so the buyer pays the
-                // matched seller's address, preserved through encoderOpts.
                 const params = {
                     VERSION: '0',
                     ORDER_MATCH_ACTION_INDEX: String(summary.actionIndex),

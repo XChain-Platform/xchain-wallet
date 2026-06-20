@@ -128,7 +128,6 @@ describe('LedgerSigner.getAddresses', () => {
             count: 1,
         });
         expect(rows).toHaveLength(1);
-        // Path should use 44' purpose for doge
         expect(rows[0].path).toMatch(/^m\/44'/);
     });
 

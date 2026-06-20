@@ -43,7 +43,7 @@ assert.ok(existsSync(testPath), 'MockHardwareSigner.test.js exists under test/un
 const mockSrc = readFileSync(mockPath, 'utf8');
 const testSrc = readFileSync(testPath, 'utf8');
 
-// ─── 1. Mock surface --------------------------------------------------
+// --- 1. Mock surface -------------------------------------------------------
 
 assert.match(
     mockSrc,
@@ -64,7 +64,7 @@ assert.match(mockSrc, /setStatus\(status, detail\)/, 'mock exposes setStatus for
 assert.match(mockSrc, /this\._emitStatus\(status, detail\)/, 'setStatus emits via base _emitStatus');
 assert.match(mockSrc, /this\.calls = \{/, 'mock exposes call counters for assertions');
 
-// ─── 2. Vitest test suite --------------------------------------------
+// --- 2. Vitest test suite --------------------------------------------------
 
 assert.match(
     testSrc,

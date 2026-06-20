@@ -32,7 +32,7 @@ const wsRoot = join(here, '..', '..', '..');
 const contributing = readFileSync(join(wsRoot, 'CONTRIBUTING.md'), 'utf8');
 const qaChecklist = readFileSync(join(wsRoot, 'docs', 'QA_Checklist.md'), 'utf8');
 
-// ─── 1. CONTRIBUTING.md governance ─────────────────────────────────────
+// --- 1. CONTRIBUTING.md governance ----------------------------------------
 
 assert.match(contributing, /^## Governance$/m,
     'CONTRIBUTING.md has a Governance section');
@@ -50,7 +50,7 @@ assert.match(
 assert.ok(existsSync(join(wsRoot, 'MAINTAINERS.md')),
     'the MAINTAINERS.md the governance section links to actually exists');
 
-// ─── 2. QA-CHECKLIST.md per-section docs check ─────────────────────────
+// --- 2. QA-CHECKLIST.md per-section docs check ----------------------------
 
 assert.match(qaChecklist, /^## Documentation parity check$/m,
     'QA-CHECKLIST has a Documentation parity check section');

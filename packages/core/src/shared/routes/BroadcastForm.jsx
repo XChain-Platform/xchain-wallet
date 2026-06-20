@@ -157,7 +157,6 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
         const val = String(value).trim();
         const fee = String(feedFee).trim();
 
-        // Compose MESSAGE + MEMO from the two text inputs.
         const message = feed || body;
         const memoParts = [];
         if (includeTimestamp) memoParts.push(new Date().toISOString());

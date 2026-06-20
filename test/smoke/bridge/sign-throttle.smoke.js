@@ -49,7 +49,6 @@ const barrelSrc = read('packages/core/src/flows/index.js');
 assert.ok(/createSignThrottle/.test(barrelSrc) && /signThrottle\.js/.test(barrelSrc),
     'flows barrel re-exports createSignThrottle');
 
-// 2 + 3 + 4. Runtime: exercise the throttle directly with a fake clock.
 const { createSignThrottle, SIGN_THROTTLE_DEFAULT_BURST, SIGN_THROTTLE_DEFAULT_WINDOW_MS } =
     await import(join(root, flowPath));
 
@@ -62,12 +61,10 @@ const t = createSignThrottle({ burst: 3, windowMs: 10_000, now: () => now });
 const A = 'https://a.example';
 const B = 'https://b.example';
 
-// Three rapid requests fit inside burst.
 assert.equal(t.check(A).allowed, true, 'A request 1 allowed');
 assert.equal(t.check(A).allowed, true, 'A request 2 allowed');
 assert.equal(t.check(A).allowed, true, 'A request 3 allowed');
 
-// The fourth should be rejected with a structured shape.
 const blocked = t.check(A);
 assert.equal(blocked.allowed, false, 'A request 4 blocked');
 assert.equal(typeof blocked.retryAfterMs, 'number', 'blocked result includes retryAfterMs');
@@ -76,21 +73,18 @@ assert.ok(blocked.retryAfterMs > 0 && blocked.retryAfterMs <= 10_000,
 assert.equal(blocked.burst, 3, 'blocked result echoes burst');
 assert.equal(blocked.windowMs, 10_000, 'blocked result echoes windowMs');
 
-// Origin B still has a fresh bucket.
 assert.equal(t.check(B).allowed, true, 'B unaffected by A throttling');
 
 // Advance the clock past the window; A's bucket recovers.
 now += 11_000;
 assert.equal(t.check(A).allowed, true, 'A recovers after window expires');
 
-// clear(origin) wipes a single bucket.
 assert.equal(t.check(A).allowed, true, 'A second slot used');
 assert.equal(t.check(A).allowed, true, 'A third slot used');
 assert.equal(t.check(A).allowed, false, 'A blocked again');
 t.clear(A);
 assert.equal(t.check(A).allowed, true, 'clear(A) drops the bucket');
 
-// clear() with no arg drops everything.
 t.clear();
 assert.equal(t.check(B).allowed, true, 'clear() resets B too');
 
@@ -106,7 +100,6 @@ assert.ok(/createSignThrottle,?/.test(handlersSrc),
 assert.ok(/const signThrottle = opts\.signThrottle \?\? createSignThrottle\(\)/.test(handlersSrc),
     'bridge handlers construct or accept a signThrottle');
 
-// Helper exists.
 assert.ok(/function assertNotThrottled\(throttle, req\)/.test(handlersSrc),
     'assertNotThrottled helper defined');
 assert.ok(/throttle\.check\(req\?\.origin\)/.test(handlersSrc),
@@ -116,7 +109,6 @@ assert.ok(/bridgeError\(\s*\n?\s*'THROTTLED'/.test(handlersSrc),
 assert.ok(/err\.retryAfterMs = result\.retryAfterMs/.test(handlersSrc),
     'THROTTLED error carries retryAfterMs for the dApp');
 
-// All four sign methods call it; connect / read methods do not.
 const signMethods = ['signMessage', 'signAction', 'signPsbt', 'signIn'];
 for (const method of signMethods) {
     const re = new RegExp(

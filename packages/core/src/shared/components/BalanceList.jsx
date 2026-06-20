@@ -313,8 +313,6 @@ export function detectSpamCandidates(rows) {
     return flagged;
 }
 
-/* ───── Aggregation helpers exported for tab components ───── */
-
 /**
  * Aggregates raw `balances` keyed by chainId + chain registry into
  * a flat list of `BalanceRow`s. Used by every tab so each tab gets
@@ -476,8 +474,6 @@ export function coinFromChainId(id) {
     const dash = id.indexOf('-');
     return dash > 0 ? id.slice(0, dash) : id;
 }
-
-/* ───── Formatting / colour helpers ───── */
 
 function safeBigInt(v) {
     if (typeof v === 'bigint') return v;

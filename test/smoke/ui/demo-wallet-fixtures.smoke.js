@@ -102,7 +102,6 @@ assert.match(
         'LTC native balance is non-zero');
 }
 
-// Empty input → empty output.
 assert.deepEqual(synthesizeDemoBalances({}), {}, 'empty input returns empty');
 assert.deepEqual(synthesizeDemoBalances(null), {}, 'null input returns empty');
 
@@ -133,7 +132,6 @@ assert.deepEqual(synthesizeDemoBalances(null), {}, 'null input returns empty');
         'incoming SEND is more recent than ISSUE');
 }
 
-// Unknown chain → empty history (no fixture available).
 assert.deepEqual(
     synthesizeDemoHistory('imaginary-chain', 'whatever'),
     [],
@@ -144,7 +142,6 @@ assert.deepEqual(
 assert.deepEqual(synthesizeDemoHistory('bitcoin-mainnet', ''), []);
 assert.deepEqual(synthesizeDemoHistory('bitcoin-mainnet', null), []);
 
-// synthesizeDemoLinks always returns [].
 assert.deepEqual(synthesizeDemoLinks(), []);
 
 // ─── 4. Home.jsx wiring ────────────────────────────────────────────────

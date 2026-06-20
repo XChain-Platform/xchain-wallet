@@ -41,7 +41,7 @@ const handlersSrc = readFileSync(
     'utf8',
 );
 
-// ─── 1. bridge-spec exports ────────────────────────────────────────────
+// --- 1. bridge-spec exports -----------------------------------------------
 
 assert.match(
     specSrc,
@@ -64,7 +64,7 @@ assert.match(
     'BridgeErrorCode union still includes BRIDGE_VERSION_MISMATCH',
 );
 
-// ─── 2. handlers.js wiring ─────────────────────────────────────────────
+// --- 2. handlers.js wiring ------------------------------------------------
 
 assert.match(
     handlersSrc,

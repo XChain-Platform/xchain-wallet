@@ -38,7 +38,6 @@ export function NetworkFilter({ chainRegistry, coinFamilies, value, onChange }) 
     const triggerRef = useRef(null);
     const popoverRef = useRef(null);
 
-    // Close on outside click / Escape
     useEffect(() => {
         if (!open) return undefined;
         const onClick = (e) => {

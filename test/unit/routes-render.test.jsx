@@ -298,14 +298,6 @@ describe('Layer 2: every shared route survives an effects flush', () => {
 });
 
 describe('Layer 3: every shared route survives basic interaction', () => {
-    // Mount, then exercise handler code: fill every field and click every
-    // enabled button. Handlers in an AI-generated app with never-rendered
-    // screens are the LEAST-executed code, so missing-import / TDZ bugs
-    // hide here. Fail policy stays EFFECT_BUG_RE (is not defined / before
-    // initialization): an empty/garbage-form submit legitimately throws
-    // validation errors and jsdom gaps (`window.confirm` "Not implemented",
-    // navigation), none of which match: so this needs no per-route
-    // allow-list. Only an undefined symbol or TDZ in handler code fails it.
     routeEntries.forEach(([importer, file]) => {
         it(file, async () => {
             const Component = await resolveComponent(importer, file);

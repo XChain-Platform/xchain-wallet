@@ -55,7 +55,6 @@ function pct(arr, p) {
 
 export async function run(label, fn, iterations) {
     const N = QUICK ? Math.max(5, Math.floor(iterations / 10)) : iterations;
-    // Warm-up
     await fn();
     const samples = [];
     for (let i = 0; i < N; i += 1) {

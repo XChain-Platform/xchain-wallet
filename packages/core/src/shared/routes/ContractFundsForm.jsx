@@ -116,12 +116,8 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
     const [hwStatus, setHwStatus] = useState('idle');
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
 
-    // §20 / Cluster W FOLLOWUP 5: watcher-mode encode-only branch.
     const { isWatcherMode } = useWalletMode();
 
-    // Phase F: permissions-manifest consent disclosure, shown inline in
-    // the review `<dl>` for both deposit and withdraw. Deferred via
-    // `skip` until the user reaches the review stage.
     const manifest = useContractManifest({
         chainId,
         contractActionIndex,

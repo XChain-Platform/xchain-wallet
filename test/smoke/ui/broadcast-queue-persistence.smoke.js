@@ -63,7 +63,6 @@ assert.ok(
     /return null/.test(storage),
     'picker returns null when neither API is reachable (in-memory only)',
 );
-// Defensive parse drops anything that isn't a sane shape.
 assert.ok(
     /function coerceSnapshot\(v\)/.test(storage),
     'broadcastQueueStorage ships a defensive coerceSnapshot helper',
@@ -97,7 +96,6 @@ assert.ok(
     /async function persistQueue\(\)/.test(bg),
     'createBackgroundHost defines persistQueue',
 );
-// Single-flight load guard.
 assert.ok(
     /let queueLoadPromise = /.test(bg) && /if \(!queueLoadPromise\)/.test(bg),
     'ensureQueueLoaded uses a single-flight queueLoadPromise so concurrent callers share one rehydrate',

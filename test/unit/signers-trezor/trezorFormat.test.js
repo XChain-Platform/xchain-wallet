@@ -188,7 +188,6 @@ describe('toTrezorSignTransaction', () => {
             { inputIndex: 1, path: "m/44'/0'/0'/0/1" },
         ];
         const payload = toTrezorSignTransaction({ decomposed: d, coin: 'btc', signingPaths: paths });
-        // Only one refTx entry despite two inputs pointing to same hash.
         expect(payload.refTxs).toHaveLength(1);
     });
 });

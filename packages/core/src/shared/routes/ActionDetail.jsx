@@ -8,12 +8,6 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Full-screen page for a single history entry. The History timeline
-// used to expand each row inline; clicking now routes here instead so
-// the user gets a dedicated surface with breathing room for decoded
-// action data, status timeline, RBF actions, save-as-contact, and the
-// peer-side panel for cross-chain LINK pairs.
-
 import { useEffect, useState } from 'react';
 import { Screen, ScreenHeader, Icon } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';

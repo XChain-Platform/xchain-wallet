@@ -34,7 +34,6 @@ const form = readFileSync(formPath, 'utf8');
 assert.ok(/export function PsbtSignForm\b/.test(form),
     'PsbtSignForm is a named export');
 
-// Helper export for normalizing pasted PSBTs is callable.
 assert.ok(/export function normalizePsbtInput\b/.test(form),
     'normalizePsbtInput is a named export');
 
@@ -80,7 +79,6 @@ assert.ok(/host\.register\(\s*['"]auth\.signPsbt['"]/.test(bg),
 // auth.signPsbt must build signingPaths from decomposePsbt + chosen address.
 assert.ok(/signingPaths/.test(bg) && /decomposePsbt/.test(bg),
     'auth.signPsbt builds signingPaths via decomposePsbt');
-// Imports signPsbtFlow from flows.
 assert.ok(/signPsbtFlow,/.test(bg),
     'background pulls signPsbtFlow off the flows namespace');
 

@@ -53,7 +53,6 @@ export function ContractStakedPositions({ walletId, chainId, onBack, onStakeToCo
         let cancelled = false;
         async function load() {
             try {
-                // Resolve wallet addresses on this chain
                 const byChain = await messaging.getAddressesByChain(walletId);
                 if (cancelled) return;
                 const addrs = (byChain?.[chainId] || []).map((a) => a.address);
@@ -145,7 +144,6 @@ export function ContractStakedPositions({ walletId, chainId, onBack, onStakeToCo
         );
     }
 
-    // Group stakes + unstakes by target contract
     /** @type {Map<string, { contractIndex: string, stakes: any[], unstakes: any[] }>} */
     const groups = new Map();
     function addToGroup(key, kind, row) {

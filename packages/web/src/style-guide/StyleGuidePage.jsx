@@ -33,10 +33,6 @@ import { VoiceSection } from './sections/VoiceSection.jsx';
 import { StatesSection } from './sections/StatesSection.jsx';
 import { PrivacyModeSection } from './sections/PrivacyModeSection.jsx';
 
-// Curated catalog: patterns we've established across the recent work
-// (Home, Receive, Send, TokenDetail). Add a section here when a new
-// pattern lands in two routes or you want to codify a one-off as
-// canonical going forward.
 const SECTIONS = [
     { id: 'color-palette',         label: 'Color palette',          Component: ColorPaletteSection },
     { id: 'typography',            label: 'Typography',             Component: TypographySection },
@@ -94,9 +90,6 @@ export function StyleGuidePage() {
     );
 }
 
-// Reusable doc-chrome wrappers: each Section composes a heading,
-// guidance block, canonical markup, and one or more live examples.
-// Sections import these so the catalog has a consistent voice.
 export function Section({ id, title, tag, kicker, children }) {
     return (
         <section id={id} className="sg-section">

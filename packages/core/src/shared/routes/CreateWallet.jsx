@@ -126,9 +126,6 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
         setStage('mnemonic');
     }
 
-    // pickQuizPositions lives in `shared/utils/pickQuizPositions.js`
-    // (see Cluster H FOLLOWUP 6 for the targetCount-scaling rationale).
-
     function handleStartVerify() {
         if (!mnemonic || !saved) return;
         const totalWords = mnemonic.trim().split(/\s+/).length;

@@ -392,14 +392,12 @@ describe('decodeAction extended', () => {
         it('v1 multi-token single list', () => {
             const d = decodeAction({ action: 'AIRDROP', params: { VERSION: '1', TICK: ['XCP', 'FILE'], AMOUNT: ['10', '5'], LIST_ACTION_INDEX: '3' } });
             expect(d.summary).toContain('Airdrop');
-            // both tokens appear in summary
             expect(d.summary).toContain('XCP');
             expect(d.summary).toContain('FILE');
         });
 
         it('v2 multi-token multi-list', () => {
             const d = decodeAction({ action: 'AIRDROP', params: { VERSION: '2', TICK: ['XCP', 'FILE'], AMOUNT: ['10', '5'], LIST_ACTION_INDEX: ['1', '2'] } });
-            // Each drop gets its own list reference
             expect(d.details.some((r) => r.label === 'Drop 1')).toBe(true);
             expect(d.details.some((r) => r.label === 'Drop 2')).toBe(true);
         });

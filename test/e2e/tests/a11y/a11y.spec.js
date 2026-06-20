@@ -35,8 +35,6 @@ async function scan(page, label) {
     const results = await new AxeBuilder({ page })
         .withTags(WCAG_TAGS)
         .analyze();
-    // Promote to a useful assertion message on failure so CI logs
-    // point at the screen + the rules hit, not just a count.
     expect(
         results.violations,
         `${label} a11y violations: ${results.violations

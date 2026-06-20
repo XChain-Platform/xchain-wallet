@@ -29,7 +29,7 @@ const web = join(wsRoot, 'packages', 'web');
 const desktop = join(wsRoot, 'packages', 'desktop');
 const sharedRoutes = join(core, 'src', 'shared', 'routes');
 
-// ─── AddressList route file ───────────────────────────────────
+// --- AddressList route file -----------------------------------------------
 
 const routePath = join(sharedRoutes, 'AddressList.jsx');
 assert.ok(existsSync(routePath), 'AddressList.jsx exists');
@@ -55,7 +55,7 @@ assert.ok(/aria-label="Wallet addresses"/.test(route),
 assert.ok(/Multisig receive/.test(route),
     'AddressList synthesizes a "Multisig receive" row when the address is not in the persisted table');
 
-// ─── Home: new onAddresses nav prop + button ─────────────────
+// --- Home: new onAddresses nav prop + button ------------------------------
 
 const home = readFileSync(join(sharedRoutes, 'Home.jsx'), 'utf8');
 assert.ok(/\bonAddresses\b/.test(home),
@@ -66,7 +66,7 @@ assert.ok(/onClick=\{onAddresses\}[\s\S]*?disabled=\{!onAddresses\}/.test(home)
 assert.ok(/Addresses/.test(home),
     'Home surfaces the "Addresses" button label');
 
-// ─── App.jsx wiring (all three shells) ────────────────────────
+// --- App.jsx wiring (all three shells) ------------------------------------
 
 for (const [shell, appPath] of [
     ['popup', join(ext, 'src', 'popup', 'App.jsx')],

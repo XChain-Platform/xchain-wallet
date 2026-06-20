@@ -22,9 +22,6 @@
 // envelope, matching the extension shell's wire format so shared
 // `core/shared/routes/*` components work unchanged.
 
-// Cross-package relative path so Node-level smoke tests resolve
-// without the pnpm workspace symlink; Vite + electron-builder
-// follow the path fine at build time.
 import { createBackgroundHost } from '../../extension/src/background/createBackgroundHost.js';
 
 /**

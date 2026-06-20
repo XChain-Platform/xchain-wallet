@@ -52,7 +52,6 @@ export function ContactsList({ walletId, onSendMessage, onBack }) {
     const [mode, setMode] = useState(/** @type {'list' | 'detail' | 'edit' | 'scan'} */ ('list'));
     const [activeId, setActiveId] = useState(/** @type {string | null} */ (null));
 
-    // Edit-mode form state.
     const [formName, setFormName] = useState('');
     const [formNotes, setFormNotes] = useState('');
     const [formEntries, setFormEntries] = useState(

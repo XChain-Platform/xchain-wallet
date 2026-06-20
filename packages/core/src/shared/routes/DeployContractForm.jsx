@@ -242,7 +242,6 @@ export function DeployContractForm({ walletId, onBack }) {
             setFormError('Fix the syntax error before previewing (see Validate code).');
             return;
         }
-        // Staking config validation: only enforced when the user opted in
         if (cooldownBlocks.trim() !== '') {
             const cb = Number(cooldownBlocks.trim());
             if (!Number.isInteger(cb) || cb < 1 || cb > 100000) {
@@ -257,7 +256,6 @@ export function DeployContractForm({ walletId, onBack }) {
         setStage('review');
     }
 
-    // §20 / Cluster W FOLLOWUP 5: watcher-mode encode-only branch.
     const { isWatcherMode } = useWalletMode();
 
     async function handleSubmit(event) {

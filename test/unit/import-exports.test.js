@@ -107,7 +107,6 @@ describe('every named/default import resolves to a real export', () => {
             return cands.find((c) => fileSet.has(c)) || null;
         }
 
-        // name → { dir, exports, main } for each workspace package.
         const pkgMap = new Map();
         for (const ent of safeReaddir(pkgsDir)) {
             if (!ent.isDirectory()) continue;

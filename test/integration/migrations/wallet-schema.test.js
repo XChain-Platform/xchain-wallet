@@ -53,8 +53,6 @@ describe('integration/migrations/wallet v1 → v2', () => {
     it('reads a v1 record and surfaces it shaped as v2 (`multisigs: []`)', async () => {
         const backend = new InMemoryBackend();
 
-        // Hand-build a v1 document and persist it through the codec
-        // so the next Vault.open() sees a real legacy blob.
         const legacyDoc = {
             ...emptyDocument(),
             wallets: [v1Wallet()],
@@ -63,8 +61,6 @@ describe('integration/migrations/wallet v1 → v2', () => {
         const blob = await encodeDocument(MASTER_KEY, legacyDoc);
         await backend.save(blob);
 
-        // Open and read; the migration harness should rewrite the
-        // wallet record in-flight.
         const vault = new Vault({ backend, masterKey: MASTER_KEY });
         await vault.open();
         const wallet = await vault.wallets.get('wallet-legacy-id');

@@ -105,7 +105,6 @@ function makeFakeVault({ initialBlocked = [], sites = [], auditLog = [] }) {
     assert.equal(log[0].entry, 'https://a.com', 'entry carries canonical origin');
     assert.equal(typeof log[0].at, 'number', 'entry has numeric timestamp');
 
-    // Idempotent re-add: log unchanged.
     await addBlockedOrigin({ vault, origin: 'https://a.com' });
     log = await listBlocklistAuditLog({ vault });
     assert.equal(log.length, 1, 'idempotent re-add does not duplicate the audit entry');
@@ -115,13 +114,11 @@ function makeFakeVault({ initialBlocked = [], sites = [], auditLog = [] }) {
     assert.equal(log.length, 2, 'remove appends a second entry');
     assert.equal(log[1].action, 'remove', 'second entry action is "remove"');
 
-    // No-op remove (entry not present): log unchanged.
     await removeBlockedOrigin({ vault, origin: 'https://a.com' });
     log = await listBlocklistAuditLog({ vault });
     assert.equal(log.length, 2, 'no-op remove does not append');
 }
 
-// Wildcard add records eviction count.
 {
     const vault = makeFakeVault({
         sites: [

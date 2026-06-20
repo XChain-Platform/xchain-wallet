@@ -58,7 +58,6 @@ export function attachChromeRuntime(host, chromeRuntime) {
         ) {
             return false;
         }
-        // Fire-and-forget the async work, then reply via sendResponse.
         Promise.resolve()
             .then(() => host.handle(message))
             .then((response) => sendResponse(response))

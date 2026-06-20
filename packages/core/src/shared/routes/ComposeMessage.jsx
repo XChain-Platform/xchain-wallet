@@ -67,7 +67,6 @@ export function ComposeMessage({
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
-    // Unlocked software session signs without a password.
     const signerReady = useSignerReady(walletId);
 
     const [addressesByChain, setAddressesByChain] = useState(

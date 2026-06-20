@@ -112,7 +112,6 @@ export class IndexedDBStorageBackend extends StorageBackend {
     }
 }
 
-// --- Private IDB plumbing ---------------------------------------------------
 
 /**
  * @param {IDBFactory} idb

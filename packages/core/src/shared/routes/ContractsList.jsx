@@ -76,7 +76,6 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
     );
     const [searchQuery, setSearchQuery] = useState('');
 
-    // Per-chain load state for each of the three sections.
     /** @typedef {{ loading: boolean, rows: any[], error: string | null }} LoadState */
     const [myByChain, setMyByChain] = useState(
         /** @type {Record<string, LoadState>} */ ({}),
@@ -88,8 +87,6 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
         /** @type {Record<string, LoadState>} */ ({}),
     );
 
-    // Phase 1: load wallet addresses so we know which BTC chains have
-    // a source address we can filter by.
     useEffect(() => {
         let cancelled = false;
         messaging.getAddressesByChain(walletId)
@@ -228,8 +225,6 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
         return () => { cancelled = true; };
     }, [addressesByChain, activeChains, messaging]);
 
-    // Phase 4: "Browse all" paginated list per chain. One request per
-    // chain; no address fan-out.
     useEffect(() => {
         if (activeChains.length === 0) {
             setBrowseByChain({});

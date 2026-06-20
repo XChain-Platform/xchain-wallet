@@ -34,7 +34,6 @@
  * @property {number} fiatRate      USD per whole unit
  */
 
-/** Map a chain id → coin family for native-symbol lookup. */
 function coinForChain(chainId) {
     if (typeof chainId !== 'string') return 'bitcoin';
     if (chainId.startsWith('litecoin-')) return 'litecoin';

@@ -228,7 +228,6 @@ describe('validatePendingTx', () => {
 
     it('rejects non-string non-null error', () => {
         const tx = createPendingTx(BASE_INPUT);
-        // error is validated via isNullableString; non-string-non-null should fail
         const r = validatePendingTx({ ...tx, error: 42 });
         expect(r.ok).toBe(false);
     });

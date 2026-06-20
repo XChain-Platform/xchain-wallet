@@ -294,7 +294,6 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack })
         );
     }
 
-    // stage === 'inbox'
     return wrap(
         <>
             <dl className={styles.detailsList}>

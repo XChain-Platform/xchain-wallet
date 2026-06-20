@@ -20,8 +20,6 @@
 // connectSrc; real-device verification in Electron will exercise this
 // path once Step 19 ships.
 //
-// Cross-package relative path keeps the smoke harness resolving this
-// under plain Node without pnpm workspace symlinks.
 
 import { makeTrezorFactory } from '@xchain-wallet/core/signerFactories';
 

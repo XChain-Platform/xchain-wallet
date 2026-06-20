@@ -20,14 +20,12 @@ import { useMessaging, screenVariantFor } from '../../../packages/core/src/share
 
 describe('MessagingContext', () => {
     it('is a valid React context object', () => {
-        // A React context has $$typeof + Provider + Consumer.
         expect(MessagingContext).toBeDefined();
         expect(typeof MessagingContext.Provider).toBe('object');
         expect(typeof MessagingContext.Consumer).toBe('object');
     });
 
     it('defaults to null', () => {
-        // renderHook without a provider gets the default value.
         const { result } = renderHook(() => {
             const ctx = React.useContext(MessagingContext);
             return ctx;

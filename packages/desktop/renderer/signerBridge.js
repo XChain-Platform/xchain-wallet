@@ -27,8 +27,6 @@
 // lazy per-webContents entry together ensure the id is reachable
 // after the first register message arrives.
 
-// Cross-package relative path so smoke tests (plain Node) resolve
-// without the pnpm workspace symlink. Vite picks up either form.
 import { bindRendererPortBridge } from '../../core/src/signers/index.js';
 
 /** @type {Map<string, import('@xchain-wallet/core/signers/Signer.js').Signer>} */

@@ -21,7 +21,6 @@ const KEY = new Uint8Array(32).fill(77);
 describe('chaos/vault/load-corruption', () => {
     it('throws when the backend returns random bytes', async () => {
         const backend = new InMemoryBackend();
-        // Save a chunk of garbage.
         const garbage = new Uint8Array(64);
         crypto.getRandomValues(garbage);
         await backend.save(garbage);
@@ -31,12 +30,9 @@ describe('chaos/vault/load-corruption', () => {
     });
 
     it('throws when the backend returns a near-real blob with one bit flipped', async () => {
-        // Encrypt + save a real blob via the codec so we have something
-        // legitimate to corrupt one bit of.
         const backend = new InMemoryBackend();
         const { encodeDocument, emptyDocument } = await import('../../../packages/core/src/storage/codec.js');
         const blob = await encodeDocument(KEY, emptyDocument());
-        // Flip a bit deep in the ciphertext (past the 12-byte IV).
         blob[20] ^= 0x01;
         await backend.save(blob);
 

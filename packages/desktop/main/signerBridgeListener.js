@@ -28,10 +28,6 @@
 // Desktop ships single-window today, but per-webContents keying
 // keeps multi-window safe when a future step lands it.
 
-// Cross-package relative paths keep this module importable under
-// plain Node (for smoke tests) without depending on the pnpm
-// workspace symlink. Vite + electron-builder follow both paths at
-// build time. Same convention as main/messageHost.js.
 import { createBackgroundTransport } from '../../core/src/signers/index.js';
 // The extension package owns the process-wide signer-bridge registry;
 // `createBackgroundHost` (which desktop's MessageHost reuses) imports

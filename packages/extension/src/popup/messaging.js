@@ -570,23 +570,14 @@ export function getSignerStatus(opts) {
 // RemoteSigner wrapping the signer-bridge transport, and calls the
 // same core flow with the signer injected.
 
-/** @param {object} opts */
 export function issueTokenHw(opts) { return /** @type {any} */ (sendMessage('action.issue.hw', opts)); }
-/** @param {object} opts */
 export function mintAssetHw(opts) { return /** @type {any} */ (sendMessage('action.mint.hw', opts)); }
-/** @param {object} opts */
 export function destroyAssetHw(opts) { return /** @type {any} */ (sendMessage('action.destroy.hw', opts)); }
-/** @param {object} opts */
 export function broadcastActionHw(opts) { return /** @type {any} */ (sendMessage('action.broadcast.hw', opts)); }
-/** @param {object} opts */
 export function dispenserActionHw(opts) { return /** @type {any} */ (sendMessage('action.dispenser.hw', opts)); }
-/** @param {object} opts */
 export function dividendActionHw(opts) { return /** @type {any} */ (sendMessage('action.dividend.hw', opts)); }
-/** @param {object} opts */
 export function createListHw(opts) { return /** @type {any} */ (sendMessage('action.createList.hw', opts)); }
-/** @param {object} opts */
 export function airdropActionHw(opts) { return /** @type {any} */ (sendMessage('action.airdrop.hw', opts)); }
-/** @param {object} opts */
 export function advancedActionHw(opts) { return /** @type {any} */ (sendMessage('action.advanced.hw', opts)); }
 
 /**
@@ -889,7 +880,6 @@ export function deployAction(opts) {
     return /** @type {any} */ (sendMessage('action.deploy', opts));
 }
 
-/** @param {object} opts */
 export function deployActionHw(opts) {
     return /** @type {any} */ (sendMessage('action.deploy.hw', opts));
 }
@@ -904,7 +894,6 @@ export function executeAction(opts) {
     return /** @type {any} */ (sendMessage('action.execute', opts));
 }
 
-/** @param {object} opts */
 export function executeActionHw(opts) {
     return /** @type {any} */ (sendMessage('action.execute.hw', opts));
 }
@@ -919,7 +908,6 @@ export function depositAction(opts) {
     return /** @type {any} */ (sendMessage('action.deposit', opts));
 }
 
-/** @param {object} opts */
 export function depositActionHw(opts) {
     return /** @type {any} */ (sendMessage('action.deposit.hw', opts));
 }
@@ -936,7 +924,6 @@ export function withdrawAction(opts) {
     return /** @type {any} */ (sendMessage('action.withdraw', opts));
 }
 
-/** @param {object} opts */
 export function withdrawActionHw(opts) {
     return /** @type {any} */ (sendMessage('action.withdraw.hw', opts));
 }
@@ -951,22 +938,18 @@ export function getStakesForAddress(req) {
     return /** @type {any} */ (sendMessage('stakes.forAddress', req));
 }
 
-/** @param {{ chainId: string, address: string, opts?: object }} req */
 export function getDelegationsForAddress(req) {
     return /** @type {any} */ (sendMessage('delegations.forAddress', req));
 }
 
-/** @param {{ chainId: string, address: string, opts?: object }} req */
 export function getRewardsForAddress(req) {
     return /** @type {any} */ (sendMessage('rewards.forAddress', req));
 }
 
-/** @param {{ chainId: string, opts?: object }} req */
 export function getValidatorsForChain(req) {
     return /** @type {any} */ (sendMessage('validators.forChain', req));
 }
 
-/** @param {{ chainId: string }} req */
 export function getCapabilityThresholds(req) {
     return /** @type {any} */ (sendMessage('capabilities.thresholds', req));
 }
@@ -982,7 +965,6 @@ export function stakeAction(opts) {
     return /** @type {any} */ (sendMessage('action.stake', opts));
 }
 
-/** @param {object} opts */
 export function stakeActionHw(opts) {
     return /** @type {any} */ (sendMessage('action.stake.hw', opts));
 }
@@ -998,32 +980,26 @@ export function unstakeAction(opts) {
     return /** @type {any} */ (sendMessage('action.unstake', opts));
 }
 
-/** @param {object} opts */
 export function unstakeActionHw(opts) {
     return /** @type {any} */ (sendMessage('action.unstake.hw', opts));
 }
 
-/** @param {object} req */
 export function getContractStakesForAddress(req) {
     return /** @type {any} */ (sendMessage('contract_stakes.forAddress', req));
 }
 
-/** @param {object} req */
 export function getContractUnstakesForAddress(req) {
     return /** @type {any} */ (sendMessage('contract_unstakes.forAddress', req));
 }
 
-/** @param {object} req */
 export function getSlashEventsForAddress(req) {
     return /** @type {any} */ (sendMessage('slash_events.forAddress', req));
 }
 
-/** @param {object} opts */
 export function contractStakeAction(opts) {
     return /** @type {any} */ (sendMessage('action.contractStake', opts));
 }
 
-/** @param {object} opts */
 export function contractStakeActionHw(opts) {
     return /** @type {any} */ (sendMessage('action.contractStake.hw', opts));
 }
@@ -1038,7 +1014,6 @@ export function collectAction(opts) {
     return /** @type {any} */ (sendMessage('action.collect', opts));
 }
 
-/** @param {object} opts */
 export function collectActionHw(opts) {
     return /** @type {any} */ (sendMessage('action.collect.hw', opts));
 }
@@ -1055,7 +1030,6 @@ export function delegateAction(opts) {
     return /** @type {any} */ (sendMessage('action.delegate', opts));
 }
 
-/** @param {object} opts */
 export function delegateActionHw(opts) {
     return /** @type {any} */ (sendMessage('action.delegate.hw', opts));
 }
@@ -1071,7 +1045,6 @@ export function revokeDelegationAction(opts) {
     return /** @type {any} */ (sendMessage('action.revokeDelegation', opts));
 }
 
-/** @param {object} opts */
 export function revokeDelegationActionHw(opts) {
     return /** @type {any} */ (sendMessage('action.revokeDelegation.hw', opts));
 }
@@ -1512,29 +1485,23 @@ export function rearmPriceAlert(req) {
 }
 
 // §41.3.4 ORDER + §41.3.5 CANCEL signing lanes.
-/** @param {object} opts */
 export function orderAction(opts) {
     return /** @type {any} */ (sendMessage('action.order', opts));
 }
-/** @param {object} opts */
 export function orderActionHw(opts) {
     return /** @type {any} */ (sendMessage('action.order.hw', opts));
 }
-/** @param {object} opts */
 export function cancelOrder(opts) {
     return /** @type {any} */ (sendMessage('action.cancelOrder', opts));
 }
-/** @param {object} opts */
 export function cancelOrderHw(opts) {
     return /** @type {any} */ (sendMessage('action.cancelOrder.hw', opts));
 }
 
 // §41.4 COINPAY : settle a native-coin obligation from a matched order.
-/** @param {object} opts */
 export function coinpayAction(opts) {
     return /** @type {any} */ (sendMessage('action.coinpay', opts));
 }
-/** @param {object} opts */
 export function coinpayActionHw(opts) {
     return /** @type {any} */ (sendMessage('action.coinpay.hw', opts));
 }
@@ -1548,47 +1515,38 @@ export function getCoinpaysForAddress(req) {
 }
 
 // §41.5 SWAP : atomic token-pair swap.
-/** @param {object} opts */
 export function swapAction(opts) {
     return /** @type {any} */ (sendMessage('action.swap', opts));
 }
-/** @param {object} opts */
 export function swapActionHw(opts) {
     return /** @type {any} */ (sendMessage('action.swap.hw', opts));
 }
 
 // §42.8.1 LINK : anchor two existing actions across chains.
-/** @param {object} opts */
 export function linkAction(opts) {
     return /** @type {any} */ (sendMessage('action.link', opts));
 }
-/** @param {object} opts */
 export function linkActionHw(opts) {
     return /** @type {any} */ (sendMessage('action.link.hw', opts));
 }
 
 // FILE : public on-chain file upload (NFT artwork attachment).
-/** @param {object} opts */
 export function fileAction(opts) {
     return /** @type {any} */ (sendMessage('action.file', opts));
 }
-/** @param {object} opts */
 export function fileActionHw(opts) {
     return /** @type {any} */ (sendMessage('action.file.hw', opts));
 }
 
 // Project registry : current roster lookup.
-/** @param {object} opts */
 export function getProjectForToken(opts) {
     return /** @type {any} */ (sendMessage('projects.byTick', opts));
 }
 
 // §41.7.2 Messaging inbox : password-gated decrypt.
-/** @param {object} opts */
 export function getMessagingInbox(opts) {
     return /** @type {any} */ (sendMessage('messaging.inbox', opts));
 }
-/** @param {object} opts */
 export function getMessagingInboxSweep(opts) {
     return /** @type {any} */ (sendMessage('messaging.inboxSweep', opts));
 }
@@ -1599,11 +1557,9 @@ export function signerReady(opts) {
 }
 
 // §41.7.3 Compose : ECIES encrypt + MESSAGE action signing.
-/** @param {object} opts */
 export function messageAction(opts) {
     return /** @type {any} */ (sendMessage('action.message', opts));
 }
-/** @param {object} opts */
 export function messageActionHw(opts) {
     return /** @type {any} */ (sendMessage('action.message.hw', opts));
 }
@@ -1620,7 +1576,6 @@ export function listContacts() {
 export function findContactByAddress(req) {
     return /** @type {any} */ (sendMessage('contacts.findByAddress', req));
 }
-/** @param {object} opts */
 export function saveContact(opts) {
     return /** @type {any} */ (sendMessage('contacts.save', opts));
 }

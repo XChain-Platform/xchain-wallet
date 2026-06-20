@@ -128,7 +128,6 @@ export function CrossChainSwapForm({ walletId, onBack }) {
         return () => { cancelled = true; };
     }, [walletId, messaging]);
 
-    // Pick a default from-address whenever the give-chain changes.
     useEffect(() => {
         if (!addressesByChain || !giveChainId) {
             setFromAddressId(null);

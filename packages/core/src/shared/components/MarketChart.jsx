@@ -59,7 +59,6 @@ export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120
         [periodId],
     );
 
-    // Lazy-init the chart once the container is mounted.
     useEffect(() => {
         let disposed = false;
         (async () => {
@@ -107,7 +106,6 @@ export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120
         };
     }, [height]);
 
-    // Fetch matches whenever the pair changes.
     useEffect(() => {
         let cancelled = false;
         setLoadError(null);
@@ -129,7 +127,6 @@ export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120
         return () => { cancelled = true; };
     }, [messaging, chainId, tick1, tick2, demo]);
 
-    // Rebucket + push into the series whenever rows or period change.
     useEffect(() => {
         if (!chartReady || !seriesRef.current) return;
         const candles = bucketizeMatches(rawRows, {

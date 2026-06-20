@@ -129,10 +129,6 @@ export function CollectiblesView({
 function CollectibleCard({ row, pinned, hidden, onSelect, onTogglePin, onToggleHide }) {
     const [imgFailed, setImgFailed] = useState(false);
     const chainIconUrl = branding.chainIconSmallUrl(row.chainId);
-    // Cluster I FOLLOWUP 3: fetch tick metadata to surface a real image
-    // when the row payload doesn't already carry one. `useTokenInfo`'s
-    // module-level cache means revisits don't re-fetch, and silent
-    // failure leaves the ticker-letter placeholder in place.
     const assetInfo = useTokenInfo({
         chainId: row.chainId,
         tick: row.tick,

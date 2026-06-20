@@ -321,10 +321,8 @@ if (typeof chrome !== 'undefined' && chrome.alarms) {
     });
 }
 
-// Kick ensureHost on startup; no-ops when there's no session.
 ensureHost().catch((err) => {
     console.error('[xchain] background init failed:', err);
 });
 
-// Log a marker so dev inspection confirms the bundle loaded.
 console.log('[xchain] background service worker ready');

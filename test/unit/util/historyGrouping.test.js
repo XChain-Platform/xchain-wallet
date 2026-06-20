@@ -82,7 +82,6 @@ describe('shared/utils/historyGrouping', () => {
         expect(out[0].kind).toBe('group');
         expect(out[0].subkind).toBe('issue-mint');
         expect(out[0].summary).toBe('Launched MYTOKEN (supply 800)');
-        // Newest member first, leader (oldest) last.
         expect(out[0].members.map((m) => m.actionIndex)).toEqual(['30', '20', '10']);
     });
 
@@ -271,8 +270,6 @@ describe('shared/utils/historyGrouping', () => {
         expect(out[0].summary).toBe('Launched MYTOKEN (supply 70)');
     });
 
-    // §28.3 / Cluster C FOLLOWUP 2: cross-chain LINK pair grouping.
-
     it('collapses both sides of a cross-chain LINK into one card', () => {
         // Two SEND rows on different chains paired by the same
         // linkActionIndex; DESC so the BTC side (newer block) appears
@@ -299,7 +296,6 @@ describe('shared/utils/historyGrouping', () => {
         expect(out).toHaveLength(1);
         expect(out[0].kind).toBe('group');
         expect(out[0].subkind).toBe('link-pair');
-        // Leader is the older side (LTC), peer/member is the newer (BTC).
         expect(out[0].leader.chainId).toBe(LTC);
         expect(out[0].members.map((m) => m.chainId)).toEqual([BTC, LTC]);
         expect(out[0].summary).toBe('Cross-chain link: SEND ↔ SEND');

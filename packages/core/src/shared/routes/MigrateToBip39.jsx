@@ -241,7 +241,6 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated }) {
         );
     }
 
-    // stage === 'create' | 'submitting'
     return wrap(
         <form onSubmit={handleCreate} noValidate>
             <Input

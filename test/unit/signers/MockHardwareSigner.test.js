@@ -66,7 +66,6 @@ describe('MockHardwareSigner', () => {
         expect(await signer.getStatus()).toBe('disconnected');
         unsubscribe();
         signer.setStatus('available');
-        // After unsubscribe, the listener should not be called again.
         expect(listener).toHaveBeenCalledTimes(1);
     });
 

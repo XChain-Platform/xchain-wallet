@@ -192,7 +192,6 @@ function makeBroker(fakeWindows, overrides = {}) {
     const result = await pending;
     assert.equal(result.approved, true);
     assert.deepEqual(result.chains, ['bitcoin-mainnet']);
-    // Window was closed on resolve.
     assert.equal(fw._opened().length, 0, 'window closed on resolve');
     assert.equal(broker._pendingSize(), 0, 'pending map drained');
 }
@@ -254,7 +253,6 @@ function makeBroker(fakeWindows, overrides = {}) {
     const fw = makeFakeWindows();
     const broker = makeBroker(fw, { newId: () => 'host-1' });
 
-    // Park a request.
     const pending = broker.connect({
         origin: 'https://dapp.example',
         appName: 'DApp',
@@ -262,7 +260,6 @@ function makeBroker(fakeWindows, overrides = {}) {
     await Promise.resolve();
     await Promise.resolve();
 
-    // Build a real MessageHost with the broker wired in.
     const masterKey = new Uint8Array(32);
     crypto.getRandomValues(masterKey);
     const vault = new storageLib.Vault({
@@ -282,7 +279,6 @@ function makeBroker(fakeWindows, overrides = {}) {
         approvals: broker,
     });
 
-    // approval.fetch
     const fetchResp = await host.handle({
         type: 'approval.fetch',
         request: { id: 'host-1' },
@@ -299,7 +295,6 @@ function makeBroker(fakeWindows, overrides = {}) {
     assert.equal(missResp.ok, false);
     assert.equal(missResp.error.name, 'ApprovalNotFoundError');
 
-    // approval.resolve
     const resolveResp = await host.handle({
         type: 'approval.resolve',
         request: {

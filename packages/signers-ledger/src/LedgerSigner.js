@@ -84,10 +84,6 @@ const LEDGER_APP_NAME_FOR_CHAIN = {
     'dogecoin-mainnet': 'Dogecoin',
 };
 
-/**
- * @param {string} chainId
- * @returns {string}
- */
 function chainIdToLedgerFormat(chainId) {
     switch (chainId) {
         case 'bitcoin-mainnet':

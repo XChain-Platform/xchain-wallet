@@ -110,7 +110,6 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const fileInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
-    // Load addresses on mount (same pattern as DividendForm).
     useEffect(() => {
         let cancelled = false;
         messaging.getAddressesByChain(walletId)
@@ -132,7 +131,6 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         return () => { cancelled = true; };
     }, [walletId, messaging, resumeId]);
 
-    // Hydrate from resumeId once addresses are loaded.
     useEffect(() => {
         if (!resumeId || hydrated || !addressesByChain) return;
         let cancelled = false;
@@ -190,7 +188,6 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         }
     }, [chainId, addressesByChain, fromAddressId, initialFromAddress]);
 
-    // Re-classify recipients whenever the paste text changes.
     useEffect(() => {
         if (stage !== 'compose') return;
         const parts = airdropLib.parsePaste(pasteText);
@@ -249,7 +246,6 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
 
     const chainsWithAddresses = addressesByChain ? Object.keys(addressesByChain) : [];
 
-    // Compose the LIST params (v0, TYPE=2, ITEM=recipients).
     const listParams = useMemo(() => {
         /** @type {Record<string, string | string[]>} */
         const p = {
@@ -260,7 +256,6 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         return p;
     }, [recipients.valid]);
 
-    // Compose the AIRDROP params (v0, resolved LIST_ACTION_INDEX).
     const airdropParams = useMemo(() => {
         /** @type {Record<string, string> } */
         const p = {

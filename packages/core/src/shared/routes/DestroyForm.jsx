@@ -189,7 +189,6 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
     const [hwStatus, setHwStatus] = useState('idle');
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
 
-    // §20 / Cluster W FOLLOWUP 5: watcher-mode encode-only branch.
     const { isWatcherMode } = useWalletMode();
 
     async function handleSubmit(event) {

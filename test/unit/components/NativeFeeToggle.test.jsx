@@ -8,8 +8,6 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Unit tests for the per-form native-coin fee toggle.
-
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { NativeFeeToggle } from '../../../packages/core/src/shared/components/NativeFeeToggle.jsx';

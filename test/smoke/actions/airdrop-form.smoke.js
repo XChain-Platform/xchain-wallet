@@ -208,7 +208,6 @@ await assert.rejects(async () => flows.airdropAction({ params: {} }), /TICK is r
 await assert.rejects(async () => flows.airdropAction({ params: { TICK: 'A' } }), /AMOUNT is required/);
 await assert.rejects(async () => flows.airdropAction({ params: { TICK: 'A', AMOUNT: '1' } }), /LIST_ACTION_INDEX is required/);
 
-// actionByTxid 404 → null.
 {
     const sdk = { getTransaction: () => { const e = new Error('not found'); e.status = 404; throw e; } };
     const sdkRegistry = { get: () => sdk };
@@ -216,7 +215,6 @@ await assert.rejects(async () => flows.airdropAction({ params: { TICK: 'A', AMOU
     assert.equal(r, null, 'actionByTxid maps 404 to null');
 }
 
-// actionByTxid happy path returns action row.
 {
     const sdk = { getTransaction: () => ({ tx_hash: 'abc', action_index: '1234' }) };
     const sdkRegistry = { get: () => sdk };
@@ -381,7 +379,6 @@ assert.ok(
     assert.equal(updated.stage, 'ready-to-airdrop');
     assert.equal(updated.listActionIndex, '1234');
 
-    // Reload via a second vault instance against the same backend.
     await vault.close();
     const v2 = new storage.Vault({ backend, masterKey: new Uint8Array(32) });
     await v2.open();
@@ -394,7 +391,6 @@ assert.ok(
     const afterClear = await flows.listPendingAirdropsForWallet({ vault: v2, walletId: 'w1' });
     assert.equal(afterClear.length, 0);
 
-    // Validation rejects empty recipients.
     await assert.rejects(
         async () => flows.savePendingAirdrop({
             vault: v2,

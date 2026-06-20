@@ -109,7 +109,6 @@ export function AdvancedActionsForm({ walletId, onBack }) {
     const [password, setPassword] = useState('');
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
-    // Addresses on mount.
     useEffect(() => {
         let cancelled = false;
         messaging.getAddressesByChain(walletId)
@@ -131,7 +130,6 @@ export function AdvancedActionsForm({ walletId, onBack }) {
         return () => { cancelled = true; };
     }, [walletId, messaging]);
 
-    // Default fromAddress when chain settles.
     useEffect(() => {
         if (!chainId || !addressesByChain) return;
         const addrs = (addressesByChain[chainId] || []).filter(
@@ -149,7 +147,6 @@ export function AdvancedActionsForm({ walletId, onBack }) {
         }
     }, [chainId, addressesByChain]);
 
-    // Load the action list when chain settles.
     useEffect(() => {
         if (!chainId) return;
         let cancelled = false;
@@ -166,7 +163,6 @@ export function AdvancedActionsForm({ walletId, onBack }) {
         return () => { cancelled = true; };
     }, [chainId, messaging]);
 
-    // When action changes, load its formats + fields and reset values.
     useEffect(() => {
         if (!chainId || !action) {
             setFormats(null);

@@ -689,8 +689,6 @@ function AppInner() {
                     />
                 );
             }
-            // §20 / G041 (Cluster W FOLLOWUP 2): sign / verify / sign-PSBT
-            // routes, in parity with the extension popup + web shells.
             if (unlockedView === 'sign-psbt' && activeWalletId) {
                 return (
                     <PsbtSignForm

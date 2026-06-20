@@ -42,7 +42,6 @@ import { validateWallet, CURRENT_VERSION as WALLET_VERSION } from '../../../pack
 import { validateAddress, CURRENT_VERSION as ADDRESS_VERSION } from '../../../packages/core/src/schemas/address.js';
 import { validateSettings, CURRENT_VERSION as SETTINGS_VERSION } from '../../../packages/core/src/schemas/settings.js';
 
-// --- helpers ---
 const NOW = new Date().toISOString();
 
 const makeV1Wallet = (overrides = {}) => ({

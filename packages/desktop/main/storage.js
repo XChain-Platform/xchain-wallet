@@ -24,9 +24,6 @@
 
 import { promises as fs } from 'node:fs';
 import { dirname, join } from 'node:path';
-// Cross-package relative path so Node resolves this without the
-// pnpm workspace symlink (smoke tests run directly against Node);
-// Vite + electron-builder follow symlinks fine at build time.
 import { StorageBackend } from '../../core/src/storage/backend.js';
 
 export class FileStorageBackend extends StorageBackend {

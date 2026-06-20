@@ -128,7 +128,6 @@ export function AddressList({
             setWifNotice(`Imported ${importedAddress}.`);
             resetWifForm();
             setShowWifForm(false);
-            // Reload the address list so the new row appears.
             const byChain = await messaging.getAddressesByChain(walletId, accountId);
             setAddressesByChain(byChain || {});
         } catch (err) {

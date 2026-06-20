@@ -44,12 +44,10 @@ assert.ok(
     /export class BroadcastFailedError extends Error/.test(sws),
     'submitWithSigner exports BroadcastFailedError class',
 );
-// Phase-1 broadcast wrap.
 assert.ok(
     /try \{\s*await encoder\.broadcastTx\(signed\.txHex\);\s*\} catch[\s\S]+?throw new BroadcastFailedError\(\{[\s\S]+?phase: 'phase1'/.test(sws),
     'submitWithSigner wraps phase-1 broadcastTx rejection in BroadcastFailedError',
 );
-// Phase-2 broadcast wrap.
 assert.ok(
     /try \{\s*await encoder\.broadcastTx\(phase2Signed\.txHex\);\s*\} catch[\s\S]+?throw new BroadcastFailedError\(\{[\s\S]+?phase: 'phase2'/.test(sws),
     'submitWithSigner wraps phase-2 broadcastTx rejection in BroadcastFailedError',
@@ -90,7 +88,6 @@ assert.ok(
     /onBroadcastFailure\(\{[\s\S]+?signedTxHex: err\.signedTxHex/.test(sa),
     'submitAction fires onBroadcastFailure with the queue-shaped entry',
 );
-// Non-BroadcastFailedError still goes to the failed branch.
 assert.ok(
     /\} else if \(pending\) \{\s*await writePending\(\{\s*status: 'failed'/.test(sa),
     'submitAction still flips PendingTx to failed for non-broadcast errors',
@@ -115,12 +112,10 @@ assert.ok(
     /host\.register\('broadcast\.queue\.enqueue'/.test(bg),
     'createBackgroundHost registers broadcast.queue.enqueue',
 );
-// action.send wires onBroadcastFailure that calls pushQueueEntry.
 assert.ok(
     /host\.register\('action\.send'[\s\S]+?onBroadcastFailure[\s\S]+?pushQueueEntry\(walletId, entry\)/.test(bg),
     'action.send wires onBroadcastFailure → pushQueueEntry',
 );
-// Every registerHwHandler invocation gets the same wiring.
 assert.ok(
     /function registerHwHandler\([\s\S]+?onBroadcastFailure[\s\S]+?pushQueueEntry\(walletId, entry\)[\s\S]+?return flow\(\{[^}]*onBroadcastFailure[^}]*\}\)/.test(bg),
     'registerHwHandler injects onBroadcastFailure into the flow call',

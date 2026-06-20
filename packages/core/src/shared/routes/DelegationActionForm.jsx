@@ -105,7 +105,7 @@ export function DelegationActionForm({ mode, walletId, chainId, onBack }) {
 
     // Revoke mode: pre-populate the pubkey input with the most recent
     // active delegation for the source address. The user can still
-    // the user can still override to revoke an older key.
+    // override to revoke an older key.
     useEffect(() => {
         if (isDelegate) return;
         if (!fromAddressId || !addressesByChain) return;
@@ -141,7 +141,6 @@ export function DelegationActionForm({ mode, walletId, chainId, onBack }) {
     const [hwStatus, setHwStatus] = useState('idle');
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
 
-    // §20 / Cluster W FOLLOWUP 5: watcher-mode encode-only branch.
     const { isWatcherMode } = useWalletMode();
 
     const actionParams = useMemo(() => {

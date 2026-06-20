@@ -35,9 +35,6 @@ import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
-// Protocol coin tickers per xchain-sdk VALID_COINS. The registry's
-// descriptor.coin values are long-form ('bitcoin' / 'litecoin' /
-// 'dogecoin'); DISPENSER serializes the short-form tickers.
 const PROTOCOL_COIN_TICKER = {
     bitcoin: 'BTC',
     litecoin: 'LTC',
@@ -429,7 +426,6 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     const [hwStatus, setHwStatus] = useState('idle');
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
 
-    // §20 / Cluster W FOLLOWUP 5: watcher-mode encode-only branch.
     const { isWatcherMode } = useWalletMode();
 
     async function handleSubmit(event) {
@@ -470,7 +466,6 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             setResult(res);
             setPassword('');
             setStage('done');
-            // Cluster P FOLLOWUP 5: clear the draft on success.
             draft.clear();
             setDraftPending(false);
         } catch (err) {
@@ -796,9 +791,6 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             />
 
             {formError ? (
-                // Cluster P FOLLOWUP 4: formError is field-level
-                // validation. Recovery is user-iteration over the
-                // Inputs above; no one-click affordance fits.
                 <StatusMessage variant="error">{formError}</StatusMessage>
             ) : null}
             <div className={styles.actions}>

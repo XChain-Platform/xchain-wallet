@@ -304,7 +304,6 @@ export function MultisigSigningSession({ walletId, onBack }) {
             setBusy(false);
             return;
         }
-        // All chunks in. Decode the envelope and dispatch.
         let envelope;
         try {
             envelope = decodeMultisigEnvelope(state.psbt);
@@ -342,7 +341,6 @@ export function MultisigSigningSession({ walletId, onBack }) {
             }
             await refreshActive(active.id);
             await refreshList();
-            // Reset for the next paste.
             setCollectorState(createXcwCollector());
             setPasteInput('');
         } catch (err) {

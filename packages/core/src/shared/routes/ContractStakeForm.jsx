@@ -82,7 +82,6 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, onBa
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
-    // Load wallet addresses on the chain
     useEffect(() => {
         let cancelled = false;
         messaging.getAddressesByChain(walletId)
@@ -109,7 +108,6 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, onBa
         return () => { cancelled = true; };
     }, [walletId, chainId, messaging]);
 
-    // Load contract metadata
     useEffect(() => {
         let cancelled = false;
         messaging.getContractByActionIndex({ chainId, contractActionIndex })

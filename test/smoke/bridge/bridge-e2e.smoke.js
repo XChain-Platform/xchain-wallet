@@ -227,7 +227,6 @@ async function autoApprove(host, fakeWindows, result) {
     assert.equal(conn.chains[0], 'bitcoin-regtest');
     assert.deepEqual(conn.accounts, [account.id]);
 
-    // ConnectedSite was written to the vault.
     const sites = await vault.connectedSites.list();
     assert.equal(sites.length, 1);
     assert.equal(sites[0].origin, 'https://dapp.example');

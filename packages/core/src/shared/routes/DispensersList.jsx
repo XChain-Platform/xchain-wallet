@@ -61,8 +61,6 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onB
         /** @type {Record<string, { loading: boolean, rows: any[], error: string | null }>} */ ({}),
     );
 
-    // Phase 1: load the wallet's addresses so we know which chains to
-    // query and which source addresses to union over.
     useEffect(() => {
         let cancelled = false;
         messaging.getAddressesByChain(walletId, activeAccountId)

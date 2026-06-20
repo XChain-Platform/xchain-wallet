@@ -28,13 +28,13 @@ import {
 } from '../../../packages/core/src/schemas/settings.js';
 import { migrateSettings } from '../../../packages/core/src/schemas/migrations.js';
 
-// ─── 1. Schema constants are at v2 ───────────────────────────────────
+// --- 1. Schema constants are at v2 ------------------------------------------
 
 assert.equal(CURRENT_VERSION, 2, 'schema bumped to v2');
 assert.deepEqual([...REDUCED_MOTION_MODES], ['auto', 'always', 'never']);
 assert.deepEqual([...BACKUP_REMINDER_CADENCES], ['off', 'monthly', 'quarterly']);
 
-// ─── 2. createDefaultSettings carries the new fields ────────────────
+// --- 2. createDefaultSettings carries the new fields -------------------------
 
 const fresh = createDefaultSettings();
 assert.equal(fresh.schemaVersion, 2);
@@ -49,7 +49,7 @@ assert.equal(fresh.backupReminders, 'off');
 const v = validateSettings(fresh);
 assert.ok(v.ok, `default settings validate (got: ${(v.errors || []).join('; ')})`);
 
-// ─── 3. v1 record migrates forward with sensible defaults ───────────
+// --- 3. v1 record migrates forward with sensible defaults -------------------
 
 /** @type {any} */
 const v1 = {
@@ -102,7 +102,7 @@ assert.equal(migrated.backupReminders, 'off');
 const v2 = validateSettings(migrated);
 assert.ok(v2.ok, `migrated v1 record validates (got: ${(v2.errors || []).join('; ')})`);
 
-// ─── 4. updateSettings round-trip on the new fields ──────────────────
+// --- 4. updateSettings round-trip on the new fields -------------------------
 
 function makeVault() {
     const masterKey = new Uint8Array(32);

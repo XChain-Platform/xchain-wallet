@@ -51,8 +51,6 @@ export default defineConfig({
         },
     ],
     webServer: {
-        // Path is relative to this config file. test/e2e/ → wallet root
-        // is two up; from there cd into packages/web for the dev server.
         command: 'pnpm -C ../../packages/web dev',
         url: 'http://localhost:5173',
         reuseExistingServer: !process.env.CI,
