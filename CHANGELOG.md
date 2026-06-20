@@ -12,129 +12,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 
 - **Web shell no longer caches the wallet password in `sessionStorage`.**
-  The web shell previously wrote the user's plaintext wallet password to
-  `sessionStorage` under `xc.session.pw` so a page reload could
-  auto-unlock the wallet. That contradicted the threat model
-  (`docs/Threat_Model.md` §1, §2.1: "never persisted, in memory only")
-  and handed any same-origin script, an XSS sink, a compromised bundled
-  dependency, a reusable credential that decrypts the entire vault. The
-  cache (`packages/web/src/sessionPasswordCache.js`) and its call sites in
-  `App.jsx` and `messaging.js` are removed; the password is now held in
-  JavaScript memory only for the duration of a single unlock / sign
-  operation and never written to any Web API storage. **UX change:** a
-  page reload re-locks the wallet and the user re-enters their password,
-  the auto-unlock-on-reload behaviour is gone. A new security regression
-  test asserts the password never lands in `sessionStorage` across the
-  unlock, create-wallet, and import-mnemonic flows. The Chrome extension
-  and Electron shells were never affected.
-
-- **SIWX challenge now binds the wallet-stamped page origin (v2 wire
-  format, breaking).** The Sign-In with XChain challenge previously
-  signed only the page-supplied `appId`, so a look-alike site could pass
-  a legitimate app's identifier and obtain a signature byte-identical to
-  one the real app would produce, a relying backend could not tell the
-  two apart. The v2 challenge embeds the origin stamped by the wallet at
-  the content-script trust boundary between `appId` and `address`
-  (`XChain Sign-In v2 | <appId> | <origin> | <address> | <nonce> |
-  <timestamp> | <expiresAt>`). In `@xchain-wallet/bridge-spec`,
-  `SignInChallengeV2` replaces `SignInChallengeV1`,
-  `parseSignInChallenge` rejects v1-shaped challenges, and
-  `validateSignInChallenge` now requires the relying backend's expected
-  `origin` and rejects mismatches. **Integrators must update their
-  server-side verification**, see the `signIn` section of
-  `docs/BRIDGE.md` for the corrected snippet; backends that keep
-  accepting v1-shaped challenges remain open to appId spoofing.
+- **SIWX challenge now binds the wallet-stamped page origin (v2 wire format, breaking).**
+- Force transitive dependency `tar` to `>=7.5.7` (resolves to 7.5.15) via a `pnpm.overrides` pin to clear the high-severity hardlink path-traversal advisory (GHSA-34x7-hfp2-rc4v).
+- Bump transitive dependency `tmp` from 0.2.5 to 0.2.7 to clear the path-traversal advisory (GHSA-ph9p-34f9-6g65).
 
 ### Added
 
-- **Periodic chain-registry refresh** (§9.7 / G007). The background host
-  now schedules a 24-hour `setInterval` alongside the existing boot-time
-  refresh, so long-running wallet instances pick up updated chain
-  descriptors within a day of the hub's `/api/v1/chain-registry` endpoint
-  going live, no manual Settings → Network refresh required. It reuses
-  the same `refreshChainRegistry` + status path as the boot refresh, so
-  the graceful bundled-descriptor fallback is unchanged, and it is gated
-  by the same `BOOT_REFRESH_ENABLED` switch (flipping that flag on
-  activates both the boot and periodic refresh). The interval is
-  `unref()`-ed on Node (desktop) and clearable via
-  `host.stopChainRegistryRefresh()`; the durable mechanism for the MV3
-  service worker remains `chrome.alarms`.
+- **Periodic chain-registry refresh** (§9.7 / G007).
 
 ### Changed
 
-- **Plain-language transaction terminology.** User-facing copy across the
-  wallet UI (action-form buttons, output-field labels, copy-button
-  aria-labels, mode hints, and multisig flow text) now says
-  "transaction" instead of the `PSBT` acronym, matching the voice
-  guideline that flags unexplained jargon. The acronym is retained only
-  on the developer-mode raw-inspector surfaces, where the raw PSBT hex
-  itself is the subject and the technical term is appropriate for the
-  audience.
+- **Plain-language transaction terminology.**
 
 ### Fixed
 
-- **Hardware-signer status poll never slowed to steady state.** The
-  `useSignerStatus` hook reads the current status to choose its polling
-  cadence (fast at 2s while connecting, slow at 10s once the device
-  reports `available`). The status was captured in a stale closure inside
-  the long-lived `setTimeout` loop, so after the device became available
-  the loop kept reading the mount-time `idle` value and stayed on the
-  fast 2s cadence indefinitely, extra device chatter and wasted polls.
-  The hook now mirrors the latest status through a ref the loop reads, so
-  it correctly switches to the 10s steady-state interval. Public API
-  (`{ status, detail, refresh }`) is unchanged.
-- **Native-fee JSDoc typedef surface.** The native-coin fee feature added
-  three options/result fields that callers can pass and read at runtime but
-  that the typedefs did not advertise: `feeQuote` and `payFeeInNativeCoin`
-  on `SubmitEncoderOpts`, and `nativeFeeQuote` on both `SubmitResult` and
-  `BuildActionPsbtResult`. Documented all four so IDE/tooling consumers of
-  the package get correct autocomplete and type guidance. Documentation-only;
-  no runtime behaviour change.
-- **`SubmitEncoderOpts.rawData` JSDoc type.** The `rawData` property was
-  annotated `{boolean}`, but it is a Latin-1-encoded binary string (the
-  raw bytes the encoder consumes via `Buffer.from(rawData, 'binary')` for
-  gated-FILE ciphertext and ECIES envelopes). Corrected the type hint to
-  `{string}` so callers no longer mistake it for a flag.
-- **P2SH/P2WSH phase-2 spend on the online-signing path.** Large-payload
-  actions (DEPLOY, FILE, BATCH, multi-recipient airdrops, contract
-  executes, and any send/issue whose ACTION string exceeds 76 bytes) are
-  auto-encoded as two-phase P2SH/P2WSH transactions. On the
-  signer-driven submit path (`submitWithSigner`), the phase-2 spend call
-  passed `p2shHash` from a non-existent field on the encoder's `create_tx`
-  response (which carries only `{ psbt, encoding }`), so `p2shHash` was
-  always `undefined` and the encoder rejected the spend with
-  `MISSING_P2SH_HASH` after phase 1 had already been broadcast. It now
-  passes the broadcast phase-1 txid, matching the SDK lifecycle-manager
-  path, so phase 2 resolves its input correctly.
-- **P2SH/P2WSH phase-2 reveal-script derivation on the online-signing
-  path.** The same `submitWithSigner` phase-2 spend call also omitted the
-  `data`, `encoding`, and `rawData` fields the encoder needs to re-derive
-  the reveal-script chunks. Without them the encoder defaulted to empty
-  data and auto-selected OP_RETURN, so the phase-2 reveal outputs no
-  longer matched the script locked by phase 1, the spend was
-  unspendable and the phase-1 funds were stranded in the P2SH/P2WSH
-  address until manual recovery. It now forwards the phase-1 action
-  string, chosen encoding, and binary payload (used by gated-FILE and
-  ECIES MESSAGE v2 actions), matching the SDK lifecycle-manager path so
-  the reveal scripts line up.
-
-### Security
-
-- Force transitive dependency `tar` to `>=7.5.7` (resolves to 7.5.15)
-  via a `pnpm.overrides` pin to clear the high-severity hardlink
-  path-traversal advisory (GHSA-34x7-hfp2-rc4v). `tar` is pulled in
-  solely by the desktop package's Electron native-rebuild toolchain
-  (`electron-builder` → `app-builder-lib` → `@electron/rebuild` →
-  `node-gyp`/`cacache`) at build time and is never bundled into any
-  shipped artifact, so there is no runtime exposure. The override is
-  needed because the 6.x line has no patched release (6.2.1 is its
-  latest); the patch ships only in 7.x. Lockfile + override change only.
-- Bump transitive dependency `tmp` from 0.2.5 to 0.2.7 to clear the
-  path-traversal advisory (GHSA-ph9p-34f9-6g65). Lockfile-only change;
-  `tmp` is pulled in solely by the desktop package's `electron-builder`
-  Flatpak packaging path (`@malept/flatpak-bundler` → `tmp-promise`) at
-  build time and is never bundled into any shipped artifact, so there is
-  no runtime exposure, this silences the advisory in audit scans.
+- **Hardware-signer status poll never slowed to steady state.**
+- **Native-fee JSDoc typedef surface.**
+- **`SubmitEncoderOpts.rawData` JSDoc type.**
+- **P2SH/P2WSH phase-2 spend on the online-signing path.**
+- **P2SH/P2WSH phase-2 reveal-script derivation on the online-signing path.**
 
 Active-network mode + native-coin price oracle + TokenDetail visual
 fixes + IndexedDB-delete hotfix. The marquee shift is the §2-principle
@@ -144,97 +40,37 @@ shows + queries only that network's chains across every surface.
 
 ### Active network (§2 / §26 principle update)
 
-- `settings.activeNetwork` (v2-tolerant, default `'mainnet'`) governs
-  which chains are visible AND queried. Chains on inactive networks
-  stay configured under the hood, switching back is instant; nothing
-  is wiped. Cross-network features (LINK / SWAP spanning networks)
-  become structurally impossible while the filter is on, which is a
-  clarification rather than a regression since cross-network bridges
-  don't exist anyway.
-- `flows/effectiveNetwork.js` ships `getActiveNetwork(settings)`,
-  `isChainOnActiveNetwork(chainId, settings, registry)`, and
-  `filterChainIdsByActiveNetwork(chainIds, settings, registry)`.
-  `ChainRegistry.descriptorFor(chainId)` lands as the public accessor
-  the helpers need.
-- Server-side chokepoints enforce the filter so the UI doesn't have
-  to re-implement it 14 times: `balances.wallet` host handler reads
-  `settings.activeNetwork` and threads it into `walletBalances` (skips
-  the per-chain SDK fan-out for non-matching chains); `addresses.byChain`
-  host handler filters the returned map, which covers Home / History /
-  AddressList / Send / every action form's chain picker without any
-  client edit.
-- `useReachability` filters `chainIds` before probing, the 30-second
-  poll no longer hits testnet endpoints when the user is on mainnet.
-- `bridge.getActiveChains` filters its result so dApps only see chains
-  the wallet will actually sign on.
-- `createWallet` / `importMnemonic` infer `activeNetwork` from the
-  first chain in `activeChainIds` (explicit override wins). Demo
-  onboarding lands on `'regtest'` automatically.
-- `ensureSettings({ activeNetwork })` honors the hint only when no
-  settings record exists yet, so activating an additional chain via
-  Developer Mode on an already-configured wallet doesn't silently
-  switch network mode.
+- `settings.activeNetwork` (v2-tolerant, default `'mainnet'`) governs which chains are visible AND queried.
+- `flows/effectiveNetwork.js` ships `getActiveNetwork(settings)`, `isChainOnActiveNetwork(chainId, settings, registry)`, and `filterChainIdsByActiveNetwork(chainIds, settings, registry)`.
+- Server-side chokepoints enforce the filter so the UI doesn't have to re-implement it 14 times: `balances.wallet` host handler reads `settings.activeNetwork` and threads it into `walletBalances` (skips the per-chain SDK fan-out for non-matching chains); `addresses.byChain` host handler filters the returned map, which covers Home / History / AddressList / Send / every action form's chain picker without any client edit.
+- `useReachability` filters `chainIds` before probing, the 30-second poll no longer hits testnet endpoints when the user is on mainnet.
+- `bridge.getActiveChains` filters its result so dApps only see chains the wallet will actually sign on.
+- `createWallet` / `importMnemonic` infer `activeNetwork` from the first chain in `activeChainIds` (explicit override wins).
+- `ensureSettings({ activeNetwork })` honors the hint only when no settings record exists yet, so activating an additional chain via Developer Mode on an already-configured wallet doesn't silently switch network mode.
 
 ### Settings → Network
 
-- New `NetworkSection.jsx` under Settings → Network, radio picker
-  between Mainnet / Testnet / Regtest with per-option hint copy. On
-  flip the page reloads so every component's cached chain-scoped
-  state (addressesByChain, balances, history) re-fetches against the
-  new filter without per-component refresh wiring.
-- `networkSummary(settings)` returned in the Settings list row so
-  the current network is visible without drilling in.
+- New `NetworkSection.jsx` under Settings → Network, radio picker between Mainnet / Testnet / Regtest with per-option hint copy.
+- `networkSummary(settings)` returned in the Settings list row so the current network is visible without drilling in.
 
 ### Native-coin price oracle (§45 / privacy-cost opt-in)
 
-- `flows/priceOracle.js` ships `createPriceOracle({fetch})` →
-  `getNativePrices({chainIds, fiatCurrency, includeSparkline})`. Maps
-  bitcoin/litecoin/dogecoin mainnet to CoinGecko ids; testnet/regtest
-  return `null` entries (no price source). Single batched call to
-  `api.coingecko.com/v3/simple/price` for spot + market cap + 24h
-  change, per-coin `/coins/{id}/market_chart?days=7` for sparklines.
-- In-memory cache only, 5 min for spot, 1 hour for sparkline. Cache
-  is per-host-instance; restart/reload empties it. No disk persistence
-  on purpose: yesterday's "what coin did the user check?" should not
-  sit in storage.
-- Host registers `prices.native` route that gates on
-  `settings.privacy.priceDataEnabled` (v2-tolerant, default `true`).
-  When disabled the handler returns `{disabled:true}` and never invokes
-  fetch, zero network calls go out.
-- New `useNativePrice(chainId, {includeSparkline})` hook for the UI
-  layer; surfaces `{entry, loading, disabled, error}`.
-- Settings → Privacy gains a "Native coin price data" toggle with
-  copy that explicitly names `api.coingecko.com` and what the request
-  reveals.
-- Three shells (extension popup, web, desktop) gain
-  `getNativePricesRequest(opts)` messaging shim.
+- `flows/priceOracle.js` ships `createPriceOracle({fetch})` → `getNativePrices({chainIds, fiatCurrency, includeSparkline})`.
+- In-memory cache only, 5 min for spot, 1 hour for sparkline.
+- Host registers `prices.native` route that gates on `settings.privacy.priceDataEnabled` (v2-tolerant, default `true`).
+- New `useNativePrice(chainId, {includeSparkline})` hook for the UI layer; surfaces `{entry, loading, disabled, error}`.
+- Settings → Privacy gains a "Native coin price data" toggle with copy that explicitly names `api.coingecko.com` and what the request reveals.
+- Three shells (extension popup, web, desktop) gain `getNativePricesRequest(opts)` messaging shim.
 
 ### TokenDetail visual fixes
 
-- Native coin (BTC/LTC/DOGE) detail page swaps the colored-letter
-  iconLetter disc for the actual chain logo (`branding.chainIconLargeUrl(chainId)`),
-  matching what the Home BalanceList row uses. The redundant ChainBadge
-  next to the ticker is hidden for native coins, the asset IS the
-  chain, so the second orange ₿ circle was noise. XCP tokens keep both
-  (asset color + chain badge convey different info).
-- Metadata block converted from a stacked `<dl>` grid to a proper
-  two-column `<table>`: label left in muted small-caps, value right-
-  aligned, hairline divider per row. Reads cleanly at popup width
-  (360px) and at full-page width.
-- `ChainBadge` gains a `showNetworkKind` prop (was already being
-  passed by TokenDetail; this commit honors it).
+- Native coin (BTC/LTC/DOGE) detail page swaps the colored-letter iconLetter disc for the actual chain logo (`branding.chainIconLargeUrl(chainId)`), matching what the Home BalanceList row uses.
+- Metadata block converted from a stacked `<dl>` grid to a proper two-column `<table>`: label left in muted small-caps, value right- aligned, hairline divider per row.
+- `ChainBadge` gains a `showNetworkKind` prop (was already being passed by TokenDetail; this commit honors it).
 
 ### IndexedDB delete race (v0.332.0 hotfix)
 
-- `IndexedDBStorageBackend` now sets `db.onversionchange = () => db.close()`
-  on the open IDB. Without this, the Locked-screen forgot-password
-  wipe (`indexedDB.deleteDatabase('xchain-wallet')` in Locked.jsx)
-  fired `onblocked` because the backend's long-lived connection was
-  open, the page reloaded before the queued delete could finish, and
-  the new tab reopened the database, net effect, the wallet survived
-  the "wipe" with no UX indication. The versionchange handler lets the
-  backend close itself in response, the delete fires `onsuccess`, and
-  the reload lands on clean Onboarding as intended.
+- `IndexedDBStorageBackend` now sets `db.onversionchange = () => db.close()` on the open IDB.
 
 ## [0.332.0] - 2026-05-21
 
@@ -246,29 +82,11 @@ backup handy now has an in-app escape instead of being stuck on the
 
 ### Locked screen
 
-- `Locked.jsx` renders a subtle "Forgot password?" text button below
-  the unlock + biometric buttons when no demo wallet exists (the
-  demo path's existing "Wipe wallet data & start over" affordance
-  takes precedence when applicable, the two are mutually exclusive
-  branches of one ternary).
-- Click expands an inline confirmation panel: danger-tinted warning
-  copy leading with "Without your recovery phrase or encrypted backup
-  file, wiping this wallet will permanently lose access to any funds
-  it holds", a clarifying line that wiping only affects this device
-  (the wallet on the blockchain is untouched), a type-WIPE-to-confirm
-  text input as a deliberate-action gate, a danger-variant Wipe
-  button (disabled until the confirmation text matches), and a
-  Cancel button that resets the panel.
-- Wipe reuses the existing `deleteWalletDatabase()` helper, same
-  IDB `xchain-wallet` + localStorage `xchain-wallet:vault-meta`
-  cleanup the demo-exit path uses. Page reload after wipe boots the
-  App into clean Onboarding.
-- Available during lockout: being locked out for 15 minutes is
-  exactly when this escape matters most, so the affordance is not
-  gated on `isLockedOut`.
-- A11y: disclosure button carries `aria-expanded` / `aria-controls`;
-  expanded panel is a `role="region"` with `aria-label`; wipe-error
-  surfaces via `role="alert"`.
+- `Locked.jsx` renders a subtle "Forgot password?" text button below the unlock + biometric buttons when no demo wallet exists (the demo path's existing "Wipe wallet data & start over" affordance takes precedence when applicable, the two are mutually exclusive branches of one ternary).
+- Click expands an inline confirmation panel: danger-tinted warning copy leading with "Without your recovery phrase or encrypted backup file, wiping this wallet will permanently lose access to any funds it holds", a clarifying line that wiping only affects this device (the wallet on the blockchain is untouched), a type-WIPE-to-confirm text input as a deliberate-action gate, a danger-variant Wipe button (disabled until the confirmation text matches), and a Cancel button that resets the panel.
+- Wipe reuses the existing `deleteWalletDatabase()` helper, same IDB `xchain-wallet` + localStorage `xchain-wallet:vault-meta` cleanup the demo-exit path uses.
+- Available during lockout: being locked out for 15 minutes is exactly when this escape matters most, so the affordance is not gated on `isLockedOut`.
+- A11y: disclosure button carries `aria-expanded` / `aria-controls`; expanded panel is a `role="region"` with `aria-label`; wipe-error surfaces via `role="alert"`.
 
 ## [0.331.0] - 2026-05-01
 
@@ -279,151 +97,65 @@ hiding under viewport-keyed media queries.
 
 ### Theme + chrome
 
-- `tokens.css` defines `--xc-danger-bg` / `--xc-danger-text` /
-  `--xc-warning-bg` / `--xc-warning-text` for both light and dark.
-  Reachability/critical banners were rendering near-black-on-black on
-  the dark theme because the bare-fallback values only worked on a
-  light surface.
-- `ReachabilityBanner` mounts inside `FullLayoutWithNav.header`
-  (gated to non-demo wallets) instead of at the App root, so it's
-  suppressed in onboarding / locked / demo states. CSS uses physical
-  `left:` not `inset-inline-start:` to avoid logical-property
-  cascade conflicts with inline overrides.
-- `DemoBanner` now returns `null` everywhere; the visible banner moves
-  to a per-wallet "Status" row + danger-styled "Exit demo & wipe"
-  button on `WalletDetails` (gated by `isDemoWallet`). Auto-expire
-  effect still ticks since the component still mounts.
+- `tokens.css` defines `--xc-danger-bg` / `--xc-danger-text` / `--xc-warning-bg` / `--xc-warning-text` for both light and dark.
+- `ReachabilityBanner` mounts inside `FullLayoutWithNav.header` (gated to non-demo wallets) instead of at the App root, so it's suppressed in onboarding / locked / demo states.
+- `DemoBanner` now returns `null` everywhere; the visible banner moves to a per-wallet "Status" row + danger-styled "Exit demo & wipe" button on `WalletDetails` (gated by `isDemoWallet`).
 
 ### Onboarding license gate
 
-- Logo added to the gate, headline + tagline removed, license box
-  flex-grows inside a column-flex `.licenseGate` so checkbox + Accept
-  CTA stay pinned at the bottom regardless of viewport.
-- Two paragraphs flagged as "critical" render with a danger-tinted
-  callout: irreversibility + the seed-phrase responsibility (rewritten
-  to lead with "never leaves this device, not uploaded, not stored on
-  any server").
-- Body text justified with `hyphens: manual` (no auto-hyphenation),
-  checkbox left-aligned in the column, `--xc-space-3` margin gap
-  between the ack row and the CTA collapsed to a single space-2.
+- Logo added to the gate, headline + tagline removed, license box flex-grows inside a column-flex `.licenseGate` so checkbox + Accept CTA stay pinned at the bottom regardless of viewport.
+- Two paragraphs flagged as "critical" render with a danger-tinted callout: irreversibility + the seed-phrase responsibility (rewritten to lead with "never leaves this device, not uploaded, not stored on any server").
+- Body text justified with `hyphens: manual` (no auto-hyphenation), checkbox left-aligned in the column, `--xc-space-3` margin gap between the ack row and the CTA collapsed to a single space-2.
 
 ### Variant system
 
-- Fourth variant `extension` (Chrome popup, 360×600 fixed frame, no
-  bottom tab bar, drawer-only navigation) added alongside small /
-  full / sidebar. Bottom tab bar gates on `variant === 'small'`.
-- `DevVariantBadge` swaps the cycle button for a `<select>` picker
-  (auto / small / full / sidebar / extension) and gains a draggable
-  grip whose position persists in `localStorage` (eager-write per
-  pointermove so the saved value never trails the actual position).
-- `LeftNav` and `BottomTabBar` visibility gated on the JS variant
-  prop instead of `@media` viewport queries, pinning small at a
-  wide window now correctly hides the sidebar and shows the bottom
-  tab bar.
-- `BottomTabBar.bar` switched from `position: fixed` (anchored to the
-  viewport, rendered outside the framed dev preview) to
-  `position: absolute` (anchored to `FullLayoutWithNav.layout`, which
-  is now `position: relative`). The bar now sits inside the framed
-  preview at the frame's bottom edge, and the existing 56 px
-  `padding-bottom` on `.main` correctly clears it instead of stealing
-  layout space for an off-screen bar.
+- Fourth variant `extension` (Chrome popup, 360×600 fixed frame, no bottom tab bar, drawer-only navigation) added alongside small / full / sidebar.
+- `DevVariantBadge` swaps the cycle button for a `<select>` picker (auto / small / full / sidebar / extension) and gains a draggable grip whose position persists in `localStorage` (eager-write per pointermove so the saved value never trails the actual position).
+- `LeftNav` and `BottomTabBar` visibility gated on the JS variant prop instead of `@media` viewport queries, pinning small at a wide window now correctly hides the sidebar and shows the bottom tab bar.
+- `BottomTabBar.bar` switched from `position: fixed` (anchored to the viewport, rendered outside the framed dev preview) to `position: absolute` (anchored to `FullLayoutWithNav.layout`, which is now `position: relative`).
 
 ### Tokens / NFTs split
 
-- Tokens tab filter dropped the `divisibility > 0` clause; it now
-  shows every non-native asset as the canonical "what do I hold?"
-  surface.
-- NFTs tab filters by non-empty `imageUrl` instead of `divisibility
-  === 0`. An asset can appear in both tabs (e.g. an imaged divisible
-  token like PEPECASH).
-- `BalanceList.buildBalanceRows` + `mkRow` thread `imageUrl` from the
-  asset record onto the row so the filter has something to read.
-- NFT grid switched to `repeat(auto-fill, minmax(100px, 1fr))`:
-  three cards fit in the small frame, more in wider frames, no
-  viewport-keyed media queries. Cards stretch to uniform height,
-  chain overlay moved bottom-left → bottom-right to match other
-  surfaces.
+- Tokens tab filter dropped the `divisibility > 0` clause; it now shows every non-native asset as the canonical "what do I hold?" surface.
+- NFTs tab filters by non-empty `imageUrl` instead of `divisibility === 0`.
+- `BalanceList.buildBalanceRows` + `mkRow` thread `imageUrl` from the asset record onto the row so the filter has something to read.
+- NFT grid switched to `repeat(auto-fill, minmax(100px, 1fr))`: three cards fit in the small frame, more in wider frames, no viewport-keyed media queries.
 
 ### Demo fixtures
 
-- LTC and DOGE regtest chains gain token + NFT entries (LITECRED,
-  MWEB, LTCDOGE, LITEORD, MIMBLEPUNK on LTC; DOGI, WOW, DSHIB, BARK,
-  DOGINAL, MEMECARD on DOGE). BTC regtest tokens fleshed out (USDX,
-  DEMOCOIN added).
-- Native and asset balances bumped to demo-friendly amounts
-  (BTC 100, LTC 1000, DOGE 10000) and seeded with `fiatRate` so the
-  Total Balance hero rolls up a non-zero amount and per-row fiat
-  populates.
-- Indivisible NFTs (and PEPECASH) carry inline SVG `imageUrl`
-  data-URIs so the new `imageUrl`-based NFTs filter actually has
-  tiles to show in demo mode.
-- `DemoActivityList` and `DemoDefiList` render in HomeTabs when
-  `isDemoWallet(walletId)` returns true, replacing the static
-  `<Placeholder>` for those tabs. Both use a 48 × 48 colored disc
-  with a kind-coded icon (RECEIVE / SEND / ISSUE / DIVIDEND / ORDER /
-  EXECUTE for activity; STAKE / DISPENSER / CONTRACT for DeFi) plus
-  a chain icon overlay in the bottom-right corner, same visual
-  contract as `BalanceList`.
-- `synthesizeDemoDefiPositions` returns 9 positions across all
-  three chains.
+- LTC and DOGE regtest chains gain token + NFT entries (LITECRED, MWEB, LTCDOGE, LITEORD, MIMBLEPUNK on LTC; DOGI, WOW, DSHIB, BARK, DOGINAL, MEMECARD on DOGE).
+- Native and asset balances bumped to demo-friendly amounts (BTC 100, LTC 1000, DOGE 10000) and seeded with `fiatRate` so the Total Balance hero rolls up a non-zero amount and per-row fiat populates.
+- Indivisible NFTs (and PEPECASH) carry inline SVG `imageUrl` data-URIs so the new `imageUrl`-based NFTs filter actually has tiles to show in demo mode.
+- `DemoActivityList` and `DemoDefiList` render in HomeTabs when `isDemoWallet(walletId)` returns true, replacing the static `<Placeholder>` for those tabs.
+- `synthesizeDemoDefiPositions` returns 9 positions across all three chains.
 - `synthesizeDemoHistory` expanded from 2 entries to 6 per chain.
-- `Onboarding.handleEnterDemo` falls back to `messaging.listWallets`
-  when `importMnemonic` doesn't return a recognizable walletId, so
-  the demo marker writes reliably across shells.
-- `Home` skips `useAutoLock` when the active wallet is the demo
-  wallet, the random demo password is not human-recoverable, so
-  auto-locking strands the user behind the nuclear "wipe wallet
-  data" escape on Locked.
+- `Onboarding.handleEnterDemo` falls back to `messaging.listWallets` when `importMnemonic` doesn't return a recognizable walletId, so the demo marker writes reliably across shells.
+- `Home` skips `useAutoLock` when the active wallet is the demo wallet, the random demo password is not human-recoverable, so auto-locking strands the user behind the nuclear "wipe wallet data" escape on Locked.
 
 ### Locked-screen demo escape
 
-- `Locked` renders a "demo wallet, password is randomly generated
-  and not recoverable" notice + danger-styled "Wipe wallet data &
-  start over" button when `getDemoWalletId()` is non-null.
-- The escape path tries `messaging.removeWallet` first, then falls
-  back to `indexedDB.deleteDatabase('xchain-wallet')` AND
-  `localStorage.removeItem('xchain-wallet:vault-meta')` (both stores
-  hold "a wallet exists" state) so the bridge-level
-  `wallet.import: a wallet already exists` check passes after reload.
-  Page reloads after the wipe.
+- `Locked` renders a "demo wallet, password is randomly generated and not recoverable" notice + danger-styled "Wipe wallet data & start over" button when `getDemoWalletId()` is non-null.
+- The escape path tries `messaging.removeWallet` first, then falls back to `indexedDB.deleteDatabase('xchain-wallet')` AND `localStorage.removeItem('xchain-wallet:vault-meta')` (both stores hold "a wallet exists" state) so the bridge-level `wallet.import: a wallet already exists` check passes after reload.
 
 ### Display / row polish
 
 - `BalanceList` row icons bumped 36 → 48 px; chain overlay 16 → 20 px.
-- `HomeTabs` activity / defi disc icons bumped to match (48 px disc,
-  24 px inner SVG, 20 px chain overlay).
-- `formatAmount` no longer strips trailing zeros, full divisibility
-  (e.g. `100.00000000`) renders for column alignment with token /
-  NFT rows.
-- Network env suffix (regtest / testnet) dropped from `BalanceList`
-  row subtitle and the activity row meta line, env is chosen
-  globally in Settings, repeating it per-row was noise.
-- `StalenessLabel` moved into `TotalBalanceHero`'s footer row,
-  right-aligned with the "X assets not priced" hint. Standalone
-  mount under the tab strip is gone.
+- `HomeTabs` activity / defi disc icons bumped to match (48 px disc, 24 px inner SVG, 20 px chain overlay).
+- `formatAmount` no longer strips trailing zeros, full divisibility (e.g.
+- Network env suffix (regtest / testnet) dropped from `BalanceList` row subtitle and the activity row meta line, env is chosen globally in Settings, repeating it per-row was noise.
+- `StalenessLabel` moved into `TotalBalanceHero`'s footer row, right-aligned with the "X assets not priced" hint.
 
 ### Pin / Hide affordances opt-in
 
-- New `showPinAffordance` and `showHideAffordance` boolean settings,
-  v2-tolerant, default `false`.
+- New `showPinAffordance` and `showHideAffordance` boolean settings, v2-tolerant, default `false`.
 - Settings → Display gains two `ToggleRow`s at the top to flip them.
-- `Home` only passes `onTogglePin` / `onToggleHide` to `HomeTabs`
-  when the corresponding setting is on, `BalanceList` already
-  treats undefined callbacks as "hide the affordance," so rows are
-  clean by default. Existing pinned/hidden lists still apply
-  regardless of the affordance toggles.
+- `Home` only passes `onTogglePin` / `onToggleHide` to `HomeTabs` when the corresponding setting is on, `BalanceList` already treats undefined callbacks as "hide the affordance," so rows are clean by default.
 
 ### Bug fixes
 
-- `Send` mounted with `ReferenceError: Cannot access 'previewBalances'
-  before initialization` because `sourceBalance` and `onMax` were
-  declared above their dependencies. Both moved below the
-  `previewBalances` `useState` and `feeEstimate` `useMemo`.
-- `@xchain-wallet/core` package `exports` map now declares `./flows`
-  and `./flows/*`. Vite's dep-pre-scan failed on a `Locked.jsx`
-  import without it.
-- `.gitignore` adds `/test/e2e/node_modules` so Playwright's local
-  install stays untracked.
+- `Send` mounted with `ReferenceError: Cannot access 'previewBalances' before initialization` because `sourceBalance` and `onMax` were declared above their dependencies.
+- `@xchain-wallet/core` package `exports` map now declares `./flows` and `./flows/*`.
+- `.gitignore` adds `/test/e2e/node_modules` so Playwright's local install stays untracked.
 
 ## [0.330.0] - 2026-04-30
 
@@ -596,48 +328,23 @@ docstring updated to point at the new `<RecipientsBlock>` carrier.
 
 ### Added
 
-- **`packages/core/src/shared/utils/logConsole.js`**, `restore`,
-  `attachMirror`, `detachMirror`, `isMirrorAttached`, default
-  `sourceAllow` predicate (vault / signer:* / encoder / bridge:*,
-  never console), `__mirrorTestUtils` test export.
+- **`packages/core/src/shared/utils/logConsole.js`** , `restore`, `attachMirror`, `detachMirror`, `isMirrorAttached`, default `sourceAllow` predicate (vault / signer:* / encoder / bridge:*, never console), `__mirrorTestUtils` test export.
 - **`packages/extension/src/background/logConsoleStorage.js`** (new)
  , `createLogConsoleStorage` adapter picker.
-- **`packages/extension/src/background/createBackgroundHost.js`**:
-  `logConsoleStorage` dep + boot-time hydrate-then-attach;
-  `logConsoleStorage` import.
-- **`packages/core/src/flows/customChains.js`** (new),
-  `listCustomChains` / `addCustomChain` / `removeCustomChain`.
-- **`packages/core/src/flows/recipientsByAction.js`** (new),
-  `getDividendRecipients` / `getAirdropRecipients`.
-- **`packages/core/src/flows/index.js`**, re-exports of the five new
-  flows.
-- **`packages/core/src/schemas/settings.js`**, v2-tolerant
-  `customChains?: object[]` field + validator branch.
+- **`packages/extension/src/background/createBackgroundHost.js`** : `logConsoleStorage` dep + boot-time hydrate-then-attach; `logConsoleStorage` import.
+- **`packages/core/src/flows/customChains.js`** (new), `listCustomChains` / `addCustomChain` / `removeCustomChain`.
+- **`packages/core/src/flows/recipientsByAction.js`** (new), `getDividendRecipients` / `getAirdropRecipients`.
+- **`packages/core/src/flows/index.js`** , re-exports of the five new flows.
+- **`packages/core/src/schemas/settings.js`** , v2-tolerant `customChains?: object[]` field + validator branch.
 - **`packages/core/src/shared/components/settings/DeveloperModeSection.jsx`**
  , `CustomChainsRow` component + paste-JSON form + Remove affordance.
-- **`packages/core/src/shared/routes/History.jsx`**:
-  `<RecipientsBlock entry={entry}>` mounted in DetailCard for DIVIDEND
-  / AIRDROP rows; peerAddressOfEntry docstring updated.
-- **`packages/extension/src/background/createBackgroundHost.js`**:
-  five new host routes (chainRegistry.{listCustomChains,
-  addCustomChain, removeCustomChain} + history.{getDividendRecipients,
-  getAirdropRecipients}); `seedCustomChainsFromVault` helper +
-  `customChainsSeeded` single-flight guard.
-- **`packages/extension/src/popup/messaging.js`**,
-  **`packages/web/src/messaging.js`**,
-  **`packages/desktop/renderer/messaging.js`**, five new shims each.
-- **`test/smoke/ui/log-console-mirror.smoke.js`** (new), surface,
-  default-allow predicate, restore behaviour, dedupe, debounce, source
-  filtering, adapter file shape, host wiring.
-- **`test/smoke/ui/custom-chains.smoke.js`** (new), flow round-trip
-  (validate / persist / register / remove / collide), schema, host
-  wiring, three shell shims, DevMode-section mount.
-- **`test/smoke/ui/dividend-airdrop-recipients.smoke.js`** (new),
-  flow round-trip across pre-resolved / action-lookup paths, holder
-  envelope shapes, host wiring, three shell shims, History UI mount.
-- **`test/smoke/ui/save-contact-extractor.smoke.js`**, header-pin
-  updated to point at the new RecipientsBlock carrier (Cluster O FU 2
-  closed).
+- **`packages/core/src/shared/routes/History.jsx`** : `<RecipientsBlock entry={entry}>` mounted in DetailCard for DIVIDEND / AIRDROP rows; peerAddressOfEntry docstring updated.
+- **`packages/extension/src/background/createBackgroundHost.js`** : five new host routes (chainRegistry.{listCustomChains, addCustomChain, removeCustomChain} + history.{getDividendRecipients, getAirdropRecipients}); `seedCustomChainsFromVault` helper + `customChainsSeeded` single-flight guard.
+- **`packages/extension/src/popup/messaging.js`** , **`packages/web/src/messaging.js`**, **`packages/desktop/renderer/messaging.js`**, five new shims each.
+- **`test/smoke/ui/log-console-mirror.smoke.js`** (new), surface, default-allow predicate, restore behaviour, dedupe, debounce, source filtering, adapter file shape, host wiring.
+- **`test/smoke/ui/custom-chains.smoke.js`** (new), flow round-trip (validate / persist / register / remove / collide), schema, host wiring, three shell shims, DevMode-section mount.
+- **`test/smoke/ui/dividend-airdrop-recipients.smoke.js`** (new), flow round-trip across pre-resolved / action-lookup paths, holder envelope shapes, host wiring, three shell shims, History UI mount.
+- **`test/smoke/ui/save-contact-extractor.smoke.js`** , header-pin updated to point at the new RecipientsBlock carrier (Cluster O FU 2 closed).
 
 Closes Cluster Q FOLLOWUP 5, Cluster Q FOLLOWUP 2, Cluster O FOLLOWUP
 2.
@@ -3844,18 +3551,8 @@ The wallet now supports unlocking with Touch ID, Windows Hello, or any platform 
 
 ### Added
 
-- **`flows/biometricUnlock.js`**, full registration + unwrap flow.
-  - `isBiometricSupported()`: async probe that requires `navigator.credentials`, the static `PublicKeyCredential` global, and a positive `isUserVerifyingPlatformAuthenticatorAvailable()` response.
-  - `isBiometricRegistered()`: sync localStorage probe; truthy when `xchain-wallet:biometric` exists.
-  - `registerBiometricCredential({ password, accountName })`: creates a platform-bound credential with `userVerification: 'required'` + a 32-byte randomised PRF salt; falls back to a follow-up `navigator.credentials.get()` to obtain the PRF output when the create() response omits it (current Chrome behaviour); derives a 32-byte AES key from the PRF output, wraps the password via `crypto/aead.encrypt`, persists `{ credentialId, prfSalt, ciphertext, createdAt }`.
-  - `unlockWithBiometric()`: runs `navigator.credentials.get()` against the stored credential id with the persisted PRF salt; rederives the wrap key; decrypts the password and returns it for the caller to feed into `messaging.unlockWallet`.
-  - `clearBiometricCredential()`: wipes the localStorage record. The platform authenticator's credential itself is untouched (must be removed via OS settings, by design).
-  - Three named errors: `BiometricUnsupportedError`, `BiometricNotRegisteredError`, `BiometricPrfUnavailableError`.
-- **`shared/components/settings/BiometricRow.jsx`**, Settings → Safety panel row owning the four-state UX:
-  - `null` → "Checking platform authenticator…"
-  - unsupported → muted "Not available, this device or browser doesn't expose a WebAuthn platform authenticator with PRF support."
-  - supported but not registered → "Enable" button reveals an inline password input. Submitting calls `registerBiometricCredential`. Errors surface via `role="alert"`.
-  - supported + registered → "Disable" button calls `clearBiometricCredential`.
+- **`flows/biometricUnlock.js`** , full registration + unwrap flow. - `isBiometricSupported()`: async probe that requires `navigator.credentials`, the static `PublicKeyCredential` global, and a positive `isUserVerifyingPlatformAuthenticatorAvailable()` response. - `isBiometricRegistered()`: sync localStorage probe; truthy when `xchain-wallet:biometric` exists. - `registerBiometricCredential({ password, accountName })`: creates a platform-bound credential with `userVerification: 'required'` + a 32-byte randomised PRF salt; falls back to a follow-up `navigator.credentials.get()` to obtain the PRF output when the create() response omits it (current Chrome behaviour); derives a 32-byte AES key from the PRF output, wraps the password via `crypto/aead.encrypt`, persists `{ credentialId, prfSalt, ciphertext, createdAt }`. - `unlockWithBiometric()`: runs `navigator.credentials.get()` against the stored credential id with the persisted PRF salt; rederives the wrap key; decrypts the password and returns it for the caller to feed into `messaging.unlockWallet`. - `clearBiometricCredential()`: wipes the localStorage record.
+- **`shared/components/settings/BiometricRow.jsx`** , Settings → Safety panel row owning the four-state UX: - `null` → "Checking platform authenticator…" - unsupported → muted "Not available, this device or browser doesn't expose a WebAuthn platform authenticator with PRF support."
 - **Locked.jsx "Use biometrics" button**, only renders when `isBiometricRegistered()` AND `isBiometricSupported()`. The probe is short-circuited when no credential is registered to avoid a needless platform authenticator round-trip on the unlock screen. The button calls `unlockWithBiometric()`, then feeds the unwrapped password into `messaging.unlockWallet()`. Biometric failures surface their raw message and do NOT increment the lockout counter (they are not bad-password guesses).
 - **`test/smoke/core/biometric-unlock.smoke.js`**, full Node-side mock of `navigator.credentials` + `PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable` + `localStorage`. Exercises the cryptographic round-trip end-to-end (register a credential, fake an assertion that returns the same PRF output, confirm the original password comes back), the request-shape contract on both `create()` and `get()` (`userVerification: 'required'`, `authenticatorAttachment: 'platform'`, `rp.id`, `allowCredentials[].id`, PRF salt presence), the persisted-record schema, ciphertext-does-not-leak-plaintext, `clearBiometricCredential` round-trip, corruption tolerance, and the support-probe negative paths.
 - **`test/smoke/ui/biometric-unlock-ui.smoke.js`**, Locked.jsx wiring (imports, state slot, short-circuit when not registered, `handleBiometric` flow, lockout-counter exemption, biometric failure must NOT call `recordLockoutFailure`, button gating on `biometricAvailable`); Settings → Safety mounting; BiometricRow's four states + Enable form's `password.length === 0` gate + `role="alert"` errors.
@@ -3988,10 +3685,7 @@ The fee tiers feeding the FeeSelector + the §21.2 simulator's fee row + the §2
 
 ### Changed
 
-- **`Send.jsx`**, replaces the synchronous `feeTiers = useMemo(estimateNativeSendFeeTiers)` with `[feeTiers, setFeeTiers] = useState` + an effect that:
-  1. seeds with the synchronous placeholder so the form stays responsive on first paint
-  2. fires `fetchNativeSendFeeTiers` and upgrades to SDK-sourced tiers when the response lands
-  The `feeEstimate` memo prefers `feeTiers[feePick.mode]` (which inherits the SDK source) and falls back to the sync placeholder only while the async fetch hasn't populated.
+- **`Send.jsx`** , replaces the synchronous `feeTiers = useMemo(estimateNativeSendFeeTiers)` with `[feeTiers, setFeeTiers] = useState` + an effect that: 1. seeds with the synchronous placeholder so the form stays responsive on first paint 2. fires `fetchNativeSendFeeTiers` and upgrades to SDK-sourced tiers when the response lands The `feeEstimate` memo prefers `feeTiers[feePick.mode]` (which inherits the SDK source) and falls back to the sync placeholder only while the async fetch hasn't populated.
 - **`test/smoke/ui/send-fee-selector.smoke.js`**, asserts the new state shape, the sync seed, the async fetcher invocation, and the live-tier preference in the `feeEstimate` memo.
 
 ### Behavior preserved
@@ -4008,9 +3702,7 @@ Closes the §44.7 audit row. Step 1 already had the FeeSelector display tier rat
 
 ### Added
 
-- **`flows/feeEstimate.js`** grows two conversion helpers:
-  - `displayRateToPerByte(unit, displayValue)`: converts user-natural rate (sat/vB or DOGE/kB) to the table's internal per-byte rate (sat/vB or koinu/byte).
-  - `perByteRateToDisplay(unit, ratePerByte)`: inverse, used to populate `rateValue` consistently in the displayed unit.
+- **`flows/feeEstimate.js`** grows two conversion helpers: - `displayRateToPerByte(unit, displayValue)`: converts user-natural rate (sat/vB or DOGE/kB) to the table's internal per-byte rate (sat/vB or koinu/byte). - `perByteRateToDisplay(unit, ratePerByte)`: inverse, used to populate `rateValue` consistently in the displayed unit.
 - Both exported from `flows/index.js`.
 
 ### Changed
@@ -4055,11 +3747,7 @@ Closes the §29 close FOLLOWUP 3 (real fee selector); the placeholder rates them
 ### Added
 
 - **`packages/core/src/ui/FeeSelector.jsx`** + **`.module.css`**, presentation-only primitive. Props: `tiers` (from `estimateNativeSendFeeTiers`), `value` (`{ mode, customRate? }`), `onChange`, `disabled`, `placeholderBadge`. ARIA radiogroup with three preset radios + a Custom radio that reveals a numeric input. The component never computes fees itself, callers pass tiers in and get selection events back. Re-exported from `@xchain-wallet/core/ui`.
-- **`flows/feeEstimate.js`** grows two helpers and a `speed` parameter:
-  - `estimateNativeSendFee({ chainId, chainRegistry, speed = 'normal' })` now dispatches per tier. Returns the existing `{ sats, coinAmount, source, confidence, rate, … }` shape plus `unit` / `rateValue` / `speed` / `etaMinutes`.
-  - `estimateNativeSendFeeTiers({ chainId, chainRegistry })` returns `{ low, normal, fast, unit }` for the FeeSelector to render.
-  - `customFeeEstimate({ chainId, chainRegistry, rate })` builds a user-rate estimate at high confidence.
-  - Per-chain tier table: BTC 1 / 6 / 12 sat/vB; LTC 1 / 1 / 2 sat/vB; DOGE 10k / 100k / 200k koinu/byte rendered as DOGE/kB.
+- **`flows/feeEstimate.js`** grows two helpers and a `speed` parameter: - `estimateNativeSendFee({ chainId, chainRegistry, speed = 'normal' })` now dispatches per tier.
 - **`test/smoke/core/fee-tiers.smoke.js`**, per-chain tier dispatch (sats math, defaults, unknown speed fallback, DOGE/kB unit semantics), `estimateNativeSendFeeTiers` ordering + null guards, `customFeeEstimate` rate validation + zero-rate allowance.
 - **`test/smoke/ui/fee-selector.smoke.js`**, public API + ARIA radiogroup, preset wiring from `tiers` prop, selection writes (`onTierClick`, `onCustomToggle`, `onCustomRateChange`), empty-state copy, conditional placeholder badge, and CSS hooks.
 - **`test/smoke/ui/send-fee-selector.smoke.js`**, Send.jsx imports, `feePick` state defaulting to `'normal'`, `feeTiers` + `feeEstimate` memos (custom branch dispatches to `customFeeEstimate`, tier branch passes `speed: feePick.mode`), and form rendering with `placeholderBadge` bound to source.
@@ -4147,12 +3835,7 @@ Closes the deferred §21 FOLLOWUP 5 (fee-aware balance preview) and the §29.2 /
 
 ### Changed
 
-- **`Send.jsx`**:
-  - Hoisted `feeEstimate` memo above the simulator's `previewResult` so the simulator gets a real fee number.
-  - New state: `amountMode: 'native' | 'fiat'`, `fiatInput`. New memos: `isNativeSend`, `sourceBalance`, `fiatPreview`. New callbacks: `onMax`, `onToggleAmountMode`, `onFiatInputChange`.
-  - The Amount field is now wrapped in a row containing the input + a `Max` button + a currency toggle button.
-  - Below the row, a balance hint reads "Available: X TICK" (with "(fee ≈ Y, placeholder)" appended for native sends).
-  - The address-balance fetch effect now also runs in the form stage (so Max + the Available hint can reference balance before the user reaches review).
+- **`Send.jsx`** : - Hoisted `feeEstimate` memo above the simulator's `previewResult` so the simulator gets a real fee number. - New state: `amountMode: 'native' | 'fiat'`, `fiatInput`.
 - **`Send.module.css`**, `.amountRow`, `.amountField`, `.amountActions`, `.amountButton`, `.balanceHint` rules.
 
 ### Behavior preserved
@@ -4187,13 +3870,7 @@ The submit button is disabled while the gate is active. Closing the form, switch
 
 ### Changed
 
-- **`Send.jsx`**:
-  - `useSettings` + `checkRecipientNovelty` imported.
-  - New `testedThisSession` Set state + `markTested` callback.
-  - New `testSendGate` memo computing the four conditions; returns `{ amountSats, threshold, ticker } | null`.
-  - New `onSendSmallTest` callback that scales `amount × 0.01` (8-decimal float, trailing-zero stripped) and pops back to the form stage.
-  - Review stage renders the gate banner between decoded warnings and the RawPsbtViewer when `testSendGate` is non-null.
-  - Submit button gains `!!testSendGate ||` to its `disabled` predicate.
+- **`Send.jsx`** : - `useSettings` + `checkRecipientNovelty` imported. - New `testedThisSession` Set state + `markTested` callback. - New `testSendGate` memo computing the four conditions; returns `{ amountSats, threshold, ticker } | null`. - New `onSendSmallTest` callback that scales `amount × 0.01` (8-decimal float, trailing-zero stripped) and pops back to the form stage. - Review stage renders the gate banner between decoded warnings and the RawPsbtViewer when `testSendGate` is non-null. - Submit button gains `!!testSendGate ||` to its `disabled` predicate.
 - **`Send.module.css`**, `.testSendGate`, `.testSendTitle`, `.testSendBody`, `.testSendActions` rules. Banner uses the accent-primary color tokens (informational, not the warning yellow, this is a friendly nudge, not an error).
 
 ### Behavior preserved
@@ -4226,10 +3903,7 @@ Closes the deferred §21 FOLLOWUP 3 from the signing-safety close report. Three 
 
 - **`packages/core/src/ui/AddressText.jsx`**, adds `highlight` prop (default false). Refactor splits the render into four explicit branches (empty / short / non-highlight / highlight). Truncate behavior unchanged when `highlight` is off, existing call sites keep their current rendering.
 - **`packages/core/src/ui/AddressText.module.css`**, `.head`, `.middle`, `.tail` rules. `.middle` uses `--xc-text-muted`.
-- **`Send.jsx`**:
-  - Paste handler now also fires `checkPasteIntegrity` (fire-and-forget; mismatch sets `pasteWarning`).
-  - New `lookalikeWarning` memo over `toAddress` + `suggestions`. Both warnings render under the AddressCombobox with `role="alert"`.
-  - Review stage wires `<AddressText … highlight />` on the From row, and intercepts the decoder's "Destination" detail to render through `<AddressText … highlight />`.
+- **`Send.jsx`** : - Paste handler now also fires `checkPasteIntegrity` (fire-and-forget; mismatch sets `pasteWarning`). - New `lookalikeWarning` memo over `toAddress` + `suggestions`.
 
 ### Behavior preserved
 
@@ -4255,11 +3929,7 @@ Closes the §29.4 / §29.5 audit rows and the deferred §21 FOLLOWUP 4 (autocomp
 
 ### Changed
 
-- **`Send.jsx`**, To-field is now `<AddressCombobox>` with the same label, placeholder, and autocomplete attributes as before. Suggestions assemble from `messaging.listContacts()` (one fetch on mount) + `messaging.getAddressHistory({ chainId, address })` for each of the wallet's own addresses on the active chain (refetches when the chain changes). Paste runs through `uri.detectQrContent`:
-  - `bip21` → fills `to`, `amount`, `tick` (as ticker), `message` (as memo); shows "Filled from `<scheme>`: URI" in the hint slot.
-  - `xchain-uri` → same fill, "Filled from xchain: URI".
-  - `wif` → blocks the paste, shows "That looks like a private key…" pointing at the import flow.
-  - Anything else falls through to default text paste.
+- **`Send.jsx`** , To-field is now `<AddressCombobox>` with the same label, placeholder, and autocomplete attributes as before.
 - **`SafetySection.jsx`**, Undo-send grace row removed. The feature was scrapped: a cancellable countdown both delays every broadcast and rewards rage-clicking with a no-op. The `settings.grace.undoSendSeconds` schema field stays as a dead slot until a future v3 migration sweeps it (see settings close FOLLOWUP 12).
 - **`test/smoke/ui/settings-safety.smoke.js`**, drops the undo-send assertions and adds explicit `doesNotMatch` checks so a future re-introduction is loud.
 
@@ -4346,11 +4016,7 @@ The preview is gated to the `signAction` kind. `signMessage`, `signPsbt`, and `s
 
 ### Changed
 
-- **`packages/extension/src/approval/kinds/SignApproval.jsx`**:
-  - Adds `previewBalances` state + a `signAction`-gated `useEffect` that resolves the source address and fetches its balances.
-  - Adds a `useMemo` that runs `decoder.simulateAction` once balances arrive.
-  - Renders `<BalanceChanges>` between `<SignSummary>` and the password form, only for the `signAction` kind.
-  - Fee defaults to `'0'` until the bridge payload carries an estimate (§44.2).
+- **`packages/extension/src/approval/kinds/SignApproval.jsx`** : - Adds `previewBalances` state + a `signAction`-gated `useEffect` that resolves the source address and fetches its balances. - Adds a `useMemo` that runs `decoder.simulateAction` once balances arrive. - Renders `<BalanceChanges>` between `<SignSummary>` and the password form, only for the `signAction` kind. - Fee defaults to `'0'` until the bridge payload carries an estimate (§44.2).
 
 ### Behavior preserved
 
@@ -4402,10 +4068,7 @@ The first §21.2 building block. A pure projection module that, given a decoded 
 
 ### Added
 
-- **`packages/core/src/decoder/txSimulator.js`**, `simulateAction({ action, params, balances, feeEstimate, chainId, chainRegistry })` returning `{ deltas, sideEffects, notes }`.
-  - Per-action simulators: SEND (token / coin), SWEEP, MINT (to-self / to-other), DESTROY, ISSUE (v0 create / v0 transfer-only / v3 lock / config), DIVIDEND, DISPENSER (v0 open / v1 cancel / v2 edit-refill), BROADCAST (v0/v1/v2/v3), AIRDROP, LIST, BATCH (recursive aggregation), generic fallback.
-  - Decimal-string add / subtract on bigint-scaled integers, sat-level precision survives arbitrary chained operations without float drift. Handles up to 18 fractional digits (every tick on the platform fits).
-  - Coin-family → ticker mapping (`bitcoin` → `BTC`, `litecoin` → `LTC`, `dogecoin` → `DOGE`) inlined to keep the simulator importless and consistent with the same map in `SwapForm.jsx` / `CoinpayForm.jsx`.
+- **`packages/core/src/decoder/txSimulator.js`** , `simulateAction({ action, params, balances, feeEstimate, chainId, chainRegistry })` returning `{ deltas, sideEffects, notes }`. - Per-action simulators: SEND (token / coin), SWEEP, MINT (to-self / to-other), DESTROY, ISSUE (v0 create / v0 transfer-only / v3 lock / config), DIVIDEND, DISPENSER (v0 open / v1 cancel / v2 edit-refill), BROADCAST (v0/v1/v2/v3), AIRDROP, LIST, BATCH (recursive aggregation), generic fallback. - Decimal-string add / subtract on bigint-scaled integers, sat-level precision survives arbitrary chained operations without float drift.
 - **`packages/core/src/decoder/index.js`**, re-exports `simulateAction` alongside the existing `decodeAction`.
 - **`test/smoke/core/tx-simulator.smoke.js`**, 19 cases covering every per-action simulator, BATCH aggregation, decimal-string precision (sat-level + signed), generic fallback, empty-balance / null-fee paths, and static wiring.
 
@@ -4423,7 +4086,7 @@ The §35 Settings page used to render every section's full body inline, 16 stack
 Examples of the new top-level rows:
 
 - **This Wallet** › Main Wallet
-- **Privacy** › 2 of 5 on
+- **Privacy** › 2 of 5 on.
 - **Safety** › Auto-lock 15 min
 - **Fees** › All defaults
 - **Network & Endpoints** › All defaults / 2 chains custom
@@ -4475,13 +4138,7 @@ Settings schema v1 → v2 migration. Unlocks every "Coming soon" deferred toggle
 
 ### Added
 
-- **Schema v2 fields:**
-  - `reducedMotion: 'auto' | 'always' | 'never'` (Appearance override of the OS `prefers-reduced-motion` signal)
-  - `privacy.blurOnBlur: boolean` (window-unfocus blur of mnemonic / QR / balance surfaces)
-  - `privacy.labelsSurviveRestore: boolean` (§19.5.2 on-chain label sync opt-in; toggle persists today, FILE-action submit/fetch wiring is shell-level pending)
-  - `grace.testSendThresholdSats: number` (large-amount confirmation gate; `0` disables)
-  - `panicMode.enabled: boolean` (§26.5 schema slot; full duress-PIN flow lands separately)
-  - `backupReminders: 'off' | 'monthly' | 'quarterly'` (§19.1 backup-reminder cadence)
+- **Schema v2 fields:** - `reducedMotion: 'auto' | 'always' | 'never'` (Appearance override of the OS `prefers-reduced-motion` signal) - `privacy.blurOnBlur: boolean` (window-unfocus blur of mnemonic / QR / balance surfaces) - `privacy.labelsSurviveRestore: boolean` (§19.5.2 on-chain label sync opt-in; toggle persists today, FILE-action submit/fetch wiring is shell-level pending) - `grace.testSendThresholdSats: number` (large-amount confirmation gate; `0` disables) - `panicMode.enabled: boolean` (§26.5 schema slot; full duress-PIN flow lands separately) - `backupReminders: 'off' | 'monthly' | 'quarterly'` (§19.1 backup-reminder cadence)
 - **`settingsMigrations[1]`** in `schemas/migrations.js`: forward-only v1 → v2 migrator with sensible per-field defaults that preserve v1 behavior.
 - **`REDUCED_MOTION_MODES` + `BACKUP_REMINDER_CADENCES`** tuples exported from `schemas/settings.js`.
 - **`test/smoke/core/settings-schema-v2.smoke.js`**, schema constants, `createDefaultSettings` shape, v1-record migration with default-fill on missing fields, post-migration validation, `updateSettings` round-trip on the new fields, validator rejection of bad values.
@@ -4917,15 +4574,7 @@ Version demoted from `1.0.0-rc.6` → `0.102.0` (then bumped here to `0.103.0`) 
 
 ### Added
 
-- `claude/reports/specs/2026-04-24_a11y-audit-readiness.md` (in the platform repo, gitignored), readiness packet. Sections:
-  - **Scope**, what the static gate already covers (button label / img alt / input label / textarea label / div-onclick role+tabIndex; 0 violations across 64 shared routes + 9 UI primitives) vs. what the external audit covers (color contrast, focus-visible, live-region timing, keyboard traps, screen-reader walkthroughs, reduced-motion verification, touch-target sizing per WCAG 2.5.5, forced-colors / Windows high-contrast, reflow + zoom per WCAG 1.4.10). Out-of-scope: i18n / RTL, audio/video, dApp pages.
-  - **Surface inventory + walkthrough targets**, per-route AT expectations across 7 surface groups (Onboarding, Lock/unlock, Home/send/receive, Sign-screen with all 8+ action types separated, Multisig coordinator, Approval popup, Settings + key management). The sign-screen entries pin what AT should announce per action so the auditor can grade exhaustively.
-  - **Assistive technologies**, NVDA + JAWS + VoiceOver (macOS + iOS) mandatory; TalkBack + Orca recommended. Four-shell coverage matrix (popup / full-screen / web / desktop renderer).
-  - **Already-addressed during pre-launch**, the static-gate baseline, the v1.0.0-rc.4 reduced-motion implementation, multisig session round labels, sign-screen safety-rail rendering, MultisigBadge aria. Vendor doesn't waste hours rediscovering these.
-  - **Audit deliverables we expect**, WCAG-success-criterion-keyed findings with severity + reproduction including AT version + viewport, screen-reader transcripts, coverage matrix, regression test recommendations, per-criterion pass/fail at WCAG 2.2 AA so the GA release notes can claim conformance.
-  - **Coordination**, scope-lock at rc.N tag, weekly check-ins for engagements > 2 weeks, no fixed disclosure window (a11y findings are not security-sensitive).
-  - **Vendor inquiry template**, paste-ready email; recommended starting-point vendor list (Deque, Knowbility, TPGi, Tenon, Microsoft Accessibility, SSB BART, Equally AI) with the explicit caveat that the user should cross-reference published wallet / fintech audits before selection.
-  - **Post-audit close-out checklist**, Critical resolved before GA, Major resolved-or-rationalized, Minor/Advisory issue-tracked, conformance statement attached to release notes, static gate extended with any new rules the audit suggests.
+- `claude/reports/specs/2026-04-24_a11y-audit-readiness.md` (in the platform repo, gitignored), readiness packet.
 
 ### Decided
 
@@ -4945,16 +4594,7 @@ Version demoted from `1.0.0-rc.6` → `0.102.0` (then bumped here to `0.103.0`) 
 
 ### Added
 
-- `claude/reports/specs/2026-04-24_security-audit-readiness.md` (in the platform repo, gitignored), readiness packet. Sections:
-  - **Scope**, three layers (cryptography, wallet flows, shell IPC) with a per-layer file inventory pinning every relevant path and LOC count. ~7,000 LOC total in scope, mapped from `xchain-sdk@1.13.0` + `@xchain-wallet/core` + `@xchain-wallet/extension` + `@xchain-wallet/desktop`.
-  - **Per-layer audit asks**, what we want the vendor to verify, written as targets rather than hypotheses (Argon2id parameters meet OWASP 2023+ guidance; MuSig2 nonce reuse impossible; service-worker rejects unapproved-origin RPC; contextBridge surface enumerable + minimal; auto-updater verifies signature before swap).
-  - **Build & reproduce instructions**, pnpm + frozen lockfile + smoke + repro-build hooks. Auditor walks from `git clone` to byte-for-byte verifiable artifact.
-  - **Threat model summary**, adversaries (malicious dApp, tab-injecting malware, compromised RPC, cosigner with stale state, local-machine post-compromise, supply-chain) and explicit out-of-scopes (vendor firmware, blockchain consensus, raw-password attacks).
-  - **Known deferred items**, pulls from the pre-launch close report so the vendor doesn't re-discover them: HW MuSig2 nonce wiring (firmware-gated), HW classical multisig PSBT signing (vendor-API-heavy stubs), Home/History per-config UI polish.
-  - **Audit deliverables we expect**, severity-classed findings with file:line, coverage report, threat-model deltas, public-shareable final report.
-  - **Coordination**, scope-lock document, weekly check-ins, 90-day responsible disclosure for High+, coordinated public disclosure with GA notes.
-  - **Vendor inquiry template**, paste-ready email; recommended starting-point vendor list (Trail of Bits, Cure53, Quarkslab, Zellic, Cantina, OpenZeppelin Security, Halborn, Spearbit) with the explicit caveat that the user should cross-reference published wallet audits before selection.
-  - **Post-audit close-out checklist**, Critical resolved before GA, High resolved-or-rationalized, Medium/Low issue-tracked, public disclosure coordinated.
+- `claude/reports/specs/2026-04-24_security-audit-readiness.md` (in the platform repo, gitignored), readiness packet.
 
 ### Decided
 
@@ -5307,16 +4947,9 @@ Phase 4, Step 21 of 23. MuSig2 hardware-signer integration + local-cosigner cont
 
 ### Added
 
-- `packages/core/src/signers/Signer.js`: three new abstract methods on the base `Signer`:
-  - `signMusig2Round1({ chainId, path, sessionRef })`: BIP327 round 1 publicNonce generation.
-  - `signMusig2Round2({ chainId, path, sessionRef, aggNonceHex })`: BIP327 round 2 partial signature.
-  - `signMultisigClassical({ chainId, path, msgHash })`: DER-encoded ECDSA over the input's sighash for P2SH / P2WSH.
-  Each carries its own JSDoc typedef block (`MultisigSessionRef`, `SignMusig2Round1Params`/`Return`, etc.). Subclasses override.
+- `packages/core/src/signers/Signer.js`: three new abstract methods on the base `Signer`: - `signMusig2Round1({ chainId, path, sessionRef })`: BIP327 round 1 publicNonce generation. - `signMusig2Round2({ chainId, path, sessionRef, aggNonceHex })`: BIP327 round 2 partial signature. - `signMultisigClassical({ chainId, path, msgHash })`: DER-encoded ECDSA over the input's sighash for P2SH / P2WSH.
 
-- `packages/core/src/signers/SoftwareSigner.js`: real implementations:
-  - `signMusig2Round1` calls `sdk.musig2.aggregateKeys` (binds the nonce to the aggregated x-only pubkey) followed by `sdk.musig2.generateNonce`. Uses a deterministic `sessionId` derived as `sha256(text || sessionRef.fingerprint || privKey)` so round 2 can re-cache the same secret nonce without persisting secret state, needed because the SDK's MuSig2 module stashes secret nonces in an internal Map keyed by publicNonce, and the wallet's SDK instance is fresh after a lock+unlock cycle.
-  - `signMusig2Round2` re-runs the same `generateNonce` (re-cached secret) then `startSession` + `partialSign`, returns the 32-byte partial sig + the (deterministic) publicNonce.
-  - `signMultisigClassical` derives the privKey at the cosigner's path, calls `sdk.wallet.signEcdsa` (new in SDK 1.12.0), returns the DER-encoded signature + the signing key's compressed pubkey.
+- `packages/core/src/signers/SoftwareSigner.js`: real implementations: - `signMusig2Round1` calls `sdk.musig2.aggregateKeys` (binds the nonce to the aggregated x-only pubkey) followed by `sdk.musig2.generateNonce`.
 
 - `packages/core/src/signers/TrezorSigner.js` + `LedgerSigner.js`: three throwing stubs each. Trezor surfaces "hardware MuSig2 is not supported on Trezor, update firmware to use MuSig2 on this device, or use the wallet's software signer." Ledger surfaces the same message tailored to the Ledger Bitcoin app. Classical multisig deferred to Step 22+ with its own clear error per device.
 
@@ -5352,10 +4985,7 @@ Phase 4, Step 20 of 23. Multisig PSBT-QR cosigner round-trip (§22.3 reuses §20
 
 - `packages/core/src/ui/AnimatedQrFrames.jsx`: generic React component that renders an array of strings as animated QR codes at 3 fps per §20.3. Pre-renders the next frame in the background so frame transitions don't flash. Caches data URLs to avoid re-rendering on every interval tick. Reusable: not multisig-specific, anything that wants to display chunked QR (cold-storage PSBT export, large URI shares) can compose with `encodeXcwChunks` to drive frames.
 
-- `packages/core/src/shared/routes/MultisigSigningSession.jsx`: three new view states layered onto the Step 19 tracker:
-  - `tracker` (existing), adds `Round 1, Collect nonces` / `Round 2, Collect signatures` / `Collect signatures` round labels per the §22.3 + §22.4 spec.
-  - `export-qr`: picks the right envelope kind for the current `(scheme, status)` tuple (round-1-nonce request for MuSig2 collecting-nonces; round-2-partial request for MuSig2 collecting-sigs once aggNonce is set; signature request for P2SH/P2WSH; finalized broadcast for terminal). Encodes the envelope, runs it through `encodeXcwChunks`, and renders the chunks via `AnimatedQrFrames`. A `<details>` block surfaces the raw frames as a textarea so wallet-to-wallet copy-paste works while camera scanners are still un-shipped.
-  - `paste-inbox`: accepts pasted XCW chunks (one per line or batch), feeds them through `addChunkToCollector`, and on completion runs `decodeMultisigEnvelope` + dispatches the contribution to `contributeMultisigNonce` / `contributeMultisigSignature` via the existing Step 19 messaging helpers. Frame counter shows progress; resetting the collector starts a new capture.
+- `packages/core/src/shared/routes/MultisigSigningSession.jsx`: three new view states layered onto the Step 19 tracker: - `tracker` (existing), adds `Round 1, Collect nonces` / `Round 2, Collect signatures` / `Collect signatures` round labels per the §22.3 + §22.4 spec. - `export-qr`: picks the right envelope kind for the current `(scheme, status)` tuple (round-1-nonce request for MuSig2 collecting-nonces; round-2-partial request for MuSig2 collecting-sigs once aggNonce is set; signature request for P2SH/P2WSH; finalized broadcast for terminal).
 
 - `packages/core/test/multisig-psbt-qr.smoke.js`: new smoke. Asserts the seven envelope kinds enumerate the full protocol; canonicalized + case-insensitive fingerprint; round-1 / round-2 / classical / finalized builders + their shape guards; encode→XCW chunks→reassemble→decode round-trip for every kind; tampered-envelope detection (fingerprint mismatch when the underlying sessionRef is swapped); envelope-version rejection; `AnimatedQrFrames` export from core/ui; sign-screen route renders both round labels per spec; sign-screen builds outbound envelopes + decodes inbound ones + pipes the contribution through messaging; uri barrel exposes the 9 new helpers; Step 19 helpers still present in all 3 shells. All 82 smokes pass.
 
@@ -5380,14 +5010,7 @@ Phase 4, Step 19 of 23. Multisig-aware sign-round persistence + dual-mode partia
 
 - `packages/core/src/storage/codec.js` + `storage/Vault.js`: new `multisigSigningSessions` collection. New documents include the slot; older documents read it as `[]` via the existing defensive merge in `decodeDocument`. No schema-version bump for the document codec, collection adds at `documentVersion: 1` are forward-compatible.
 
-- `packages/core/src/flows/multisigSigning.js`: eight flow operations:
-  - `startMultisigSigningSession({ vault, walletId, chainId, msgHash, psbtHex?, actionSummary? })`: snapshots the wallet's persisted `MultisigConfig` (scheme + threshold + cosigner pubkey list) onto the new session so the active config can mutate without affecting an in-flight spend. Initial status is `collecting-nonces` for MuSig2 and `collecting-sigs` for P2SH/P2WSH.
-  - `contributeMultisigNonce({ vault, sessionId, pubkey, publicNonceHex })`: round 1 only; rejects duplicate cosigners and wrong-length nonces.
-  - `contributeMultisigSignature({ vault, sessionId, pubkey, signatureHex })`: single round (P2SH/P2WSH) or round 2 partial sig (MuSig2). For P2SH/P2WSH the threshold-meeting contribution auto-flips status to `ready-to-finalize`; for MuSig2 the caller drives the transition explicitly via `aggregateMultisigSession`.
-  - `aggregateMultisigSession({ vault, sdkRegistry, sessionId })`: idempotent two-step transition for MuSig2. When `status='collecting-nonces'` and threshold is met it calls `sdk.musig2.aggregateNonces` and persists `aggNonce` + advances to `'collecting-sigs'`. When `status='collecting-sigs'` and threshold partial sigs are present it calls `sdk.musig2.startSession` + `aggregateSignatures` and persists `aggregatedSchnorrSig` + advances to `'ready-to-finalize'`.
-  - `finalizeMultisigSigningSession({ vault, sessionId, finalizedTxHex, txid? })`: caller-supplied tx hex transition stub; Step 20 supplies real tx bytes once PSBT finalization lands.
-  - `cancelMultisigSigningSession({ vault, sessionId })`: terminal cancel; idempotent for already-terminal records.
-  - `getMultisigSigningSession` / `listMultisigSigningSessions`: reads.
+- `packages/core/src/flows/multisigSigning.js`: eight flow operations: - `startMultisigSigningSession({ vault, walletId, chainId, msgHash, psbtHex?, actionSummary? })`: snapshots the wallet's persisted `MultisigConfig` (scheme + threshold + cosigner pubkey list) onto the new session so the active config can mutate without affecting an in-flight spend.
 
 - `packages/extension/src/background/createBackgroundHost.js`: eight new `multisigSign.*` handlers (start / get / list / cancel / contributeNonce / contributeSignature / aggregate / finalize) wired through the same vault + sdkRegistry deps the Step 17/18 multisig handlers use.
 
@@ -5506,11 +5129,7 @@ Phase 4, Step 14 of 23. Parallel cross-chain composer (§42.8.2). Multi-row draf
 
 ### Added
 
-- `packages/core/src/shared/routes/ParallelComposer.jsx`: §42.8.2 four-stage flow:
-  - **Compose**: `[+ Add action]` button seeds a row with the wallet's first chain and a default JSON params skeleton (`{"VERSION":"0"}`). Each row carries `{chainId, fromAddressId, action, paramsJson, status, txid, error}`. Per-row Edit (in-place fields) and Remove. Action dropdown is hydrated from `messaging.listActions` with a static fallback list when SDK introspection fails. Compose-level validator surfaces row-numbered errors (chain unset / address unset / action unset / invalid JSON / non-object params).
-  - **Review**: counts actions across distinct chains, lists them, surfaces the §42.8.2 spec warning (each action signs and broadcasts independently, failures do NOT roll back successes). Required ack checkbox gates the "Sign all" button.
-  - **Signing**: per-row sign loop. The active row shows a `RowDetail` block (chain / from / action / params) plus `SignCredentials` (HW vs software branch). Software-signed rows reuse a single password entered once at the top of the run; HW-signed rows prompt independently. Per-row status transitions `pending → submitting → success | failed`; failed rows can be retried in place; pending rows after a failure can be skipped. After a row succeeds the composer auto-advances to the next non-success row.
-  - **Done**: lists every row with its final status (✅ broadcast / ⚠ failed / ↷ skipped) and txid where applicable.
+- `packages/core/src/shared/routes/ParallelComposer.jsx`: §42.8.2 four-stage flow: - **Compose**: `[+ Add action]` button seeds a row with the wallet's first chain and a default JSON params skeleton (`{"VERSION":"0"}`).
 - ActionsMenu, new "Parallel cross-chain actions" entry across all three shells.
 - Three App.jsx, new `'parallel-compose'` sub-route. Reachable from the actions menu; Back returns to the menu.
 
@@ -5695,13 +5314,7 @@ Phase 4, Step 4 of 23. DEPLOY authoring form (§42.6). No SDK bump, `sdk.contrac
 - `packages/core/src/flows/contractUtilities.js`: three wrappers over `sdk.contracts.*`: `contractValidate`, `contractCheckCodeSize`, `contractSuggestGasLimit`. Pure; no network. Routed through the messaging layer for consistency with the "UI never imports an SDK directly" discipline.
 - `packages/extension/src/background/createBackgroundHost.js`: `action.deploy` + `action.deploy.hw` (via `registerHwHandler`) + three pure-function passthroughs (`contracts.validate`, `contracts.checkCodeSize`, `contracts.suggestGasLimit`).
 - Three-shell messaging helpers, `deployAction` / `deployActionHw` / `validateContractCode` / `checkContractCodeSize` / `suggestContractGasLimit` in popup + web + desktop `messaging.js`.
-- `packages/core/src/shared/routes/DeployContractForm.jsx`: §42.6 form:
-  - Chain picker (BTC-only; auto-selects first BTC chain with an address).
-  - Name (optional) / Code source (monospace textarea) / Gas limit / Constructor params (optional).
-  - Three action buttons: **Validate code** (acorn parse + size check + float-literal warnings), **Estimate size** (shows byte count + 64KB-limit flag), **Suggest gas** (fills the Gas limit input on first tap if empty).
-  - Review screen: composed summary, chain badge, source address, name, byte count, gas limit, constructor params, validation warnings, `SignCredentials` (password + HW `getSignerStatus` wiring), primary button labelled `Deploy on <chain>` / `Sign on Trezor|Ledger` per source type.
-  - Done screen: post-broadcast txid + Done button.
-  - BTC-only gate: renders a clear "Contracts are BTC-only at launch. Use Receive on a Bitcoin network…" message when the wallet has no BTC address. Mirrors ContractsList's gate.
+- `packages/core/src/shared/routes/DeployContractForm.jsx`: §42.6 form: - Chain picker (BTC-only; auto-selects first BTC chain with an address). - Name (optional) / Code source (monospace textarea) / Gas limit / Constructor params (optional). - Three action buttons: **Validate code** (acorn parse + size check + float-literal warnings), **Estimate size** (shows byte count + 64KB-limit flag), **Suggest gas** (fills the Gas limit input on first tap if empty). - Review screen: composed summary, chain badge, source address, name, byte count, gas limit, constructor params, validation warnings, `SignCredentials` (password + HW `getSignerStatus` wiring), primary button labelled `Deploy on <chain>` / `Sign on Trezor|Ledger` per source type. - Done screen: post-broadcast txid + Done button. - BTC-only gate: renders a clear "Contracts are BTC-only at launch.
 - `packages/core/src/shared/routes/ContractsList.jsx`: gains optional `onDeploy` prop. When the host passes it, renders a primary `+ Deploy new contract` button in the filter-bar row. Hidden when prop omitted.
 - Three-shell App.jsx, new `'contract-deploy'` sub-route. `ContractsList.onDeploy` transitions to it; the form's Back returns to the list.
 
@@ -5717,21 +5330,10 @@ Phase 4, Step 3 of 23. Contract detail page (§42.3). No SDK bump needed, all fi
 
 ### Added
 
-- `packages/core/src/flows/contractDetail.js`: five single-contract read flows:
-  - `contractByActionIndex`: `sdk.getContract(contractActionIndex)` for the header block (owner / deploy block / gas limit / status / code hash).
-  - `actionByIndex`: `sdk.getAction(actionIndex)` for the originating DEPLOY action (carries NAME / CODE_HASH / CONSTRUCTOR_PARAMS that don't live on the contract row).
-  - `contractState`: `sdk.getContractState(idx, key?)`; `key` optional so the page can load the full state map and render it expandable.
-  - `contractBalance`: `sdk.getContractBalance(idx, tick?)`; `tick` optional so the page lists every token the contract holds.
-  - `executionsForContract`: `sdk.getExecutions(contractActionIndex, opts)` for the paginated EXECUTE-history section.
+- `packages/core/src/flows/contractDetail.js`: five single-contract read flows: - `contractByActionIndex`: `sdk.getContract(contractActionIndex)` for the header block (owner / deploy block / gas limit / status / code hash). - `actionByIndex`: `sdk.getAction(actionIndex)` for the originating DEPLOY action (carries NAME / CODE_HASH / CONSTRUCTOR_PARAMS that don't live on the contract row). - `contractState`: `sdk.getContractState(idx, key?)`; `key` optional so the page can load the full state map and render it expandable. - `contractBalance`: `sdk.getContractBalance(idx, tick?)`; `tick` optional so the page lists every token the contract holds. - `executionsForContract`: `sdk.getExecutions(contractActionIndex, opts)` for the paginated EXECUTE-history section.
 - `packages/extension/src/background/createBackgroundHost.js`: registers five new read-only passthroughs (`contracts.byActionIndex`, `actions.byIndex`, `contracts.state`, `contracts.balance`, `executions.forContract`).
 - Three-shell messaging helpers, `getContractByActionIndex` / `getActionByIndex` / `getContractState` / `getContractBalance` / `getExecutionsForContract` in popup + web + desktop `messaging.js`.
-- `packages/core/src/shared/routes/ContractDetail.jsx`: §42.3 page:
-  - Header: `Contract #<idx>, "<NAME>"` + large ChainBadge. Owner / Deployed block / Gas limit / Status / Code hash rendered from the `contracts` table, with NAME / CODE_HASH / GAS_LIMIT falling back to the DEPLOY action when the contract row omits them.
-  - "State (expandable)": loads eagerly but shows a one-line count by default; Expand button renders the full key/value table. Key / value cells monospaced; long values wrap with `word-break: break-all`.
-  - "Balances": per-token table (`Token` / `Amount`).
-  - "Execution history": paginated list (Prev / Next) via `executionsForContract({ opts: { page } })`; pagination heuristic handles both total-known and total-unknown response shapes.
-  - Action buttons: `Call method` / `Deposit` / `Withdraw`. Each accepts an optional `onExecute / onDeposit / onWithdraw` prop, when omitted the button renders disabled and a one-line descriptor explains the forms land in upcoming Phase 4 steps. Keeps the detail page complete in Step 3 without a half-baked signing path.
-  - "(you)" suffix next to Owner when the contract's source address matches one of the wallet's addresses on this chain (via `getAddressesByChain`).
+- `packages/core/src/shared/routes/ContractDetail.jsx`: §42.3 page: - Header: `Contract #<idx>, "<NAME>"` + large ChainBadge.
 - Three-shell App.jsx, new `'contract-detail'` sub-route, `contractRef` state `{ chainId, contractActionIndex }`. `ContractsList.onOpenContract` now sets `contractRef` and transitions. ContractDetail's Back returns to the list.
 
 ### Notes
@@ -5745,17 +5347,10 @@ Phase 4, Step 2 of 23. Contracts nav item + browse landing (§42.2). Bumps the p
 
 ### Added
 
-- `packages/core/src/flows/contractQueries.js`: five read-only flows scoped to a single chain + sdkRegistry:
-  - `contractsForSource({ sdkRegistry, chainId, address, opts? })`: contracts the address deployed, backs "My contracts".
-  - `contractsForAddress(…)`: the broader "source OR contract address" lane, preserved for future surfaces.
-  - `contractsBrowseAll({ sdkRegistry, chainId, opts? })`: paginated all-contracts list for the "Browse all" section.
-  - `depositsForAddress(…)` / `withdrawalsForAddress(…)`: backing "My interactions" via client-side union + dedupe by CONTRACT_ACTION_INDEX.
+- `packages/core/src/flows/contractQueries.js`: five read-only flows scoped to a single chain + sdkRegistry: - `contractsForSource({ sdkRegistry, chainId, address, opts? })`: contracts the address deployed, backs "My contracts". - `contractsForAddress(…)`: the broader "source OR contract address" lane, preserved for future surfaces. - `contractsBrowseAll({ sdkRegistry, chainId, opts? })`: paginated all-contracts list for the "Browse all" section. - `depositsForAddress(…)` / `withdrawalsForAddress(…)`: backing "My interactions" via client-side union + dedupe by CONTRACT_ACTION_INDEX.
 - `packages/extension/src/background/createBackgroundHost.js`: registers five explorer passthroughs (`contracts.forSource` / `contracts.forAddress` / `contracts.browseAll` / `deposits.forAddress` / `withdrawals.forAddress`).
 - Three-shell messaging helpers, `getContractsForSource` / `getContractsForAddress` / `getContractsBrowseAll` / `getDepositsForAddress` / `getWithdrawalsForAddress` in popup / web / desktop `messaging.js`.
-- `packages/core/src/shared/routes/ContractsList.jsx`: the §42.2 landing surface. Header + back, BTC-only chain-filter bar (mainnet/testnet/regtest appear when the wallet has an address on them), client-side name/action_index search, three sections:
-  - **My contracts (deployed by me)**, fan-out `contractsForSource` over every BTC address, merge, dedupe, newest-first.
-  - **My interactions (deposits / withdrawals)**, union of deposits + withdrawals on each BTC address, grouped by CONTRACT_ACTION_INDEX, with the set of interaction kinds (`deposit` / `withdraw`) and the most recent block. EXECUTE-only interactions (method calls with no deposit) are not yet listed, documented limitation (the SDK's `getExecutions` is contract-scoped today; that lane lives on the contract detail page in Step 3).
-  - **Browse all contracts**, `contractsBrowseAll` per active chain.
+- `packages/core/src/shared/routes/ContractsList.jsx`: the §42.2 landing surface.
 - `packages/core/src/shared/hooks/useBtcAddressesPresent.js`: shared hook that resolves once the wallet's addresses load and returns `true | false | null` depending on whether any BTC-family chain has at least one address. Used to gate the Contracts nav entry.
 - `packages/core/src/shared/routes/Home.jsx`: new `onContracts` prop + button (variant="secondary"). Rendered only when the prop is passed; the three shell App.jsx files pass it only when `activeWalletId && hasBtcAddress` resolves true.
 - Three-shell App.jsx, new `'contracts-list'` sub-route; `useBtcAddressesPresent(activeWalletId)` drives conditional prop-passing; `onOpenContract` placeholder in the route handler leaves a no-op for Step 3 to wire the detail page.
@@ -5946,11 +5541,7 @@ HW Sign follow-up slice 4 of 4, HW branches for the remaining multi-stage action
 
 ### Changed
 
-- `packages/core/test/hw-sign-e2e.smoke.js`: extended with slice-4 assertions:
-  - `DispenserForm` + `DispenserDetail` + `AirdropForm` each import `SignCredentials` + `isHwSource`, route through the appropriate `*Hw` messaging variant, and gate submit on HW status.
-  - Desktop `renderer/signerBridge.js` + `main/signerBridgeListener.js` exist and export the expected symbols.
-  - Desktop `preload.js` exposes `xchainWalletSignerBridge` with `postMessage` + `onMessage`.
-  - Desktop `main/index.js` attaches the listener; `renderer/App.jsx` threads `registerLocalSigner` into `PairSignerForm`.
+- `packages/core/test/hw-sign-e2e.smoke.js`: extended with slice-4 assertions: - `DispenserForm` + `DispenserDetail` + `AirdropForm` each import `SignCredentials` + `isHwSource`, route through the appropriate `*Hw` messaging variant, and gate submit on HW status. - Desktop `renderer/signerBridge.js` + `main/signerBridgeListener.js` exist and export the expected symbols. - Desktop `preload.js` exposes `xchainWalletSignerBridge` with `postMessage` + `onMessage`. - Desktop `main/index.js` attaches the listener; `renderer/App.jsx` threads `registerLocalSigner` into `PairSignerForm`.
 - Smoke count: 49 (+1: `desktop-signer-bridge.smoke.js`). 49/49 green.
 
 ### Deferred
@@ -5985,14 +5576,7 @@ HW Sign follow-up slices 2–3, renderer↔background port RPC (extension + web)
 ### Changed
 
 - `packages/core/src/signers/index.js`: re-exports `bindRendererPortBridge` + `createBackgroundTransport`.
-- `packages/core/test/hw-sign-e2e.smoke.js`: extended to cover the new wiring:
-  - All **10** `.hw` handlers are registered via `registerHwHandler` (not the old per-handler `host.register` pattern).
-  - Core `signerPortProtocol` module exists + exports the two symbols.
-  - Popup `signerBridge.js` exists, opens `chrome.runtime.connect` with the agreed port name, imports the core binder.
-  - Background `signerBridgeListener.js` exists, filters on port name, calls `signerBridge.setTransport` on register and `clearTransport` on disconnect, wraps via `createBackgroundTransport`.
-  - Background entrypoint calls `attachSignerBridgeListener()` at startup.
-  - `PairSignerForm` threads the live signer through `onSignerPaired`.
-  - Popup App imports + passes `onSignerPaired={registerLocalSigner}`.
+- `packages/core/test/hw-sign-e2e.smoke.js`: extended to cover the new wiring: - All **10** `.hw` handlers are registered via `registerHwHandler` (not the old per-handler `host.register` pattern). - Core `signerPortProtocol` module exists + exports the two symbols. - Popup `signerBridge.js` exists, opens `chrome.runtime.connect` with the agreed port name, imports the core binder. - Background `signerBridgeListener.js` exists, filters on port name, calls `signerBridge.setTransport` on register and `clearTransport` on disconnect, wraps via `createBackgroundTransport`. - Background entrypoint calls `attachSignerBridgeListener()` at startup. - `PairSignerForm` threads the live signer through `onSignerPaired`. - Popup App imports + passes `onSignerPaired={registerLocalSigner}`.
 - Smoke count: 49 (+1: `signer-port-protocol.smoke.js`). 49/49 green.
 
 ### Deferred (slice 4, next session)
@@ -6028,20 +5612,14 @@ Module-scoped registry keyed by `signerId` → `RemoteSigner` transport function
 
 **UI, Send.jsx HW branch**
 
-- Detects HW source via `fromAddress.source === 'trezor' || fromAddress.source === 'ledger'`, flips the review/sign screen between two layouts:
-  - **Software**: existing password `<Input>`.
-  - **Hardware**: `<HwSignBlock>` rendering §18.5 `DerivationPathCrossCheck` + live device-status banner. `getStatus` is wired to `messaging.getSignerStatus({ signerId, chainId })`; `onStatusChange` exposes live state to the form so the Submit button gates on `hwStatus === 'available'`.
+- Detects HW source via `fromAddress.source === 'trezor' || fromAddress.source === 'ledger'`, flips the review/sign screen between two layouts: - **Software**: existing password `<Input>`. - **Hardware**: `<HwSignBlock>` rendering §18.5 `DerivationPathCrossCheck` + live device-status banner.
 - Submit button copy flips to `"Sign on Trezor"` / `"Sign on Ledger"` in the HW branch; disabled until the device reports ready.
 - Submit handler branches: software → `messaging.sendAsset({ ..., password })`; HW → `messaging.sendAssetHw({ ..., signerId })`. Error surface unified (HW path doesn't have a password field to refocus).
 - `source` + `signerId` are now forwarded in the `from` payload so the background can resolve the SignerRecord.
 
 ### Changed
 
-- `packages/core/test/hw-sign-e2e.smoke.js`: extended to cover the new wiring:
-  - signerBridge module: live registry round-trip (set/get/clear), `registeredIds()` shape, guard-rails on bad input.
-  - createBackgroundHost: both handlers registered, `resolveSigner` + `buildRemoteSigner` imported, bridge lookup call, "Hardware signer is not connected" error present.
-  - Each of popup / web / desktop messaging: `sendAssetHw` + `getSignerStatus` exports, correct routing types.
-  - Send.jsx static checks: HwSignBlock import, `isHwSource` branch, call-sites, device-aware button copy, status-gated disable.
+- `packages/core/test/hw-sign-e2e.smoke.js`: extended to cover the new wiring: - signerBridge module: live registry round-trip (set/get/clear), `registeredIds()` shape, guard-rails on bad input. - createBackgroundHost: both handlers registered, `resolveSigner` + `buildRemoteSigner` imported, bridge lookup call, "Hardware signer is not connected" error present. - Each of popup / web / desktop messaging: `sendAssetHw` + `getSignerStatus` exports, correct routing types. - Send.jsx static checks: HwSignBlock import, `isHwSource` branch, call-sites, device-aware button copy, status-gated disable.
 - Smoke count holds at 47 (all new assertions land in the existing `hw-sign-e2e.smoke.js`).
 
 ### Developer notes
@@ -6338,13 +5916,8 @@ Phase 2, Step 22b of 26, piece 7b part 2. Buyer-facing half of Dispensers (§40.
 
 **Shared routes**
 
-- `packages/core/src/shared/routes/DispenserExplorer.jsx`: browse surface for finding dispensers. Two search modes:
-  - **By token**, routes through `messaging.getDispensersForToken` (matches both `GIVE_TICK` and `GET_TICK`). Token input is regex-validated (A–Z, 0–9, period, or `^TICK_ID` reference).
-  - **By address**, routes through `messaging.getDispensersForAddress` (matches both source and dispenser address).
-  - Chain filter: single-chain or "All chains" with per-chain parallel fan-out. Per-chain errors surface inline so one outage doesn't block others. Row click → host's `onOpenDispenser(chainId, actionIndex)` navigates to detail.
-- `packages/core/src/shared/routes/DispenserDetail.jsx`: new buyer surfaces under the existing detail page (owner-only sections unchanged):
-  - **Token-paid lane** (`GET_TICK` set, buyer pays XChain token): new "Buy from this dispenser" section with payer-address picker (HD external addresses on the dispenser's chain), integer `fills` input (multi-fill purchase), and a "Buy N fills" button that opens a review stage → password prompt → `messaging.sendAsset` with `asset = GET_TICK`, `amount = GET_AMOUNT × fills`, `to = <dispenser address>`. Review surfaces per-fill price + per-fill give, dispenser address, chain badge, plus a hint about UTXO-chain buy races ("if the dispenser closes or runs out before confirmation, the payment reaches the creator but no TICK is released"). Danger-aware wording without blocking the flow. Wrong-password errors re-prompt.
-  - **Coin-paid lane** (`GET_COIN` set, `GET_TICK` empty, buyer pays native coin): "Pay to buy" panel with dispenser address, exact trigger amount, copy-to-clipboard helpers, and a note that "any {COIN} wallet can trigger a fill" + "Native-coin sending from this wallet is on the roadmap." This lane defers a full buy flow because native-coin sends from the XChain wallet require bare-transaction infrastructure the wallet doesn't have yet (no OP_RETURN, direct UTXO-to-output PSBT via the SDK's wallet module or bitcoinjs-lib), tracked for a future step.
+- `packages/core/src/shared/routes/DispenserExplorer.jsx`: browse surface for finding dispensers.
+- `packages/core/src/shared/routes/DispenserDetail.jsx`: new buyer surfaces under the existing detail page (owner-only sections unchanged): - **Token-paid lane** (`GET_TICK` set, buyer pays XChain token): new "Buy from this dispenser" section with payer-address picker (HD external addresses on the dispenser's chain), integer `fills` input (multi-fill purchase), and a "Buy N fills" button that opens a review stage → password prompt → `messaging.sendAsset` with `asset = GET_TICK`, `amount = GET_AMOUNT × fills`, `to = <dispenser address>`.
 
 **ActionsMenu + App routing**
 
@@ -6353,13 +5926,7 @@ Phase 2, Step 22b of 26, piece 7b part 2. Buyer-facing half of Dispensers (§40.
 
 ### Smoke
 
-- `packages/core/test/dispenser-explorer.smoke.js`: new. Covers:
-  - Single-component export, search-mode toggle, chain-filter wiring + empty-state wording.
-  - Token-regex validation.
-  - Per-chain parallel fan-out on "All chains".
-  - Routing of token vs address searches to the right messaging helper.
-  - DispenserDetail's new buyer surfaces: `isTokenPaid` / `isCoinPaid` lane detection, buy-flow state, sendAsset composition (asset = GET_TICK, amount scaled by fills, target = dispenser address), multi-fill support, UTXO-race warning copy, pay-here copy-to-clipboard helpers, ownership-gated visibility.
-  - ActionsMenu "Browse dispensers" entry + explorer sub-route + origin-tagged list-vs-explorer nav across popup / web / desktop.
+- `packages/core/test/dispenser-explorer.smoke.js`: new.
 - `packages/core/test/dispensers-list.smoke.js`: updated the `setDispenserRef` assertion to expect the new `origin` field.
 
 41/41 smokes green.
@@ -6406,14 +5973,7 @@ Phase 2, Step 22a of 26, piece 7b part 1. Owner-facing half of Dispensers (§40.
 
 ### Smoke
 
-- `packages/core/test/dispensers-list.smoke.js`: new.
-  - File layout + single-export shape for both shared routes.
-  - List's messaging wiring (`getDispensersForSource` per address), dedupe-by-action-index, newest-block-first sort, empty / error states.
-  - Detail's load sequence (dispenser fetch + address fetch in parallel), owner-detection state, recent-dispenses fetch, cancel composer (`VERSION: '1'`, DISPENSER_ACTION_INDEX from props), danger-variant sign button, close-window advisory, wrong-password handling.
-  - Flow guards (sdkRegistry / chainId / address / actionIndex / type required).
-  - Positive-path test: `dispensersForSource` invokes `sdk.getDispensers(address, 'source', opts)` with expected args against a fake SDK.
-  - Five background handlers registered; all three shells export the five messaging helpers.
-  - ActionsMenu "My dispensers" entry + App.jsx `'dispensers-list'` / `'dispenser-detail'` sub-routes + `setDispenserRef({ chainId, actionIndex })` nav transition in popup / web / desktop.
+- `packages/core/test/dispensers-list.smoke.js`: new. - File layout + single-export shape for both shared routes. - List's messaging wiring (`getDispensersForSource` per address), dedupe-by-action-index, newest-block-first sort, empty / error states. - Detail's load sequence (dispenser fetch + address fetch in parallel), owner-detection state, recent-dispenses fetch, cancel composer (`VERSION: '1'`, DISPENSER_ACTION_INDEX from props), danger-variant sign button, close-window advisory, wrong-password handling. - Flow guards (sdkRegistry / chainId / address / actionIndex / type required). - Positive-path test: `dispensersForSource` invokes `sdk.getDispensers(address, 'source', opts)` with expected args against a fake SDK. - Five background handlers registered; all three shells export the five messaging helpers. - ActionsMenu "My dispensers" entry + App.jsx `'dispensers-list'` / `'dispenser-detail'` sub-routes + `setDispenserRef({ chainId, actionIndex })` nav transition in popup / web / desktop.
 
 40/40 smokes green.
 
@@ -6441,10 +6001,7 @@ Phase 2, Step 21 of 26, piece 7a. DISPENSER authoring form (§40.7.1). First hal
 
 **Decoder** (`packages/core/src/decoder/actionDecoder.js`)
 
-- New `decodeDispenser` case with three version-specific summaries:
-  - v0 create: `"Create dispenser on X: lock N TICK, give M TICK per <price>"`. Price string adapts to coin-paid / validator-FIAT / user-oracle lanes.
-  - v1 cancel: `"Cancel dispenser on X (#INDEX)"` + 1-hour-close warning.
-  - v2 edit: `"Edit dispenser on X (#INDEX)"` + list-delay warning.
+- New `decodeDispenser` case with three version-specific summaries: - v0 create: `"Create dispenser on X: lock N TICK, give M TICK per <price>"`.
 - Decoder emits diagnostic warnings: non-positive give/escrow, escrow < give, ambiguous payment (neither GET_TICK nor GET_COIN), oracle set without FIAT_CODE, pipe/semicolon in MEMO.
 
 **Shared form route** (`packages/core/src/shared/routes/DispenserForm.jsx`)
@@ -6469,12 +6026,7 @@ Phase 2, Step 21 of 26, piece 7a. DISPENSER authoring form (§40.7.1). First hal
 
 ### Smoke
 
-- `packages/core/test/dispenser-form.smoke.js`: new.
-  - File layout, three-stage machine, decoder wiring with `action: 'DISPENSER'`.
-  - Params composer: VERSION pinned, GIVE_COIN/GET_COIN populated from chain, `GET_TICK` left unset (coin-paid lane), ORACLE_ADDRESS + FIAT fields only set when user provides them.
-  - Flow guards: opts / params / GIVE_TICK / GIVE_AMOUNT / GET_AMOUNT / GET_TICK-or-GET_COIN / DISPENSER_ACTION_INDEX-requires-v1-or-v2 / from.
-  - Decoder coverage for v0 coin-paid, v0 escrow < give warning, v0 oracle-without-FIAT_CODE warning, v1 cancel, v2 edit, MEMO pipe/semicolon warn.
-  - `messaging.dispenserAction` on all three shells; `action.dispenser` handler; ActionsMenu + App.jsx wiring in popup + web + desktop.
+- `packages/core/test/dispenser-form.smoke.js`: new. - File layout, three-stage machine, decoder wiring with `action: 'DISPENSER'`. - Params composer: VERSION pinned, GIVE_COIN/GET_COIN populated from chain, `GET_TICK` left unset (coin-paid lane), ORACLE_ADDRESS + FIAT fields only set when user provides them. - Flow guards: opts / params / GIVE_TICK / GIVE_AMOUNT / GET_AMOUNT / GET_TICK-or-GET_COIN / DISPENSER_ACTION_INDEX-requires-v1-or-v2 / from. - Decoder coverage for v0 coin-paid, v0 escrow < give warning, v0 oracle-without-FIAT_CODE warning, v1 cancel, v2 edit, MEMO pipe/semicolon warn. - `messaging.dispenserAction` on all three shells; `action.dispenser` handler; ActionsMenu + App.jsx wiring in popup + web + desktop.
 - `packages/core/test/action-decoder.smoke.js`: swapped the fallback-case check from DISPENSER (now decoded) to DIVIDEND (still generic).
 
 39/39 smokes green.
@@ -6499,11 +6051,7 @@ Phase 2, Step 20 of 26, piece 6. BROADCAST authoring form (§40.6). First Batch-
 
 **Decoder** (`packages/core/src/decoder/actionDecoder.js`)
 
-- New `decodeBroadcast` case covering all four protocol format versions:
-  - v0 plain message, summary quotes the text; warns on empty MESSAGE.
-  - v1 oracle, summary includes the value + feed label; surfaces "Feed fee" as a percentage.
-  - v2 feed, summary includes the feed identifier; surfaces "Feed fee".
-  - v3 feed results, summary announces the publish + feed index.
+- New `decodeBroadcast` case covering all four protocol format versions: - v0 plain message, summary quotes the text; warns on empty MESSAGE. - v1 oracle, summary includes the value + feed label; surfaces "Feed fee" as a percentage. - v2 feed, summary includes the feed identifier; surfaces "Feed fee". - v3 feed results, summary announces the publish + feed index.
 - Warns on `|` / `;` in MESSAGE or MEMO so users see the protocol-level rejection risk before signing.
 
 **Shared form route** (`packages/core/src/shared/routes/BroadcastForm.jsx`)
@@ -6530,13 +6078,7 @@ Phase 2, Step 20 of 26, piece 6. BROADCAST authoring form (§40.6). First Batch-
 
 ### Smoke
 
-- `packages/core/test/broadcast-form.smoke.js`: new.
-  - File layout + export shape + CSS reuse.
-  - Three-stage state machine, decoder wiring with `action: 'BROADCAST'`, params composer correctness (MESSAGE/VALUE/FEE/MEMO conditional setting + timestamp injection).
-  - `messaging.broadcastAction` exported from all three shells; action.broadcast handler registered.
-  - Core flow validation guards (`opts`, `params`, `MESSAGE or BROADCAST_ACTION_INDEX`, `from`).
-  - Decoder coverage for all four format versions, including the pipe/semicolon warning.
-  - ActionsMenu + App.jsx wiring in popup + web + desktop.
+- `packages/core/test/broadcast-form.smoke.js`: new. - File layout + export shape + CSS reuse. - Three-stage state machine, decoder wiring with `action: 'BROADCAST'`, params composer correctness (MESSAGE/VALUE/FEE/MEMO conditional setting + timestamp injection). - `messaging.broadcastAction` exported from all three shells; action.broadcast handler registered. - Core flow validation guards (`opts`, `params`, `MESSAGE or BROADCAST_ACTION_INDEX`, `from`). - Decoder coverage for all four format versions, including the pipe/semicolon warning. - ActionsMenu + App.jsx wiring in popup + web + desktop.
 
 All 38 smokes green.
 
@@ -6553,14 +6095,7 @@ Phase 2, Step 19 of 26, piece 5d. Electron-builder packaging pipeline for the de
 
 **Packaging config + build resources** (`packages/desktop/`)
 
-- `electron-builder.config.cjs`: single source of truth for packaging across Windows / macOS / Linux.
-  - `appId = io.xchain.wallet`, `productName = XChain Wallet`, `asar: true`, `npmRebuild: false`, `buildDependenciesFromSource: false` (reproducibility-critical flags).
-  - `mac`: hardened-runtime + entitlements at `build/entitlements.mac.plist`, `identity: CSC_IDENTITY_NAME ?? null` (unsigned dev builds work without certs), notarization gated on `APPLE_API_KEY_ID`, targets: dmg + zip (x64 + arm64).
-  - `win`: publisher = "Dankest, LLC", SHA256 signing, RFC 3161 timestamp server pinned (signatures survive cert expiry), targets: nsis + zip (x64 + arm64).
-  - `linux`: maintainer + synopsis + description set, targets: AppImage + deb (x64 + arm64), xz compression on deb.
-  - `protocols` declares all four schemes (`xchain`, `bitcoin`, `litecoin`, `dogecoin`) at install time so the OS knows we CAN handle them, runtime claim is gated in `main/protocol.js`.
-  - `publish`: electron-updater generic provider at `https://downloads.xchain.io/wallet/desktop/`.
-  - `extraMetadata.buildDate` derived from `SOURCE_DATE_EPOCH` (set by reproduce.sh to the HEAD commit's author date).
+- `electron-builder.config.cjs`: single source of truth for packaging across Windows / macOS / Linux. - `appId = io.xchain.wallet`, `productName = XChain Wallet`, `asar: true`, `npmRebuild: false`, `buildDependenciesFromSource: false` (reproducibility-critical flags). - `mac`: hardened-runtime + entitlements at `build/entitlements.mac.plist`, `identity: CSC_IDENTITY_NAME ?? null` (unsigned dev builds work without certs), notarization gated on `APPLE_API_KEY_ID`, targets: dmg + zip (x64 + arm64). - `win`: publisher = "Dankest, LLC", SHA256 signing, RFC 3161 timestamp server pinned (signatures survive cert expiry), targets: nsis + zip (x64 + arm64). - `linux`: maintainer + synopsis + description set, targets: AppImage + deb (x64 + arm64), xz compression on deb. - `protocols` declares all four schemes (`xchain`, `bitcoin`, `litecoin`, `dogecoin`) at install time so the OS knows we CAN handle them, runtime claim is gated in `main/protocol.js`. - `publish`: electron-updater generic provider at `https://downloads.xchain.io/wallet/desktop/`. - `extraMetadata.buildDate` derived from `SOURCE_DATE_EPOCH` (set by reproduce.sh to the HEAD commit's author date).
 - `vite.config.js`: renderer build config. Deterministic chunk / asset filenames; source maps off; `assetsInlineLimit: 0` to prevent small-file inlining variance; output into `renderer/dist/`.
 - `build/entitlements.mac.plist`: macOS hardened-runtime entitlements. `com.apple.security.device.usb` (required for WebHID ↔ Ledger), `com.apple.security.network.client` (xchain-sdk + Trezor Connect iframe + electron-updater); JIT / unsigned-executable disabled.
 - `build/README.md`: placeholder for `icon.png` / `icon.icns` / `icon.ico` (not yet committed, icon design is an open task).
@@ -6601,19 +6136,7 @@ Phase 2, Step 19 of 26, piece 5d. Electron-builder packaging pipeline for the de
 
 ### Smoke + docs
 
-- `packages/core/test/desktop-packaging.smoke.js`: new. Exercises:
-  - File layout + electron-builder config structure + deterministic flags (asar, npmRebuild, buildDependenciesFromSource).
-  - All four schemes declared in `protocols`.
-  - mac / win / linux target shapes; `identity: null` when CSC_IDENTITY_NAME unset; Windows RFC 3161 timestamp server pinned.
-  - `publish` uses electron-updater generic provider pointing at `downloads.xchain.io` over HTTPS.
-  - Protocol module: Tier 1 + Tier 2 constants; `registerProtocolClients` claims + removes correctly based on opt-in list; `classifyDeepLink` handles `xchain:`, coin URIs, malformed BIP21, junk input; `attachDeepLinkHandlers` validates its callback.
-  - Updater module: dev-mode short-circuit, prod-mode event forwarding for all seven event types, `autoDownload` forced off, input validation.
-  - `main/index.js` wires `registerProtocolClients` + `attachDeepLinkHandlers` + `attachUpdater` + single-instance lock + loads `renderer/dist/index.html`.
-  - Dockerfile pins base-image digest + Node SHA256 + takes pnpm version as build-arg + runs as non-root.
-  - `build.sh` / `reproduce.sh`: strict mode, `SOURCE_DATE_EPOCH` required, `--frozen-lockfile`, SHA256 manifest emission, `git worktree` isolation, `--user $(id -u):$(id -g)` mapping.
-  - Scripts are executable.
-  - CSP allowlists only `connect.trezor.io` for `frame-src`.
-  - `Reproducible_Builds.md` sections present.
+- `packages/core/test/desktop-packaging.smoke.js`: new.
 - `packages/desktop/Reproducible_Builds.md`: end-to-end verifier docs.
 
 ### Changed
@@ -6679,14 +6202,7 @@ Phase 2, Step 18 of 26, piece 5c. Hardware signer pairing goes live on the Elect
 
 ### Smoke + docs
 
-- `packages/core/test/hw-factories.smoke.js`: new. Exercises:
-  - Core builders exist + import no `@trezor/*` / `@ledgerhq/*` (comments stripped before the regex to let the JSDoc examples mention the SDK names without tripping the check).
-  - `makeTrezorFactory` validates deps, success path returns `{ signer, pairingInfo }` with the right shape against a mock Connect, failure paths (user cancellation, malformed Connect) surface clear errors.
-  - `makeLedgerFactory` same end-to-end: success path returns a `LedgerSigner` + pairingInfo with a deterministically-derived `deviceIdentifier`, failure paths (null transport, non-constructor Btc, Bitcoin app closed) surface clear errors.
-  - Desktop renderer factories exist, import the core builder via cross-package relative path, and lazy-import the HW SDKs.
-  - `packages/desktop/package.json` declares HW deps at extension-parity versions (drift guard: assertion diffs against extension/package.json).
-  - `renderer/App.jsx` wires the real factories into PairSignerForm and no longer passes `undefined`.
-  - Main-process permission handlers: vendor allowlist covers Ledger + both Trezor models; allows `hid` / denies other permissions; device handler filters on `deviceType === 'hid'` and whitelisted vendorId; rejects null session; invoked from main/index.js on `app.whenReady`.
+- `packages/core/test/hw-factories.smoke.js`: new.
 - `packages/core/test/trezor-signer.smoke.js`: updated. New assertions verify the core builder file exists, exports `makeTrezorFactory`, and contains no `@trezor/connect-web` imports (real code, with comments stripped). Extension factory asserts it delegates via `makeTrezorFactory` + imports core through the cross-package relative path `../../../core/src/signerFactories/index.js`. Retains all Step-13 behavioural assertions (mock Connect round-trip, deviceIdentifier / model / firmwareVersion helpers).
 - `packages/core/test/ledger-signer.smoke.js`: parallel updates for the Ledger factory migration.
 - `packages/core/test/desktop-shell.smoke.js`: the Step 16 "renderer App passes `undefined` HW factories (deferred to Step 18)" assertion flipped to "renderer App wires real `pairTrezorSigner` + `pairLedgerSigner` factories". Description + success line updated accordingly.
@@ -6716,30 +6232,18 @@ Phase 2, Step 17 of 26, piece 5b. OS keychain integration for the Electron deskt
 
 **Extension + core refactor**
 
-- `packages/extension/src/background/sessionMeta.js`: exported two new shell-agnostic helpers alongside the existing `attachSessionMetaListener`:
-  - `dispatchPreHost(type, request, { storageBackend, sessionBackend, metaBackend, chainRegistry, sdkRegistry, onUnlocked, onLocked })`: the same handler dispatch the extension's chrome.runtime listener uses, now parameterized on the backend trio so desktop can wire a file/keychain backend set. Throws `Error` for unknown types.
-  - `handleSessionStatus({ storageBackend, sessionBackend })`: refactored to take the backends as deps instead of instantiating `ChromeStorageBackend` / `ChromeSessionBackend` itself.
+- `packages/extension/src/background/sessionMeta.js`: exported two new shell-agnostic helpers alongside the existing `attachSessionMetaListener`: - `dispatchPreHost(type, request, { storageBackend, sessionBackend, metaBackend, chainRegistry, sdkRegistry, onUnlocked, onLocked })`: the same handler dispatch the extension's chrome.runtime listener uses, now parameterized on the backend trio so desktop can wire a file/keychain backend set.
 - `packages/extension/src/background/index.js`: re-exports `dispatchPreHost`, `handleSessionStatus`, and `PRE_HOST_MESSAGE_TYPES` alongside `attachSessionMetaListener`.
 
 **Main-process rewire** (`packages/desktop/main/index.js`)
 
-- Replaced the Step 16 scaffold's placeholder master-key wiring with the real three-backend pipeline. `app.whenReady` now:
-  1. Builds the runtime against `FileStorageBackend` (vault) + `FileMetaBackend` (kdfParams) + `KeychainSessionBackend` (master key).
-  2. Calls `ensureHost(runtime)`: best-effort auto-unlock. Success → vault opens, MessageHost comes up, renderer sees `state: 'unlocked'` on first `session.status`. Failure (no cached key, keychain unavailable, or cached key doesn't decrypt the vault, stale after a wallet reset) → stays locked; renderer drives `wallet.unlock` through the pre-host listener.
-  3. Registers `ipcMain.handle(IPC_CHANNEL, …)` that delegates to `handleIpcMessage`.
+- Replaced the Step 16 scaffold's placeholder master-key wiring with the real three-backend pipeline.
 - SDK factory swapped from the `getSdk / has / listChainIds` stub to a real `sdkLib.SDKRegistry` wrapping `createDevMockSdk`: same pattern the extension service worker and web hostBridge use, so onboarding flows actually reach the vault (the Step 16 stub didn't expose `.get(chainId)` and `wallet.create` would `TypeError`).
 - `app.on('before-quit')` zeros the master key + closes the vault via `tearDownHost(runtime)`; the keychain ciphertext stays on disk so the next launch can auto-unlock.
 
 ### Smoke + docs
 
-- `packages/core/test/desktop-keychain.smoke.js`: new, exercises the full Step 17 surface:
-  - `KeychainSessionBackend` round-trip through a mock safeStorage (XOR scramble, not cryptographic, tests fidelity, not security). Ciphertext on disk is NOT equal to plaintext. `clear` removes the file + zeros the in-memory slot.
-  - `isAvailable()` returns false when `isEncryptionAvailable()` is false; false when the backend is `basic_text`. `save` is a no-op (no file created) in the unavailable case but keeps the key in-memory for the current session.
-  - `load()` returns `null` (not throws) on decrypt failure, simulates OS logout / keychain reset via a second backend instance with a failing `decryptString`.
-  - `FileMetaBackend` round-trip: save + load preserves object shape, clear removes the file.
-  - End-to-end runtime lifecycle with real crypto + mock keychain: fresh runtime → `state: 'no-wallet'` → `wallet.create` onboarding (onUnlocked fires, host is built, session.bin persisted, post-host `wallet.list` returns the created wallet) → "restart" (drop runtime, build a new one against the same userData) auto-unlocks via the keychain without a password prompt → `wallet.lock` clears session.bin + returns `WalletLockedError` for subsequent post-host messages → wrong-password `wallet.unlock` returns `InvalidPasswordError` with no session written → right password rebuilds the host + re-persists the session.
-  - Keychain-unavailable path: onboarding succeeds but session.bin is NOT written; restart sees `state: 'locked'` and requires a password prompt. No insecure cache, as designed.
-  - Static wiring: `main/index.js` imports `keychain.js`, `meta.js`, `runtime.js`; references `safeStorage` and `ensureHost(runtime)`; `runtime.js` routes via `dispatchPreHost` + gates on `PRE_HOST_MESSAGE_TYPES` + returns `WalletLockedError`; `keychain.js` checks `isEncryptionAvailable` + refuses `basic_text`.
+- `packages/core/test/desktop-keychain.smoke.js`: new, exercises the full Step 17 surface: - `KeychainSessionBackend` round-trip through a mock safeStorage (XOR scramble, not cryptographic, tests fidelity, not security).
 
 ### Changed
 
@@ -6851,13 +6355,7 @@ Phase 2, Steps 13–15 of 26, pieces 4b + 4c + 4d. Closes out **Piece 4 (Hardwar
 **Piece 4d / Step 15, Signer selection UI + view-key UI (§17.6, §17.7)**
 
 - `packages/core/src/shared/routes/PairSignerForm.jsx` + `.module.css`. Four-stage flow: vendor picker (Trezor / Ledger) → pairing (shell-supplied factory runs) → confirm (device info + firmware verdict + label input) → saving (messaging.registerSigner) → done. The factories are injected as props (`pairTrezor`, `pairLedger`) so the shared route stays shell-agnostic. Firmware verdict (from `checkFirmware`) gates the save button: `'unsupported'` firmware changes the button to "Update firmware first" and disables save.
-- `packages/core/src/shared/routes/ViewPrivateKey.jsx` + `.module.css`. Implements §17.7's reveal ceremony end-to-end:
-    - Warning screen before any password prompt.
-    - Password re-entry required every time, even when the wallet is already unlocked (§17.7.3).
-    - Tap-to-reveal WIF; auto-hide on `window.blur`; Hide button always visible.
-    - Clipboard auto-clear after 60 seconds.
-    - `classifySource(address)` routes HW + watch-only addresses to informational panels (no password prompt, no fake reveal) per §17.7.2.
-    - QR rendering via a `renderQR({ value })` render-prop so the `qrcode` dep stays in shell packages.
+- `packages/core/src/shared/routes/ViewPrivateKey.jsx` + `.module.css`.
 - `packages/core/src/flows/exportPrivateKey.js`: existed since Pass 2; this step wires it into the messaging surface. Background host registers `wallet.exportPrivateKey`; `messaging.exportPrivateKey(opts)` exported from both popup + web.
 - `packages/extension/src/popup/App.jsx` + `packages/web/src/App.jsx`: new `'pair-signer'` sub-route; factories imported from each shell's `signers/*Factory.js` and passed into `<PairSignerForm>`. `buildActionEntries` grows a seventh "Pair hardware signer" entry in the Actions menu.
 - New smoke: `packages/core/test/signer-ui.smoke.js`. Asserts four-stage state machine on PairSignerForm, DI prop shape + shell-agnostic imports, firmware-verdict gating, classifySource branching on ViewPrivateKey, window-blur + clipboard auto-clear wiring, exportPrivateKey handler + messaging, App.jsx sub-route + factory imports in both shells.
@@ -6948,10 +6446,7 @@ Phase 2, Steps 8–11 of 26, pieces 3a + 3b + 3c + 3d. Closes out **Piece 3 (sta
 
 **Piece 3d / Step 11, token admin (§40.5)**
 
-- `packages/core/src/shared/routes/TokenAdminForm.jsx`: single parameterized component driven by a `mode` prop (`'lock'` | `'description'` | `'transfer'`) delivering the three §40.5 surfaces:
-    - **Lock supply**, ISSUE v3 with `LOCK_MAX_SUPPLY` + `LOCK_MINT`. Renders a "Locking is permanent" warning on the form stage and uses the `danger` Button variant on the sign button.
-    - **Update description**, ISSUE v1 with a single `DESCRIPTION` field. Replaces the existing on-chain description.
-    - **Transfer ownership**, ISSUE v0 with only `TRANSFER` set. New owner address required.
+- `packages/core/src/shared/routes/TokenAdminForm.jsx`: single parameterized component driven by a `mode` prop (`'lock'` | `'description'` | `'transfer'`) delivering the three §40.5 surfaces:   - **Lock supply**, ISSUE v3 with `LOCK_MAX_SUPPLY` + `LOCK_MINT`.
 
   All three reuse `messaging.issueToken`: no new background handler or core flow needed, since every admin action is ISSUE at the protocol level.
 - `packages/extension/src/popup/App.jsx` + `packages/web/src/App.jsx`: three new sub-routes (`'lock'`, `'description'`, `'transfer'`), all rendering `<TokenAdminForm mode={unlockedView} …/>`. `buildActionEntries` grows three more entries so the Actions menu surfaces all six of Piece 3.
@@ -6987,13 +6482,7 @@ Phase 2, Steps 5-7 of 26, pieces 2c + 2d + 2e. Closes out **Piece 2 (Token Creat
 
 **Piece 2d / Step 6, per-template composition**
 
-- `TEMPLATE_COMPOSERS` object in `TokenWizard.jsx` replaces the single `composeIssueParams` function. One composer per template (Meme / Utility / Community / Collectible / Subasset / Custom), each picking the subset of ISSUE v0 fields that template wants:
-    - **Meme**, one ISSUE with `MAX_SUPPLY` + `MINT_SUPPLY` (creator gets full supply) + `DECIMALS=0` + `LOCK_MAX_SUPPLY` + `LOCK_MINT`. Matches §40.1's intent atomically via a single transaction; the spec's "BATCH" description was inaccurate, the protocol's ISSUE v0 composes mint + lock in one go.
-    - **Utility**, `MAX_SUPPLY` + `MINT_SUPPLY` + optional `MAX_MINT`, no lock flags. Mintable going forward.
-    - **Community**, same shape as Utility. Dividends happen later via the DIVIDEND action on the TICK; no Phase-1 flag on ISSUE.
-    - **Collectible**, single-edition (`MAX_SUPPLY=1`, `MINT_SUPPLY=1`, `DECIMALS=0`, both locks). Image goes in `DESCRIPTION`: explorer renders linked URLs as images (the JDOG protocol example). Full FILE + BATCH path is deferred past Phase 2 because §BATCH bans FILE.
-    - **Subasset**, composer joins `parent.child` into the final `TICK`; form collects parent + child separately so the wizard can show the preview correctly.
-    - **Custom**, every ISSUE v0 field exposed (superset of the other five). The escape hatch for edge cases the templates don't cover.
+- `TEMPLATE_COMPOSERS` object in `TokenWizard.jsx` replaces the single `composeIssueParams` function.
 - `TEMPLATE_FIELDS` visibility map drives which inputs show on the details stage per template. Collectible hides Supply (hard-wired to 1 by composer). Subasset adds Parent asset (required, uppercased, A-Z 0-9). Community hides the lock-on-create + transfer-to toggles (Utility's shape).
 - `TEMPLATES` table: all six `interactive: true`. The "Coming in Step 6" affordance is gone, templates are live.
 - New form state: `imageUrl` (Collectible), `parentAsset` (Subasset). Both stay in state across template switches so the user can flip templates without retyping.
@@ -7069,15 +6558,7 @@ Phase 2, Step 3 of 26, piece 2a. Extends `actionDecoder.decodeAction` to cover t
 
 **`packages/core/src/decoder/actionDecoder.js`**
 
-- **ISSUE**, six format-version branches. Summaries differentiate the semantic intent rather than just echoing "ISSUE":
-    - v0 with `MAX_SUPPLY` → `"Create token TICK with max supply N on Chain"`.
-    - v0 with `TRANSFER` but no supply fields → `"Transfer ownership of TICK to ADDR on Chain"`.
-    - v0 otherwise → `"Configure token TICK on Chain"`.
-    - v1 → `"Update description of TICK on Chain"`.
-    - v2 → `"Update mint parameters of TICK on Chain"`.
-    - v3 → `"Lock TICK (max supply, minting, ...) on Chain"` when any `LOCK_*` flag is set; names the locks in human terms, not field names.
-    - v4 → `"Update callback parameters of TICK on Chain"`.
-    - v5 → `"Update allow/block list for TICK on Chain"`.
+- **ISSUE** , six format-version branches.
 - **MINT**, `"Mint AMOUNT TICK on Chain to DESTINATION"`; missing destination reads as `"broadcasting address"` in the details list.
 - **DESTROY**, v0 (single) produces `"Destroy AMOUNT TICK on Chain"`. v1/v2 (multi-destroy, repeating `TICK`/`AMOUNT` pairs) fall through to the generic decoder but are decorated with the irreversibility warning so the user still sees it before signing.
 - **BATCH**, recurses into the `params.COMMANDS` array (wallet-side shape; each entry `{ action, params }`) and composes child summaries into a numbered list. Details show `Step N` rows with indented sub-action details. Warnings from every nested command bubble up to the root. Empty / malformed `COMMANDS` surfaces a dedicated "review raw transaction" warning so no blind-sign is possible.
@@ -7289,18 +6770,7 @@ Every "pending" item in `IMPLEMENTATION_STATUS.md` that a single codebase commit
 
 Closes out Batch 4.
 
-- `packages/core/src/decoder/actionDecoder.js`: pure function:
-    ```
-    decodeAction({ action, params, chainId, chainRegistry })
-      → { summary: string, details: Array<{ label, value }>, warnings: string[] }
-    ```
-  Phase 1 covers SEND + SWEEP with human sentences ("Send 100 MYTOKEN on Bitcoin to bc1q…", "Sweep all assets on Dogecoin to bc1q…"). Every other ACTION kind gets a generic fallback that pretty-prints the params and surfaces a "no plain-English summary yet" warning, dedicated decoders for ISSUE / MINT / DISPENSER / etc. land alongside their authoring forms in later phases.
-  
-  Warnings it raises:
-  - Memo containing `|` or `;` (protocol rejects the tx).
-  - SEND with amount ≤ 0 or empty destination.
-  - SWEEP blanket "moves every balance at the source address" reminder + empty-destination warning.
-  - Unknown action "no summary yet" notice.
+- `packages/core/src/decoder/actionDecoder.js`: pure function:   ```   decodeAction({ action, params, chainId, chainRegistry })     → { summary: string, details: Array<{ label, value }>, warnings: string[] }   ``` Phase 1 covers SEND + SWEEP with human sentences ("Send 100 MYTOKEN on Bitcoin to bc1q…", "Sweep all assets on Dogecoin to bc1q…").
 
 - `packages/core/src/index.js` re-exports the `decoder` namespace so both shells reach it via `import { decoder } from '@xchain-wallet/core'`.
 
@@ -7328,12 +6798,7 @@ Covers Batch 4 pieces 12 + 13 (web onboarding + web Send). Bundled because both 
 
 Closes the bootstrap gap called out in `TEST_DAPP_RUNBOOK.md` for web. Users can now create a fresh BIP39 wallet or import an existing 12/15/18/21/24-word phrase without hand-seeding IDB through DevTools.
 
-- `packages/web/src/hostBridge.js`:
-  - Replaced the throwing SDK scaffold with a clearly-flagged `createDevMockSdk` (DO NOT USE FOR MAINNET). Produces deterministic pseudo-addresses per (pubkey, addressType) so HD derivation completes during onboarding; signing / broadcast / message-signing still throw loudly. Real `xchain-sdk` bundling is a Batch 5 piece.
-  - `createWalletLocal({ password, name, strengthBits, bip39Passphrase, activeChainIds })`: fresh kdfParams, master key, blank vault → `flows.createWallet` → save meta → host live. Returns `{ mnemonic, walletName }`.
-  - `importMnemonicLocal({ password, mnemonic, name, bip39Passphrase, activeChainIds })`: same persistence path for an existing phrase (BIP39 or Counterwallet-legacy; format auto-detected).
-  - Both helpers guard idempotence (second create / import against an existing meta rejects with "a wallet already exists").
-  - `DEFAULT_ACTIVE_CHAIN_IDS`: BTC/DOGE/LTC mainnet. Users can change via Settings (later piece).
+- `packages/web/src/hostBridge.js`: - Replaced the throwing SDK scaffold with a clearly-flagged `createDevMockSdk` (DO NOT USE FOR MAINNET).
 - `packages/web/src/messaging.js`: `createWallet` + `importMnemonic` helpers.
 - `packages/web/src/routes/CreateWallet.jsx` (+ CSS), 2-stage flow: password+confirm+name form → mnemonic display with "I've saved it" checkbox. Mnemonic is generated client-side via `cryptoLib.generateBip39Mnemonic` and **only persisted after** the user acks, via `importMnemonic` with the generated phrase, so a user who closes the tab at the display stage leaves no vault behind.
 - `packages/web/src/routes/ImportWallet.jsx` (+ CSS), textarea for the phrase (spell-check off, lowercase, no autocomplete), word-count validation (12/15/18/21/24), password + confirm, name.
@@ -7343,10 +6808,7 @@ Closes the bootstrap gap called out in `TEST_DAPP_RUNBOOK.md` for web. Users can
 
 **Piece 13, web Send form + review** (§29 authoring)
 
-- `packages/web/src/routes/Send.jsx` (+ CSS), multi-stage authoring flow:
-  - **form**: chain picker (when the wallet has addresses on >1 chain), auto-picked source address (highest external HD index on the chain), native-ticker default (`descriptor.coin.toUpperCase()`), recipient / asset / amount / memo inputs. Client-side validation: required fields, positive amount, protocol `|` + `;` memo rejection.
-  - **review**: decoded summary (Chain / From / To / Asset / Amount / Memo) in a `<dl>` grid with an inline password input.
-  - **submitting / done / error** states, `InvalidPasswordError` surfaces as "Incorrect password."; other errors surface raw and drop back to review with the form state hydrated so the user doesn't retype.
+- `packages/web/src/routes/Send.jsx` (+ CSS), multi-stage authoring flow: - **form**: chain picker (when the wallet has addresses on >1 chain), auto-picked source address (highest external HD index on the chain), native-ticker default (`descriptor.coin.toUpperCase()`), recipient / asset / amount / memo inputs.
 - `packages/web/src/messaging.js`: `sendAsset(opts)` helper targeting the host's `action.send` handler.
 - `packages/web/src/App.jsx`: added `unlocked` sub-routing (`home | send`), caches active walletId at App level so Send reuses Home's single-wallet assumption.
 - `packages/web/src/routes/Home.jsx`: activated the Send button via new `onSend` prop.
@@ -7380,11 +6842,7 @@ The web SPA is now a real React app. Same state-machine topology as the extensio
 
 - `packages/web/src/main.jsx`: React root. Imports `@xchain-wallet/core/ui/tokens.css` once so design-token custom properties install on `:root` for every route.
 - `packages/web/src/App.jsx`: 5-state router matching the popup (`loading | error | no-wallet | locked | unlocked`), rendering the web routes with `Screen variant="full"`.
-- `packages/web/src/routes/`: four routes + co-located CSS modules:
-  - `Loading.jsx`: full-layout three-dot indicator.
-  - `Onboarding.jsx`: stub hero + disabled create/import buttons pointing at piece 12. Wraps in `<ExtensionBanner />`.
-  - `Locked.jsx`: real password form, same focus + error handling as the popup's Locked, routed through `unlockWallet()`. Wraps in `<ExtensionBanner />`.
-  - `Home.jsx`: wallet-name header + Lock button + per-chain balance grid (via `ChainBadge`), disabled Send/Receive.
+- `packages/web/src/routes/`: four routes + co-located CSS modules: - `Loading.jsx`: full-layout three-dot indicator. - `Onboarding.jsx`: stub hero + disabled create/import buttons pointing at piece 12.
 - `packages/web/src/components/ExtensionBanner.jsx`: §8.3 detection banner. Checks `window.xchain` on mount and listens for the inject-script's `xchain#initialized` event. Dismissal persisted to `sessionStorage` so it doesn't nag across navigations but reappears on a fresh tab.
 
 **Build wiring**
@@ -7412,14 +6870,7 @@ Routes are intentionally duplicated between popup and web for this piece. A late
 
 **Batch 3 piece 10, bridge end-to-end smoke + test-dApp runbook**
 
-- `packages/core/test/bridge-e2e.smoke.js`: integration smoke that assembles the real Vault + MessageHost + ApprovalBroker (with a fake `chrome.windows`) and drives the full Phase-1 bridge surface through `host.handle`:
-  - `bridge.connect` → approval parked → `approval.resolve` with the same envelope the popup sends → `ConnectedSite` written + response shape verified.
-  - Second `connect` on the same origin is idempotent (no new approval window opens).
-  - `bridge.getAccounts` / `getAddresses` / `getSupportedChains` (9 chains; `icon` elided as piece-1 shell follow-up intended).
-  - `bridge.signAction` with `ISSUE` returns `{ error: 'UNSUPPORTED_ACTION', supportedActions: ['SEND', 'SWEEP'] }` without opening an approval.
-  - `bridge.disconnect` removes the site.
-  - Window-close-without-decision on a pending connect → dApp-side Promise rejects with `UserRejectedError`.
-  - Test-dApp surface (`runExample` + `MockXChainProvider`) still exposes the symbols the runbook references, catches accidental drift.
+- `packages/core/test/bridge-e2e.smoke.js`: integration smoke that assembles the real Vault + MessageHost + ApprovalBroker (with a fake `chrome.windows`) and drives the full Phase-1 bridge surface through `host.handle`: - `bridge.connect` → approval parked → `approval.resolve` with the same envelope the popup sends → `ConnectedSite` written + response shape verified. - Second `connect` on the same origin is idempotent (no new approval window opens). - `bridge.getAccounts` / `getAddresses` / `getSupportedChains` (9 chains; `icon` elided as piece-1 shell follow-up intended). - `bridge.signAction` with `ISSUE` returns `{ error: 'UNSUPPORTED_ACTION', supportedActions: ['SEND', 'SWEEP'] }` without opening an approval. - `bridge.disconnect` removes the site. - Window-close-without-decision on a pending connect → dApp-side Promise rejects with `UserRejectedError`. - Test-dApp surface (`runExample` + `MockXChainProvider`) still exposes the symbols the runbook references, catches accidental drift.
 - `packages/extension/docs/TEST_DAPP_RUNBOOK.md`: manual browser-pass runbook for RC builds. Covers build + load unpacked, bootstrap gap (seed a wallet via DevTools until Batch 4's onboarding lands), serving the test-dApp, walking `runExample` through each approval popup with expected outcomes, edge cases (reject / close / re-connect / always-allow / mid-flow lock), and a pointer at the node smoke for PR gate use.
 
 ### Scope boundary
@@ -7436,9 +6887,7 @@ Covers Batch 3 pieces 8 + 9 (approval window plumbing + per-kind approval screen
 
 - `packages/extension/src/background/approvalBroker.js`: `ApprovalBroker` class implements the `Approvals` interface (`connect`, `signAction`, `signMessage`, `signPsbt`, `signIn`) by parking requests in an in-memory map, opening an approval popup via `chrome.windows.create`, and returning a Promise that settles when the popup calls back via `approval.resolve` or when the window is closed by the user (chrome.windows.onRemoved → resolves as `{ approved: false }`: the `USER_REJECTED` convention). Deps are injectable (`newId`, `getUrl`, `windows`) so tests can drive the lifecycle without a browser.
 - `packages/extension/src/background/uuid.js`: `sessionRandomUUID()` falls back to `crypto.getRandomValues` when `randomUUID` isn't available so the broker is testable under older Node.
-- `packages/extension/src/background/createBackgroundHost.js` registers two new host handlers gated on the broker having the methods:
-  - `approval.fetch({ id })`: returns the parked `{ id, kind, payload }` for the approval window; surfaces `ApprovalNotFoundError` for unknown ids.
-  - `approval.resolve({ id, result })`: settles the parked Promise. Closes the window via `chrome.windows.remove`.
+- `packages/extension/src/background/createBackgroundHost.js` registers two new host handlers gated on the broker having the methods: - `approval.fetch({ id })`: returns the parked `{ id, kind, payload }` for the approval window; surfaces `ApprovalNotFoundError` for unknown ids. - `approval.resolve({ id, result })`: settles the parked Promise.
 - `packages/extension/approval.html` + `packages/extension/src/approval/main.jsx`: the approval-window entry. Piece 8 shipped a `<Placeholder />` to prove the window plumbing works end-to-end; piece 9 replaces it with a real Router.
 - `packages/extension/vite.config.js` adds `approval` as a fourth HTML entry. The manifest doesn't reference `approval.html` directly, `chrome.runtime.getURL` does, so the plugin copy is enough.
 - `packages/extension/src/background.js` constructs a module-scoped `ApprovalBroker` at startup (survives unlock/lock cycles) and passes it as `approvals` when building the host.
@@ -7468,15 +6917,8 @@ Covers Batch 3 pieces 8 + 9 (approval window plumbing + per-kind approval screen
 
 **Receive view + BIP21 QR** (§29.7 receive flow, §29.10 BIP21 URI), Batch 2 piece 7
 
-- `packages/extension/src/popup/routes/Receive.jsx` + `.module.css`: full Receive surface:
-  - Chain picker (native `<select>`) when the wallet has addresses on multiple chains; single `ChainBadge` header otherwise. Picker is filtered to chains the wallet already owns an address on, "add a new chain" is a later onboarding flow.
-  - Newest persisted external HD address for the picked chain, rendered as a BIP21-encoded QR via `qrcode@^1.5.4`. QR uses error-correction level `M`, 200px wide, `#0F172A` on `#FFFFFF` so contrast holds in both themes.
-  - Address pane uses `<AddressText truncate={false}>` + `<CopyButton>` so the full string is visible + one-tap copyable.
-  - "New address" button opens an inline password form that calls `receive.getAddress`. The password prompt is required because HD seed decryption re-runs Argon2id per derivation (§26, password-never-stored posture); the current-newest address is displayed without a prompt so routine "send me some" traffic doesn't trigger the KDF.
-  - ← Back control returns to Home.
-- **Two new pre-password host handlers** in `createBackgroundHost.js`:
-  - `addresses.byChain({ walletId })` → `Record<chainId, Address[]>`: used to build the Receive picker.
-  - `addresses.newest({ walletId, chainId, addressType? })` → newest external-index HD address (change=0), or `null`. Skips imported WIFs and internal (change=1) addresses.
+- `packages/extension/src/popup/routes/Receive.jsx` + `.module.css`: full Receive surface: - Chain picker (native `<select>`) when the wallet has addresses on multiple chains; single `ChainBadge` header otherwise.
+- **Two new pre-password host handlers** in `createBackgroundHost.js`: - `addresses.byChain({ walletId })` → `Record<chainId, Address[]>`: used to build the Receive picker. - `addresses.newest({ walletId, chainId, addressType? })` → newest external-index HD address (change=0), or `null`.
 - `packages/extension/src/popup/App.jsx`: popup-local sub-route within the `unlocked` state: `home | receive`. Active walletId is cached at App level so Receive can reuse Home's single-wallet assumption without re-querying `wallet.list`.
 - `packages/extension/src/popup/routes/Home.jsx`: `Receive` button activated via a new `onReceive` prop (disabled when the prop is absent).
 - Messaging: `getAddressesByChain(walletId)`, `getNewestAddress(walletId, chainId)`, `generateReceiveAddress({ walletId, chainId, password, bip39Passphrase?, addressType? })`.
@@ -7507,10 +6949,7 @@ Covers Batch 2 pieces 5 + 6 (real unlock screen + Home screen with `wallet.lock`
 
 - **`wallet.lock` handler**, `packages/extension/src/background/walletLock.js` clears the session backend and fires `onLocked()`. Added to `PRE_HOST_MESSAGE_TYPES` (with a matching dispatch case). Idempotent, safe to call when there's already no session.
 - **Background teardown**, `background.js` captures `attachChromeRuntime`'s detach fn, defines `tearDownHost()` (detach listener + `vault.close()` + null refs), and passes it as `onLocked`. A subsequent unlock starts from a clean slate; stale vault references can't leak across a lock boundary.
-- **Home screen**, `src/popup/routes/Home.jsx` ships the full unlocked-wallet landing view:
-  - Header: wallet name (from `wallet.list[0]`: single-wallet Phase 1 scope; picker is a later piece) + `Lock` button with loading state.
-  - Body: per-chain `<ChainBalanceCard>` rendered from `balances.wallet`. Graceful error fallback for each chain card so the SDK-stubbed state (every entry carries an `error`) renders as informative text instead of a crash. Empty-wallet hint when no addresses exist.
-  - Actions: disabled `Send` + `Receive` with an inline note pointing at their later pieces.
+- **Home screen** , `src/popup/routes/Home.jsx` ships the full unlocked-wallet landing view: - Header: wallet name (from `wallet.list[0]`: single-wallet Phase 1 scope; picker is a later piece) + `Lock` button with loading state. - Body: per-chain `<ChainBalanceCard>` rendered from `balances.wallet`.
 - **ChainBalanceCard**, `src/popup/components/ChainBalanceCard.jsx` + `.module.css`. Card with a `ChainBadge` header, address-count sub-label, and a fallback body that surfaces the SDK error when all entries failed.
 - **`useAutoLock` hook**, `src/popup/hooks/useAutoLock.js` foreground auto-lock (§26). 5-min default, 30s tick, listens for mousemove / keydown / scroll / click / touchstart. Calls `onLock()` once the idle threshold is crossed. Documents the scope gap: background-mediated auto-lock (survives popup close/reopen) is a later piece.
 - `lockWallet()` / `listWallets()` / `getWalletBalances(walletId)` added to `messaging.js`.
@@ -7542,11 +6981,7 @@ The popup is the user's primary entry point to the wallet. This piece ships the 
 - `packages/extension/src/popup/main.jsx`: `createRoot(container).render(<App />)`; imports `@xchain-wallet/core/ui/tokens.css` once so every route inherits the design-token palette + dark-mode + reduced-motion handling.
 - `packages/extension/src/popup/App.jsx`: 5-state router: `loading → no-wallet | locked | unlocked | error`. Queries `session.status` on mount, renders the matching route, and passes each route a `refresh()` callback so flows that change state (create wallet, unlock, lock) re-pull ground truth from the background.
 - `packages/extension/src/popup/messaging.js`: `sendMessage(type, request)` wraps `chrome.runtime.sendMessage` in a Promise. Surfaces the MessageHost `{ok, result} | {ok, error}` envelope as resolve/reject and preserves the error-class name. `getSessionStatus()` is the named query.
-- `packages/extension/src/popup/routes/`: four route stubs with co-located CSS modules:
-    - `Loading.jsx`: animated three-dot pulse indicator; static under `prefers-reduced-motion`.
-    - `Onboarding.jsx`: logo hero + tagline from `branding.js`; "Create a new wallet" / "I already have one" buttons (disabled, real flows land in Batch 4).
-    - `Locked.jsx`: scaffold stub; real password form + `unlockWallet` wiring lands in piece 5.
-    - `Home.jsx`: scaffold stub with a header "Lock" trigger so the state machine is exercisable end-to-end; balances / send / receive land in pieces 6–7.
+- `packages/extension/src/popup/routes/`: four route stubs with co-located CSS modules:   - `Loading.jsx`: animated three-dot pulse indicator; static under `prefers-reduced-motion`.   - `Onboarding.jsx`: logo hero + tagline from `branding.js`; "Create a new wallet" / "I already have one" buttons (disabled, real flows land in Batch 4).   - `Locked.jsx`: scaffold stub; real password form + `unlockWallet` wiring lands in piece 5.   - `Home.jsx`: scaffold stub with a header "Lock" trigger so the state machine is exercisable end-to-end; balances / send / receive land in pieces 6–7.
 
 **Background session-meta listener**
 
@@ -7600,14 +7035,7 @@ Picks the UI framework + styling approach for the Phase 1 UI session. React 18.3
 
 **Framework wiring**
 
-- `packages/core/package.json`: `react` / `react-dom` declared as optional peer dependencies (`^18.3.0`). Optional because non-UI code (smoke tests, background handlers) imports `@xchain-wallet/core` without needing React. New `exports` map exposes subpaths so Node-only callers don't trip on JSX reached through the default entry:
-    ```
-    ".": "./src/index.js"
-    "./ui": "./src/ui/index.js"
-    "./ui/tokens.css": "./src/ui/tokens.css"
-    "./ui/*": "./src/ui/*"
-    "./branding/*": "./src/branding/*"
-    ```
+- `packages/core/package.json`: `react` / `react-dom` declared as optional peer dependencies (`^18.3.0`).
 - `packages/extension/package.json` + `packages/web/package.json`: `react` / `react-dom` as regular deps; `@vitejs/plugin-react@^4.3.0` as a dev dep. Wired at the shell level so each Vite config can opt in to JSX in a later piece.
 
 **Design tokens (§5.4 visual identity, §37 micro-UX)**
@@ -8115,7 +7543,7 @@ End-to-end verified against the real `xchain-sdk`: generated wallet produces val
 **`@xchain-wallet/core/sdk`**, per-chain SDK instance registry (§10.2)
 - `SDKRegistry` class: lazy instantiation on `get(chainId)`, instance caching, `initActive(chainIds)` for parallel startup, `invalidate(chainId)` / `invalidateAll()` with `sdk.close()` cleanup hook, `setEndpointOverrides()` for Settings-driven URL overrides
 - `SDKFactory` callback pattern, `core` stays SDK-agnostic; shells pass in whatever import path works for their target (`require('xchain-sdk')`, `await import`, or a mock for tests)
-- `XChainSDKLike` typedef documenting the minimal SDK surface the wallet depends on
+- `XChainSDKLike` typedef documenting the minimal SDK surface the wallet depends on.
 - `UnknownChainError` for unregistered chain ids
 - Smart URL join: `:443` / `:80` elided; other ports kept explicit
 
@@ -8154,9 +7582,7 @@ End-to-end verified against the real `xchain-sdk`: generated wallet produces val
 - Verified against the reference Mnemonic.js implementation for 100 random seed round-trips
 
 ### Changed
-- `SoftwareSigner.unlock` now routes by `walletEncryption.format`:
-  - `'bip39'` (default), existing behavior with optional §15.6 passphrase
-  - `'counterwallet-legacy'`: Counterwallet decoder; BIP39 passphrase explicitly rejected
+- `SoftwareSigner.unlock` now routes by `walletEncryption.format`: `'bip39'` (default, optional §15.6 passphrase) or `'counterwallet-legacy'` (Counterwallet decoder, BIP39 passphrase rejected).
 - `@xchain-wallet/core` root barrel adds `storage` namespace alongside `schemas` / `registry` / `signers` / `crypto`
 
 ## [0.3.0] - 2026-04-22
