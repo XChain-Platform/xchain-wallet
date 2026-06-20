@@ -7,13 +7,13 @@
   <img src="https://img.shields.io/badge/version-0.333.0-blue" alt="Version">
   <img src="https://img.shields.io/badge/tests-295%20smokes%20%2B%20Playwright%20E2E-brightgreen" alt="Tests">
   <img src="https://img.shields.io/badge/node-%3E%3D22-green" alt="Node">
-  <img src="https://img.shields.io/badge/license-Dankest%20Community-orange" alt="License">
+  <img src="https://img.shields.io/badge/license-AGPL--3.0--or--later-blue" alt="License">
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/shells-web%20%7C%20extension%20%7C%20desktop-blueviolet" alt="Shells">
   <img src="https://img.shields.io/badge/signers-software%20%7C%20Trezor%20%7C%20Ledger%20%7C%20MuSig2-blueviolet" alt="Signers">
-  <img src="https://img.shields.io/badge/coverage-unit%20%7C%20smoke%20%7C%20a11y%20%7C%20e2e%20%7C%20bridge%20%7C%20repro--build-brightgreen" alt="Coverage">
+  <img src="https://img.shields.io/badge/coverage-unit%20%7C%20smoke%20%7C%20integration%20%7C%20boundary%20%7C%20security%20%7C%20fuzz%20%7C%20chaos%20%7C%20regression%20%7C%20a11y%20%7C%20mutation%20%7C%20bench%20%7C%20e2e-brightgreen" alt="Coverage">
 </p>
 
 Self-custodial multi-chain wallet for the XChain Platform. Runs as a browser web app, a Chrome MV3 extension (popup + full-screen), and a desktop application (Windows / macOS / Linux), all from a single React codebase. Bitcoin, Dogecoin, and Litecoin at launch; additional chains added as the platform adds them. The wallet consumes [xchain-sdk](https://github.com/XChain-platform/xchain-sdk) as its only data and signing layer and never duplicates SDK functionality.
@@ -24,17 +24,20 @@ Self-custodial multi-chain wallet for the XChain Platform. Runs as a browser web
 - **All 28 XChain ACTIONs:** SEND, ISSUE, MINT, DESTROY, ORDER, DISPENSER, DIVIDEND, SWEEP, SWAP, AIRDROP, MESSAGE, LIST, LINK, BROADCAST, PRICE, BATCH, DEPLOY, EXECUTE, DEPOSIT, WITHDRAW, COINPAY, STAKE, UNSTAKE, DELEGATE, COLLECT, CALLBACK, SLEEP, FILE
 - **Self-custodial key management:** BIP39 mnemonic + optional 25th-word passphrase, BIP32 HD derivation per chain, AES-256-GCM vault encrypted with an Argon2id-derived master key (calibrated per device), Counterwallet legacy mnemonic import
 - **Pluggable signer interface:** `SoftwareSigner` (in-vault keys), `TrezorSigner` (Trezor Connect, all current models), `LedgerSigner` (WebHID, all current models), `RemoteSigner` (cross-shell pairing), `MultisigSigner` (classical n-of-m + MuSig2 sessions)
-- **Full token issuance suite:** issue, mint, destroy, distribute, dividend, dispenser create + buy + close, broadcast, airdrop with parsed-recipients preview, sweep
+- **Full token issuance suite:** issue, mint, destroy, distribute, dividend, dispenser create + buy + close, broadcast, airdrop with parsed-recipients preview, sweep, and sell-ownership (lists token ownership for sale via ORDER/DISPENSER with price-in-BTC or token inputs)
+- **Programmable token policy:** bind a controller contract to a token (`ControllerBindForm`) to delegate issuance authority and transfer rules to an on-chain contract; unbind restores direct-owner control
 - **Built-in DEX surface:** token markets list, market view with lightweight-charts price chart, place-order panel, orderbook, recent trades, open orders, trade history
 - **Encrypted messaging inbox:** ECIES (multi-device default), ECDH (session), and AES (pre-shared); full inbox + compose flow over the SDK MessageManager
 - **Smart contracts:** deploy from source, execute methods, deposit + withdraw, contracts-list / contract-detail explorer views, gas estimation, ContractClient bindings
 - **BTC staking + delegation:** STAKE (VERSION 1 new / VERSION 2 top-up, auto-detected from existing stakes for the entered pubkey), pubkey-based UNSTAKE, DELEGATE (v0/v1 rotate; v2/v3 revoke), COLLECT; staking dashboard, delegation form, operator dashboard. Capability-based model: a pubkey's aggregate stake auto-qualifies it for each of four independent capabilities (`price`, `cross_chain`, `oracle_publish`, `attestation`)
 - **My Tokens & Manage Token:** issuer dashboard listing all tokens owned by active addresses; per-token admin surface with Mint / Destroy / Lock supply / Update description / Transfer ownership / Create dispenser / Pay dividend / Airdrop / Broadcast
 - **Privacy mode:** masks amounts in history detail, activity rows, open orders, and group summaries; per-account toggle persisted across sessions
+- **Automatic Donation System (ADS):** opt-out (consent captured at onboarding) per-chain micro-donation on each submitted action; invisible after setup with no line on sign screens; configurable per chain in Settings; a single `ADS_DEFAULT_ENABLED` constant controls the default without touching flows
 - **Cross-chain flows:** cross-chain swap form, cross-chain templates (parallel composer for atomic multi-chain submission), per-chain SDK registry, link/swap coordinators
 - **Multisig coordinator:** create n-of-m configs, paste-inbox for partial PSBTs, AnimatedQrFrames PSBT-QR transport, multisig session state machine, MuSig2 session round labels, schema-v2 multi-config-per-address support, camera scanner
 - **dApp bridge (`window.xchain`):** typed bridge spec at `@xchain-wallet/bridge-spec`: connect, getAccounts, getBalances, signMessage, signPsbt, signAction, signIn (Sign-In with XChain), event subscriptions; per-origin permission grants enforced in the extension service worker and desktop main process
 - **Air-gapped PSBT signing:** BIP21 / multisig PSBT envelope / chunked PSBT-QR encoding; QR scanner + AnimatedQrFrames for offline cosigner round-trips; `prefers-reduced-motion` honored with manual frame stepping
+- **Sign message / verify signature:** sign arbitrary text with any address (BIP322-compatible) and verify counterparty signatures; output is copyable; gated behind password re-entry in the sensitive-action flow
 - **Sign-screen safety rails:** plain-English action decoder shows `to` / `amount` / `asset` as you typed them, even if the encoder fabricates output; multi-step approval requires explicit user confirmation; per-action expectation summaries
 - **Onboarding and recovery:** create / import / Counterwallet-migrate / dry-run-restore / discover-used-addresses (gap-limit scan); view-private-key + export-WIF gated behind password re-entry
 - **Lock / unlock / auto-lock:** Argon2id-derived session key cached in `chrome.storage.session` (extension) or in-memory (web/desktop); foreground auto-lock on idle; manual lock action; OS keychain auto-unlock on desktop
@@ -224,14 +227,3 @@ with a commercial license available for proprietary use.
 You may use, modify, and distribute this material under the terms of the License.
 See [LICENSE](./LICENSE.md) and [NOTICE](./NOTICE.md) for full terms.
 See the [licensing overview](https://docs.xchain.io/legal/licensing).
-
-## License
-
-XChain Platform is **open source**, dual-licensed under:
-
-- the **[GNU Affero General Public License v3.0](./LICENSE.md)** (`AGPL-3.0-or-later`), free for everyone, and
-- a **[commercial license](https://docs.xchain.io/legal/commercial-license)** for companies that need to keep modifications private.
-
-See the **[licensing overview](https://docs.xchain.io/legal/licensing)** for which one applies to you. "XChain" is a trademark of Dankest, LLC. See the **[Trademark Policy](https://docs.xchain.io/legal/trademark)**.
-
-Copyright © 2025-2026 Dankest, LLC.
