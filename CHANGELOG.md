@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.333.0] - 2026-06-20
+
 ### Security
 
 - **Web shell no longer caches the wallet password in `sessionStorage`.**
@@ -133,8 +135,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Flatpak packaging path (`@malept/flatpak-bundler` → `tmp-promise`) at
   build time and is never bundled into any shipped artifact, so there is
   no runtime exposure — this silences the advisory in audit scans.
-
-## [0.333.0] - 2026-05-21
 
 Active-network mode + native-coin price oracle + TokenDetail visual
 fixes + IndexedDB-delete hotfix. The marquee shift is the §2-principle

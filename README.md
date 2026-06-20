@@ -16,7 +16,7 @@
   <img src="https://img.shields.io/badge/coverage-unit%20%7C%20smoke%20%7C%20integration%20%7C%20boundary%20%7C%20security%20%7C%20fuzz%20%7C%20chaos%20%7C%20regression%20%7C%20a11y%20%7C%20mutation%20%7C%20bench%20%7C%20e2e-brightgreen" alt="Coverage">
 </p>
 
-Self-custodial multi-chain wallet for the XChain Platform. Runs as a browser web app, a Chrome MV3 extension (popup + full-screen), and a desktop application (Windows / macOS / Linux), all from a single React codebase. Bitcoin, Dogecoin, and Litecoin at launch; additional chains added as the platform adds them. The wallet consumes [xchain-sdk](https://github.com/XChain-platform/xchain-sdk) as its only data and signing layer and never duplicates SDK functionality.
+Self-custodial multi-chain wallet for the XChain Platform. Runs as a browser web app, a Chrome MV3 extension (popup + full-screen), and a desktop application (Windows / macOS / Linux), all from a single React codebase. Bitcoin, Dogecoin, and Litecoin at launch; additional chains added as the platform adds them. The wallet consumes [xchain-sdk](https://github.com/XChain-Platform/xchain-sdk) as its only data and signing layer and never duplicates SDK functionality.
 
 ## Features
 
@@ -48,26 +48,26 @@ Self-custodial multi-chain wallet for the XChain Platform. Runs as a browser web
 
 ## Documentation
 
-Full wallet documentation lives in the [xchain-documentation](https://github.com/XChain-platform/xchain-documentation/tree/master/components/wallet) repository:
+Full wallet documentation lives in the [xchain-documentation](https://github.com/XChain-Platform/xchain-documentation/tree/master/components/wallet) repository:
 
 | Document | Description |
 |---|---|
-| [README](https://github.com/XChain-platform/xchain-documentation/blob/master/components/wallet/README.md) | Overview, shell matrix, package layout, usage modes |
-| [Architecture](https://github.com/XChain-platform/xchain-documentation/blob/master/components/wallet/ARCHITECTURE.md) | Repo layout, package boundaries, state flow, three-shell model, core/web/extension/desktop seams |
-| [Keys & Signing](https://github.com/XChain-platform/xchain-documentation/blob/master/components/wallet/Keys_Signing.md) | BIP39 + passphrase, HD derivation, vault encryption, signer interface, software / Trezor / Ledger / Remote / Multisig |
-| [Security & Threat Model](https://github.com/XChain-platform/xchain-documentation/blob/master/components/wallet/SECURITY.md) | Protected assets, in-scope and out-of-scope threats, sign-screen safety rails, audit posture |
-| [UX Surfaces](https://github.com/XChain-platform/xchain-documentation/blob/master/components/wallet/UX.md) | Onboarding, lock/unlock, balances, history, send/receive, sign screens, contacts, QR scanner, command palette, settings |
-| [Features](https://github.com/XChain-platform/xchain-documentation/blob/master/components/wallet/FEATURES.md) | Token issuance, DEX, messaging, dispensers, contracts, staking, multisig, cross-chain; surface-by-surface |
-| [Bridge](https://github.com/XChain-platform/xchain-documentation/blob/master/components/wallet/BRIDGE.md) | `window.xchain` dApp bridge: connect, signMessage, signPsbt, signAction, signIn, events, error codes |
-| [URI Schemes](https://github.com/XChain-platform/xchain-documentation/blob/master/components/wallet/URI_Schemes.md) | BIP21 + chain URIs + multisig PSBT envelope + chunked PSBT-QR transport |
-| [Multisig](https://github.com/XChain-platform/xchain-documentation/blob/master/components/wallet/MULTISIG.md) | Classical n-of-m + MuSig2: create flow, paste inbox, session state machine, PSBT-QR cosigner round-trips |
-| [Shell - Extension](https://github.com/XChain-platform/xchain-documentation/blob/master/components/wallet/Shell_Extension.md) | Chrome MV3 architecture, manifest, service worker, content script, injected provider, approval popup |
-| [Shell - Desktop](https://github.com/XChain-platform/xchain-documentation/blob/master/components/wallet/Shell_Desktop.md) | Electron main / renderer split, OS keychain, WebHID hardware transports, electron-builder packaging, auto-updater |
-| [Shell - Web](https://github.com/XChain-platform/xchain-documentation/blob/master/components/wallet/Shell_Web.md) | Vite SPA, mobile responsiveness, extension-detect banner, session-only key handling |
-| [Build & Release](https://github.com/XChain-platform/xchain-documentation/blob/master/components/wallet/Build_Release.md) | Synchronized versioning, Chrome Web Store submission, electron-builder, signing, release-hashes |
-| [Reproducible Builds](https://github.com/XChain-platform/xchain-documentation/blob/master/components/wallet/Reproducible_Builds.md) | Level-2 reproducibility: scope, scaffolding audit, run-twice verification, drift sources |
-| [Testing](https://github.com/XChain-platform/xchain-documentation/blob/master/components/wallet/TESTING.md) | Smoke gates, Playwright E2E, a11y audit, repro-build audit, manifest audit, bridge-e2e, hw-sign-e2e |
-| [Configuration](https://github.com/XChain-platform/xchain-documentation/blob/master/components/wallet/CONFIGURATION.md) | Per-chain endpoints, custom RPC, signer registration, settings store, developer mode |
+| [README](https://github.com/XChain-Platform/xchain-documentation/blob/master/components/wallet/README.md) | Overview, shell matrix, package layout, usage modes |
+| [Architecture](https://github.com/XChain-Platform/xchain-documentation/blob/master/components/wallet/ARCHITECTURE.md) | Repo layout, package boundaries, state flow, three-shell model, core/web/extension/desktop seams |
+| [Keys & Signing](https://github.com/XChain-Platform/xchain-documentation/blob/master/components/wallet/Keys_Signing.md) | BIP39 + passphrase, HD derivation, vault encryption, signer interface, software / Trezor / Ledger / Remote / Multisig |
+| [Security & Threat Model](https://github.com/XChain-Platform/xchain-documentation/blob/master/components/wallet/SECURITY.md) | Protected assets, in-scope and out-of-scope threats, sign-screen safety rails, audit posture |
+| [UX Surfaces](https://github.com/XChain-Platform/xchain-documentation/blob/master/components/wallet/UX.md) | Onboarding, lock/unlock, balances, history, send/receive, sign screens, contacts, QR scanner, command palette, settings |
+| [Features](https://github.com/XChain-Platform/xchain-documentation/blob/master/components/wallet/FEATURES.md) | Token issuance, DEX, messaging, dispensers, contracts, staking, multisig, cross-chain; surface-by-surface |
+| [Bridge](https://github.com/XChain-Platform/xchain-documentation/blob/master/components/wallet/BRIDGE.md) | `window.xchain` dApp bridge: connect, signMessage, signPsbt, signAction, signIn, events, error codes |
+| [URI Schemes](https://github.com/XChain-Platform/xchain-documentation/blob/master/components/wallet/URI_Schemes.md) | BIP21 + chain URIs + multisig PSBT envelope + chunked PSBT-QR transport |
+| [Multisig](https://github.com/XChain-Platform/xchain-documentation/blob/master/components/wallet/MULTISIG.md) | Classical n-of-m + MuSig2: create flow, paste inbox, session state machine, PSBT-QR cosigner round-trips |
+| [Shell - Extension](https://github.com/XChain-Platform/xchain-documentation/blob/master/components/wallet/Shell_Extension.md) | Chrome MV3 architecture, manifest, service worker, content script, injected provider, approval popup |
+| [Shell - Desktop](https://github.com/XChain-Platform/xchain-documentation/blob/master/components/wallet/Shell_Desktop.md) | Electron main / renderer split, OS keychain, WebHID hardware transports, electron-builder packaging, auto-updater |
+| [Shell - Web](https://github.com/XChain-Platform/xchain-documentation/blob/master/components/wallet/Shell_Web.md) | Vite SPA, mobile responsiveness, extension-detect banner, session-only key handling |
+| [Build & Release](https://github.com/XChain-Platform/xchain-documentation/blob/master/components/wallet/Build_Release.md) | Synchronized versioning, Chrome Web Store submission, electron-builder, signing, release-hashes |
+| [Reproducible Builds](https://github.com/XChain-Platform/xchain-documentation/blob/master/components/wallet/Reproducible_Builds.md) | Level-2 reproducibility: scope, scaffolding audit, run-twice verification, drift sources |
+| [Testing](https://github.com/XChain-Platform/xchain-documentation/blob/master/components/wallet/TESTING.md) | Smoke gates, Playwright E2E, a11y audit, repro-build audit, manifest audit, bridge-e2e, hw-sign-e2e |
+| [Configuration](https://github.com/XChain-Platform/xchain-documentation/blob/master/components/wallet/CONFIGURATION.md) | Per-chain endpoints, custom RPC, signer registration, settings store, developer mode |
 
 ## Status
 
@@ -76,12 +76,12 @@ Pre-v1.0 (current version: `0.333.0`). All four implementation phases (Phase 1: 
 ## Quick Start
 
 ```bash
-git clone https://github.com/XChain-platform/xchain-wallet.git
+git clone https://github.com/XChain-Platform/xchain-wallet.git
 cd xchain-wallet
 pnpm install
 ```
 
-The repository depends on a sibling `xchain-sdk` checkout. Both `packages/web/package.json` and `packages/extension/package.json` link `xchain-sdk` from `../../../xchain-sdk`. Clone [xchain-sdk](https://github.com/XChain-platform/xchain-sdk) next to `xchain-wallet` before installing.
+The repository depends on a sibling `xchain-sdk` checkout. Both `packages/web/package.json` and `packages/extension/package.json` link `xchain-sdk` from `../../../xchain-sdk`. Clone [xchain-sdk](https://github.com/XChain-Platform/xchain-sdk) next to `xchain-wallet` before installing.
 
 ### Run the web SPA
 
@@ -198,7 +198,7 @@ All packages in this repository (root, `packages/core`, `packages/extension`, `p
 
 ## Parent Platform
 
-XChain Wallet is the reference client for the [XChain Platform](https://github.com/XChain-platform). The platform is a blockchain-agnostic token protocol running on Bitcoin, Dogecoin, and Litecoin, with a built-in DEX, sandboxed JavaScript smart contracts, encrypted messaging, and cross-chain swaps, all encoded directly into standard blockchain transactions. See the platform [README](https://github.com/XChain-platform/xchain-documentation/blob/master/README.md) for a list of every component and how they connect.
+XChain Wallet is the reference client for the [XChain Platform](https://github.com/XChain-Platform). The platform is a blockchain-agnostic token protocol running on Bitcoin, Dogecoin, and Litecoin, with a built-in DEX, sandboxed JavaScript smart contracts, encrypted messaging, and cross-chain swaps, all encoded directly into standard blockchain transactions. See the platform [README](https://github.com/XChain-Platform/xchain-documentation/blob/master/README.md) for a list of every component and how they connect.
 
 ## Contributing
 

@@ -28,7 +28,7 @@ The verify script (planned for the RC-1 release) does:
 5. Compare against `RELEASE_MANIFEST.txt` (published alongside the release).
 6. Exit 0 if all hashes match, non-zero if any diverge.
 
-See [the PR](https://github.com/XChain-platform/xchain-wallet/issues) tracking the verify-script PR for the actual implementation.
+See [the PR](https://github.com/XChain-Platform/xchain-wallet/issues) tracking the verify-script PR for the actual implementation.
 
 ## Current gotchas (Phase 1)
 
