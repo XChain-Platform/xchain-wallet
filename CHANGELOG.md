@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Align `signers-ledger` `@noble/hashes` to `^1.8.0` (was `^1.5.0`); `LedgerSigner` imports from `@noble/hashes/sha2`, a path only present in >=1.7, so the old range was a latent breakage on an isolated install.
+
 ## [0.333.0] - 2026-06-20
 
 ### Security
