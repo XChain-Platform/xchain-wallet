@@ -1,0 +1,272 @@
+/* Copyright © 2025–2026 Dankest, LLC
+ * Based on XChain Platform by Dankest, LLC – https://dankest.llc
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ *
+ * This file is part of XChain Platform. Licensed under the GNU Affero
+ * General Public License v3.0 or later; see LICENSE.md. A commercial
+ * license (without AGPL source-disclosure terms) is available -
+ * contact legal@dankest.llc. */
+
+/* Contacts list view. Mirrors the Send/Receive TokenPicker toolbar
+   (search left, control right) so the address book feels identical to
+   the picker users meet during a send. The control on the right is a
+   custom network dropdown (chain icon + name) rather than a native select,
+   because native selects can't render images inside options. */
+
+.toolbar {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--xc-space-2);
+    width: 100%;
+    margin-bottom: var(--xc-space-2);
+    flex-wrap: nowrap;
+}
+
+/* Search and network picker each take exactly 50% of the toolbar. */
+.search {
+    flex: 1 1 0;
+    min-width: 0;
+    box-sizing: border-box;
+    padding: var(--xc-space-2) var(--xc-space-3);
+    font-family: var(--xc-font-sans);
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text);
+    background: var(--xc-surface);
+    border: 1px solid var(--xc-border-strong);
+    border-radius: var(--xc-radius-md);
+}
+
+.search::placeholder {
+    color: var(--xc-text-muted);
+}
+
+/* Custom network dropdown: trigger button + absolute popover. The wrapper
+   is a flex item so min-width:0 overrides the default min-width:auto,
+   letting it shrink to match the search box at exactly 50%. */
+.networkWrap {
+    flex: 1 1 0;
+    min-width: 0;
+    position: relative;
+    box-sizing: border-box;
+}
+
+.networkTrigger {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    width: 100%;
+    box-sizing: border-box;
+    min-width: 0;
+    padding: var(--xc-space-2) var(--xc-space-3);
+    font-family: var(--xc-font-sans);
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    color: var(--xc-text);
+    background: var(--xc-surface);
+    border: 1px solid var(--xc-border-strong);
+    border-radius: var(--xc-radius-md);
+    cursor: pointer;
+    text-align: left;
+    overflow: hidden;
+}
+
+.networkTrigger:hover {
+    border-color: var(--xc-accent-primary);
+}
+
+.networkTrigger:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
+.networkTriggerIcon {
+    flex: 0 0 auto;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.networkTriggerIcon img {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    display: block;
+}
+
+.networkTriggerLabel {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.networkCaret {
+    flex: 0 0 auto;
+    color: var(--xc-text-muted);
+    font-size: 10px;
+    line-height: 1;
+}
+
+.networkPopover {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    z-index: 100;
+    background: var(--xc-surface-raised);
+    border: 1px solid var(--xc-border-strong);
+    border-radius: var(--xc-radius-md);
+    box-shadow: var(--xc-shadow-md);
+    overflow: hidden;
+    list-style: none;
+    padding: var(--xc-space-1);
+    margin: 0;
+}
+
+.networkOption {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    width: 100%;
+    padding: var(--xc-space-2) var(--xc-space-2);
+    font-family: var(--xc-font-sans);
+    font-size: var(--xc-text-sm);
+    font-weight: 500;
+    color: var(--xc-text);
+    background: transparent;
+    border: none;
+    border-radius: var(--xc-radius-sm);
+    cursor: pointer;
+    text-align: left;
+}
+
+.networkOption:hover {
+    background: var(--xc-bg-muted);
+}
+
+.networkOptionActive {
+    color: var(--xc-accent-primary);
+    font-weight: 600;
+}
+
+.networkOptionIcon {
+    flex: 0 0 18px;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.networkOptionIcon img {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    display: block;
+}
+
+/* Circular plus button in the header trailing slot, matching the
+   My Tokens "Issue" affordance so the add-contact entry point reads the
+   same across the wallet. */
+.addButton {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: 1px solid var(--xc-border);
+    border-radius: 50%;
+    background: transparent;
+    color: var(--xc-accent-primary);
+    cursor: pointer;
+}
+
+.addButton:hover {
+    background: var(--xc-bg-muted);
+    border-color: var(--xc-accent-primary);
+}
+
+.addButton:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
+.list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.row {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-3);
+    width: 100%;
+    text-align: left;
+    padding: var(--xc-space-3);
+    margin-bottom: var(--xc-space-2);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-md);
+    background: transparent;
+    cursor: pointer;
+    color: inherit;
+}
+
+.row:hover {
+    background: var(--xc-bg-muted);
+    border-color: var(--xc-border-strong);
+}
+
+.row:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
+.rowMain {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.rowName {
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.rowSub {
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+}
+
+.rowCount {
+    flex: 0 0 auto;
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+}
+
+/* Empty state shown when no contacts exist or none match the filter.
+   Rendered as a card so the emptiness is clearly intentional, not a
+   loading glitch. */
+.emptyCard {
+    margin: var(--xc-space-2) 0;
+    padding: var(--xc-space-6) var(--xc-space-4);
+    background: var(--xc-surface-raised);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-lg);
+    text-align: center;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+}

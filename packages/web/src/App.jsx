@@ -278,6 +278,9 @@ function AppInner() {
     const [composePrefill, setComposePrefill] = useState(
         /** @type {{ chainId?: string, fromAddressId?: string, toAddress?: string } | null} */ (null),
     );
+    const [contactScanPrefill, setContactScanPrefill] = useState(
+        /** @type {{ address: string, chainId?: string } | null} */ (null),
+    );
     const [activeWalletId, setActiveWalletId] = useState(
         /** @type {string | null} */ (null),
     );
@@ -1147,6 +1150,8 @@ function AppInner() {
                             setUnlockedView('compose-message');
                         }}
                         onBack={formBack}
+                        scanPrefill={contactScanPrefill}
+                        onScanPrefillConsumed={() => setContactScanPrefill(null)}
                     />
                 );
             }
@@ -1872,14 +1877,21 @@ function AppInner() {
                                 onClassified={(outcome) => {
                                     setGlobalScannerOpen(false);
                                     if (outcome.kind === 'send') {
-                                        setSendPrefill({
-                                            address: outcome.address,
-                                            amount: outcome.amount,
-                                            tick: outcome.tick,
-                                            chainId: outcome.chainId,
-                                            memo: outcome.memo,
-                                        });
-                                        setUnlockedView('send');
+                                        if (unlockedView === 'contacts') {
+                                            setContactScanPrefill({
+                                                address: outcome.address,
+                                                chainId: outcome.chainId,
+                                            });
+                                        } else {
+                                            setSendPrefill({
+                                                address: outcome.address,
+                                                amount: outcome.amount,
+                                                tick: outcome.tick,
+                                                chainId: outcome.chainId,
+                                                memo: outcome.memo,
+                                            });
+                                            setUnlockedView('send');
+                                        }
                                     } else if (outcome.kind === 'receive') {
                                         setUnlockedView('receive');
                                     } else if (outcome.kind === 'psbt') {

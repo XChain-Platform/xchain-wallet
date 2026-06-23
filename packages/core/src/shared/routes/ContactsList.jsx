@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Screen,
     ScreenHeader,
@@ -16,14 +16,98 @@ import {
     Input,
     ChainBadge,
     AddressText,
- Icon,} from '@xchain-wallet/core/ui';
+    Icon,
+} from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
+import * as branding from '../../branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useToast } from '../components/ToastHost.jsx';
 import { ScanRoute } from './ScanRoute.jsx';
 import styles from './IssueTokenForm.module.css';
+import picker from './ContactsList.module.css';
+
+// Each entry carries the icon URL at module load time so the dropdown
+// renders without any async work. Uses mainnet icons because contacts
+// store coin families, not per-network chainIds.
+const NETWORK_OPTIONS = [
+    { value: 'bitcoin',  label: 'Bitcoin',  iconUrl: branding.chainIconSmallUrl('bitcoin-mainnet') },
+    { value: 'litecoin', label: 'Litecoin', iconUrl: branding.chainIconSmallUrl('litecoin-mainnet') },
+    { value: 'dogecoin', label: 'Dogecoin', iconUrl: branding.chainIconSmallUrl('dogecoin-mainnet') },
+];
 
 const chainRegistry = registryLib.defaultRegistry();
+
+/**
+ * Lightweight custom dropdown for the network filter. A native <select>
+ * cannot render images inside options, so we build a small trigger +
+ * popover pattern (the same shape as ChainPicker, but much simpler at
+ * only 4 fixed options).
+ */
+function NetworkDropdown({ value, onChange }) {
+    const [open, setOpen] = useState(false);
+    const triggerRef = useRef(null);
+    const popoverRef = useRef(null);
+
+    useEffect(() => {
+        if (!open) return undefined;
+        const onDown = (e) => {
+            if (triggerRef.current?.contains(e.target)) return;
+            if (popoverRef.current?.contains(e.target)) return;
+            setOpen(false);
+        };
+        const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+        window.addEventListener('mousedown', onDown);
+        window.addEventListener('keydown', onKey);
+        return () => {
+            window.removeEventListener('mousedown', onDown);
+            window.removeEventListener('keydown', onKey);
+        };
+    }, [open]);
+
+    const selected = NETWORK_OPTIONS.find((n) => n.value === value) || null;
+
+    return (
+        <div className={picker.networkWrap}>
+            <button
+                ref={triggerRef}
+                type="button"
+                className={picker.networkTrigger}
+                onClick={() => setOpen((v) => !v)}
+                aria-haspopup="listbox"
+                aria-expanded={open ? 'true' : 'false'}
+                aria-label="Filter by network"
+            >
+                <span className={picker.networkTriggerIcon} aria-hidden="true">
+                    {selected?.iconUrl ? <img src={selected.iconUrl} alt="" /> : <Icon.FilterIcon />}
+                </span>
+                <span className={picker.networkTriggerLabel}>
+                    {selected ? selected.label : 'All Networks'}
+                </span>
+                <span className={picker.networkCaret} aria-hidden="true">&#9660;</span>
+            </button>
+            {open ? (
+                <ul ref={popoverRef} className={picker.networkPopover} role="listbox">
+                    {[{ value: 'all', label: 'All Networks', iconUrl: null, icon: <Icon.FilterIcon /> }, ...NETWORK_OPTIONS].map((n) => (
+                        <li key={n.value}>
+                            <button
+                                type="button"
+                                role="option"
+                                aria-selected={value === n.value ? 'true' : 'false'}
+                                className={`${picker.networkOption} ${value === n.value ? picker.networkOptionActive : ''}`}
+                                onClick={() => { onChange(n.value); setOpen(false); }}
+                            >
+                                <span className={picker.networkOptionIcon} aria-hidden="true">
+                                    {n.iconUrl ? <img src={n.iconUrl} alt="" /> : n.icon || null}
+                                </span>
+                                {n.label}
+                            </button>
+                        </li>
+                    ))}
+                </ul>
+            ) : null}
+        </div>
+    );
+}
 
 /**
  * §41.7.4 Contacts. List + detail + create/edit in one route; the
@@ -32,6 +116,7 @@ const chainRegistry = registryLib.defaultRegistry();
  *   - 'list'   - table of contacts + Add button
  *   - 'detail' - read view of one contact + Send message / Edit / Delete
  *   - 'edit'   - form for new or existing contact
+ *   - 'scan'   - QR scanner, launched from either list or edit
  *
  * On send-message the parent App.jsx navigates to ComposeMessage with
  * the contact's primary entry pre-filled.
@@ -40,8 +125,13 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {string} props.walletId
  * @param {(prefill: { chainId?: string, toAddress?: string }) => void} [props.onSendMessage]
  * @param {() => void} props.onBack
+ * @param {{ address: string, chainId?: string } | null} [props.scanPrefill] Address
+ *   scanned via the global AppHeader QR button while this route is mounted.
+ *   When set, the component opens the new-contact edit form with the address
+ *   pre-filled, then calls onScanPrefillConsumed to clear it in the parent.
+ * @param {() => void} [props.onScanPrefillConsumed]
  */
-export function ContactsList({ walletId, onSendMessage, onBack }) {
+export function ContactsList({ walletId, onSendMessage, onBack, scanPrefill, onScanPrefillConsumed }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -51,6 +141,17 @@ export function ContactsList({ walletId, onSendMessage, onBack }) {
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [mode, setMode] = useState(/** @type {'list' | 'detail' | 'edit' | 'scan'} */ ('list'));
     const [activeId, setActiveId] = useState(/** @type {string | null} */ (null));
+
+    // Tracks whether the QR scanner was launched from the edit form, so
+    // handleScanned knows to merge the address into the current form state
+    // rather than resetting it.
+    const [scanFromEdit, setScanFromEdit] = useState(false);
+
+    // List-view filters. `query` is a free-text match over name / notes /
+    // any entry address or label; `networkFilter` keeps only contacts that
+    // hold at least one address on that chain.
+    const [query, setQuery] = useState('');
+    const [networkFilter, setNetworkFilter] = useState(/** @type {'all' | string} */ ('all'));
 
     const [formName, setFormName] = useState('');
     const [formNotes, setFormNotes] = useState('');
@@ -78,6 +179,38 @@ export function ContactsList({ walletId, onSendMessage, onBack }) {
         return contacts.find((c) => c.id === activeId) || null;
     }, [activeId, contacts]);
 
+    const filteredContacts = useMemo(() => {
+        if (!contacts) return [];
+        const q = query.trim().toLowerCase();
+        return contacts.filter((c) => {
+            const entries = Array.isArray(c.entries) ? c.entries : [];
+            if (networkFilter !== 'all' && !entries.some((e) => e.chain === networkFilter)) {
+                return false;
+            }
+            if (!q) return true;
+            if (c.name?.toLowerCase().includes(q)) return true;
+            if (c.notes?.toLowerCase().includes(q)) return true;
+            return entries.some((e) =>
+                e.address?.toLowerCase().includes(q) || e.label?.toLowerCase().includes(q),
+            );
+        });
+    }, [contacts, query, networkFilter]);
+
+    // When the global AppHeader QR scanner produces an address while this
+    // route is active, App.jsx sets scanPrefill and we open the new-contact
+    // form with that address already filled in.
+    useEffect(() => {
+        if (!scanPrefill) return;
+        const chain = coinFamilyFromChainId(scanPrefill.chainId) || 'bitcoin';
+        setActiveId(null);
+        setFormName('');
+        setFormNotes('');
+        setFormEntries([{ chain, address: scanPrefill.address, label: '' }]);
+        setSubmitError(null);
+        setMode('edit');
+        onScanPrefillConsumed?.();
+    }, [scanPrefill, onScanPrefillConsumed]);
+
     function startEdit(contact) {
         if (contact) {
             setFormName(contact.name);
@@ -94,24 +227,39 @@ export function ContactsList({ walletId, onSendMessage, onBack }) {
         setMode('edit');
     }
 
+    function launchScanFromEdit() {
+        setScanFromEdit(true);
+        setMode('scan');
+    }
+
     function handleScanned(outcome) {
         // ScanRoute fires { kind: 'send', address, chainId? } for plain
-        // addresses, BIP21, and xchain: send URIs. Receive / PSBT scans
-        // have no useful address to add; kick those back to the list
-        // with a toast so the user can try again.
+        // addresses, BIP21, and xchain: send URIs.
         if (outcome && outcome.kind === 'send' && outcome.address) {
-            setActiveId(null);
-            setFormName('');
-            setFormNotes('');
-            setFormEntries([{
-                chain: coinFamilyFromChainId(outcome.chainId) || 'bitcoin',
-                address: outcome.address,
-                label: '',
-            }]);
-            setSubmitError(null);
-            setMode('edit');
+            const chain = coinFamilyFromChainId(outcome.chainId) || 'bitcoin';
+            if (scanFromEdit) {
+                // Merge into the edit form: fill the first entry whose
+                // address is blank, or overwrite entry[0] if all are filled.
+                setFormEntries((prev) => {
+                    const idx = prev.findIndex((e) => !e.address.trim());
+                    const next = [...prev];
+                    const target = idx >= 0 ? idx : 0;
+                    next[target] = { ...next[target], chain, address: outcome.address };
+                    return next;
+                });
+                setScanFromEdit(false);
+                setMode('edit');
+            } else {
+                setActiveId(null);
+                setFormName('');
+                setFormNotes('');
+                setFormEntries([{ chain, address: outcome.address, label: '' }]);
+                setSubmitError(null);
+                setMode('edit');
+            }
         } else {
-            setMode('list');
+            setScanFromEdit(false);
+            setMode(scanFromEdit ? 'edit' : 'list');
             showToast({ message: 'No address detected in that QR code.' });
         }
     }
@@ -196,6 +344,17 @@ export function ContactsList({ walletId, onSendMessage, onBack }) {
             title={mode === 'edit'
                 ? (active ? 'Edit contact' : 'New contact')
                 : mode === 'detail' ? 'Contact' : 'Contacts'}
+            trailing={mode === 'list' ? (
+                <button
+                    type="button"
+                    className={picker.addButton}
+                    onClick={() => { setActiveId(null); startEdit(null); }}
+                    aria-label="Add contact"
+                    title="Add contact"
+                >
+                    <Icon.PlusIcon />
+                </button>
+            ) : null}
         />
     );
 
@@ -222,7 +381,7 @@ export function ContactsList({ walletId, onSendMessage, onBack }) {
     if (mode === 'scan') {
         return (
             <ScanRoute
-                onBack={() => setMode('list')}
+                onBack={() => { setScanFromEdit(false); setMode(scanFromEdit ? 'edit' : 'list'); }}
                 onClassified={handleScanned}
                 chainRegistry={chainRegistry}
             />
@@ -368,46 +527,58 @@ export function ContactsList({ walletId, onSendMessage, onBack }) {
     // mode === 'list'
     return wrap(
         <>
+            <div className={picker.toolbar}>
+                <input
+                    type="text"
+                    className={picker.search}
+                    placeholder="Search"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    aria-label="Search contacts"
+                />
+                <NetworkDropdown value={networkFilter} onChange={setNetworkFilter} />
+            </div>
             {contacts.length === 0 ? (
-                <p className={styles.hint}>No contacts yet. Add one to label addresses in the inbox and history.</p>
+                <div className={picker.emptyCard}>No contacts yet. Tap + to add one and label addresses across the inbox and history.</div>
+            ) : filteredContacts.length === 0 ? (
+                <div className={picker.emptyCard}>No contacts match your filters.</div>
             ) : (
-                <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                    {contacts.map((c) => (
-                        <li key={c.id}>
-                            <button
-                                type="button"
-                                onClick={() => { setActiveId(c.id); setMode('detail'); }}
-                                style={{
-                                    display: 'block',
-                                    width: '100%',
-                                    textAlign: 'left',
-                                    padding: '0.5rem',
-                                    marginBottom: '0.25rem',
-                                    border: '1px solid var(--xc-border)',
-                                    borderRadius: '4px',
-                                    background: 'transparent',
-                                    cursor: 'pointer',
-                                    color: 'inherit',
-                                }}
-                            >
-                                <div style={{ fontWeight: 600 }}>{c.name}</div>
-                                <div style={{ fontSize: '0.75rem', color: 'var(--xc-fg-muted)' }}>
-                                    {c.entries.length} address{c.entries.length === 1 ? '' : 'es'}
-                                    {c.entries[0] ? <> · <AddressText address={c.entries[0].address} /></> : null}
-                                </div>
-                            </button>
-                        </li>
-                    ))}
+                <ul className={picker.list}>
+                    {filteredContacts.map((c) => {
+                        // Prefer the entry on the filtered network so the row
+                        // subtitle shows the address the user is filtering for;
+                        // otherwise fall back to the contact's primary entry.
+                        const display = (networkFilter !== 'all'
+                            && c.entries.find((e) => e.chain === networkFilter))
+                            || c.entries[0];
+                        const chainId = display ? chainIdFor(display.chain) : null;
+                        const d = chainId ? chainRegistry.get(chainId) : null;
+                        return (
+                            <li key={c.id}>
+                                <button
+                                    type="button"
+                                    className={picker.row}
+                                    onClick={() => { setActiveId(c.id); setMode('detail'); }}
+                                >
+                                    {d ? <ChainBadge descriptor={d} size="sm" /> : null}
+                                    <span className={picker.rowMain}>
+                                        <span className={picker.rowName}>{c.name}</span>
+                                        <span className={picker.rowSub}>
+                                            {display ? <AddressText address={display.address} /> : null}
+                                        </span>
+                                    </span>
+                                    <span className={picker.rowCount}>
+                                        {c.entries.length} address{c.entries.length === 1 ? '' : 'es'}
+                                    </span>
+                                </button>
+                            </li>
+                        );
+                    })}
                 </ul>
             )}
-            <div className={styles.actions}>
-                <Button variant="primary" onClick={() => { setActiveId(null); startEdit(null); }}>
-                    + Add contact
-                </Button>
-                <Button variant="ghost" onClick={() => setMode('scan')} icon={<Icon.ScanIcon />}>
-                    Scan address
-                </Button>
-            </div>
         </>,
     );
 }
