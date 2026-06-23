@@ -749,7 +749,7 @@ export function PsbtSignForm({ walletId, onBack }) {
                             wordBreak: 'break-all',
                         }}
                     />
-                    <input {...drop.pickerProps} aria-label="Upload PSBT file" />
+                    <input {...drop.pickerProps} aria-label="Upload transaction file" />
                 </div>
                 <div style={{ marginTop: 4, fontSize: 'var(--xc-text-sm)', color: 'var(--xc-text-muted)', display: 'flex', alignItems: 'center', gap: 'var(--xc-space-2)', flexWrap: 'wrap' }}>
                     <span>Or</span>

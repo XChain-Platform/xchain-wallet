@@ -26,6 +26,7 @@ import { useActionProofVerification } from '../hooks/useProofVerification.js';
 import { EmptyStateNudge } from '../components/EmptyStateNudge.jsx';
 import { useToast } from '../components/ToastHost.jsx';
 import { groupHistoryEntries } from '../utils/historyGrouping.js';
+import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { TxStatusTimeline } from '../components/TxStatusTimeline.jsx';
 import { StalenessLabel } from '../components/StalenessLabel.jsx';
 import { flows as flowsLib } from '@xchain-wallet/core';
@@ -1392,14 +1393,14 @@ function basicDetailRows(entry, chainTip) {
     // Action: just the colored bubble. The action number now lives
     // on its own "Index" row below Block.
     rows.push(['Action', (
-        <span className={styles.actionTag}>{entry.action || '-'}</span>
+        <span className={styles.actionTag}>{entry.action ? actionDisplayLabel(entry.action) : '-'}</span>
     )]);
 
     // Status: second, so success / failure is visible immediately.
     const status = classifyEntryStatus(entry);
-    const statusLabel = status === 'confirmed' ? 'VALID'
-        : status === 'failed' ? 'INVALID'
-        : 'PENDING';
+    const statusLabel = status === 'confirmed' ? 'Confirmed'
+        : status === 'failed' ? 'Failed'
+        : 'Pending';
     const statusColorClass = status === 'confirmed' ? styles.statusPillSuccess
         : status === 'failed' ? styles.statusPillError
         : styles.statusPillPending;

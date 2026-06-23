@@ -513,10 +513,10 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 <h2 className={styles.successTitle}>Not available in watcher mode</h2>
                 <p className={styles.hint}>
                     Airdrop is a two-phase action: the wallet broadcasts a
-                    LIST transaction, waits for the indexer to confirm it,
-                    then broadcasts the AIRDROP transaction referencing the
-                    list. A watcher-mode wallet can't observe the LIST
-                    landing on-chain (broadcasting happens on a different
+                    recipient-list transaction, waits for the indexer to
+                    confirm it, then broadcasts the airdrop transaction
+                    referencing the list. A watcher-mode wallet can't observe
+                    the recipient list landing on-chain (broadcasting happens on a different
                     wallet), so this flow can't be split across an
                     air-gapped boundary today.
                 </p>
@@ -536,9 +536,9 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         return wrap(
             <>
                 <h2 className={styles.successTitle}>Airdrop sent</h2>
-                <p className={styles.successLabel}>LIST transaction</p>
+                <p className={styles.successLabel}>Recipient list transaction</p>
                 <code className={styles.txid}>{listTxid}</code>
-                <p className={styles.successLabel}>AIRDROP transaction</p>
+                <p className={styles.successLabel}>Airdrop transaction</p>
                 <code className={styles.txid}>{airdropTxid}</code>
                 <div className={styles.actions}>
                     <Button variant="primary" onClick={handleClearPending}>Done</Button>
@@ -554,7 +554,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
             <>
                 <p className={styles.summary}>{listDecoded?.summary}</p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>LIST transaction</dt>
+                    <dt className={styles.detailsLabel}>Recipient list transaction</dt>
                     <dd className={styles.detailsValue}>
                         <code className={styles.txid}>{listTxid}</code>
                     </dd>
@@ -564,9 +564,9 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     </dd>
                 </dl>
                 <p className={styles.hint}>
-                    Waiting for the LIST transaction to be indexed. Once the
-                    explorer assigns an ACTION_INDEX, we'll continue to the
-                    AIRDROP step. Safe to close the wallet; we'll resume from
+                    Waiting for the recipient-list transaction to be indexed. Once the
+                    explorer assigns an action index, we'll continue to the
+                    airdrop step. Safe to close the wallet; we'll resume from
                     Home when you reopen it.
                 </p>
                 {slow ? (

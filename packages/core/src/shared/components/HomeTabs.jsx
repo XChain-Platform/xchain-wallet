@@ -29,6 +29,7 @@ import {
     synthesizeDemoDefiPositions,
 } from '@xchain-wallet/core/flows';
 import { classifyEntryAction, classifyEntryStatus } from '../utils/historyFilter.js';
+import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { useCollectibleKeys } from '../hooks/useCollectibleKeys.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import styles from './HomeTabs.module.css';
@@ -348,13 +349,6 @@ const ACTION_ICON = {
     other:      (k) => <Icon.HistoryIcon key={k} />,
 };
 
-const ACTION_LABEL = {
-    send: 'SEND',         receive: 'RECEIVE',  issue: 'ISSUE',     mint: 'MINT',
-    destroy: 'DESTROY',   sweep: 'SWEEP',      dispenser: 'DISPENSER', dispense: 'DISPENSE',
-    order: 'ORDER',       swap: 'SWAP',        dividend: 'DIVIDEND',
-    broadcast: 'BROADCAST', message: 'MESSAGE', crosschain: 'LINK',
-};
-
 // One activity row. Visual mirrors the DeFi row layout: 48px icon on
 // the left (circular chain icon for native, square token tile for
 // tokens with a chain overlay), three-line body on the right:
@@ -380,11 +374,11 @@ function ActivityRow({ entry, walletAddresses, assetLookup, chainTip, onClick })
     // mode should opaque every financial figure the user sees, not
     // just balances on the Coins/Tokens tab.
     const displayPrimary = balancesHidden && primary ? '•••••' : primary;
-    const label = ACTION_LABEL[kind] || (entry.action || 'EVENT');
+    const label = actionDisplayLabel(kind) || actionDisplayLabel(entry.action) || 'Event';
     const iconFn = ACTION_ICON[kind] || ACTION_ICON.other;
-    const statusLabel = status === 'confirmed' ? 'VALID'
-        : status === 'failed' ? 'INVALID'
-        : 'PENDING';
+    const statusLabel = status === 'confirmed' ? 'Confirmed'
+        : status === 'failed' ? 'Failed'
+        : 'Pending';
     const statusClass = status === 'confirmed' ? styles.statusValid
         : status === 'failed' ? styles.statusInvalid
         : styles.statusPending;
@@ -571,9 +565,9 @@ function DemoDefiList({ networkFilter, balances, onSelectEntry }) {
         <ul className={styles.demoList}>
             {positions.map((p, idx) => {
                 const chainIconUrl = branding.chainIconSmallUrl(p.chainId);
-                const statusLabel = p.status === 'confirmed' ? 'VALID'
-                    : p.status === 'failed' ? 'INVALID'
-                    : 'PENDING';
+                const statusLabel = p.status === 'confirmed' ? 'Confirmed'
+                    : p.status === 'failed' ? 'Failed'
+                    : 'Pending';
                 const statusClass = p.status === 'confirmed' ? styles.statusValid
                     : p.status === 'failed' ? styles.statusInvalid
                     : styles.statusPending;

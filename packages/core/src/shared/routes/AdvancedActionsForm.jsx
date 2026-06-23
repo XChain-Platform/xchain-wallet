@@ -28,6 +28,7 @@ import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
+import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -513,7 +514,7 @@ export function AdvancedActionsForm({ walletId, onBack }) {
                     <option value="">Pick an action</option>
                     {(actions || []).map((a) => (
                         <option key={a} value={a}>
-                            {a}
+                            {actionDisplayLabel(a)} ({a})
                             {ACTIONS_WITH_DEDICATED_FORMS.has(a)
                                 ? ' (dedicated form available)'
                                 : ''}
