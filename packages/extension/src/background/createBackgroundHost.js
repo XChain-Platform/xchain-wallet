@@ -43,6 +43,8 @@ const {
     unlockWallet,
     receiveAddress,
     dispenserAddress,
+    resolveActiveAddresses,
+    setActiveAddress,
     sendToken,
     buildSendPsbt,
     buildActionPsbt,
@@ -1252,6 +1254,26 @@ export function createBackgroundHost(deps) {
         if (!id) throw new Error('addresses.delete: id is required');
         const removed = await vault.addresses.delete(id);
         return { ok: removed };
+    });
+
+    // Resolve the active (operating) address per chain for an account.
+    host.register('addresses.active', async (req, { vault, chainRegistry }) => {
+        return resolveActiveAddresses({
+            vault,
+            walletId: req?.walletId,
+            accountId: req?.accountId,
+            chainRegistry,
+        });
+    });
+
+    // Set the active address for one (account, chain).
+    host.register('addresses.setActive', async (req, { vault }) => {
+        return setActiveAddress({
+            vault,
+            accountId: req?.accountId,
+            chainId: req?.chainId,
+            addressId: req?.addressId,
+        });
     });
 
 

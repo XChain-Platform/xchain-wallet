@@ -227,6 +227,7 @@ export { getSettings, updateSettings } from './settings.js';
 export { removeWallet } from './removeWallet.js';
 export { receiveAddress, NoMatchingAccountError } from './receiveAddress.js';
 export { dispenserAddress } from './dispenserAddress.js';
+export { resolveActiveAddresses, setActiveAddress } from './activeAddress.js';
 export {
     addressBalances,
     addressHistory,

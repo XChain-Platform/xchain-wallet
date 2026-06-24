@@ -27,6 +27,8 @@ import { createContext } from 'react';
  * @property {(walletId: string) => Promise<any>} [getWalletBalances]
  * @property {(walletId: string) => Promise<any>} [getAddressesByChain]
  * @property {(walletId: string, chainId: string) => Promise<any>} [getNewestAddress]
+ * @property {(walletId: string, accountId?: string) => Promise<any>} [getActiveAddresses]
+ * @property {(accountId: string, chainId: string, addressId: string) => Promise<any>} [setActiveAddress]
  * @property {(opts: any) => Promise<any>} [createWallet]
  * @property {(opts: any) => Promise<any>} [importMnemonic]
  * @property {(opts: any) => Promise<any>} [addImportedWallet]

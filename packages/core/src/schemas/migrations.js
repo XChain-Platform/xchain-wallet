@@ -65,7 +65,12 @@ export const walletMigrations = {
     },
 };
 /** @type {MigrationMap} */
-export const accountMigrations = {};
+export const accountMigrations = {
+    // v1 -> v2: §11.3.2. Active address per chain. Existing accounts get an
+    // empty override map; the active address resolves to the default (the
+    // lowest-index receive address) until the user picks one.
+    1: (r) => ({ ...r, schemaVersion: 2, activeAddressByChainId: {} }),
+};
 /** @type {MigrationMap} */
 export const addressMigrations = {
     // v1 -> v2: §17.6. Signer routing. Existing v1 records predate

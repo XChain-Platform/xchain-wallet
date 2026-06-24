@@ -40,6 +40,7 @@ import {
 } from '../../../packages/core/src/schemas/migrations.js';
 import { validateWallet, CURRENT_VERSION as WALLET_VERSION } from '../../../packages/core/src/schemas/wallet.js';
 import { validateAddress, CURRENT_VERSION as ADDRESS_VERSION } from '../../../packages/core/src/schemas/address.js';
+import { CURRENT_VERSION as ACCOUNT_VERSION } from '../../../packages/core/src/schemas/account.js';
 import { validateSettings, CURRENT_VERSION as SETTINGS_VERSION } from '../../../packages/core/src/schemas/settings.js';
 
 const NOW = new Date().toISOString();
@@ -325,11 +326,7 @@ describe('multisigConfigMigrations: v1 to v2', () => {
     });
 });
 
-describe('empty migration maps (account, contact, connectedSite, pendingTx, etc.)', () => {
-    it('accountMigrations has no registered steps', () => {
-        expect(Object.keys(accountMigrations)).toHaveLength(0);
-    });
-
+describe('empty migration maps (contact, connectedSite, pendingTx, etc.)', () => {
     it('contactMigrations has no registered steps', () => {
         expect(Object.keys(contactMigrations)).toHaveLength(0);
     });
@@ -359,10 +356,18 @@ describe('empty migration maps (account, contact, connectedSite, pendingTx, etc.
     });
 });
 
-describe('migrateAccount (no-op)', () => {
-    it('passes through v1 at current (v1) target', () => {
+describe('accountMigrations: v1 to v2', () => {
+    it('adds an empty activeAddressByChainId map', () => {
+        const r = accountMigrations[1]({ schemaVersion: 1, id: 'a-1' });
+        expect(r.schemaVersion).toBe(2);
+        expect(r.activeAddressByChainId).toEqual({});
+        expect(r.id).toBe('a-1');
+    });
+
+    it('migrateAccount carries a v1 record up to current', () => {
         const r = migrateAccount({ schemaVersion: 1 });
-        expect(r.schemaVersion).toBe(1);
+        expect(r.schemaVersion).toBe(ACCOUNT_VERSION);
+        expect(r.activeAddressByChainId).toEqual({});
     });
 });
 

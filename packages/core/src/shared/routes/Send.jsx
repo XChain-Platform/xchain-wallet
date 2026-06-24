@@ -172,6 +172,11 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
     const [fromAddressId, setFromAddressId] = useState(
         /** @type {string | null} */ (null),
     );
+    // Active (operating) address per chain; Send defaults its from-address to
+    // this so a send always spends from the chain's active address.
+    const [activeByChain, setActiveByChain] = useState(
+        /** @type {Record<string, { id: string, address: string }>} */ ({}),
+    );
     const [toAddress, setToAddress] = useState(prefill?.address || '');
     const [tick, setTick] = useState(prefill?.tick || '');
     const [amount, setAmount] = useState(prefill?.amount || '');
@@ -579,22 +584,39 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
 
     // Latest-tick ref so the chainId effect below can preserve a
     // non-empty tick without subscribing to every keystroke.
+    useEffect(() => {
+        if (!walletId || typeof messaging.getActiveAddresses !== 'function') return undefined;
+        let cancelled = false;
+        messaging.getActiveAddresses(walletId)
+            .then((m) => { if (!cancelled) setActiveByChain(m || {}); })
+            .catch(() => { if (!cancelled) setActiveByChain({}); });
+        return () => { cancelled = true; };
+    }, [walletId, messaging]);
+
     const tickRef = useRef(tick);
     tickRef.current = tick;
     useEffect(() => {
         if (!chainId || !addressesByChain) return;
-        const addrs = (addressesByChain[chainId] || []).filter(
-            (a) => a.source === 'hd' && a.derivationPath?.split('/')?.[4] === '0',
-        );
-        if (addrs.length > 0) {
-            const sorted = [...addrs].sort((a, b) => {
-                const ai = Number(a.derivationPath?.split('/')?.[5] ?? -1);
-                const bi = Number(b.derivationPath?.split('/')?.[5] ?? -1);
-                return bi - ai;
-            });
-            setFromAddressId(sorted[0].id);
+        const all = addressesByChain[chainId] || [];
+        // Prefer the chain's active (operating) address; fall back to the
+        // newest HD external address when no active address is resolvable.
+        const activeId = activeByChain[chainId]?.id;
+        if (activeId && all.some((a) => a.id === activeId)) {
+            setFromAddressId(activeId);
         } else {
-            setFromAddressId(null);
+            const addrs = all.filter(
+                (a) => a.source === 'hd' && a.derivationPath?.split('/')?.[4] === '0',
+            );
+            if (addrs.length > 0) {
+                const sorted = [...addrs].sort((a, b) => {
+                    const ai = Number(a.derivationPath?.split('/')?.[5] ?? -1);
+                    const bi = Number(b.derivationPath?.split('/')?.[5] ?? -1);
+                    return bi - ai;
+                });
+                setFromAddressId(sorted[0].id);
+            } else {
+                setFromAddressId(null);
+            }
         }
         // Default the tick to the native coin only when the field is
         // empty. Without this guard, SendPicker prefilling a non-native
@@ -605,7 +627,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
             const nativeTicker = nativeTickerFor(descriptor);
             if (nativeTicker) setTick(nativeTicker);
         }
-    }, [chainId, addressesByChain]);
+    }, [chainId, addressesByChain, activeByChain]);
 
     useEffect(() => {
         if (stage === 'review') {

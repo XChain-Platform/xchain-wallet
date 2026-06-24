@@ -164,6 +164,16 @@ export function deleteAddress(id) {
     return /** @type {any} */ (sendMessage('addresses.delete', { id }));
 }
 
+/** Resolve the active address per chain for an account. @param {string} walletId @param {string} [accountId] */
+export function getActiveAddresses(walletId, accountId) {
+    return /** @type {any} */ (sendMessage('addresses.active', { walletId, accountId }));
+}
+
+/** Set the active address for one (account, chain). @param {string} accountId @param {string} chainId @param {string} addressId */
+export function setActiveAddress(accountId, chainId, addressId) {
+    return /** @type {any} */ (sendMessage('addresses.setActive', { accountId, chainId, addressId }));
+}
+
 /**
  * Build, sign, and broadcast a SEND action via the host's `action.send`
  * handler. Pass-through to core's `sendToken` flow; fails loudly

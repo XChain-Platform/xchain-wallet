@@ -53,8 +53,8 @@ assert.ok(/spamNudgedForWalletRef\.current === activeWalletId/.test(homeSrc),
     'Effect bails when the same wallet was already nudged this mount');
 assert.ok(/spamNudgedForWalletRef\.current = activeWalletId/.test(homeSrc),
     'Effect marks the wallet as nudged before showing the toast');
-assert.ok(/buildBalanceRows\(balances, chainRegistry\)/.test(homeSrc),
-    'Effect aggregates raw balances into rows via buildBalanceRows');
+assert.ok(/buildBalanceRows\(balances, chainRegistry, activeByChain\)/.test(homeSrc),
+    'Effect builds rows via buildBalanceRows scoped to the active address per chain');
 assert.ok(/detectSpamCandidates\(rows\)/.test(homeSrc),
     'Effect runs detectSpamCandidates against the aggregated rows');
 assert.ok(/candidates\.filter\(\(k\) => !hiddenSet\.has\(k\)\)/.test(homeSrc),

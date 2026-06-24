@@ -317,8 +317,17 @@ export function detectSpamCandidates(rows) {
  * Aggregates raw `balances` keyed by chainId + chain registry into
  * a flat list of `BalanceRow`s. Used by every tab so each tab gets
  * the same shape and only needs to filter.
+ *
+ * When `activeByChain` (chainId -> { address }) is supplied, each chain's
+ * row reflects ONLY its active (operating) address, not the sum across all
+ * addresses. Omitting it keeps the legacy whole-account aggregate, so other
+ * callers are unaffected.
+ *
+ * @param {Record<string, any[]>} balances
+ * @param {import('../../registry/index.js').ChainRegistry} chainRegistry
+ * @param {Record<string, { address: string }> | null} [activeByChain]
  */
-export function buildBalanceRows(balances, chainRegistry) {
+export function buildBalanceRows(balances, chainRegistry, activeByChain = null) {
     const out = [];
     if (!balances || typeof balances !== 'object') return out;
 
@@ -327,10 +336,17 @@ export function buildBalanceRows(balances, chainRegistry) {
         const descriptor = chainRegistry.get(chainId);
         if (!descriptor) continue;
 
+        const activeAddr = activeByChain && activeByChain[chainId]
+            ? activeByChain[chainId].address
+            : null;
+
         let nativeAcc = null;
         const tokenAcc = new Map();
 
         for (const entry of entries) {
+            // Active-address mode: only the active address contributes to the
+            // chain's balance, so the user sees one address per coin.
+            if (activeAddr && entry.address !== activeAddr) continue;
             const b = entry.balances;
             if (!b || typeof b !== 'object') continue;
 

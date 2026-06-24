@@ -24,6 +24,7 @@ import * as branding from '../../branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { EmptyStateNudge } from '../components/EmptyStateNudge.jsx';
 import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
+import { AddAddressModal } from './AddAddressModal.jsx';
 import { coinFromChainId, formatAmount, fiatValue } from '../components/BalanceList.jsx';
 import { useSettings } from '../hooks/useSettings.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
@@ -105,6 +106,7 @@ export function AddressList({
 
     // "+" menu in the header: Add address / Import address.
     const [addMenuOpen, setAddMenuOpen] = useState(false);
+    const [showAddModal, setShowAddModal] = useState(false);
     const addMenuRef = useRef(null);
     useEffect(() => {
         if (!addMenuOpen) return undefined;
@@ -133,6 +135,24 @@ export function AddressList({
             .catch(() => { if (!cancelled) setBalancesByChain({}); });
         return () => { cancelled = true; };
     }, [walletId, accountId, messaging]);
+
+    // Resolved active (operating) address per chain: the row matching it gets
+    // the green "Active" bubble and the detail view hides "Set active" for it.
+    const [activeByChain, setActiveByChain] = useState(
+        /** @type {Record<string, { id: string, address: string }>} */ ({}),
+    );
+    useEffect(() => {
+        if (!walletId || typeof messaging.getActiveAddresses !== 'function') return undefined;
+        let cancelled = false;
+        messaging.getActiveAddresses(walletId, accountId)
+            .then((m) => { if (!cancelled) setActiveByChain(m || {}); })
+            .catch(() => { if (!cancelled) setActiveByChain({}); });
+        return () => { cancelled = true; };
+    }, [walletId, accountId, messaging, reloadKey]);
+
+    const isActiveRow = (row) => (
+        !!row?.address && activeByChain[row.chainId]?.address === row.address
+    );
 
     // address (chainId:address) -> native balance { quantity, tick, divisibility }.
     const nativeByKey = useMemo(() => {
@@ -165,16 +185,6 @@ export function AddressList({
             ? `${formatAmount(nb.quantity, nb.divisibility)} ${nb.tick || nativeTick}`
             : `0 ${nativeTick}`;
     };
-    // Per-format colored bubble class (P2TR purple, P2WPKH blue, etc.).
-    const addrTypeClass = (t) => {
-        const k = String(t || '').toLowerCase();
-        if (k === 'p2tr') return local.typeP2tr;
-        if (k === 'p2wpkh') return local.typeP2wpkh;
-        if (k === 'p2sh-p2wpkh') return local.typeP2shP2wpkh;
-        if (k === 'p2pkh') return local.typeP2pkh;
-        return local.typeOther;
-    };
-
     // Formatted fiat value for a row, with the currency code (e.g. "$32.10 USD"),
     // or '' when there's no price/balance.
     const fiatTextFor = (row) => {
@@ -390,19 +400,17 @@ export function AddressList({
                     </button>
                     {addMenuOpen ? (
                         <ul className={local.addMenu} role="menu">
-                            {onReceive ? (
-                                <li>
-                                    <button
-                                        type="button"
-                                        role="menuitem"
-                                        className={local.addMenuItem}
-                                        onClick={() => { setAddMenuOpen(false); onReceive(); }}
-                                    >
-                                        <span className={local.addMenuIcon} aria-hidden="true"><Icon.PlusIcon /></span>
-                                        Add address
-                                    </button>
-                                </li>
-                            ) : null}
+                            <li>
+                                <button
+                                    type="button"
+                                    role="menuitem"
+                                    className={local.addMenuItem}
+                                    onClick={() => { setAddMenuOpen(false); setShowAddModal(true); }}
+                                >
+                                    <span className={local.addMenuIcon} aria-hidden="true"><Icon.PlusIcon /></span>
+                                    Add address
+                                </button>
+                            </li>
                             <li>
                                 <button
                                     type="button"
@@ -501,6 +509,15 @@ export function AddressList({
                 setLoadError(err?.message || 'Failed to delete address.');
             }
         };
+        const setAsActive = async () => {
+            if (!selected.record?.id || typeof messaging.setActiveAddress !== 'function') return;
+            try {
+                await messaging.setActiveAddress(accountId, selected.chainId, selected.record.id);
+                setReloadKey((k) => k + 1);
+            } catch (err) {
+                setLoadError(err?.message || 'Failed to set active address.');
+            }
+        };
         return (
             <Screen variant={variant} header={<ScreenHeader onBack={() => setSelected(null)} title="View Address" titleIcon={<Icon.ScanIcon />} />}>
                 <div className={local.detailTop}>
@@ -548,8 +565,9 @@ export function AddressList({
                     <button
                         type="button"
                         className={local.quickAction}
-                        onClick={() => onReceive?.()}
-                        disabled={!onReceive}
+                        onClick={setAsActive}
+                        disabled={!selected.record?.id || isActiveRow(selected)}
+                        title={isActiveRow(selected) ? 'This is the active address' : 'Make this the active address'}
                     >
                         <span className={local.quickActionIcon} aria-hidden="true"><Icon.ReceiveIcon /></span>
                         <span>Use</span>
@@ -758,6 +776,16 @@ export function AddressList({
             </div>
             ) : null}
 
+            {showAddModal ? (
+                <AddAddressModal
+                    walletId={walletId}
+                    accountId={accountId}
+                    chainIds={Object.keys(addressesByChain || {})}
+                    onClose={() => setShowAddModal(false)}
+                    onGenerated={() => setReloadKey((k) => k + 1)}
+                />
+            ) : null}
+
             {rows.length === 0 ? (
                 <div className={local.emptyCard}>
                     No addresses match the current filter.
@@ -775,13 +803,11 @@ export function AddressList({
                                 onClick={() => { setSelected(row); setLabelDraft(row.label || ''); }}
                                 aria-label={`View address ${row.address}`}
                             >
-                                {(row.label || row.record?.addressType) ? (
+                                {(row.label || isActiveRow(row)) ? (
                                     <div className={local.addrTopRow}>
                                         <span className={local.addrLabel}>{row.label || ''}</span>
-                                        {row.record?.addressType ? (
-                                            <span className={`${local.addrType} ${addrTypeClass(row.record.addressType)}`}>
-                                                {String(row.record.addressType).toUpperCase()}
-                                            </span>
+                                        {isActiveRow(row) ? (
+                                            <span className={local.addrActive}>Active</span>
                                         ) : null}
                                     </div>
                                 ) : null}

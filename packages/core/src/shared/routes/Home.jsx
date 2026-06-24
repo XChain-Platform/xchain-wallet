@@ -94,6 +94,11 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
     const [balances, setBalances] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
     );
+    // Active (operating) address per chain. The headline balance per coin
+    // reflects this address only (not the sum across all addresses).
+    const [activeByChain, setActiveByChain] = useState(
+        /** @type {Record<string, { id: string, address: string }>} */ ({}),
+    );
     // Cluster G FOLLOWUP 5: Unix-ms timestamp of the most recent
     // successful balance fetch; null until the first one completes.
     // Threaded into HomeTabs → StalenessLabel so the user can tell
@@ -221,7 +226,7 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
     useEffect(() => {
         if (!balances || !activeWalletId) return;
         if (spamNudgedForWalletRef.current === activeWalletId) return;
-        const rows = buildBalanceRows(balances, chainRegistry);
+        const rows = buildBalanceRows(balances, chainRegistry, activeByChain);
         const candidates = detectSpamCandidates(rows);
         const hiddenSet = new Set(hiddenTokens);
         const fresh = candidates.filter((k) => !hiddenSet.has(k));
@@ -241,7 +246,7 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
                 });
             },
         });
-    }, [balances, activeWalletId, hiddenTokens, messaging, showToast]);
+    }, [balances, activeByChain, activeWalletId, hiddenTokens, messaging, showToast]);
 
     // Load the wallets list once. The user picks the active one via
     // HeaderSettingsButton → onSwitchWallet → setActiveWalletId →
@@ -318,6 +323,7 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
         let cancelled = false;
         setBalances(null);
         setBalancesFetchedAt(null);
+        setActiveByChain({});
         setMultisig(null);
         setPendingAirdrops([]);
         setPendingCoinpays([]);
@@ -345,6 +351,13 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
                 }
             } catch (err) {
                 if (!cancelled) setLoadError(err?.message || 'Failed to load balances.');
+            }
+
+            if (typeof messaging.getActiveAddresses === 'function') {
+                try {
+                    const active = await messaging.getActiveAddresses(walletId, accountId);
+                    if (!cancelled) setActiveByChain(active || {});
+                } catch { /* fall back to aggregate when unavailable */ }
             }
 
             if (typeof messaging.getMultisigReceiveAddress === 'function') {
@@ -643,6 +656,7 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
                     <HomeTabs
                         chainRegistry={chainRegistry}
                         balances={balances}
+                        activeByChain={activeByChain}
                         balancesFetchedAt={balancesFetchedAt}
                         walletId={activeWalletId}
                         networkFilter={networkFilter}
