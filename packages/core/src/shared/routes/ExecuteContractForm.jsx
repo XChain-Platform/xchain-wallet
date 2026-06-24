@@ -26,6 +26,7 @@ import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { useContractManifest } from '../hooks/useContractManifest.js';
 import { ContractConsentPanel } from '../components/ContractConsentPanel.jsx';
+import { preferredSourceId } from '../addressSelection.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -81,23 +82,24 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, on
 
     useEffect(() => {
         let cancelled = false;
-        messaging.getAddressesByChain(walletId)
-            .then((byChain) => {
+        Promise.all([
+            messaging.getAddressesByChain(walletId),
+            typeof messaging.getActiveAddresses === 'function'
+                ? messaging.getActiveAddresses(walletId)
+                : Promise.resolve({}),
+        ])
+            .then(([byChain, active]) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain || {});
-                const addrs = (byChain?.[chainId] || []).filter(
-                    (a) => a.source === 'hd' && a.derivationPath?.split('/')?.[4] === '0',
-                );
-                if (addrs.length === 0) {
+                // Execute from the chain's active address (else newest HD
+                // external), matching Send so the action's SOURCE is the
+                // operating address.
+                const sourceId = preferredSourceId(byChain?.[chainId] || [], active?.[chainId]);
+                if (!sourceId) {
                     setLoadError('No address on this chain to execute from. Use Receive to generate one first.');
                     return;
                 }
-                const sorted = [...addrs].sort((a, b) => {
-                    const ai = Number(a.derivationPath?.split('/')?.[5] ?? -1);
-                    const bi = Number(b.derivationPath?.split('/')?.[5] ?? -1);
-                    return bi - ai;
-                });
-                setFromAddressId(sorted[0].id);
+                setFromAddressId(sourceId);
             })
             .catch((err) => {
                 if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');

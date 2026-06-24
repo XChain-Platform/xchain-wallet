@@ -34,6 +34,7 @@ import { buildBalanceRows } from './BalanceList.jsx';
 import { formatWithThousands } from '../utils/amountFormat.js';
 import { NativeFeeToggle } from './NativeFeeToggle.jsx';
 import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
+import { preferredSourceId } from '../addressSelection.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -89,19 +90,19 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
         let cancelled = false;
         (async () => {
             try {
-                const byChain = await messaging.getAddressesByChain(walletId);
+                const [byChain, active] = await Promise.all([
+                    messaging.getAddressesByChain(walletId),
+                    typeof messaging.getActiveAddresses === 'function'
+                        ? messaging.getActiveAddresses(walletId)
+                        : Promise.resolve({}),
+                ]);
                 if (cancelled) return;
                 setAddressesByChain(byChain);
-                const onChain = (byChain[chainId] || [])
-                    .filter((a) => a.source === 'hd' && a.derivationPath?.split('/')?.[4] === '0');
-                if (onChain.length > 0) {
-                    const sorted = [...onChain].sort((a, b) => {
-                        const ai = Number(a.derivationPath?.split('/')?.[5] ?? -1);
-                        const bi = Number(b.derivationPath?.split('/')?.[5] ?? -1);
-                        return bi - ai;
-                    });
-                    setFromAddressId(sorted[0].id);
-                }
+                // Fund the order from the chain's active address (fall back to
+                // the newest HD external), matching Send so the balance shown
+                // below and the address that signs are the same one.
+                const sourceId = preferredSourceId(byChain[chainId] || [], active?.[chainId]);
+                if (sourceId) setFromAddressId(sourceId);
                 // Pull balances alongside addresses so we can show the
                 // user how much of tick1 / tick2 they have available
                 // before they place the order.
@@ -119,12 +120,22 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
 
     const balanceFor = useCallback((tick) => {
         if (!balances) return null;
-        const rows = buildBalanceRows(balances, chainRegistry);
+        // Scope the shown balance to the funding address (the one that will
+        // sign), not the wallet-wide aggregate: a single SOURCE can only spend
+        // what sits on that address, so showing the aggregate would overstate
+        // what the order can actually cover.
+        const fundingAddr = (addressesByChain?.[chainId] || [])
+            .find((a) => a.id === fromAddressId)?.address || null;
+        const rows = buildBalanceRows(
+            balances,
+            chainRegistry,
+            fundingAddr ? { [chainId]: { address: fundingAddr } } : null,
+        );
         const tickUpper = String(tick || '').toUpperCase();
         const hit = rows.find((r) => r.chainId === chainId && r.tick.toUpperCase() === tickUpper);
         if (!hit) return '0';
         return formatQuantity(hit.quantity, hit.divisibility);
-    }, [balances, chainId]);
+    }, [balances, chainId, addressesByChain, fromAddressId]);
 
     const fromAddress = useMemo(() => {
         if (!addressesByChain || !fromAddressId) return null;

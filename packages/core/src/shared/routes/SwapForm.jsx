@@ -27,6 +27,7 @@ import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
+import { preferredSourceId } from '../addressSelection.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -79,6 +80,9 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
     );
+    const [activeByChain, setActiveByChain] = useState(
+        /** @type {Record<string, { id: string, address: string }>} */ ({}),
+    );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
 
     const [chainId, setChainId] = useState(/** @type {string | null} */ (initialChainId || null));
@@ -107,10 +111,16 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
 
     useEffect(() => {
         let cancelled = false;
-        messaging.getAddressesByChain(walletId)
-            .then((byChain) => {
+        Promise.all([
+            messaging.getAddressesByChain(walletId),
+            typeof messaging.getActiveAddresses === 'function'
+                ? messaging.getActiveAddresses(walletId)
+                : Promise.resolve({}),
+        ])
+            .then(([byChain, active]) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain);
+                setActiveByChain(active || {});
                 const first = Object.keys(byChain)[0];
                 if (!first) {
                     setLoadError(
@@ -129,20 +139,11 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
 
     useEffect(() => {
         if (!chainId || !addressesByChain) return;
-        const addrs = (addressesByChain[chainId] || []).filter(
-            (a) => a.source === 'hd' && a.derivationPath?.split('/')?.[4] === '0',
-        );
-        if (addrs.length > 0) {
-            const sorted = [...addrs].sort((a, b) => {
-                const ai = Number(a.derivationPath?.split('/')?.[5] ?? -1);
-                const bi = Number(b.derivationPath?.split('/')?.[5] ?? -1);
-                return bi - ai;
-            });
-            setFromAddressId(sorted[0].id);
-        } else {
-            setFromAddressId(null);
-        }
-    }, [chainId, addressesByChain]);
+        // Default the from-address to the chain's active address (else newest
+        // HD external), matching Send. The user can still override via the
+        // dropdown; that doesn't change these deps, so it isn't clobbered.
+        setFromAddressId(preferredSourceId(addressesByChain[chainId] || [], activeByChain[chainId]));
+    }, [chainId, addressesByChain, activeByChain]);
 
     const fromAddress = useMemo(() => {
         if (!addressesByChain || !fromAddressId || !chainId) return null;

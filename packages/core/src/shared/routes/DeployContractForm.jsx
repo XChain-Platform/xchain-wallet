@@ -24,6 +24,7 @@ import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
+import { preferredSourceId } from '../addressSelection.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -73,6 +74,9 @@ export function DeployContractForm({ walletId, onBack }) {
         [],
     );
 
+    const [activeByChain, setActiveByChain] = useState(
+        /** @type {Record<string, { id: string, address: string }>} */ ({}),
+    );
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
     );
@@ -110,10 +114,16 @@ export function DeployContractForm({ walletId, onBack }) {
 
     useEffect(() => {
         let cancelled = false;
-        messaging.getAddressesByChain(walletId)
-            .then((byChain) => {
+        Promise.all([
+            messaging.getAddressesByChain(walletId),
+            typeof messaging.getActiveAddresses === 'function'
+                ? messaging.getActiveAddresses(walletId)
+                : Promise.resolve({}),
+        ])
+            .then(([byChain, active]) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain || {});
+                setActiveByChain(active || {});
                 const firstBtc = btcChainIds.find(
                     (cid) => Array.isArray(byChain?.[cid]) && byChain[cid].length > 0,
                 );
@@ -133,20 +143,10 @@ export function DeployContractForm({ walletId, onBack }) {
 
     useEffect(() => {
         if (!chainId || !addressesByChain) return;
-        const addrs = (addressesByChain[chainId] || []).filter(
-            (a) => a.source === 'hd' && a.derivationPath?.split('/')?.[4] === '0',
-        );
-        if (addrs.length > 0) {
-            const sorted = [...addrs].sort((a, b) => {
-                const ai = Number(a.derivationPath?.split('/')?.[5] ?? -1);
-                const bi = Number(b.derivationPath?.split('/')?.[5] ?? -1);
-                return bi - ai;
-            });
-            setFromAddressId(sorted[0].id);
-        } else {
-            setFromAddressId(null);
-        }
-    }, [chainId, addressesByChain]);
+        // Deploy from the chain's active address (else newest HD external),
+        // matching Send.
+        setFromAddressId(preferredSourceId(addressesByChain[chainId] || [], activeByChain[chainId]));
+    }, [chainId, addressesByChain, activeByChain]);
 
     useEffect(() => {
         if (stage === 'review') setTimeout(() => passwordRef.current?.focus(), 0);

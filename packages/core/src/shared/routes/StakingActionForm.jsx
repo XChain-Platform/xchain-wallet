@@ -24,6 +24,7 @@ import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
+import { preferredSourceId } from '../addressSelection.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -78,23 +79,23 @@ export function StakingActionForm({ mode, walletId, chainId, onBack }) {
 
     useEffect(() => {
         let cancelled = false;
-        messaging.getAddressesByChain(walletId)
-            .then((byChain) => {
+        Promise.all([
+            messaging.getAddressesByChain(walletId),
+            typeof messaging.getActiveAddresses === 'function'
+                ? messaging.getActiveAddresses(walletId)
+                : Promise.resolve({}),
+        ])
+            .then(([byChain, active]) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain || {});
-                const addrs = (byChain?.[chainId] || []).filter(
-                    (a) => a.source === 'hd' && a.derivationPath?.split('/')?.[4] === '0',
-                );
-                if (addrs.length === 0) {
+                // Act from the chain's active address (else newest HD
+                // external), matching Send.
+                const sourceId = preferredSourceId(byChain?.[chainId] || [], active?.[chainId]);
+                if (!sourceId) {
                     setLoadError('No address on this chain. Use Receive to generate one first.');
                     return;
                 }
-                const sorted = [...addrs].sort((a, b) => {
-                    const ai = Number(a.derivationPath?.split('/')?.[5] ?? -1);
-                    const bi = Number(b.derivationPath?.split('/')?.[5] ?? -1);
-                    return bi - ai;
-                });
-                setFromAddressId(sorted[0].id);
+                setFromAddressId(sourceId);
             })
             .catch((err) => {
                 if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');

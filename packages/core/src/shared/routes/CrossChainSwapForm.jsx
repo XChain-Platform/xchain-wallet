@@ -23,6 +23,7 @@ import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
+import { activeSourceId } from '../addressSelection.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -73,6 +74,9 @@ export function CrossChainSwapForm({ walletId, onBack }) {
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
     );
+    const [activeByChain, setActiveByChain] = useState(
+        /** @type {Record<string, { id: string, address: string }>} */ ({}),
+    );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
 
     const [giveChainId, setGiveChainId] = useState(/** @type {string | null} */ (null));
@@ -100,10 +104,16 @@ export function CrossChainSwapForm({ walletId, onBack }) {
 
     useEffect(() => {
         let cancelled = false;
-        messaging.getAddressesByChain(walletId)
-            .then((byChain) => {
+        Promise.all([
+            messaging.getAddressesByChain(walletId),
+            typeof messaging.getActiveAddresses === 'function'
+                ? messaging.getActiveAddresses(walletId)
+                : Promise.resolve({}),
+        ])
+            .then(([byChain, active]) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain || {});
+                setActiveByChain(active || {});
                 const chains = Object.entries(byChain || {})
                     .filter(([, addrs]) => Array.isArray(addrs) && addrs.length > 0)
                     .map(([cid]) => cid);
@@ -134,6 +144,13 @@ export function CrossChainSwapForm({ walletId, onBack }) {
             return;
         }
         const addrs = addressesByChain[giveChainId] || [];
+        // Prefer the give-chain's active address; fall back to the existing
+        // newest-HD (or any-address) heuristic when none is set.
+        const activeId = activeSourceId(addrs, activeByChain[giveChainId]);
+        if (activeId) {
+            setFromAddressId(activeId);
+            return;
+        }
         const hd = addrs.filter(
             (a) => a.source === 'hd' && a.derivationPath?.split('/')?.[4] === '0',
         );
@@ -148,7 +165,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
         } else {
             setFromAddressId(null);
         }
-    }, [giveChainId, addressesByChain]);
+    }, [giveChainId, addressesByChain, activeByChain]);
 
     // Auto-fill receiver address on the get-chain (newest external HD
     // index). Only fills when the user hasn't typed something custom.
