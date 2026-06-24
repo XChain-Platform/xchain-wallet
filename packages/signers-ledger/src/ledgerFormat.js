@@ -38,13 +38,21 @@
  * @returns {string}
  */
 export function chainIdToLedgerCurrency(chainId) {
+    // Ledger currencies map to installed device apps. There are Bitcoin,
+    // Bitcoin Test, Litecoin, and Dogecoin apps, but NO Litecoin-testnet,
+    // Dogecoin-testnet, or regtest apps. Those chainIds fall through to the
+    // throw, and the wallet uses a software signer for them.
     switch (chainId) {
         case 'bitcoin-mainnet': return 'bitcoin';
         case 'bitcoin-testnet': return 'bitcoin_testnet';
         case 'litecoin-mainnet': return 'litecoin';
         case 'dogecoin-mainnet': return 'dogecoin';
         default:
-            throw new Error(`ledgerFormat: unsupported chainId "${chainId}"`);
+            throw new Error(
+                `ledgerFormat: unsupported chainId "${chainId}". No Ledger app `
+                + 'exists for Litecoin/Dogecoin testnet or regtest; use a software '
+                + 'wallet for this network.',
+            );
     }
 }
 

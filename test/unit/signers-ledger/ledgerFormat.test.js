@@ -40,6 +40,20 @@ describe('chainIdToLedgerCurrency', () => {
     it('throws for unsupported chainId', () => {
         expect(() => chainIdToLedgerCurrency('unknown-chain')).toThrow(/unsupported chainId/);
     });
+
+    // No Ledger app exists for these, so they throw an actionable hint
+    // pointing at the software signer.
+    it('throws for litecoin-testnet (no Ledger app)', () => {
+        expect(() => chainIdToLedgerCurrency('litecoin-testnet')).toThrow(/software wallet/);
+    });
+
+    it('throws for dogecoin-testnet (no Ledger app)', () => {
+        expect(() => chainIdToLedgerCurrency('dogecoin-testnet')).toThrow(/software wallet/);
+    });
+
+    it('throws for bitcoin-regtest (no Ledger regtest app)', () => {
+        expect(() => chainIdToLedgerCurrency('bitcoin-regtest')).toThrow(/software wallet/);
+    });
 });
 
 describe('serializeOutputs', () => {

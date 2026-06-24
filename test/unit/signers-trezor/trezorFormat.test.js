@@ -26,6 +26,10 @@ describe('chainIdToTrezorCoin', () => {
         expect(chainIdToTrezorCoin('bitcoin-testnet')).toBe('test');
     });
 
+    it('maps bitcoin-regtest to regtest', () => {
+        expect(chainIdToTrezorCoin('bitcoin-regtest')).toBe('regtest');
+    });
+
     it('maps litecoin-mainnet to ltc', () => {
         expect(chainIdToTrezorCoin('litecoin-mainnet')).toBe('ltc');
     });
@@ -36,6 +40,16 @@ describe('chainIdToTrezorCoin', () => {
 
     it('throws for unsupported chainId', () => {
         expect(() => chainIdToTrezorCoin('unknown-chain')).toThrow(/unsupported chainId/);
+    });
+
+    // Trezor firmware has no Litecoin/Dogecoin testnet coin, so these are
+    // intentionally unmapped and throw an actionable software-signer hint.
+    it('throws for litecoin-testnet (not in Trezor firmware)', () => {
+        expect(() => chainIdToTrezorCoin('litecoin-testnet')).toThrow(/software wallet/);
+    });
+
+    it('throws for dogecoin-testnet (not in Trezor firmware)', () => {
+        expect(() => chainIdToTrezorCoin('dogecoin-testnet')).toThrow(/software wallet/);
     });
 });
 

@@ -56,7 +56,7 @@ const INPUT_SCRIPT_TYPE = {
  *
  * @param {Object} opts
  * @param {import('./types').DecomposedPsbt} opts.decomposed   from sdk.wallet.decomposePsbt
- * @param {string} opts.coin                                    Trezor coin short name ('btc' | 'test' | 'ltc' | 'doge')
+ * @param {string} opts.coin                                    Trezor coin short name ('btc' | 'test' | 'regtest' | 'ltc' | 'doge')
  * @param {Array<{inputIndex: number, path: string, sighashType?: number}>} opts.signingPaths
  * @returns {{ coin: string, inputs: object[], outputs: object[], refTxs: object[] }}
  */
@@ -139,10 +139,18 @@ export function toTrezorSignTransaction({ decomposed, coin, signingPaths }) {
     return payload;
 }
 
+// Trezor firmware coin set. Bitcoin ships mainnet / testnet / regtest
+// coin definitions, but Litecoin and Dogecoin are MAINNET-ONLY on Trezor:
+// their testnets are not in the firmware, so the device cannot derive or
+// validate LTC/DOGE testnet addresses at all. Those chainIds intentionally
+// fall through to the throw in chainIdToTrezorCoin, and the wallet uses a
+// software signer for them. Do not "fix" this by pointing them at 'test':
+// that yields Bitcoin-testnet-format addresses, not valid LTC/DOGE ones.
 /** @type {Record<string, string>} */
 const CHAIN_ID_TO_TREZOR_COIN = {
     'bitcoin-mainnet': 'btc',
     'bitcoin-testnet': 'test',
+    'bitcoin-regtest': 'regtest',
     'litecoin-mainnet': 'ltc',
     'dogecoin-mainnet': 'doge',
 };
@@ -159,7 +167,10 @@ const CHAIN_ID_TO_TREZOR_COIN = {
 export function chainIdToTrezorCoin(chainId) {
     const coin = CHAIN_ID_TO_TREZOR_COIN[chainId];
     if (!coin) {
-        throw new Error(`trezorFormat: unsupported chainId "${chainId}"`);
+        throw new Error(
+            `trezorFormat: unsupported chainId "${chainId}". Trezor firmware has `
+            + 'no Litecoin/Dogecoin testnet coin; use a software wallet for this network.',
+        );
     }
     return coin;
 }
