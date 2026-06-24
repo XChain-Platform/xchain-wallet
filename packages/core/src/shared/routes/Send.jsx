@@ -26,6 +26,7 @@ import {
 } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { tickerColor } from '../components/BalanceList.jsx';
+import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { buildRecentDestinations } from '../../flows/recentDestinations.js';
@@ -83,6 +84,38 @@ function nativeTickerFor(descriptor) {
     return NATIVE_TICKER_BY_COIN[descriptor.coin] || descriptor.coin.toUpperCase();
 }
 
+const COIN_DISPLAY = { bitcoin: 'Bitcoin', litecoin: 'Litecoin', dogecoin: 'Dogecoin' };
+
+// Best-effort detection of which coin an address belongs to, used only to
+// catch an obviously wrong-chain destination (e.g. a Dogecoin address while
+// sending Bitcoin). Returns 'bitcoin' | 'litecoin' | 'dogecoin' only when the
+// prefix is COIN-EXCLUSIVE; ambiguous prefixes (the shared '3' p2sh, the
+// shared 'm'/'n'/'2' testnet leaders) return null so we never false-flag a
+// valid address. This is a guard, not full validation; the encoder still has
+// the final say.
+function confidentAddressCoin(address) {
+    const a = (address || '').trim();
+    if (!a) return null;
+    const lower = a.toLowerCase();
+    if (lower.startsWith('bc1') || lower.startsWith('tb1') || lower.startsWith('bcrt1')) return 'bitcoin';
+    if (lower.startsWith('ltc1') || lower.startsWith('tltc1') || lower.startsWith('rltc1')) return 'litecoin';
+    if (a.startsWith('1')) return 'bitcoin';          // BTC p2pkh
+    if (a.startsWith('L') || a.startsWith('M')) return 'litecoin'; // LTC p2pkh / p2sh
+    if (a.startsWith('D') || a.startsWith('A') || a.startsWith('9')) return 'dogecoin'; // DOGE p2pkh / p2sh
+    return null;                                       // '3', m/n/2, etc. -> ambiguous
+}
+
+// Returns an error string when `address` is confidently a different coin than
+// `coin` (the selected send chain's coin family), else null.
+function wrongChainAddressError(address, coin) {
+    if (!coin) return null;
+    const detected = confidentAddressCoin(address);
+    if (detected && detected !== coin) {
+        return `This looks like a ${COIN_DISPLAY[detected] || detected} address, not a ${COIN_DISPLAY[coin] || coin} address.`;
+    }
+    return null;
+}
+
 /**
  * Send view (§29): authoring surface for the SEND action.
  *
@@ -111,9 +144,11 @@ function nativeTickerFor(descriptor) {
  *        the user can override before submitting. Address comes from
  *        the URI path / `to=` param; chainId from the URI path or the
  *        BIP21 `chain=` param; tick from the URI path or `tick=`.
- * @param {() => void} [props.onChangeAsset]   tapped from the asset hero;
- *        should navigate to the SendPicker. Omit to leave the hero
- *        non-interactive.
+ * @param {(carry: { address: string, amount: string }) => void} [props.onChangeAsset]
+ *        tapped from the asset hero; should navigate to the SendPicker.
+ *        Receives the currently-entered To address and amount so the caller can
+ *        carry them back into the prefill (changing the asset must not wipe the
+ *        destination or amount). Omit to leave the hero non-interactive.
  */
 export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
     const { messaging, shell } = useMessaging();
@@ -151,6 +186,8 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
     );
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
+    // Inline error on the To field, e.g. a wrong-chain destination address.
+    const [toError, setToError] = useState(/** @type {string | null} */ (null));
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
@@ -221,14 +258,6 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
     // vault and load once; history is per-chain × per-address and
     // refetches when the chain changes.
     const [contacts, setContacts] = useState(/** @type {any[]} */ ([]));
-    const refreshContacts = useCallback(async () => {
-        try {
-            const rows = await messaging.listContacts();
-            setContacts(Array.isArray(rows) ? rows : []);
-        } catch {
-            /* silent; autocomplete just shows fewer hits */
-        }
-    }, [messaging]);
     useEffect(() => {
         let cancelled = false;
         messaging.listContacts()
@@ -240,13 +269,9 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
     // Contacts UX state: picker open/close, search query, and the
     // "save as contact" inline form (idle → naming → saving).
     const [contactsPickerOpen, setContactsPickerOpen] = useState(false);
-    const [saveContactStage, setSaveContactStage] = useState(
-        /** @type {'idle' | 'naming' | 'saving'} */ ('idle'),
-    );
-    const [saveContactName, setSaveContactName] = useState('');
-    const [saveContactError, setSaveContactError] = useState(
-        /** @type {string | null} */ (null),
-    );
+    // Address-book picker filters: free-text search + network ('all' | coin).
+    const [pickerQuery, setPickerQuery] = useState('');
+    const [pickerNetwork, setPickerNetwork] = useState('all');
 
     const [historyRows, setHistoryRows] = useState(/** @type {any[]} */ ([]));
     useEffect(() => {
@@ -300,50 +325,40 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
         return out;
     }, [contacts, chainId, chainCoinFor]);
 
-    // If the typed address exactly matches a contact entry on this
-    // chain, show the chip + skip the save-as-contact affordance.
+    // If the typed address exactly matches a contact entry on this chain,
+    // show the matched-contact name pill next to the To label.
     const matchedContact = useMemo(() => {
         const trimmed = toAddress.trim();
         if (!trimmed) return null;
         return chainContacts.find(({ entry }) => entry.address === trimmed) || null;
     }, [toAddress, chainContacts]);
 
-    const canSaveAsContact = useMemo(() => {
-        const t = toAddress.trim();
-        if (!t || matchedContact) return false;
-        if (t.length < 20 || /\s/.test(t)) return false;
-        return !!chainCoinFor(chainId);
-    }, [toAddress, matchedContact, chainId, chainCoinFor]);
-
     const handlePickContact = useCallback((entry) => {
         setToAddress(entry.address);
+        setToError(null);
         setContactsPickerOpen(false);
     }, []);
 
-    const handleSubmitSaveContact = useCallback(async (e) => {
-        e?.preventDefault?.();
-        const name = saveContactName.trim();
-        const addr = toAddress.trim();
-        const coin = chainCoinFor(chainId);
-        if (!name || !addr || !coin) return;
-        setSaveContactStage('saving');
-        setSaveContactError(null);
-        try {
-            await messaging.saveContact({
-                input: {
-                    name,
-                    notes: '',
-                    entries: [{ chain: coin, address: addr, label: '' }],
-                },
-            });
-            await refreshContacts();
-            setSaveContactStage('idle');
-            setSaveContactName('');
-        } catch (err) {
-            setSaveContactError(err?.message || 'Failed to save contact.');
-            setSaveContactStage('naming');
+    // All saved addresses across every contact, flattened and filtered by the
+    // picker's network dropdown + search box. Unlike chainContacts (current
+    // chain only), this spans all networks so the user can search/filter freely.
+    const pickerRows = useMemo(() => {
+        const q = pickerQuery.trim().toLowerCase();
+        const out = [];
+        for (const c of contacts) {
+            for (const e of c?.entries || []) {
+                if (!e?.address) continue;
+                if (pickerNetwork !== 'all' && e.chain !== pickerNetwork) continue;
+                if (q) {
+                    const hay = `${c?.name || ''} ${e.address} ${e.label || ''}`.toLowerCase();
+                    if (!hay.includes(q)) continue;
+                }
+                out.push({ contact: c, entry: e });
+            }
         }
-    }, [messaging, refreshContacts, saveContactName, toAddress, chainId, chainCoinFor]);
+        return out;
+    }, [contacts, pickerQuery, pickerNetwork]);
+
 
     // §29.5 smart paste: BIP21 URI pre-fills amount/token/memo;
     // pasting a WIF surfaces "import this private key instead?" rather
@@ -823,6 +838,12 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
             setFormError('Destination address is required.');
             return;
         }
+        const chainMismatch = wrongChainAddressError(toAddress, chainCoinFor(chainId));
+        if (chainMismatch) {
+            setToError(chainMismatch);
+            setFormError(chainMismatch);
+            return;
+        }
         if (!tick.trim()) {
             setFormError('Token ticker is required.');
             return;
@@ -1283,28 +1304,22 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
         );
     }
 
-    // Address-book picker: rendered in place of the form when the user
-    // taps the book icon in the To field. Shows only contacts whose
-    // `entries[].chain` matches the current chain's coin family (so a
-    // DOGE send only surfaces Dogecoin contacts, etc.). Selecting a row
-    // fills the To field and returns to the form with all other field
-    // state intact.
+    // Contacts picker: rendered in place of the form when the user taps the
+    // contacts icon in the To field. Shows saved contact addresses across all
+    // networks with a 50/50 search + network-filter toolbar. Selecting a row
+    // fills the To field and returns to the form with all other state intact.
     if (contactsPickerOpen) {
-        const desc = chainId ? chainRegistry.get(chainId) : null;
-        const chainCoin = desc?.coin || null;
-        const chainLabel = desc?.displayName || (chainCoin ? chainCoin.charAt(0).toUpperCase() + chainCoin.slice(1) : 'this chain');
         const pickerHeader = (
             <ScreenHeader
                 onBack={() => setContactsPickerOpen(false)}
-                title="Address Book"
-                titleIcon={<Icon.BookIcon />}
+                title="Contacts"
+                titleIcon={<Icon.UsersIcon />}
             />
         );
-        // Truly-empty path: no saved contacts on this chain at all.
-        // Render a single calm card with the empty message; skip the
-        // outer surface and hint copy so the page doesn't show a
-        // card-inside-a-card.
-        if (chainContacts.length === 0) {
+        const hasAnyAddress = contacts.some((c) => (c?.entries || []).some((e) => e?.address));
+        // Truly-empty path: no saved addresses at all. Render a single calm
+        // card so the page doesn't show a card-inside-a-card.
+        if (!hasAnyAddress) {
             return (
                 <Screen variant={variant} header={pickerHeader}>
                     <div
@@ -1320,54 +1335,45 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                             color: 'var(--xc-text)',
                         }}
                     >
-                        Your address book is empty for {chainLabel}
+                        You have no contacts yet
                     </div>
                 </Screen>
             );
         }
         return (
             <Screen variant={variant} header={pickerHeader}>
-                <div className={`${styles.card} ${isFull ? styles.cardFull : styles.cardSmall}`}>
-                    <p className={styles.hint} style={{ textAlign: 'left', marginBottom: 'var(--xc-space-3)' }}>
-                        Showing saved {chainLabel} addresses. Other chains live on their own send pages.
-                    </p>
-                    <ul style={{ listStyle: 'none', margin: 'var(--xc-space-3) 0 0', padding: 0 }}>
-                        {chainContacts.map(({ contact, entry }) => (
-                            <li key={`${contact.id}:${entry.address}`} style={{ marginBottom: 'var(--xc-space-2)' }}>
+                <div className={styles.abToolbar}>
+                    <input
+                        type="text"
+                        className={styles.abSearch}
+                        placeholder="Search"
+                        value={pickerQuery}
+                        onChange={(e) => setPickerQuery(e.target.value)}
+                        autoComplete="off"
+                        autoCorrect="off"
+                        spellCheck={false}
+                        aria-label="Search contacts"
+                    />
+                    <NetworkFilterDropdown value={pickerNetwork} onChange={setPickerNetwork} />
+                </div>
+                {pickerRows.length === 0 ? (
+                    <div className={styles.abEmpty}>No addresses match your filters.</div>
+                ) : (
+                    <ul className={styles.abList}>
+                        {pickerRows.map(({ contact, entry }) => (
+                            <li key={`${contact.id}:${entry.address}`}>
                                 <button
                                     type="button"
+                                    className={styles.abRow}
                                     onClick={() => handlePickContact(entry)}
-                                    style={{
-                                        width: '100%',
-                                        display: 'flex',
-                                        flexDirection: 'column',
-                                        alignItems: 'flex-start',
-                                        gap: '2px',
-                                        padding: 'var(--xc-space-3)',
-                                        border: '1px solid var(--xc-border)',
-                                        borderRadius: 'var(--xc-radius-sm)',
-                                        background: 'var(--xc-surface, transparent)',
-                                        color: 'var(--xc-text)',
-                                        textAlign: 'left',
-                                        cursor: 'pointer',
-                                    }}
                                 >
-                                    <span style={{ fontWeight: 700, fontSize: 'var(--xc-text-md)' }}>
-                                        {contact.name}
-                                    </span>
-                                    <span style={{ fontSize: 'var(--xc-text-xs)', color: 'var(--xc-text-muted)', wordBreak: 'break-all' }}>
-                                        {entry.address}
-                                    </span>
-                                    {entry.label ? (
-                                        <span style={{ fontSize: 'var(--xc-text-xs)', color: 'var(--xc-text-muted)' }}>
-                                            {entry.label}
-                                        </span>
-                                    ) : null}
+                                    <span className={styles.abName}>{contact.name}</span>
+                                    <span className={styles.abAddr} title={entry.address}>{entry.address}</span>
                                 </button>
                             </li>
                         ))}
                     </ul>
-                </div>
+                )}
             </Screen>
         );
     }
@@ -1407,25 +1413,17 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                 tick={tick}
                 descriptor={descriptor}
                 prefill={prefill}
-                onChangeAsset={onChangeAsset}
+                onChangeAsset={onChangeAsset ? () => onChangeAsset({ address: toAddress, amount }) : undefined}
             />
-            {matchedContact ? (
-                <div className={styles.contactChip}>
-                    <Icon.UsersIcon />
-                    <span>
-                        Sending to{' '}
-                        <span className={styles.contactChipName}>
-                            {matchedContact.contact.name}
-                        </span>
-                    </span>
-                </div>
-            ) : null}
             <div className={`${styles.toFieldWrap} ${styles.bigField}`}>
                 <AddressCombobox
-                    label="To"
+                    label={matchedContact
+                        ? <>To <span className={styles.toContactName}>{matchedContact.contact.name}</span></>
+                        : 'To'}
                     value={toAddress}
                     onChange={(e) => {
                         setToAddress(e.target.value);
+                        if (toError) setToError(null);
                         if (pasteHint) setPasteHint(null);
                         if (pasteWarning) setPasteWarning(null);
                     }}
@@ -1433,6 +1431,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                     suggestions={suggestions}
                     placeholder="Enter or paste an address or name..."
                     hint={pasteHint || undefined}
+                    error={toError || undefined}
                     autoComplete="off"
                     autoCapitalize="none"
                     autoCorrect="off"
@@ -1448,11 +1447,11 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                 <button
                     type="button"
                     className={styles.inlineContactsButton}
-                    onClick={() => setContactsPickerOpen(true)}
-                    aria-label="Open address book"
-                    title="Address book"
+                    onClick={() => { setPickerQuery(''); setPickerNetwork('all'); setContactsPickerOpen(true); }}
+                    aria-label="Open contacts"
+                    title="Contacts"
                 >
-                    <Icon.BookIcon />
+                    <Icon.UsersIcon />
                 </button>
             </div>
             {pasteWarning ? (
@@ -1464,66 +1463,6 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                 <div role="alert" className={styles.warnings}>
                     <p className={styles.warning}>{lookalikeWarning}</p>
                 </div>
-            ) : null}
-            {canSaveAsContact && saveContactStage === 'idle' ? (
-                <div className={styles.saveContactRow}>
-                    <button
-                        type="button"
-                        className={styles.saveContactLink}
-                        onClick={() => {
-                            setSaveContactStage('naming');
-                            setSaveContactError(null);
-                        }}
-                    >
-                        + Save as contact
-                    </button>
-                </div>
-            ) : null}
-            {saveContactStage === 'naming' || saveContactStage === 'saving' ? (
-                <form
-                    onSubmit={handleSubmitSaveContact}
-                    noValidate
-                    className={styles.saveContactForm}
-                >
-                    <div className={styles.saveContactInput}>
-                        <Input
-                            label="Contact name"
-                            value={saveContactName}
-                            onChange={(e) => {
-                                setSaveContactName(e.target.value);
-                                if (saveContactError) setSaveContactError(null);
-                            }}
-                            placeholder="e.g. Alice"
-                            autoFocus
-                            aria-invalid={saveContactError ? true : undefined}
-                        />
-                        {saveContactError ? (
-                            <p role="alert" className={styles.error} style={{ marginTop: 'var(--xc-space-1)' }}>
-                                {saveContactError}
-                            </p>
-                        ) : null}
-                    </div>
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={saveContactStage === 'saving'}
-                        disabled={saveContactName.trim().length === 0}
-                    >
-                        Save
-                    </Button>
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        onClick={() => {
-                            setSaveContactStage('idle');
-                            setSaveContactName('');
-                            setSaveContactError(null);
-                        }}
-                        disabled={saveContactStage === 'saving'}
-                    >
-                        Cancel
-                    </Button>
-                </form>
             ) : null}
             {!hasTokenSelected ? (
                 <Input

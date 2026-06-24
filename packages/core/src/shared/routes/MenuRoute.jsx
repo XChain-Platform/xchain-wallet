@@ -77,7 +77,7 @@ export function MenuRoute({
         { id: 'messaging',    label: 'Messaging',   Icon: Icon.MessageIcon,  handler: onMessaging },
         { id: 'cross-chain', label: 'Cross-chain', Icon: Icon.LinkIcon,     handler: onCrossChain },
         { id: 'contacts',    label: 'Contacts',    Icon: Icon.UsersIcon,    handler: onContacts },
-        { id: 'addresses',   label: 'Addresses',   Icon: Icon.AddressIcon,  handler: onAddresses },
+        { id: 'addresses',   label: 'Addresses',   Icon: Icon.ScanIcon,     handler: onAddresses },
         { id: 'contracts',   label: 'Contracts',   Icon: Icon.ContractIcon, handler: onContracts },
         { id: 'staking',     label: 'Staking',     Icon: Icon.StakeIcon,    handler: onStaking },
         { id: 'multisig',    label: 'Multisig',    Icon: Icon.MultisigIcon, handler: onMultisig },

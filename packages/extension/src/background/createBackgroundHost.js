@@ -1234,6 +1234,26 @@ export function createBackgroundHost(deps) {
         return newestAddress(req, { vault, chainRegistry });
     });
 
+    // Rename an address: set its user-facing label by record id.
+    host.register('addresses.setLabel', async (req, { vault }) => {
+        const id = req?.id;
+        if (!id) throw new Error('addresses.setLabel: id is required');
+        const label = typeof req?.label === 'string' ? req.label : '';
+        const rec = await vault.addresses.get(id);
+        if (!rec) throw new Error('addresses.setLabel: address not found');
+        await vault.addresses.put({ ...rec, label });
+        return { ok: true };
+    });
+
+    // Delete an address record by id (e.g. an imported WIF the user no
+    // longer wants surfaced). Derived addresses can be re-derived later.
+    host.register('addresses.delete', async (req, { vault }) => {
+        const id = req?.id;
+        if (!id) throw new Error('addresses.delete: id is required');
+        const removed = await vault.addresses.delete(id);
+        return { ok: removed };
+    });
+
 
     host.register('action.send', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
         const walletId = req?.walletId;

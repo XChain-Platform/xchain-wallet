@@ -16,8 +16,10 @@
 // suitable for `<AddressCombobox>`.
 //
 // Two source kinds:
-//   - `contact`: entries[].chain matches the chain's coin family.
-//                  Sort earlier (more authoritative).
+//   - `contact`: every saved contact address. Entries on the current chain
+//                  rank first; entries on other chains follow with their
+//                  network shown in the sublabel so the user can tell them
+//                  apart. All contacts surface, not just same-chain ones.
 //   - `history`: destinations the user has previously sent to from
 //                  any of their own addresses on this chain. Deduped
 //                  by address; weighted by recency × frequency.
@@ -31,6 +33,8 @@
 //   }
 
 const HISTORY_ADDR_FIELDS = ['destination', 'DESTINATION', 'recipient'];
+
+const COIN_LABEL = { bitcoin: 'Bitcoin', litecoin: 'Litecoin', dogecoin: 'Dogecoin' };
 
 /**
  * @typedef {object} Suggestion
@@ -47,7 +51,7 @@ const HISTORY_ADDR_FIELDS = ['destination', 'DESTINATION', 'recipient'];
  *
  * @param {object} opts
  * @param {Array<{ name?: string, entries?: Array<{ chain?: string, address?: string, label?: string }> }>} [opts.contacts]
- * @param {string} [opts.chainCoin]    coin family ('bitcoin' / 'litecoin' / 'dogecoin') matching `descriptor.coin`. Required for contact filtering.
+ * @param {string} [opts.chainCoin]    coin family ('bitcoin' / 'litecoin' / 'dogecoin') matching `descriptor.coin`. Ranks same-chain contacts first; all contacts are listed regardless.
  * @param {Array<{ action?: string, ACTION?: string } & Record<string, any>>} [opts.historyRows]    history.address rows for the user's own addresses on this chain
  * @param {number} [opts.historyLimit] cap on the number of history rows fed in (after that, only contacts surface). Default 100.
  * @returns {Suggestion[]}
@@ -62,22 +66,43 @@ export function buildRecentDestinations({
     const out = [];
     const seen = new Set();
 
+    // Push one contact entry as a suggestion. Other-chain entries get the
+    // network name in the sublabel so a user sending one coin can still see
+    // (and recognize) a contact whose address is for a different coin.
+    const addContactEntry = (c, e, isCurrentChain) => {
+        const addr = (e?.address || '').trim();
+        if (!addr || seen.has(addr)) return;
+        seen.add(addr);
+        const name = (c?.name || '').trim();
+        const entryLabel = (e?.label || '').trim();
+        const networkLabel = isCurrentChain ? '' : (COIN_LABEL[e?.chain] || e?.chain || '');
+        let sublabel;
+        if (networkLabel) {
+            sublabel = entryLabel && entryLabel !== name ? `${networkLabel} · ${entryLabel}` : networkLabel;
+        } else {
+            sublabel = name && entryLabel && name !== entryLabel ? entryLabel : undefined;
+        }
+        out.push({
+            address: addr,
+            label: name || entryLabel || addr,
+            sublabel,
+            source: 'contact',
+        });
+    };
+
+    // Pass 1: entries on the current chain (most relevant, listed first).
     if (typeof chainCoin === 'string' && chainCoin.length > 0) {
         for (const c of contacts) {
-            const name = (c?.name || '').trim();
             for (const e of c?.entries || []) {
-                if (!e || e.chain !== chainCoin) continue;
-                const addr = (e.address || '').trim();
-                if (!addr || seen.has(addr)) continue;
-                seen.add(addr);
-                const entryLabel = (e.label || '').trim();
-                out.push({
-                    address: addr,
-                    label: name || entryLabel || addr,
-                    sublabel: name && entryLabel && name !== entryLabel ? entryLabel : undefined,
-                    source: 'contact',
-                });
+                if (e?.chain === chainCoin) addContactEntry(c, e, true);
             }
+        }
+    }
+    // Pass 2: every other contact entry, so all contacts are reachable here,
+    // not just the ones with an address on the current chain.
+    for (const c of contacts) {
+        for (const e of c?.entries || []) {
+            if (!chainCoin || e?.chain !== chainCoin) addContactEntry(c, e, false);
         }
     }
 

@@ -206,7 +206,7 @@ function AppInner() {
     // to 'home'; SendPicker → Send sets it to 'send-picker' so backing
     // out lands on the token list the user was just browsing.
     const [sendBackTo, setSendBackTo] = useState(
-        /** @type {'home' | 'send-picker' | 'token-detail'} */ ('home'),
+        /** @type {'home' | 'send-picker' | 'token-detail' | 'contacts'} */ ('home'),
     );
     // ReceivePicker → Receive prefill carrier; cleared when the user
     // backs out of Receive. Mirrors `sendPrefill` for the Send side.
@@ -416,8 +416,10 @@ function AppInner() {
                             setUnlockedView(sendBackTo);
                             setSendBackTo('home');
                         }}
-                        onChangeAsset={() => {
-                            setSendPrefill(null);
+                        onChangeAsset={(carry) => {
+                            // Carry the typed To address + amount so picking a
+                            // new asset doesn't wipe those fields.
+                            setSendPrefill({ address: carry?.address || '', amount: carry?.amount || '' });
                             setUnlockedView('send-picker');
                         }}
                     />
@@ -428,15 +430,18 @@ function AppInner() {
                     <SendPicker
                         walletId={activeWalletId}
                         accountId={activeAccountId || undefined}
-                        onBack={() => setUnlockedView('home')}
+                        onBack={() => { setSendPrefill(null); setUnlockedView('home'); }}
                         onSelect={(sel) => {
-                            setSendPrefill({
+                            // Preserve any To address + amount carried in via onChangeAsset.
+                            setSendPrefill((prev) => ({
                                 chainId: sel.chainId,
                                 tick: sel.tick,
                                 kind: sel.kind,
                                 displayName: sel.displayName,
                                 imageUrl: sel.imageUrl,
-                            });
+                                address: prev?.address || undefined,
+                                amount: prev?.amount || undefined,
+                            }));
                             setSendBackTo('send-picker');
                             setUnlockedView('send');
                         }}
@@ -449,7 +454,7 @@ function AppInner() {
                         walletId={activeWalletId}
                         accountId={activeAccountId || undefined}
                         hideOwnFilter
-                        onBack={() => setUnlockedView('home')}
+                        onBack={() => setUnlockedView('receive')}
                         onSelect={(sel) => {
                             setReceivePrefill({
                                 chainId: sel.chainId,
@@ -918,11 +923,16 @@ function AppInner() {
                 return (
                     <ContactsList
                         walletId={activeWalletId}
+                        onSend={(prefill) => {
+                            setSendPrefill(prefill);
+                            setSendBackTo('contacts');
+                            setUnlockedView('send');
+                        }}
                         onSendMessage={(prefill) => {
                             setComposePrefill({ ...prefill, __from: 'contacts' });
                             setUnlockedView('compose-message');
                         }}
-                        onBack={() => setUnlockedView('actions')}
+                        onBack={formBack}
                     />
                 );
             }
@@ -1285,7 +1295,7 @@ function AppInner() {
                             onCrossChainTemplates: () => setUnlockedView('cross-chain-templates'),
                             onMultisigCreate: hasBtcAddress ? () => setUnlockedView('multisig-create') : undefined,
                             onMultisigSign: hasBtcAddress ? () => setUnlockedView('multisig-sign') : undefined,
-                            onContacts: () => setUnlockedView('contacts'),
+                            onContacts: () => { setFormReturnView('actions'); setUnlockedView('contacts'); },
                             onSignMessage: () => setUnlockedView('sign-message'),
                             onVerifySignature: () => setUnlockedView('verify-signature'),
                             onSignPsbt: () => setUnlockedView('sign-psbt'),
@@ -1468,7 +1478,7 @@ function AppInner() {
                         } : undefined}
                         onMigrateToBip39={activeWalletId ? () => setUnlockedView('migrate-bip39') : undefined}
                         onCrossChain={activeWalletId ? () => setUnlockedView('cross-chain-templates') : undefined}
-                        onContacts={activeWalletId ? () => setUnlockedView('contacts') : undefined}
+                        onContacts={activeWalletId ? () => { setFormReturnView('home'); setUnlockedView('contacts'); } : undefined}
                         onMultisig={activeWalletId && hasBtcAddress ? () => setUnlockedView('multisig-create') : undefined}
                         onSelectToken={activeWalletId ? (tok) => {
                             setTokenDetailRef(tok);

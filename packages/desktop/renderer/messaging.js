@@ -120,6 +120,16 @@ export function getNewestAddress(walletId, chainId, accountId) {
     return /** @type {any} */ (sendMessage('addresses.newest', { walletId, chainId, accountId }));
 }
 
+/** Rename an address (set its label). @param {string} id @param {string} label */
+export function setAddressLabel(id, label) {
+    return /** @type {any} */ (sendMessage('addresses.setLabel', { id, label }));
+}
+
+/** Delete an address record by id. @param {string} id */
+export function deleteAddress(id) {
+    return /** @type {any} */ (sendMessage('addresses.delete', { id }));
+}
+
 /** @param {object} opts */
 export function generateReceiveAddress(opts) {
     return /** @type {any} */ (sendMessage('receive.getAddress', opts));

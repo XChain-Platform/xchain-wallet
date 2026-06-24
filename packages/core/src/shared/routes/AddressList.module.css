@@ -1,0 +1,480 @@
+/* Copyright © 2025–2026 Dankest, LLC
+ * Based on XChain Platform by Dankest, LLC – https://dankest.llc
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ *
+ * This file is part of XChain Platform. Licensed under the GNU Affero
+ * General Public License v3.0 or later; see LICENSE.md. A commercial
+ * license (without AGPL source-disclosure terms) is available -
+ * contact legal@dankest.llc. */
+
+/* Addresses page toolbar: search + network filter, each 50% wide, matching
+   the contacts list and the Send address-book picker. */
+.toolbar {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--xc-space-2);
+    width: 100%;
+    margin-bottom: var(--xc-space-2);
+}
+
+.search {
+    flex: 1 1 0;
+    min-width: 0;
+    box-sizing: border-box;
+    padding: var(--xc-space-2) var(--xc-space-3);
+    font-family: var(--xc-font-sans);
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text);
+    background: var(--xc-surface);
+    border: 1px solid var(--xc-border-strong);
+    border-radius: var(--xc-radius-md);
+}
+
+.search::placeholder {
+    color: var(--xc-text-muted);
+}
+
+/* Header "+" button + its Add/Import dropdown menu. */
+.addMenuWrap {
+    position: relative;
+}
+
+.addBtn {
+    appearance: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    border: 1px solid var(--xc-border-strong);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--xc-text);
+    cursor: pointer;
+    flex: 0 0 auto;
+}
+
+.addBtn:hover {
+    background: var(--xc-bg-muted);
+}
+
+.addBtn:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
+.addMenu {
+    position: absolute;
+    top: calc(100% + 4px);
+    inset-inline-end: 0;
+    z-index: 200;
+    min-width: 12rem;
+    background: var(--xc-surface-raised);
+    border: 1px solid var(--xc-border-strong);
+    border-radius: var(--xc-radius-md);
+    box-shadow: var(--xc-shadow-md);
+    overflow: hidden;
+    list-style: none;
+    padding: var(--xc-space-1);
+    margin: 0;
+}
+
+.addMenuItem {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    width: 100%;
+    padding: var(--xc-space-2);
+    background: transparent;
+    border: none;
+    border-radius: var(--xc-radius-sm);
+    cursor: pointer;
+    text-align: left;
+    color: var(--xc-text);
+    font: inherit;
+    font-size: var(--xc-text-sm);
+}
+
+.addMenuItem:hover {
+    background: var(--xc-bg-muted);
+}
+
+.addMenuIcon {
+    display: inline-flex;
+    flex: 0 0 auto;
+    color: var(--xc-text-muted);
+}
+
+/* Full-width segmented toggle (All | Normal | Imported | Other) between the
+   filter row and the results. Equal-width segments; active one filled. */
+.segmented {
+    display: flex;
+    width: 100%;
+    margin-bottom: var(--xc-space-3);
+    border: 1px solid var(--xc-border-strong);
+    border-radius: var(--xc-radius-md);
+    overflow: hidden;
+}
+
+.segment {
+    flex: 1 1 0;
+    appearance: none;
+    background: var(--xc-surface);
+    border: none;
+    border-inline-start: 1px solid var(--xc-border);
+    padding: var(--xc-space-2) var(--xc-space-1);
+    font: inherit;
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    color: var(--xc-text-muted);
+    cursor: pointer;
+}
+
+.segment:first-child {
+    border-inline-start: none;
+}
+
+.segment:hover:not(.segmentActive) {
+    background: var(--xc-bg-muted);
+    color: var(--xc-text);
+}
+
+.segmentActive {
+    background: var(--xc-accent-primary);
+    color: #FFFFFF;
+}
+
+/* Empty state shown when the filter matches no addresses: a calm card so it
+   reads as intentional, not a glitch. */
+.emptyCard {
+    margin: var(--xc-space-2) 0;
+    padding: var(--xc-space-6) var(--xc-space-4);
+    background: var(--xc-surface-raised);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-lg);
+    text-align: center;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+}
+
+/* One card wrapping all addresses, mirroring the contacts list / Home
+   balances list: rows separated by a hairline divider, highlighted on hover. */
+.addrList {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--xc-surface);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-md);
+    overflow: hidden;
+}
+
+.addrRow {
+    appearance: none;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+    padding: var(--xc-space-3);
+    border: none;
+    border-top: 1px solid var(--xc-border);
+    background: transparent;
+    color: inherit;
+    text-align: start;
+    font: inherit;
+    cursor: pointer;
+}
+
+.addrList li:first-child .addrRow {
+    border-top: none;
+}
+
+.addrRow:hover {
+    background: var(--xc-bg-muted);
+}
+
+.addrRow:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: -2px;
+}
+
+/* Top line: optional label (left) + address-type bubble (right). */
+.addrTopRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.addrLabel {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    color: var(--xc-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Line 1: network icon + address. Line 2: native amount (left), fiat (right). */
+.addrLine1 {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.chainIcon {
+    flex: 0 0 auto;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    display: block;
+    margin-top: 2px;
+}
+
+.addrLine2 {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--xc-space-2);
+}
+
+.addrAmount {
+    font-family: var(--xc-font-mono);
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    color: var(--xc-text-muted);
+}
+
+.addrFiat {
+    flex: 0 0 auto;
+    font-family: var(--xc-font-mono);
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+    color: var(--xc-text-muted);
+}
+
+.addrType {
+    flex: 0 0 auto;
+    padding: 2px var(--xc-space-2);
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    color: #FFFFFF;
+    text-transform: uppercase;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+}
+
+/* Per-format solid colors so the bubble pops against the row. */
+.typeP2tr {
+    background: linear-gradient(180deg, #8b5cf6, #7c3aed);
+}
+
+.typeP2wpkh {
+    background: linear-gradient(180deg, #3b82f6, #2563eb);
+}
+
+.typeP2shP2wpkh {
+    background: linear-gradient(180deg, #fb923c, #ea580c);
+}
+
+.typeP2pkh {
+    background: linear-gradient(180deg, #14b8a6, #0d9488);
+}
+
+.typeOther {
+    background: linear-gradient(180deg, #94a3b8, #64748b);
+}
+
+/* Top of the address detail view (address + label), no card wrapper. */
+.detailTop {
+    margin-bottom: var(--xc-space-3);
+}
+
+/* Address detail view. */
+.detailCard {
+    padding: var(--xc-space-4);
+    background: var(--xc-surface);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-lg);
+}
+
+.detailHead {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    margin-bottom: var(--xc-space-1);
+}
+
+.detailName {
+    font-size: var(--xc-text-lg);
+    font-weight: 600;
+    color: var(--xc-text);
+    word-break: break-word;
+    margin-bottom: var(--xc-space-1);
+}
+
+.detailNameEmpty {
+    color: var(--xc-text-muted);
+    font-weight: 500;
+}
+
+.detailAddr {
+    font-family: var(--xc-font-mono);
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text);
+    word-break: break-all;
+}
+
+/* Plain copy icon inline at the end of the address text (no button chrome). */
+.copyIcon {
+    appearance: none;
+    border: none;
+    background: transparent;
+    padding: 0;
+    margin-inline-start: var(--xc-space-1);
+    color: var(--xc-text-muted);
+    cursor: pointer;
+    display: inline-flex;
+    vertical-align: middle;
+}
+
+.copyIcon:hover {
+    color: var(--xc-text);
+}
+
+.copyIcon:focus-visible {
+    outline: none;
+    color: var(--xc-text);
+}
+
+.copyIcon svg {
+    width: 14px;
+    height: 14px;
+}
+
+/* About-section tab strip on the address detail view. */
+.tabsRow {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--xc-border);
+    margin: var(--xc-space-3) 0 0;
+}
+
+.tab {
+    appearance: none;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    padding: var(--xc-space-3) var(--xc-space-3);
+    color: var(--xc-text-muted);
+    font: inherit;
+    font-size: var(--xc-text-sm);
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.tabActive {
+    color: var(--xc-accent-primary);
+    border-bottom-color: var(--xc-accent-primary);
+}
+
+.tabPanel {
+    padding: var(--xc-space-3) 0;
+}
+
+.detailField {
+    margin-top: var(--xc-space-3);
+}
+
+.detailLabel {
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text-muted);
+    font-weight: 700;
+    margin-bottom: 2px;
+}
+
+.detailValue {
+    font-size: var(--xc-text-md);
+    word-break: break-all;
+}
+
+.detailFooter {
+    margin-top: var(--xc-space-4);
+}
+
+/* Inline label editor: input grows, Save button hugs the right. */
+.labelRow {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+}
+
+.labelRow > :first-child {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin-bottom: 0;
+}
+
+/* Four-up action row under the detail card, mirroring the contacts detail. */
+.quickActions {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--xc-space-2);
+    margin-top: var(--xc-space-2);
+}
+
+.quickAction {
+    appearance: none;
+    background: var(--xc-surface-raised);
+    border: 1px solid var(--xc-accent-primary);
+    border-radius: var(--xc-radius-md);
+    padding: var(--xc-space-3) var(--xc-space-1);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--xc-space-1);
+    cursor: pointer;
+    color: var(--xc-text);
+    font-family: inherit;
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+    min-height: 72px;
+    text-align: center;
+}
+
+.quickAction:hover:not(:disabled) {
+    background: var(--xc-bg-muted);
+}
+
+.quickAction:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
+.quickAction:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.quickActionIcon {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
+    color: var(--xc-accent-primary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}

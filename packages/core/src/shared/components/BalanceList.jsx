@@ -502,7 +502,7 @@ function groupThousands(s) {
     return String(s).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }
 
-function fiatValue(quantityStr, divisibility, fiatRate) {
+export function fiatValue(quantityStr, divisibility, fiatRate) {
     if (typeof fiatRate !== 'number' || !isFinite(fiatRate)) return null;
     const q = safeBigInt(quantityStr);
     if (q === 0n) return 0;
@@ -534,7 +534,7 @@ export function sumFiatValue(rows) {
     return { total, priced, unpriced };
 }
 
-function formatFiat(usd) {
+export function formatFiat(usd) {
     if (usd === null || usd === undefined) return '';
     if (usd === 0) return '$0.00';
     if (usd > 0 && usd < 0.01) return '<$0.01';

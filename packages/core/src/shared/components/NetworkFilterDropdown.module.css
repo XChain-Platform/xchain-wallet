@@ -1,0 +1,137 @@
+/* Copyright © 2025–2026 Dankest, LLC
+ * Based on XChain Platform by Dankest, LLC – https://dankest.llc
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ *
+ * This file is part of XChain Platform. Licensed under the GNU Affero
+ * General Public License v3.0 or later; see LICENSE.md. A commercial
+ * license (without AGPL source-disclosure terms) is available -
+ * contact legal@dankest.llc. */
+
+/* Custom network dropdown: trigger button + absolute popover. The wrapper
+   is a flex item so min-width:0 overrides the default min-width:auto,
+   letting it shrink to match a sibling search box at exactly 50%. */
+.networkWrap {
+    flex: 1 1 0;
+    min-width: 0;
+    position: relative;
+    box-sizing: border-box;
+}
+
+.networkTrigger {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    width: 100%;
+    box-sizing: border-box;
+    min-width: 0;
+    padding: var(--xc-space-2) var(--xc-space-3);
+    font-family: var(--xc-font-sans);
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    color: var(--xc-text);
+    background: var(--xc-surface);
+    border: 1px solid var(--xc-border-strong);
+    border-radius: var(--xc-radius-md);
+    cursor: pointer;
+    text-align: left;
+    overflow: hidden;
+}
+
+.networkTrigger:hover {
+    border-color: var(--xc-accent-primary);
+}
+
+.networkTrigger:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
+.networkTriggerIcon {
+    flex: 0 0 auto;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.networkTriggerIcon img {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    display: block;
+}
+
+.networkTriggerLabel {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.networkCaret {
+    flex: 0 0 auto;
+    color: var(--xc-text-muted);
+    font-size: 10px;
+    line-height: 1;
+}
+
+.networkPopover {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    z-index: 100;
+    background: var(--xc-surface-raised);
+    border: 1px solid var(--xc-border-strong);
+    border-radius: var(--xc-radius-md);
+    box-shadow: var(--xc-shadow-md);
+    overflow: hidden;
+    list-style: none;
+    padding: var(--xc-space-1);
+    margin: 0;
+}
+
+.networkOption {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    width: 100%;
+    padding: var(--xc-space-2) var(--xc-space-2);
+    font-family: var(--xc-font-sans);
+    font-size: var(--xc-text-sm);
+    font-weight: 500;
+    color: var(--xc-text);
+    background: transparent;
+    border: none;
+    border-radius: var(--xc-radius-sm);
+    cursor: pointer;
+    text-align: left;
+}
+
+.networkOption:hover {
+    background: var(--xc-bg-muted);
+}
+
+.networkOptionActive {
+    color: var(--xc-accent-primary);
+    font-weight: 600;
+}
+
+.networkOptionIcon {
+    flex: 0 0 18px;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.networkOptionIcon img {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    display: block;
+}

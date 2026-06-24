@@ -8,27 +8,46 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     Screen,
     ScreenHeader,
     Button,
-    ChainBadge,
     AddressText,
-    CopyButton,
     MultisigBadge,
     Skeleton,
     Input,
     Icon,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
+import * as branding from '../../branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { EmptyStateNudge } from '../components/EmptyStateNudge.jsx';
-import { coinFromChainId } from '../components/BalanceList.jsx';
+import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
+import { coinFromChainId, formatAmount, fiatValue } from '../components/BalanceList.jsx';
+import { useSettings } from '../hooks/useSettings.js';
 import styles from './History.module.css';
+import local from './AddressList.module.css';
 import wifStyles from './AddressList.wif.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+
+const NATIVE_TICK = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
+
+// Format a fiat value in the user's selected currency (symbol + amount),
+// e.g. "$32.10" / "¥3,200". The 3-letter code is appended by the caller.
+function formatFiatAmount(value, currency) {
+    if (value === null || value === undefined) return '';
+    const code = String(currency || 'USD').toUpperCase();
+    try {
+        const fmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: code, currencyDisplay: 'symbol' });
+        const minorUnit = fmt.resolvedOptions().maximumFractionDigits === 0 ? 1 : 0.01;
+        if (value > 0 && value < minorUnit) return `<${fmt.format(minorUnit)}`;
+        return fmt.format(value);
+    } catch {
+        return value.toLocaleString('en-US', { maximumFractionDigits: 2 });
+    }
+}
 
 /**
  * §22 + §56.3 Pre-launch Step 2: Standalone address list. Aggregates
@@ -38,10 +57,10 @@ const chainRegistry = registryLib.defaultRegistry();
  * wallet's `getMultisigReceiveAddress` output on the BTC chain carry
  * the `<MultisigBadge>` indicator inline.
  *
- * Filtering is prop-driven by the shell: `networkFilter` narrows to a
- * single network and `tokenQuery` matches address/label text. (The
- * earlier in-component chain-chip + "Multisig only" filter bar was
- * removed in favour of these shell-level controls.)
+ * Filtering is in-page: a toolbar with a search box + network dropdown
+ * (50/50, matching the contacts list and Send address book) narrows the
+ * list by address/label text and by network. The `networkFilter` /
+ * `tokenQuery` props seed the initial values so deep-links still apply.
  *
  * @param {object} props
  * @param {string} props.walletId
@@ -61,10 +80,116 @@ export function AddressList({
 }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
+    const { settings } = useSettings();
+    const fiatCurrency = (settings?.fiatCurrency || 'USD').toUpperCase();
+
+    // In-page search + network filter (toolbar below), seeded from any
+    // shell-provided defaults so deep-links still apply on first render.
+    const [query, setQuery] = useState(tokenQuery || '');
+    const [network, setNetwork] = useState(networkFilter || 'all');
+    // Address-type toggle: all | normal (hd) | imported (wif) | other (hardware/multisig).
+    const [sourceFilter, setSourceFilter] = useState('all');
+
+    // Selected address row -> shows the address detail view in place of the list.
+    const [selected, setSelected] = useState(/** @type {any | null} */ (null));
+    // Bump to refetch addresses + balances after a label edit or delete.
+    const [reloadKey, setReloadKey] = useState(0);
+    // Inline label editor state for the detail view.
+    const [labelDraft, setLabelDraft] = useState('');
+    const [labelSaving, setLabelSaving] = useState(false);
+    // Brief "copied" feedback on the inline address copy icon.
+    const [addrCopied, setAddrCopied] = useState(false);
+
+    // "+" menu in the header: Add address / Import address.
+    const [addMenuOpen, setAddMenuOpen] = useState(false);
+    const addMenuRef = useRef(null);
+    useEffect(() => {
+        if (!addMenuOpen) return undefined;
+        const onDown = (e) => { if (!addMenuRef.current?.contains(e.target)) setAddMenuOpen(false); };
+        const onKey = (e) => { if (e.key === 'Escape') setAddMenuOpen(false); };
+        window.addEventListener('mousedown', onDown);
+        window.addEventListener('keydown', onKey);
+        return () => {
+            window.removeEventListener('mousedown', onDown);
+            window.removeEventListener('keydown', onKey);
+        };
+    }, [addMenuOpen]);
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
     );
+    // Per-address native balances, so each row can show e.g. "0.0005 BTC".
+    const [balancesByChain, setBalancesByChain] = useState(
+        /** @type {Record<string, any[]> | null} */ (null),
+    );
+    useEffect(() => {
+        if (!walletId || typeof messaging.getWalletBalances !== 'function') return undefined;
+        let cancelled = false;
+        messaging.getWalletBalances(walletId, accountId)
+            .then((b) => { if (!cancelled) setBalancesByChain(b || {}); })
+            .catch(() => { if (!cancelled) setBalancesByChain({}); });
+        return () => { cancelled = true; };
+    }, [walletId, accountId, messaging]);
+
+    // address (chainId:address) -> native balance { quantity, tick, divisibility }.
+    const nativeByKey = useMemo(() => {
+        const m = new Map();
+        if (!balancesByChain) return m;
+        for (const [chainId, entries] of Object.entries(balancesByChain)) {
+            if (!Array.isArray(entries)) continue;
+            for (const e of entries) {
+                const nb = e?.balances?.native;
+                if (!e?.address || !nb || nb.quantity == null) continue;
+                m.set(`${chainId}:${String(e.address).toLowerCase()}`, {
+                    quantity: nb.quantity,
+                    tick: nb.tick || null,
+                    divisibility: Number(nb.divisibility ?? 8),
+                    fiatRate: typeof nb.fiatRate === 'number' ? nb.fiatRate : null,
+                });
+            }
+        }
+        return m;
+    }, [balancesByChain]);
+
+    // Formatted native balance for a row, e.g. "0.0005 BTC".
+    const amountTextFor = (row) => {
+        const d = chainRegistry.get(row.chainId);
+        const nativeTick = NATIVE_TICK[d?.coin] || (d?.coin || '').toUpperCase();
+        const nb = nativeByKey.get(`${row.chainId}:${String(row.address || '').toLowerCase()}`);
+        return nb
+            ? `${formatAmount(nb.quantity, nb.divisibility)} ${nb.tick || nativeTick}`
+            : `0 ${nativeTick}`;
+    };
+    // Per-format colored bubble class (P2TR purple, P2WPKH blue, etc.).
+    const addrTypeClass = (t) => {
+        const k = String(t || '').toLowerCase();
+        if (k === 'p2tr') return local.typeP2tr;
+        if (k === 'p2wpkh') return local.typeP2wpkh;
+        if (k === 'p2sh-p2wpkh') return local.typeP2shP2wpkh;
+        if (k === 'p2pkh') return local.typeP2pkh;
+        return local.typeOther;
+    };
+
+    // Formatted fiat value for a row, with the currency code (e.g. "$32.10 USD"),
+    // or '' when there's no price/balance.
+    const fiatTextFor = (row) => {
+        const nb = nativeByKey.get(`${row.chainId}:${String(row.address || '').toLowerCase()}`);
+        if (!nb) return '';
+        const v = fiatValue(nb.quantity, nb.divisibility, nb.fiatRate);
+        return v === null ? '' : `${formatFiatAmount(v, fiatCurrency)} ${fiatCurrency}`;
+    };
+
+    // Human label for the address type, mirroring the toggle categories.
+    const typeLabelFor = (row) => (
+        row.multisig
+            ? 'Multisig'
+            : row.record?.source === 'imported-wif'
+                ? 'Imported'
+                : row.record?.source === 'hd'
+                    ? 'Normal'
+                    : 'Other'
+    );
+
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [multisigs, setMultisigs] = useState(
         /** @type {Array<{ multisigConfigId: string, address: string, threshold: number, cosignerCount: number, scheme: string }>} */ ([]),
@@ -148,7 +273,7 @@ export function AddressList({
                 if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
             });
         return () => { cancelled = true; };
-    }, [walletId, accountId, messaging]);
+    }, [walletId, accountId, messaging, reloadKey]);
 
     useEffect(() => {
         let cancelled = false;
@@ -178,7 +303,7 @@ export function AddressList({
                 .map((m) => [m.address.toLowerCase(), m]),
         );
         const networkMatch = (chainId) => (
-            networkFilter === 'all' || coinFromChainId(chainId) === networkFilter
+            network === 'all' || coinFromChainId(chainId) === network
         );
         /** @type {Array<{ key: string, chainId: string, address: string, label: string, multisig: any, record: any }>} */
         const out = [];
@@ -216,7 +341,21 @@ export function AddressList({
             }
         }
         let next = out;
-        const q = String(tokenQuery || '').trim().toLowerCase();
+        // Address-type filter. Multisig is always "other"; otherwise classify
+        // by the record's source ('hd' = normal, 'imported-wif' = imported).
+        if (sourceFilter !== 'all') {
+            next = next.filter((r) => {
+                const cat = r.multisig
+                    ? 'other'
+                    : r.record?.source === 'imported-wif'
+                        ? 'imported'
+                        : r.record?.source === 'hd'
+                            ? 'normal'
+                            : 'other';
+                return cat === sourceFilter;
+            });
+        }
+        const q = String(query || '').trim().toLowerCase();
         if (q) {
             next = next.filter((r) => (
                 String(r.address || '').toLowerCase().includes(q)
@@ -224,12 +363,56 @@ export function AddressList({
             ));
         }
         return next;
-    }, [addressesByChain, networkFilter, tokenQuery, multisigs]);
+    }, [addressesByChain, network, query, sourceFilter, multisigs]);
 
-        const header = (
+    const header = (
         <ScreenHeader
             onBack={onBack}
             title="Addresses"
+            titleIcon={<Icon.ScanIcon />}
+            trailing={(
+                <div className={local.addMenuWrap} ref={addMenuRef}>
+                    <button
+                        type="button"
+                        className={local.addBtn}
+                        onClick={() => setAddMenuOpen((o) => !o)}
+                        aria-haspopup="menu"
+                        aria-expanded={addMenuOpen}
+                        aria-label="Add or import address"
+                        title="Add address"
+                    >
+                        <Icon.PlusIcon />
+                    </button>
+                    {addMenuOpen ? (
+                        <ul className={local.addMenu} role="menu">
+                            {onReceive ? (
+                                <li>
+                                    <button
+                                        type="button"
+                                        role="menuitem"
+                                        className={local.addMenuItem}
+                                        onClick={() => { setAddMenuOpen(false); onReceive(); }}
+                                    >
+                                        <span className={local.addMenuIcon} aria-hidden="true"><Icon.PlusIcon /></span>
+                                        Add address
+                                    </button>
+                                </li>
+                            ) : null}
+                            <li>
+                                <button
+                                    type="button"
+                                    role="menuitem"
+                                    className={local.addMenuItem}
+                                    onClick={() => { setAddMenuOpen(false); setWifNotice(null); setShowWifForm(true); }}
+                                >
+                                    <span className={local.addMenuIcon} aria-hidden="true"><Icon.DownloadIcon /></span>
+                                    Import address
+                                </button>
+                            </li>
+                        </ul>
+                    ) : null}
+                </div>
+            )}
         />
     );
     const wrap = (children) => (
@@ -254,6 +437,166 @@ export function AddressList({
         );
     }
 
+    // Address detail view: shown in place of the list when a row is tapped.
+    if (selected) {
+        const d = chainRegistry.get(selected.chainId);
+        const canSecret = !!(onShowPrivateKey && selected.record && !selected.multisig);
+        const canDelete = !!selected.record?.id;
+        const fields = [
+            { label: 'Network', value: d?.displayName || selected.chainId },
+            { label: 'Balance', value: amountTextFor(selected) },
+            { label: 'Type', value: typeLabelFor(selected) },
+        ];
+        if (selected.record?.addressType) {
+            fields.push({ label: 'Address format', value: String(selected.record.addressType).toUpperCase() });
+        }
+        if (selected.multisig) {
+            fields.push({
+                label: 'Multisig',
+                value: `${selected.multisig.threshold}-of-${selected.multisig.cosignerCount} (${selected.multisig.scheme})`,
+            });
+        }
+        if (selected.record?.derivationPath) {
+            fields.push({ label: 'Derivation path', value: selected.record.derivationPath });
+        }
+        const openXchain = () => {
+            const base = d?.explorer?.defaultUrl || branding.DEFAULT_EXPLORER_BASE;
+            if (!base) return;
+            try { window.open(`${base}/address/${selected.address}`, '_blank', 'noopener'); } catch { /* no-op */ }
+        };
+        const saveLabel = async () => {
+            if (!selected.record?.id || labelSaving) return;
+            setLabelSaving(true);
+            try {
+                const next = labelDraft.trim();
+                await messaging.setAddressLabel(selected.record.id, next);
+                setSelected({ ...selected, label: next, record: { ...selected.record, label: next } });
+                setReloadKey((k) => k + 1);
+            } catch (err) {
+                setLoadError(err?.message || 'Failed to save label.');
+            } finally {
+                setLabelSaving(false);
+            }
+        };
+        const copyAddress = () => {
+            try {
+                navigator.clipboard?.writeText?.(selected.address);
+                setAddrCopied(true);
+                setTimeout(() => setAddrCopied(false), 1200);
+            } catch { /* no-op */ }
+        };
+        const removeAddress = async () => {
+            if (!selected.record?.id) return;
+            if (!confirm('Delete this address? An imported key is gone unless you have a separate backup.')) return;
+            try {
+                await messaging.deleteAddress(selected.record.id);
+                setSelected(null);
+                setReloadKey((k) => k + 1);
+            } catch (err) {
+                setLoadError(err?.message || 'Failed to delete address.');
+            }
+        };
+        return (
+            <Screen variant={variant} header={<ScreenHeader onBack={() => setSelected(null)} title="Address" />}>
+                <div className={local.detailTop}>
+                    <div className={local.detailLabel}>Address</div>
+                    <div className={local.detailAddr}>
+                        <AddressText address={selected.address} truncate={false} />
+                        <button
+                            type="button"
+                            className={local.copyIcon}
+                            onClick={copyAddress}
+                            aria-label="Copy address"
+                            title="Copy address"
+                        >
+                            {addrCopied ? <Icon.CheckIcon /> : <Icon.CopyIcon />}
+                        </button>
+                    </div>
+                    <div className={local.detailLabel} style={{ marginTop: 'var(--xc-space-3)' }}>Label</div>
+                    {selected.record?.id ? (
+                        <div className={local.labelRow}>
+                            <Input
+                                label=""
+                                value={labelDraft}
+                                onChange={(e) => setLabelDraft(e.target.value)}
+                                placeholder="Add a label"
+                                aria-label="Address label"
+                            />
+                            <Button
+                                size="md"
+                                variant="primary"
+                                loading={labelSaving}
+                                disabled={labelDraft.trim() === (selected.label || '')}
+                                onClick={saveLabel}
+                            >
+                                Save
+                            </Button>
+                        </div>
+                    ) : (
+                        <div className={`${local.detailName} ${selected.label ? '' : local.detailNameEmpty}`}>
+                            {selected.label || 'No label'}
+                        </div>
+                    )}
+                </div>
+
+                <div className={local.quickActions} role="group" aria-label="Address actions">
+                    <button
+                        type="button"
+                        className={local.quickAction}
+                        onClick={() => onReceive?.()}
+                        disabled={!onReceive}
+                    >
+                        <span className={local.quickActionIcon} aria-hidden="true"><Icon.ReceiveIcon /></span>
+                        <span>Use</span>
+                    </button>
+                    <button
+                        type="button"
+                        className={local.quickAction}
+                        onClick={() => onShowPrivateKey?.(selected.record)}
+                        disabled={!canSecret}
+                    >
+                        <span className={local.quickActionIcon} aria-hidden="true"><Icon.KeyIcon /></span>
+                        <span>Secret</span>
+                    </button>
+                    <button
+                        type="button"
+                        className={local.quickAction}
+                        onClick={openXchain}
+                    >
+                        <span className={local.quickActionIcon} aria-hidden="true"><Icon.ExternalLinkIcon /></span>
+                        <span>XChain</span>
+                    </button>
+                    <button
+                        type="button"
+                        className={local.quickAction}
+                        onClick={removeAddress}
+                        disabled={!canDelete}
+                    >
+                        <span className={local.quickActionIcon} aria-hidden="true"><Icon.TrashIcon /></span>
+                        <span>Delete</span>
+                    </button>
+                </div>
+
+                <div className={local.tabsRow} role="tablist" aria-label="Address sections">
+                    <button type="button" role="tab" aria-selected="true" className={`${local.tab} ${local.tabActive}`}>
+                        About
+                    </button>
+                </div>
+
+                <div className={local.tabPanel}>
+                    <div className={local.detailCard}>
+                        {fields.map((f) => (
+                            <div key={f.label} className={local.detailField}>
+                                <div className={local.detailLabel}>{f.label}</div>
+                                <div className={local.detailValue}>{f.value}</div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </Screen>
+        );
+    }
+
     const activeChainIds = Object.entries(addressesByChain)
         .filter(([, addrs]) => Array.isArray(addrs) && addrs.length > 0)
         .map(([cid]) => cid);
@@ -272,22 +615,44 @@ export function AddressList({
 
     return wrap(
         <>
+            <div className={local.toolbar}>
+                <input
+                    type="text"
+                    className={local.search}
+                    placeholder="Search"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    aria-label="Search addresses"
+                />
+                <NetworkFilterDropdown value={network} onChange={setNetwork} />
+            </div>
+            <div className={local.segmented} role="tablist" aria-label="Filter by address type">
+                {[
+                    { id: 'all', label: 'All' },
+                    { id: 'normal', label: 'Normal' },
+                    { id: 'imported', label: 'Imported' },
+                    { id: 'other', label: 'Other' },
+                ].map((opt) => (
+                    <button
+                        key={opt.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={sourceFilter === opt.id}
+                        className={`${local.segment} ${sourceFilter === opt.id ? local.segmentActive : ''}`}
+                        onClick={() => setSourceFilter(opt.id)}
+                    >
+                        {opt.label}
+                    </button>
+                ))}
+            </div>
+            {showWifForm || wifNotice ? (
             <div className={wifStyles.wifBar}>
                 {wifNotice && !showWifForm ? (
                     <p className={wifStyles.wifNotice} role="status">{wifNotice}</p>
                 ) : null}
-                <button
-                    type="button"
-                    onClick={() => {
-                        setShowWifForm((v) => !v);
-                        if (showWifForm) resetWifForm();
-                        setWifNotice(null);
-                    }}
-                    className={wifStyles.wifToggle}
-                    aria-expanded={showWifForm}
-                >
-                    {showWifForm ? 'Cancel' : 'Import private key (WIF)'}
-                </button>
                 {showWifForm ? (
                     <form className={wifStyles.wifForm} onSubmit={handleImportWif} noValidate>
                         <p className={wifStyles.wifWarning}>
@@ -365,6 +730,15 @@ export function AddressList({
                         ) : null}
                         <div className={wifStyles.wifActions}>
                             <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                disabled={wifBusy}
+                                onClick={() => { setShowWifForm(false); resetWifForm(); setWifNotice(null); }}
+                            >
+                                Cancel
+                            </Button>
+                            <Button
                                 type="submit"
                                 variant="primary"
                                 size="sm"
@@ -377,50 +751,61 @@ export function AddressList({
                     </form>
                 ) : null}
             </div>
-
-            {rows.length === 0 ? (
-                <p className={styles.empty}>
-                    No addresses match the current filter.
-                </p>
             ) : null}
 
-            <ul className={styles.timeline} aria-label="Wallet addresses">
+            {rows.length === 0 ? (
+                <div className={local.emptyCard}>
+                    No addresses match the current filter.
+                </div>
+            ) : (
+            <ul className={local.addrList} aria-label="Wallet addresses">
                 {rows.map((row) => {
                     const d = chainRegistry.get(row.chainId);
+                    const iconUrl = d ? branding.chainIconSmallUrl(d.id) : null;
                     return (
-                        <li key={row.key} className={styles.row}>
-                            <div className={styles.rowHead}>
-                                {d ? <ChainBadge descriptor={d} size="sm" /> : null}
-                                {row.label ? (
-                                    <span className={styles.rowTitle}>{row.label}</span>
+                        <li key={row.key}>
+                            <button
+                                type="button"
+                                className={local.addrRow}
+                                onClick={() => { setSelected(row); setLabelDraft(row.label || ''); }}
+                                aria-label={`View address ${row.address}`}
+                            >
+                                {(row.label || row.record?.addressType) ? (
+                                    <div className={local.addrTopRow}>
+                                        <span className={local.addrLabel}>{row.label || ''}</span>
+                                        {row.record?.addressType ? (
+                                            <span className={`${local.addrType} ${addrTypeClass(row.record.addressType)}`}>
+                                                {String(row.record.addressType).toUpperCase()}
+                                            </span>
+                                        ) : null}
+                                    </div>
                                 ) : null}
-                                {row.multisig ? (
-                                    <MultisigBadge
-                                        threshold={row.multisig.threshold}
-                                        cosignerCount={row.multisig.cosignerCount}
-                                        scheme={row.multisig.scheme}
-                                        size="sm"
-                                    />
-                                ) : null}
-                            </div>
-                            <div className={styles.rowMeta}>
-                                <AddressText address={row.address} />
-                                <CopyButton value={row.address} />
-                                {onShowPrivateKey && row.record && !row.multisig ? (
-                                    <Button
-                                        size="sm"
-                                        variant="ghost"
-                                        onClick={() => onShowPrivateKey(row.record)}
-                                        aria-label={`Show private key for ${row.address}`}
-                                    >
-                                        Show key
-                                    </Button>
-                                ) : null}
-                            </div>
+                                <div className={local.addrLine1}>
+                                    {iconUrl ? (
+                                        <img src={iconUrl} alt="" className={local.chainIcon} width={16} height={16} />
+                                    ) : null}
+                                    <AddressText address={row.address} truncate={false} />
+                                    {row.multisig ? (
+                                        <MultisigBadge
+                                            threshold={row.multisig.threshold}
+                                            cosignerCount={row.multisig.cosignerCount}
+                                            scheme={row.multisig.scheme}
+                                            size="sm"
+                                        />
+                                    ) : null}
+                                </div>
+                                <div className={local.addrLine2}>
+                                    <span className={local.addrAmount}>{amountTextFor(row)}</span>
+                                    {fiatTextFor(row) ? (
+                                        <span className={local.addrFiat}>{fiatTextFor(row)}</span>
+                                    ) : null}
+                                </div>
+                            </button>
                         </li>
                     );
                 })}
             </ul>
+            )}
         </>,
     );
 }

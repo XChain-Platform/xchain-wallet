@@ -42,77 +42,210 @@
     color: var(--xc-text-muted);
 }
 
-/* Custom network dropdown: trigger button + absolute popover. The wrapper
-   is a flex item so min-width:0 overrides the default min-width:auto,
-   letting it shrink to match the search box at exactly 50%. */
-.networkWrap {
-    flex: 1 1 0;
-    min-width: 0;
-    position: relative;
-    box-sizing: border-box;
-}
-
-.networkTrigger {
-    display: flex;
+/* Circular plus button in the header trailing slot, matching the
+   My Tokens "Issue" affordance so the add-contact entry point reads the
+   same across the wallet. */
+/* Matches the main AppHeader icon buttons (.menuBtn): strong border,
+   38x38, transparent fill, muted-background hover. The only deviation is
+   the fully round shape, since these live in the sub-header. */
+.addButton {
+    appearance: none;
+    display: inline-flex;
     align-items: center;
-    gap: var(--xc-space-2);
-    width: 100%;
-    box-sizing: border-box;
-    min-width: 0;
-    padding: var(--xc-space-2) var(--xc-space-3);
-    font-family: var(--xc-font-sans);
-    font-size: var(--xc-text-sm);
-    font-weight: 600;
-    color: var(--xc-text);
-    background: var(--xc-surface);
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    padding: 0;
     border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
+    border-radius: 50%;
+    background: transparent;
+    color: var(--xc-text);
     cursor: pointer;
-    text-align: left;
-    overflow: hidden;
+    flex: 0 0 auto;
 }
 
-.networkTrigger:hover {
-    border-color: var(--xc-accent-primary);
+.addButton:hover {
+    background: var(--xc-bg-muted);
 }
 
-.networkTrigger:focus-visible {
+.addButton:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
     outline-offset: 2px;
 }
 
-.networkTriggerIcon {
-    flex: 0 0 auto;
-    width: 18px;
-    height: 18px;
+/* One big card wrapping all contacts, mirroring the Home BalanceList:
+   rows are separated by a hairline divider and highlight on hover. */
+.list {
+    display: flex;
+    flex-direction: column;
+    background: var(--xc-surface);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-md);
+    overflow: hidden;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.row {
     display: flex;
     align-items: center;
-    justify-content: center;
+    gap: var(--xc-space-3);
+    width: 100%;
+    padding: var(--xc-space-3);
+    border-top: 1px solid var(--xc-border);
+    background: transparent;
+    text-align: start;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
 }
 
-.networkTriggerIcon img {
-    width: 18px;
-    height: 18px;
-    border-radius: 50%;
-    display: block;
+.row:first-of-type {
+    border-top: none;
 }
 
-.networkTriggerLabel {
+.row:hover {
+    background: var(--xc-bg-muted);
+}
+
+.row:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: -2px;
+}
+
+.rowName {
     flex: 1 1 auto;
     min-width: 0;
+    font-weight: 600;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-.networkCaret {
+.rowChains {
     flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+}
+
+.chainIcon {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    display: block;
+}
+
+/* Fallback badge for an address whose network couldn't be identified:
+   a "?" in a circle, sized to match .chainIcon. */
+.unknownIcon {
+    flex: 0 0 auto;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--xc-bg-muted);
     color: var(--xc-text-muted);
-    font-size: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
     line-height: 1;
 }
 
-.networkPopover {
+/* Tab strip used in the contact detail view. Canonical underline pattern.
+   space-between pushes the trailing add-address button to the right edge. */
+.tabsRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0;
+    border-bottom: 1px solid var(--xc-border);
+    margin: var(--xc-space-4) 0 0;
+}
+
+/* Plus button on the Addresses tab line, right-justified. Matches the
+   sub-header icon buttons but sized to sit on the tab row. */
+.addAddressBtn {
+    appearance: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    margin-bottom: var(--xc-space-1);
+    border: 1px solid var(--xc-border-strong);
+    border-radius: var(--xc-radius-md);
+    background: transparent;
+    color: var(--xc-text);
+    cursor: pointer;
+    flex: 0 0 auto;
+}
+
+.addAddressBtn:hover {
+    background: var(--xc-bg-muted);
+}
+
+.addAddressBtn:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
+.tab {
+    appearance: none;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    padding: var(--xc-space-3) var(--xc-space-3);
+    color: var(--xc-text-muted);
+    font: inherit;
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    transition: color 160ms ease, border-color 160ms ease;
+}
+
+.tab:hover { color: var(--xc-text); }
+
+.tab:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: -2px;
+}
+
+.tabActive {
+    color: var(--xc-accent-primary);
+    border-bottom-color: var(--xc-accent-primary);
+}
+
+.tabLabel { font-weight: 700; }
+
+.tabPanel {
+    padding: var(--xc-space-3) 0;
+}
+
+/* Quick-action row in the contact detail view, mirroring the Home screen's
+   quick actions: a 4-up grid of icon-over-label buttons. */
+/* Relative anchor so the address-picker dropdown can position under the row. */
+.actionsWrap {
+    position: relative;
+    margin-top: var(--xc-space-2);
+}
+
+.quickActions {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--xc-space-2);
+}
+
+/* Address-picker dropdown: appears below the action row when a multi-address
+   contact's Send/Message needs the user to choose which address to use. */
+.addrMenu {
     position: absolute;
     top: calc(100% + 4px);
     left: 0;
@@ -128,133 +261,225 @@
     margin: 0;
 }
 
-.networkOption {
+.addrMenuHead {
+    padding: var(--xc-space-2) var(--xc-space-2) var(--xc-space-1);
+    font-size: var(--xc-text-xs);
+    font-weight: 700;
+    color: var(--xc-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.addrMenuItem {
     display: flex;
     align-items: center;
     gap: var(--xc-space-2);
     width: 100%;
-    padding: var(--xc-space-2) var(--xc-space-2);
-    font-family: var(--xc-font-sans);
-    font-size: var(--xc-text-sm);
-    font-weight: 500;
-    color: var(--xc-text);
+    padding: var(--xc-space-2);
     background: transparent;
     border: none;
     border-radius: var(--xc-radius-sm);
     cursor: pointer;
     text-align: left;
+    color: var(--xc-text);
+    font: inherit;
 }
 
-.networkOption:hover {
+.addrMenuItem:hover {
     background: var(--xc-bg-muted);
 }
 
-.networkOptionActive {
-    color: var(--xc-accent-primary);
-    font-weight: 600;
+.addrMenuItem:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: -2px;
 }
 
-.networkOptionIcon {
-    flex: 0 0 18px;
-    width: 18px;
-    height: 18px;
+.quickAction {
+    appearance: none;
+    background: var(--xc-surface-raised);
+    border: 1px solid var(--xc-accent-primary);
+    border-radius: var(--xc-radius-md);
+    padding: var(--xc-space-3) var(--xc-space-1);
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
+    gap: var(--xc-space-1);
+    cursor: pointer;
+    color: var(--xc-text);
+    font-family: inherit;
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+    min-height: 72px;
+    text-align: center;
 }
 
-.networkOptionIcon img {
-    width: 18px;
-    height: 18px;
+.quickAction:hover:not(:disabled) {
+    background: var(--xc-bg-muted);
+}
+
+.quickAction:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
+.quickAction:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.quickActionIcon {
+    width: 32px;
+    height: 32px;
     border-radius: 50%;
-    display: block;
-}
-
-/* Circular plus button in the header trailing slot, matching the
-   My Tokens "Issue" affordance so the add-contact entry point reads the
-   same across the wallet. */
-.addButton {
+    background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
+    color: var(--xc-accent-primary);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 32px;
-    height: 32px;
-    padding: 0;
+}
+
+/* Cards in the contact detail view: one for name + notes, one per address. */
+.infoCard {
+    padding: var(--xc-space-4);
+    background: var(--xc-surface);
     border: 1px solid var(--xc-border);
-    border-radius: 50%;
-    background: transparent;
-    color: var(--xc-accent-primary);
-    cursor: pointer;
+    border-radius: var(--xc-radius-lg);
 }
 
-.addButton:hover {
-    background: var(--xc-bg-muted);
-    border-color: var(--xc-accent-primary);
-}
-
-.addButton:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
-}
-
-.list {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-}
-
-.row {
-    display: flex;
-    align-items: center;
-    gap: var(--xc-space-3);
-    width: 100%;
-    text-align: left;
-    padding: var(--xc-space-3);
-    margin-bottom: var(--xc-space-2);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
-    background: transparent;
-    cursor: pointer;
-    color: inherit;
-}
-
-.row:hover {
-    background: var(--xc-bg-muted);
-    border-color: var(--xc-border-strong);
-}
-
-.row:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
-}
-
-.rowMain {
-    flex: 1 1 auto;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-}
-
-.rowName {
-    font-weight: 600;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.rowSub {
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
+.addressCard {
     display: flex;
     align-items: center;
     gap: var(--xc-space-2);
+    padding: var(--xc-space-3);
+    margin-bottom: var(--xc-space-2);
+    background: var(--xc-surface);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-md);
 }
 
-.rowCount {
+.addressCard:last-child {
+    margin-bottom: 0;
+}
+
+/* Show the full address; only ellipsis when it would overflow the card.
+   min-width:0 lets the flex item shrink below its content width so
+   text-overflow can engage instead of forcing the row wider. */
+.addressText {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--xc-font-mono);
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text);
+}
+
+/* Red-outline X button to delete a single address, pinned to the right of
+   its card and nudged toward the edge. */
+.addressDeleteBtn {
+    appearance: none;
+    margin-inline-start: auto;
+    margin-inline-end: calc(-1 * var(--xc-space-1));
     flex: 0 0 auto;
-    font-size: var(--xc-text-xs);
+    width: 22px;
+    height: 22px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 1px solid var(--xc-danger);
+    border-radius: var(--xc-radius-sm);
+    background: transparent;
+    color: var(--xc-danger);
+    cursor: pointer;
+}
+
+.addressDeleteBtn:hover {
+    background: color-mix(in srgb, var(--xc-danger) 10%, transparent);
+}
+
+.addressDeleteBtn:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
+/* Add-address modal: centered card over a dimmed full-screen backdrop. */
+.modalOverlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    background: rgba(15, 23, 42, 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--xc-space-4);
+}
+
+.modalCard {
+    width: 100%;
+    max-width: 420px;
+    background: var(--xc-surface-raised);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-lg);
+    box-shadow: var(--xc-shadow-md);
+    padding: var(--xc-space-5);
+}
+
+.modalTitle {
+    font-size: var(--xc-text-md);
+    font-weight: 700;
+    color: var(--xc-text);
+    margin-bottom: var(--xc-space-3);
+}
+
+.modalActions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--xc-space-2);
+    margin-top: var(--xc-space-3);
+}
+
+/* Textarea used in the new contact form notes field, styled to match Input. */
+.notesField {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+    margin-bottom: var(--xc-space-2);
+}
+
+/* Save row on the create/edit contact forms. Tighter top margin than the
+   shared .actions so the button sits close under the notes textarea. */
+.formActions {
+    margin-top: var(--xc-space-2);
+}
+
+.notesLabel {
+    font-size: var(--xc-text-sm);
     color: var(--xc-text-muted);
+    font-weight: 500;
+}
+
+.notesTextarea {
+    padding: var(--xc-space-2) var(--xc-space-3);
+    font-family: var(--xc-font-sans);
+    font-size: var(--xc-text-md);
+    color: var(--xc-text);
+    background: var(--xc-surface);
+    border: 1px solid var(--xc-border-strong);
+    border-radius: var(--xc-radius-md);
+    width: 100%;
+    box-sizing: border-box;
+    resize: vertical;
+    min-height: 80px;
+    transition: border-color var(--xc-transition), box-shadow var(--xc-transition);
+}
+
+.notesTextarea:focus {
+    outline: none;
+    border-color: var(--xc-accent-primary);
+    box-shadow: 0 0 0 3px var(--xc-focus-ring);
 }
 
 /* Empty state shown when no contacts exist or none match the filter.

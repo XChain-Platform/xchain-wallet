@@ -334,7 +334,7 @@ function AppInner() {
     // to 'home'; SendPicker → Send sets it to 'send-picker' so backing
     // out lands on the token list the user was just browsing.
     const [sendBackTo, setSendBackTo] = useState(
-        /** @type {'home' | 'send-picker' | 'token-detail'} */ ('home'),
+        /** @type {'home' | 'send-picker' | 'token-detail' | 'contacts'} */ ('home'),
     );
     // ReceivePicker → Receive prefill carrier; cleared when the user
     // backs out of Receive. Mirrors `sendPrefill` for the Send side.
@@ -573,7 +573,7 @@ function AppInner() {
                         onMoreActions={() => setUnlockedView('actions')}
                         onMessaging={() => setUnlockedView('messaging')}
                         onCrossChain={() => setUnlockedView('cross-chain')}
-                        onContacts={() => setUnlockedView('contacts')}
+                        onContacts={() => { setFormReturnView(menuBackTo); setUnlockedView('contacts'); }}
                         onAddresses={() => setUnlockedView('addresses')}
                         onContracts={() => setUnlockedView('contracts')}
                         onStaking={() => setUnlockedView('staking')}
@@ -602,8 +602,10 @@ function AppInner() {
                             setSendBackTo('home');
                         }}
                         prefill={sendPrefill}
-                        onChangeAsset={() => {
-                            setSendPrefill(null);
+                        onChangeAsset={(carry) => {
+                            // Carry the typed To address + amount so picking a
+                            // new asset doesn't wipe those fields.
+                            setSendPrefill({ address: carry?.address || '', amount: carry?.amount || '' });
                             setUnlockedView('send-picker');
                         }}
                     />
@@ -621,15 +623,18 @@ function AppInner() {
                         kindFilter={globalKindFilter}
                         onKindFilterChange={setGlobalKindFilter}
                         hideOwnFilter
-                        onBack={() => setUnlockedView('home')}
+                        onBack={() => { setSendPrefill(null); setUnlockedView('home'); }}
                         onSelect={(sel) => {
-                            setSendPrefill({
+                            // Preserve any To address + amount carried in via onChangeAsset.
+                            setSendPrefill((prev) => ({
                                 chainId: sel.chainId,
                                 tick: sel.tick,
                                 kind: sel.kind,
                                 displayName: sel.displayName,
                                 imageUrl: sel.imageUrl,
-                            });
+                                address: prev?.address || undefined,
+                                amount: prev?.amount || undefined,
+                            }));
                             setSendBackTo('send-picker');
                             setUnlockedView('send');
                         }}
@@ -648,7 +653,7 @@ function AppInner() {
                         kindFilter={globalKindFilter}
                         onKindFilterChange={setGlobalKindFilter}
                         hideOwnFilter
-                        onBack={() => setUnlockedView('home')}
+                        onBack={() => setUnlockedView('receive')}
                         onSelect={(sel) => {
                             setReceivePrefill({
                                 chainId: sel.chainId,
@@ -1145,6 +1150,11 @@ function AppInner() {
                 return (
                     <ContactsList
                         walletId={activeWalletId}
+                        onSend={(prefill) => {
+                            setSendPrefill(prefill);
+                            setSendBackTo('contacts');
+                            setUnlockedView('send');
+                        }}
                         onSendMessage={(prefill) => {
                             setComposePrefill({ ...prefill, __from: 'contacts' });
                             setUnlockedView('compose-message');

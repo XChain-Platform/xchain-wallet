@@ -226,6 +226,16 @@ export function getNewestAddress(walletId, chainId, accountId) {
     );
 }
 
+/** Rename an address (set its label). @param {string} id @param {string} label */
+export function setAddressLabel(id, label) {
+    return /** @type {any} */ (sendMessage('addresses.setLabel', { id, label }));
+}
+
+/** Delete an address record by id. @param {string} id */
+export function deleteAddress(id) {
+    return /** @type {any} */ (sendMessage('addresses.delete', { id }));
+}
+
 /**
  * Derive + persist the next unused external address for (wallet, chain).
  * Requires the user's password when the resolved signer is software

@@ -30,6 +30,7 @@ import {
     Printer as LucidePrinter,
     Handshake as LucideHandshake,
     ShieldCheck as LucideShieldCheck,
+    Save as LucideSave,
 } from 'lucide-react';
 
 const STROKE_PROPS = {
@@ -230,6 +231,10 @@ export function PrinterIcon() {
     return <LucidePrinter {...LUCIDE_PROPS} />;
 }
 
+export function SaveIcon() {
+    return <LucideSave {...LUCIDE_PROPS} />;
+}
+
 export function HandshakeIcon() {
     return <LucideHandshake {...LUCIDE_PROPS} />;
 }
@@ -265,7 +270,8 @@ const LABEL_MAP = [
     [/^more\b/, MoreIcon],
     [/^back\b|^previous\b/, BackIcon],
     [/^next\b|^continue\b|^proceed\b|^forward\b|^onward\b|^use template\b/, ForwardIcon],
-    [/^save\b|^submit\b|^confirm\b|^done\b|^ok\b|^apply\b|^accept\b|^approve\b|^yes\b|^validat/, CheckIcon],
+    [/^save\b/, SaveIcon],
+    [/^submit\b|^confirm\b|^done\b|^ok\b|^apply\b|^accept\b|^approve\b|^yes\b|^validat/, CheckIcon],
     [/^cancel\b|^close\b|^dismiss\b|^skip\b|^not now\b|^nevermind\b|^reject\b|^deny\b|^no\b/, XIcon],
     [/^delete\b|^remove\b|^discard\b|^destroy\b|^revoke\b|^clear\b|^burn\b|^sweep\b/, TrashIcon],
     [/^edit\b|^rename\b|^modify\b|^update\b|^compose\b|^write\b|^draft\b/, PencilIcon],
@@ -626,6 +632,15 @@ export function UsersIcon() {
             <circle cx="9" cy="7" r="4" />
             <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
             <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+        </svg>
+    );
+}
+
+export function UserIcon() {
+    return (
+        <svg {...STROKE_PROPS}>
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+            <circle cx="12" cy="7" r="4" />
         </svg>
     );
 }

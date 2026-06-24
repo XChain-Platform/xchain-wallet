@@ -14,98 +14,28 @@ import {
     ScreenHeader,
     Button,
     Input,
-    ChainBadge,
-    AddressText,
     Icon,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
-import * as branding from '../../branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useToast } from '../components/ToastHost.jsx';
+import { NETWORK_OPTIONS, NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
 import { ScanRoute } from './ScanRoute.jsx';
 import styles from './IssueTokenForm.module.css';
 import picker from './ContactsList.module.css';
 
-// Each entry carries the icon URL at module load time so the dropdown
-// renders without any async work. Uses mainnet icons because contacts
-// store coin families, not per-network chainIds.
-const NETWORK_OPTIONS = [
-    { value: 'bitcoin',  label: 'Bitcoin',  iconUrl: branding.chainIconSmallUrl('bitcoin-mainnet') },
-    { value: 'litecoin', label: 'Litecoin', iconUrl: branding.chainIconSmallUrl('litecoin-mainnet') },
-    { value: 'dogecoin', label: 'Dogecoin', iconUrl: branding.chainIconSmallUrl('dogecoin-mainnet') },
-];
-
 const chainRegistry = registryLib.defaultRegistry();
 
 /**
- * Lightweight custom dropdown for the network filter. A native <select>
- * cannot render images inside options, so we build a small trigger +
- * popover pattern (the same shape as ChainPicker, but much simpler at
- * only 4 fixed options).
+ * Small round coin badge for a contact entry's chain. Shows the network
+ * icon when the chain is recognized, or a question-mark-in-a-circle when
+ * the address format could not be matched to a known network ('unknown').
  */
-function NetworkDropdown({ value, onChange }) {
-    const [open, setOpen] = useState(false);
-    const triggerRef = useRef(null);
-    const popoverRef = useRef(null);
-
-    useEffect(() => {
-        if (!open) return undefined;
-        const onDown = (e) => {
-            if (triggerRef.current?.contains(e.target)) return;
-            if (popoverRef.current?.contains(e.target)) return;
-            setOpen(false);
-        };
-        const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
-        window.addEventListener('mousedown', onDown);
-        window.addEventListener('keydown', onKey);
-        return () => {
-            window.removeEventListener('mousedown', onDown);
-            window.removeEventListener('keydown', onKey);
-        };
-    }, [open]);
-
-    const selected = NETWORK_OPTIONS.find((n) => n.value === value) || null;
-
+function ChainCoinIcon({ chain }) {
+    const opt = NETWORK_OPTIONS.find((n) => n.value === chain);
+    if (opt) return <img src={opt.iconUrl} alt={opt.label} className={picker.chainIcon} />;
     return (
-        <div className={picker.networkWrap}>
-            <button
-                ref={triggerRef}
-                type="button"
-                className={picker.networkTrigger}
-                onClick={() => setOpen((v) => !v)}
-                aria-haspopup="listbox"
-                aria-expanded={open ? 'true' : 'false'}
-                aria-label="Filter by network"
-            >
-                <span className={picker.networkTriggerIcon} aria-hidden="true">
-                    {selected?.iconUrl ? <img src={selected.iconUrl} alt="" /> : <Icon.FilterIcon />}
-                </span>
-                <span className={picker.networkTriggerLabel}>
-                    {selected ? selected.label : 'All Networks'}
-                </span>
-                <span className={picker.networkCaret} aria-hidden="true">&#9660;</span>
-            </button>
-            {open ? (
-                <ul ref={popoverRef} className={picker.networkPopover} role="listbox">
-                    {[{ value: 'all', label: 'All Networks', iconUrl: null, icon: <Icon.FilterIcon /> }, ...NETWORK_OPTIONS].map((n) => (
-                        <li key={n.value}>
-                            <button
-                                type="button"
-                                role="option"
-                                aria-selected={value === n.value ? 'true' : 'false'}
-                                className={`${picker.networkOption} ${value === n.value ? picker.networkOptionActive : ''}`}
-                                onClick={() => { onChange(n.value); setOpen(false); }}
-                            >
-                                <span className={picker.networkOptionIcon} aria-hidden="true">
-                                    {n.iconUrl ? <img src={n.iconUrl} alt="" /> : n.icon || null}
-                                </span>
-                                {n.label}
-                            </button>
-                        </li>
-                    ))}
-                </ul>
-            ) : null}
-        </div>
+        <span className={picker.unknownIcon} aria-label="Unknown network" title="Unknown network">?</span>
     );
 }
 
@@ -123,6 +53,8 @@ function NetworkDropdown({ value, onChange }) {
  *
  * @param {object} props
  * @param {string} props.walletId
+ * @param {(prefill: { chainId?: string, address?: string }) => void} [props.onSend]
+ *   Navigate to the Send flow pre-filled with the contact's primary address.
  * @param {(prefill: { chainId?: string, toAddress?: string }) => void} [props.onSendMessage]
  * @param {() => void} props.onBack
  * @param {{ address: string, chainId?: string } | null} [props.scanPrefill] Address
@@ -131,7 +63,7 @@ function NetworkDropdown({ value, onChange }) {
  *   pre-filled, then calls onScanPrefillConsumed to clear it in the parent.
  * @param {() => void} [props.onScanPrefillConsumed]
  */
-export function ContactsList({ walletId, onSendMessage, onBack, scanPrefill, onScanPrefillConsumed }) {
+export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPrefill, onScanPrefillConsumed }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -162,6 +94,17 @@ export function ContactsList({ walletId, onSendMessage, onBack, scanPrefill, onS
     );
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [submitting, setSubmitting] = useState(false);
+
+    // Add-address modal (launched from the detail view's + button).
+    const [addAddrOpen, setAddAddrOpen] = useState(false);
+    const [addAddrValue, setAddAddrValue] = useState('');
+    const [addAddrError, setAddAddrError] = useState(/** @type {string | null} */ (null));
+    const [addAddrSaving, setAddAddrSaving] = useState(false);
+
+    // Address-picker dropdown shown when a multi-address contact's Send or
+    // Message action needs the user to choose which address to use.
+    const [addrPicker, setAddrPicker] = useState(/** @type {'send' | 'message' | null} */ (null));
+    const actionsRef = useRef(null);
 
     const loadContacts = useCallback(async () => {
         try {
@@ -210,6 +153,22 @@ export function ContactsList({ walletId, onSendMessage, onBack, scanPrefill, onS
         setMode('edit');
         onScanPrefillConsumed?.();
     }, [scanPrefill, onScanPrefillConsumed]);
+
+    // Dismiss the address-picker dropdown on outside click or Escape.
+    useEffect(() => {
+        if (!addrPicker) return undefined;
+        const onDown = (e) => {
+            if (actionsRef.current?.contains(e.target)) return;
+            setAddrPicker(null);
+        };
+        const onKey = (e) => { if (e.key === 'Escape') setAddrPicker(null); };
+        window.addEventListener('mousedown', onDown);
+        window.addEventListener('keydown', onKey);
+        return () => {
+            window.removeEventListener('mousedown', onDown);
+            window.removeEventListener('keydown', onKey);
+        };
+    }, [addrPicker]);
 
     function startEdit(contact) {
         if (contact) {
@@ -331,6 +290,44 @@ export function ContactsList({ walletId, onSendMessage, onBack, scanPrefill, onS
         }
     }
 
+    // Remove a single address entry from the active contact, after a
+    // confirmation that mirrors the delete-contact prompt.
+    async function handleDeleteAddress(index) {
+        if (!active) return;
+        if (!confirm('Delete this address?')) return;
+        const nextEntries = active.entries.filter((_, i) => i !== index);
+        try {
+            await messaging.saveContact({ record: { ...active, entries: nextEntries } });
+            await loadContacts();
+        } catch (err) {
+            setLoadError(err?.message || 'Delete failed.');
+        }
+    }
+
+    // Append the address typed in the add-address modal to the active
+    // contact, auto-detecting its coin network.
+    async function handleAddAddress() {
+        if (!active || addAddrSaving) return;
+        const address = addAddrValue.trim();
+        if (!address) {
+            setAddAddrError('Address is required.');
+            return;
+        }
+        setAddAddrSaving(true);
+        setAddAddrError(null);
+        const entry = { chain: detectAddressCoin(address), address, label: '' };
+        try {
+            await messaging.saveContact({ record: { ...active, entries: [...active.entries, entry] } });
+            await loadContacts();
+            setAddAddrOpen(false);
+            setAddAddrValue('');
+        } catch (err) {
+            setAddAddrError(err?.message || 'Save failed.');
+        } finally {
+            setAddAddrSaving(false);
+        }
+    }
+
     const header = (
         <ScreenHeader
             onBack={() => {
@@ -342,8 +339,15 @@ export function ContactsList({ walletId, onSendMessage, onBack, scanPrefill, onS
                 }
             }}
             title={mode === 'edit'
-                ? (active ? 'Edit contact' : 'New contact')
-                : mode === 'detail' ? 'Contact' : 'Contacts'}
+                ? (active ? 'Edit Contact' : 'New contact')
+                : mode === 'detail' ? 'View Contact' : 'Contacts'}
+            titleIcon={
+                mode === 'list' ? <Icon.UsersIcon />
+                    : mode === 'detail' ? <Icon.UserIcon />
+                    : (mode === 'edit' && active) ? <Icon.PencilIcon />
+                    : (mode === 'edit' && !active) ? <Icon.PlusIcon />
+                    : undefined
+            }
             trailing={mode === 'list' ? (
                 <button
                     type="button"
@@ -358,9 +362,13 @@ export function ContactsList({ walletId, onSendMessage, onBack, scanPrefill, onS
         />
     );
 
-    const wrap = (children) => (
+    // `card` controls the raised inner card used by the form/detail views
+    // in the full (desktop) variant. The list view passes card=false so its
+    // contacts card sits directly on the screen background, exactly like the
+    // Home balances list (no card-in-card).
+    const wrap = (children, { card = true } = {}) => (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+            {isFull && card ? <div className={styles.card}>{children}</div> : children}
         </Screen>
     );
 
@@ -388,85 +396,71 @@ export function ContactsList({ walletId, onSendMessage, onBack, scanPrefill, onS
         );
     }
 
-    if (mode === 'edit') {
+    if (mode === 'edit' && !active) {
+        // Simple create form: name, address, notes. The coin network is
+        // auto-detected from the address as the user types (Bitcoin /
+        // Litecoin / Dogecoin / Unknown) and stored on the entry's chain.
+        const entry0 = formEntries[0];
+        const detected = entry0.address.trim() ? entry0.chain : null;
+        const detectedOpt = detected ? NETWORK_OPTIONS.find((n) => n.value === detected) : null;
         return wrap(
             <form onSubmit={handleSave} noValidate>
                 <Input label="Name" value={formName} onChange={(e) => setFormName(e.target.value)} />
-                <Input label="Notes" value={formNotes} onChange={(e) => setFormNotes(e.target.value)} />
-                <p style={{ margin: '0.5rem 0 0.25rem', fontWeight: 600 }}>Addresses</p>
-                {formEntries.map((entry, i) => (
-                    <div
-                        key={i}
-                        style={{
-                            display: 'grid',
-                            gridTemplateColumns: isFull ? '1fr 2fr 1fr auto' : '1fr',
-                            gap: '0.25rem',
-                            marginBottom: '0.5rem',
-                        }}
-                    >
-                        <select
-                            className={styles.select}
-                            value={entry.chain}
-                            onChange={(e) => {
-                                const next = [...formEntries];
-                                next[i] = { ...next[i], chain: e.target.value };
-                                setFormEntries(next);
-                            }}
-                        >
-                            <option value="bitcoin">Bitcoin</option>
-                            <option value="litecoin">Litecoin</option>
-                            <option value="dogecoin">Dogecoin</option>
-                        </select>
-                        <Input
-                            label=""
-                            aria-label={`Address ${i + 1}`}
-                            value={entry.address}
-                            onChange={(e) => {
-                                const next = [...formEntries];
-                                next[i] = { ...next[i], address: e.target.value };
-                                setFormEntries(next);
-                            }}
-                            placeholder="Address"
-                        />
-                        <Input
-                            label=""
-                            aria-label={`Label ${i + 1}`}
-                            value={entry.label}
-                            onChange={(e) => {
-                                const next = [...formEntries];
-                                next[i] = { ...next[i], label: e.target.value };
-                                setFormEntries(next);
-                            }}
-                            placeholder="Label (optional)"
-                        />
-                        <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            aria-label={`Remove address ${i + 1}`}
-                            onClick={() => {
-                                if (formEntries.length === 1) return;
-                                setFormEntries(formEntries.filter((_, idx) => idx !== i));
-                            }}
-                            disabled={formEntries.length === 1}
-                        >
-                            ×
-                        </Button>
+                <Input
+                    label="Address"
+                    value={entry0.address}
+                    onChange={(e) => {
+                        const address = e.target.value;
+                        setFormEntries([{ ...entry0, address, chain: detectAddressCoin(address) }]);
+                    }}
+                    placeholder=""
+                />
+                {detected ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--xc-space-2)', margin: '0.25rem 0 0.75rem', fontSize: 'var(--xc-text-sm)', color: 'var(--xc-text-muted)' }}>
+                        {detectedOpt ? <img src={detectedOpt.iconUrl} alt="" className={picker.chainIcon} /> : null}
+                        <span>Network: {detectedOpt ? detectedOpt.label : 'Unknown'}</span>
                     </div>
-                ))}
-                <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setFormEntries([...formEntries, { chain: 'bitcoin', address: '', label: '' }])}
-                >
-                    + Add address
-                </Button>
+                ) : null}
+                <div className={picker.notesField}>
+                    <label className={picker.notesLabel}>Notes</label>
+                    <textarea
+                        className={picker.notesTextarea}
+                        value={formNotes}
+                        onChange={(e) => setFormNotes(e.target.value)}
+                    />
+                </div>
                 {submitError ? (
                     <p role="alert" className={styles.error} style={{ marginTop: '0.5rem' }}>{submitError}</p>
                 ) : null}
-                <div className={styles.actions}>
-                    <Button type="submit" variant="primary" loading={submitting}>
+                <div className={picker.formActions}>
+                    <Button type="submit" variant="primary" block loading={submitting}>
+                        Save
+                    </Button>
+                </div>
+            </form>,
+        );
+    }
+
+    if (mode === 'edit' && active) {
+        // Name + notes only; existing addresses are preserved on save via
+        // formEntries (populated from the contact by startEdit). Addresses are
+        // managed from the detail view, not this form.
+        return wrap(
+            <form onSubmit={handleSave} noValidate>
+                <Input label="Name" value={formName} onChange={(e) => setFormName(e.target.value)} />
+                <div className={picker.notesField}>
+                    <label className={picker.notesLabel}>Notes</label>
+                    <textarea
+                        className={picker.notesTextarea}
+                        value={formNotes}
+                        onChange={(e) => setFormNotes(e.target.value)}
+                    />
+                </div>
+                {submitError ? (
+                    <p role="alert" className={styles.error} style={{ marginTop: '0.5rem' }}>{submitError}</p>
+                ) : null}
+                <div className={picker.formActions}>
+                    <Button type="submit" variant="primary" block loading={submitting}>
                         Save
                     </Button>
                 </div>
@@ -476,50 +470,178 @@ export function ContactsList({ walletId, onSendMessage, onBack, scanPrefill, onS
 
     if (mode === 'detail' && active) {
         const primary = active.entries[0];
+        const multiAddress = active.entries.length > 1;
+        // Fire a Send/Message for a specific entry, then close the picker.
+        const runAction = (action, entry) => {
+            if (action === 'send') onSend?.({ chainId: chainIdFor(entry.chain), address: entry.address });
+            else onSendMessage?.({ chainId: chainIdFor(entry.chain), toAddress: entry.address });
+            setAddrPicker(null);
+        };
+        // Single-address contacts act immediately; multi-address ones toggle a
+        // dropdown so the user can pick which address to use (clicking the same
+        // button again closes it).
+        const startAction = (action) => {
+            if (!primary) return;
+            if (multiAddress) setAddrPicker((cur) => (cur === action ? null : action));
+            else runAction(action, primary);
+        };
         return wrap(
             <>
-                <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Name</dt>
-                    <dd className={styles.detailsValue}>{active.name}</dd>
+                <div className={picker.infoCard}>
+                    <div style={{ fontSize: 'var(--xc-text-sm)', color: 'var(--xc-text-muted)', fontWeight: 700, marginBottom: '0.25rem' }}>Name</div>
+                    <div style={{ fontSize: 'var(--xc-text-lg)', fontWeight: 600 }}>{active.name}</div>
                     {active.notes ? (
                         <>
-                            <dt className={styles.detailsLabel}>Notes</dt>
-                            <dd className={styles.detailsValue}>{active.notes}</dd>
+                            <div style={{ fontSize: 'var(--xc-text-sm)', color: 'var(--xc-text-muted)', fontWeight: 700, margin: '0.75rem 0 0.25rem' }}>Notes</div>
+                            <p style={{ margin: 0, color: 'var(--xc-text-muted)' }}>{active.notes}</p>
                         </>
                     ) : null}
-                </dl>
+                </div>
 
-                <p style={{ margin: '0.5rem 0 0.25rem', fontWeight: 600 }}>Addresses</p>
-                <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                <div className={picker.actionsWrap} ref={actionsRef}>
+                    <div className={picker.quickActions} role="group" aria-label="Contact actions">
+                        <button
+                            type="button"
+                            className={picker.quickAction}
+                            onClick={() => startAction('send')}
+                            disabled={!onSend || !primary}
+                            aria-haspopup={multiAddress ? 'menu' : undefined}
+                            aria-expanded={multiAddress ? (addrPicker === 'send') : undefined}
+                        >
+                            <span className={picker.quickActionIcon} aria-hidden="true"><Icon.SendIcon /></span>
+                            <span>Send</span>
+                        </button>
+                        <button
+                            type="button"
+                            className={picker.quickAction}
+                            onClick={() => startAction('message')}
+                            disabled={!onSendMessage || !primary}
+                            aria-haspopup={multiAddress ? 'menu' : undefined}
+                            aria-expanded={multiAddress ? (addrPicker === 'message') : undefined}
+                        >
+                            <span className={picker.quickActionIcon} aria-hidden="true"><Icon.MessageIcon /></span>
+                            <span>Message</span>
+                        </button>
+                        <button
+                            type="button"
+                            className={picker.quickAction}
+                            onClick={() => startEdit(active)}
+                        >
+                            <span className={picker.quickActionIcon} aria-hidden="true"><Icon.PencilIcon /></span>
+                            <span>Edit</span>
+                        </button>
+                        <button
+                            type="button"
+                            className={picker.quickAction}
+                            onClick={() => handleDelete(active.id)}
+                        >
+                            <span className={picker.quickActionIcon} aria-hidden="true"><Icon.TrashIcon /></span>
+                            <span>Delete</span>
+                        </button>
+                    </div>
+                    {addrPicker ? (
+                        <ul className={picker.addrMenu} role="menu" aria-label="Choose an address">
+                            <li className={picker.addrMenuHead}>
+                                {addrPicker === 'send' ? 'Send to' : 'Message to'}
+                            </li>
+                            {active.entries.map((e, i) => (
+                                <li key={i}>
+                                    <button
+                                        type="button"
+                                        role="menuitem"
+                                        className={picker.addrMenuItem}
+                                        onClick={() => runAction(addrPicker, e)}
+                                    >
+                                        <ChainCoinIcon chain={e.chain} />
+                                        <span className={picker.addressText} title={e.address}>{e.address}</span>
+                                        {e.label ? <span style={{ color: 'var(--xc-fg-muted)', marginLeft: '0.25rem' }}>({e.label})</span> : null}
+                                    </button>
+                                </li>
+                            ))}
+                        </ul>
+                    ) : null}
+                </div>
+
+                <div className={picker.tabsRow} role="tablist">
+                    <button
+                        type="button"
+                        role="tab"
+                        aria-selected="true"
+                        className={`${picker.tab} ${picker.tabActive}`}
+                    >
+                        <span className={picker.tabLabel}>Addresses</span>
+                    </button>
+                    <button
+                        type="button"
+                        className={picker.addAddressBtn}
+                        onClick={() => { setAddAddrValue(''); setAddAddrError(null); setAddAddrOpen(true); }}
+                        aria-label="Add address"
+                        title="Add address"
+                    >
+                        <Icon.PlusIcon />
+                    </button>
+                </div>
+
+                <ul className={picker.tabPanel} style={{ listStyle: 'none', padding: 0, margin: 'var(--xc-space-2) 0 0' }}>
                     {active.entries.map((e, i) => {
-                        const chainId = chainIdFor(e.chain);
-                        const d = chainId ? chainRegistry.get(chainId) : null;
                         return (
-                            <li key={i} style={{ padding: '0.25rem 0' }}>
-                                {d ? <ChainBadge descriptor={d} size="sm" /> : <span>{e.chain}</span>}
-                                {' '}<AddressText address={e.address} />
-                                {e.label ? <span style={{ color: 'var(--xc-fg-muted)', marginLeft: '0.5rem' }}>({e.label})</span> : null}
+                            <li key={i} className={picker.addressCard}>
+                                <ChainCoinIcon chain={e.chain} />
+                                <span className={picker.addressText} title={e.address}>{e.address}</span>
+                                {e.label ? <span style={{ color: 'var(--xc-fg-muted)', marginLeft: '0.25rem' }}>({e.label})</span> : null}
+                                <button
+                                    type="button"
+                                    className={picker.addressDeleteBtn}
+                                    onClick={() => handleDeleteAddress(i)}
+                                    aria-label="Delete address"
+                                    title="Delete address"
+                                >
+                                    <Icon.XIcon />
+                                </button>
                             </li>
                         );
                     })}
                 </ul>
 
-                <div className={styles.actions}>
-                    {onSendMessage && primary ? (
-                        <Button
-                            variant="primary"
-                            onClick={() => onSendMessage({
-                                chainId: chainIdFor(primary.chain),
-                                toAddress: primary.address,
-                            })}
-                        >
-                            Send message
-                        </Button>
-                    ) : null}
-                    <Button variant="ghost" onClick={() => startEdit(active)}>Edit</Button>
-                    <Button variant="danger" onClick={() => handleDelete(active.id)}>Delete</Button>
-                    <Button variant="ghost" onClick={() => { setActiveId(null); setMode('list'); }}>Back to list</Button>
-                </div>
+                {addAddrOpen ? (
+                    <div
+                        className={picker.modalOverlay}
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label="Add address"
+                        onMouseDown={(ev) => { if (ev.target === ev.currentTarget) setAddAddrOpen(false); }}
+                    >
+                        <div className={picker.modalCard}>
+                            <div className={picker.modalTitle}>Add address</div>
+                            <Input
+                                label="Address"
+                                value={addAddrValue}
+                                onChange={(ev) => { setAddAddrValue(ev.target.value); setAddAddrError(null); }}
+                                placeholder=""
+                                autoFocus
+                            />
+                            {addAddrValue.trim() ? (
+                                (() => {
+                                    const det = detectAddressCoin(addAddrValue);
+                                    const detOpt = NETWORK_OPTIONS.find((n) => n.value === det);
+                                    return (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--xc-space-2)', marginBottom: 'var(--xc-space-2)', fontSize: 'var(--xc-text-sm)', color: 'var(--xc-text-muted)' }}>
+                                            {detOpt ? <img src={detOpt.iconUrl} alt="" className={picker.chainIcon} /> : null}
+                                            <span>Network: {detOpt ? detOpt.label : 'Unknown'}</span>
+                                        </div>
+                                    );
+                                })()
+                            ) : null}
+                            {addAddrError ? (
+                                <p role="alert" className={styles.error} style={{ marginTop: '0.25rem' }}>{addAddrError}</p>
+                            ) : null}
+                            <div className={picker.modalActions}>
+                                <Button type="button" variant="ghost" onClick={() => setAddAddrOpen(false)}>Cancel</Button>
+                                <Button type="button" variant="primary" loading={addAddrSaving} onClick={handleAddAddress}>Add</Button>
+                            </div>
+                        </div>
+                    </div>
+                ) : null}
             </>,
         );
     }
@@ -539,47 +661,37 @@ export function ContactsList({ walletId, onSendMessage, onBack, scanPrefill, onS
                     spellCheck={false}
                     aria-label="Search contacts"
                 />
-                <NetworkDropdown value={networkFilter} onChange={setNetworkFilter} />
+                <NetworkFilterDropdown value={networkFilter} onChange={setNetworkFilter} />
             </div>
             {contacts.length === 0 ? (
                 <div className={picker.emptyCard}>No contacts yet. Tap + to add one and label addresses across the inbox and history.</div>
             ) : filteredContacts.length === 0 ? (
                 <div className={picker.emptyCard}>No contacts match your filters.</div>
             ) : (
-                <ul className={picker.list}>
+                <div className={picker.list} role="list" aria-label="Contacts">
                     {filteredContacts.map((c) => {
-                        // Prefer the entry on the filtered network so the row
-                        // subtitle shows the address the user is filtering for;
-                        // otherwise fall back to the contact's primary entry.
-                        const display = (networkFilter !== 'all'
-                            && c.entries.find((e) => e.chain === networkFilter))
-                            || c.entries[0];
-                        const chainId = display ? chainIdFor(display.chain) : null;
-                        const d = chainId ? chainRegistry.get(chainId) : null;
+                        const uniqueChains = [...new Set((c.entries || []).map((e) => e.chain))];
                         return (
-                            <li key={c.id}>
-                                <button
-                                    type="button"
-                                    className={picker.row}
-                                    onClick={() => { setActiveId(c.id); setMode('detail'); }}
-                                >
-                                    {d ? <ChainBadge descriptor={d} size="sm" /> : null}
-                                    <span className={picker.rowMain}>
-                                        <span className={picker.rowName}>{c.name}</span>
-                                        <span className={picker.rowSub}>
-                                            {display ? <AddressText address={display.address} /> : null}
-                                        </span>
-                                    </span>
-                                    <span className={picker.rowCount}>
-                                        {c.entries.length} address{c.entries.length === 1 ? '' : 'es'}
-                                    </span>
-                                </button>
-                            </li>
+                            <button
+                                key={c.id}
+                                type="button"
+                                role="listitem"
+                                className={picker.row}
+                                onClick={() => { setActiveId(c.id); setMode('detail'); }}
+                            >
+                                <span className={picker.rowName}>{c.name}</span>
+                                <span className={picker.rowChains}>
+                                    {uniqueChains.map((chain) => (
+                                        <ChainCoinIcon key={chain} chain={chain} />
+                                    ))}
+                                </span>
+                            </button>
                         );
                     })}
-                </ul>
+                </div>
             )}
         </>,
+        { card: false },
     );
 }
 
@@ -600,4 +712,27 @@ function coinFamilyFromChainId(chainId) {
     if (chainId.startsWith('litecoin')) return 'litecoin';
     if (chainId.startsWith('dogecoin')) return 'dogecoin';
     return null;
+}
+
+// Best-effort guess of which coin an address belongs to, from well-known
+// address prefixes. Bech32 HRPs (bc1/ltc1/...) are unambiguous; mainnet
+// base58 leading letters (1, L/M, D/A/9) are reliable. Shared testnet/regtest
+// base58 prefixes (m/n/2) and bare '3' overlap across coins, so anything not
+// clearly one chain returns 'unknown'. This is a heuristic for labeling, not
+// real validation (the SDK validates addresses at send time).
+function detectAddressCoin(address) {
+    const a = (address || '').trim();
+    if (!a) return 'unknown';
+    const lower = a.toLowerCase();
+
+    if (lower.startsWith('bc1') || lower.startsWith('tb1') || lower.startsWith('bcrt1')) return 'bitcoin';
+    if (lower.startsWith('ltc1') || lower.startsWith('tltc1') || lower.startsWith('rltc1')) return 'litecoin';
+    // Dogecoin has no bech32 address format, so it only matches base58 below.
+
+    if (a.startsWith('1')) return 'bitcoin';                                    // BTC p2pkh
+    if (a.startsWith('L') || a.startsWith('M')) return 'litecoin';              // LTC p2pkh / p2sh
+    if (a.startsWith('D') || a.startsWith('A') || a.startsWith('9')) return 'dogecoin'; // DOGE p2pkh / p2sh
+    if (a.startsWith('3')) return 'bitcoin';                                    // BTC p2sh (dominant case)
+
+    return 'unknown';
 }

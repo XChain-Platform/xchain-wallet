@@ -7,7 +7,7 @@
 .cardFull {
     max-width: 560px;
     margin: 0 auto;
-    padding: var(--xc-space-3) var(--xc-space-6) var(--xc-space-6);
+    padding: var(--xc-space-3) var(--xc-space-6);
     box-shadow: var(--xc-shadow-md);
 }
 
@@ -82,7 +82,7 @@
 }
 
 .actionsBar {
-    margin-top: var(--xc-space-3);
+    margin-top: var(--xc-space-1);
 }
 
 .actionsBarFull {
@@ -298,22 +298,19 @@
     cursor: not-allowed;
 }
 
-.contactChip {
+/* Matched contact name shown as a small pill right after the "To" label, so
+   it reads as a distinct value without needing a colon after "To". */
+.toContactName {
     display: inline-flex;
     align-items: center;
-    gap: var(--xc-space-1);
-    padding: 2px var(--xc-space-2);
-    background: color-mix(in srgb, var(--xc-accent-primary, #2563eb) 12%, transparent);
-    color: var(--xc-text);
+    vertical-align: middle;
+    margin-inline-start: var(--xc-space-2);
+    padding: 1px var(--xc-space-2);
     border-radius: 999px;
+    background: color-mix(in srgb, var(--xc-accent-primary, #2563eb) 14%, transparent);
+    color: var(--xc-accent-primary);
     font-size: var(--xc-text-xs);
-    font-weight: 500;
-    margin-bottom: var(--xc-space-1);
-    align-self: flex-start;
-}
-
-.contactChipName {
-    font-weight: 700;
+    font-weight: 600;
 }
 
 .contactsPopover {
@@ -356,35 +353,94 @@
     color: var(--xc-text-muted);
 }
 
-.saveContactRow {
+/* Contacts picker toolbar: search + network filter, each 50% wide. The
+   bottom margin matches the screen body's top padding so the spacing above
+   and below the toolbar is equal. */
+.abToolbar {
     display: flex;
+    flex-direction: row;
     align-items: center;
     gap: var(--xc-space-2);
+    width: 100%;
+    margin-bottom: var(--xc-space-2);
+}
+
+.abSearch {
+    flex: 1 1 0;
+    min-width: 0;
+    box-sizing: border-box;
+    padding: var(--xc-space-2) var(--xc-space-3);
+    font-family: var(--xc-font-sans);
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text);
+    background: var(--xc-surface);
+    border: 1px solid var(--xc-border-strong);
+    border-radius: var(--xc-radius-md);
+}
+
+.abSearch::placeholder {
+    color: var(--xc-text-muted);
+}
+
+/* One card wrapping all results, mirroring the Home balances list: rows
+   separated by a hairline divider and highlighted on hover. Each row shows
+   the contact name on the first line and the address on the second. */
+.abList {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--xc-surface);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-md);
+    overflow: hidden;
+}
+
+.abRow {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    padding: var(--xc-space-3);
+    border-top: 1px solid var(--xc-border);
+    background: transparent;
+    color: var(--xc-text);
+    text-align: left;
+    cursor: pointer;
+}
+
+.abList li:first-child .abRow {
+    border-top: none;
+}
+
+.abRow:hover,
+.abRow:focus-visible {
+    background: var(--xc-bg-muted);
+    outline: none;
+}
+
+.abName {
+    font-weight: 700;
+    font-size: var(--xc-text-md);
+}
+
+.abAddr {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
-    margin-bottom: var(--xc-space-2);
+    font-family: var(--xc-font-mono);
 }
 
-.saveContactLink {
-    background: transparent;
-    border: none;
-    color: var(--xc-accent-primary);
-    cursor: pointer;
-    font: inherit;
-    padding: 0;
-    text-decoration: underline;
-}
-
-.saveContactForm {
-    display: flex;
-    align-items: flex-end;
-    gap: var(--xc-space-2);
-    margin-bottom: var(--xc-space-2);
-}
-
-.saveContactInput {
-    flex: 1 1 auto;
-    min-width: 0;
+.abEmpty {
+    padding: var(--xc-space-5) var(--xc-space-3);
+    text-align: center;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
 }
 
 .amountFooter {
