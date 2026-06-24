@@ -1,5 +1,5 @@
-// Copyright © 2025–2026 Dankest, LLC
-// Based on XChain Platform by Dankest, LLC – https://dankest.llc
+// Copyright © 2025-2026 Dankest, LLC
+// Based on XChain Platform by Dankest, LLC - https://dankest.llc
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
@@ -8,37 +8,31 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
     Screen,
     ScreenHeader,
     Button,
-    Input,
     AddressText,
-    ChainBadge,
- Icon,} from '@xchain-wallet/core/ui';
-import {
-    registry as registryLib,
-} from '@xchain-wallet/core';
+    Icon,
+} from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { CLIPBOARD_AUTO_CLEAR_DEFAULT } from '../../schemas/settings.js';
 import styles from './ViewPrivateKey.module.css';
 
-const chainRegistry = registryLib.defaultRegistry();
-
 /**
- * ViewPrivateKey: §17.7. Shows the WIF for an address the wallet
- * owns, with the full security ceremony: password re-entry even
- * inside an unlocked session (§17.7.3), tap-to-reveal, automatic
- * hide on window blur, and a Copy button that auto-clears the
- * clipboard after 60 seconds.
+ * ViewPrivateKey: §17.7. Shows the WIF for an address the wallet owns.
+ * Reveal is gated by the "Before you continue" warning plus the wallet
+ * already being unlocked: the WIF is exported straight from the unlocked
+ * session signer, so no password is re-entered (the §17.7.3
+ * password-every-time ceremony was retired by product decision). The
+ * other guardrails stay: tap-to-reveal, auto-hide on window blur, and a
+ * Copy button that auto-clears the clipboard.
  *
  * HW-wallet + watch-only addresses route to an informational panel
- * per §17.7.2: no password prompt, no fake reveal. Protocol-level
- * refusal is the `exportPrivateKey` flow's job; this component
- * short-circuits the UX so users don't even type a password to be
- * told "no."
+ * per §17.7.2: no reveal path. Protocol-level refusal is the
+ * `exportPrivateKey` flow's job; this component short-circuits the UX.
  *
  * QR rendering lives in the shell: the component accepts a
  * `renderQR({ value })` render-prop. Extension + web both pass a
@@ -65,28 +59,20 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
     })();
 
     const [stage, setStage] = useState(
-        /** @type {'warning' | 'password' | 'submitting' | 'revealed'} */ ('warning'),
+        /** @type {'warning' | 'submitting' | 'revealed'} */ ('warning'),
     );
-    const [password, setPassword] = useState('');
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [revealed, setRevealed] = useState(false);
     const [wif, setWif] = useState(/** @type {string | null} */ (null));
     const [clipboardStatus, setClipboardStatus] = useState(
         /** @type {'idle' | 'copied' | 'cleared'} */ ('idle'),
     );
-    const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
     const sourceInfo = useMemo(() => classifySource(address), [address]);
 
-    useEffect(() => {
-        if (stage === 'password') {
-            setTimeout(() => passwordRef.current?.focus(), 0);
-        }
-    }, [stage]);
-
     // §17.7.1: auto-hide on window blur. Wipes the revealed flag
     // but keeps the WIF in closure so the reveal button can bring
-    // it back without re-entering the password within the session.
+    // it back without re-exporting within the session.
     useEffect(() => {
         const handler = () => setRevealed(false);
         window.addEventListener('blur', handler);
@@ -105,21 +91,16 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
         return () => clearTimeout(id);
     }, [clipboardStatus, clipboardAutoClearSeconds]);
 
-    const chainId = useMemo(() => {
-        const descriptor = findDescriptor(address);
-        return descriptor?.chainId || null;
-    }, [address]);
-    const descriptor = chainId ? chainRegistry.get(chainId) : null;
-
-    async function handleSubmit(event) {
-        event.preventDefault();
-        if (stage === 'submitting' || password.length === 0) return;
+    // Export the WIF from the already-unlocked session signer (no
+    // password). The shared host injects the pool signer into the
+    // `wallet.exportPrivateKey` route.
+    async function reveal() {
+        if (stage === 'submitting') return;
         setStage('submitting');
         setSubmitError(null);
         try {
             const res = await messaging.exportPrivateKey({
                 walletId,
-                password,
                 addressId: address.id,
             });
             setWif(res.wif);
@@ -127,19 +108,12 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
             setStage('revealed');
         } catch (err) {
             const name = err?.name;
-            if (name === 'WrongPasswordError' || name === 'InvalidPasswordError') {
-                setSubmitError('Incorrect password.');
-            } else if (name === 'NoKeyForAddressError') {
-                // The core flow's authoritative refusal. Shouldn't hit
-                // for HW/watch-only since we route those to the info
-                // panel; this fires if classifySource is wrong.
+            if (name === 'NoKeyForAddressError') {
                 setSubmitError('This address has no exportable private key.');
             } else {
-                setSubmitError(err?.message || 'Export failed.');
+                setSubmitError(err?.message || 'Could not show the private key. Make sure the wallet is unlocked.');
             }
-            setStage('password');
-            passwordRef.current?.focus();
-            passwordRef.current?.select();
+            setStage('warning');
         }
     }
 
@@ -153,10 +127,11 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
         }
     }
 
-        const header = (
+    const header = (
         <ScreenHeader
             onBack={onBack}
             title="Show private key"
+            titleIcon={<Icon.LockIcon />}
         />
     );
     const wrap = (children) => (
@@ -205,7 +180,7 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
         );
     }
 
-    if (stage === 'warning') {
+    if (stage === 'warning' || stage === 'submitting') {
         return wrap(
             <>
                 <h2 className={styles.warningTitle}>Before you continue</h2>
@@ -233,53 +208,20 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
                         </li>
                     )}
                 </ul>
+                {submitError ? (
+                    <p className={styles.errorText} role="alert">{submitError}</p>
+                ) : null}
                 <div className={styles.actions}>
-                    <Button variant="primary" onClick={() => setStage('password')}>
-                        I understand, continue
+                    <Button
+                        variant="primary"
+                        onClick={reveal}
+                        loading={stage === 'submitting'}
+                        disabled={stage === 'submitting'}
+                    >
+                        I understand, show key
                     </Button>
                 </div>
             </>,
-        );
-    }
-
-    if (stage === 'password' || stage === 'submitting') {
-        return wrap(
-            <form onSubmit={handleSubmit} noValidate>
-                <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : address.chain}
-                    </dd>
-                    <dt className={styles.detailsLabel}>Address</dt>
-                    <dd className={styles.detailsValue}>
-                        <AddressText address={address.address} />
-                    </dd>
-                </dl>
-                <Input
-                    ref={passwordRef}
-                    type="password"
-                    label="Password"
-                    hint="Required every time, even when the wallet is already unlocked."
-                    value={password}
-                    onChange={(e) => {
-                        setPassword(e.target.value);
-                        if (submitError) setSubmitError(null);
-                    }}
-                    autoComplete="current-password"
-                    disabled={stage === 'submitting'}
-                    error={submitError || undefined}
-                />
-                <div className={styles.actions}>
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={stage === 'submitting'}
-                        disabled={password.length === 0}
-                    >
-                        Reveal
-                    </Button>
-                </div>
-            </form>,
         );
     }
 
@@ -367,13 +309,4 @@ function classifySource(address) {
         case 'watch-only': return { kind: 'watch-only' };
         default: return { kind: 'hd' };
     }
-}
-
-function findDescriptor(address) {
-    for (const descriptor of chainRegistry.supportedChains()) {
-        if (descriptor.coin === address.chain && descriptor.networkKind === address.network) {
-            return descriptor;
-        }
-    }
-    return null;
 }

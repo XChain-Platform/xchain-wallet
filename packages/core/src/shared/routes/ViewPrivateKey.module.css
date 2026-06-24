@@ -15,6 +15,12 @@
     margin: 0 0 var(--xc-space-3);
 }
 
+.errorText {
+    font-size: var(--xc-text-sm);
+    color: var(--xc-danger);
+    margin: var(--xc-space-3) 0 0;
+}
+
 .warningList {
     font-size: var(--xc-text-sm);
     color: var(--xc-text);

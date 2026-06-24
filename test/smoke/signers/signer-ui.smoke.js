@@ -103,13 +103,17 @@ assert.ok(
     'ViewPrivateKey is a named export',
 );
 
-// Four-stage ceremony + two informational panels.
-for (const stage of ['warning', 'password', 'submitting', 'revealed']) {
+// Three-stage flow + two informational panels (password stage retired).
+for (const stage of ['warning', 'submitting', 'revealed']) {
     assert.ok(
         viewSrc.includes(`'${stage}'`),
         `ViewPrivateKey tracks stage "${stage}"`,
     );
 }
+assert.ok(
+    !/'password'/.test(viewSrc),
+    'ViewPrivateKey no longer has a password stage',
+);
 
 // HW + watch-only routing.
 assert.ok(
@@ -132,7 +136,7 @@ assert.ok(
 // Security ceremony.
 assert.ok(
     /messaging\.exportPrivateKey\s*\(/.test(viewSrc),
-    'ViewPrivateKey calls messaging.exportPrivateKey with password',
+    'ViewPrivateKey calls messaging.exportPrivateKey (from the unlocked session, no password)',
 );
 assert.ok(
     /addEventListener\('blur'/.test(viewSrc),
@@ -149,10 +153,15 @@ assert.ok(
     'ViewPrivateKey uses tap-to-reveal, not auto-reveal',
 );
 
-// Password re-prompt even in unlocked session.
+// No password re-prompt: reveal is gated by the "Before you continue"
+// warning only, then exports from the already-unlocked session signer.
 assert.ok(
-    /Required every time/.test(viewSrc),
-    'ViewPrivateKey re-prompts for password even in unlocked session (§17.7.3)',
+    !/type="password"/.test(viewSrc) && !/Required every time/.test(viewSrc),
+    'ViewPrivateKey reveals from the unlocked session without a password prompt',
+);
+assert.ok(
+    /Before you continue/.test(viewSrc),
+    'ViewPrivateKey still shows the "Before you continue" warning gate',
 );
 
 // QR via render-prop (keeps core free of qrcode dep).

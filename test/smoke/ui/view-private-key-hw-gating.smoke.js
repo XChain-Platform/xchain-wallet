@@ -36,30 +36,28 @@ assert.ok(/case 'ledger':\s*return\s*\{\s*kind:\s*'hardware'/.test(vpk),
 assert.ok(/case 'watch-only':\s*return\s*\{\s*kind:\s*'watch-only'/.test(vpk),
     'classifySource maps watch-only → kind: watch-only');
 
-// Hardware branch must short-circuit BEFORE the warning / password
-// / reveal render-stage branches. Use the render-branch headers
-// (`stage === 'warning'`, `(stage === 'password' || stage === 'submitting')`,
-// `// stage === 'revealed'`). Those only appear once, in render order.
+// Hardware branch must short-circuit BEFORE the warning / reveal
+// render-stage branches. Use the render-branch headers
+// (`stage === 'warning'`, `// stage === 'revealed'`). Those only appear
+// once, in render order. The reveal is gated by the warning alone; the
+// password re-entry stage was retired (reveal exports from the already
+// unlocked session signer).
 const hwBranch = /sourceInfo\.kind === 'hardware'/.exec(vpk);
 const warningStage = /stage === 'warning'/.exec(vpk);
-const passwordStage = /stage === 'password' \|\| stage === 'submitting'/.exec(vpk);
 const revealStage = /\/\/ stage === 'revealed'/.exec(vpk);
 assert.ok(hwBranch, 'ViewPrivateKey gates HW addresses with sourceInfo.kind === "hardware"');
 assert.ok(warningStage, 'ViewPrivateKey has a warning render-branch');
-assert.ok(passwordStage, 'ViewPrivateKey has a password render-branch');
 assert.ok(revealStage, 'ViewPrivateKey has a revealed render-branch');
 assert.ok(hwBranch.index < warningStage.index,
     'HW gating short-circuits before the warning render-branch');
-assert.ok(hwBranch.index < passwordStage.index,
-    'HW gating short-circuits before the password render-branch');
 assert.ok(hwBranch.index < revealStage.index,
     'HW gating short-circuits before the revealed render-branch');
 
 // Same for watch-only.
 const watchBranch = /sourceInfo\.kind === 'watch-only'/.exec(vpk);
 assert.ok(watchBranch, 'ViewPrivateKey gates watch-only addresses');
-assert.ok(watchBranch.index < passwordStage.index,
-    'Watch-only gating short-circuits before the password render-branch');
+assert.ok(watchBranch.index < revealStage.index,
+    'Watch-only gating short-circuits before the revealed render-branch');
 
 // HW info panel says the key lives on the device. No prompt to enter password.
 assert.ok(/lives on your/.test(vpk),
