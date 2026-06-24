@@ -18,6 +18,7 @@
 
 import { createAccount as createAccountRecord } from '../schemas/account.js';
 import { createAddress } from '../schemas/address.js';
+import { tickerForCoin } from '../registry/coinTicker.js';
 import { unlockWalletRecord } from './unlockWallet.js';
 import { WalletNotFoundError } from './unlockWallet.js';
 
@@ -28,7 +29,7 @@ import { WalletNotFoundError } from './unlockWallet.js';
  * @property {string} [bip39Passphrase]                  required if the wallet has §15.6 25th-word enabled and no pre-unlocked signer is supplied
  * @property {import('../signers/Signer.js').Signer} [signer]   pre-unlocked SoftwareSigner OR a RemoteSigner for HW. When present, no password is read and the signer is NOT locked by this flow (pool / shell owns its lifecycle)
  * @property {string} [name]                             default `Account N` where N is the new index + 1
- * @property {string} [initialAddressLabel]              default 'Address #1'
+ * @property {string} [initialAddressLabel]              default '<TICKER> Address #1' per chain (e.g. 'BTC Address #1'); an explicit value is used as-is for every chain
  * @property {import('../storage/Vault.js').Vault} vault
  * @property {import('../registry/index.js').ChainRegistry} chainRegistry
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
@@ -51,7 +52,7 @@ export async function createAccount({
     bip39Passphrase = '',
     signer: providedSigner,
     name,
-    initialAddressLabel = 'Address #1',
+    initialAddressLabel,
     vault,
     chainRegistry,
     sdkRegistry,
@@ -136,7 +137,7 @@ export async function createAccount({
                 derivationPath: derived.path,
                 address: derived.address,
                 publicKey: derived.publicKey,
-                label: initialAddressLabel,
+                label: initialAddressLabel ?? `${tickerForCoin(descriptor.coin)} Address #1`,
                 signerId: signer.id,
             });
             await vault.addresses.put(record);

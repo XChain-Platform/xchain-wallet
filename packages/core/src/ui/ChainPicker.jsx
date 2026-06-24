@@ -10,6 +10,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as branding from '../branding/branding.js';
+import { tickerForCoin } from '../registry/coinTicker.js';
 import { ChevronIcon } from './ChainPicker.icons.jsx';
 import styles from './ChainPicker.module.css';
 
@@ -174,10 +175,4 @@ export function ChainPicker({
             ) : null}
         </div>
     );
-}
-
-function tickerForCoin(coin) {
-    if (!coin) return '';
-    const map = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
-    return map[coin] || coin.toUpperCase();
 }

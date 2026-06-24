@@ -426,6 +426,13 @@
     margin-bottom: 0;
 }
 
+/* Size the Save button to one quick-action column (the four-up grid below
+   is repeat(4, 1fr) with the same gap), so its width matches the Delete
+   button and their right edges line up. */
+.labelRow > :last-child {
+    flex: 0 0 calc((100% - 3 * var(--xc-space-2)) / 4);
+}
+
 /* Four-up action row under the detail card, mirroring the contacts detail. */
 .quickActions {
     display: grid;

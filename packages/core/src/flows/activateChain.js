@@ -37,6 +37,7 @@
 // source 'trezor'/'ledger' and the signer's id, exactly like createAccount.
 
 import { createAddress } from '../schemas/address.js';
+import { tickerForCoin } from '../registry/coinTicker.js';
 import { unlockWalletRecord, WalletNotFoundError } from './unlockWallet.js';
 import { seedSettingsForChains } from './seedSettings.js';
 
@@ -159,7 +160,7 @@ export async function activateChain({
                 derivationPath: derived.path,
                 address: derived.address,
                 publicKey: derived.publicKey,
-                label: 'Address #1',
+                label: `${tickerForCoin(descriptor.coin)} Address #1`,
                 signerId: signer.id,
             });
             await vault.addresses.put(record);

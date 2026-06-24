@@ -100,6 +100,12 @@ describe('receiveAddress (§29.7)', () => {
         expect(signer.calls[0]).toMatchObject({ change: 0, startIndex: 0, accountIndex: 0 });
     });
 
+    it('defaults the label to the coin-prefixed "<TICKER> Address #N"', async () => {
+        const vault = makeVault({ accounts: [ACCOUNT_A] });
+        const rec = await receiveAddress(base(vault, signer));
+        expect(rec.label).toBe('BTC Address #1');
+    });
+
     it('allocates contiguously across calls', async () => {
         const vault = makeVault({ accounts: [ACCOUNT_A] });
         const first = await receiveAddress(base(vault, signer));

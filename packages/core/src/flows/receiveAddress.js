@@ -19,6 +19,7 @@
 // reuse a pre-generated-but-unfunded address.
 
 import { createAddress } from '../schemas/address.js';
+import { tickerForCoin } from '../registry/coinTicker.js';
 import { unlockWallet } from './unlockWallet.js';
 
 export class NoMatchingAccountError extends Error {
@@ -45,7 +46,7 @@ export class NoMatchingAccountError extends Error {
  * @property {string} [accountId]               preferred: pick the Account by id
  * @property {number} [accountIndex]            fallback: pick by BIP44 index (default 0). Ignored when `accountId` is supplied.
  * @property {string} [addressType]             defaults to descriptor.defaultAddressType
- * @property {string} [label]                   defaults to "Address #N+1"
+ * @property {string} [label]                   defaults to "<TICKER> Address #N+1" (e.g. "BTC Address #2")
  */
 
 /**
@@ -164,7 +165,7 @@ export async function receiveAddress({
             derivationPath: derived.path,
             address: derived.address,
             publicKey: derived.publicKey,
-            label: label ?? `Address #${nextIndex + 1}`,
+            label: label ?? `${tickerForCoin(descriptor.coin)} Address #${nextIndex + 1}`,
             signerId: signer.id,
         });
         await vault.addresses.put(record);

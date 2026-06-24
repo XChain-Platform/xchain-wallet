@@ -16,12 +16,17 @@
 // `signerId: null`, signaling "needs reconciliation"; the runtime
 // resolver fills this in on first load.
 //
-// v3 (current) adds `role` per §16: 'receive' | 'change' | 'dispenser'.
+// v3 adds `role` per §16: 'receive' | 'change' | 'dispenser'.
 // 'receive'/'change' track the BIP44 external/internal branch (change
 // 0/1). 'dispenser' is a metadata tag on a normal external (change=0)
 // address that hosts a dispenser, not a separate branch. v2 records
 // migrate forward by parsing the change segment of `derivationPath`
 // (legacy change=2 records, if any, map to 'dispenser').
+//
+// v4 (current) coin-prefixes the legacy default address label. The old
+// default ("Address #N") was chain-agnostic, so BTC/LTC/DOGE under one
+// account all rendered identically. v3 records whose label exactly matches
+// the old default migrate to "<TICKER> Address #N"; custom labels are kept.
 
 import { ADDRESS_ROLES, ADDRESS_SOURCES, NETWORKS } from './constants.js';
 import {
@@ -36,11 +41,11 @@ import {
 } from './validate.js';
 import { randomUUID } from '../util/uuid.js';
 
-export const CURRENT_VERSION = 3;
+export const CURRENT_VERSION = 4;
 
 /**
  * @typedef {Object} Address
- * @property {3} schemaVersion
+ * @property {4} schemaVersion
  * @property {string} id
  * @property {string | null} accountId        null for watch-only / imported-WIF
  * @property {string} chain                   coin identifier

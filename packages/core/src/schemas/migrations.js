@@ -28,6 +28,7 @@ import { CURRENT_VERSION as PENDING_AIRDROP_VERSION } from './pendingAirdrop.js'
 import { CURRENT_VERSION as WATCHLIST_VERSION } from './watchlistEntry.js';
 import { CURRENT_VERSION as PRICE_ALERT_VERSION } from './priceAlert.js';
 import { randomUUID } from '../util/uuid.js';
+import { tickerForCoin } from '../registry/coinTicker.js';
 
 /**
  * @typedef {(record: any) => any} MigrationStep
@@ -86,6 +87,19 @@ export const addressMigrations = {
             else if (change === '2') role = 'dispenser';
         }
         return { ...r, schemaVersion: 3, role };
+    },
+    // v3 -> v4: the default address label ("Address #N") was chain-agnostic,
+    // so BTC/LTC/DOGE under one account all showed the same label. Prefix
+    // the native ticker to the legacy default ("BTC Address #N"). Only the
+    // exact old-default pattern is rewritten; user-customized labels (and
+    // already-prefixed ones) are left untouched.
+    3: (r) => {
+        let label = r.label;
+        if (typeof label === 'string') {
+            const m = /^Address #(\d+)$/.exec(label);
+            if (m) label = `${tickerForCoin(r.chain)} Address #${m[1]}`;
+        }
+        return { ...r, schemaVersion: 4, label };
     },
 };
 /** @type {MigrationMap} */

@@ -27,13 +27,12 @@ import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
 import { coinFromChainId, formatAmount, fiatValue } from '../components/BalanceList.jsx';
 import { useSettings } from '../hooks/useSettings.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
+import { tickerForCoin } from '../../registry/coinTicker.js';
 import styles from './History.module.css';
 import local from './AddressList.module.css';
 import wifStyles from './AddressList.wif.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
-
-const NATIVE_TICK = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
 
 // Format a fiat value in the user's selected currency (symbol + amount),
 // e.g. "$32.10" / "¥3,200". The 3-letter code is appended by the caller.
@@ -160,7 +159,7 @@ export function AddressList({
     const amountTextFor = (row) => {
         if (balancesHidden) return '•••••';
         const d = chainRegistry.get(row.chainId);
-        const nativeTick = NATIVE_TICK[d?.coin] || (d?.coin || '').toUpperCase();
+        const nativeTick = tickerForCoin(d?.coin);
         const nb = nativeByKey.get(`${row.chainId}:${String(row.address || '').toLowerCase()}`);
         return nb
             ? `${formatAmount(nb.quantity, nb.divisibility)} ${nb.tick || nativeTick}`
@@ -503,7 +502,7 @@ export function AddressList({
             }
         };
         return (
-            <Screen variant={variant} header={<ScreenHeader onBack={() => setSelected(null)} title="Address" />}>
+            <Screen variant={variant} header={<ScreenHeader onBack={() => setSelected(null)} title="View Address" titleIcon={<Icon.ScanIcon />} />}>
                 <div className={local.detailTop}>
                     <div className={local.detailLabel}>Address</div>
                     <div className={local.detailAddr}>

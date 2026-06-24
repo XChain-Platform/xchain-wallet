@@ -160,6 +160,29 @@ describe('addressMigrations: v1 to v2', () => {
     });
 });
 
+describe('addressMigrations: v3 to v4', () => {
+    it('coin-prefixes the legacy default label', () => {
+        const v3 = { schemaVersion: 3, chain: 'bitcoin', label: 'Address #1' };
+        const r = addressMigrations[3](v3);
+        expect(r.schemaVersion).toBe(4);
+        expect(r.label).toBe('BTC Address #1');
+    });
+
+    it('uses the right ticker per chain', () => {
+        expect(addressMigrations[3]({ schemaVersion: 3, chain: 'litecoin', label: 'Address #2' }).label)
+            .toBe('LTC Address #2');
+        expect(addressMigrations[3]({ schemaVersion: 3, chain: 'dogecoin', label: 'Address #3' }).label)
+            .toBe('DOGE Address #3');
+    });
+
+    it('leaves custom and already-prefixed labels untouched', () => {
+        expect(addressMigrations[3]({ schemaVersion: 3, chain: 'bitcoin', label: 'Savings' }).label)
+            .toBe('Savings');
+        expect(addressMigrations[3]({ schemaVersion: 3, chain: 'bitcoin', label: 'BTC Address #1' }).label)
+            .toBe('BTC Address #1');
+    });
+});
+
 describe('migrateAddress', () => {
     it('migrates v1 address to v2', () => {
         const v1 = {

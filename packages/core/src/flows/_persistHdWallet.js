@@ -18,6 +18,7 @@ import { calibrateKdfParams, encryptWalletSeed } from '../crypto/index.js';
 import { createWallet as createWalletRecord } from '../schemas/wallet.js';
 import { createAccount } from '../schemas/account.js';
 import { createAddress } from '../schemas/address.js';
+import { tickerForCoin } from '../registry/coinTicker.js';
 import { ensureSettings } from './seedSettings.js';
 import { unlockWalletRecord } from './unlockWallet.js';
 
@@ -31,7 +32,7 @@ import { unlockWalletRecord } from './unlockWallet.js';
  * @property {string} password
  * @property {string} name
  * @property {string} accountName
- * @property {string} [initialAddressLabel]         default 'Address #1'
+ * @property {string} [initialAddressLabel]         default '<TICKER> Address #1' per chain (e.g. 'BTC Address #1'); an explicit value is used as-is for every chain
  * @property {import('../crypto/kdf.js').KdfParams} [kdfParams]
  * @property {import('../storage/Vault.js').Vault} vault
  * @property {import('../registry/index.js').ChainRegistry} chainRegistry
@@ -52,7 +53,7 @@ export async function persistHdWallet({
     password,
     name,
     accountName,
-    initialAddressLabel = 'Address #1',
+    initialAddressLabel,
     kdfParams,
     vault,
     chainRegistry,
@@ -132,7 +133,7 @@ export async function persistHdWallet({
                 derivationPath: derived.path,
                 address: derived.address,
                 publicKey: derived.publicKey,
-                label: initialAddressLabel,
+                label: initialAddressLabel ?? `${tickerForCoin(descriptor.coin)} Address #1`,
                 signerId: signer.id,
             });
             await vault.addresses.put(record);
