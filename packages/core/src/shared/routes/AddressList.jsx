@@ -26,6 +26,7 @@ import { EmptyStateNudge } from '../components/EmptyStateNudge.jsx';
 import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
 import { coinFromChainId, formatAmount, fiatValue } from '../components/BalanceList.jsx';
 import { useSettings } from '../hooks/useSettings.js';
+import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import styles from './History.module.css';
 import local from './AddressList.module.css';
 import wifStyles from './AddressList.wif.module.css';
@@ -82,6 +83,9 @@ export function AddressList({
     const variant = screenVariantFor(shell);
     const { settings } = useSettings();
     const fiatCurrency = (settings?.fiatCurrency || 'USD').toUpperCase();
+    // App-wide Privacy Mode (the Home eye toggle): when on, mask every
+    // per-address balance here too, matching BalanceList's dot convention.
+    const [balancesHidden] = useBalancesHidden();
 
     // In-page search + network filter (toolbar below), seeded from any
     // shell-provided defaults so deep-links still apply on first render.
@@ -151,8 +155,10 @@ export function AddressList({
         return m;
     }, [balancesByChain]);
 
-    // Formatted native balance for a row, e.g. "0.0005 BTC".
+    // Formatted native balance for a row, e.g. "0.0005 BTC". Privacy Mode
+    // masks it everywhere this is rendered (list rows + detail Balance).
     const amountTextFor = (row) => {
+        if (balancesHidden) return '•••••';
         const d = chainRegistry.get(row.chainId);
         const nativeTick = NATIVE_TICK[d?.coin] || (d?.coin || '').toUpperCase();
         const nb = nativeByKey.get(`${row.chainId}:${String(row.address || '').toLowerCase()}`);
@@ -797,7 +803,7 @@ export function AddressList({
                                 <div className={local.addrLine2}>
                                     <span className={local.addrAmount}>{amountTextFor(row)}</span>
                                     {fiatTextFor(row) ? (
-                                        <span className={local.addrFiat}>{fiatTextFor(row)}</span>
+                                        <span className={local.addrFiat}>{balancesHidden ? '•••' : fiatTextFor(row)}</span>
                                     ) : null}
                                 </div>
                             </button>
