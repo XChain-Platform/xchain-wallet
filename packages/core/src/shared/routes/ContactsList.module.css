@@ -248,8 +248,8 @@
 .addrMenu {
     position: absolute;
     top: calc(100% + 4px);
-    left: 0;
-    right: 0;
+    inset-inline-start: 0;
+    inset-inline-end: 0;
     z-index: 100;
     background: var(--xc-surface-raised);
     border: 1px solid var(--xc-border-strong);
@@ -280,7 +280,7 @@
     border: none;
     border-radius: var(--xc-radius-sm);
     cursor: pointer;
-    text-align: left;
+    text-align: start;
     color: var(--xc-text);
     font: inherit;
 }

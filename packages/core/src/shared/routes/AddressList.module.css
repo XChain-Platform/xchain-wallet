@@ -92,7 +92,7 @@
     border: none;
     border-radius: var(--xc-radius-sm);
     cursor: pointer;
-    text-align: left;
+    text-align: start;
     color: var(--xc-text);
     font: inherit;
     font-size: var(--xc-text-sm);

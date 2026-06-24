@@ -68,7 +68,7 @@ function formatFiatAmount(value, currency) {
  * @param {string} [props.accountId]   active BIP44 account; when set, only that account's addresses are shown
  * @param {() => void} props.onBack
  * @param {() => void} [props.onReceive]
- * @param {(address: { id: string, address: string, source: string, chain: string, network: string, derivationPath: string | null, label: string }) => void} [props.onShowPrivateKey]   §17.7: when supplied, each non-multisig row gets a "Show key" affordance that hands the row's address back to the caller (shell wires it to <ViewPrivateKey>)
+ * @param {(address: { id: string, address: string, source: string, chain: string, network: string, derivationPath: string | null, label: string }) => void} [props.onShowPrivateKey]   §17.7: when supplied, the detail view exposes a "Secret" affordance for non-multisig rows with a record, handing that address back to the caller (shell wires it to <ViewPrivateKey>)
  */
 export function AddressList({
     walletId,

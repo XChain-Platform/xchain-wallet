@@ -21,7 +21,7 @@ import {
     EyeIcon, UploadIcon, DownloadIcon, MigrateIcon, TokenIcon,
     MultisigIcon, AddressIcon, ContractIcon, MarketIcon, MessageIcon,
     HistoryIcon, HomeIcon, GearIcon, MoreIcon, PrinterIcon, HandshakeIcon,
-    VerifyIcon,
+    VerifyIcon, SaveIcon,
 } from '../../../packages/core/src/ui/icons/index.jsx';
 
 describe('ui/icons/iconForLabel', () => {
@@ -34,7 +34,7 @@ describe('ui/icons/iconForLabel', () => {
         ['Broadcast', BroadcastIcon],
         ['Lock', LockIcon],
         ['Unlock', UnlockIcon],
-        ['Save', CheckIcon],
+        ['Save', SaveIcon],
         ['Confirm', CheckIcon],
         ['Validate code', CheckIcon],
         ['Cancel', XIcon],
@@ -115,7 +115,7 @@ describe('ui/icons/iconForLabel', () => {
         });
 
         it('trims surrounding whitespace before matching', () => {
-            expect(iconForLabel('   Save   ')).toBe(CheckIcon);
+            expect(iconForLabel('   Save   ')).toBe(SaveIcon);
         });
     });
 });

@@ -425,6 +425,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                     <label className={picker.notesLabel}>Notes</label>
                     <textarea
                         className={picker.notesTextarea}
+                        aria-label="Notes"
                         value={formNotes}
                         onChange={(e) => setFormNotes(e.target.value)}
                     />
@@ -452,6 +453,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                     <label className={picker.notesLabel}>Notes</label>
                     <textarea
                         className={picker.notesTextarea}
+                        aria-label="Notes"
                         value={formNotes}
                         onChange={(e) => setFormNotes(e.target.value)}
                     />

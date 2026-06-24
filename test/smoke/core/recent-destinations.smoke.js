@@ -50,24 +50,26 @@ const contacts = [
     },
 ];
 
+// All contact entries surface (§29.4): same-chain entries rank first, then
+// other-chain entries follow so every contact is reachable from Send.
 const btcContacts = buildRecentDestinations({ contacts, chainCoin: 'bitcoin' });
-assert.equal(btcContacts.length, 2, 'two contacts have bitcoin entries');
+assert.equal(btcContacts.length, 4, 'all four contact entries surface');
 assert.equal(btcContacts[0].source, 'contact');
 assert.deepEqual(
     btcContacts.map((s) => s.address),
-    ['bc1qalice', 'bc1qbob'],
-    'contact suggestions in input order',
+    ['bc1qalice', 'bc1qbob', 'ltc1qalice', 'D7carla'],
+    'same-chain (bitcoin) entries first, other-chain entries after',
 );
 assert.equal(btcContacts[0].label, 'Alice', 'label = contact name');
 
 const ltcContacts = buildRecentDestinations({ contacts, chainCoin: 'litecoin' });
-assert.equal(ltcContacts.length, 1, 'only Alice has a litecoin entry');
-assert.equal(ltcContacts[0].address, 'ltc1qalice');
+assert.equal(ltcContacts.length, 4, 'all entries surface; litecoin entry ranks first');
+assert.equal(ltcContacts[0].address, 'ltc1qalice', 'same-chain (litecoin) entry first');
 
 assert.equal(
     buildRecentDestinations({ contacts, chainCoin: 'bitcoin-testnet' }).length,
-    0,
-    'unknown coin family → 0 contact rows',
+    4,
+    'unknown coin family → all contacts still surface as other-chain rows',
 );
 
 // --- history aggregation: SEND only, dedup, recency ordering --------------

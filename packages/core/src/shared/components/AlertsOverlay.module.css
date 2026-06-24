@@ -77,7 +77,7 @@
     color: var(--xc-text);
 }
 
-/* §53 / Cluster K FOLLOWUP 2 — explicit focus ring; the browser
+/* §53 / Cluster K FOLLOWUP 2: explicit focus ring; the browser
    default is unreadable on the high-contrast and dark themes. */
 .close:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
@@ -117,9 +117,9 @@
     gap: var(--xc-space-2);
 }
 
-.info     { border-left-color: var(--xc-accent-primary); }
-.warning  { border-left-color: #F59E0B; }
-.critical { border-left-color: var(--xc-danger); }
+.info     { border-inline-start-color: var(--xc-accent-primary); }
+.warning  { border-inline-start-color: #F59E0B; }
+.critical { border-inline-start-color: var(--xc-danger); }
 
 .alertHead {
     display: flex;

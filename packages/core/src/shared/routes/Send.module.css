@@ -407,7 +407,7 @@
     border-top: 1px solid var(--xc-border);
     background: transparent;
     color: var(--xc-text);
-    text-align: left;
+    text-align: start;
     cursor: pointer;
 }
 

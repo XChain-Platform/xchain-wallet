@@ -29,12 +29,12 @@ const routes = join(core, 'src', 'shared', 'routes');
 const al = readFileSync(join(routes, 'AddressList.jsx'), 'utf8');
 assert.ok(/onShowPrivateKey/.test(al),
     'AddressList accepts an onShowPrivateKey prop');
-assert.ok(/Show key/.test(al),
-    'AddressList renders a "Show key" affordance');
-// Multisig synthetic rows must NOT show the button; the gating
-// expression should require row.record AND !row.multisig.
-assert.ok(/onShowPrivateKey\s*&&\s*row\.record\s*&&\s*!row\.multisig/.test(al),
-    'AddressList only shows the Show-key button for non-multisig rows with a record');
+assert.ok(/Secret/.test(al),
+    'AddressList renders a "Secret" reveal affordance');
+// Multisig synthetic rows must NOT get the reveal button; the detail-view
+// gating expression (canSecret) requires selected.record AND !selected.multisig.
+assert.ok(/onShowPrivateKey\s*&&\s*selected\.record\s*&&\s*!selected\.multisig/.test(al),
+    'AddressList only enables the Secret button for non-multisig rows with a record');
 
 // --- 2. Both shells import + render ViewPrivateKey ----------------------
 

@@ -82,9 +82,8 @@ for (const [label, src, viewName, restoreFields] of [
     assert.ok(/draft\.hasDraft\(\) && !draftPending/.test(src),
         `${label} only shows the banner when a draft exists and isn't already pending`);
 
-    // 7. On success the draft is cleared.
-    assert.ok(/Cluster P FOLLOWUP 5/.test(src),
-        `${label} tags the FOLLOWUP id`);
+    // 7. On success the draft is cleared (the behavioral check; the old
+    //    FOLLOWUP-tag comment assertion was dropped after a comment cleanup).
     const postDoneClear = src.match(/setStage\('done'\);[\s\S]{0,400}?draft\.clear\(\);[\s\S]{0,80}?setDraftPending\(false\);/);
     assert.ok(postDoneClear,
         `${label} calls draft.clear() + setDraftPending(false) immediately after setStage('done')`);
