@@ -173,6 +173,18 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onDemoE
             // this throwaway demo wallet instead of stranding the user on
             // the password screen with a key they never typed.
             if (walletId) flowsLib.markDemoWallet(walletId, { password });
+            // Seed a few demo contacts (random names, 1-3 chains each) into the
+            // address book so the Contacts screen, Send picker, and message
+            // inbox show realistic contact data. Best-effort: a failure here
+            // must not block entering the demo. The demo-exit wipe clears the
+            // whole vault, so these don't outlive the throwaway wallet.
+            if (typeof messaging.saveContact === 'function') {
+                try {
+                    for (const input of flowsLib.synthesizeDemoContacts()) {
+                        await messaging.saveContact({ input });
+                    }
+                } catch { /* non-fatal: the demo works without seeded contacts */ }
+            }
             if (typeof onDemoEntered === 'function') onDemoEntered();
         } catch (err) {
             setDemoError(err?.message || 'Could not start demo mode.');

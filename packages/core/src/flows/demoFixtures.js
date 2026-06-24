@@ -701,13 +701,72 @@ export function synthesizeDemoMarketActivity(token, opts = {}) {
     return { offers, sales, dexOrders, dexSwaps };
 }
 
+// Five contacts seeded into a fresh demo wallet so the address book, Send
+// picker, Contacts screen, and message inbox all show realistic contact data.
+// Each spans one to three chains. Addresses are illustrative demo strings
+// (AddressText truncates them); the first contact's Bitcoin address doubles as
+// a messaging counterparty, so one inbox row shows a contact name in place of
+// an address while the others show raw addresses for contrast.
+const DEMO_CONTACTS = [
+    {
+        name: 'Erin Calloway',
+        entries: [
+            { chain: 'bitcoin', address: 'demo1erincallowaybtc0000000000000000001', label: 'Main' },
+            { chain: 'litecoin', address: 'demoLerincallowayltc0000000000000000001', label: 'LTC' },
+            { chain: 'dogecoin', address: 'demoDerincallowaydoge000000000000000001', label: 'DOGE tips' },
+        ],
+    },
+    {
+        name: 'Marcus Webb',
+        entries: [
+            { chain: 'bitcoin', address: 'demo1marcuswebbbtc00000000000000000002', label: 'Cold storage' },
+            { chain: 'litecoin', address: 'demoLmarcuswebbltc00000000000000000002', label: '' },
+        ],
+    },
+    {
+        name: 'Priya Nair',
+        entries: [
+            { chain: 'bitcoin', address: 'demo1priyanairbtc000000000000000000003', label: '' },
+        ],
+    },
+    {
+        name: 'Diego Santos',
+        entries: [
+            { chain: 'litecoin', address: 'demoLdiegosantosltc0000000000000000004', label: 'Savings' },
+            { chain: 'dogecoin', address: 'demoDdiegosantosdoge000000000000000004', label: '' },
+        ],
+    },
+    {
+        name: 'Yuki Tanaka',
+        entries: [
+            { chain: 'bitcoin', address: 'demo1yukitanakabtc00000000000000000005', label: 'Trading' },
+            { chain: 'dogecoin', address: 'demoDyukitanakadoge0000000000000000005', label: 'Memes' },
+        ],
+    },
+];
+
+// Non-contact demo counterparties for the inbox, kept distinct from the seeded
+// contacts so those rows render as truncated addresses, not names.
+export const DEMO_MESSAGE_ADDRESSES = {
+    alice: 'demo1alicexchaincounterpartyaddr00000000001',
+    bob: 'demo1bobxchaincounterpartyaddr0000000000002',
+    carol: 'demo1carolxchaincounterpartyaddr00000000003',
+    dave: 'demo1davexchaincounterpartyaddr0000000000004',
+    // Erin Calloway's Bitcoin address: this conversation resolves to her name.
+    contact: DEMO_CONTACTS[0].entries[0].address,
+};
+
 /**
- * Synthesize the message list the §41.7.2 inbox renders for a demo
- * wallet: a couple of conversations against the owner's address, mixing
- * incoming/outgoing ECIES (decrypted) messages plus one ECDH message that
- * stays encrypted (exercises the 🔒 placeholder path). Mirrors the demo
- * pattern used elsewhere so the inbox shows something instead of being
- * empty (the demo wallet has no on-chain message history to decrypt).
+ * Synthesize the message list the §41.7.2 inbox renders for a demo wallet:
+ * five conversations against the owner's address, one per encryption mode plus
+ * one resolved to a contact name, so the list exercises every preview path.
+ *
+ *   1. Alice   - plain text (unencrypted), newest
+ *   2. Erin    - ECIES, but the counterparty is a saved contact, so the row
+ *                shows the contact name instead of the address
+ *   3. Bob     - ECIES (decrypts to text)
+ *   4. Carol   - ECDH shared session key (stays encrypted -> 🔒 placeholder)
+ *   5. Dave    - AES shared key (stays encrypted -> 🔒 placeholder)
  *
  * Each row matches `getMessagingInbox`'s message shape (from / to /
  * timestamp / method / text / txid), so the inbox's conversation grouping
@@ -722,10 +781,7 @@ export function synthesizeDemoMessages(ownerAddress, opts = {}) {
     const now = typeof opts.now === 'number' ? opts.now : Date.now();
     const sec = (deltaSec) => Math.floor(now / 1000) - deltaSec;
 
-    // Illustrative counterparty addresses; AddressText truncates them in
-    // the UI, so the exact value only needs to be stable + distinct.
-    const alice = 'demo1alicexchaincounterpartyaddr00000000001';
-    const bob = 'demo1bobxchaincounterpartyaddr000000000002';
+    const { alice, bob, carol, dave, contact } = DEMO_MESSAGE_ADDRESSES;
 
     let n = 0;
     const mk = (from, to, deltaSec, method, text) => ({
@@ -735,20 +791,46 @@ export function synthesizeDemoMessages(ownerAddress, opts = {}) {
         timestamp: sec(deltaSec),
         method,
         text,
+        // Demo threads live on Bitcoin so the inbox network filter has
+        // something to act on (Bitcoin shows them; Litecoin/Dogecoin hide them).
+        chainId: 'bitcoin-mainnet',
     });
 
     return [
-        // Conversation with Alice (most recent, ECIES, decrypts to text).
-        mk(alice, ownerAddress, 600, 1, 'Hey! Did you get the tokens I sent over?'),
-        mk(ownerAddress, alice, 540, 1, 'Yes, just received them. Thank you!'),
-        mk(alice, ownerAddress, 480, 1, 'Perfect. Ping me if you want to swap some on the DEX.'),
+        // 1. Alice - plain text (method 0, unencrypted), the newest activity.
+        mk(alice, ownerAddress, 30, 0, 'Sent you a plain unencrypted note - no key needed to read this one.'),
+        mk(ownerAddress, alice, 20, 0, 'Got it, thanks!'),
 
-        // Conversation with Bob (one in, one out, ECIES).
+        // 2. Erin - ECIES, and a saved contact, so the row shows the name.
+        mk(contact, ownerAddress, 360, 1, 'Moved the savings stash to the new address. All set.'),
+        mk(ownerAddress, contact, 300, 1, 'Perfect, confirmed on my end.'),
+
+        // 3. Bob - ECIES (decrypts to text).
         mk(bob, ownerAddress, 7_200, 1, 'gm, are you joining the XChain call later?'),
         mk(ownerAddress, bob, 7_000, 1, 'gm! yeah, I will be there.'),
 
-        // An ECDH message we cannot decrypt without a session key; shows
-        // the encrypted placeholder rather than text.
-        mk(bob, ownerAddress, 3_600, 2, null),
+        // 4. Carol - ECDH shared session key; no session key here, so it stays
+        //    encrypted and renders the 🔒 placeholder.
+        mk(carol, ownerAddress, 86_400, 2, null),
+
+        // 5. Dave - AES shared key; likewise encrypted without the key.
+        mk(dave, ownerAddress, 259_200, 3, null),
     ];
+}
+
+/**
+ * Demo contacts to seed into a fresh demo wallet's address book. Returns
+ * `saveContact`-input shapes (name + entries[{ chain, address, label }]), one
+ * per contact, spanning one to three chains each. The caller persists them via
+ * `messaging.saveContact`, so they behave as real, editable contacts across
+ * the Contacts screen, Send picker, history labels, and message inbox.
+ *
+ * @returns {Array<{ name: string, entries: Array<{ chain: string, address: string, label: string }> }>}
+ */
+export function synthesizeDemoContacts() {
+    // Deep-copy so callers can't mutate the module-level fixtures.
+    return DEMO_CONTACTS.map((c) => ({
+        name: c.name,
+        entries: c.entries.map((e) => ({ ...e })),
+    }));
 }

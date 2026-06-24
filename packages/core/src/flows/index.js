@@ -360,6 +360,7 @@ export {
     synthesizeDemoDefiPositions,
     synthesizeDemoMarketActivity,
     synthesizeDemoMessages,
+    synthesizeDemoContacts,
 } from './demoFixtures.js';
 export {
     discoverUsedAddresses,
