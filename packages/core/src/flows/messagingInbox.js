@@ -48,6 +48,7 @@ import { exportPrivateKey } from './exportPrivateKey.js';
  * @property {string | null} to
  * @property {string | null} coin
  * @property {string | null} chain
+ * @property {string} [chainId]            owning chainId, stamped by the sweep for network filtering
  * @property {string | null} text          decrypted plaintext, or null when encrypted
  * @property {boolean} encrypted           true iff the on-chain entry was encrypted
  * @property {number | null} method        1=ECIES, 2=ECDH, 3=AES
@@ -212,7 +213,11 @@ export async function getMessagingInboxSweep({
                 if (seenTxids.has(txid)) continue;
                 seenTxids.add(txid);
             }
-            merged.push(msg);
+            // Stamp the owning chainId so the inbox UI can filter conversations
+            // by network without re-deriving it from the (SDK-dependent) coin
+            // field. A txid is chain-specific, so the first address to surface
+            // it carries the correct chain.
+            merged.push(msg && msg.chainId ? msg : { ...msg, chainId: result.chainId });
         }
     }
 

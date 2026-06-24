@@ -1,0 +1,146 @@
+/* Copyright © 2025–2026 Dankest, LLC
+ * Based on XChain Platform by Dankest, LLC – https://dankest.llc
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ *
+ * This file is part of XChain Platform. Licensed under the GNU Affero
+ * General Public License v3.0 or later; see LICENSE.md. A commercial
+ * license (without AGPL source-disclosure terms) is available -
+ * contact legal@dankest.llc.
+ */
+
+/* Inbox toolbar: search + network filter, each 50% wide, matching the
+   addresses page, the contacts list, and the Send address-book picker. */
+.toolbar {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--xc-space-2);
+    width: 100%;
+    margin-bottom: calc(var(--xc-space-1) + 2px);
+}
+
+.search {
+    flex: 1 1 0;
+    min-width: 0;
+    box-sizing: border-box;
+    padding: var(--xc-space-2) var(--xc-space-3);
+    font-family: var(--xc-font-sans);
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text);
+    background: var(--xc-surface);
+    border: 1px solid var(--xc-border-strong);
+    border-radius: var(--xc-radius-md);
+}
+
+.search::placeholder {
+    color: var(--xc-text-muted);
+}
+
+/* Circular header "+" button that launches the new-conversation flow. */
+.addBtn {
+    appearance: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    border: 1px solid var(--xc-border-strong);
+    border-radius: 50%;
+    background: transparent;
+    color: var(--xc-text);
+    cursor: pointer;
+    flex: 0 0 auto;
+}
+
+.addBtn:hover {
+    background: var(--xc-bg-muted);
+}
+
+.addBtn:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
+/* Card wrapping the active-chat list. */
+.convCard {
+    background: var(--xc-surface);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-lg);
+    overflow: hidden;
+}
+
+/* Scrollable conversation list inside the card. */
+.convList {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+/* One chat row: line 1 = name/address + relative time; line 2 = preview. */
+.convItem {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    width: 100%;
+    text-align: left;
+    padding: var(--xc-space-3);
+    border: none;
+    border-bottom: 1px solid var(--xc-border);
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+}
+
+.convList li:last-child .convItem {
+    border-bottom: none;
+}
+
+.convItem:hover {
+    background: var(--xc-bg-muted);
+}
+
+/* Line 1: name/address (left, ellipsized) + relative timestamp (right). */
+.convTop {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.convName {
+    /* Reserve at least half the row for the name/address so the short
+       `first6…last6` form isn't double-truncated by the CSS ellipsis; the
+       timestamp yields width instead. */
+    flex: 1 1 auto;
+    min-width: 50%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 600;
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text);
+}
+
+.convTime {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+}
+
+/* Line 2: single-line message preview, ellipsized. */
+.convPreview {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text-muted);
+}

@@ -18,8 +18,10 @@ import {
  Icon,} from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
-import { useSignerReady } from '../hooks/useSignerReady.js';
+import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
+import { coinFromChainId } from '../components/BalanceList.jsx';
 import styles from './IssueTokenForm.module.css';
+import local from './MessagingInbox.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -51,9 +53,6 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack })
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
-    // Unlocked session → read without a password (background derives the
-    // WIF per address from the pooled signer). Locked → password prompt.
-    const signerReady = useSignerReady(walletId);
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -71,6 +70,10 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack })
     const [contactsByAddress, setContactsByAddress] = useState(
         /** @type {Record<string, string>} */ ({}),
     );
+    // In-page conversation filters: free-text search (address or contact name)
+    // + network dropdown, mirroring the addresses page toolbar.
+    const [query, setQuery] = useState('');
+    const [network, setNetwork] = useState('all');
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
     useEffect(() => {
@@ -185,16 +188,49 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack })
         fetchInbox(password);
     }
 
-    function handleContinue() {
-        if (sweepAddrs.length === 0) return;
-        if (signerReady) fetchInbox(null);
-        else setStage('password');
-    }
+    // Skip the standalone intro screen: open the inbox as soon as the
+    // account's messageable addresses are known. A ready session signer
+    // fetches immediately; a locked wallet drops straight to the password
+    // prompt. We probe signer readiness directly (async) and only then decide,
+    // so an already-unlocked session never flashes the password screen while
+    // the readiness check is still in flight.
+    const autoOpenedRef = useRef(false);
+    useEffect(() => {
+        if (autoOpenedRef.current) return undefined;
+        if (stage !== 'pick') return undefined;
+        if (!addressesByChain || sweepAddrs.length === 0) return undefined;
+        autoOpenedRef.current = true;
+        if (flowsLib.isDemoWallet(walletId)) { fetchInbox(null); return undefined; }
+        if (typeof messaging.signerReady !== 'function') { setStage('password'); return undefined; }
+        let cancelled = false;
+        messaging.signerReady({ walletId })
+            .then((r) => {
+                if (cancelled) return;
+                if (r?.ready) fetchInbox(null);
+                else setStage('password');
+            })
+            .catch(() => { if (!cancelled) setStage('password'); });
+        return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [stage, addressesByChain, sweepAddrs, walletId, messaging]);
 
     const conversations = useMemo(
         () => buildConversations(messages, ownerSet),
         [messages, ownerSet],
     );
+    // Apply the toolbar's search + network filters. Search matches the
+    // counterparty address or its contact name; the network filter keeps a
+    // conversation when any of its messages live on the selected coin.
+    const visibleConversations = useMemo(() => {
+        const q = String(query || '').trim().toLowerCase();
+        return conversations.filter((c) => {
+            if (network !== 'all' && !c.coins.has(network)) return false;
+            if (!q) return true;
+            const name = contactsByAddress[c.counterparty] || '';
+            return c.counterparty.toLowerCase().includes(q)
+                || name.toLowerCase().includes(q);
+        });
+    }, [conversations, query, network, contactsByAddress]);
     const thread = useMemo(() => {
         if (!selectedCounterparty) return [];
         return messages
@@ -215,7 +251,24 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack })
         return info ? { chainId: info.chainId, fromAddressId: info.id } : null;
     }, [thread, ownerSet, addrInfoByAddress]);
 
-    const header = <ScreenHeader onBack={onBack} title="Messaging" titleIcon={<Icon.MessageIcon />} />;
+    const header = (
+        <ScreenHeader
+            onBack={onBack}
+            title="Messaging"
+            titleIcon={<Icon.MessageIcon />}
+            trailing={onCompose ? (
+                <button
+                    type="button"
+                    className={local.addBtn}
+                    onClick={() => onCompose()}
+                    aria-label="New conversation"
+                    title="New conversation"
+                >
+                    <Icon.PlusIcon />
+                </button>
+            ) : undefined}
+        />
+    );
 
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
@@ -240,21 +293,11 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack })
         );
     }
 
+    // The 'pick' stage no longer shows a standalone intro: the auto-open
+    // effect above advances it to the inbox (or the password prompt) the
+    // moment addresses load, so this is just the brief transitional state.
     if (stage === 'pick') {
-        return wrap(
-            <>
-                <p style={{ margin: '0 0 0.5rem' }}>
-                    Read messages across this account. The inbox covers all{' '}
-                    {sweepAddrs.length} of the account's addresses (receive and
-                    dispenser), merged into one conversation list.
-                </p>
-                <div className={styles.actions}>
-                    <Button variant="primary" onClick={handleContinue}>
-                        {signerReady ? 'Open inbox' : 'Continue'}
-                    </Button>
-                </div>
-            </>,
-        );
+        return wrap(<p className={styles.hint}>Opening inbox…</p>);
     }
 
     if (stage === 'password' || stage === 'submitting') {
@@ -294,148 +337,128 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack })
         );
     }
 
+    // Thread view: tapping a conversation opens its full back-and-forth on a
+    // dedicated screen. The header's back arrow returns to the list; Reply
+    // composes to the same counterparty.
+    if (selectedCounterparty) {
+        const cpName = contactsByAddress[selectedCounterparty];
+        const threadBody = (
+            <>
+                {thread.length === 0 ? (
+                    <p className={styles.hint}>No messages in this conversation.</p>
+                ) : (
+                    <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                        {thread.map((m, idx) => {
+                            const isOutgoing = ownerSet.has(m.from);
+                            return (
+                                <li
+                                    key={m.txid || `row-${idx}`}
+                                    style={{
+                                        padding: '0.5rem',
+                                        marginBottom: '0.25rem',
+                                        borderRadius: '4px',
+                                        background: isOutgoing
+                                            ? 'var(--xc-accent-bg, rgba(25, 118, 210, 0.08))'
+                                            : 'var(--xc-bg-muted, rgba(0, 0, 0, 0.04))',
+                                        textAlign: isOutgoing ? 'right' : 'left',
+                                    }}
+                                >
+                                    <div style={{ fontSize: '0.75rem', color: 'var(--xc-fg-muted)', marginBottom: '0.25rem' }}>
+                                        {isOutgoing ? 'You' : <AddressText address={m.from || ''} />}
+                                        {' · '}
+                                        {m.timestamp ? formatDate(m.timestamp) : '-'}
+                                        {m.method ? ` · ${methodLabel(m.method)}` : null}
+                                    </div>
+                                    <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                                        {m.text !== null ? m.text : encryptedPlaceholder(m.method)}
+                                    </div>
+                                </li>
+                            );
+                        })}
+                    </ul>
+                )}
+                {onCompose ? (
+                    <div className={styles.actions}>
+                        <Button
+                            variant="primary"
+                            onClick={() => onCompose({
+                                chainId: replyContext?.chainId || undefined,
+                                fromAddressId: replyContext?.fromAddressId || undefined,
+                                toAddress: selectedCounterparty || undefined,
+                            })}
+                        >
+                            Reply
+                        </Button>
+                    </div>
+                ) : null}
+            </>
+        );
+        return (
+            <Screen
+                variant={variant}
+                header={(
+                    <ScreenHeader
+                        onBack={() => setSelectedCounterparty(null)}
+                        title={cpName || <AddressText address={selectedCounterparty} />}
+                        titleIcon={<Icon.MessageIcon />}
+                    />
+                )}
+            >
+                {isFull ? <div className={styles.card}>{threadBody}</div> : threadBody}
+            </Screen>
+        );
+    }
+
     return wrap(
         <>
-            <dl className={styles.detailsList}>
-                <dt className={styles.detailsLabel}>Account inbox</dt>
-                <dd className={styles.detailsValue}>
-                    {sweepAddrs.length} address{sweepAddrs.length === 1 ? '' : 'es'} swept
-                </dd>
-                <dt className={styles.detailsLabel}>Messages</dt>
-                <dd className={styles.detailsValue}>{messages.length}</dd>
-            </dl>
-
-            <div
-                style={isFull ? {
-                    display: 'grid',
-                    gridTemplateColumns: '1fr 2fr',
-                    gap: '1rem',
-                    marginTop: '0.75rem',
-                } : {
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '0.75rem',
-                    marginTop: '0.75rem',
-                }}
-            >
-                <section aria-label="Conversations">
-                    <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>Conversations</p>
-                    {conversations.length === 0 ? (
-                        <p className={styles.hint}>No messages for this account yet.</p>
-                    ) : (
-                        <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                            {conversations.map((c) => (
-                                <li key={c.counterparty}>
-                                    <button
-                                        type="button"
-                                        onClick={() => setSelectedCounterparty(c.counterparty)}
-                                        aria-pressed={selectedCounterparty === c.counterparty}
-                                        style={{
-                                            display: 'block',
-                                            width: '100%',
-                                            textAlign: 'left',
-                                            padding: '0.5rem',
-                                            marginBottom: '0.25rem',
-                                            border: selectedCounterparty === c.counterparty
-                                                ? '2px solid var(--xc-accent, #1976d2)'
-                                                : '1px solid var(--xc-border)',
-                                            borderRadius: '4px',
-                                            background: 'transparent',
-                                            cursor: 'pointer',
-                                            color: 'inherit',
-                                        }}
-                                    >
-                                        <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>
-                                            {contactsByAddress[c.counterparty] ? (
-                                                <>
-                                                    {contactsByAddress[c.counterparty]}{' '}
-                                                    <span style={{ color: 'var(--xc-fg-muted)', fontWeight: 400, fontSize: '0.75rem' }}>
-                                                        (<AddressText address={c.counterparty} />)
-                                                    </span>
-                                                </>
-                                            ) : (
-                                                <AddressText address={c.counterparty} />
-                                            )}
-                                        </div>
-                                        <div style={{ fontSize: '0.75rem', color: 'var(--xc-fg-muted)' }}>
-                                            {c.count} message{c.count === 1 ? '' : 's'} ·{' '}
-                                            {c.lastTimestamp ? formatDate(c.lastTimestamp) : '-'}
-                                        </div>
-                                    </button>
-                                </li>
-                            ))}
-                        </ul>
-                    )}
-                </section>
-
-                <section aria-label="Thread">
-                    <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>
-                        {selectedCounterparty ? (
-                            <>Thread with <AddressText address={selectedCounterparty} /></>
-                        ) : 'Thread'}
-                    </p>
-                    {!selectedCounterparty ? (
-                        <p className={styles.hint}>Select a conversation to view the thread.</p>
-                    ) : thread.length === 0 ? (
-                        <p className={styles.hint}>No messages.</p>
-                    ) : (
-                        <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                            {thread.map((m, idx) => {
-                                const isOutgoing = ownerSet.has(m.from);
-                                return (
-                                    <li
-                                        key={m.txid || `row-${idx}`}
-                                        style={{
-                                            padding: '0.5rem',
-                                            marginBottom: '0.25rem',
-                                            borderRadius: '4px',
-                                            background: isOutgoing
-                                                ? 'var(--xc-accent-bg, rgba(25, 118, 210, 0.08))'
-                                                : 'var(--xc-bg-muted, rgba(0, 0, 0, 0.04))',
-                                            textAlign: isOutgoing ? 'right' : 'left',
-                                        }}
-                                    >
-                                        <div style={{ fontSize: '0.75rem', color: 'var(--xc-fg-muted)', marginBottom: '0.25rem' }}>
-                                            {isOutgoing ? 'You' : <AddressText address={m.from || ''} />}
-                                            {' · '}
-                                            {m.timestamp ? formatDate(m.timestamp) : '-'}
-                                            {m.method ? ` · ${methodLabel(m.method)}` : null}
-                                        </div>
-                                        <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                                            {m.text !== null ? m.text : encryptedPlaceholder(m.method)}
-                                        </div>
-                                    </li>
-                                );
-                            })}
-                        </ul>
-                    )}
-                </section>
+            <div className={local.toolbar}>
+                <input
+                    type="text"
+                    className={local.search}
+                    placeholder="Search"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    aria-label="Search conversations"
+                />
+                <NetworkFilterDropdown value={network} onChange={setNetwork} />
             </div>
 
-            <div className={styles.actions}>
-                {onCompose ? (
-                    <Button
-                        variant="primary"
-                        onClick={() => onCompose({
-                            chainId: replyContext?.chainId || undefined,
-                            fromAddressId: replyContext?.fromAddressId || undefined,
-                            toAddress: selectedCounterparty || undefined,
-                        })}
-                    >
-                        {selectedCounterparty ? 'Reply' : 'New conversation'}
-                    </Button>
-                ) : null}
-                <Button
-                    variant="ghost"
-                    onClick={() => {
-                        setMessages([]);
-                        setSelectedCounterparty(null);
-                        setStage('pick');
-                    }}
-                >
-                    Reload
-                </Button>
-            </div>
+            {conversations.length === 0 ? (
+                <p className={styles.hint}>No messages for this account yet.</p>
+            ) : visibleConversations.length === 0 ? (
+                <p className={styles.hint}>No conversations match the current filter.</p>
+            ) : (
+                <div className={local.convCard}>
+                    <ul className={local.convList} aria-label="Conversations">
+                        {visibleConversations.map((c) => (
+                            <li key={c.counterparty}>
+                                <button
+                                    type="button"
+                                    className={local.convItem}
+                                    onClick={() => setSelectedCounterparty(c.counterparty)}
+                                >
+                                    <div className={local.convTop}>
+                                        <span className={local.convName}>
+                                            {contactsByAddress[c.counterparty]
+                                                ? contactsByAddress[c.counterparty]
+                                                : <AddressText address={c.counterparty} />}
+                                        </span>
+                                        <span className={local.convTime}>
+                                            {c.lastTimestamp ? formatRelative(c.lastTimestamp) : ''}
+                                        </span>
+                                    </div>
+                                    <div className={local.convPreview}>
+                                        {previewFor(c.lastText, c.lastMethod)}
+                                    </div>
+                                </button>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
         </>,
     );
 }
@@ -447,22 +470,43 @@ function counterpartyOf(msg, ownerSet) {
     return null;
 }
 
+// Coin family (e.g. 'bitcoin') a message belongs to: derived from the
+// sweep-stamped chainId, falling back to the SDK-provided coin/chain fields.
+function coinOf(msg) {
+    if (msg?.chainId) return coinFromChainId(msg.chainId);
+    if (msg?.chain) return coinFromChainId(msg.chain);
+    return typeof msg?.coin === 'string' ? msg.coin.toLowerCase() : '';
+}
+
 function buildConversations(messages, ownerSet) {
     if (!ownerSet || ownerSet.size === 0) return [];
-    /** @type {Map<string, { counterparty: string, count: number, lastTimestamp: number | null }>} */
+    /** @type {Map<string, { counterparty: string, count: number, lastTimestamp: number | null, lastText: string | null, lastMethod: number | null, coins: Set<string> }>} */
     const acc = new Map();
     for (const msg of messages) {
         const cp = counterpartyOf(msg, ownerSet);
         if (!cp) continue;
         const existing = acc.get(cp);
         const ts = Number.isFinite(Number(msg.timestamp)) ? Number(msg.timestamp) : null;
+        const coin = coinOf(msg);
         if (existing) {
             existing.count += 1;
+            if (coin) existing.coins.add(coin);
+            // Track the newest message so the list row can preview it. A null
+            // timestamp can't be ordered, so it never displaces a dated one.
             if (ts !== null && (existing.lastTimestamp === null || ts > existing.lastTimestamp)) {
                 existing.lastTimestamp = ts;
+                existing.lastText = msg.text ?? null;
+                existing.lastMethod = msg.method ?? null;
             }
         } else {
-            acc.set(cp, { counterparty: cp, count: 1, lastTimestamp: ts });
+            acc.set(cp, {
+                counterparty: cp,
+                count: 1,
+                lastTimestamp: ts,
+                lastText: msg.text ?? null,
+                lastMethod: msg.method ?? null,
+                coins: new Set(coin ? [coin] : []),
+            });
         }
     }
     return [...acc.values()].sort(
@@ -496,4 +540,35 @@ function formatDate(unixSeconds) {
     } catch {
         return '-';
     }
+}
+
+// Relative "X ago" label for a conversation's last activity, e.g. "a few
+// seconds ago" / "1 day ago". Accepts unix seconds or ms. Mirrors the wording
+// History uses for its timeline rows.
+function formatRelative(ts) {
+    if (!ts) return '';
+    const ms = ts < 1e12 ? ts * 1000 : ts;
+    const diffSec = Math.floor((Date.now() - ms) / 1000);
+    if (diffSec < 45) return 'a few seconds ago';
+    const min = Math.floor(diffSec / 60);
+    if (min < 1) return 'less than a minute ago';
+    if (min < 60) return `${min} minute${min === 1 ? '' : 's'} ago`;
+    const hr = Math.floor(diffSec / 3600);
+    if (hr < 24) return `${hr} hour${hr === 1 ? '' : 's'} ago`;
+    const day = Math.floor(diffSec / 86400);
+    if (day < 30) return `${day} day${day === 1 ? '' : 's'} ago`;
+    const month = Math.floor(day / 30);
+    if (month < 12) return `${month} month${month === 1 ? '' : 's'} ago`;
+    const year = Math.floor(day / 365);
+    return `${year} year${year === 1 ? '' : 's'} ago`;
+}
+
+// One-line preview of a conversation's most recent message for the list row.
+// Decrypted text shows verbatim (CSS ellipsis trims it); an encrypted or
+// empty body falls back to a short label rather than the long thread notice.
+function previewFor(text, method) {
+    if (typeof text === 'string' && text.trim()) return text;
+    if (method === 2 || method === 3) return '🔒 Encrypted message';
+    if (method === 1) return '🔒 Could not decrypt';
+    return 'No preview';
 }
