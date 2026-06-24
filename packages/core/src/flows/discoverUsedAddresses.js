@@ -59,9 +59,6 @@ import {
 import { InvalidMnemonicError, normalizeMnemonic } from './importMnemonic.js';
 
 export const DEFAULT_GAP_LIMIT = 20;
-// Dispenser branch (change=2) is contiguous from index 0 and typically
-// short; a smaller gap is ample and bounds restore work (§16).
-export const DEFAULT_DISPENSER_GAP_LIMIT = 5;
 export const DEFAULT_PER_QUERY_TIMEOUT_MS = 5000;
 export const DEFAULT_CHAIN_TIMEOUT_MS = 60000;
 
@@ -105,7 +102,7 @@ export const DEFAULT_CHAIN_TIMEOUT_MS = 60000;
  * @property {string[]} [chainIds]            default: every registered chain
  * @property {'default' | 'all' | string[]} [addressTypes]  default 'default'
  * @property {number} [accountIndex]          default 0
- * @property {0 | 1 | 2} [change]             default 0; 1 change, 2 dispenser (§16)
+ * @property {0 | 1} [change]                default 0; BIP44 branch (0 external, 1 internal change) (§16)
  * @property {number} [gapLimit]              default {@link DEFAULT_GAP_LIMIT}
  * @property {number} [startIndex]            default 0 (for resume semantics)
  * @property {number} [perQueryTimeoutMs]     default {@link DEFAULT_PER_QUERY_TIMEOUT_MS}

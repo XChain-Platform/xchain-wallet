@@ -8,20 +8,27 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// dispenserAddress (§16). Derive and persist the next dispenser
-// sub-address for a wallet/account/chain/addressType tuple. Dispensers
-// live on their own derivation branch (change=2), separate from the
-// account's receive (change=0) and change (change=1) addresses, so an
-// account's dispenser inventory addresses never mix into its Receive
-// list. Each call advances the index by one.
+// dispenserAddress (§16). Derive and persist the address that will host
+// a new dispenser for a wallet/account/chain/addressType tuple.
 //
-// Allocation is CONTIGUOUS: "next index" is computed as one past the
-// highest persisted dispenser index for the tuple, and we never skip.
-// That contiguity is what makes gap-limit restore (§15.4, change=2 pass)
-// rediscover the whole dispenser sequence.
+// A dispenser address is just a standard external (change=0) address
+// tagged with role 'dispenser'. It draws from the SAME contiguous index
+// space as the account's personal receive addresses (receiveAddress.js),
+// not a separate branch. This is a deliberate change from the original
+// design, which quarantined dispensers on change=2: keeping every
+// user-facing address on the BIP44 external chain means a seed-only
+// restore into ANY BIP44 wallet rediscovers them and their funds
+// (§15.4 external pass). The trade-off is that dispenser-ness is now
+// local metadata (the `role` tag and label), not encoded in the path, so
+// a seed-only restore cannot tell which external addresses were
+// dispensers.
+//
+// Allocation is CONTIGUOUS: "next index" is one past the highest
+// persisted change=0 index for the tuple across ALL roles, so it never
+// collides with a receive address and never leaves a gap.
 //
 // Structurally a twin of receiveAddress.js; the only differences are the
-// change branch (2 vs 0), the role tag, and the default label.
+// role tag and the default label.
 
 import { createAddress } from '../schemas/address.js';
 import { NoMatchingAccountError } from './receiveAddress.js';
@@ -100,24 +107,34 @@ export async function dispenserAddress({
         resolvedAccountIndex = accountIndex;
     }
 
-    // Find the highest dispenser (change=2) index for this
-    // (account, chain, network, addressType) combination. -1 means "no
-    // dispenser addresses yet"; nextIndex starts at 0. Contiguous by
-    // construction: always one past the max, never a gap.
+    // Scan the account's external (change=0) addresses for this
+    // (account, chain, network, addressType) tuple. Two accumulators:
+    //   highest        -> the max change=0 index across ALL roles (-1 if
+    //                     none); nextIndex is one past it, so a dispenser
+    //                     never collides with a personal receive index.
+    //   dispenserCount -> how many of those are already dispensers, used
+    //                     only for the human "Dispenser #N" default label.
     const allAddresses = await vault.addresses.list();
     let highest = -1;
+    let dispenserCount = 0;
     for (const a of allAddresses) {
         if (a.accountId !== account.id) continue;
         if (a.chain !== descriptor.coin) continue;
         if (a.network !== descriptor.networkKind) continue;
         if (a.addressType !== type) continue;
-        if (a.source !== 'hd') continue;
+        // Count every HD-derived address regardless of signer kind:
+        // software ('hd') and hardware ('trezor'/'ledger') share one
+        // external index space per account, so a Trezor account keeps
+        // allocating index+1 instead of colliding at 0. imported-wif /
+        // watch-only have a null derivationPath and drop out below.
+        if (a.source !== 'hd' && a.source !== 'trezor' && a.source !== 'ledger') continue;
         if (typeof a.derivationPath !== 'string') continue;
         const parts = a.derivationPath.split('/');
         // BIP44-style path: m / purpose' / coin' / account' / change / index
         if (parts.length < 2) continue;
         const change = parts[parts.length - 2];
-        if (change !== '2') continue;
+        if (change !== '0') continue;
+        if (a.role === 'dispenser') dispenserCount += 1;
         const idx = Number(parts[parts.length - 1]);
         if (Number.isFinite(idx) && idx > highest) highest = idx;
     }
@@ -141,7 +158,7 @@ export async function dispenserAddress({
         const [derived] = await signer.getAddresses({
             chainId,
             accountIndex: resolvedAccountIndex,
-            change: 2,
+            change: 0,
             startIndex: nextIndex,
             count: 1,
             addressType: type,
@@ -155,7 +172,7 @@ export async function dispenserAddress({
             derivationPath: derived.path,
             address: derived.address,
             publicKey: derived.publicKey,
-            label: label ?? `Dispenser #${nextIndex + 1}`,
+            label: label ?? `Dispenser #${dispenserCount + 1}`,
             role: 'dispenser',
             signerId: signer.id,
         });

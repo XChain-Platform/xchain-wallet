@@ -23,9 +23,11 @@ export const ADDRESS_SOURCES = /** @type {const} */ ([
     'ledger',
 ]);
 
-// Derivation role of an HD address, mirroring the BIP44 change branch
-// (§16): 0 receive, 1 change, 2 dispenser. Watch-only / imported keys
-// have no branch and default to 'receive'.
+// Derivation role of an HD address (§16). 'receive' and 'change' mirror
+// the BIP44 external/internal branches (change 0/1). 'dispenser' is a
+// metadata tag on a normal external (change=0) address that hosts a
+// dispenser, NOT a separate branch. Watch-only / imported keys have no
+// branch and default to 'receive'.
 export const ADDRESS_ROLES = /** @type {const} */ ([
     'receive',
     'change',

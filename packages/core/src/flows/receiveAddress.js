@@ -115,7 +115,12 @@ export async function receiveAddress({
         if (a.chain !== descriptor.coin) continue;
         if (a.network !== descriptor.networkKind) continue;
         if (a.addressType !== type) continue;
-        if (a.source !== 'hd') continue;
+        // Count every HD-derived address regardless of signer kind:
+        // software ('hd') and hardware ('trezor'/'ledger') share one
+        // external index space per account, so a Trezor account keeps
+        // allocating index+1 instead of colliding at 0. imported-wif /
+        // watch-only have a null derivationPath and drop out below.
+        if (a.source !== 'hd' && a.source !== 'trezor' && a.source !== 'ledger') continue;
         if (typeof a.derivationPath !== 'string') continue;
         const parts = a.derivationPath.split('/');
         // BIP44-style path: m / purpose' / coin' / account' / change / index

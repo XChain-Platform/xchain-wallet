@@ -150,8 +150,9 @@ export async function getMessagingInbox({
 
 /**
  * Per-account sweep: fetch + decrypt MESSAGE history for every address in
- * the account's receive (/0/) + dispenser (/2/) union (the caller passes
- * the address-id list) and merge the results into one inbox. Messages are
+ * the account (the caller passes the address-id list, typically the
+ * account's external addresses, dispensers included) and merge the
+ * results into one inbox. Messages are
  * de-duped by txid (a self-message addressed between two of the account's
  * own addresses would otherwise appear twice). A per-address transport
  * failure is recorded in `errors` and skipped; an auth-class failure

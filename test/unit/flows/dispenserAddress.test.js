@@ -6,9 +6,13 @@
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md.
 
-// Unit: §16 dispenser sub-address derivation. Asserts the change=2
-// branch, contiguous index allocation, per-account isolation, and the
-// role tag / path shape, against an in-memory vault + a fake signer.
+// Unit: §16 dispenser address derivation. Dispensers are standard
+// external (change=0) addresses tagged role 'dispenser', drawing from the
+// account's single external index space shared with receive addresses.
+// Asserts the change=0 branch, contiguous allocation that does NOT
+// collide with receive indices, per-account isolation, the role tag /
+// path shape, and the dispenser-counted label, against an in-memory vault
+// + a fake signer.
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { dispenserAddress } from '../../../packages/core/src/flows/dispenserAddress.js';
@@ -91,58 +95,60 @@ describe('dispenserAddress (§16)', () => {
     let signer;
     beforeEach(() => { signer = makeSigner(); });
 
-    it('derives index 0 on the change=2 branch when no dispensers exist', async () => {
+    it('derives index 0 on the change=0 branch when the account is empty', async () => {
         const vault = makeVault({ accounts: [ACCOUNT_A] });
         const rec = await dispenserAddress(base(vault, signer));
         expect(rec.role).toBe('dispenser');
-        expect(rec.derivationPath).toBe("m/84'/0'/0'/2/0");
-        expect(signer.calls[0]).toMatchObject({ change: 2, startIndex: 0, accountIndex: 0 });
+        expect(rec.derivationPath).toBe("m/84'/0'/0'/0/0");
+        expect(signer.calls[0]).toMatchObject({ change: 0, startIndex: 0, accountIndex: 0 });
     });
 
     it('allocates contiguously: second call returns index 1', async () => {
         const vault = makeVault({ accounts: [ACCOUNT_A] });
         const first = await dispenserAddress(base(vault, signer));
         const second = await dispenserAddress(base(vault, signer));
-        expect(first.derivationPath).toBe("m/84'/0'/0'/2/0");
-        expect(second.derivationPath).toBe("m/84'/0'/0'/2/1");
+        expect(first.derivationPath).toBe("m/84'/0'/0'/0/0");
+        expect(second.derivationPath).toBe("m/84'/0'/0'/0/1");
     });
 
-    it('continues from the highest existing dispenser index', async () => {
+    it('continues from the highest existing external index', async () => {
         const seeded = [0, 1, 2].map((i) => createAddress({
             accountId: 'acct-a',
             chain: 'bitcoin',
             network: 'regtest',
             source: 'hd',
             addressType: 'p2wpkh',
-            derivationPath: `m/84'/0'/0'/2/${i}`,
+            derivationPath: `m/84'/0'/0'/0/${i}`,
             address: `seed_${i}`,
             publicKey: `seedpub_${i}`,
             role: 'dispenser',
         }));
         const vault = makeVault({ accounts: [ACCOUNT_A], addresses: seeded });
         const rec = await dispenserAddress(base(vault, signer));
-        expect(rec.derivationPath).toBe("m/84'/0'/0'/2/3");
+        expect(rec.derivationPath).toBe("m/84'/0'/0'/0/3");
     });
 
     it('does not let another account pollute this account index', async () => {
-        // Account B already has dispensers 0,1; account A has none.
+        // Account B already has external addresses 0,1; account A has none.
         const bAddrs = [0, 1].map((i) => createAddress({
             accountId: 'acct-b',
             chain: 'bitcoin',
             network: 'regtest',
             source: 'hd',
             addressType: 'p2wpkh',
-            derivationPath: `m/84'/0'/1'/2/${i}`,
+            derivationPath: `m/84'/0'/1'/0/${i}`,
             address: `b_${i}`,
             publicKey: `bpub_${i}`,
             role: 'dispenser',
         }));
         const vault = makeVault({ accounts: [ACCOUNT_A, ACCOUNT_B], addresses: bAddrs });
         const rec = await dispenserAddress(base(vault, signer, { accountId: 'acct-a' }));
-        expect(rec.derivationPath).toBe("m/84'/0'/0'/2/0");
+        expect(rec.derivationPath).toBe("m/84'/0'/0'/0/0");
     });
 
-    it('ignores receive (change=0) addresses when computing the next dispenser index', async () => {
+    it('shares the external index space: continues past receive (change=0) addresses', async () => {
+        // Receive addresses occupy change=0 indices 0..3, so the next
+        // dispenser must take index 4, never reusing a receive index.
         const receiveAddrs = [0, 1, 2, 3].map((i) => createAddress({
             accountId: 'acct-a',
             chain: 'bitcoin',
@@ -156,7 +162,27 @@ describe('dispenserAddress (§16)', () => {
         }));
         const vault = makeVault({ accounts: [ACCOUNT_A], addresses: receiveAddrs });
         const rec = await dispenserAddress(base(vault, signer));
-        expect(rec.derivationPath).toBe("m/84'/0'/0'/2/0");
+        expect(rec.derivationPath).toBe("m/84'/0'/0'/0/4");
+    });
+
+    it('shares the index space across signer kinds: continues past a hardware (trezor) address', async () => {
+        // A Trezor-derived address occupies external index 0 with source
+        // 'trezor' (not 'hd'). The next dispenser must take index 1, never
+        // colliding at 0 just because the existing address is hardware.
+        const hwAddrs = [createAddress({
+            accountId: 'acct-a',
+            chain: 'bitcoin',
+            network: 'regtest',
+            source: 'trezor',
+            addressType: 'p2wpkh',
+            derivationPath: "m/84'/0'/0'/0/0",
+            address: 'tz_0',
+            publicKey: 'tzpub_0',
+            role: 'receive',
+        })];
+        const vault = makeVault({ accounts: [ACCOUNT_A], addresses: hwAddrs });
+        const rec = await dispenserAddress(base(vault, signer));
+        expect(rec.derivationPath).toBe("m/84'/0'/0'/0/1");
     });
 
     it('persists the record so it is retrievable from the vault', async () => {
@@ -167,9 +193,27 @@ describe('dispenserAddress (§16)', () => {
         expect(stored.role).toBe('dispenser');
     });
 
-    it('defaults the label to "Dispenser #N+1"', async () => {
-        const vault = makeVault({ accounts: [ACCOUNT_A] });
-        const rec = await dispenserAddress(base(vault, signer));
-        expect(rec.label).toBe('Dispenser #1');
+    it('labels by dispenser count, not by external index', async () => {
+        // Four receive addresses but zero dispensers: the next dispenser
+        // derives at external index 4 yet is still labeled "Dispenser #1".
+        const receiveAddrs = [0, 1, 2, 3].map((i) => createAddress({
+            accountId: 'acct-a',
+            chain: 'bitcoin',
+            network: 'regtest',
+            source: 'hd',
+            addressType: 'p2wpkh',
+            derivationPath: `m/84'/0'/0'/0/${i}`,
+            address: `r_${i}`,
+            publicKey: `rpub_${i}`,
+            role: 'receive',
+        }));
+        const vault = makeVault({ accounts: [ACCOUNT_A], addresses: receiveAddrs });
+        const first = await dispenserAddress(base(vault, signer));
+        expect(first.derivationPath).toBe("m/84'/0'/0'/0/4");
+        expect(first.label).toBe('Dispenser #1');
+        // Second dispenser: index 5, label increments to #2.
+        const second = await dispenserAddress(base(vault, signer));
+        expect(second.derivationPath).toBe("m/84'/0'/0'/0/5");
+        expect(second.label).toBe('Dispenser #2');
     });
 });

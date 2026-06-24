@@ -108,7 +108,7 @@ export class ChainRegistry {
      * @param {string} chainId
      * @param {string} addressType
      * @param {number} accountIndex
-     * @param {0 | 1 | 2} change   0 receive, 1 change, 2 dispenser (§16)
+     * @param {0 | 1} change   BIP44 branch: 0 external (receive/dispenser), 1 internal change (§16)
      * @param {number} index
      */
     derivationPathFor(chainId, addressType, accountIndex, change, index) {

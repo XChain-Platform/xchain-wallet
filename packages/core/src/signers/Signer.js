@@ -56,7 +56,7 @@ export class NotImplementedError extends Error {
  * @typedef {Object} GetAddressesParams
  * @property {string} chainId
  * @property {number} accountIndex
- * @property {0 | 1 | 2} change   0 receive, 1 change, 2 dispenser (§16)
+ * @property {0 | 1} change   BIP44 branch: 0 external (receive/dispenser), 1 internal change (§16)
  * @property {number} startIndex
  * @property {number} count
  * @property {string} [addressType]  defaults to the chain's defaultAddressType

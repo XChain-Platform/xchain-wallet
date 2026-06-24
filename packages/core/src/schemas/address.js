@@ -16,10 +16,12 @@
 // `signerId: null`, signaling "needs reconciliation"; the runtime
 // resolver fills this in on first load.
 //
-// v3 (current) adds `role` per §16: 'receive' | 'change' | 'dispenser',
-// mirroring the BIP44 change branch (0/1/2). It separates dispenser
-// inventory addresses from personal receive addresses. v2 records migrate
-// forward by parsing the change segment of `derivationPath`.
+// v3 (current) adds `role` per §16: 'receive' | 'change' | 'dispenser'.
+// 'receive'/'change' track the BIP44 external/internal branch (change
+// 0/1). 'dispenser' is a metadata tag on a normal external (change=0)
+// address that hosts a dispenser, not a separate branch. v2 records
+// migrate forward by parsing the change segment of `derivationPath`
+// (legacy change=2 records, if any, map to 'dispenser').
 
 import { ADDRESS_ROLES, ADDRESS_SOURCES, NETWORKS } from './constants.js';
 import {

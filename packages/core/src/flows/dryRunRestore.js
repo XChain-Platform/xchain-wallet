@@ -36,9 +36,6 @@ import {
 import { InvalidMnemonicError, normalizeMnemonic } from './importMnemonic.js';
 
 export const DEFAULT_DRY_RUN_GAP = 10;
-// Dispenser branch (change=2) is contiguous and short; deriving a few
-// addresses is enough to confirm the branch restores (§16).
-export const DEFAULT_DRY_RUN_DISPENSER_GAP = 5;
 
 /**
  * @typedef {Object} DryRunDerivedAddress
@@ -58,8 +55,6 @@ export const DEFAULT_DRY_RUN_DISPENSER_GAP = 5;
  * @property {number} matchedCount               matches across indices where current wallet has an address
  * @property {number} divergentCount             same indices, different address (this is the "red X" signal)
  * @property {number} missingCount               derived something but current wallet has nothing at this (path, type)
- * @property {Array<{ index: number, expected: string | null, derived: string, match: boolean }>} [dispenserComparisons]   change=2 branch, present only when scanDispenserBranch is set (§16)
- * @property {DryRunDerivedAddress[]} [dispenserDerived]   change=2 derived addresses, present only when scanDispenserBranch is set
  */
 
 /**
@@ -80,9 +75,7 @@ export const DEFAULT_DRY_RUN_DISPENSER_GAP = 5;
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
  * @property {number} [gapLimit]                  per-chain address count; default 10
  * @property {number} [accountIndex]              default 0
- * @property {0 | 1 | 2} [change]                 default 0; 1 change, 2 dispenser (§16)
- * @property {boolean} [scanDispenserBranch]      also compare the change=2 dispenser branch (§16); default false
- * @property {number} [dispenserGapLimit]         dispenser-branch address count; default 5
+ * @property {0 | 1} [change]                     default 0; BIP44 branch (0 external, 1 internal change) (§16)
  */
 
 /**
@@ -101,8 +94,6 @@ export async function dryRunRestore({
     gapLimit = DEFAULT_DRY_RUN_GAP,
     accountIndex = 0,
     change = 0,
-    scanDispenserBranch = false,
-    dispenserGapLimit = DEFAULT_DRY_RUN_DISPENSER_GAP,
 }) {
     if (!vault) throw new Error('dryRunRestore: vault is required');
     if (typeof walletId !== 'string' || walletId.length === 0) {
@@ -151,8 +142,9 @@ export async function dryRunRestore({
         let overallMatch = true;
 
         // Derive `count` addresses on one change branch and compare each
-        // against the wallet's persisted records. Shared by the primary
-        // (change=0) pass and the optional dispenser (change=2) pass.
+        // against the wallet's persisted records. Dispensers are ordinary
+        // external (change=0) addresses, so the primary pass already
+        // covers them; there is no separate dispenser pass.
         const deriveAndCompare = (chainId, descriptor, sdk, addressType, branchChange, count) => {
             const derived = /** @type {DryRunDerivedAddress[]} */ ([]);
             for (let index = 0; index < count; index++) {
@@ -230,17 +222,6 @@ export async function dryRunRestore({
                 divergentCount: main.divergentCount,
                 missingCount: main.missingCount,
             };
-
-            // §16: optionally confirm the dispenser branch restores too.
-            // Its divergences also fail the overall match, but its matches
-            // do NOT feed the "seed corresponds to wallet" heuristic below
-            // (that stays anchored on the primary branch).
-            if (scanDispenserBranch) {
-                const disp = deriveAndCompare(chainId, descriptor, sdk, addressType, 2, dispenserGapLimit);
-                if (disp.divergentCount > 0) overallMatch = false;
-                chainMatch.dispenserDerived = disp.derived;
-                chainMatch.dispenserComparisons = disp.comparisons;
-            }
 
             perChain.push(chainMatch);
         }
