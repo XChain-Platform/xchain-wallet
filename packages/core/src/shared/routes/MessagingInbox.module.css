@@ -86,7 +86,7 @@
     flex-direction: column;
     gap: 2px;
     width: 100%;
-    text-align: left;
+    text-align: start;
     padding: var(--xc-space-3);
     border: none;
     border-bottom: 1px solid var(--xc-border);
