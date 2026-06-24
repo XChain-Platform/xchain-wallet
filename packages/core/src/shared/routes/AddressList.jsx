@@ -91,7 +91,8 @@ export function AddressList({
     // shell-provided defaults so deep-links still apply on first render.
     const [query, setQuery] = useState(tokenQuery || '');
     const [network, setNetwork] = useState(networkFilter || 'all');
-    // Address-type toggle: all | normal (hd) | imported (wif) | other (hardware/multisig).
+    // Address-type toggle: all | normal (hd) | imported (wif). Hardware/multisig
+    // addresses have no dedicated tab; they surface under "All".
     const [sourceFilter, setSourceFilter] = useState('all');
 
     // Selected address row -> shows the address detail view in place of the list.
@@ -513,7 +514,10 @@ export function AddressList({
             if (!selected.record?.id || typeof messaging.setActiveAddress !== 'function') return;
             try {
                 await messaging.setActiveAddress(accountId, selected.chainId, selected.record.id);
-                setReloadKey((k) => k + 1);
+                // Leave the addresses section entirely and return to Home. The
+                // active address is persisted before we navigate, so Home's
+                // fresh mount refetches balances against the new active address.
+                onBack?.();
             } catch (err) {
                 setLoadError(err?.message || 'Failed to set active address.');
             }
@@ -521,7 +525,12 @@ export function AddressList({
         return (
             <Screen variant={variant} header={<ScreenHeader onBack={() => setSelected(null)} title="View Address" titleIcon={<Icon.ScanIcon />} />}>
                 <div className={local.detailTop}>
-                    <div className={local.detailLabel}>Address</div>
+                    <div className={local.detailLabelRow}>
+                        <span className={local.detailLabel}>Address</span>
+                        {isActiveRow(selected) ? (
+                            <span className={local.addrActive}>Active</span>
+                        ) : null}
+                    </div>
                     <div className={local.detailAddr}>
                         <AddressText address={selected.address} truncate={false} />
                         <button
@@ -566,7 +575,7 @@ export function AddressList({
                         type="button"
                         className={local.quickAction}
                         onClick={setAsActive}
-                        disabled={!selected.record?.id || isActiveRow(selected)}
+                        disabled={!selected.record?.id}
                         title={isActiveRow(selected) ? 'This is the active address' : 'Make this the active address'}
                     >
                         <span className={local.quickActionIcon} aria-hidden="true"><Icon.ReceiveIcon /></span>
@@ -657,7 +666,6 @@ export function AddressList({
                     { id: 'all', label: 'All' },
                     { id: 'normal', label: 'Normal' },
                     { id: 'imported', label: 'Imported' },
-                    { id: 'other', label: 'Other' },
                 ].map((opt) => (
                     <button
                         key={opt.id}

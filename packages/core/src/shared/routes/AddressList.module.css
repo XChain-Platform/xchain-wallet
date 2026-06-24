@@ -386,6 +386,14 @@
     margin-bottom: 2px;
 }
 
+/* "Address" caption (left) + optional "Active" pill (right) on the detail view. */
+.detailLabelRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--xc-space-2);
+}
+
 .detailValue {
     font-size: var(--xc-text-md);
     word-break: break-all;
