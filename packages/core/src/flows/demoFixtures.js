@@ -765,8 +765,8 @@ export const DEMO_MESSAGE_ADDRESSES = {
  *   2. Erin    - ECIES, but the counterparty is a saved contact, so the row
  *                shows the contact name instead of the address
  *   3. Bob     - ECIES (decrypts to text)
- *   4. Carol   - ECDH shared session key (stays encrypted -> 🔒 placeholder)
- *   5. Dave    - AES shared key (stays encrypted -> 🔒 placeholder)
+ *   4. Carol   - ECDH shared session key (decrypts to text, like ECIES)
+ *   5. Dave    - AES pre-shared key (stays encrypted -> 🔒 placeholder)
  *
  * Each row matches `getMessagingInbox`'s message shape (from / to /
  * timestamp / method / text / txid), so the inbox's conversation grouping
@@ -809,11 +809,12 @@ export function synthesizeDemoMessages(ownerAddress, opts = {}) {
         mk(bob, ownerAddress, 7_200, 1, 'gm, are you joining the XChain call later?'),
         mk(ownerAddress, bob, 7_000, 1, 'gm! yeah, I will be there.'),
 
-        // 4. Carol - ECDH shared session key; no session key here, so it stays
-        //    encrypted and renders the 🔒 placeholder.
-        mk(carol, ownerAddress, 86_400, 2, null),
+        // 4. Carol - ECDH shared session key; the wallet derives the shared
+        //    secret from both addresses' keys, so it decrypts like ECIES.
+        mk(carol, ownerAddress, 86_400, 2, 'Shared-key (ECDH) thread: we can both read this one.'),
+        mk(ownerAddress, carol, 86_100, 2, 'Confirmed, reading you loud and clear.'),
 
-        // 5. Dave - AES shared key; likewise encrypted without the key.
+        // 5. Dave - AES pre-shared key; no key to enter, so it stays locked.
         mk(dave, ownerAddress, 259_200, 3, null),
     ];
 }

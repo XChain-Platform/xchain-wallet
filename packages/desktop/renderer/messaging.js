@@ -804,6 +804,8 @@ export function signerReady(opts) { return /** @type {any} */ (sendMessage('wall
 export function messageAction(opts) { return /** @type {any} */ (sendMessage('action.message', opts)); }
 /** @param {object} opts */
 export function messageActionHw(opts) { return /** @type {any} */ (sendMessage('action.message.hw', opts)); }
+export function sendHandshake(opts) { return /** @type {any} */ (sendMessage('messaging.handshake', opts)); }
+export function sendHandshakeHw(opts) { return /** @type {any} */ (sendMessage('messaging.handshake.hw', opts)); }
 /** @param {{ chainId: string, address: string }} req */
 export function getRecipientPubkey(req) { return /** @type {any} */ (sendMessage('messaging.pubkey', req)); }
 

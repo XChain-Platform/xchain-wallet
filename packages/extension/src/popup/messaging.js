@@ -1583,6 +1583,13 @@ export function messageAction(opts) {
 export function messageActionHw(opts) {
     return /** @type {any} */ (sendMessage('action.message.hw', opts));
 }
+// ECDH key-exchange handshake (publish our pubkey; version 0 = request, 1 = response).
+export function sendHandshake(opts) {
+    return /** @type {any} */ (sendMessage('messaging.handshake', opts));
+}
+export function sendHandshakeHw(opts) {
+    return /** @type {any} */ (sendMessage('messaging.handshake.hw', opts));
+}
 /** @param {{ chainId: string, address: string }} req */
 export function getRecipientPubkey(req) {
     return /** @type {any} */ (sendMessage('messaging.pubkey', req));

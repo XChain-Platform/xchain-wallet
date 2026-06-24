@@ -48,6 +48,8 @@ assert.equal(typeof flows.messageAction, 'function',
     'flows.messageAction exported');
 assert.equal(typeof flows.getRecipientPubkey, 'function',
     'flows.getRecipientPubkey exported');
+assert.equal(typeof flows.handshakeAction, 'function',
+    'flows.handshakeAction exported (ECDH key-exchange handshake)');
 assert.equal(typeof flows.PubkeyNotFoundError, 'function',
     'flows.PubkeyNotFoundError exported (subclassable)');
 
@@ -88,6 +90,18 @@ assert.ok(/setTimeout\(/.test(src) && /\},\s*400\)/.test(src),
     'ComposeMessage debounces the pubkey lookup (400ms)');
 assert.ok(/sendUnencrypted/.test(src) && /Continue anyway/.test(src),
     'ComposeMessage offers the unencrypted fallback on pubkey-missing');
+assert.ok(/encryptionChoice/.test(src) && /'ecdh'/.test(src),
+    'ComposeMessage offers an ECDH (shared-key) encryption choice');
+assert.ok(/messaging\.sendHandshake\s*\(/.test(src) && /Request encrypted session/.test(src),
+    'ComposeMessage can publish a key-exchange handshake when the recipient pubkey is unknown');
+
+// --- 2b. messageAction ECDH send path ---------------------------------
+const messageActionSrc = readFileSync(join(core, 'src', 'flows', 'messageAction.js'), 'utf8');
+assert.ok(/deriveSharedSecret\s*\(/.test(messageActionSrc)
+    && /sessionEncrypt\s*\(/.test(messageActionSrc),
+    'messageAction derives a shared secret + session-encrypts for ECDH (method 2)');
+assert.ok(/hardware wallet/i.test(messageActionSrc),
+    'messageAction blocks ECDH from hardware signers (no exposed key)');
 assert.ok(/messaging\.messageAction\s*\(/.test(src)
     && /messaging\.messageActionHw\s*\(/.test(src),
     'ComposeMessage branches messageAction / messageActionHw on isHwSource');
@@ -99,7 +113,8 @@ assert.ok(/PubkeyNotFoundError/.test(src),
 // --- 3. Background handlers -------------------------------------------
 
 const bg = readFileSync(join(ext, 'src', 'background', 'createBackgroundHost.js'), 'utf8');
-for (const route of ['action.message', 'action.message.hw', 'messaging.pubkey']) {
+for (const route of ['action.message', 'action.message.hw', 'messaging.pubkey',
+    'messaging.handshake', 'messaging.handshake.hw']) {
     assert.ok(bg.includes(`'${route}'`), `background host registers ${route}`);
 }
 
@@ -111,7 +126,8 @@ for (const [shell, msgPath] of [
     ['desktop', join(desktop, 'renderer', 'messaging.js')],
 ]) {
     const m = readFileSync(msgPath, 'utf8');
-    for (const fn of ['messageAction', 'messageActionHw', 'getRecipientPubkey']) {
+    for (const fn of ['messageAction', 'messageActionHw', 'getRecipientPubkey',
+        'sendHandshake', 'sendHandshakeHw']) {
         assert.ok(
             new RegExp(`export function ${fn}\\b`).test(m),
             `${shell} messaging.js exports ${fn}`,

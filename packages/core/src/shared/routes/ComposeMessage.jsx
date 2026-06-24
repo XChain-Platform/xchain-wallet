@@ -84,6 +84,17 @@ export function ComposeMessage({
         /** @type {'idle' | 'checking' | 'found' | 'missing'} */ ('idle'),
     );
     const [sendUnencrypted, setSendUnencrypted] = useState(false);
+    // Encryption choice when the recipient's pubkey is known: 'ecies' (default,
+    // only the recipient can read) or 'ecdh' (a shared session key both parties
+    // derive, so the sender can read their own sent messages too). ECDH needs
+    // our private key to derive the secret, so it's unavailable on hardware.
+    const [encryptionChoice, setEncryptionChoice] = useState(
+        /** @type {'ecies' | 'ecdh'} */ ('ecies'),
+    );
+    // Tracks a sent ECDH key-exchange request (handshake) so the missing-pubkey
+    // branch can confirm it without leaving the compose screen.
+    const [handshakeBusy, setHandshakeBusy] = useState(false);
+    const [handshakeSent, setHandshakeSent] = useState(false);
     const [stage, setStage] = useState(
         /** @type {'form' | 'submitting' | 'done'} */ ('form'),
     );
@@ -179,7 +190,9 @@ export function ComposeMessage({
                 },
                 destination: toAddress.trim(),
                 message: message,
-                method: pubkeyState === 'missing' && sendUnencrypted ? null : 1,
+                method: pubkeyState === 'missing' && sendUnencrypted
+                    ? null
+                    : (encryptionChoice === 'ecdh' && !hw ? 2 : 1),
             };
             const r = hw
                 ? await messaging.messageActionHw({ ...base, signerId: fromAddress.signerId })
@@ -201,6 +214,45 @@ export function ComposeMessage({
                 passwordRef.current?.focus();
                 passwordRef.current?.select();
             }
+        }
+    }
+
+    // Publish our pubkey to the recipient (MESSAGE format-0 handshake) so they
+    // can derive the ECDH shared secret and message us, even before our address
+    // has spent. Used when the recipient's key is unknown: it requests a session
+    // rather than sending an (impossible to encrypt) message.
+    async function handleRequestSession() {
+        if (handshakeBusy || !fromAddress || !chainId || !toAddress.trim()) return;
+        if (!hw && !signerReady && password.length === 0) {
+            setSubmitError('Enter your password to send the key request.');
+            return;
+        }
+        if (hw && hwStatus !== 'available') return;
+        setHandshakeBusy(true);
+        setSubmitError(null);
+        try {
+            const base = {
+                walletId,
+                chainId,
+                from: {
+                    address: fromAddress.address,
+                    publicKey: fromAddress.publicKey,
+                    derivationPath: fromAddress.derivationPath,
+                    addressId: fromAddress.id,
+                    source: fromAddress.source,
+                    signerId: fromAddress.signerId,
+                },
+                destination: toAddress.trim(),
+                version: 0,
+            };
+            await (hw
+                ? messaging.sendHandshakeHw({ ...base, signerId: fromAddress.signerId })
+                : messaging.sendHandshake({ ...base, password }));
+            setHandshakeSent(true);
+        } catch (err) {
+            setSubmitError(err?.message || 'Could not send the key request.');
+        } finally {
+            setHandshakeBusy(false);
         }
     }
 
@@ -287,9 +339,29 @@ export function ComposeMessage({
                 <p className={styles.hint}>Looking up recipient's public key…</p>
             ) : null}
             {pubkeyState === 'found' ? (
-                <p className={styles.hint}>
-                    ✓ Recipient pubkey found. Message will be encrypted with ECIES (only they can read it).
-                </p>
+                <div className={styles.hint} style={{ marginTop: '0.25rem' }}>
+                    <p style={{ margin: '0 0 0.35rem' }}>✓ Recipient public key found. Choose encryption:</p>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                        <input
+                            type="radio"
+                            name="encryptionChoice"
+                            checked={encryptionChoice === 'ecies'}
+                            onChange={() => setEncryptionChoice('ecies')}
+                        />
+                        Standard (ECIES): only the recipient can read it.
+                    </label>
+                    {!hw ? (
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                            <input
+                                type="radio"
+                                name="encryptionChoice"
+                                checked={encryptionChoice === 'ecdh'}
+                                onChange={() => setEncryptionChoice('ecdh')}
+                            />
+                            Shared key (ECDH): both you and the recipient can read it.
+                        </label>
+                    ) : null}
+                </div>
             ) : null}
             {pubkeyState === 'missing' ? (
                 <div
@@ -314,6 +386,24 @@ export function ComposeMessage({
                         />
                         Continue anyway with an unencrypted message.
                     </label>
+                    <div style={{ marginTop: '0.5rem' }}>
+                        {handshakeSent ? (
+                            <p style={{ margin: 0 }} role="status">
+                                ✓ Key request sent. Once they respond or send any transaction, you can
+                                message them encrypted.
+                            </p>
+                        ) : (
+                            <Button
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                loading={handshakeBusy}
+                                onClick={handleRequestSession}
+                            >
+                                Request encrypted session (publish your key)
+                            </Button>
+                        )}
+                    </div>
                 </div>
             ) : null}
 

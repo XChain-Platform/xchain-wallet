@@ -214,9 +214,30 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack })
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [stage, addressesByChain, sweepAddrs, walletId, messaging]);
 
+    // MESSAGE format-0/1 rows are ECDH key-exchange handshakes (a published
+    // pubkey, no body), not conversation messages: keep them out of the chat
+    // list and threads, and surface inbound requests separately.
+    const conversableMessages = useMemo(
+        () => messages.filter((m) => m.format !== 0 && m.format !== 1),
+        [messages],
+    );
+    // Counterparties who published their key to one of our addresses (inbound
+    // format-0). They've shared a pubkey, so we can now message them encrypted.
+    const handshakeRequesters = useMemo(() => {
+        const seen = new Set();
+        const out = [];
+        for (const m of messages) {
+            if (m.format !== 0 || !ownerSet.has(m.to)) continue;
+            const who = m.from;
+            if (!who || ownerSet.has(who) || seen.has(who)) continue;
+            seen.add(who);
+            out.push(who);
+        }
+        return out;
+    }, [messages, ownerSet]);
     const conversations = useMemo(
-        () => buildConversations(messages, ownerSet),
-        [messages, ownerSet],
+        () => buildConversations(conversableMessages, ownerSet),
+        [conversableMessages, ownerSet],
     );
     // Apply the toolbar's search + network filters. Search matches the
     // counterparty address or its contact name; the network filter keeps a
@@ -233,10 +254,10 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack })
     }, [conversations, query, network, contactsByAddress]);
     const thread = useMemo(() => {
         if (!selectedCounterparty) return [];
-        return messages
+        return conversableMessages
             .filter((m) => counterpartyOf(m, ownerSet) === selectedCounterparty)
             .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
-    }, [messages, selectedCounterparty, ownerSet]);
+    }, [conversableMessages, selectedCounterparty, ownerSet]);
 
     // Reply context: derive the from-address + chain from the owner side of
     // the selected thread's most recent message, so a Reply originates from
@@ -370,7 +391,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack })
                                         {m.method ? ` · ${methodLabel(m.method)}` : null}
                                     </div>
                                     <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                                        {m.text !== null ? m.text : encryptedPlaceholder(m.method)}
+                                        {m.text !== null ? m.text : encryptedPlaceholder()}
                                     </div>
                                 </li>
                             );
@@ -426,6 +447,14 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack })
                 <NetworkFilterDropdown value={network} onChange={setNetwork} />
             </div>
 
+            {handshakeRequesters.length > 0 ? (
+                <p className={styles.hint} role="status" style={{ marginBottom: 'var(--xc-space-2)' }}>
+                    🔑 {handshakeRequesters.length} encrypted-session request
+                    {handshakeRequesters.length === 1 ? '' : 's'}: someone shared their key. Start a
+                    new message to them and the wallet will offer encrypted (ECDH) sending.
+                </p>
+            ) : null}
+
             {conversations.length === 0 ? (
                 <p className={styles.hint}>No messages for this account yet.</p>
             ) : visibleConversations.length === 0 ? (
@@ -444,14 +473,14 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack })
                                         <span className={local.convName}>
                                             {contactsByAddress[c.counterparty]
                                                 ? contactsByAddress[c.counterparty]
-                                                : <AddressText address={c.counterparty} />}
+                                                : <AddressText address={c.counterparty} truncate={false} />}
                                         </span>
                                         <span className={local.convTime}>
                                             {c.lastTimestamp ? formatRelative(c.lastTimestamp) : ''}
                                         </span>
                                     </div>
                                     <div className={local.convPreview}>
-                                        {previewFor(c.lastText, c.lastMethod)}
+                                        {previewFor(c.lastText)}
                                     </div>
                                 </button>
                             </li>
@@ -521,11 +550,12 @@ function methodLabel(method) {
     return `method ${method}`;
 }
 
-function encryptedPlaceholder(method) {
-    if (method === 2 || method === 3) {
-        return '🔒 Encrypted (session key required). Open a session with the sender to read it.';
-    }
-    return '🔒 Encrypted (decryption failed).';
+// Shown in the thread when a message body can't be decrypted. ECIES (1) and
+// ECDH (2) decrypt automatically from the wallet's keys, so a remaining locked
+// body is an AES (3) pre-shared-key message (no key-entry surface) or one not
+// addressed to a key we hold.
+function encryptedPlaceholder() {
+    return '🔒 Encrypted with a shared key this wallet does not have, so it can\'t be read here.';
 }
 
 function formatDate(unixSeconds) {
@@ -564,11 +594,10 @@ function formatRelative(ts) {
 }
 
 // One-line preview of a conversation's most recent message for the list row.
-// Decrypted text shows verbatim (CSS ellipsis trims it); an encrypted or
-// empty body falls back to a short label rather than the long thread notice.
-function previewFor(text, method) {
+// Decrypted text shows verbatim (CSS ellipsis trims it). ECIES + ECDH decrypt
+// from the wallet's keys, so a missing body is a shared-key (AES) message or
+// one not for us; show a short lock label rather than the long thread notice.
+function previewFor(text) {
     if (typeof text === 'string' && text.trim()) return text;
-    if (method === 2 || method === 3) return '🔒 Encrypted message';
-    if (method === 1) return '🔒 Could not decrypt';
-    return 'No preview';
+    return '🔒 Encrypted message';
 }

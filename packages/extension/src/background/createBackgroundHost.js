@@ -68,6 +68,7 @@ const {
     unlockGatedFileForAddress,
     listGatedFiles,
     messageAction,
+    handshakeAction,
     getRecipientPubkey,
     listContacts,
     findContactByAddress,
@@ -1781,6 +1782,7 @@ export function createBackgroundHost(deps) {
     registerHwHandler('action.link.hw', linkAction);
     registerHwHandler('action.file.hw', fileAction);
     registerHwHandler('action.message.hw', messageAction);
+    registerHwHandler('messaging.handshake.hw', handshakeAction);
     registerHwHandler('action.deploy.hw', deployAction);
     registerHwHandler('action.execute.hw', executeAction);
     registerHwHandler('action.deposit.hw', depositAction);
@@ -1907,6 +1909,9 @@ export function createBackgroundHost(deps) {
     // §41.7.3 Compose: MESSAGE action signing + recipient pubkey lookup.
     host.register('action.message', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
         return messageAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+    });
+    host.register('messaging.handshake', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        return handshakeAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
     });
     host.register('messaging.pubkey', async (req, { sdkRegistry }) => {
         return getRecipientPubkey({ ...req, sdkRegistry });

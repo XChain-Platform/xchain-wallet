@@ -27,11 +27,16 @@
 //   v2: `VERSION|COIN|DESTINATION|ENCRYPTED_MESSAGE` (encrypted body)
 //   v3: `VERSION|COIN|DESTINATION|PLAINTEXT_MESSAGE` (unencrypted)
 //
-// Phase 3 Step 13 uses v2 (ECIES) or v3 (plaintext fallback); v0 and
-// v1 are ECDH session-setup and out of Phase 3 scope.
+// Supported sends: v2 ECIES (method 1), v2 ECDH session (method 2), and
+// v3 plaintext (method null). ECDH derives a deterministic shared secret
+// from our key + the recipient's address pubkey, so it needs our private key
+// at compose time and therefore can't be sent from a hardware signer. The
+// v0/v1 ECDH key-exchange handshake (publishing a pubkey) is separate and not
+// handled here.
 
 import { submitAction } from './submitAction.js';
 import { normalizeSource } from './sendToken.js';
+import { exportPrivateKey } from './exportPrivateKey.js';
 
 const PROTOCOL_COIN_TICKER = {
     bitcoin: 'BTC',
@@ -90,7 +95,40 @@ export async function messageAction(opts) {
 
     const source = normalizeSource(opts.from, 'messageAction');
     const sdk = opts.sdkRegistry.get(opts.chainId);
-    const method = opts.method === null ? null : 1;
+    // method: null = plaintext (v3), 1 = ECIES (v2), 2 = ECDH session (v2).
+    const method = opts.method === null ? null : (opts.method === 2 ? 2 : 1);
+
+    // Resolve our own WIF for the source address. ECDH needs our private key to
+    // derive the shared secret at compose time (ECIES needs only the
+    // recipient's public key). Mirrors the inbox's resolution: an injected
+    // software signer, otherwise a password-based export. Hardware signers
+    // never expose the key, so ECDH can't be sent from them.
+    async function resolveSourceWif() {
+        if (opts.signer) {
+            if (typeof opts.signer.exportWifForPath !== 'function') {
+                throw new Error(
+                    'ECDH (shared-key) messages cannot be sent from a hardware wallet, which never exposes the private key needed to derive the shared secret. Use standard (ECIES) encryption instead.',
+                );
+            }
+            return source.derivationPath
+                ? opts.signer.exportWifForPath({ chainId: opts.chainId, path: source.derivationPath })
+                : opts.signer.exportWifForAddressId(source.addressId);
+        }
+        const addressId = (opts.from && (opts.from.id || opts.from.addressId)) || source.addressId;
+        if (!addressId) {
+            throw new Error('messageAction: ECDH send needs an addressId to derive the key.');
+        }
+        const exported = await exportPrivateKey({
+            vault: opts.vault,
+            walletId: opts.walletId,
+            password: opts.password,
+            bip39Passphrase: opts.bip39Passphrase,
+            chainRegistry: opts.chainRegistry,
+            sdkRegistry: opts.sdkRegistry,
+            addressId,
+        });
+        return exported.wif;
+    }
 
     /** @type {Record<string, string>} */
     let params;
@@ -100,6 +138,21 @@ export async function messageAction(opts) {
             COIN: coin,
             DESTINATION: opts.destination,
             PLAINTEXT_MESSAGE: opts.message,
+        };
+    } else if (method === 2) {
+        // ECDH: derive the deterministic shared secret from our key + the
+        // recipient's address pubkey, then AES-GCM session-encrypt. Same v2
+        // wire shape as ECIES (no method/key on the wire).
+        const pubkey = await sdk.getPublicKey(opts.destination);
+        if (!pubkey) throw new PubkeyNotFoundError(opts.destination);
+        const wif = await resolveSourceWif();
+        const { sharedSecret } = sdk.messaging.deriveSharedSecret(wif, pubkey);
+        const encrypted = sdk.messaging.sessionEncrypt(opts.message, sharedSecret);
+        params = {
+            VERSION: '2',
+            COIN: coin,
+            DESTINATION: opts.destination,
+            ENCRYPTED_MESSAGE: encrypted.ciphertext,
         };
     } else {
         const pubkey = await sdk.getPublicKey(opts.destination);
@@ -119,6 +172,78 @@ export async function messageAction(opts) {
         actionSummary: method === null
             ? `Send plaintext message to ${opts.destination}`
             : `Send encrypted message to ${opts.destination}`,
+    };
+
+    return submitAction({
+        vault: opts.vault,
+        walletId: opts.walletId,
+        password: opts.password,
+        signer: opts.signer,
+        bip39Passphrase: opts.bip39Passphrase,
+        chainRegistry: opts.chainRegistry,
+        sdkRegistry: opts.sdkRegistry,
+        chainId: opts.chainId,
+        actionData: { action: 'MESSAGE', params },
+        encoderOpts: {
+            pubkey: source.publicKey,
+            ...(opts.fee !== undefined && { fee: opts.fee }),
+            ...(opts.feePerKb !== undefined && { feePerKb: opts.feePerKb }),
+            ...(opts.rbf !== undefined && { rbf: opts.rbf }),
+        },
+        signingPaths: [source.derivationPath
+            ? { inputIndex: 0, path: source.derivationPath }
+            : { inputIndex: 0, addressId: source.addressId }],
+        pendingTxMeta,
+        waitForTxid: opts.waitForTxid,
+        waitOpts: opts.waitOpts,
+        onProgress: opts.onProgress,
+    });
+}
+
+/**
+ * Publish an ECDH key-exchange handshake (MESSAGE format 0 = request, 1 =
+ * response). It broadcasts our address pubkey (the ECDH "session key") in
+ * ENCRYPTION_KEY so the counterparty can derive the shared secret and send us
+ * encrypted messages, even before our address has spent (which would otherwise
+ * reveal the pubkey). No message body and no encryption: just key publication,
+ * so it works from hardware signers too.
+ *
+ * @param {object} opts  same plumbing as messageAction (vault/walletId/
+ *   password/signer/bip39Passphrase/chainRegistry/sdkRegistry/chainId/from/
+ *   fee/feePerKb/rbf/waitForTxid/trackPendingTx/onProgress), plus:
+ * @param {string} opts.destination   counterparty address
+ * @param {0 | 1} [opts.version]      0 = request (default), 1 = response
+ * @returns {Promise<import('./submitAction.js').SubmitResult>}
+ */
+export async function handshakeAction(opts) {
+    if (!opts) throw new Error('handshakeAction: opts is required');
+    if (typeof opts.destination !== 'string' || opts.destination.length === 0) {
+        throw new Error('handshakeAction: destination is required');
+    }
+    const version = opts.version === 1 ? 1 : 0;
+
+    const descriptor = opts.chainRegistry.get(opts.chainId);
+    if (!descriptor) throw new Error(`handshakeAction: unknown chain "${opts.chainId}"`);
+    const coin = PROTOCOL_COIN_TICKER[descriptor.coin];
+    if (!coin) throw new Error(`handshakeAction: no protocol coin ticker for "${descriptor.coin}"`);
+
+    const source = normalizeSource(opts.from, 'handshakeAction');
+    const params = {
+        // VERSION selects format 0 vs 1 (identical field shapes; the encoder's
+        // FormatSelector picks the version from this explicit value).
+        VERSION: String(version),
+        COIN: coin,
+        DESTINATION: opts.destination,
+        ENCRYPTION_METHOD: '2',
+        ENCRYPTION_KEY: source.publicKey,
+    };
+
+    const pendingTxMeta = opts.trackPendingTx === false ? undefined : {
+        fromAddress: source.address,
+        toAddress: opts.destination,
+        actionSummary: version === 0
+            ? `Request an encrypted session with ${opts.destination}`
+            : `Respond to an encrypted-session request from ${opts.destination}`,
     };
 
     return submitAction({
