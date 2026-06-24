@@ -43,10 +43,11 @@ assert.ok(/seedSettingsForChains\(settings, chainRegistry, \[chainId\]\)/.test(f
 assert.ok(/await vault\.settings\.put\(seeded\)/.test(flowSrc),
     'activateChain persists the seeded settings');
 
-// 3. Flow refuses HW signers (FOLLOWUP work) and is idempotent
-//    against accounts that already have an address on the chain.
-assert.ok(/signer\.kind !== 'software'/.test(flowSrc),
-    'activateChain refuses non-software signers');
+// 3. Flow is HW-aware: address source tracks the signer kind (software
+//    'hd', hardware 'trezor'/'ledger'), and is idempotent against accounts
+//    that already have an address on the chain.
+assert.ok(/signer\.kind === 'software' \? 'hd' : signer\.kind/.test(flowSrc),
+    'activateChain derives address source from the signer kind (HW-aware)');
 assert.ok(/alreadyHasOnChain/.test(flowSrc),
     'activateChain skips accounts that already have an address on chainId');
 assert.ok(/skippedAccounts/.test(flowSrc),

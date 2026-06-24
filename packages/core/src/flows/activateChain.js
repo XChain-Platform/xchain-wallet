@@ -29,10 +29,12 @@
 // custom chain registry lands (§9.7) it can use the same primitive.
 //
 // Hardware-signer handling: §17.4 lists HW-derived addresses as the
-// signer's responsibility (addresses are derived against a SignerRecord
-// rather than the wallet's seed). Activating a new chain across a
-// HW-only account isn't well-defined yet, so this flow refuses signers
-// whose `kind !== 'software'`. The HW-aware path lands as a follow-up.
+// signer's responsibility (derived against a SignerRecord rather than the
+// wallet's seed). Hardware activation works the same as software, but the
+// caller MUST pass a connected RemoteSigner as `signer`: a HW-only wallet
+// has no seed in the vault to unlock, and deriving the new chain's first
+// address round-trips to the device. The resulting addresses carry
+// source 'trezor'/'ledger' and the signer's id, exactly like createAccount.
 
 import { createAddress } from '../schemas/address.js';
 import { unlockWalletRecord, WalletNotFoundError } from './unlockWallet.js';
@@ -44,7 +46,7 @@ import { seedSettingsForChains } from './seedSettings.js';
  * @property {string} chainId
  * @property {string} [password]                                   required when no pre-unlocked signer is supplied
  * @property {string} [bip39Passphrase]
- * @property {import('../signers/Signer.js').Signer} [signer]      pre-unlocked signer from the pool
+ * @property {import('../signers/Signer.js').Signer} [signer]      pre-unlocked signer: software from the pool, or a connected RemoteSigner for hardware (required for HW-only wallets, which have no seed to unlock)
  * @property {import('../storage/Vault.js').Vault} vault
  * @property {import('../registry/index.js').ChainRegistry} chainRegistry
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
@@ -118,12 +120,11 @@ export async function activateChain({
         });
     const ownsSigner = !providedSigner;
 
-    if (signer.kind !== 'software') {
-        if (ownsSigner && typeof signer.lock === 'function') signer.lock();
-        throw new Error(
-            'activateChain: hardware-signer activation not supported yet. Pair the chain via a software wallet first.',
-        );
-    }
+    // Address.source tracks the signer kind: software seeds produce 'hd'
+    // addresses; hardware devices produce 'trezor'/'ledger' addresses tied
+    // to their SignerRecord by signerId. For hardware the device must be
+    // connected so signer.getAddresses can derive the new chain's address.
+    const addressSource = signer.kind === 'software' ? 'hd' : signer.kind;
 
     const descriptor = chainRegistry.get(chainId);
     const addressType = descriptor.defaultAddressType;
@@ -153,7 +154,7 @@ export async function activateChain({
                 accountId: account.id,
                 chain: descriptor.coin,
                 network: descriptor.networkKind,
-                source: 'hd',
+                source: addressSource,
                 addressType,
                 derivationPath: derived.path,
                 address: derived.address,
