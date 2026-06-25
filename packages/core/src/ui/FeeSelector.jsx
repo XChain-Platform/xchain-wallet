@@ -15,6 +15,9 @@ import { InfoTip } from './InfoTip.jsx';
 const TIER_SPEEDS = ['low', 'normal', 'fast'];
 const SPEEDS_WITH_CUSTOM = [...TIER_SPEEDS, 'custom'];
 const SPEED_LABELS = { low: 'Low', normal: 'Normal', fast: 'Fast', custom: 'Custom' };
+// ETA-pill tint per priority: slower = warmer/riskier. Maps to the
+// per-tone classes in the stylesheet (red / orange / green / white).
+const ETA_TONE = { low: 'etaLow', normal: 'etaNormal', fast: 'etaFast', custom: 'etaCustom' };
 
 /**
  * FeeSelector (§44.2): Low / Normal / Fast / Custom slider. Rendering
@@ -42,6 +45,8 @@ const SPEED_LABELS = { low: 'Low', normal: 'Normal', fast: 'Fast', custom: 'Cust
  *                     in the same readout slot the tier modes use, so the live
  *                     fee stays visible as the user edits the rate.
  *   - disabled   `boolean`
+ *   - coinTicker native coin symbol (BTC / LTC / DOGE) shown after the fee
+ *               amount so it's unambiguous which coin the fee is paid in
  *
  * @typedef {object} FeeSelectorValue
  * @property {'low' | 'normal' | 'fast' | 'custom'} mode
@@ -56,24 +61,34 @@ export function FeeSelector({
     formatFiat,
     allowCustom = true,
     label = null,
+    coinTicker = '',
 }) {
     const customInputId = useId();
     const SPEEDS = allowCustom ? SPEEDS_WITH_CUSTOM : TIER_SPEEDS;
     const MAX_INDEX = SPEEDS.length - 1;
 
-    // Group label + contextual help. Rendered above both the empty
+    // Header row: field label + contextual help on the left, the ETA
+    // for the active tier on the right. Rendered above both the empty
     // state and the slider so the "what does this mean" affordance is
-    // always next to the control (§37 / G122 InfoTip integration).
-    const labelBlock = label ? (
-        <div
-            className={styles.label}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--xc-space-1)' }}
-        >
-            {label}
-            <InfoTip
-                aria="Network fee help"
-                label="Pick how fast this transaction confirms. Faster fees cost more; Custom sets an exact rate."
-            />
+    // always next to the control (§37 / G122 InfoTip integration). ETA
+    // sits up here rather than in the readout so the lower line is free
+    // to show the fee amount + coin + fiat.
+    const headerRow = (etaMinutes, speed) => (label || Number.isFinite(etaMinutes)) ? (
+        <div className={styles.header}>
+            {label ? (
+                <span className={styles.label}>
+                    {label}
+                    <InfoTip
+                        aria="Fee priority help"
+                        label="Pick how fast this transaction confirms. Faster fees cost more; Custom sets an exact rate."
+                    />
+                </span>
+            ) : <span />}
+            {Number.isFinite(etaMinutes) ? (
+                <span className={`${styles.headerEta} ${styles[ETA_TONE[speed]] || ''}`.trim()}>
+                    ~{etaMinutes} min
+                </span>
+            ) : null}
         </div>
     ) : null;
 
@@ -87,7 +102,7 @@ export function FeeSelector({
     if (!tiers || tierList.length === 0) {
         return (
             <div className={styles.wrap}>
-                {labelBlock}
+                {headerRow()}
                 <p className={styles.placeholder}>Fee estimate unavailable for this chain.</p>
             </div>
         );
@@ -127,7 +142,7 @@ export function FeeSelector({
 
     return (
         <div className={styles.wrap}>
-            {labelBlock}
+            {headerRow(activeEstimate?.etaMinutes, isCustom ? 'custom' : sliderSpeed)}
             <div className={styles.sliderBlock} data-active-speed={sliderSpeed}>
                 <input
                     type="range"
@@ -143,16 +158,13 @@ export function FeeSelector({
                         : `${SPEED_LABELS[sliderSpeed]}: ${activeEstimate?.coinAmount ?? ''}${activeEstimate?.etaMinutes ? ` · ~${activeEstimate.etaMinutes} min` : ''}`}
                     className={styles.slider}
                 />
-                <div
-                    className={styles.sliderTicks}
-                    style={{ gridTemplateColumns: `repeat(${SPEEDS.length}, 1fr)` }}
-                    aria-hidden="true"
-                >
-                    {SPEEDS.map((s) => (
+                <div className={styles.sliderTicks} aria-hidden="true">
+                    {SPEEDS.map((s, i) => (
                         <button
                             key={s}
                             type="button"
                             className={`${styles.sliderTick} ${sliderSpeed === s ? styles.sliderTickActive : ''}`.trim()}
+                            style={{ left: `calc(${MAX_INDEX ? i / MAX_INDEX : 0} * (100% - var(--fee-thumb)) + var(--fee-thumb) / 2)` }}
                             onClick={() => pickSpeed(s)}
                             disabled={disabled}
                             tabIndex={-1}
@@ -172,8 +184,8 @@ export function FeeSelector({
                                 {activeEstimate ? (
                                     <>
                                         {activeEstimate.coinAmount}
-                                        {activeEstimate.etaMinutes ? (
-                                            <span className={styles.sliderReadoutEta}> · ~{activeEstimate.etaMinutes} min</span>
+                                        {coinTicker ? (
+                                            <span className={styles.sliderReadoutCoin}> {coinTicker}</span>
                                         ) : null}
                                         {fiatStr ? (
                                             <span className={styles.sliderReadoutFiat}>{fiatStr}</span>

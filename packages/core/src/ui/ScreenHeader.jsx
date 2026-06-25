@@ -25,6 +25,8 @@ import styles from './ScreenHeader.module.css';
  *   back chevron in the leading slot. Omit to render an empty spacer.
  * @param {string} [props.backLabel]                  aria-label for the back
  *   button. Defaults to "Back".
+ * @param {boolean} [props.backDisabled]              disables the back button
+ *   (e.g. while a submit is in flight). The chevron stays visible but inert.
  * @param {import('react').ReactNode} props.title     centered title text.
  * @param {import('react').ReactNode} [props.titleIcon]   optional inline icon
  *   placed immediately to the left of the title (e.g. a route-action glyph
@@ -36,6 +38,7 @@ import styles from './ScreenHeader.module.css';
 export function ScreenHeader({
     onBack,
     backLabel = 'Back',
+    backDisabled = false,
     title,
     titleIcon = null,
     trailing = null,
@@ -48,6 +51,7 @@ export function ScreenHeader({
                     onClick={onBack}
                     className={styles.back}
                     aria-label={backLabel}
+                    disabled={backDisabled}
                 >
                     <BackIcon />
                 </button>

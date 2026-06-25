@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useState } from 'react';
-import { Screen, Button, Icon } from '@xchain-wallet/core/ui';
+import { Screen, Button, Icon, ScreenHeader } from '@xchain-wallet/core/ui';
 import { isDemoWallet, clearDemoWalletId, getDemoWalletExpiry } from '@xchain-wallet/core/flows';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { clearLastView } from '../utils/lastViewMemory.js';
@@ -95,19 +95,7 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
     }, [walletId, messaging]);
 
     const header = (
-        <div className={pickerStyles.header}>
-            <button
-                type="button"
-                onClick={onBack}
-                className={pickerStyles.iconBtn}
-                aria-label="Back"
-                title="Back"
-            >
-                <Icon.BackIcon />
-            </button>
-            <span className={pickerStyles.title}>Wallet details</span>
-            <span />
-        </div>
+        <ScreenHeader onBack={onBack} title="Wallet details" />
     );
 
     if (error) {

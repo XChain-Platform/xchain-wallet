@@ -54,6 +54,7 @@ import {
     Icon,
     StatusMessage,
     QrScanner,
+    ScreenHeader,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -68,7 +69,6 @@ import {
     addChunkToCollector,
     XCW_PREFIX,
 } from '../../uri/psbtQr.js';
-import pickerStyles from './WalletPicker.module.css';
 import styles from './IssueTokenForm.module.css';
 
 function arrayBufferToHex(buf) {
@@ -480,20 +480,7 @@ export function PsbtSignForm({ walletId, onBack }) {
     }
 
     const header = (
-        <div className={pickerStyles.header}>
-            <button
-                type="button"
-                onClick={onBack}
-                className={pickerStyles.iconBtn}
-                aria-label="Back"
-                title="Back"
-                disabled={busy}
-            >
-                <Icon.BackIcon />
-            </button>
-            <span className={pickerStyles.title}>Sign transaction</span>
-            <span style={{ width: 28 }} />
-        </div>
+        <ScreenHeader onBack={onBack} backDisabled={busy} title="Sign transaction" />
     );
 
     if (loadError) {

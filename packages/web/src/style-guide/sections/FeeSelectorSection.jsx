@@ -22,6 +22,25 @@ const SAMPLE_TIERS = {
     unit:   'sat/vB',
 };
 
+// Doc-page fiat stub. In-app the caller passes a real formatter that
+// converts the coin amount to the user's display currency via the price
+// oracle. Here a fixed BTC rate keeps the readout figure realistic.
+const formatFiat = (coinAmount) =>
+    `$${(parseFloat(coinAmount) * 60000).toFixed(2)} USD`;
+
+// Recompute a fee estimate from the user-typed Custom rate so the fee
+// amount + fiat keep showing in Custom mode. In-app this is what Send
+// passes via `customFeeEstimate`; here we scale off the sample tiers
+// (rate 1 sat/vB -> 0.000015 BTC).
+const customEstimateFor = (pick) => {
+    const rate = Number.isFinite(pick.customRate) ? Math.max(0, pick.customRate) : 0;
+    return {
+        coinAmount: (rate * 0.000015).toFixed(8),
+        rate: `${rate} sat/vB`,
+        rateValue: rate,
+    };
+};
+
 export function FeeSelectorSection() {
     const [sendPick, setSendPick] = useState({ mode: 'normal' });
     const [receivePick, setReceivePick] = useState({ mode: 'normal' });
@@ -35,7 +54,7 @@ export function FeeSelectorSection() {
             kicker="Low / Normal / Fast slider (optionally with Custom) over a native range input, styled with accent-color. Used anywhere the user expresses a fee preference: Send (typing the rate), Receive (encoding a preference into the QR), Settings defaults, etc."
         >
             <Guidance
-                what={<>A 3- or 4-stop slider over <code>&lt;input type="range"&gt;</code>, with tier readout (coin amount + ETA + rate) below the track. Custom mode reveals a numeric input for the rate. Renders a placeholder ("Fee estimate unavailable for this chain.") when no <code>tiers</code> are passed.</>}
+                what={<>A 3- or 4-stop slider over <code>&lt;input type="range"&gt;</code>. A header row carries the label (left) and the active tier's ETA (right); the readout below the track shows the fee amount + coin ticker + fiat (left) and the rate / Custom input (right). Tick labels are positioned under each slider nub. Renders a placeholder ("Fee estimate unavailable for this chain.") when no <code>tiers</code> are passed.</>}
                 when={<>Any form that submits a transaction or encodes a fee preference. Always use this (never build a one-off fee picker). Pulling tiers from <code>estimateNativeSendFeeTiers</code> (sync seed) + <code>fetchNativeSendFeeTiers</code> (live SDK upgrade) gives the consistent BTC/LTC/DOGE handling.</>}
                 whenNot={<>Settings panels that store the user's default fee strategy use a simpler radio group (Low/Normal/Fast/Custom) rather than this slider. The slider implies "this transaction" intent; settings imply "future transactions".</>}
                 variants={<>
@@ -64,10 +83,12 @@ useEffect(() => {
 }, [chainId, messaging]);
 
 <FeeSelector
-    label="Fee priority"
+    label="Priority"
     tiers={feeTiers}
     value={feePick}
     onChange={setFeePick}
+    coinTicker={coinTicker}  // BTC / LTC / DOGE, shown after the fee
+    formatFiat={formatFiat}  // coin amount -> display-currency string
     allowCustom={false}      // omit / true on Send; false on Receive
 />`}
             </Markup>
@@ -77,6 +98,9 @@ useEffect(() => {
                     tiers={SAMPLE_TIERS}
                     value={sendPick}
                     onChange={setSendPick}
+                    customEstimate={sendPick.mode === 'custom' ? customEstimateFor(sendPick) : null}
+                    coinTicker="BTC"
+                    formatFiat={formatFiat}
                 />
             </LiveExample>
 
@@ -86,16 +110,20 @@ useEffect(() => {
                     value={receivePick}
                     onChange={setReceivePick}
                     allowCustom={false}
+                    coinTicker="BTC"
+                    formatFiat={formatFiat}
                 />
             </LiveExample>
 
-            <LiveExample label="With inline label (preferred over an external wrapper)">
+            <LiveExample label="With inline label: Priority + ETA on the label line, fee + fiat below">
                 <FeeSelector
-                    label="Fee priority"
+                    label="Priority"
                     tiers={SAMPLE_TIERS}
                     value={labeledPick}
                     onChange={setLabeledPick}
-                    allowCustom={false}
+                    customEstimate={labeledPick.mode === 'custom' ? customEstimateFor(labeledPick) : null}
+                    coinTicker="BTC"
+                    formatFiat={formatFiat}
                 />
             </LiveExample>
 

@@ -5,15 +5,62 @@
     margin-top: var(--xc-space-4);
 }
 
+.header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--xc-space-2);
+}
+
 .label {
     font-size: var(--xc-text-xs);
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.04em;
     color: var(--xc-text-muted);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+}
+
+.headerEta {
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+    border-radius: 999px;
+    padding: 1px 9px;
+    white-space: nowrap;
+}
+
+/* Tinted ETA pill, color-coded by priority: slower confirmation reads
+   warmer/riskier. Background is a soft tint of the semantic token so it
+   sits quietly next to the label. Custom has no preset ETA so it rarely
+   renders; when it does it gets a neutral white chip. */
+.etaLow {
+    background: color-mix(in srgb, var(--xc-danger) 14%, transparent);
+    color: var(--xc-danger);
+}
+
+.etaNormal {
+    background: color-mix(in srgb, var(--xc-warning) 14%, transparent);
+    color: var(--xc-warning);
+}
+
+.etaFast {
+    background: color-mix(in srgb, var(--xc-success) 14%, transparent);
+    color: var(--xc-success);
+}
+
+.etaCustom {
+    background: #FFFFFF;
+    color: #334155;
+    box-shadow: inset 0 0 0 1px var(--xc-border);
 }
 
 .sliderBlock {
+    /* Width of the native range thumb, used to align the tick labels
+       under each nub. Bump this if a browser renders a wider thumb and
+       the middle stops drift off-center. */
+    --fee-thumb: 16px;
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-1);
@@ -38,12 +85,17 @@
 }
 
 .sliderTicks {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: var(--xc-space-1);
+    position: relative;
+    height: 1.25em;
 }
 
 .sliderTick {
+    position: absolute;
+    /* `left` is set inline per stop to the thumb-center position; the
+       transform centers the label on it. First/last clamp to the edges
+       so they don't overflow the track. */
+    transform: translateX(-50%);
+    white-space: nowrap;
     background: transparent;
     border: none;
     padding: 0;
@@ -54,8 +106,8 @@
     text-align: center;
 }
 
-.sliderTick:first-child { text-align: start; }
-.sliderTick:last-child { text-align: end; }
+.sliderTick:first-child { transform: translateX(0); }
+.sliderTick:last-child { transform: translateX(-100%); }
 
 .sliderTick:disabled { cursor: not-allowed; }
 
@@ -78,15 +130,15 @@
     font-weight: 500;
 }
 
-.sliderReadoutEta {
+.sliderReadoutCoin {
     color: var(--xc-text-muted);
     font-weight: 400;
 }
 
 .sliderReadoutFiat {
     margin-inline-start: var(--xc-space-2);
-    background: color-mix(in srgb, var(--xc-accent-primary) 14%, transparent);
-    color: var(--xc-accent-primary);
+    background: color-mix(in srgb, var(--xc-success) 14%, transparent);
+    color: var(--xc-success);
     border-radius: 999px;
     padding: 1px 9px;
     font-size: var(--xc-text-sm);

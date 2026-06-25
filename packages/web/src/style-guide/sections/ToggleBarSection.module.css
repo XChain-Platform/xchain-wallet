@@ -1,0 +1,48 @@
+/* Copyright © 2025–2026 Dankest, LLC
+ * Based on XChain Platform by Dankest, LLC – https://dankest.llc
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ *
+ * This file is part of XChain Platform. Licensed under the GNU Affero
+ * General Public License v3.0 or later; see LICENSE.md. A commercial
+ * license (without AGPL source-disclosure terms) is available -
+ * contact legal@dankest.llc. */
+
+/* Mirrors `.segmented` / `.segment` / `.segmentActive` from
+   shared/routes/AddressList.module.css. Keep in sync with that source
+   of truth. */
+.segmented {
+    display: flex;
+    width: 100%;
+    border: 1px solid var(--xc-border-strong);
+    border-radius: var(--xc-radius-md);
+    overflow: hidden;
+}
+
+.segment {
+    flex: 1 1 0;
+    appearance: none;
+    background: var(--xc-surface);
+    border: none;
+    border-inline-start: 1px solid var(--xc-border);
+    padding: var(--xc-space-2) var(--xc-space-1);
+    font: inherit;
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    color: var(--xc-text-muted);
+    cursor: pointer;
+}
+
+.segment:first-child {
+    border-inline-start: none;
+}
+
+.segment:hover:not(.segmentActive) {
+    background: var(--xc-bg-muted);
+    color: var(--xc-text);
+}
+
+.segmentActive {
+    background: var(--xc-accent-primary);
+    color: #FFFFFF;
+}

@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useState } from 'react';
-import { Screen, Icon } from '@xchain-wallet/core/ui';
+import { Screen, Icon, ScreenHeader } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './ActionsMenu.module.css';
 import pickerStyles from './WalletPicker.module.css';
@@ -57,27 +57,20 @@ export function WalletPicker({
     }, [messaging]);
 
     const header = (
-        <div className={pickerStyles.header}>
-            <button
-                type="button"
-                onClick={onBack}
-                className={pickerStyles.iconBtn}
-                aria-label="Back"
-                title="Back"
-            >
-                <Icon.BackIcon />
-            </button>
-            <span className={pickerStyles.title}>Wallets</span>
-            <button
-                type="button"
-                onClick={onAddWallet}
-                className={pickerStyles.iconBtn}
-                aria-label="Add Wallet"
-                title="Add Wallet"
-            >
-                <Icon.PlusIcon />
-            </button>
-        </div>
+        <ScreenHeader
+            onBack={onBack}
+            title="Wallets"
+            trailing={(
+                <button
+                    type="button"
+                    onClick={onAddWallet}
+                    aria-label="Add Wallet"
+                    title="Add Wallet"
+                >
+                    <Icon.PlusIcon />
+                </button>
+            )}
+        />
     );
 
     return (

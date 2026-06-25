@@ -1,4 +1,4 @@
-/* Shared secondary-toolbar header. One CSS module — every screen
+/* Shared secondary-toolbar header. One CSS module, so every screen
    inherits the same chevron alignment, title centering, and trailing-
    action slot. See STYLE_GUIDE.md for the rationale. */
 
@@ -19,13 +19,17 @@
     color: var(--xc-accent-primary);
     font-size: var(--xc-text-sm);
     cursor: pointer;
-    /* Zero left padding + negative inline-start margin so the chevron's
-       left edge aligns with the AppHeader logo above. AppHeader pads
-       the outer bar by space-3; Screen.header pads by space-4. The
-       delta (space-3 − space-4) pulls this button leftward enough that
-       the icon glyph lines up with the logo's left edge. */
+    /* Align the chevron's point with the AppHeader logo's left edge.
+       Two offsets stack. First, the bar-padding delta: AppHeader pads its
+       bar by space-3, Screen.header pads by space-4, so the content box
+       starts 4px too far right. Second, the chevron glyph sits ~10px inside
+       its own 28px SVG (the BackIcon vertex is at 9/24 of the viewBox),
+       so a box-aligned button still reads indented. Subtract both so the
+       visible chevron point lands under the logo's left edge. Tune
+       --xc-page-header-chevron-nudge if a different chevron is swapped in. */
+    --xc-page-header-chevron-nudge: 10px;
     padding: var(--xc-space-1) var(--xc-space-2) var(--xc-space-1) 0;
-    margin-inline-start: calc(var(--xc-space-3) - var(--xc-space-4));
+    margin-inline-start: calc(var(--xc-space-3) - var(--xc-space-4) - var(--xc-page-header-chevron-nudge));
     border-radius: var(--xc-radius-sm);
     transition: color 0.12s ease;
 }
@@ -40,7 +44,12 @@
     outline-offset: 2px;
 }
 
-/* Scale the chevron SVG up — the default Icon stroke is sized at 18×18
+.back:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Scale the chevron SVG up. The default Icon stroke is sized at 18×18
    to fit inline next to text; the back chevron sits on its own at the
    leading edge of the toolbar so it can read bigger and still feel
    balanced. */
@@ -87,6 +96,39 @@
        trailing controls sit flush with the right edge of the AppHeader
        above. */
     margin-inline-end: calc(var(--xc-space-3) - var(--xc-space-4));
+}
+
+/* Trailing action buttons read as circles, the round counterpart to the
+   AppHeader's square menu buttons. Same 38px footprint as .menuBtn up in
+   AppHeader, so a Page-header action sits directly under an App-header
+   button with edges aligned; only the border-radius differs. */
+.trailing button {
+    appearance: none;
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    border: 1px solid var(--xc-border-strong);
+    background: transparent;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--xc-text);
+    cursor: pointer;
+    flex: 0 0 auto;
+}
+
+.trailing button:hover {
+    background: var(--xc-bg-muted);
+}
+
+.trailing button:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
+.trailing button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
 }
 
 .spacer {

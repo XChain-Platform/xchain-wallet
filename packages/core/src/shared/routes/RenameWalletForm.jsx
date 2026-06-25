@@ -9,10 +9,9 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useRef, useState } from 'react';
-import { Screen, Input, Icon } from '@xchain-wallet/core/ui';
+import { Screen, Input, Icon, ScreenHeader } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './CreateWallet.module.css';
-import pickerStyles from './WalletPicker.module.css';
 
 /**
  * RenameWalletForm: change a Wallet record's `name` field. No
@@ -72,29 +71,22 @@ export function RenameWalletForm({ walletId, initialName = '', onBack, onRenamed
     const saveDisabled = busy || name.trim().length === 0;
 
     const header = (
-        <div className={pickerStyles.header}>
-            <button
-                type="button"
-                onClick={onBack}
-                className={pickerStyles.iconBtn}
-                aria-label="Back"
-                title="Back"
-                disabled={busy}
-            >
-                <Icon.BackIcon />
-            </button>
-            <span className={pickerStyles.title}>Rename wallet</span>
-            <button
-                type="button"
-                onClick={() => handleSubmit()}
-                className={pickerStyles.iconBtn}
-                aria-label="Save"
-                title="Save"
-                disabled={saveDisabled}
-            >
-                <Icon.CheckIcon />
-            </button>
-        </div>
+        <ScreenHeader
+            onBack={onBack}
+            backDisabled={busy}
+            title="Rename wallet"
+            trailing={(
+                <button
+                    type="button"
+                    onClick={() => handleSubmit()}
+                    aria-label="Save"
+                    title="Save"
+                    disabled={saveDisabled}
+                >
+                    <Icon.CheckIcon />
+                </button>
+            )}
+        />
     );
 
     const formBody = (

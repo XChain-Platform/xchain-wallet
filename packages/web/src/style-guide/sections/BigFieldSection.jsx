@@ -25,6 +25,7 @@ const BIG_FIELD_STYLE = {
 export function BigFieldSection() {
     const [amount, setAmount] = useState('0.001');
     const [to, setTo] = useState('');
+    const [from, setFrom] = useState('');
     return (
         <Section
             id="big-field"
@@ -87,6 +88,21 @@ export function BigFieldSection() {
                     />
                     <button type="button" className={styles.iconButton} aria-label="Open address book">
                         <Icon.BookIcon />
+                    </button>
+                </div>
+            </LiveExample>
+
+            <LiveExample label="From field with Scan-QR inline action">
+                <div className={styles.fieldWrap}>
+                    <Input
+                        label="From"
+                        value={from}
+                        onChange={(e) => setFrom(e.target.value)}
+                        placeholder="Enter or paste an address or name…"
+                        style={{ ...BIG_FIELD_STYLE, paddingRight: '52px' }}
+                    />
+                    <button type="button" className={styles.iconButton} aria-label="Scan QR code">
+                        <Icon.ScanIcon />
                     </button>
                 </div>
             </LiveExample>

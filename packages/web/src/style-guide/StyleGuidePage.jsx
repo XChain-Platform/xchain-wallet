@@ -17,7 +17,7 @@ import { TypographySection } from './sections/TypographySection.jsx';
 import { SpacingSection } from './sections/SpacingSection.jsx';
 import { IconsSection } from './sections/IconsSection.jsx';
 import { AppHeaderSection } from './sections/AppHeaderSection.jsx';
-import { ScreenHeaderSection } from './sections/ScreenHeaderSection.jsx';
+import { PageHeaderSection } from './sections/PageHeaderSection.jsx';
 import { TabsSection } from './sections/TabsSection.jsx';
 import { QuickActionSection } from './sections/QuickActionSection.jsx';
 import { GrayCardSection } from './sections/GrayCardSection.jsx';
@@ -27,6 +27,7 @@ import { AssetHeroSection } from './sections/AssetHeroSection.jsx';
 import { AssetCardSection } from './sections/AssetCardSection.jsx';
 import { BalanceListSection } from './sections/BalanceListSection.jsx';
 import { PillSegmentedSection } from './sections/PillSegmentedSection.jsx';
+import { ToggleBarSection } from './sections/ToggleBarSection.jsx';
 import { BigFieldSection } from './sections/BigFieldSection.jsx';
 import { FeeSelectorSection } from './sections/FeeSelectorSection.jsx';
 import { VoiceSection } from './sections/VoiceSection.jsx';
@@ -39,7 +40,7 @@ const SECTIONS = [
     { id: 'spacing',               label: 'Spacing & radii',        Component: SpacingSection },
     { id: 'icons',                 label: 'Icon catalog',           Component: IconsSection },
     { id: 'app-header',            label: 'App header',             Component: AppHeaderSection },
-    { id: 'screen-header',         label: 'Screen header',          Component: ScreenHeaderSection },
+    { id: 'page-header',           label: 'Page header',            Component: PageHeaderSection },
     { id: 'tabs',                  label: 'Tabs (page-level)',      Component: TabsSection },
     { id: 'quick-action',          label: 'Quick-action card',      Component: QuickActionSection },
     { id: 'gray-card',             label: 'Gray surface card',      Component: GrayCardSection },
@@ -49,6 +50,7 @@ const SECTIONS = [
     { id: 'asset-card',            label: 'Asset card (Receive)',   Component: AssetCardSection },
     { id: 'balance-list',          label: 'Balance / search list',  Component: BalanceListSection },
     { id: 'pill-segmented',        label: 'Pill segmented',         Component: PillSegmentedSection },
+    { id: 'toggle-bar',            label: 'Toggle bar (filter)',    Component: ToggleBarSection },
     { id: 'big-field',             label: 'Big-field input',        Component: BigFieldSection },
     { id: 'fee-selector',          label: 'Fee selector',           Component: FeeSelectorSection },
     { id: 'voice',                 label: 'Voice & microcopy',      Component: VoiceSection },

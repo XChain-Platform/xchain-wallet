@@ -33,13 +33,13 @@ import {
     CopyButton,
     Icon,
     StatusMessage,
+    ScreenHeader,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useFormDraft } from '../hooks/useFormDraft.js';
 import { useSettings } from '../hooks/useSettings.js';
-import pickerStyles from './WalletPicker.module.css';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -192,20 +192,7 @@ export function SignMessageForm({ walletId, onBack }) {
     }
 
     const header = (
-        <div className={pickerStyles.header}>
-            <button
-                type="button"
-                onClick={onBack}
-                className={pickerStyles.iconBtn}
-                aria-label="Back"
-                title="Back"
-                disabled={busy}
-            >
-                <Icon.BackIcon />
-            </button>
-            <span className={pickerStyles.title}>Sign message</span>
-            <span style={{ width: 28 }} />
-        </div>
+        <ScreenHeader onBack={onBack} backDisabled={busy} title="Sign message" />
     );
 
     if (loadError) {

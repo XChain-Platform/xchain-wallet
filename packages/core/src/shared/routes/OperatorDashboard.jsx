@@ -15,7 +15,9 @@ import {
     Input,
     ChainBadge,
     AddressText,
- Icon,} from '@xchain-wallet/core/ui';
+    Icon,
+    ScreenHeader,
+} from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials } from '../components/SignCredentials.jsx';
@@ -113,13 +115,7 @@ export function OperatorDashboard({ walletId, chainId, address, onBack }) {
     const descriptor = chainRegistry.get(chainId);
 
     const header = (
-        <div className={dashStyles.header}>
-            <button type="button" onClick={onBack} className={dashStyles.back} aria-label="Back to staking">
-                <Icon.BackIcon />
-            </button>
-            <span className={dashStyles.title}>Operator dashboard</span>
-            <span className={dashStyles.spacer} />
-        </div>
+        <ScreenHeader onBack={onBack} backLabel="Back to staking" title="Operator dashboard" />
     );
 
     const allLoading = stakes.loading || delegations.loading || rewards.loading
