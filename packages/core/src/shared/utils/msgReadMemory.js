@@ -9,19 +9,23 @@
 // contact legal@dankest.llc.
 
 // Per-conversation read marks for the messaging inbox. Stores, per wallet +
-// account, a map of counterparty address -> the unix-seconds timestamp of the
-// newest message the user has seen in that thread. A conversation is "unread"
-// when an incoming message is newer than its stored mark.
+// account, a map of counterparty address -> the list of incoming-message txids
+// the user has opened past in that thread. A conversation is "unread" when it
+// holds an incoming message whose txid is not in that set.
+//
+// Why identity (txids) and not a high-water timestamp: the inbox re-derives
+// every message's block time from chain on each load, so a single stored
+// timestamp flips back to unread whenever the recomputed newest-incoming time
+// rises above it (a newly indexed message, a reorg shifting block_time). Seen
+// txids are stable from mempool through confirmation and reindex, so read state
+// stays put across reloads and only a genuinely new message (new txid) re-flags
+// the thread.
 //
 // Why localStorage instead of vault settings: like the rest of the wallet's
 // ephemeral per-device UI state (last view, active account), read marks are a
 // convenience that should not survive a from-seed restore. A user re-importing
 // their seed onto a fresh device starts with everything unread rather than
 // inheriting another device's read state, which is the safe default.
-//
-// The mark is keyed on the counterparty address, not on individual message
-// txids: it is smaller, and an old message arriving out of order still reads
-// as already-seen as long as it predates the mark.
 
 const NS = 'xc:msgRead:';
 
@@ -51,13 +55,13 @@ function safeRemove(key) {
 }
 
 /**
- * Read the read-mark map for a wallet + account. Returns an empty object when
+ * Read the seen-txid map for a wallet + account. Returns an empty object when
  * nothing is stored or the persisted value is unparseable, so callers can treat
- * a missing mark as "never read" (timestamp 0).
+ * a missing entry as "never read" (no txids seen).
  *
  * @param {string | null | undefined} walletId
  * @param {string | null | undefined} accountId
- * @returns {Record<string, number>}
+ * @returns {Record<string, string[]>}
  */
 export function readMsgRead(walletId, accountId) {
     if (typeof walletId !== 'string' || !walletId) return {};
@@ -65,17 +69,29 @@ export function readMsgRead(walletId, accountId) {
     if (typeof raw !== 'string' || !raw) return {};
     try {
         const parsed = JSON.parse(raw);
-        return parsed && typeof parsed === 'object' ? parsed : {};
+        if (!parsed || typeof parsed !== 'object') return {};
+        /** @type {Record<string, string[]>} */
+        const out = {};
+        for (const [cp, value] of Object.entries(parsed)) {
+            // Each entry is the list of seen incoming txids. Legacy installs
+            // stored a single high-water timestamp (a number) here; that can't
+            // be mapped to txids, so it is dropped and the thread reads as
+            // unread once after upgrade (the module's safe default).
+            if (Array.isArray(value)) {
+                out[cp] = value.filter((t) => typeof t === 'string' && t);
+            }
+        }
+        return out;
     } catch { return {}; }
 }
 
 /**
- * Persist the full read-mark map for a wallet + account, replacing any prior
+ * Persist the full seen-txid map for a wallet + account, replacing any prior
  * value. Callers hold the map in state, update it, and write the whole thing.
  *
  * @param {string | null | undefined} walletId
  * @param {string | null | undefined} accountId
- * @param {Record<string, number>} map
+ * @param {Record<string, string[]>} map
  */
 export function writeMsgRead(walletId, accountId, map) {
     if (typeof walletId !== 'string' || !walletId) return;

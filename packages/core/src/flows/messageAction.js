@@ -61,7 +61,8 @@ export class PubkeyNotFoundError extends Error {
  * @property {string} [bip39Passphrase]
  * @property {import('../registry/index.js').ChainRegistry} chainRegistry
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
- * @property {string} chainId
+ * @property {string} chainId               destination/COIN chain (recipient's network)
+ * @property {string} [broadcastChainId]    chain that funds + broadcasts the tx; defaults to chainId
  * @property {import('./sendToken.js').SourceRef | import('../schemas/address.js').Address} from
  * @property {string} destination     recipient address
  * @property {string} message         plaintext message body
@@ -88,11 +89,25 @@ export async function messageAction(opts) {
         throw new Error('messageAction: message is required');
     }
 
+    // The MESSAGE wire format separates the destination's network (COIN) from
+    // the chain the transaction is broadcast on. Per protocol/actions/MESSAGE.md:
+    // "messages can be broadcast on any chain regardless of the destination's
+    // chain (e.g. send a message to a BTC address via the DOGE network for
+    // cheaper/faster transactions)". So `chainId` is the destination/COIN chain
+    // (it sets COIN and is where the recipient's pubkey is resolved), while
+    // `broadcastChainId` (defaulting to it) funds the tx and pays the fee.
     const descriptor = opts.chainRegistry.get(opts.chainId);
     if (!descriptor) throw new Error(`messageAction: unknown chain "${opts.chainId}"`);
     const coin = PROTOCOL_COIN_TICKER[descriptor.coin];
     if (!coin) throw new Error(`messageAction: no protocol coin ticker for "${descriptor.coin}"`);
+    const broadcastChainId = opts.broadcastChainId || opts.chainId;
+    if (!opts.chainRegistry.get(broadcastChainId)) {
+        throw new Error(`messageAction: unknown broadcast chain "${broadcastChainId}"`);
+    }
 
+    // `from` is an address on the broadcast chain (it provides the funding
+    // UTXOs and signs). `sdk` targets the destination chain: it resolves the
+    // recipient's pubkey and provides the (chain-agnostic) encryption helpers.
     const source = normalizeSource(opts.from, 'messageAction');
     const sdk = opts.sdkRegistry.get(opts.chainId);
     // method: null = plaintext (v3), 1 = ECIES (v2), 2 = ECDH session (v2).
@@ -111,7 +126,7 @@ export async function messageAction(opts) {
                 );
             }
             return source.derivationPath
-                ? opts.signer.exportWifForPath({ chainId: opts.chainId, path: source.derivationPath })
+                ? opts.signer.exportWifForPath({ chainId: broadcastChainId, path: source.derivationPath })
                 : opts.signer.exportWifForAddressId(source.addressId);
         }
         const addressId = (opts.from && (opts.from.id || opts.from.addressId)) || source.addressId;
@@ -182,7 +197,7 @@ export async function messageAction(opts) {
         bip39Passphrase: opts.bip39Passphrase,
         chainRegistry: opts.chainRegistry,
         sdkRegistry: opts.sdkRegistry,
-        chainId: opts.chainId,
+        chainId: broadcastChainId,
         actionData: { action: 'MESSAGE', params },
         encoderOpts: {
             pubkey: source.publicKey,

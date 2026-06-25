@@ -141,12 +141,16 @@ export default defineConfig({
     server: {
         port: 5173,
         host: '0.0.0.0',
-        allowedHosts: ['localhost', '127.0.0.1'],
+        // `devhost` is the dev VM hostname used to demo the wallet over the
+        // LAN; Vite blocks unlisted Host headers, so it has to be allowed here.
+        // Reach it over HTTPS (VITE_HTTPS=1) so the non-localhost origin is still
+        // a secure context for crypto.subtle (see the secure-context note above).
+        allowedHosts: ['localhost', '127.0.0.1', 'devhost'],
     },
     preview: {
         port: 4173,
         host: '0.0.0.0',
-        allowedHosts: ['localhost', '127.0.0.1'],
+        allowedHosts: ['localhost', '127.0.0.1', 'devhost'],
     },
     plugins: [
         react(),

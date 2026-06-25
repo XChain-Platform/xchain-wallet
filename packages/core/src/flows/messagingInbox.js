@@ -70,7 +70,7 @@ import { exportPrivateKey } from './exportPrivateKey.js';
 // propagate; the callers decide whether to abort.
 async function fetchInboxForAddress({
     vault, walletId, password, bip39Passphrase,
-    chainRegistry, sdkRegistry, addressId, type, passthroughOpts, injectedSigner,
+    chainRegistry, sdkRegistry, addressId, type, passthroughOpts, injectedSigner, queryChainIds,
 }) {
     let wif; let address; let chainId;
     if (injectedSigner) {
@@ -92,12 +92,39 @@ async function fetchInboxForAddress({
         }));
     }
 
-    const sdk = sdkRegistry.get(chainId);
-    const messages = await sdk.getMessagesForAddress(
-        address,
-        { ...(passthroughOpts || {}), wif, type },
-    );
-    return { address, chainId, messages: Array.isArray(messages) ? messages : [] };
+    // A MESSAGE addressed to this address can be broadcast on any chain (the
+    // wallet routes sends over Dogecoin for cheap fees; see messageAction.js +
+    // protocol/actions/MESSAGE.md). So scan every chain the account uses, not
+    // just this address's home chain, decrypting with this address's WIF (the
+    // COIN/destination is this address regardless of where it was broadcast).
+    // De-dupe by txid; a same-chain send appears only once anyway.
+    const chainsToScan = (Array.isArray(queryChainIds) && queryChainIds.length)
+        ? queryChainIds : [chainId];
+    const merged = [];
+    const seenTxids = new Set();
+    for (const scanChainId of chainsToScan) {
+        let sdk;
+        try { sdk = sdkRegistry.get(scanChainId); } catch { continue; }
+        let rows;
+        try {
+            rows = await sdk.getMessagesForAddress(address, { ...(passthroughOpts || {}), wif, type });
+        } catch (err) {
+            // The address's own chain is authoritative: a failure there is a
+            // real transport/auth error the caller must see. Other chains are
+            // best-effort cross-chain scans, so a failure there is skipped.
+            if (scanChainId === chainId) throw err;
+            continue;
+        }
+        for (const msg of (Array.isArray(rows) ? rows : [])) {
+            const txid = msg && msg.txid;
+            if (txid) {
+                if (seenTxids.has(txid)) continue;
+                seenTxids.add(txid);
+            }
+            merged.push(msg);
+        }
+    }
+    return { address, chainId, messages: merged };
 }
 
 // Errors that are deterministic across every address in a sweep (the
@@ -193,13 +220,27 @@ export async function getMessagingInboxSweep({
     const merged = [];
     const seenTxids = new Set();
 
+    // The set of chains this account holds addresses on. Messages can be
+    // broadcast on any of them regardless of the recipient's chain, so every
+    // address is scanned across all of these (see fetchInboxForAddress). Read
+    // from the address records directly, which needs no keys/password.
+    const queryChainIds = [];
+    const seenChains = new Set();
+    for (const addressId of addressIds) {
+        if (typeof addressId !== 'string' || !addressId) continue;
+        const rec = await vault.addresses.get(addressId).catch(() => null);
+        if (!rec) continue;
+        const cid = chainRegistry.chainIdFor(rec.chain, rec.network);
+        if (cid && !seenChains.has(cid)) { seenChains.add(cid); queryChainIds.push(cid); }
+    }
+
     for (const addressId of addressIds) {
         if (typeof addressId !== 'string' || addressId.length === 0) continue;
         let result;
         try {
             result = await fetchInboxForAddress({
                 vault, walletId, password, bip39Passphrase,
-                chainRegistry, sdkRegistry, addressId, type, passthroughOpts, injectedSigner,
+                chainRegistry, sdkRegistry, addressId, type, passthroughOpts, injectedSigner, queryChainIds,
             });
         } catch (err) {
             if (err && SWEEP_FATAL_ERRORS.has(err.name)) throw err;

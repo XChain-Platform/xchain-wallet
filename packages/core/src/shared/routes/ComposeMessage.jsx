@@ -14,16 +14,21 @@ import {
     ScreenHeader,
     Button,
     Input,
+    Textarea,
+    IconSelect,
+    FeeSelector,
     ChainBadge,
-    ChainPicker,
     AddressText,
  Icon,} from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
+import { chainIconSmallUrl } from '../../branding/branding.js';
+import { isValidAddressAnyNetwork, detectAddressCoin } from '../utils/addressValidation.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
-import { estimateNativeSendFee } from '../../flows/feeEstimate.js';
+import { estimateNativeSendFee, estimateNativeSendFeeTiers, customFeeEstimate } from '../../flows/feeEstimate.js';
+import { getFiatRate, coinToFiat } from '../../flows/priceLookup.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -31,6 +36,16 @@ const chainRegistry = registryLib.defaultRegistry();
 // User-facing native ticker for a chain, used to label the network-fee
 // estimate on the review screen.
 const NATIVE_TICKER_BY_CHAIN = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
+
+// Delivery-network dropdown: user-facing coin labels, display order, and the
+// short "why pick this chain" note shown in brackets next to each network.
+const COIN_LABEL = { bitcoin: 'Bitcoin', litecoin: 'Litecoin', dogecoin: 'Dogecoin' };
+const COIN_ORDER = { bitcoin: 0, litecoin: 1, dogecoin: 2 };
+const COIN_CHARACTERISTIC = {
+    bitcoin: 'slowest + strongest',
+    litecoin: 'faster + cheaper',
+    dogecoin: 'fastest + cheapest',
+};
 
 /**
  * §41.7.3 Compose encrypted message.
@@ -85,6 +100,11 @@ export function ComposeMessage({
     const [toAddress, setToAddress] = useState(initialToAddress || '');
     const [message, setMessage] = useState('');
     const [password, setPassword] = useState('');
+    // Network-fee tier picker (Low / Normal / Fast / Custom), mirroring Send.
+    // Custom mode reveals a rate input. Defaults to Normal.
+    const [feePick, setFeePick] = useState(
+        /** @type {{ mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }} */ ({ mode: 'normal' }),
+    );
     const [pubkeyState, setPubkeyState] = useState(
         /** @type {'idle' | 'checking' | 'found' | 'missing'} */ ('idle'),
     );
@@ -119,9 +139,19 @@ export function ComposeMessage({
                     setLoadError('No addresses yet. Use Receive to generate one before sending.');
                     return;
                 }
+                // Messaging defaults to Dogecoin: a MESSAGE pays a native miner
+                // fee, and DOGE is by far the cheapest supported chain, so it
+                // keeps sending effectively free. Honor an explicit chain passed
+                // from the inbox (e.g. a reply, which must stay on the
+                // conversation's chain); otherwise prefer a Dogecoin address the
+                // wallet holds, falling back to the first chain if it has none.
+                const chainKeys = Object.keys(byChain);
+                const dogeChain = chainKeys.find(
+                    (cid) => chainRegistry.get(cid)?.coin === 'dogecoin',
+                );
                 const preferredChain = initialChainId && byChain[initialChainId]
                     ? initialChainId
-                    : Object.keys(byChain)[0];
+                    : (dogeChain || chainKeys[0]);
                 setChainId((cur) => cur || preferredChain);
                 if (!fromAddressId) {
                     const hdAddr = (byChain[preferredChain] || []).find(
@@ -136,8 +166,21 @@ export function ComposeMessage({
         return () => { cancelled = true; };
     }, [walletId, messaging, initialChainId, fromAddressId]);
 
+    // The recipient's own chain (the message's COIN / where their key is looked
+    // up), derived from the address rather than the delivery network: a message
+    // can be addressed to a Bitcoin address yet broadcast over Dogecoin. When
+    // the coin can't be told from the address (shared testnet/regtest leaders),
+    // fall back to the delivery network. `chainId` stays the broadcast/fee chain.
+    const destChainId = useMemo(() => {
+        if (!chainId) return chainId;
+        const network = chainRegistry.get(chainId)?.networkKind;
+        const coin = detectAddressCoin(toAddress);
+        if (!coin || !network) return chainId;
+        return chainRegistry.chainIdFor(coin, network) || chainId;
+    }, [toAddress, chainId]);
+
     useEffect(() => {
-        if (!chainId || !toAddress.trim()) {
+        if (!destChainId || !toAddress.trim()) {
             setPubkeyState('idle');
             setSendUnencrypted(false);
             return undefined;
@@ -146,7 +189,7 @@ export function ComposeMessage({
         setPubkeyState('checking');
         const addr = toAddress.trim();
         const handle = setTimeout(() => {
-            messaging.getRecipientPubkey({ chainId, address: addr })
+            messaging.getRecipientPubkey({ chainId: destChainId, address: addr })
                 .then((pubkey) => {
                     if (cancelled) return;
                     setPubkeyState(pubkey ? 'found' : 'missing');
@@ -157,7 +200,7 @@ export function ComposeMessage({
                 });
         }, 400);
         return () => { cancelled = true; clearTimeout(handle); };
-    }, [chainId, toAddress, messaging]);
+    }, [destChainId, toAddress, messaging]);
 
     useEffect(() => {
         if (stage === 'review') {
@@ -177,6 +220,106 @@ export function ComposeMessage({
         signerId: hw ? fromAddress?.signerId : null,
     });
 
+    // The "Delivery network" options: one per chain the account holds, labeled
+    // by coin and ordered BTC, LTC, DOGE. The selected chain (`chainId`) is the
+    // network the message is delivered on: it sets COIN, resolves the
+    // recipient's pubkey, funds the tx, and pays the fee. Defaults to Dogecoin
+    // (see the address-load effect) since it's the cheapest to deliver on.
+    const deliveryOptions = useMemo(() => {
+        const out = [];
+        for (const cid of Object.keys(addressesByChain || {})) {
+            const coin = chainRegistry.get(cid)?.coin;
+            if (coin) out.push({ chainId: cid, coin, label: COIN_LABEL[coin] || coin });
+        }
+        out.sort((a, b) => (COIN_ORDER[a.coin] ?? 9) - (COIN_ORDER[b.coin] ?? 9));
+        return out;
+    }, [addressesByChain]);
+
+    // Network dropdown rows: coin logo + "Coin (characteristic)" so the user
+    // sees the trade-off (Dogecoin fastest + cheapest, Bitcoin slowest +
+    // strongest) at a glance.
+    const networkOptions = useMemo(() => deliveryOptions.map((o) => {
+        const note = COIN_CHARACTERISTIC[o.coin];
+        const url = chainIconSmallUrl(o.chainId);
+        return {
+            value: o.chainId,
+            label: note ? `${o.label} (${note})` : o.label,
+            icon: url ? <img src={url} alt="" /> : null,
+        };
+    }), [deliveryOptions]);
+
+    // Encryption dropdown rows: a lock for the encrypted methods, an open lock
+    // for plain text, each with a one-line "who can read it" note.
+    const encryptionOptions = useMemo(() => {
+        const opts = [
+            { value: 'ecies', label: 'Standard (ECIES)', sub: 'Only the recipient can read it', icon: <Icon.LockIcon /> },
+        ];
+        if (!hw) {
+            opts.push({ value: 'ecdh', label: 'Shared key (ECDH)', sub: 'You and the recipient can read it', icon: <Icon.LockIcon /> });
+        }
+        opts.push({ value: 'plaintext', label: 'Plain text', sub: 'Anyone can read it', icon: <Icon.UnlockIcon /> });
+        return opts;
+    }, [hw]);
+
+    // Auto-pick the funding address (first HD/imported address) on the selected
+    // delivery network, so the form needs no separate "from address" field.
+    useEffect(() => {
+        if (!addressesByChain || !chainId) return;
+        const addrs = addressesByChain[chainId] || [];
+        if (fromAddressId && addrs.some((a) => a.id === fromAddressId)) return;
+        const hd = addrs.find((a) => a.source === 'hd' || a.source === 'imported-wif');
+        setFromAddressId(hd ? hd.id : null);
+    }, [chainId, addressesByChain, fromAddressId]);
+
+    // Network-fee tiers for the selected delivery network, plus the live
+    // estimate for the current pick (a tier, or the custom rate). Drives the
+    // FeeSelector and the review screen's fee line.
+    const feeTiers = useMemo(
+        () => estimateNativeSendFeeTiers({ chainId, chainRegistry }),
+        [chainId],
+    );
+    const customEstimate = useMemo(
+        () => (feePick.mode === 'custom'
+            ? customFeeEstimate({ chainId, chainRegistry, rate: Number(feePick.customRate) || 0 })
+            : null),
+        [chainId, feePick],
+    );
+    const selectedFeeEstimate = feePick.mode === 'custom'
+        ? customEstimate
+        : (feeTiers ? feeTiers[feePick.mode] : estimateNativeSendFee({ chainId, chainRegistry, speed: feePick.mode }));
+
+    // Fiat value of a fee amount, paid on the delivery network. Passed to the
+    // FeeSelector so each tier's readout shows its cost in a colored bubble next
+    // to the time estimate. Tiny sub-cent fees collapse to "< $0.01".
+    const fiatRate = useMemo(
+        () => getFiatRate({ chainCoin: chainRegistry.get(chainId)?.coin, fiatCurrency: 'USD' }),
+        [chainId],
+    );
+    const fiatForFee = useMemo(() => (coinAmount) => {
+        const v = coinToFiat(coinAmount, fiatRate);
+        if (v == null || !Number.isFinite(v) || v <= 0) return null;
+        return v < 0.01 ? '< $0.01' : `$${v.toFixed(2)}`;
+    }, [fiatRate]);
+
+    // Catch random text before review. A message can be delivered on any chain
+    // regardless of the recipient's chain, so the address is validated only as a
+    // real address (any supported network), NOT against the delivery network.
+    // Only flags once the user has typed something.
+    const addressInvalid = useMemo(
+        () => Boolean(toAddress.trim()) && !isValidAddressAnyNetwork(toAddress),
+        [toAddress],
+    );
+    const addressError = addressInvalid ? 'Enter a valid address' : undefined;
+
+    // The selected encryption, as a single dropdown value. 'plaintext' maps to
+    // the unencrypted (v3) send; 'ecies'/'ecdh' are the encrypted methods.
+    const encryptionValue = sendUnencrypted ? 'plaintext' : encryptionChoice;
+    function onEncryptionChange(value) {
+        if (value === 'plaintext') { setSendUnencrypted(true); return; }
+        setSendUnencrypted(false);
+        setEncryptionChoice(value);
+    }
+
     // Form submit: run the same guards that gate a real send, then move to the
     // review stage. No signing or broadcast happens here; the message is only
     // sent once the user confirms on the review screen via handleSubmit.
@@ -184,8 +327,10 @@ export function ComposeMessage({
         event.preventDefault();
         if (stage !== 'form') return;
         if (!fromAddress || !chainId || !toAddress.trim() || !message.trim()) return;
-        if (pubkeyState === 'missing' && !sendUnencrypted) return;
-        if (pubkeyState === 'checking') return;
+        if (addressInvalid) return;
+        // Plain text needs no recipient key, so it never waits on (or is blocked
+        // by) the pubkey lookup; encrypted sends require a resolved key.
+        if (!sendUnencrypted && (pubkeyState === 'missing' || pubkeyState === 'checking')) return;
         if (!hw && !signerReady && password.length === 0) return;
         if (hw && hwStatus !== 'available') return;
         setSubmitError(null);
@@ -196,7 +341,8 @@ export function ComposeMessage({
         event.preventDefault();
         if (stage === 'submitting') return;
         if (!fromAddress || !chainId || !toAddress.trim() || !message.trim()) return;
-        if (pubkeyState === 'missing' && !sendUnencrypted) return;
+        if (addressInvalid) return;
+        if (!sendUnencrypted && pubkeyState === 'missing') return;
         if (!hw && !signerReady && password.length === 0) return;
         if (hw && hwStatus !== 'available') return;
 
@@ -205,7 +351,11 @@ export function ComposeMessage({
         try {
             const base = {
                 walletId,
-                chainId,
+                // chainId = the recipient's chain (sets COIN, resolves their
+                // key); broadcastChainId = the delivery network that funds + pays
+                // the fee. They differ when messaging e.g. a BTC address via DOGE.
+                chainId: destChainId,
+                broadcastChainId: chainId,
                 from: {
                     address: fromAddress.address,
                     publicKey: fromAddress.publicKey,
@@ -216,7 +366,7 @@ export function ComposeMessage({
                 },
                 destination: toAddress.trim(),
                 message: message,
-                method: pubkeyState === 'missing' && sendUnencrypted
+                method: sendUnencrypted
                     ? null
                     : (encryptionChoice === 'ecdh' && !hw ? 2 : 1),
             };
@@ -286,6 +436,7 @@ export function ComposeMessage({
         <ScreenHeader
             onBack={onBack}
             title={stage === 'review' || stage === 'submitting' ? 'Review message' : 'New message'}
+            titleIcon={<Icon.MessageIcon />}
         />
     );
     const wrap = (children) => (
@@ -324,19 +475,20 @@ export function ComposeMessage({
         );
     }
 
-    const chainIds = Object.keys(addressesByChain || {});
-
     if (stage === 'review' || stage === 'submitting') {
-        const fee = estimateNativeSendFee({ chainId, chainRegistry });
+        // Fee reflects the picked tier/custom rate on the delivery network.
+        const fee = selectedFeeEstimate;
         const ticker = descriptor?.coin
             ? (NATIVE_TICKER_BY_CHAIN[descriptor.coin] || descriptor.coin.toUpperCase())
             : '';
         const feeText = fee
             ? `${fee.coinAmount} ${ticker}`.trim() + (fee.rate ? ` (${fee.rate})` : '')
             : 'Estimate unavailable';
-        const unencrypted = pubkeyState === 'missing' && sendUnencrypted;
+        // Plain text is whatever the user selected, not only the pubkey-missing
+        // fallback: they can deliberately send plaintext even to a known key.
+        const unencrypted = sendUnencrypted;
         const encryptionLabel = unencrypted
-            ? 'Unencrypted plaintext'
+            ? 'Plain text'
             : (encryptionChoice === 'ecdh' && !hw ? 'ECDH' : 'ECIES');
         return wrap(
             <form onSubmit={handleSubmit} noValidate>
@@ -416,68 +568,46 @@ export function ComposeMessage({
 
     return wrap(
         <form onSubmit={handleReview} noValidate>
-            <ChainPicker
-                label="From chain"
-                value={chainId}
-                onChange={(next) => { setChainId(next); setFromAddressId(null); }}
-                chainIds={chainIds}
-                chainRegistry={chainRegistry}
-            />
-
-            <label className={styles.fieldLabel}>
-                <span>From address</span>
-                <select
-                    className={styles.select}
-                    value={fromAddressId || ''}
-                    onChange={(e) => setFromAddressId(e.target.value)}
-                >
-                    {(addressesByChain[chainId] || [])
-                        .filter((a) => a.source === 'hd' || a.source === 'imported-wif' || a.source === 'trezor' || a.source === 'ledger')
-                        .map((a) => (
-                            <option key={a.id} value={a.id}>{a.address}</option>
-                        ))}
-                </select>
-            </label>
-
+            {/* 1. Address (recipient) */}
             <Input
-                label="To address"
+                label="Address"
                 value={toAddress}
                 onChange={(e) => setToAddress(e.target.value)}
                 placeholder="Recipient address"
                 autoComplete="off"
                 autoCorrect="off"
                 spellCheck={false}
+                error={addressError}
             />
 
-            {pubkeyState === 'checking' ? (
-                <p className={styles.hint}>Looking up recipient's public key…</p>
+            {/* 2. Message */}
+            <Textarea
+                label="Message"
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                rows={isFull ? 6 : 4}
+                placeholder="Write your message…"
+                style={{ minHeight: isFull ? '6rem' : '4rem' }}
+            />
+
+            {/* 3. Encryption */}
+            <IconSelect
+                label="Encryption"
+                value={encryptionValue}
+                onChange={onEncryptionChange}
+                options={encryptionOptions}
+            />
+            {pubkeyState === 'checking' && encryptionValue !== 'plaintext' ? (
+                <p className={styles.hint} style={{ marginTop: '0.25rem' }}>
+                    Looking up recipient's public key…
+                </p>
             ) : null}
-            {pubkeyState === 'found' ? (
-                <div className={styles.hint} style={{ marginTop: '0.25rem' }}>
-                    <p style={{ margin: '0 0 0.35rem' }}>✓ Recipient public key found. Choose encryption:</p>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                        <input
-                            type="radio"
-                            name="encryptionChoice"
-                            checked={encryptionChoice === 'ecies'}
-                            onChange={() => setEncryptionChoice('ecies')}
-                        />
-                        Standard (ECIES): only the recipient can read it.
-                    </label>
-                    {!hw ? (
-                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                            <input
-                                type="radio"
-                                name="encryptionChoice"
-                                checked={encryptionChoice === 'ecdh'}
-                                onChange={() => setEncryptionChoice('ecdh')}
-                            />
-                            Shared key (ECDH): both you and the recipient can read it.
-                        </label>
-                    ) : null}
-                </div>
+            {pubkeyState === 'found' && encryptionValue !== 'plaintext' ? (
+                <p className={styles.hint} style={{ marginTop: '0.25rem' }}>
+                    ✓ Recipient public key found.
+                </p>
             ) : null}
-            {pubkeyState === 'missing' ? (
+            {pubkeyState === 'missing' && encryptionValue !== 'plaintext' ? (
                 <div
                     role="alert"
                     style={{
@@ -489,74 +619,61 @@ export function ComposeMessage({
                     }}
                 >
                     <p style={{ margin: '0 0 0.5rem' }}>
-                        We don't know the recipient's public key yet. They need to have sent a
-                        transaction before we can encrypt.
+                        We don't know the recipient's public key yet, so we can't encrypt. They need to
+                        send a transaction first, or pick "Plain text" above.
                     </p>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                        <input
-                            type="checkbox"
-                            checked={sendUnencrypted}
-                            onChange={(e) => setSendUnencrypted(e.target.checked)}
-                        />
-                        Continue anyway with an unencrypted message.
-                    </label>
-                    <div style={{ marginTop: '0.5rem' }}>
-                        {handshakeSent ? (
-                            <p style={{ margin: 0 }} role="status">
-                                ✓ Key request sent. Once they respond or send any transaction, you can
-                                message them encrypted.
-                            </p>
-                        ) : (
-                            <Button
-                                type="button"
-                                variant="secondary"
-                                size="sm"
-                                loading={handshakeBusy}
-                                onClick={handleRequestSession}
-                            >
-                                Request encrypted session (publish your key)
-                            </Button>
-                        )}
-                    </div>
+                    {handshakeSent ? (
+                        <p style={{ margin: 0 }} role="status">
+                            ✓ Key request sent. Once they respond or send any transaction, you can
+                            message them encrypted.
+                        </p>
+                    ) : (
+                        <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            loading={handshakeBusy}
+                            onClick={handleRequestSession}
+                        >
+                            Request encrypted session (publish your key)
+                        </Button>
+                    )}
                 </div>
             ) : null}
 
-            <label className={styles.fieldLabel} style={{ marginTop: '0.5rem' }}>
-                <span>Message</span>
-                <textarea
-                    className={styles.select}
-                    value={message}
-                    onChange={(e) => setMessage(e.target.value)}
-                    rows={isFull ? 6 : 4}
-                    placeholder="Write your message…"
-                    style={{ minHeight: isFull ? '6rem' : '4rem', resize: 'vertical', fontFamily: 'inherit' }}
-                />
-            </label>
+            {/* 4. Delivery network */}
+            <IconSelect
+                label="Delivery network"
+                value={chainId || ''}
+                onChange={(v) => { setChainId(v); setFromAddressId(null); }}
+                options={networkOptions}
+            />
 
-            {fromAddress && chainId ? (
-                <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
-                    <dt className={styles.detailsLabel}>From</dt>
-                    <dd className={styles.detailsValue}>
-                        <AddressText address={fromAddress.address} />
-                    </dd>
-                </dl>
+            {/* 5. Network fee (Low / Normal / Fast / Custom slider) */}
+            {feeTiers ? (
+                <FeeSelector
+                    label="Network fee"
+                    formatFiat={fiatForFee}
+                    tiers={feeTiers}
+                    value={feePick}
+                    onChange={setFeePick}
+                    customEstimate={feePick.mode === 'custom' ? customEstimate : null}
+                />
             ) : null}
 
-            <div className={styles.actions}>
+            <div className={styles.actions} style={{ marginTop: '0.75rem' }}>
                 <Button
                     type="submit"
                     variant="primary"
+                    block
+                    icon={<Icon.SendIcon />}
                     disabled={!fromAddress
                         || !toAddress.trim()
+                        || addressInvalid
                         || !message.trim()
-                        || (pubkeyState === 'missing' && !sendUnencrypted)
-                        || pubkeyState === 'checking'}
+                        || (!sendUnencrypted && (pubkeyState === 'missing' || pubkeyState === 'checking'))}
                 >
-                    Review
+                    Send message
                 </Button>
             </div>
         </form>,

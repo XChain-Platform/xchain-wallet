@@ -172,11 +172,11 @@ export function FeeSelector({
                                 {activeEstimate ? (
                                     <>
                                         {activeEstimate.coinAmount}
-                                        {fiatStr ? (
-                                            <span className={styles.sliderReadoutFiat}> ({fiatStr})</span>
-                                        ) : null}
                                         {activeEstimate.etaMinutes ? (
                                             <span className={styles.sliderReadoutEta}> · ~{activeEstimate.etaMinutes} min</span>
+                                        ) : null}
+                                        {fiatStr ? (
+                                            <span className={styles.sliderReadoutFiat}>{fiatStr}</span>
                                         ) : null}
                                     </>
                                 ) : null}

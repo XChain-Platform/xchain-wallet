@@ -84,8 +84,13 @@
 }
 
 .sliderReadoutFiat {
-    color: var(--xc-text-muted);
-    font-weight: 400;
+    margin-inline-start: var(--xc-space-2);
+    background: color-mix(in srgb, var(--xc-accent-primary) 14%, transparent);
+    color: var(--xc-accent-primary);
+    border-radius: 999px;
+    padding: 1px 9px;
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
 }
 
 .sliderReadoutRate {

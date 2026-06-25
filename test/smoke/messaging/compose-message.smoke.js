@@ -88,10 +88,18 @@ for (const state of ['idle', 'checking', 'found', 'missing']) {
 }
 assert.ok(/setTimeout\(/.test(src) && /\},\s*400\)/.test(src),
     'ComposeMessage debounces the pubkey lookup (400ms)');
-assert.ok(/sendUnencrypted/.test(src) && /Continue anyway/.test(src),
-    'ComposeMessage offers the unencrypted fallback on pubkey-missing');
-assert.ok(/encryptionChoice/.test(src) && /'ecdh'/.test(src),
+assert.ok(/sendUnencrypted/.test(src) && /value: 'plaintext'/.test(src),
+    'ComposeMessage offers the plain-text fallback in the Encryption dropdown');
+assert.ok(/encryptionChoice/.test(src) && /value: 'ecdh'/.test(src),
     'ComposeMessage offers an ECDH (shared-key) encryption choice');
+assert.ok(/Delivery network/.test(src) && /networkOptions/.test(src),
+    'ComposeMessage lets the user pick the delivery network');
+assert.ok(/IconSelect/.test(src) && /LockIcon/.test(src) && /UnlockIcon/.test(src),
+    'Encryption options carry lock / unlock icons');
+assert.ok(/FeeSelector/.test(src) && /feePick/.test(src),
+    'ComposeMessage includes the network-fee tier selector');
+assert.ok(/isValidAddressAnyNetwork/.test(src) && /addressInvalid/.test(src),
+    'ComposeMessage validates the recipient address (any network) before review');
 assert.ok(/messaging\.sendHandshake\s*\(/.test(src) && /Request encrypted session/.test(src),
     'ComposeMessage can publish a key-exchange handshake when the recipient pubkey is unknown');
 

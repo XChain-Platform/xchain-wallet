@@ -85,12 +85,12 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack })
     const [contactsByAddress, setContactsByAddress] = useState(
         /** @type {Record<string, string>} */ ({}),
     );
-    // Per-conversation read marks (counterparty -> newest seen unix-seconds),
-    // loaded from localStorage. Drives the unread dot in the list. `unreadFrom`
-    // captures the read mark at the moment a thread is opened, so the thread can
-    // still show where the unread run began even after we advance the mark.
-    const [readMap, setReadMap] = useState(/** @type {Record<string, number>} */ ({}));
-    const [unreadFrom, setUnreadFrom] = useState(/** @type {number | null} */ (null));
+    // Per-conversation read state (counterparty -> seen incoming txids), loaded
+    // from localStorage. Drives the unread dot in the list. `unreadFrom` captures
+    // the seen-set at the moment a thread is opened, so the thread can still show
+    // where the unread run began even after we mark its messages seen.
+    const [readMap, setReadMap] = useState(/** @type {Record<string, string[]>} */ ({}));
+    const [unreadFrom, setUnreadFrom] = useState(/** @type {Set<string> | null} */ (null));
     const firstUnreadRef = useRef(/** @type {HTMLLIElement | null} */ (null));
     // In-page conversation filters: free-text search (address or contact name)
     // + network dropdown, mirroring the addresses page toolbar.
@@ -197,6 +197,19 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack })
         return m;
     }, [addressesByChain]);
 
+    // Every message is broadcast over Dogecoin (cheap/fast) regardless of the
+    // recipient's chain (see flows/messageAction.js). This is the account's
+    // Dogecoin funding address + chain on the active network, used to pay the
+    // fee and sign. Null when the account has no Dogecoin address, in which case
+    // the send falls back to broadcasting on the recipient's own chain.
+    const dogeBroadcast = useMemo(() => {
+        const a = sweepAddrs.find(
+            (x) => chainRegistry.get(x.chainId)?.coin === 'dogecoin',
+        );
+        const rec = a ? recordByAddress[a.address] : null;
+        return rec ? { chainId: a.chainId, record: rec } : null;
+    }, [sweepAddrs, recordByAddress]);
+
     // Load the merged inbox. `pw` is null on the unlocked-session path; a
     // string on the password path.
     async function fetchInbox(pw) {
@@ -295,16 +308,35 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack })
         () => buildConversations(conversableMessages, ownerSet),
         [conversableMessages, ownerSet],
     );
+    // Per-counterparty set of seen incoming txids, derived from the persisted
+    // read map for fast membership checks.
+    const seenByCp = useMemo(() => {
+        /** @type {Record<string, Set<string>>} */
+        const m = {};
+        for (const [cp, txids] of Object.entries(readMap)) m[cp] = new Set(txids);
+        return m;
+    }, [readMap]);
+    // A conversation is unread when it holds an incoming message whose txid the
+    // user has not opened past. Computed once here so the list dots, the
+    // account-wide badge, and the open handler all agree.
+    const unreadByCp = useMemo(() => {
+        /** @type {Record<string, boolean>} */
+        const m = {};
+        for (const c of conversations) {
+            const seen = seenByCp[c.counterparty];
+            m[c.counterparty] = c.incomingTxids.some((txid) => !(seen && seen.has(txid)));
+        }
+        return m;
+    }, [conversations, seenByCp]);
     // Publish the unread-conversation count for the app-level surfaces (nav
     // badge, Home banner). Gated on a completed sweep so we never clear a real
     // badge with a premature 0 before the inbox has loaded. Uses the same unread
-    // predicate as the list rows, so the badge can't disagree with the dots.
+    // map as the list rows, so the badge can't disagree with the dots.
     useEffect(() => {
         if (stage !== 'inbox') return;
-        const unread = conversations.filter((c) => c.lastIncomingTimestamp != null
-            && c.lastIncomingTimestamp > (readMap[c.counterparty] || 0)).length;
+        const unread = Object.values(unreadByCp).filter(Boolean).length;
         writeMsgUnread(walletId, activeAccountId, unread);
-    }, [conversations, readMap, stage, walletId, activeAccountId]);
+    }, [unreadByCp, stage, walletId, activeAccountId]);
     // Apply the toolbar's search + network filters. Search matches the
     // counterparty address or its contact name; the network filter keeps a
     // conversation when any of its messages live on the selected coin.
@@ -355,14 +387,14 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack })
     // changes. A run of messages on the same day shows the header once.
     const threadItems = useMemo(() => buildThreadItems(thread), [thread]);
 
-    // The first incoming message newer than the read mark captured when the
-    // thread was opened: the boundary between already-seen messages and the new
-    // run. Drives the "Unread" divider and the open-time scroll target.
+    // The first incoming message not in the seen-set captured when the thread
+    // was opened: the boundary between already-seen messages and the new run.
+    // Drives the "Unread" divider and the open-time scroll target.
     const firstUnreadMsg = useMemo(() => {
         if (unreadFrom == null) return null;
         for (const m of thread) {
             const incoming = Boolean(m.from && !ownerSet.has(m.from));
-            if (incoming && (Number(m.timestamp) || 0) > unreadFrom) return m;
+            if (incoming && m.txid && !unreadFrom.has(m.txid)) return m;
         }
         return null;
     }, [thread, ownerSet, unreadFrom]);
@@ -378,19 +410,23 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack })
         }
     }, [selectedCounterparty, firstUnreadMsg]);
 
-    // Open a conversation: capture the prior read mark (so the thread can show
-    // where unread began), advance the mark to the newest activity so the list
-    // dot clears, and persist.
+    // Open a conversation: capture the prior seen-set (so the thread can show
+    // where unread began), record every currently-shown incoming txid as seen so
+    // the list dot clears, and persist. The seen-set is replaced rather than
+    // merged, which prunes txids no longer in the inbox and keeps storage bounded
+    // to the thread's size. The persist runs inside a functional state update so
+    // a rapid second open can't overwrite this one with a stale snapshot.
     function openConversation(c) {
         const cp = c.counterparty;
-        const prior = readMap[cp] || 0;
-        const hasUnread = c.lastIncomingTimestamp != null && c.lastIncomingTimestamp > prior;
+        const prior = new Set(readMap[cp] || []);
+        const hasUnread = c.incomingTxids.some((txid) => !prior.has(txid));
         setUnreadFrom(hasUnread ? prior : null);
-        const newest = c.lastTimestamp || c.lastIncomingTimestamp || prior;
-        if (newest > prior) {
-            const next = { ...readMap, [cp]: newest };
-            setReadMap(next);
-            writeMsgRead(walletId, activeAccountId, next);
+        if (hasUnread) {
+            setReadMap((prev) => {
+                const next = { ...prev, [cp]: c.incomingTxids.slice() };
+                writeMsgRead(walletId, activeAccountId, next);
+                return next;
+            });
         }
         setSelectedCounterparty(cp);
     }
@@ -494,6 +530,11 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack })
     if (selectedCounterparty && pendingSend != null && replyContext) {
         const confirmRecord = recordByAddress[replyContext.fromAddress];
         if (confirmRecord) {
+            // The reply addresses the counterparty on the conversation's chain
+            // (that sets COIN), but broadcasts + pays the fee on Dogecoin when
+            // the account has a DOGE address, falling back to the conversation's
+            // own chain otherwise.
+            const broadcast = dogeBroadcast || { chainId: replyContext.chainId, record: confirmRecord };
             return (
                 <SendConfirm
                     walletId={walletId}
@@ -503,7 +544,8 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack })
                     variant={variant}
                     isFull={isFull}
                     chainId={replyContext.chainId}
-                    fromRecord={confirmRecord}
+                    broadcastChainId={broadcast.chainId}
+                    fromRecord={broadcast.record}
                     destination={selectedCounterparty}
                     method={threadMethod}
                     message={pendingSend}
@@ -667,8 +709,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack })
                 <div className={local.convCard}>
                     <ul className={local.convList} aria-label="Conversations">
                         {visibleConversations.map((c) => {
-                            const isUnread = c.lastIncomingTimestamp != null
-                                && c.lastIncomingTimestamp > (readMap[c.counterparty] || 0);
+                            const isUnread = Boolean(unreadByCp[c.counterparty]);
                             return (
                                 <li key={c.counterparty}>
                                     <button
@@ -772,16 +813,20 @@ function ThreadComposer({ value, onChange, onSubmit }) {
  */
 function SendConfirm({
     walletId, demo, messaging, signerReady, variant, isFull,
-    chainId, fromRecord, destination, method, message, contactName, onSent, onCancel,
+    chainId, broadcastChainId, fromRecord, destination, method, message, contactName, onSent, onCancel,
 }) {
     const [password, setPassword] = useState('');
     const [sending, setSending] = useState(false);
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const needsPassword = !demo && !signerReady;
 
-    const descriptor = chainRegistry.get(chainId);
+    // The fee is paid on the broadcast chain (Dogecoin), which can differ from
+    // the recipient's chain (`chainId`, which only sets COIN). Show that chain's
+    // native ticker + estimate so the cost the user sees is the cost they pay.
+    const feeChainId = broadcastChainId || chainId;
+    const descriptor = chainRegistry.get(feeChainId);
     const ticker = nativeTickerFor(descriptor);
-    const fee = useMemo(() => estimateNativeSendFee({ chainId, chainRegistry }), [chainId]);
+    const fee = useMemo(() => estimateNativeSendFee({ chainId: feeChainId, chainRegistry }), [feeChainId]);
 
     function optimisticRow(txid) {
         return {
@@ -816,6 +861,7 @@ function SendConfirm({
             const result = await messaging.messageAction({
                 walletId,
                 chainId,
+                broadcastChainId: feeChainId,
                 from: {
                     address: fromRecord.address,
                     publicKey: fromRecord.publicKey,
@@ -888,11 +934,8 @@ function SendConfirm({
                 <p role="alert" className={styles.error} style={{ marginTop: '0.25rem' }}>{error}</p>
             ) : null}
             <div className={styles.actions}>
-                <Button variant="primary" onClick={handleConfirm} loading={sending}>
+                <Button variant="primary" block onClick={handleConfirm} loading={sending}>
                     Send message
-                </Button>
-                <Button variant="ghost" onClick={onCancel} disabled={sending}>
-                    Cancel
                 </Button>
             </div>
         </>
@@ -1042,7 +1085,7 @@ function coinOf(msg) {
 
 function buildConversations(messages, ownerSet) {
     if (!ownerSet || ownerSet.size === 0) return [];
-    /** @type {Map<string, { counterparty: string, count: number, lastTimestamp: number | null, lastIncomingTimestamp: number | null, lastText: string | null, lastMethod: number | null, coins: Set<string> }>} */
+    /** @type {Map<string, { counterparty: string, count: number, lastTimestamp: number | null, lastIncomingTimestamp: number | null, lastText: string | null, lastMethod: number | null, coins: Set<string>, incomingTxids: Set<string> }>} */
     const acc = new Map();
     for (const msg of messages) {
         const cp = counterpartyOf(msg, ownerSet);
@@ -1053,10 +1096,14 @@ function buildConversations(messages, ownerSet) {
         // incoming messages can leave a thread unread; our own sent messages
         // never do.
         const incoming = Boolean(msg.from && !ownerSet.has(msg.from));
+        // The txid is the read-state identity: opening a thread records every
+        // incoming txid as seen, so confirmation/reindex churn can't re-flag it.
+        const txid = incoming && typeof msg.txid === 'string' && msg.txid ? msg.txid : null;
         const coin = coinOf(msg);
         if (existing) {
             existing.count += 1;
             if (coin) existing.coins.add(coin);
+            if (txid) existing.incomingTxids.add(txid);
             // Track the newest message so the list row can preview it. A null
             // timestamp can't be ordered, so it never displaces a dated one.
             if (ts !== null && (existing.lastTimestamp === null || ts > existing.lastTimestamp)) {
@@ -1077,12 +1124,13 @@ function buildConversations(messages, ownerSet) {
                 lastText: msg.text ?? null,
                 lastMethod: msg.method ?? null,
                 coins: new Set(coin ? [coin] : []),
+                incomingTxids: new Set(txid ? [txid] : []),
             });
         }
     }
-    return [...acc.values()].sort(
-        (a, b) => (b.lastTimestamp || 0) - (a.lastTimestamp || 0),
-    );
+    return [...acc.values()]
+        .map((c) => ({ ...c, incomingTxids: [...c.incomingTxids] }))
+        .sort((a, b) => (b.lastTimestamp || 0) - (a.lastTimestamp || 0));
 }
 
 function methodLabel(method) {
