@@ -22,6 +22,7 @@ import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
+import { estimateNativeSendFee } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -41,9 +42,8 @@ const PROTOCOL_COIN_TICKER = {
  *   - The ActionsMenu "Pay COINPAY" entry, which opens this form
  *     without a prefilled obligation and scans the wallet on mount.
  *
- * The form is deliberately read-only above the sign block; the user
- * doesn't pick an obligation's payee or amount, they confirm it.
- * Overpaying would be wasteful; underpaying would fail validation.
+ * Flow: form -> review -> submitting -> done. Nothing is signed
+ * or broadcast until the user reaches the review stage and confirms.
  *
  * @param {object} props
  * @param {string} props.walletId
@@ -75,7 +75,7 @@ export function CoinpayForm({
     );
     const [password, setPassword] = useState('');
     const [stage, setStage] = useState(
-        /** @type {'form' | 'submitting' | 'done'} */ ('form'),
+        /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
     );
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [hwStatus, setHwStatus] = useState('idle');
@@ -150,6 +150,14 @@ export function CoinpayForm({
         return () => { cancelled = true; };
     }, [addressesByChain, messaging, initialActionIndex, initialChainId, initialAddress]);
 
+    // Focus the password field when entering review so the user can
+    // sign without lifting their hands off the keyboard.
+    useEffect(() => {
+        if (stage === 'review') {
+            setTimeout(() => passwordRef.current?.focus(), 0);
+        }
+    }, [stage]);
+
     const descriptor = selected ? chainRegistry.get(selected.chainId) : null;
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
     const hw = isHwSource(selected?.addr);
@@ -168,8 +176,28 @@ export function CoinpayForm({
         };
     }, [selected]);
 
+    // Fee estimate for the review screen. Recomputed when the selected
+    // chain changes; null for unknown chains or missing chainId.
+    const feeEstimate = useMemo(() => {
+        if (!selected?.chainId) return null;
+        return estimateNativeSendFee({ chainId: selected.chainId, chainRegistry });
+    }, [selected]);
+
     // §20 / Cluster W FOLLOWUP 5: watcher-mode encode-only branch.
     const { isWatcherMode } = useWalletMode();
+
+    // Validate the selected obligation before advancing to review.
+    // Signs nothing; just gates stage transition.
+    function handleReview(event) {
+        event.preventDefault();
+        if (!selected || !summary) return;
+        if (summary.coinAmount == null || !summary.payeeAddress) {
+            setSubmitError('Obligation is missing payee or coin amount.');
+            return;
+        }
+        setSubmitError(null);
+        setStage('review');
+    }
 
     async function handleSubmit(event) {
         event.preventDefault();
@@ -232,7 +260,7 @@ export function CoinpayForm({
         } catch (err) {
             const bad = err?.name === 'InvalidPasswordError';
             setSubmitError(bad ? 'Incorrect password.' : err?.message || 'Sign failed.');
-            setStage('form');
+            setStage('review');
             if (!isWatcherMode && !hw) {
                 passwordRef.current?.focus();
                 passwordRef.current?.select();
@@ -246,10 +274,13 @@ export function CoinpayForm({
         setStage('form');
     }
 
-        const header = (
+    const titleText = (stage === 'review' || stage === 'submitting')
+        ? 'Review payment'
+        : 'Pay COINPAY';
+    const header = (
         <ScreenHeader
             onBack={onBack}
-            title="Pay COINPAY"
+            title={titleText}
         />
     );
     const wrap = (children) => (
@@ -294,6 +325,100 @@ export function CoinpayForm({
         );
     }
 
+    // Review + submitting: show the obligation details, sign credentials,
+    // and the confirm button. No signing happens until this stage.
+    if (stage === 'review' || stage === 'submitting') {
+        const feeLabel = (() => {
+            if (!feeEstimate) return 'Estimate unavailable';
+            const ticker = coinTicker || 'coins';
+            const base = `${feeEstimate.coinAmount} ${ticker}`;
+            return feeEstimate.rate ? `${base} (${feeEstimate.rate})` : base;
+        })();
+
+        return wrap(
+            <form onSubmit={handleSubmit} noValidate>
+                <p className={styles.summary}>
+                    Pay {summary.coinAmount} {coinTicker || 'base units'} to settle
+                    ORDER_MATCH #{summary.actionIndex}.
+                </p>
+                <dl className={styles.detailsList}>
+                    <DetailRow
+                        label="Chain"
+                        value={descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : selected.chainId}
+                    />
+                    <DetailRow
+                        label="From"
+                        value={<AddressText address={selected.address} />}
+                    />
+                    <DetailRow
+                        label="ORDER_MATCH"
+                        value={<code>{summary.actionIndex}</code>}
+                    />
+                    <DetailRow
+                        label="Paying to"
+                        value={<AddressText address={summary.payeeAddress} />}
+                    />
+                    <DetailRow
+                        label="Amount"
+                        value={`${summary.coinAmount} ${coinTicker || 'base units'}`}
+                    />
+                    {summary.expiration ? (
+                        <DetailRow label="Expires at" value={`block ${summary.expiration}`} />
+                    ) : null}
+                    <DetailRow label="Network fee" value={feeLabel} />
+                </dl>
+
+                {isWatcherMode ? (
+                    <p className={styles.hint}>
+                        Watcher mode: this wallet will build an unsigned transaction.
+                        Sign it on your Signer-mode wallet, then bring the
+                        signed transaction to a Full-mode wallet to broadcast.
+                    </p>
+                ) : (
+                    <SignCredentials
+                        unlocked={signerReady}
+                        fromAddress={selected.addr}
+                        chainId={selected.chainId}
+                        password={password}
+                        onPasswordChange={(v) => {
+                            setPassword(v);
+                            if (submitError) setSubmitError(null);
+                        }}
+                        onStatusChange={onHwStatusChange}
+                        passwordRef={passwordRef}
+                        submitError={submitError}
+                        disabled={stage === 'submitting'}
+                        getSignerStatus={messaging.getSignerStatus}
+                    />
+                )}
+                {(isWatcherMode || hw) && submitError ? (
+                    <div role="alert" className={styles.error}>{submitError}</div>
+                ) : null}
+
+                <div className={styles.actions}>
+                    <Button
+                        type="submit"
+                        variant="primary"
+                        loading={stage === 'submitting'}
+                        disabled={
+                            isWatcherMode
+                                ? false
+                                : hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)
+                        }
+                    >
+                        {isWatcherMode
+                            ? 'Create unsigned transaction'
+                            : hw
+                                ? `Sign on ${selected.addr.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                                : 'Sign COINPAY'}
+                    </Button>
+                </div>
+            </form>,
+        );
+    }
+
+    // Form stage: obligation picker. No credentials shown here; the user
+    // picks an obligation then advances to review before signing.
     return wrap(
         <>
             {scanning && obligations.length === 0 ? (
@@ -365,7 +490,7 @@ export function CoinpayForm({
             ) : null}
 
             {selected && summary ? (
-                <form onSubmit={handleSubmit} noValidate>
+                <form onSubmit={handleReview} noValidate>
                     <dl className={styles.detailsList}>
                         <dt className={styles.detailsLabel}>Chain</dt>
                         <dd className={styles.detailsValue}>
@@ -397,51 +522,17 @@ export function CoinpayForm({
                         ) : null}
                     </dl>
 
-                    {isWatcherMode ? (
-                        <p className={styles.hint}>
-                            Watcher mode: this wallet will build an unsigned transaction.
-                            Sign it on your Signer-mode wallet, then bring the
-                            signed transaction to a Full-mode wallet to broadcast.
-                        </p>
-                    ) : (
-                        <SignCredentials
-                        unlocked={signerReady}
-                            fromAddress={selected.addr}
-                            chainId={selected.chainId}
-                            password={password}
-                            onPasswordChange={(v) => {
-                                setPassword(v);
-                                if (submitError) setSubmitError(null);
-                            }}
-                            onStatusChange={onHwStatusChange}
-                            passwordRef={passwordRef}
-                            submitError={submitError}
-                            disabled={stage === 'submitting'}
-                            getSignerStatus={messaging.getSignerStatus}
-                        />
-                    )}
-                    {(isWatcherMode || hw) && submitError ? (
-                        <p role="alert" style={{ margin: '0.25rem 0 0', color: '#ef5350', fontSize: '0.75rem' }}>
-                            {submitError}
-                        </p>
+                    {submitError ? (
+                        <div role="alert" className={styles.error}>{submitError}</div>
                     ) : null}
 
                     <div className={styles.actions}>
                         <Button
                             type="submit"
                             variant="primary"
-                            loading={stage === 'submitting'}
-                            disabled={
-                                isWatcherMode
-                                    ? false
-                                    : hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)
-                            }
+                            disabled={!selected || !summary}
                         >
-                            {isWatcherMode
-                                ? 'Create unsigned transaction'
-                                : hw
-                                    ? `Sign on ${selected.addr.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                    : 'Sign COINPAY'}
+                            Review
                         </Button>
                     </div>
                 </form>
@@ -450,6 +541,15 @@ export function CoinpayForm({
                 </div>
             )}
         </>,
+    );
+}
+
+function DetailRow({ label, value }) {
+    return (
+        <>
+            <dt className={styles.detailsLabel}>{label}</dt>
+            <dd className={styles.detailsValue}>{value}</dd>
+        </>
     );
 }
 

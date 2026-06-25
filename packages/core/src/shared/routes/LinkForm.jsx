@@ -24,6 +24,7 @@ import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
+import { estimateNativeSendFee } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -33,6 +34,14 @@ const chainRegistry = registryLib.defaultRegistry();
 // 'dogecoin'); the LINK action serializes COIN1 / COIN2 as
 // short-form tickers ('BTC' / 'LTC' / 'DOGE').
 const PROTOCOL_COIN_TICKER = {
+    bitcoin: 'BTC',
+    litecoin: 'LTC',
+    dogecoin: 'DOGE',
+};
+
+// Human-readable coin ticker for display in the Network fee row.
+// Mirrors the keys used by the fee-estimate table.
+const COIN_DISPLAY_TICKER = {
     bitcoin: 'BTC',
     litecoin: 'LTC',
     dogecoin: 'DOGE',
@@ -81,7 +90,7 @@ export function LinkForm({ walletId, onBack }) {
     const [password, setPassword] = useState('');
 
     const [stage, setStage] = useState(
-        /** @type {'form' | 'submitting' | 'done'} */ ('form'),
+        /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
     );
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
@@ -189,6 +198,14 @@ export function LinkForm({ walletId, onBack }) {
         return () => clearTimeout(t);
     }, [chain2Id, actionIndex2, messaging, previewCache]);
 
+    // Focus the password field when we land on the review stage so the
+    // user can sign without reaching for the mouse.
+    useEffect(() => {
+        if (stage === 'review') {
+            setTimeout(() => passwordRef.current?.focus(), 0);
+        }
+    }, [stage]);
+
     const validationError = useMemo(() => {
         if (!ticker1 || !ticker2) return null;
         if (!actionIndex1 || !actionIndex2) return null;
@@ -202,21 +219,45 @@ export function LinkForm({ walletId, onBack }) {
 
     const { isWatcherMode } = useWalletMode();
 
+    // Network fee estimate for the submit chain (shown on review screen).
+    const feeEstimate = useMemo(() => {
+        if (!submitChainId) return null;
+        return estimateNativeSendFee({ chainId: submitChainId, chainRegistry });
+    }, [submitChainId]);
+
+    // Derive the submit-chain coin ticker for the fee row display.
+    const submitDescriptor = submitChainId ? chainRegistry.get(submitChainId) : null;
+    const feeCoinTicker = submitDescriptor
+        ? (COIN_DISPLAY_TICKER[submitDescriptor.coin] || submitDescriptor.coin)
+        : null;
+
+    // Form submit goes to the review stage, not directly to broadcast.
+    // Runs the same guards that previously gated signing so nothing
+    // reachable from the review screen is in an invalid state.
+    function handleReview(event) {
+        event.preventDefault();
+        if (!fromAddress || !submitChainId) return;
+        if (!chain1Id || !chain2Id) return;
+        if (validationError) return;
+        if (!actionIndex1 || !actionIndex2) {
+            setFormError('Provide both action indices before reviewing.');
+            return;
+        }
+        setFormError(null);
+        setStage('review');
+    }
+
+    // Sign and broadcast; only reachable from the review stage.
     async function handleSubmit(event) {
         event.preventDefault();
         if (stage === 'submitting') return;
         if (!fromAddress || !submitChainId) return;
         if (!chain1Id || !chain2Id) return;
         if (validationError) return;
-        if (!actionIndex1 || !actionIndex2) {
-            setFormError('Provide both action indices before signing.');
-            return;
-        }
         if (!isWatcherMode && !hw && (!signerReady && password.length === 0)) return;
         if (!isWatcherMode && hw && hwStatus !== 'available') return;
 
         setStage('submitting');
-        setFormError(null);
         setSubmitError(null);
         try {
             const base = {
@@ -261,7 +302,7 @@ export function LinkForm({ walletId, onBack }) {
         } catch (err) {
             const bad = err?.name === 'InvalidPasswordError';
             setSubmitError(bad ? 'Incorrect password.' : err?.message || 'Sign failed.');
-            setStage('form');
+            setStage('review');
             if (!isWatcherMode && !hw) {
                 passwordRef.current?.focus();
                 passwordRef.current?.select();
@@ -275,10 +316,11 @@ export function LinkForm({ walletId, onBack }) {
         setStage('form');
     }
 
-        const header = (
+    const isReviewOrSubmitting = stage === 'review' || stage === 'submitting';
+    const header = (
         <ScreenHeader
             onBack={onBack}
-            title="Link two actions across chains"
+            title={isReviewOrSubmitting ? 'Review link' : 'Link two actions across chains'}
         />
     );
     const wrap = (children) => (
@@ -332,12 +374,127 @@ export function LinkForm({ walletId, onBack }) {
         return wrap(<p className={styles.hint}>Loading wallet…</p>);
     }
 
+    // Review + submitting: show a summary dl, the decoded sub-action
+    // previews, credentials, and the sign button. No form fields are
+    // editable here; the user goes back to the form stage to change anything.
+    if (stage === 'review' || stage === 'submitting') {
+        const preview1Key = chain1Id && /^\d+$/.test(actionIndex1) ? `${chain1Id}:${actionIndex1}` : null;
+        const preview2Key = chain2Id && /^\d+$/.test(actionIndex2) ? `${chain2Id}:${actionIndex2}` : null;
+        const preview1 = preview1Key ? previewCache[preview1Key] : null;
+        const preview2 = preview2Key ? previewCache[preview2Key] : null;
+
+        return wrap(
+            <form onSubmit={handleSubmit} noValidate>
+                <p className={styles.summary}>
+                    Link {ticker1} #{actionIndex1} to {ticker2} #{actionIndex2}
+                    {memo.trim() ? `, memo: "${memo.trim()}"` : ''}
+                </p>
+                <dl className={styles.detailsList}>
+                    <dt className={styles.detailsLabel}>Chain</dt>
+                    <dd className={styles.detailsValue}>
+                        {submitDescriptor
+                            ? <ChainBadge descriptor={submitDescriptor} size="sm" />
+                            : submitChainId}
+                    </dd>
+                    <dt className={styles.detailsLabel}>From</dt>
+                    <dd className={styles.detailsValue}>
+                        <AddressText address={fromAddress.address} />
+                    </dd>
+                    <dt className={styles.detailsLabel}>Linking</dt>
+                    <dd className={styles.detailsValue}>
+                        {ticker1} #{actionIndex1} {'↔'} {ticker2} #{actionIndex2}
+                    </dd>
+                    <dt className={styles.detailsLabel}>Side A decoded</dt>
+                    <dd className={styles.detailsValue} style={{ fontSize: 'var(--xc-text-xs)', color: 'var(--xc-text-muted)' }}>
+                        {preview1?.loading
+                            ? 'Loading…'
+                            : preview1?.error
+                                ? `Could not decode: ${preview1.error}`
+                                : preview1?.action
+                                    ? decodePreview(preview1.action)
+                                    : '(preview not loaded)'}
+                    </dd>
+                    <dt className={styles.detailsLabel}>Side B decoded</dt>
+                    <dd className={styles.detailsValue} style={{ fontSize: 'var(--xc-text-xs)', color: 'var(--xc-text-muted)' }}>
+                        {preview2?.loading
+                            ? 'Loading…'
+                            : preview2?.error
+                                ? `Could not decode: ${preview2.error}`
+                                : preview2?.action
+                                    ? decodePreview(preview2.action)
+                                    : '(preview not loaded)'}
+                    </dd>
+                    <dt className={styles.detailsLabel}>Network fee</dt>
+                    <dd className={styles.detailsValue}>
+                        {feeEstimate && feeCoinTicker
+                            ? `${feeEstimate.coinAmount} ${feeCoinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
+                            : 'Estimate unavailable'}
+                    </dd>
+                </dl>
+
+                {isWatcherMode ? (
+                    <p className={styles.hint}>
+                        Watcher mode: this wallet will build an unsigned transaction.
+                        Sign it on your Signer-mode wallet, then bring the
+                        signed transaction to a Full-mode wallet to broadcast.
+                    </p>
+                ) : (
+                    <SignCredentials
+                        unlocked={signerReady}
+                        fromAddress={fromAddress}
+                        chainId={submitChainId}
+                        password={password}
+                        onPasswordChange={(v) => {
+                            setPassword(v);
+                            if (submitError) setSubmitError(null);
+                        }}
+                        onStatusChange={onHwStatusChange}
+                        passwordRef={passwordRef}
+                        submitError={submitError}
+                        disabled={stage === 'submitting'}
+                        getSignerStatus={messaging.getSignerStatus}
+                    />
+                )}
+                {(isWatcherMode || hw) && submitError ? (
+                    <p role="alert" style={{ margin: '0.25rem 0 0', color: '#ef5350', fontSize: '0.75rem' }}>
+                        {submitError}
+                    </p>
+                ) : null}
+
+                <div className={styles.actions}>
+                    <Button
+                        type="button"
+                        variant="secondary"
+                        disabled={stage === 'submitting'}
+                        onClick={() => setStage('form')}
+                    >
+                        Back
+                    </Button>
+                    <Button
+                        type="submit"
+                        variant="primary"
+                        loading={stage === 'submitting'}
+                        disabled={isWatcherMode
+                            ? false
+                            : hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
+                    >
+                        {isWatcherMode
+                            ? 'Create unsigned transaction'
+                            : hw
+                                ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                                : 'Sign LINK'}
+                    </Button>
+                </div>
+            </form>,
+        );
+    }
+
     const chainIds = Object.entries(addressesByChain)
         .filter(([, addrs]) => Array.isArray(addrs) && addrs.length > 0)
         .map(([cid]) => cid);
 
     return wrap(
-        <form onSubmit={handleSubmit} noValidate>
+        <form onSubmit={handleReview} noValidate>
             <div style={{
                 display: 'grid',
                 gridTemplateColumns: isFull ? '1fr 1fr' : '1fr',
@@ -401,55 +558,24 @@ export function LinkForm({ walletId, onBack }) {
             ) : null}
 
             {fromAddress && submitChainId ? (
-                <>
-                    <dl className={styles.detailsList}>
-                        <dt className={styles.detailsLabel}>Submit on</dt>
-                        <dd className={styles.detailsValue}>
-                            {chainRegistry.get(submitChainId)
-                                ? <ChainBadge descriptor={chainRegistry.get(submitChainId)} size="sm" />
-                                : submitChainId}
-                        </dd>
-                        <dt className={styles.detailsLabel}>From</dt>
-                        <dd className={styles.detailsValue}>
-                            <AddressText address={fromAddress.address} />
-                        </dd>
-                        <dt className={styles.detailsLabel}>Pair</dt>
-                        <dd className={styles.detailsValue}>
-                            {ticker1} #{actionIndex1 || '?'}
-                            {' ↔ '}
-                            {ticker2} #{actionIndex2 || '?'}
-                        </dd>
-                    </dl>
-
-                    {isWatcherMode ? (
-                        <p className={styles.hint}>
-                            Watcher mode: this wallet will build an unsigned transaction.
-                            Sign it on your Signer-mode wallet, then bring the
-                            signed transaction to a Full-mode wallet to broadcast.
-                        </p>
-                    ) : (
-                        <SignCredentials
-                        unlocked={signerReady}
-                            fromAddress={fromAddress}
-                            chainId={submitChainId}
-                            password={password}
-                            onPasswordChange={(v) => {
-                                setPassword(v);
-                                if (submitError) setSubmitError(null);
-                            }}
-                            onStatusChange={onHwStatusChange}
-                            passwordRef={passwordRef}
-                            submitError={submitError}
-                            disabled={stage === 'submitting'}
-                            getSignerStatus={messaging.getSignerStatus}
-                        />
-                    )}
-                    {(isWatcherMode || hw) && submitError ? (
-                        <p role="alert" style={{ margin: '0.25rem 0 0', color: '#ef5350', fontSize: '0.75rem' }}>
-                            {submitError}
-                        </p>
-                    ) : null}
-                </>
+                <dl className={styles.detailsList}>
+                    <dt className={styles.detailsLabel}>Submit on</dt>
+                    <dd className={styles.detailsValue}>
+                        {chainRegistry.get(submitChainId)
+                            ? <ChainBadge descriptor={chainRegistry.get(submitChainId)} size="sm" />
+                            : submitChainId}
+                    </dd>
+                    <dt className={styles.detailsLabel}>From</dt>
+                    <dd className={styles.detailsValue}>
+                        <AddressText address={fromAddress.address} />
+                    </dd>
+                    <dt className={styles.detailsLabel}>Pair</dt>
+                    <dd className={styles.detailsValue}>
+                        {ticker1} #{actionIndex1 || '?'}
+                        {' ↔ '}
+                        {ticker2} #{actionIndex2 || '?'}
+                    </dd>
+                </dl>
             ) : null}
 
             {formError ? (
@@ -460,19 +586,11 @@ export function LinkForm({ walletId, onBack }) {
                 <Button
                     type="submit"
                     variant="primary"
-                    loading={stage === 'submitting'}
                     disabled={!!validationError
                         || !fromAddress
-                        || !actionIndex1 || !actionIndex2
-                        || (isWatcherMode
-                            ? false
-                            : hw ? hwStatus !== 'available' : (!signerReady && password.length === 0))}
+                        || !actionIndex1 || !actionIndex2}
                 >
-                    {isWatcherMode
-                        ? 'Create unsigned transaction'
-                        : hw
-                            ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                            : 'Sign LINK'}
+                    Review
                 </Button>
             </div>
         </form>,

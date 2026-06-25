@@ -24,6 +24,7 @@ import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
+import { estimateNativeSendFee } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import receivePickerStyles from './TokenPicker.module.css';
 
@@ -79,7 +80,7 @@ export function SellOwnershipForm({ walletId, onBack, chainId, tick, initialFrom
     const [memo, setMemo] = useState('');
     const [password, setPassword] = useState('');
 
-    const [stage, setStage] = useState(/** @type {'form' | 'submitting' | 'done'} */ ('form'));
+    const [stage, setStage] = useState(/** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'));
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
@@ -116,6 +117,13 @@ export function SellOwnershipForm({ walletId, onBack, chainId, tick, initialFrom
         return () => { cancelled = true; };
     }, [walletId, chainId, messaging, initialFromAddress]);
 
+    // Focus the password field when entering review, matching DestroyForm convention.
+    useEffect(() => {
+        if (stage === 'review') {
+            setTimeout(() => passwordRef.current?.focus(), 0);
+        }
+    }, [stage]);
+
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
     const fromAddress = useMemo(() => {
@@ -149,20 +157,36 @@ export function SellOwnershipForm({ walletId, onBack, chainId, tick, initialFrom
     const priceReady = /^[0-9]+(\.[0-9]+)?$/.test(price.trim()) && Number(price.trim()) > 0;
     const getTickReady = getMode === 'coin' || getTick.trim().length > 0;
 
-    async function handleSubmit(event) {
+    // Network fee estimate: computed once from the static placeholder table.
+    // Displayed on the review screen so the user sees the expected chain fee
+    // before signing. Returns null for unknown chains; row shows "Estimate unavailable".
+    const feeEstimate = useMemo(
+        () => estimateNativeSendFee({ chainId, chainRegistry }),
+        [chainId],
+    );
+
+    // Validate form fields and advance to the review stage; real signing
+    // happens only after the user confirms on the review screen.
+    function handleReview(event) {
         event.preventDefault();
-        if (stage === 'submitting') return;
         if (!fromAddress || !chainId) return;
         if (validationError) return;
         if (!priceReady || !getTickReady) {
             setFormError(`Enter what you want in return and a price greater than 0.`);
             return;
         }
+        setFormError(null);
+        setStage('review');
+    }
+
+    async function handleSubmit(event) {
+        event.preventDefault();
+        if (stage === 'submitting') return;
+        if (!fromAddress || !chainId) return;
         if (!isWatcherMode && !hw && (!signerReady && password.length === 0)) return;
         if (!isWatcherMode && hw && hwStatus !== 'available') return;
 
         setStage('submitting');
-        setFormError(null);
         setSubmitError(null);
         try {
             // ORDER and DISPENSER ownership sales take the same fields; only
@@ -214,7 +238,7 @@ export function SellOwnershipForm({ walletId, onBack, chainId, tick, initialFrom
         } catch (err) {
             const bad = err?.name === 'InvalidPasswordError';
             setSubmitError(bad ? 'Incorrect password.' : err?.message || 'Sign failed.');
-            setStage('form');
+            setStage('review');
             if (!isWatcherMode && !hw) {
                 passwordRef.current?.focus();
                 passwordRef.current?.select();
@@ -228,8 +252,12 @@ export function SellOwnershipForm({ walletId, onBack, chainId, tick, initialFrom
         setStage('form');
     }
 
+    // Header title switches to "Review sale" once the user leaves the form stage.
+    const headerTitle = (stage === 'review' || stage === 'submitting')
+        ? 'Review sale'
+        : `Sell ${tokenUpper} name`;
     const header = (
-        <ScreenHeader onBack={onBack} title={`Sell ${tokenUpper} name`} />
+        <ScreenHeader onBack={onBack} title={headerTitle} />
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
@@ -268,8 +296,84 @@ export function SellOwnershipForm({ walletId, onBack, chainId, tick, initialFrom
         );
     }
 
+    if (stage === 'review' || stage === 'submitting') {
+        const mechanismLabel = mechanism === 'dispenser' ? 'Dispenser (instant buy)' : 'Open order';
+        const priceLabel = `${price} ${wantLabel}`;
+        const feeRow = feeEstimate
+            ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
+            : 'Estimate unavailable';
+
+        return wrap(
+            <form onSubmit={handleSubmit} noValidate>
+                <p className={styles.summary}>
+                    Sell ownership of {tokenUpper} for {priceLabel} via {mechanismLabel}.
+                </p>
+                <dl className={styles.detailsList}>
+                    <DetailRow label="Chain" value={descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId} />
+                    <DetailRow label="From" value={<AddressText address={fromAddress.address} />} />
+                    <DetailRow label="Selling" value={`${tokenUpper} (ownership)`} />
+                    <DetailRow label="Mechanism" value={mechanismLabel} />
+                    <DetailRow label="Price" value={priceLabel} />
+                    {expiration.trim() ? (
+                        <DetailRow label="Expires after" value={`${expiration.trim()} blocks`} />
+                    ) : null}
+                    {memo.trim() ? (
+                        <DetailRow label="Memo" value={memo.trim()} />
+                    ) : null}
+                    <DetailRow label="Network fee" value={feeRow} />
+                </dl>
+
+                {isWatcherMode ? (
+                    <p className={styles.hint}>
+                        Watcher mode: this wallet will build an unsigned transaction.
+                        Sign it on your Signer-mode wallet, then bring the
+                        signed transaction to a Full-mode wallet to broadcast.
+                    </p>
+                ) : (
+                    <SignCredentials
+                        unlocked={signerReady}
+                        fromAddress={fromAddress}
+                        chainId={chainId}
+                        password={password}
+                        onPasswordChange={(v) => { setPassword(v); if (submitError) setSubmitError(null); }}
+                        onStatusChange={onHwStatusChange}
+                        passwordRef={passwordRef}
+                        submitError={submitError}
+                        disabled={stage === 'submitting'}
+                        getSignerStatus={messaging.getSignerStatus}
+                        signerInfo={hwSignerInfo}
+                    />
+                )}
+                {(isWatcherMode || hw) && submitError ? (
+                    <div role="alert" className={styles.error}>{submitError}</div>
+                ) : null}
+
+                <div className={styles.actions}>
+                    <Button
+                        type="submit"
+                        variant="primary"
+                        loading={stage === 'submitting'}
+                        disabled={
+                            isWatcherMode
+                                ? false
+                                : hw
+                                    ? hwStatus !== 'available'
+                                    : (!signerReady && password.length === 0)
+                        }
+                    >
+                        {isWatcherMode
+                            ? 'Create unsigned transaction'
+                            : hw
+                                ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                                : 'List name for sale'}
+                    </Button>
+                </div>
+            </form>,
+        );
+    }
+
     return wrap(
-        <form onSubmit={handleSubmit} noValidate>
+        <form onSubmit={handleReview} noValidate>
             <div className={styles.chainLine}>
                 {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
             </div>
@@ -386,32 +490,6 @@ export function SellOwnershipForm({ walletId, onBack, chainId, tick, initialFrom
                 <p role="alert" className={styles.error} style={{ marginTop: '0.5rem' }}>{validationError}</p>
             ) : null}
 
-            {fromAddress ? (
-                isWatcherMode ? (
-                    <p className={styles.hint}>
-                        Watcher mode. This wallet will build an unsigned transaction. Sign it on your
-                        Signer-mode wallet, then broadcast from a Full-mode wallet.
-                    </p>
-                ) : (
-                    <SignCredentials
-                        unlocked={signerReady}
-                        fromAddress={fromAddress}
-                        chainId={chainId}
-                        password={password}
-                        onPasswordChange={(v) => { setPassword(v); if (submitError) setSubmitError(null); }}
-                        onStatusChange={onHwStatusChange}
-                        passwordRef={passwordRef}
-                        submitError={submitError}
-                        disabled={stage === 'submitting'}
-                        getSignerStatus={messaging.getSignerStatus}
-                        signerInfo={hwSignerInfo}
-                    />
-                )
-            ) : null}
-            {(isWatcherMode || hw) && submitError ? (
-                <p role="alert" style={{ margin: '0.25rem 0 0', color: '#ef5350', fontSize: '0.75rem' }}>{submitError}</p>
-            ) : null}
-
             {formError ? (
                 <p role="alert" className={styles.error} style={{ marginTop: '0.5rem' }}>{formError}</p>
             ) : null}
@@ -420,17 +498,20 @@ export function SellOwnershipForm({ walletId, onBack, chainId, tick, initialFrom
                 <Button
                     type="submit"
                     variant="primary"
-                    loading={stage === 'submitting'}
-                    disabled={!!validationError || !fromAddress || !priceReady || !getTickReady
-                        || (isWatcherMode ? false : hw ? hwStatus !== 'available' : (!signerReady && password.length === 0))}
+                    disabled={!!validationError || !fromAddress || !priceReady || !getTickReady}
                 >
-                    {isWatcherMode
-                        ? 'Create unsigned transaction'
-                        : hw
-                            ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                            : 'List name for sale'}
+                    Review
                 </Button>
             </div>
         </form>,
+    );
+}
+
+function DetailRow({ label, value }) {
+    return (
+        <>
+            <dt className={styles.detailsLabel}>{label}</dt>
+            <dd className={styles.detailsValue}>{value}</dd>
+        </>
     );
 }

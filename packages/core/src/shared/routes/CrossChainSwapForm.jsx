@@ -24,6 +24,7 @@ import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { activeSourceId } from '../addressSelection.js';
+import { estimateNativeSendFee } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -36,6 +37,10 @@ const PROTOCOL_COIN_TICKER = {
     litecoin: 'LTC',
     dogecoin: 'DOGE',
 };
+
+// Maps descriptor.coin to the display ticker shown next to the fee
+// estimate on the review screen.
+const NATIVE_TICKER_BY_COIN = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
 
 /**
  * §42.8.3 Cross-chain SWAP authoring surface.
@@ -93,7 +98,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
     const [password, setPassword] = useState('');
 
     const [stage, setStage] = useState(
-        /** @type {'form' | 'submitting' | 'done'} */ ('form'),
+        /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
     );
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
@@ -182,6 +187,14 @@ export function CrossChainSwapForm({ walletId, onBack }) {
         return () => { cancelled = true; };
     }, [walletId, getChainId, getAddressTouched, messaging]);
 
+    // Focus the password field when entering review, matching the
+    // DestroyForm convention for the confirmation stage.
+    useEffect(() => {
+        if (stage === 'review') {
+            setTimeout(() => passwordRef.current?.focus(), 0);
+        }
+    }, [stage]);
+
     const fromAddress = useMemo(() => {
         if (!addressesByChain || !fromAddressId || !giveChainId) return null;
         return (addressesByChain[giveChainId] || []).find((a) => a.id === fromAddressId) || null;
@@ -210,27 +223,51 @@ export function CrossChainSwapForm({ walletId, onBack }) {
         return null;
     }, [giveCoinTicker, getCoinTicker, giveTick, getTick, expirationBlocks]);
 
+    // Network fee estimate for the give chain (the chain that pays the
+    // on-chain fee). Computed synchronously from the placeholder table;
+    // displayed on the review screen so the user sees a cost summary.
+    const feeEstimate = useMemo(
+        () => estimateNativeSendFee({ chainId: giveChainId, chainRegistry }),
+        [giveChainId],
+    );
+    const giveTicker = giveDescriptor?.coin
+        ? NATIVE_TICKER_BY_COIN[giveDescriptor.coin] || giveDescriptor.coin.toUpperCase()
+        : null;
+    const feeText = feeEstimate && giveTicker
+        ? `${feeEstimate.coinAmount} ${giveTicker}` + (feeEstimate.rate ? ` (${feeEstimate.rate})` : '')
+        : 'Estimate unavailable';
+
     // §20 / Cluster W FOLLOWUP 5: watcher-mode encode-only branch.
     const { isWatcherMode } = useWalletMode();
 
-    async function handleSubmit(event) {
+    // Validate the form fields and advance to the review stage. The
+    // actual sign/broadcast only fires from handleSubmit, which is
+    // reachable only from the review screen.
+    function handleReview(event) {
         event.preventDefault();
-        if (stage === 'submitting') return;
         if (!fromAddress || !giveChainId || !getChainId) return;
         if (validationError) return;
         if (!giveTick || !giveAmount || !getTick || !getAmount) {
-            setFormError('Fill give/get tickers and amounts before signing.');
+            setFormError('Fill give/get tickers and amounts before reviewing.');
             return;
         }
         if (!getAddress) {
             setFormError('Receiver address on the get-chain is required.');
             return;
         }
+        setFormError(null);
+        setStage('review');
+    }
+
+    async function handleSubmit(event) {
+        event.preventDefault();
+        if (stage === 'submitting') return;
+        if (!fromAddress || !giveChainId || !getChainId) return;
+        if (validationError) return;
         if (!isWatcherMode && !hw && (!signerReady && password.length === 0)) return;
         if (!isWatcherMode && hw && hwStatus !== 'available') return;
 
         setStage('submitting');
-        setFormError(null);
         setSubmitError(null);
         try {
             const params = {
@@ -275,7 +312,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
         } catch (err) {
             const bad = err?.name === 'InvalidPasswordError';
             setSubmitError(bad ? 'Incorrect password.' : err?.message || 'Sign failed.');
-            setStage('form');
+            setStage('review');
             if (!isWatcherMode && !hw) {
                 passwordRef.current?.focus();
                 passwordRef.current?.select();
@@ -289,10 +326,12 @@ export function CrossChainSwapForm({ walletId, onBack }) {
         setStage('form');
     }
 
-        const header = (
+    const header = (
         <ScreenHeader
             onBack={onBack}
-            title="Cross-chain swap"
+            title={stage === 'review' || stage === 'submitting'
+                ? 'Review swap'
+                : 'Cross-chain swap'}
         />
     );
     const wrap = (children) => (
@@ -347,12 +386,105 @@ export function CrossChainSwapForm({ walletId, onBack }) {
         return wrap(<p className={styles.hint}>Loading wallet…</p>);
     }
 
+    // Review and submitting stages: show a confirmation summary with
+    // all swap terms before the user signs. The real broadcast only fires
+    // from here, keeping the form stage completely read-only.
+    if (stage === 'review' || stage === 'submitting') {
+        return wrap(
+            <form onSubmit={handleSubmit} noValidate>
+                <p className={styles.summary}>
+                    Offer to give {giveAmount} {giveTick} on {giveDescriptor?.displayName || giveChainId} in exchange
+                    for {getAmount} {getTick} on {getDescriptor?.displayName || getChainId}.
+                </p>
+                <dl className={styles.detailsList}>
+                    <DetailRow
+                        label="Give chain"
+                        value={giveDescriptor ? <ChainBadge descriptor={giveDescriptor} size="sm" /> : giveChainId}
+                    />
+                    <DetailRow
+                        label="Give"
+                        value={`${giveAmount} ${giveTick}`}
+                    />
+                    <DetailRow
+                        label="From"
+                        value={<AddressText address={fromAddress.address} />}
+                    />
+                    <DetailRow
+                        label="Get chain"
+                        value={getDescriptor ? <ChainBadge descriptor={getDescriptor} size="sm" /> : getChainId}
+                    />
+                    <DetailRow
+                        label="Get"
+                        value={`${getAmount} ${getTick}`}
+                    />
+                    <DetailRow
+                        label="Receive at"
+                        value={<AddressText address={getAddress} />}
+                    />
+                    {expirationBlocks ? (
+                        <DetailRow label="Expiration" value={`${expirationBlocks} blocks`} />
+                    ) : null}
+                    {memo ? (
+                        <DetailRow label="Memo" value={memo} />
+                    ) : null}
+                    <DetailRow label="Network fee" value={feeText} />
+                </dl>
+                {isWatcherMode ? (
+                    <p className={styles.hint}>
+                        Watcher mode: this wallet will build an unsigned transaction.
+                        Sign it on your Signer-mode wallet, then bring the
+                        signed transaction to a Full-mode wallet to broadcast.
+                    </p>
+                ) : (
+                    <SignCredentials
+                        unlocked={signerReady}
+                        fromAddress={fromAddress}
+                        chainId={giveChainId}
+                        password={password}
+                        onPasswordChange={(v) => {
+                            setPassword(v);
+                            if (submitError) setSubmitError(null);
+                        }}
+                        onStatusChange={onHwStatusChange}
+                        passwordRef={passwordRef}
+                        submitError={submitError}
+                        disabled={stage === 'submitting'}
+                        getSignerStatus={messaging.getSignerStatus}
+                    />
+                )}
+                {(isWatcherMode || hw) && submitError ? (
+                    <div role="alert" className={styles.error}>{submitError}</div>
+                ) : null}
+                <div className={styles.actions}>
+                    <Button
+                        type="submit"
+                        variant="primary"
+                        loading={stage === 'submitting'}
+                        disabled={
+                            isWatcherMode
+                                ? false
+                                : hw
+                                    ? hwStatus !== 'available'
+                                    : (!signerReady && password.length === 0)
+                        }
+                    >
+                        {isWatcherMode
+                            ? 'Create unsigned transaction'
+                            : hw
+                                ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                                : 'Sign cross-chain SWAP'}
+                    </Button>
+                </div>
+            </form>,
+        );
+    }
+
     const chainIds = Object.entries(addressesByChain)
         .filter(([, addrs]) => Array.isArray(addrs) && addrs.length > 0)
         .map(([cid]) => cid);
 
     return wrap(
-        <form onSubmit={handleSubmit} noValidate>
+        <form onSubmit={handleReview} noValidate>
             <div style={{
                 display: 'grid',
                 gridTemplateColumns: isFull ? '1fr 1fr' : '1fr',
@@ -478,58 +610,6 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                 <p role="alert" className={styles.error}>{validationError}</p>
             ) : null}
 
-            {fromAddress && giveChainId && getChainId ? (
-                <>
-                    <dl className={styles.detailsList}>
-                        <dt className={styles.detailsLabel}>Give</dt>
-                        <dd className={styles.detailsValue}>
-                            {giveAmount} {giveTick} on {giveDescriptor?.displayName || giveChainId}
-                        </dd>
-                        <dt className={styles.detailsLabel}>Get</dt>
-                        <dd className={styles.detailsValue}>
-                            {getAmount} {getTick} on {getDescriptor?.displayName || getChainId}
-                        </dd>
-                        <dt className={styles.detailsLabel}>From</dt>
-                        <dd className={styles.detailsValue}>
-                            <AddressText address={fromAddress.address} />
-                        </dd>
-                        <dt className={styles.detailsLabel}>To</dt>
-                        <dd className={styles.detailsValue}>
-                            {getAddress ? <AddressText address={getAddress} /> : '(none)'}
-                        </dd>
-                    </dl>
-
-                    {isWatcherMode ? (
-                        <p className={styles.hint}>
-                            Watcher mode: this wallet will build an unsigned transaction.
-                            Sign it on your Signer-mode wallet, then bring the
-                            signed transaction to a Full-mode wallet to broadcast.
-                        </p>
-                    ) : (
-                        <SignCredentials
-                        unlocked={signerReady}
-                            fromAddress={fromAddress}
-                            chainId={giveChainId}
-                            password={password}
-                            onPasswordChange={(v) => {
-                                setPassword(v);
-                                if (submitError) setSubmitError(null);
-                            }}
-                            onStatusChange={onHwStatusChange}
-                            passwordRef={passwordRef}
-                            submitError={submitError}
-                            disabled={stage === 'submitting'}
-                            getSignerStatus={messaging.getSignerStatus}
-                        />
-                    )}
-                    {(isWatcherMode || hw) && submitError ? (
-                        <p role="alert" style={{ margin: '0.25rem 0 0', color: '#ef5350', fontSize: '0.75rem' }}>
-                            {submitError}
-                        </p>
-                    ) : null}
-                </>
-            ) : null}
-
             {formError ? (
                 <p role="alert" className={styles.error}>{formError}</p>
             ) : null}
@@ -538,22 +618,23 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                 <Button
                     type="submit"
                     variant="primary"
-                    loading={stage === 'submitting'}
                     disabled={!!validationError
                         || !fromAddress
-                        || !giveTick || !giveAmount || !getTick || !getAmount || !getAddress
-                        || (isWatcherMode
-                            ? false
-                            : hw ? hwStatus !== 'available' : (!signerReady && password.length === 0))}
+                        || !giveTick || !giveAmount || !getTick || !getAmount || !getAddress}
                 >
-                    {isWatcherMode
-                        ? 'Create unsigned transaction'
-                        : hw
-                            ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                            : 'Sign cross-chain SWAP'}
+                    Review
                 </Button>
             </div>
         </form>,
+    );
+}
+
+function DetailRow({ label, value }) {
+    return (
+        <>
+            <dt className={styles.detailsLabel}>{label}</dt>
+            <dd className={styles.detailsValue}>{value}</dd>
+        </>
     );
 }
 

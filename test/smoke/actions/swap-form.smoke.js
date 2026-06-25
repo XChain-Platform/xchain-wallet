@@ -93,6 +93,46 @@ assert.ok(/GIVE_OWNERSHIP/.test(src) && /GET_OWNERSHIP/.test(src),
 assert.ok(/setGiveOwnership/.test(src) && /setGetOwnership/.test(src),
     'SwapForm wires give/get ownership toggles');
 
+// Review stage: form goes form -> review -> submitting -> done.
+assert.ok(/'form' \| 'review' \| 'submitting' \| 'done'/.test(src),
+    "SwapForm stage type includes 'review'");
+assert.ok(/setStage\('review'\)/.test(src),
+    'SwapForm calls setStage(review) on form submit');
+assert.ok(/function handleReview\b/.test(src),
+    'SwapForm has a handleReview handler that gates the review transition');
+// swapAction must only be reachable from handleSubmit, not from handleReview.
+// Verify: handleReview exists and sets stage to review; handleSubmit fires the flows.
+// The two calls must appear AFTER handleReview ends (i.e. inside handleSubmit).
+{
+    const reviewIdx = src.indexOf('function handleReview');
+    const submitIdx = src.indexOf('function handleSubmit');
+    assert.ok(reviewIdx !== -1, 'handleReview is present');
+    assert.ok(submitIdx !== -1, 'handleSubmit is present');
+    // handleReview must appear before handleSubmit in the file.
+    assert.ok(reviewIdx < submitIdx, 'handleReview is defined before handleSubmit');
+    // The actual flow calls must appear inside handleSubmit (after it starts).
+    const swapActionIdx = src.indexOf('messaging.swapAction(');
+    const swapActionHwIdx = src.indexOf('messaging.swapActionHw(');
+    assert.ok(swapActionIdx > submitIdx,
+        'messaging.swapAction is gated behind handleSubmit (after review)');
+    assert.ok(swapActionHwIdx > submitIdx,
+        'messaging.swapActionHw is gated behind handleSubmit (after review)');
+}
+// On submit error, stage returns to 'review' (not 'form'). The setStage('review')
+// call must appear inside handleSubmit (after its definition) and must not be
+// the initial form-stage call (which is handled by setStage('form') in handleBuildAnother).
+{
+    const submitIdx = src.indexOf('function handleSubmit');
+    const reviewInSubmit = src.indexOf("setStage('review')", submitIdx);
+    assert.ok(reviewInSubmit !== -1 && reviewInSubmit > submitIdx,
+        "SwapForm returns to 'review' stage (not 'form') on submit error");
+}
+// Fee estimate row appears on the review screen.
+assert.ok(/estimateNativeSendFee/.test(src),
+    'SwapForm imports and uses estimateNativeSendFee for the review screen');
+assert.ok(/Network fee/.test(src),
+    'SwapForm review screen shows a Network fee row');
+
 // --- 3. Background handlers -------------------------------------------
 
 const bg = readFileSync(join(ext, 'src', 'background', 'createBackgroundHost.js'), 'utf8');

@@ -110,6 +110,34 @@ assert.ok(/SignCredentials/.test(src) && /isHwSource/.test(src),
 assert.ok(/PubkeyNotFoundError/.test(src),
     'ComposeMessage handles PubkeyNotFoundError from the background flow');
 
+// --- 2c. Review/confirm gate ------------------------------------------
+// The message must not be signed/broadcast until the user reviews the
+// recipient + cost and confirms. The form submits to a review stage; the
+// real send (messageAction / messageActionHw) fires only from review.
+for (const stage of ['form', 'review', 'submitting', 'done']) {
+    assert.ok(src.includes(`'${stage}'`),
+        `ComposeMessage stage machine includes "${stage}"`);
+}
+assert.ok(/function handleReview\b/.test(src),
+    'ComposeMessage has a handleReview handler that gates the send behind a review');
+assert.ok(/onSubmit=\{handleReview\}/.test(src),
+    'ComposeMessage form submits to handleReview (review first, not send)');
+assert.ok(/setStage\('review'\)/.test(src),
+    'ComposeMessage advances to the review stage before sending');
+// The real send lives in handleSubmit, reached only from the review-stage
+// form. handleReview must NOT call messageAction itself: the send is gated.
+const reviewBody = src.slice(
+    src.indexOf('function handleReview'),
+    src.indexOf('async function handleSubmit'),
+);
+assert.ok(reviewBody.length > 0, 'handleReview precedes handleSubmit');
+assert.ok(!/messaging\.messageAction(Hw)?\s*\(/.test(reviewBody),
+    'handleReview does not send: messageAction is gated behind the review confirm');
+assert.ok(/estimateNativeSendFee\s*\(/.test(src),
+    'ComposeMessage review estimates the network fee (recipient + cost shown)');
+assert.ok(/Review message/.test(src),
+    'ComposeMessage retitles the header to "Review message" on the review stage');
+
 // --- 3. Background handlers -------------------------------------------
 
 const bg = readFileSync(join(ext, 'src', 'background', 'createBackgroundHost.js'), 'utf8');

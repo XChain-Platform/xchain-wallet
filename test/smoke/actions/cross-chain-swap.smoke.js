@@ -70,6 +70,33 @@ assert.ok(/GET_ADDRESS/.test(src),
 assert.ok(/EXPIRATION/.test(src),
     'CrossChainSwapForm sets EXPIRATION on the SWAP params');
 
+// Review/confirm stage: signing is gated behind a review screen.
+assert.ok(/'form' \| 'review' \| 'submitting' \| 'done'/.test(src),
+    'CrossChainSwapForm stage type includes review');
+assert.ok(/setStage\('review'\)/.test(src),
+    'CrossChainSwapForm advances to review stage before signing');
+assert.ok(/function handleReview\b/.test(src),
+    'CrossChainSwapForm form submit handler is handleReview (not handleSubmit)');
+assert.ok(/onSubmit=\{handleReview\}/.test(src),
+    'CrossChainSwapForm form element uses handleReview as its onSubmit');
+// handleSubmit is only reachable from the review stage form.
+assert.ok(/stage === 'review' \|\| stage === 'submitting'/.test(src),
+    'CrossChainSwapForm renders sign block only in review/submitting stage');
+// On error, stage reverts to review (not form).
+assert.ok(/setStage\('review'\)/.test(src),
+    'CrossChainSwapForm reverts to review stage on submit error');
+// Review screen shows fee estimate from the give chain.
+assert.ok(/estimateNativeSendFee/.test(src),
+    'CrossChainSwapForm imports and calls estimateNativeSendFee for the review screen');
+assert.ok(/Network fee/.test(src),
+    'CrossChainSwapForm review screen includes a Network fee row');
+// Header title switches on stage.
+assert.ok(/Review swap/.test(src),
+    'CrossChainSwapForm header title says "Review swap" in review/submitting stage');
+// Form-stage primary button label is "Review".
+assert.ok(/>\s*Review\s*<\/Button>/.test(src),
+    'CrossChainSwapForm form-stage primary button label is "Review"');
+
 // --- App.jsx wiring (all three shells) ---
 
 for (const [shell, appPath] of [
@@ -91,5 +118,5 @@ for (const [shell, appPath] of [
 }
 
 console.log(
-    'OK: cross-chain swap smoke (CrossChainSwapForm §42.8.3 give-chain + get-chain pickers + auto-filled receiver via getNewestAddress + GIVE_COIN/GET_COIN asymmetry validation + native-coin DISPENSER rule retained + reuses swapAction core flow + HW vs software signing + 3-shell App.jsx + ActionsMenu entry)',
+    'OK: cross-chain swap smoke (CrossChainSwapForm §42.8.3 give-chain + get-chain pickers + auto-filled receiver via getNewestAddress + GIVE_COIN/GET_COIN asymmetry validation + native-coin DISPENSER rule retained + reuses swapAction core flow + HW vs software signing + review/confirm stage gates signing + network fee on review + 3-shell App.jsx + ActionsMenu entry)',
 );

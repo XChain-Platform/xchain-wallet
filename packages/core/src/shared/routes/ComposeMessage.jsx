@@ -23,9 +23,14 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
+import { estimateNativeSendFee } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+
+// User-facing native ticker for a chain, used to label the network-fee
+// estimate on the review screen.
+const NATIVE_TICKER_BY_CHAIN = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
 
 /**
  * §41.7.3 Compose encrypted message.
@@ -96,7 +101,7 @@ export function ComposeMessage({
     const [handshakeBusy, setHandshakeBusy] = useState(false);
     const [handshakeSent, setHandshakeSent] = useState(false);
     const [stage, setStage] = useState(
-        /** @type {'form' | 'submitting' | 'done'} */ ('form'),
+        /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
     );
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [hwStatus, setHwStatus] = useState('idle');
@@ -154,6 +159,12 @@ export function ComposeMessage({
         return () => { cancelled = true; clearTimeout(handle); };
     }, [chainId, toAddress, messaging]);
 
+    useEffect(() => {
+        if (stage === 'review') {
+            setTimeout(() => passwordRef.current?.focus(), 0);
+        }
+    }, [stage]);
+
     const fromAddress = useMemo(() => {
         if (!addressesByChain || !fromAddressId || !chainId) return null;
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
@@ -165,6 +176,21 @@ export function ComposeMessage({
         walletId,
         signerId: hw ? fromAddress?.signerId : null,
     });
+
+    // Form submit: run the same guards that gate a real send, then move to the
+    // review stage. No signing or broadcast happens here; the message is only
+    // sent once the user confirms on the review screen via handleSubmit.
+    function handleReview(event) {
+        event.preventDefault();
+        if (stage !== 'form') return;
+        if (!fromAddress || !chainId || !toAddress.trim() || !message.trim()) return;
+        if (pubkeyState === 'missing' && !sendUnencrypted) return;
+        if (pubkeyState === 'checking') return;
+        if (!hw && !signerReady && password.length === 0) return;
+        if (hw && hwStatus !== 'available') return;
+        setSubmitError(null);
+        setStage('review');
+    }
 
     async function handleSubmit(event) {
         event.preventDefault();
@@ -209,7 +235,7 @@ export function ComposeMessage({
             } else {
                 setSubmitError(err?.message || 'Send failed.');
             }
-            setStage('form');
+            setStage('review');
             if (!hw) {
                 passwordRef.current?.focus();
                 passwordRef.current?.select();
@@ -259,7 +285,7 @@ export function ComposeMessage({
         const header = (
         <ScreenHeader
             onBack={onBack}
-            title="New message"
+            title={stage === 'review' || stage === 'submitting' ? 'Review message' : 'New message'}
         />
     );
     const wrap = (children) => (
@@ -300,8 +326,96 @@ export function ComposeMessage({
 
     const chainIds = Object.keys(addressesByChain || {});
 
+    if (stage === 'review' || stage === 'submitting') {
+        const fee = estimateNativeSendFee({ chainId, chainRegistry });
+        const ticker = descriptor?.coin
+            ? (NATIVE_TICKER_BY_CHAIN[descriptor.coin] || descriptor.coin.toUpperCase())
+            : '';
+        const feeText = fee
+            ? `${fee.coinAmount} ${ticker}`.trim() + (fee.rate ? ` (${fee.rate})` : '')
+            : 'Estimate unavailable';
+        const unencrypted = pubkeyState === 'missing' && sendUnencrypted;
+        const encryptionLabel = unencrypted
+            ? 'Unencrypted plaintext'
+            : (encryptionChoice === 'ecdh' && !hw ? 'ECDH' : 'ECIES');
+        return wrap(
+            <form onSubmit={handleSubmit} noValidate>
+                <p className={styles.summary}>
+                    Send an {unencrypted ? 'unencrypted' : 'encrypted'} message to this recipient.
+                </p>
+                <dl className={styles.detailsList}>
+                    <dt className={styles.detailsLabel}>Chain</dt>
+                    <dd className={styles.detailsValue}>
+                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
+                    </dd>
+                    <dt className={styles.detailsLabel}>From</dt>
+                    <dd className={styles.detailsValue}>
+                        <AddressText address={fromAddress.address} />
+                    </dd>
+                    <DetailRow
+                        label="To"
+                        value={<AddressText address={toAddress.trim()} />}
+                    />
+                    <DetailRow label="Encryption" value={encryptionLabel} />
+                    <DetailRow label="Network fee" value={feeText} />
+                    <DetailRow
+                        label="Message"
+                        value={(
+                            <span style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                                {message}
+                            </span>
+                        )}
+                    />
+                </dl>
+
+                <SignCredentials
+                    fromAddress={fromAddress}
+                    chainId={chainId}
+                    unlocked={signerReady}
+                    password={password}
+                    onPasswordChange={(v) => {
+                        setPassword(v);
+                        if (submitError) setSubmitError(null);
+                    }}
+                    onStatusChange={onHwStatusChange}
+                    passwordRef={passwordRef}
+                    submitError={submitError}
+                    disabled={stage === 'submitting'}
+                    getSignerStatus={messaging.getSignerStatus}
+                    signerInfo={hwSignerInfo}
+                />
+                {hw && submitError ? (
+                    <p role="alert" style={{ margin: '0.25rem 0 0', color: '#ef5350', fontSize: '0.75rem' }}>
+                        {submitError}
+                    </p>
+                ) : null}
+
+                <div className={styles.actions}>
+                    <Button
+                        type="submit"
+                        variant="primary"
+                        loading={stage === 'submitting'}
+                        disabled={hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
+                    >
+                        {hw
+                            ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                            : 'Send message'}
+                    </Button>
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => setStage('form')}
+                        disabled={stage === 'submitting'}
+                    >
+                        Back
+                    </Button>
+                </div>
+            </form>,
+        );
+    }
+
     return wrap(
-        <form onSubmit={handleSubmit} noValidate>
+        <form onSubmit={handleReview} noValidate>
             <ChainPicker
                 label="From chain"
                 value={chainId}
@@ -420,59 +534,40 @@ export function ComposeMessage({
             </label>
 
             {fromAddress && chainId ? (
-                <>
-                    <dl className={styles.detailsList}>
-                        <dt className={styles.detailsLabel}>Chain</dt>
-                        <dd className={styles.detailsValue}>
-                            {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                        </dd>
-                        <dt className={styles.detailsLabel}>From</dt>
-                        <dd className={styles.detailsValue}>
-                            <AddressText address={fromAddress.address} />
-                        </dd>
-                    </dl>
-
-                    <SignCredentials
-                        fromAddress={fromAddress}
-                        chainId={chainId}
-                        unlocked={signerReady}
-                        password={password}
-                        onPasswordChange={(v) => {
-                            setPassword(v);
-                            if (submitError) setSubmitError(null);
-                        }}
-                        onStatusChange={onHwStatusChange}
-                        passwordRef={passwordRef}
-                        submitError={submitError}
-                        disabled={stage === 'submitting'}
-                        getSignerStatus={messaging.getSignerStatus}
-                        signerInfo={hwSignerInfo}
-                    />
-                    {hw && submitError ? (
-                        <p role="alert" style={{ margin: '0.25rem 0 0', color: '#ef5350', fontSize: '0.75rem' }}>
-                            {submitError}
-                        </p>
-                    ) : null}
-                </>
+                <dl className={styles.detailsList}>
+                    <dt className={styles.detailsLabel}>Chain</dt>
+                    <dd className={styles.detailsValue}>
+                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
+                    </dd>
+                    <dt className={styles.detailsLabel}>From</dt>
+                    <dd className={styles.detailsValue}>
+                        <AddressText address={fromAddress.address} />
+                    </dd>
+                </dl>
             ) : null}
 
             <div className={styles.actions}>
                 <Button
                     type="submit"
                     variant="primary"
-                    loading={stage === 'submitting'}
                     disabled={!fromAddress
                         || !toAddress.trim()
                         || !message.trim()
                         || (pubkeyState === 'missing' && !sendUnencrypted)
-                        || pubkeyState === 'checking'
-                        || (hw ? hwStatus !== 'available' : (!signerReady && password.length === 0))}
+                        || pubkeyState === 'checking'}
                 >
-                    {hw
-                        ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                        : 'Send message'}
+                    Review
                 </Button>
             </div>
         </form>,
+    );
+}
+
+function DetailRow({ label, value }) {
+    return (
+        <>
+            <dt className={styles.detailsLabel}>{label}</dt>
+            <dd className={styles.detailsValue}>{value}</dd>
+        </>
     );
 }

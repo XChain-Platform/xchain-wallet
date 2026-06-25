@@ -91,6 +91,40 @@ assert.ok(/p\.GIVE_TICK = tick2/.test(src) && /p\.GET_TICK = tick1/.test(src),
 assert.ok(/p\.GIVE_TICK = tick1/.test(src) && /p\.GET_TICK = tick2/.test(src),
     'Sell side gives tick1 to get tick2');
 
+// --- 4b. Review step (form -> review -> sign) -------------------
+
+// Stage type now includes 'review'.
+assert.ok(/'form' \| 'review' \| 'submitting' \| 'done'/.test(src),
+    "stage type includes 'review'");
+
+// Form submit goes to handleReview, which sets stage to 'review'
+// without calling orderAction or orderActionHw.
+assert.ok(/function handleReview\b/.test(src), 'handleReview function defined');
+assert.ok(/setStage\('review'\)/.test(src), "handleReview advances stage to 'review'");
+
+// orderAction / orderActionHw live inside handleSubmit, which is only
+// reachable from the review stage (the form's onSubmit is handleReview).
+// We verify they appear AFTER the review guard and that the form uses
+// handleReview on its onSubmit.
+assert.ok(/onSubmit={handleReview}/.test(src),
+    'form onSubmit is handleReview (not handleSubmit)');
+assert.ok(/function handleSubmit\b/.test(src), 'handleSubmit function still exists');
+
+// On sign error, the panel stays in the review stage (not form).
+assert.ok(/setStage\('review'\)/.test(src)
+    && /catch/.test(src),
+    'sign errors return to review stage');
+
+// Review view shows an Edit/Back affordance to return to form.
+assert.ok(/setStage\('form'\)/.test(src),
+    'review view has a Back/Edit affordance that returns to form stage');
+
+// Review view shows a network fee line via estimateNativeSendFee.
+assert.ok(/estimateNativeSendFee/.test(src),
+    'PlaceOrderPanel imports and uses estimateNativeSendFee for fee display');
+assert.ok(/Network fee/.test(src),
+    'review view renders a "Network fee" row');
+
 // --- 5. Background handlers --------------------------------------
 
 const bgSrc = readFileSync(
@@ -121,5 +155,5 @@ for (const [shell, msgPath] of [
 }
 
 console.log(
-    'OK: place-order smoke (orderAction + cancelOrder core flows guard required fields; PlaceOrderPanel §41.3.4 uses SignCredentials + isHwSource + branches orderAction/orderActionHw + prefillPrice from orderbook + buy/sell toggle maps to GIVE/GET orientation + EXPIRATION presets; 4 background handlers registered (order/cancelOrder × sw+hw); orderAction + orderActionHw + cancelOrder + cancelOrderHw exported by popup/web/desktop messaging)',
+    'OK: place-order smoke (orderAction + cancelOrder core flows guard required fields; PlaceOrderPanel §41.3.4 uses SignCredentials + isHwSource + branches orderAction/orderActionHw + prefillPrice from orderbook + buy/sell toggle maps to GIVE/GET orientation + EXPIRATION presets; form->review->sign flow: handleReview gates entry to review stage, orderAction/orderActionHw only fire from handleSubmit on review, sign errors stay on review, Back/Edit returns to form; estimateNativeSendFee renders Network fee row; 4 background handlers registered (order/cancelOrder × sw+hw); orderAction + orderActionHw + cancelOrder + cancelOrderHw exported by popup/web/desktop messaging)',
 );

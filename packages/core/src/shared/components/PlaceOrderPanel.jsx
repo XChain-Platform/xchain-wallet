@@ -29,12 +29,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Input } from '@xchain-wallet/core/ui';
 import { flows as flowsLib, registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging } from '../useMessaging.js';
-import { isHwSource } from './SignCredentials.jsx';
+import { isHwSource, SignCredentials } from './SignCredentials.jsx';
 import { buildBalanceRows } from './BalanceList.jsx';
 import { formatWithThousands } from '../utils/amountFormat.js';
 import { NativeFeeToggle } from './NativeFeeToggle.jsx';
 import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 import { preferredSourceId } from '../addressSelection.js';
+import { estimateNativeSendFee } from '../../flows/feeEstimate.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -71,7 +72,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
     );
     const [fromAddressId, setFromAddressId] = useState(/** @type {string | null} */ (null));
     const [password, setPassword] = useState('');
-    const [stage, setStage] = useState(/** @type {'form' | 'submitting' | 'done'} */ ('form'));
+    const [stage, setStage] = useState(/** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'));
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
@@ -192,9 +193,11 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
         return p;
     }
 
-    async function handleSubmit(event) {
+    // Validate form fields and advance to the review stage. No signing
+    // happens here; the user sees a summary and confirms before we touch
+    // the key material.
+    function handleReview(event) {
         event.preventDefault();
-        if (stage === 'submitting') return;
         if (!fromAddress) {
             setFormError('No address to sign from on this chain. Use Receive first.');
             return;
@@ -213,14 +216,20 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
             setFormError('Expiration must be a non-negative integer (blocks).');
             return;
         }
-        // Password input intentionally removed. The wallet is unlocked at
-        // this point. If the backend has actually re-locked, the sign
-        // call below will surface that as an InvalidPasswordError.
-        if (hw && hwStatus !== 'available') {
-            setFormError('Connect and unlock the hardware signer first.');
-            return;
-        }
         setFormError(null);
+        setSubmitError(null);
+        setStage('review');
+        // Focus the password field on the review screen so the user
+        // can immediately start typing without an extra click.
+        setTimeout(() => passwordRef.current?.focus(), 0);
+    }
+
+    // Executes the ORDER sign and broadcast. Only reachable from the
+    // review stage; returns to review (not form) on error so the user
+    // can correct their credentials without losing the order summary.
+    async function handleSubmit(event) {
+        event.preventDefault();
+        if (stage === 'submitting') return;
         setStage('submitting');
         setSubmitError(null);
         try {
@@ -259,13 +268,21 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                 errorMessage = err?.message || 'Order placement failed.';
             }
             setSubmitError(errorMessage);
-            setStage('form');
+            // Return to review (not form) so the user sees the error
+            // alongside their credentials without having to re-enter
+            // the order details.
+            setStage('review');
             if (!hw) {
                 passwordRef.current?.focus();
                 passwordRef.current?.select();
             }
         }
     }
+
+    const feeEstimate = useMemo(
+        () => estimateNativeSendFee({ chainId, chainRegistry }),
+        [chainId],
+    );
 
     if (stage === 'done') {
         const txid = result?.txid || result?.broadcast?.txid;
@@ -301,9 +318,129 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
         );
     }
 
+    // Review stage: show order summary, collect credentials, then sign.
+    // The user returns to the form (with inputs intact) via "Edit order".
+    if (stage === 'review' || stage === 'submitting') {
+        const expirationLabel = expirationId === 'never'
+            ? 'Never (perpetual)'
+            : expirationId === 'custom'
+                ? `${expirationBlocks} blocks`
+                : (EXPIRATION_PRESETS.find((e) => e.id === expirationId)?.label ?? expirationId);
+
+        const giveTick = side === 'buy' ? tick2 : tick1;
+        const giveAmt = side === 'buy' ? (total != null ? String(total) : '') : size;
+        const getTick = side === 'buy' ? tick1 : tick2;
+        const getAmt = side === 'buy' ? size : (total != null ? String(total) : '');
+
+        let feeDisplay = 'Estimate unavailable';
+        if (feeEstimate) {
+            feeDisplay = `${feeEstimate.coinAmount} ${coinTicker}`;
+            if (feeEstimate.rate) feeDisplay += ` (${feeEstimate.rate})`;
+        }
+
+        const panelStyle = {
+            border: '1px solid var(--xc-border)',
+            borderRadius: '4px',
+            padding: '0.75rem',
+        };
+        const dlStyle = {
+            margin: '0 0 var(--xc-space-2)',
+            padding: 'var(--xc-space-2) var(--xc-space-3)',
+            background: 'var(--xc-bg-muted)',
+            border: '1px solid var(--xc-border)',
+            borderRadius: 'var(--xc-radius-sm)',
+            display: 'grid',
+            gridTemplateColumns: 'auto 1fr',
+            columnGap: 'var(--xc-space-3)',
+            rowGap: 2,
+            fontSize: 'var(--xc-text-xs)',
+        };
+        const dtStyle = { color: 'var(--xc-text-muted)' };
+        const ddStyle = { margin: 0, color: 'var(--xc-text)', textAlign: 'right', fontVariantNumeric: 'tabular-nums' };
+
+        return (
+            <div style={panelStyle}>
+                <p style={{ margin: '0 0 var(--xc-space-2)', fontSize: '0.85rem', fontWeight: 600 }}>
+                    {summary || `${side === 'buy' ? 'Buy' : 'Sell'} order`}
+                </p>
+                <dl style={dlStyle}>
+                    <dt style={dtStyle}>Market</dt>
+                    <dd style={ddStyle}>{tick1}/{tick2}</dd>
+                    <dt style={dtStyle}>Side</dt>
+                    <dd style={ddStyle}>{side === 'buy' ? 'Buy' : 'Sell'}</dd>
+                    <dt style={dtStyle}>Give</dt>
+                    <dd style={ddStyle}>{giveAmt} {giveTick}</dd>
+                    <dt style={dtStyle}>Get</dt>
+                    <dd style={ddStyle}>{getAmt} {getTick}</dd>
+                    <dt style={dtStyle}>Price</dt>
+                    <dd style={ddStyle}>{price} {tick2}/{tick1}</dd>
+                    <dt style={dtStyle}>Expiration</dt>
+                    <dd style={ddStyle}>{expirationLabel}</dd>
+                    <dt style={dtStyle}>From</dt>
+                    <dd style={{ ...ddStyle, wordBreak: 'break-all' }}>
+                        {fromAddress?.address ?? '-'}
+                    </dd>
+                    <dt style={dtStyle}>Network fee</dt>
+                    <dd style={ddStyle}>{feeDisplay}</dd>
+                </dl>
+                {payFeeInNativeCoin ? (
+                    <p
+                        role="alert"
+                        style={{ margin: '0 0 var(--xc-space-2)', color: 'var(--xc-text-muted)', fontSize: '0.75rem' }}
+                    >
+                        {NATIVE_FEE_WARNING}
+                    </p>
+                ) : null}
+                <form onSubmit={handleSubmit} noValidate>
+                    <SignCredentials
+                        fromAddress={fromAddress}
+                        chainId={chainId}
+                        password={password}
+                        onPasswordChange={(v) => {
+                            setPassword(v);
+                            if (submitError) setSubmitError(null);
+                        }}
+                        onStatusChange={onHwStatusChange}
+                        passwordRef={passwordRef}
+                        submitError={submitError}
+                        disabled={stage === 'submitting'}
+                        getSignerStatus={messaging.getSignerStatus}
+                    />
+                    {submitError && hw ? (
+                        <p role="alert" style={{ margin: '0.5rem 0 0', color: '#ef5350', fontSize: '0.75rem' }}>
+                            {submitError}
+                        </p>
+                    ) : null}
+                    <div style={{ display: 'flex', gap: 'var(--xc-space-2)', marginTop: '0.5rem' }}>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setStage('form')}
+                            disabled={stage === 'submitting'}
+                        >
+                            Edit order
+                        </Button>
+                        <Button
+                            type="submit"
+                            variant="primary"
+                            block
+                            loading={stage === 'submitting'}
+                            disabled={hw && hwStatus !== 'available'}
+                        >
+                            {hw
+                                ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                                : `Place ${side} order`}
+                        </Button>
+                    </div>
+                </form>
+            </div>
+        );
+    }
+
     return (
         <form
-            onSubmit={handleSubmit}
+            onSubmit={handleReview}
             noValidate
             style={{
                 border: '1px solid var(--xc-border)',
@@ -452,22 +589,12 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                 onChange={setPayFeeInNativeCoin}
                 coinTicker={coinTicker}
             />
-            {/* Password input intentionally omitted. The wallet is
-                already unlocked at this point, and forcing a re-entry
-                here breaks the in-context trading flow. The submit
-                handler passes the empty password through; signing will
-                fail loudly if the wallet has actually re-locked. */}
             {payFeeInNativeCoin ? (
                 <p
                     role="alert"
                     style={{ margin: '0.5rem 0 0', color: 'var(--xc-text-muted)', fontSize: '0.75rem' }}
                 >
                     {NATIVE_FEE_WARNING}
-                </p>
-            ) : null}
-            {submitError ? (
-                <p role="alert" style={{ margin: '0.5rem 0 0', color: '#ef5350', fontSize: '0.75rem' }}>
-                    {submitError}
                 </p>
             ) : null}
             {formError ? (
@@ -480,17 +607,9 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                     type="submit"
                     variant="primary"
                     block
-                    loading={stage === 'submitting'}
-                    disabled={
-                        !fromAddress
-                        || !price
-                        || !size
-                        || (hw && hwStatus !== 'available')
-                    }
+                    disabled={!fromAddress || !price || !size}
                 >
-                    {hw
-                        ? `${side === 'buy' ? 'Buy' : 'Sell'} on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                        : `Place ${side} order`}
+                    Review
                 </Button>
             </div>
         </form>

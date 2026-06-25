@@ -28,6 +28,7 @@ import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 import { preferredSourceId } from '../addressSelection.js';
+import { estimateNativeSendFee } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -100,7 +101,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
     const [password, setPassword] = useState('');
 
     const [stage, setStage] = useState(
-        /** @type {'form' | 'submitting' | 'done'} */ ('form'),
+        /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
     );
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
@@ -145,6 +146,14 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
         setFromAddressId(preferredSourceId(addressesByChain[chainId] || [], activeByChain[chainId]));
     }, [chainId, addressesByChain, activeByChain]);
 
+    // Focus password field immediately on entering review so the user can
+    // sign without reaching for the mouse (mirrors DestroyForm behaviour).
+    useEffect(() => {
+        if (stage === 'review') {
+            setTimeout(() => passwordRef.current?.focus(), 0);
+        }
+    }, [stage]);
+
     const fromAddress = useMemo(() => {
         if (!addressesByChain || !fromAddressId || !chainId) return null;
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
@@ -177,22 +186,39 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
     // §20 / Cluster W FOLLOWUP 5: watcher-mode encode-only branch.
     const { isWatcherMode } = useWalletMode();
 
-    async function handleSubmit(event) {
+    // Network fee estimate shown on the review screen. Computed once and
+    // memoized; the chain is locked during review so staleness isn't a risk.
+    const feeEstimate = useMemo(
+        () => estimateNativeSendFee({ chainId, chainRegistry }),
+        [chainId],
+    );
+
+    // handleReview validates the form then moves to the review stage.
+    // No signing happens here: the actual flow calls live in handleSubmit
+    // and are only reachable after the user confirms on the review screen.
+    function handleReview(event) {
         event.preventDefault();
-        if (stage === 'submitting') return;
         if (!fromAddress || !chainId) return;
         if (validationError) return;
         if (!giveTick || !getTick
             || (!giveOwnership && !giveAmount)
             || (!getOwnership && !getAmount)) {
-            setFormError('Fill the give/get tickers and amounts before signing.');
+            setFormError('Fill the give/get tickers and amounts before reviewing.');
             return;
         }
+        setFormError(null);
+        setStage('review');
+    }
+
+    async function handleSubmit(event) {
+        event.preventDefault();
+        if (stage === 'submitting') return;
+        if (!fromAddress || !chainId) return;
+        if (validationError) return;
         if (!isWatcherMode && !hw && (!signerReady && password.length === 0)) return;
         if (!isWatcherMode && hw && hwStatus !== 'available') return;
 
         setStage('submitting');
-        setFormError(null);
         setSubmitError(null);
         try {
             const params = {
@@ -252,7 +278,9 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                         ? 'The native-coin fee price is temporarily unavailable. Try again in a moment, or turn off native-coin fee payment.'
                     : err?.message || 'Sign failed.',
             );
-            setStage('form');
+            // Stay on review rather than dropping back to the form so the
+            // user can correct their password without re-entering swap terms.
+            setStage('review');
             if (!isWatcherMode && !hw) {
                 passwordRef.current?.focus();
                 passwordRef.current?.select();
@@ -266,10 +294,13 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
         setStage('form');
     }
 
-        const header = (
+    const titleSuffix = descriptor ? ` on ${descriptor.displayName}` : '';
+    const header = (
         <ScreenHeader
             onBack={onBack}
-            title="Swap tokens"
+            title={stage === 'review' || stage === 'submitting'
+                ? 'Review swap'
+                : `Swap tokens${titleSuffix}`}
         />
     );
     const wrap = (children) => (
@@ -323,10 +354,107 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
         return wrap(<p className={styles.hint}>Loading wallet…</p>);
     }
 
+    // --- Review / submitting screen -------------------------------------
+    if (stage === 'review' || stage === 'submitting') {
+        const giveSide = giveOwnership
+            ? `ownership of ${giveTick.trim().toUpperCase()}`
+            : `${giveAmount} ${giveTick.trim().toUpperCase()}`;
+        const getSide = getOwnership
+            ? `ownership of ${getTick.trim().toUpperCase()}`
+            : `${getAmount} ${getTick.trim().toUpperCase()}`;
+        const feeLabel = feeEstimate
+            ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
+            : 'Estimate unavailable';
+
+        return wrap(
+            <form onSubmit={handleSubmit} noValidate>
+                <p className={styles.summary}>
+                    Swap {giveSide} for {getSide}
+                    {descriptor ? ` on ${descriptor.displayName}` : ''}.
+                </p>
+                <dl className={styles.detailsList}>
+                    <DetailRow label="Chain" value={
+                        descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId
+                    } />
+                    <DetailRow label="From" value={<AddressText address={fromAddress.address} />} />
+                    <DetailRow label="Give" value={giveSide} />
+                    <DetailRow label="Get" value={getSide} />
+                    {!giveOwnership && !getOwnership ? (
+                        <DetailRow
+                            label="Price"
+                            value={
+                                Number(giveAmount) > 0 && Number(getAmount) > 0
+                                    ? `1 ${giveTick.trim().toUpperCase()} = ${
+                                        (Number(getAmount) / Number(giveAmount)).toFixed(8).replace(/\.?0+$/, '')
+                                    } ${getTick.trim().toUpperCase()}`
+                                    : 'n/a'
+                            }
+                        />
+                    ) : null}
+                    {memo.trim() ? <DetailRow label="Memo" value={memo.trim()} /> : null}
+                    <DetailRow label="Network fee" value={feeLabel} />
+                </dl>
+                {payFeeInNativeCoin ? (
+                    <div role="alert" className={styles.warnings}>
+                        <p className={styles.warning}>{NATIVE_FEE_WARNING}</p>
+                    </div>
+                ) : null}
+                {isWatcherMode ? (
+                    <p className={styles.hint}>
+                        Watcher mode: this wallet will build an unsigned transaction.
+                        Sign it on your Signer-mode wallet, then bring the
+                        signed transaction to a Full-mode wallet to broadcast.
+                    </p>
+                ) : (
+                    <SignCredentials
+                        unlocked={signerReady}
+                        fromAddress={fromAddress}
+                        chainId={chainId}
+                        password={password}
+                        onPasswordChange={(v) => {
+                            setPassword(v);
+                            if (submitError) setSubmitError(null);
+                        }}
+                        onStatusChange={onHwStatusChange}
+                        passwordRef={passwordRef}
+                        submitError={submitError}
+                        disabled={stage === 'submitting'}
+                        getSignerStatus={messaging.getSignerStatus}
+                        signerInfo={hwSignerInfo}
+                    />
+                )}
+                {(isWatcherMode || hw) && submitError ? (
+                    <p role="alert" style={{ margin: '0.25rem 0 0', color: '#ef5350', fontSize: '0.75rem' }}>
+                        {submitError}
+                    </p>
+                ) : null}
+                <div className={styles.actions}>
+                    <Button
+                        type="submit"
+                        variant="primary"
+                        loading={stage === 'submitting'}
+                        disabled={
+                            isWatcherMode
+                                ? false
+                                : hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)
+                        }
+                    >
+                        {isWatcherMode
+                            ? 'Create unsigned transaction'
+                            : hw
+                                ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                                : 'Sign swap'}
+                    </Button>
+                </div>
+            </form>,
+        );
+    }
+
+    // --- Form screen ----------------------------------------------------
     const chainIds = Object.keys(addressesByChain || {});
 
     return wrap(
-        <form onSubmit={handleSubmit} noValidate>
+        <form onSubmit={handleReview} noValidate>
             <ChainPicker
                 label="Chain"
                 value={chainId}
@@ -434,57 +562,6 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                 </p>
             ) : null}
 
-            {fromAddress && chainId ? (
-                <>
-                    <dl className={styles.detailsList}>
-                        <dt className={styles.detailsLabel}>Chain</dt>
-                        <dd className={styles.detailsValue}>
-                            {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                        </dd>
-                        <dt className={styles.detailsLabel}>From</dt>
-                        <dd className={styles.detailsValue}>
-                            <AddressText address={fromAddress.address} />
-                        </dd>
-                    </dl>
-
-                    {payFeeInNativeCoin ? (
-                        <div role="alert" className={styles.warnings}>
-                            <p className={styles.warning}>{NATIVE_FEE_WARNING}</p>
-                        </div>
-                    ) : null}
-
-                    {isWatcherMode ? (
-                        <p className={styles.hint}>
-                            Watcher mode: this wallet will build an unsigned transaction.
-                            Sign it on your Signer-mode wallet, then bring the
-                            signed transaction to a Full-mode wallet to broadcast.
-                        </p>
-                    ) : (
-                        <SignCredentials
-                        unlocked={signerReady}
-                            fromAddress={fromAddress}
-                            chainId={chainId}
-                            password={password}
-                            onPasswordChange={(v) => {
-                                setPassword(v);
-                                if (submitError) setSubmitError(null);
-                            }}
-                            onStatusChange={onHwStatusChange}
-                            passwordRef={passwordRef}
-                            submitError={submitError}
-                            disabled={stage === 'submitting'}
-                            getSignerStatus={messaging.getSignerStatus}
-                            signerInfo={hwSignerInfo}
-                        />
-                    )}
-                    {(isWatcherMode || hw) && submitError ? (
-                        <p role="alert" style={{ margin: '0.25rem 0 0', color: '#ef5350', fontSize: '0.75rem' }}>
-                            {submitError}
-                        </p>
-                    ) : null}
-                </>
-            ) : null}
-
             {formError ? (
                 <p role="alert" className={styles.error} style={{ marginTop: '0.5rem' }}>
                     {formError}
@@ -495,23 +572,24 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                 <Button
                     type="submit"
                     variant="primary"
-                    loading={stage === 'submitting'}
                     disabled={!!validationError
                         || !fromAddress
                         || !giveTick || !getTick
                         || (!giveOwnership && !giveAmount)
-                        || (!getOwnership && !getAmount)
-                        || (isWatcherMode
-                            ? false
-                            : hw ? hwStatus !== 'available' : (!signerReady && password.length === 0))}
+                        || (!getOwnership && !getAmount)}
                 >
-                    {isWatcherMode
-                        ? 'Create unsigned transaction'
-                        : hw
-                            ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                            : 'Sign swap'}
+                    Review
                 </Button>
             </div>
         </form>,
+    );
+}
+
+function DetailRow({ label, value }) {
+    return (
+        <>
+            <dt className={styles.detailsLabel}>{label}</dt>
+            <dd className={styles.detailsValue}>{value}</dd>
+        </>
     );
 }

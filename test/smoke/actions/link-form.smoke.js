@@ -58,6 +58,40 @@ for (const call of [
 assert.ok(/SignCredentials/.test(src), 'LinkForm uses SignCredentials');
 assert.ok(/isHwSource/.test(src), 'LinkForm imports isHwSource for HW branching');
 
+// Review stage: form goes form -> review -> submitting, never directly
+// to submitting. Signing is gated by the review stage.
+assert.ok(/'form' \| 'review' \| 'submitting' \| 'done'/.test(src),
+    "LinkForm stage type includes 'review'");
+assert.ok(/handleReview/.test(src),
+    'LinkForm has a handleReview handler (form submit goes to review, not directly to broadcast)');
+assert.ok(/setStage\('review'\)/.test(src),
+    "LinkForm transitions to 'review' stage on form submit");
+// The sign/broadcast path must only be reachable from handleSubmit, not handleReview.
+assert.ok(/handleSubmit/.test(src),
+    'LinkForm has a handleSubmit handler for the actual broadcast');
+// Extract just the handleReview function body by slicing from its declaration to the
+// next top-level function declaration, then verify linkAction is absent from that slice.
+const reviewFnStart = src.indexOf('function handleReview');
+const submitFnStart = src.indexOf('function handleSubmit');
+assert.ok(reviewFnStart !== -1 && submitFnStart !== -1 && reviewFnStart < submitFnStart,
+    'handleReview is declared before handleSubmit');
+const reviewFnBody = src.slice(reviewFnStart, submitFnStart);
+assert.ok(!reviewFnBody.includes('linkAction'),
+    'handleReview body does not call linkAction (signing is gated by review)');
+// Review block renders decoded previews for both sides.
+assert.ok(/Side A decoded/.test(src),
+    'Review stage shows Side A decoded label');
+assert.ok(/Side B decoded/.test(src),
+    'Review stage shows Side B decoded label');
+// Network fee row from estimateNativeSendFee.
+assert.ok(/estimateNativeSendFee/.test(src),
+    'LinkForm imports and uses estimateNativeSendFee for the Network fee row');
+assert.ok(/Network fee/.test(src),
+    'Review stage shows a Network fee row');
+// Header title switches on review.
+assert.ok(/Review link/.test(src),
+    "Header switches to 'Review link' in review/submitting stages");
+
 // --- Core flow ---
 
 assert.equal(typeof flows.linkAction, 'function',

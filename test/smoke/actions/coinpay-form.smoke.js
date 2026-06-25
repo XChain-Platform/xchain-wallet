@@ -107,6 +107,33 @@ assert.ok(/pending_coinpay/.test(formSrc),
 assert.ok(/payer_address/.test(formSrc),
     'CoinpayForm filters obligations on payer_address matching the wallet address');
 
+// Review stage: form -> review -> submitting -> done. Signing must not
+// be reachable from the form stage.
+assert.ok(/'form'\s*\|\s*'review'\s*\|\s*'submitting'\s*\|\s*'done'/.test(formSrc),
+    "CoinpayForm stage type includes 'review'");
+assert.ok(/handleReview/.test(formSrc),
+    'CoinpayForm has a handleReview handler that gates sign/broadcast');
+assert.ok(/setStage\('review'\)/.test(formSrc),
+    "CoinpayForm transitions to 'review' before submitting");
+// SignCredentials must not appear at form stage; verify it lives inside
+// the review/submitting block by checking it follows the stage guard.
+assert.ok(
+    /(stage\s*===\s*'review'\s*\|\|\s*stage\s*===\s*'submitting'[\s\S]*?SignCredentials|SignCredentials[\s\S]*?stage\s*===\s*'review'\s*\|\|\s*stage\s*===\s*'submitting')/.test(formSrc),
+    'SignCredentials is scoped to the review/submitting stage',
+);
+// handleSubmit must only be reachable from the review stage form.
+assert.ok(
+    /stage\s*===\s*'submitting'\s*\)\s*return/.test(formSrc),
+    'handleSubmit guards against duplicate submits in review stage',
+);
+// Network fee row appears on the review screen.
+assert.ok(/Network fee/.test(formSrc), 'CoinpayForm shows a Network fee row on review');
+assert.ok(/estimateNativeSendFee/.test(formSrc), 'CoinpayForm imports estimateNativeSendFee');
+// Header title switches on review/submitting.
+assert.ok(/Review payment/.test(formSrc), "CoinpayForm header says 'Review payment' in review stage");
+// Form-stage primary button label is "Review".
+assert.ok(/>\s*Review\s*<\/Button>/.test(formSrc), "CoinpayForm form-stage button label is 'Review'");
+
 // --- 4. Background host registrations ---------------------------------
 
 const bg = readFileSync(join(ext, 'src', 'background', 'createBackgroundHost.js'), 'utf8');
@@ -190,5 +217,5 @@ for (const [shell, pkgPath] of [
 }
 
 console.log(
-    'OK: coinpay-form smoke (§41.4 COINPAY: core flow guards + CoinpayForm fans out getCoinpayObligationsForAddress + coinpayAction/Hw behind SignCredentials + 3-shell messaging + 3-shell App.jsx + ActionsMenu entry + Home resume card filters pending_coinpay on payer_address + xchain-sdk ^1.9.1 pin)',
+    'OK: coinpay-form smoke (§41.4 COINPAY: core flow guards + CoinpayForm fans out getCoinpayObligationsForAddress + review stage gates coinpayAction/Hw + SignCredentials on review/submitting only + Network fee row + 3-shell messaging + 3-shell App.jsx + ActionsMenu entry + Home resume card filters pending_coinpay on payer_address + xchain-sdk ^1.9.1 pin)',
 );
