@@ -322,7 +322,16 @@ export class SoftwareSigner extends Signer {
         const entry = signingPaths[0];
         const wif = this._resolveWifForEntry(chainId, entry);
         const sdk = this._sdkRegistry.get(chainId);
-        const { txHex, txid, psbtHex: signedPsbtHex } = sdk.wallet.signPsbt(psbtHex, wif);
+        // Scope the signature to exactly the approved inputs. signingPaths carries
+        // one entry per input index the caller authorized; forwarding those indices
+        // to the SDK ensures we sign/finalize only those, never an extra UTXO a
+        // crafted dApp PSBT slipped in. Numeric-validate so a malformed entry fails
+        // loudly rather than silently widening scope.
+        const inputIndices = signingPaths.map(sp => sp.inputIndex);
+        if (!inputIndices.every(i => Number.isInteger(i) && i >= 0)) {
+            throw new Error('SoftwareSigner.signPsbt: every signingPaths entry must carry a non-negative integer inputIndex');
+        }
+        const { txHex, txid, psbtHex: signedPsbtHex } = sdk.wallet.signPsbt(psbtHex, wif, { inputIndices });
         logConsole.record({
             source: 'signer:software',
             level: 'info',

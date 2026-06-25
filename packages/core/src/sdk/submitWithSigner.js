@@ -175,12 +175,33 @@ export async function submitWithSigner({
         ...effectiveEncoderOpts,
     });
 
+    // The signers now sign ONLY the inputs named in signingPaths (so a dApp PSBT
+    // cannot get extra UTXOs signed). But this is the wallet's OWN action tx: every
+    // input is the active key's (the encoder funds greedily from the change address
+    // and can pick more than one UTXO). The flows declare just one signingPaths
+    // entry, so expand it to one entry per actual PSBT input, reusing the active
+    // key's source, or those extra funding inputs would be left unsigned and the
+    // broadcast would fail. (The dApp bridge path keeps its strict user-approved
+    // scope and does not call this helper.)
+    const expandSigningPaths = (psbtHex) => {
+        try {
+            const base = signingPaths[0];
+            const count = sdk.wallet.decomposePsbt(psbtHex).inputs.length;
+            if (count <= signingPaths.length) return signingPaths;
+            return Array.from({ length: count }, (_unused, inputIndex) => ({ ...base, inputIndex }));
+        } catch {
+            // If the PSBT cannot be decomposed for any reason, fall back to the
+            // caller-provided paths so behaviour is never worse than before.
+            return signingPaths;
+        }
+    };
+
     // Step 3: sign via the injected Signer.
     onProgress('signing', { encoding: encoded.encoding });
     const signed = await signer.signPsbt({
         psbtHex: encoded.psbt,
         chainId,
-        signingPaths,
+        signingPaths: expandSigningPaths(encoded.psbt),
     });
 
     // Step 4: broadcast phase-1 tx. Wrap rejections so submitAction
@@ -232,7 +253,7 @@ export async function submitWithSigner({
         const phase2Signed = await signer.signPsbt({
             psbtHex: spendResult.psbt,
             chainId,
-            signingPaths,
+            signingPaths: expandSigningPaths(spendResult.psbt),
         });
         try {
             await encoder.broadcastTx(phase2Signed.txHex);
