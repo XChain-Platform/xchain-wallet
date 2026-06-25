@@ -63,6 +63,168 @@
     outline-offset: 2px;
 }
 
+/* Encrypted-session requests: counterparties who published their key to one of
+   our addresses. Each row offers a "Share my key" reply (format-1 handshake). */
+.requestCard {
+    background: var(--xc-surface);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-lg);
+    padding: var(--xc-space-3);
+    margin-bottom: var(--xc-space-2);
+}
+
+.requestIntro {
+    margin: 0 0 var(--xc-space-2);
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text-muted);
+}
+
+.requestList {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+}
+
+.requestRow {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+    padding-top: var(--xc-space-2);
+    border-top: 1px solid var(--xc-border);
+}
+
+.requestList li:first-child {
+    padding-top: 0;
+    border-top: none;
+}
+
+.requestWho {
+    font-weight: 600;
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.requestActions {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--xc-space-2);
+}
+
+.requestAuth {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+}
+
+.requestSent {
+    margin: 0;
+    font-size: var(--xc-text-sm);
+    color: var(--xc-success, var(--xc-text-muted));
+}
+
+/* iMessage-style day separator: a centered, muted date header shown once
+   above each day's run of messages in the thread view. */
+.daySeparator {
+    text-align: center;
+    margin: var(--xc-space-3) 0 var(--xc-space-2);
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+    color: var(--xc-text-muted);
+}
+
+/* "Unread messages" boundary shown above the first unread message in a thread.
+   A centered accent label flanked by hairline rules. `scroll-margin-top`
+   reserves a gap above it so scrolling it into view on open still leaves a
+   sliver of the last already-read message visible for context. */
+.unreadDivider {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    margin: var(--xc-space-3) 0 var(--xc-space-2);
+    font-size: var(--xc-text-xs);
+    font-weight: 700;
+    color: var(--xc-accent-primary);
+    scroll-margin-top: 56px;
+}
+
+.unreadDivider::before,
+.unreadDivider::after {
+    content: '';
+    flex: 1 1 auto;
+    height: 1px;
+    background: var(--xc-accent-primary);
+    opacity: 0.4;
+}
+
+/* Docked thread composer: lives in the Screen footer, which flex-pins it to
+   the bottom of the screen and supplies the top border + raised background.
+   We pull against the footer's default padding (space-3 vertical / space-4
+   horizontal) with negative margins so the bar reads as a tight, even space-2
+   gutter, without a global footer change. The message input spans the full
+   width; pressing Enter opens the send-confirmation screen. */
+.composer {
+    display: flex;
+    flex-direction: column;
+    margin: calc(var(--xc-space-2) - var(--xc-space-3)) calc(var(--xc-space-2) - var(--xc-space-4));
+}
+
+.composerInput {
+    width: 100%;
+    box-sizing: border-box;
+    padding: var(--xc-space-2) var(--xc-space-3);
+    font-family: var(--xc-font-sans);
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text);
+    background: var(--xc-surface);
+    border: 1px solid var(--xc-border-strong);
+    border-radius: var(--xc-radius-md);
+}
+
+.composerInput::placeholder {
+    color: var(--xc-text-muted);
+}
+
+/* Send-confirmation review rows: label on the left, value on the right. */
+.confirmList {
+    margin: var(--xc-space-3) 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-3);
+}
+
+.confirmRow {
+    display: flex;
+    flex-direction: row;
+    align-items: baseline;
+    gap: var(--xc-space-3);
+}
+
+.confirmLabel {
+    flex: 0 0 auto;
+    min-width: 6.5rem;
+    margin: 0;
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    color: var(--xc-text-muted);
+}
+
+.confirmValue {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin: 0;
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text);
+    text-align: start;
+}
+
 /* Card wrapping the active-chat list. */
 .convCard {
     background: var(--xc-surface);
@@ -110,6 +272,40 @@
     justify-content: space-between;
     gap: var(--xc-space-2);
     min-width: 0;
+}
+
+/* Holds the unread dot + name on the left of line 1, taking the row's free
+   width so the name still ellipsizes and the timestamp keeps its place. */
+.convNameWrap {
+    display: flex;
+    align-items: baseline;
+    gap: var(--xc-space-2);
+    flex: 1 1 auto;
+    min-width: 50%;
+    overflow: hidden;
+}
+
+/* Unread indicator: a small accent dot to the left of a conversation's name,
+   iOS-Messages style. Cleared once the thread is opened. */
+.unreadDot {
+    flex: 0 0 auto;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--xc-accent-primary);
+    /* Nudge onto the text center so it reads as inline with the name. */
+    align-self: center;
+}
+
+/* Bold the name + preview while a conversation has unread messages. */
+.convNameUnread {
+    color: var(--xc-text);
+    font-weight: 700;
+}
+
+.convPreviewUnread {
+    color: var(--xc-text);
+    font-weight: 600;
 }
 
 .convName {
