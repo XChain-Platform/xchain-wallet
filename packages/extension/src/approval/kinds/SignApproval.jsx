@@ -296,9 +296,20 @@ export function SignApproval({ id, kind, payload, onReject }) {
     // sign flows that re-use this screen wouldn't.
     const appName = payload?.appName || payload?.payload?.appName || '';
 
+    // For a PSBT sign, block approval whenever the independent decode failed
+    // (or produced nothing). The summary already warns visually, but that is
+    // presentational only: without this gate the user can still approve a
+    // transaction whose effects could not be verified. Mirrors PsbtSignForm,
+    // which already refuses to sign on `!decomposed`.
+    const psbtDecodeFailed =
+        kind === 'signPsbt' &&
+        !!psbtHexForSign &&
+        !psbtIntent.loading &&
+        (psbtIntent.error !== null || psbtIntent.decomposed === null);
+
     async function handleApprove(event) {
         event.preventDefault();
-        if (busy || password.length === 0 || !walletId) return;
+        if (busy || password.length === 0 || !walletId || psbtDecodeFailed) return;
         setBusy(true);
         setError(null);
         try {
@@ -347,7 +358,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
                         variant="primary"
                         block
                         loading={busy}
-                        disabled={password.length === 0 || !walletId}
+                        disabled={password.length === 0 || !walletId || psbtDecodeFailed}
                     >
                         {approveLabel}
                     </Button>
