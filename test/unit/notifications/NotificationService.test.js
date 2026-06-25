@@ -48,6 +48,7 @@ function makeDeps(overrides = {}) {
             dispenserFills: true,
             orderFills: true,
             priceAlerts: true,
+            messages: true,
         },
     };
     const addresses = [
@@ -134,6 +135,37 @@ describe('NotificationService', () => {
         deps.sdks['bitcoin-mainnet'].emit('addrBTC', {
             type: 'NEW_ACTION',
             data: { action_index: 12, source: 'someoneElse', destination: 'addrBTC' },
+        });
+        await flush();
+
+        expect(deps.notify).not.toHaveBeenCalled();
+    });
+
+    it('fires an incoming-message for an inbound MESSAGE action when the flag is on', async () => {
+        const deps = makeDeps();
+        const svc = makeService(deps);
+        await svc.start();
+
+        deps.sdks['bitcoin-mainnet'].emit('addrBTC', {
+            type: 'NEW_ACTION',
+            data: { action_index: 13, action: 'MESSAGE', source: 'someoneElse', destination: 'addrBTC' },
+        });
+        await flush();
+
+        // A MESSAGE is its own kind, not a generic incoming-receipt.
+        expect(deps.notify).toHaveBeenCalledTimes(1);
+        expect(deps.notify.mock.calls[0][0]).toMatchObject({ kind: 'incoming-message' });
+    });
+
+    it('suppresses incoming messages when the flag is off (and does not fall back to a receipt)', async () => {
+        const deps = makeDeps();
+        deps.settings.notifications.messages = false;
+        const svc = makeService(deps);
+        await svc.start();
+
+        deps.sdks['bitcoin-mainnet'].emit('addrBTC', {
+            type: 'NEW_ACTION',
+            data: { action_index: 14, action: 'MESSAGE', source: 'someoneElse', destination: 'addrBTC' },
         });
         await flush();
 

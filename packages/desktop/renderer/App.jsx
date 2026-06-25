@@ -41,6 +41,7 @@ import { WalletDetails } from '@xchain-wallet/core/shared/routes/WalletDetails.j
 import { RenameWalletForm } from '@xchain-wallet/core/shared/routes/RenameWalletForm.jsx';
 import { RenameAccountForm } from '@xchain-wallet/core/shared/routes/RenameAccountForm.jsx';
 import { readActiveAccount, writeActiveAccount } from '@xchain-wallet/core/shared/utils/activeAccountMemory.js';
+import { useMessagingUnread } from '@xchain-wallet/core/shared/hooks/useMessagingUnread.js';
 import { Locked } from '@xchain-wallet/core/shared/routes/Locked.jsx';
 import { Home } from '@xchain-wallet/core/shared/routes/Home.jsx';
 import { Settings } from '@xchain-wallet/core/shared/routes/Settings.jsx';
@@ -173,6 +174,9 @@ function AppInner() {
     const [activeAccountId, setActiveAccountId] = useState(
         /** @type {string | null} */ (null),
     );
+    // Unread-message count for the active wallet + account, surfaced as a badge
+    // on the Messaging nav entries (see useMessagingUnread / msgReadMemory).
+    const messagingUnread = useMessagingUnread(activeWalletId, activeAccountId);
     const [dispenserRef, setDispenserRef] = useState(
         /** @type {{ chainId: string, actionIndex: string, origin?: 'explorer' | 'list' | 'manage-token' } | null} */ (null),
     );
@@ -1413,6 +1417,7 @@ function AppInner() {
                             onOpenSettings={handleOpenSettings}
                             walletName={activeWalletName}
                             hasBtcAddress={hasBtcAddress}
+                            badges={{ messaging: messagingUnread }}
                         />
                     }
                     bottomBar={
@@ -1423,6 +1428,7 @@ function AppInner() {
                             onOpenWalletPicker={handleOpenWalletPicker}
                             onOpenSettings={handleOpenSettings}
                             hasBtcAddress={hasBtcAddress}
+                            badges={{ messaging: messagingUnread }}
                         />
                     }
                     header={

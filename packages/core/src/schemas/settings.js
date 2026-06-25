@@ -101,7 +101,7 @@ export const CLIPBOARD_AUTO_CLEAR_DEFAULT = 60;
  * @property {Record<string, FeeSettings>} fees
  * @property {{ torRouting: boolean, changeAddressRotation: boolean, hideSmallBalances: boolean, blurOnBlur: boolean, labelsSurviveRestore: boolean, clipboardAutoClearSeconds?: number, hapticsEnabled?: boolean, alwaysRequireHwExplicitConfirm?: boolean, priceDataEnabled?: boolean, metadataFetchEnabled?: boolean }} privacy   v2: adds blurOnBlur (window-unfocus blur of sensitive data), labelsSurviveRestore (§19.5.2 on-chain label sync opt-in); clipboardAutoClearSeconds is optional v2-tolerant (0-600 inclusive, 0 = never clear, default 60, §17.7.1 / G028); hapticsEnabled is v2-tolerant (defaults true when absent, set false to suppress every `useHaptic` pulse alongside the OS-level reduced-motion preference, Cluster P FOLLOWUP 1); alwaysRequireHwExplicitConfirm is v2-tolerant (defaults false; when true the HW sign-screen cross-check confirm is required on every sign regardless of the risk classifier, Cluster N FOLLOWUP 3); formDraftTtlMs is v2-tolerant (defaults to 24h, allowed values are FORM_DRAFT_TTL_OPTIONS, Cluster P FOLLOWUP 6); priceDataEnabled is v2-tolerant (defaults true; when false the price oracle is disabled and the TokenDetail stats strip / chart hide for native coins, sends a request to a third-party API revealing wallet activity, hence the opt-out).
  * @property {{ enabled: boolean, perChain: Record<string, AdsChainState> }} ads
- * @property {{ txConfirmations: boolean, incomingReceipts: boolean, dispenserFills: boolean, orderFills: boolean, priceAlerts: boolean }} notifications
+ * @property {{ txConfirmations: boolean, incomingReceipts: boolean, dispenserFills: boolean, orderFills: boolean, priceAlerts: boolean, messages?: boolean }} notifications   v2: adds messages (v2-tolerant, defaults true; notify when a watched address receives a MESSAGE action)
  * @property {boolean} developerMode
  * @property {boolean} learnMode
  * @property {{ undoSendSeconds: number, testSendThresholdSats: number }} grace                              v2: adds testSendThresholdSats (large-amount confirmation gate; 0 = disabled)
@@ -179,6 +179,7 @@ export function createDefaultSettings() {
             dispenserFills: true,
             orderFills: true,
             priceAlerts: false,
+            messages: true,
         },
         developerMode: false,
         learnMode: false,
@@ -315,7 +316,9 @@ export function validateSettings(record) {
             isBoolean(r.notifications.incomingReceipts) &&
             isBoolean(r.notifications.dispenserFills) &&
             isBoolean(r.notifications.orderFills) &&
-            isBoolean(r.notifications.priceAlerts),
+            isBoolean(r.notifications.priceAlerts) &&
+            // v2-tolerant: pre-v2 records predate the messages flag.
+            (r.notifications.messages == null || isBoolean(r.notifications.messages)),
         'malformed',
     );
 

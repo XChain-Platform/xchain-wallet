@@ -96,6 +96,11 @@ const NOTIFICATION_FLAGS = /** @type {const} */ ([
         hint: 'Notify when a watched address receives a transaction.',
     },
     {
+        key: 'messages',
+        label: 'Incoming messages',
+        hint: 'Notify when a watched address receives a message.',
+    },
+    {
         key: 'dispenserFills',
         label: 'Dispenser fills',
         hint: 'Notify when a dispenser you authored is hit.',

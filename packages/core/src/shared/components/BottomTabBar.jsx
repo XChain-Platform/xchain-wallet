@@ -10,6 +10,7 @@
 
 import { useEffect, useState } from 'react';
 import { Icon } from '@xchain-wallet/core/ui';
+import { formatBadgeCount } from './LeftNav.jsx';
 import styles from './BottomTabBar.module.css';
 
 /**
@@ -43,6 +44,7 @@ import styles from './BottomTabBar.module.css';
  * @param {() => void} [props.onOpenSettings]
  * @param {() => void} [props.onOpenWalletPicker]
  * @param {boolean} [props.hasBtcAddress]
+ * @param {Record<string, number>} [props.badges]   per-view counts; a count > 0 badges that sheet row and surfaces a dot on the "More" tab (e.g. { messaging: 3 })
  */
 
 const PRIMARY_TABS = [
@@ -72,6 +74,7 @@ export function BottomTabBar({
     onOpenSettings,
     onOpenWalletPicker,
     hasBtcAddress = false,
+    badges = {},
 }) {
     const [sheetOpen, setSheetOpen] = useState(false);
 
@@ -96,6 +99,9 @@ export function BottomTabBar({
     const sheetRows = SHEET_PRIMARY.filter(
         (row) => !row.requiresBtc || hasBtcAddress,
     );
+    // Messaging lives behind "More", so any unread inside the sheet also needs a
+    // dot on the More tab itself or the user would never see it while collapsed.
+    const sheetHasUnread = sheetRows.some((row) => badges[row.id] > 0);
 
     return (
         <>
@@ -126,6 +132,9 @@ export function BottomTabBar({
                 >
                     <span className={styles.tabIcon} aria-hidden="true">
                         <Icon.MenuIcon />
+                        {sheetHasUnread ? (
+                            <span className={styles.tabDot} aria-hidden="true" />
+                        ) : null}
                     </span>
                     <span className={styles.tabLabel}>More</span>
                 </button>
@@ -161,7 +170,12 @@ export function BottomTabBar({
                                             <span className={styles.sheetIcon} aria-hidden="true">
                                                 <row.Icon />
                                             </span>
-                                            <span>{row.label}</span>
+                                            <span className={styles.sheetLabel}>{row.label}</span>
+                                            {badges[row.id] > 0 ? (
+                                                <span className={styles.sheetBadge} aria-label={`${badges[row.id]} unread`}>
+                                                    {formatBadgeCount(badges[row.id])}
+                                                </span>
+                                            ) : null}
                                         </button>
                                     </li>
                                 );

@@ -229,9 +229,18 @@ export class NotificationService {
                         try { await this._onTxConfirmed(txid); } catch (e) { this._log.warn('NotificationService: onTxConfirmed failed', e); }
                     }
                 } else if (destination && destination === addr.address) {
-                    // An inbound transfer landed → incoming receipt.
-                    if (!flags.incomingReceipts) break;
-                    plan = { kind: 'incoming-receipt', title: `Received on ${addr.label}`, body: `Your ${addr.label} address received a transaction.` };
+                    // An inbound action landed at our address. A MESSAGE is its
+                    // own notification kind (gated by its own flag); everything
+                    // else is a generic incoming receipt. The action-type string
+                    // rides on every live NEW_ACTION event from the explorer.
+                    if (data.action === 'MESSAGE') {
+                        if (!flags.messages) break;
+                        // Privacy (§46.4): no sender, no content, only the chain.
+                        plan = { kind: 'incoming-message', title: 'New message', body: `You received a message on ${addr.label}.` };
+                    } else {
+                        if (!flags.incomingReceipts) break;
+                        plan = { kind: 'incoming-receipt', title: `Received on ${addr.label}`, body: `Your ${addr.label} address received a transaction.` };
+                    }
                 }
                 break;
             }

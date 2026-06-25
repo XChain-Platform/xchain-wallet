@@ -14,6 +14,7 @@ import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core'
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useAutoLock } from '../hooks/useAutoLock.js';
+import { useMessagingUnread } from '../hooks/useMessagingUnread.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { useProofVerification } from '../hooks/useProofVerification.js';
 import { HomeTabs } from '../components/HomeTabs.jsx';
@@ -91,6 +92,9 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
     );
     const activeAccountId = activeAccountIdProp ?? activeAccountIdLocal;
     const setActiveAccountId = onSwitchAccount ?? setActiveAccountIdLocal;
+    // Unread-message count for the active wallet + account, surfaced as a Home
+    // alert and a dot on the Messaging button (see useMessagingUnread).
+    const messagingUnread = useMessagingUnread(activeWalletId, activeAccountId);
     const [balances, setBalances] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
     );
@@ -494,6 +498,17 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
     // attention, etc.) drop into this array as they wire through
     // their own sources.
     const alerts = [];
+    if (messagingUnread > 0 && onMessaging) {
+        alerts.push({
+            id: 'unread-messages',
+            severity: 'info',
+            title: 'Unread messages',
+            message: messagingUnread === 1
+                ? 'You have 1 conversation with unread messages.'
+                : `You have ${messagingUnread} conversations with unread messages.`,
+            action: { label: 'Open Messaging', onSelect: onMessaging },
+        });
+    }
     if (activeWallet?.format === 'counterwallet-legacy' && onMigrateToBip39) {
         alerts.push({
             id: 'legacy-format',
@@ -802,6 +817,22 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
                         icon={<Icon.MessageIcon />}
                     >
                         Messaging
+                        {messagingUnread > 0 ? (
+                            <span
+                                aria-label={`${messagingUnread} unread`}
+                                style={{
+                                    marginInlineStart: '0.4rem',
+                                    padding: '0 0.4rem',
+                                    borderRadius: '999px',
+                                    background: 'var(--xc-accent-primary, #0b84ff)',
+                                    color: '#fff',
+                                    fontSize: '0.7rem',
+                                    fontWeight: 700,
+                                }}
+                            >
+                                {messagingUnread > 99 ? '99+' : messagingUnread}
+                            </span>
+                        ) : null}
                     </Button>
                     <Button
                         variant="secondary"

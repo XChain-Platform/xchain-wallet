@@ -1,4 +1,4 @@
-/* §24.3 / G054 — bottom-tab bar + bottom-sheet drawer. The bar is
+/* §24.3 / G054: bottom-tab bar + bottom-sheet drawer. The bar is
    thumb-reachable on mobile-portrait viewports; the sheet floats above
    the route content with a dimmed scrim. */
 
@@ -58,6 +58,19 @@
     justify-content: center;
     width: 22px;
     height: 22px;
+    position: relative;
+}
+
+/* Unread dot on the "More" tab: messaging lives in the sheet, so this is the
+   only at-a-glance unread cue while the sheet is collapsed. */
+.tabDot {
+    position: absolute;
+    top: -1px;
+    right: -1px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--xc-accent-primary, #0b84ff);
 }
 
 .tabLabel {
@@ -143,6 +156,26 @@
     width: 20px;
     height: 20px;
     flex: 0 0 auto;
+}
+
+/* Take the row's free width so the count badge sits flush right. */
+.sheetLabel {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+/* Unread count pill on a sheet row (e.g. Messaging). */
+.sheetBadge {
+    flex: 0 0 auto;
+    min-width: 1.25rem;
+    padding: 0 0.4rem;
+    border-radius: 999px;
+    background: var(--xc-accent-primary, #0b84ff);
+    color: #fff;
+    font-size: var(--xc-text-xs);
+    font-weight: 700;
+    line-height: 1.35rem;
+    text-align: center;
 }
 
 .sheetDivider {

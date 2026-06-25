@@ -55,6 +55,12 @@ function isActive(itemId, currentView) {
     return group ? group.includes(currentView) : itemId === currentView;
 }
 
+// Compact nav badge label: a count capped at "99+" so a large unread total
+// never blows out the pill width.
+export function formatBadgeCount(n) {
+    return n > 99 ? '99+' : String(n);
+}
+
 /**
  * @param {object} props
  * @param {string} props.currentView
@@ -64,6 +70,7 @@ function isActive(itemId, currentView) {
  * @param {() => void} [props.onOpenWalletPicker]
  * @param {string} [props.walletName]
  * @param {boolean} [props.hasBtcAddress]
+ * @param {Record<string, number>} [props.badges]   per-view unread/attention counts; a count > 0 renders a pill on that item (e.g. { messaging: 3 })
  */
 export function LeftNav({
     currentView,
@@ -73,6 +80,7 @@ export function LeftNav({
     onOpenWalletPicker,
     walletName,
     hasBtcAddress = false,
+    badges = {},
 }) {
     const primary = [
         { id: 'home', label: 'Home', Icon: Icon.HomeIcon },
@@ -110,6 +118,11 @@ export function LeftNav({
                                     <item.Icon />
                                 </span>
                                 <span className={styles.label}>{item.label}</span>
+                                {badges[item.id] > 0 ? (
+                                    <span className={styles.badge} aria-label={`${badges[item.id]} unread`}>
+                                        {formatBadgeCount(badges[item.id])}
+                                    </span>
+                                ) : null}
                             </button>
                         </li>
                     );

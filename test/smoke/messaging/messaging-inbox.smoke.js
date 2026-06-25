@@ -92,6 +92,84 @@ assert.ok(/Conversations\b/.test(src) && /Thread\b/.test(src),
 assert.ok(/counterparty/i.test(src),
     'MessagingInbox groups messages by counterparty');
 
+// --- 2b. Encrypted-session reply (format-1 handshake) -----------------
+
+assert.ok(/function SessionRequestRow\b/.test(src),
+    'MessagingInbox defines SessionRequestRow for encrypted-session replies');
+assert.ok(/messaging\.sendHandshake\s*\(/.test(src),
+    'MessagingInbox reply calls messaging.sendHandshake');
+assert.ok(/version:\s*1/.test(src),
+    'MessagingInbox reply sends a format-1 (response) handshake');
+assert.ok(/Share my key/.test(src),
+    'MessagingInbox renders a "Share my key" reply action');
+assert.ok(/useSignerReady\b/.test(src),
+    'MessagingInbox uses signer-ready state to gate the inline password prompt');
+
+// --- 2c. Docked composer + send confirmation --------------------------
+
+assert.ok(/function ThreadComposer\b/.test(src),
+    'MessagingInbox defines ThreadComposer (docked message input)');
+assert.ok(/onSubmit=\{\(\) => \{/.test(src) && /setPendingSend\(/.test(src),
+    'composer Enter routes the draft to the send-confirmation screen');
+assert.ok(/className=\{local\.composerInput\}/.test(src) && !/className=\{local\.composerSend\}/.test(src),
+    'composer is a full-width input with no send button');
+assert.ok(/function SendConfirm\b/.test(src),
+    'MessagingInbox defines a SendConfirm review screen');
+assert.ok(/title="Send message"/.test(src),
+    'confirmation screen is titled "Send message"');
+assert.ok(/messaging\.messageAction\s*\(/.test(src),
+    'confirmation sends via messaging.messageAction');
+assert.ok(/estimateNativeSendFee\b/.test(src) && /Network fee/.test(src),
+    'confirmation shows an estimated network (TX) fee');
+assert.ok(!/>\s*Reply\s*</.test(src),
+    'the old Reply button is removed from the thread view');
+
+// --- 2d. iMessage-style day separators --------------------------------
+
+assert.ok(/buildThreadItems\b/.test(src),
+    'MessagingInbox groups thread messages into day-separated items');
+assert.ok(/function formatDaySeparator\b/.test(src) && /'Today'/.test(src) && /'Yesterday'/.test(src),
+    'day separator labels Today / Yesterday and dates');
+assert.ok(/local\.daySeparator/.test(src),
+    'thread renders a day-separator row');
+assert.ok(/function formatTime\b/.test(src),
+    'message bubbles show a per-message time-of-day caption');
+
+// --- 2e. iMessage-style bubbles ---------------------------------------
+
+assert.ok(/borderRadius: '1\.1rem'/.test(src) && /maxWidth: '75%'/.test(src),
+    'message rows render as rounded bubbles that shrink to fit, capped at 75% width');
+assert.ok(/alignItems: isOutgoing \? 'flex-end' : 'flex-start'/.test(src),
+    'outgoing bubbles align right, incoming align left');
+assert.ok(!/#0b84ff/.test(src) && /var\(--xc-accent-primary\)/.test(src),
+    'message bubbles use theme colors, not hardcoded hex');
+
+// --- 2f. Read / unread tracking ---------------------------------------
+
+assert.ok(/readMsgRead\b/.test(src) && /writeMsgRead\b/.test(src),
+    'MessagingInbox loads + persists per-conversation read marks');
+assert.ok(/lastIncomingTimestamp\b/.test(src),
+    'conversations track their newest incoming message for unread detection');
+assert.ok(/local\.unreadDot\b/.test(src),
+    'the conversation list shows an unread dot');
+assert.ok(/function openConversation\b/.test(src) && /setSelectedCounterparty\(/.test(src),
+    'opening a conversation goes straight to the thread and clears the read mark');
+assert.ok(/Unread messages/.test(src) && /firstUnreadRef\b/.test(src),
+    'the thread marks where unread messages begin and scrolls there on open');
+
+// --- 2g. App-level unread snapshot ------------------------------------
+
+assert.ok(/writeMsgUnread\b/.test(src),
+    'MessagingInbox publishes the account unread count for app-level surfaces');
+{
+    const utils = readFileSync(join(core, 'src', 'shared', 'utils', 'msgReadMemory.js'), 'utf8');
+    assert.ok(/export function readMsgUnread\b/.test(utils) && /export function writeMsgUnread\b/.test(utils),
+        'msgReadMemory exposes the unread-count snapshot read/write');
+    const hook = readFileSync(join(core, 'src', 'shared', 'hooks', 'useMessagingUnread.js'), 'utf8');
+    assert.ok(/export function useMessagingUnread\b/.test(hook) && /MSG_UNREAD_EVENT/.test(hook),
+        'useMessagingUnread reads the snapshot and refreshes on the publish event');
+}
+
 // --- 3. Background handler --------------------------------------------
 
 const bg = readFileSync(join(ext, 'src', 'background', 'createBackgroundHost.js'), 'utf8');
@@ -134,7 +212,7 @@ for (const [shell, appPath] of [
 
 const homeSrc = readFileSync(join(sharedRoutes, 'Home.jsx'), 'utf8');
 assert.ok(/onMessaging/.test(homeSrc), 'Home.jsx accepts onMessaging prop');
-assert.ok(/>\s*Messaging\s*</.test(homeSrc),
+assert.ok(/>\s*Messaging\b/.test(homeSrc),
     'Home.jsx renders a "Messaging" button');
 
 console.log(

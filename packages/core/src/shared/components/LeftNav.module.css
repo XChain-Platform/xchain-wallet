@@ -1,4 +1,4 @@
-/* §24.2 / G053 — left-nav layout. The .layout flex container places
+/* §24.2 / G053: left-nav layout. The .layout flex container places
    .sidebar alongside .main; below 900px (the §24.1 full-layout
    breakpoint) the sidebar collapses so narrow viewports get the route
    full-width. Once §24.3 / G054 lands, the mobile bottom tab bar
@@ -33,7 +33,7 @@
     --xc-screen-h: 100%;
 }
 
-/* §49 / Cluster G FOLLOWUP 4 — persistent header slot for banners
+/* §49 / Cluster G FOLLOWUP 4: persistent header slot for banners
    (QueuedBroadcastBanner, etc) that should survive route changes. The
    slot collapses when no header is supplied (parent renders nothing). */
 .header {
@@ -50,7 +50,7 @@
     flex-direction: column;
     /* Anchors absolutely-positioned children (e.g. the global QR
        scanner overlay) to the route content area instead of the
-       browser viewport — so the popup-extension UI doesn't have the
+       browser viewport, so the popup-extension UI doesn't have the
        overlay punching past its own bounds. */
     position: relative;
 }
@@ -59,7 +59,7 @@
     .sidebar { display: none; }
 }
 
-/* §24.3 / G054 — when a bottom-tab bar is supplied (small/sidebar
+/* §24.3 / G054: when a bottom-tab bar is supplied (small/sidebar
    variants pass it; full variant passes null and the slot collapses),
    give the main pane enough bottom-padding to clear the fixed 56px bar
    (+ iOS safe-area inset). Visibility is JS-gated by the bottomBar prop;
@@ -149,6 +149,20 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+/* Unread/attention count pill pinned to the right of a nav row. */
+.badge {
+    flex: 0 0 auto;
+    min-width: 1.1rem;
+    padding: 0 0.35rem;
+    border-radius: 999px;
+    background: var(--xc-accent-primary, #0b84ff);
+    color: #fff;
+    font-size: var(--xc-text-xs);
+    font-weight: 700;
+    line-height: 1.25rem;
+    text-align: center;
 }
 
 .divider {
