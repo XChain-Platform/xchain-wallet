@@ -543,7 +543,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                         inputRef={amountInputRef}
                     />
                     <FeeSelector
-                        label="Priority"
+                        label="Network fee"
                         coinTicker={nativeTickerFor(descriptor)}
                         tiers={feeTiers}
                         value={feePick}

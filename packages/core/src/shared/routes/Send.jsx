@@ -1520,7 +1520,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
             />
             {feeTiers ? (
                 <FeeSelector
-                    label="Priority"
+                    label="Network fee"
                     coinTicker={nativeTickerFor(descriptor)}
                     tiers={feeTiers}
                     value={feePick}

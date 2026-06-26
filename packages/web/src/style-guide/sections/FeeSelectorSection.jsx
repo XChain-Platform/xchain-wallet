@@ -83,7 +83,7 @@ useEffect(() => {
 }, [chainId, messaging]);
 
 <FeeSelector
-    label="Priority"
+    label="Network fee"
     tiers={feeTiers}
     value={feePick}
     onChange={setFeePick}
@@ -115,9 +115,9 @@ useEffect(() => {
                 />
             </LiveExample>
 
-            <LiveExample label="With inline label: Priority + ETA on the label line, fee + fiat below">
+            <LiveExample label="With inline label: Network fee + ETA on the label line, fee + fiat below">
                 <FeeSelector
-                    label="Priority"
+                    label="Network fee"
                     tiers={SAMPLE_TIERS}
                     value={labeledPick}
                     onChange={setLabeledPick}

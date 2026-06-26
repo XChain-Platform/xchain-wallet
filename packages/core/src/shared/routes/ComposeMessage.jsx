@@ -652,7 +652,7 @@ export function ComposeMessage({
             {/* 5. Network fee (Low / Normal / Fast / Custom slider) */}
             {feeTiers ? (
                 <FeeSelector
-                    label="Priority"
+                    label="Network fee"
                     coinTicker={descriptor?.coin ? (NATIVE_TICKER_BY_CHAIN[descriptor.coin] || descriptor.coin.toUpperCase()) : ''}
                     formatFiat={fiatForFee}
                     tiers={feeTiers}
