@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Screen,
-    ScreenHeader,
+    PageHeader,
     Button,
     Input,
     ChainBadge,
@@ -377,7 +377,7 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
     }
 
     const header = (
-        <ScreenHeader
+        <PageHeader
             onBack={onBack}
             backLabel="Back"
             title={`Official tokens of ${tick}`}

@@ -11,7 +11,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
     Screen,
-    ScreenHeader,
+    PageHeader,
     Button,
     ChainBadge,
     AddressText,
@@ -162,7 +162,7 @@ export function StakingDashboard({
     }, [btcChainsWithAddresses, addressesByChain, messaging]);
 
         const header = (
-        <ScreenHeader
+        <PageHeader
             onBack={onBack}
             backLabel="Back to home"
             title="Staking"

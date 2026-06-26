@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Screen,
-    ScreenHeader,
+    PageHeader,
     Button,
     Input,
     ChainBadge,
@@ -250,7 +250,7 @@ export function ParallelComposer({ walletId, onBack, initialRows }) {
     const allDoneOrSkipped = rows.every((r) => r.status === 'success' || r.status === 'skipped');
 
         const header = (
-        <ScreenHeader
+        <PageHeader
             onBack={onBack}
             title="Parallel cross-chain actions"
         />

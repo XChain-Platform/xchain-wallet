@@ -11,7 +11,7 @@
 import { useState } from 'react';
 import {
     Screen,
-    ScreenHeader,
+    PageHeader,
     Button,
     Input,
  Icon, StatusMessage,} from '@xchain-wallet/core/ui';
@@ -138,7 +138,7 @@ export function PairSignerForm({
     }
 
         const header = (
-        <ScreenHeader
+        <PageHeader
             onBack={onBack}
             title="Pair hardware signer"
         />

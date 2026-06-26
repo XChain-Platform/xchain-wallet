@@ -13,8 +13,8 @@
 // WHY THIS EXISTS
 // ---------------
 // The #1 latent-crash class in this wallet is a component used in JSX but
-// never imported (`<ScreenHeader>` without its import → `ReferenceError:
-// ScreenHeader is not defined` → white screen. A botched import-organizer
+// never imported (`<PageHeader>` without its import → `ReferenceError:
+// PageHeader is not defined` → white screen. A botched import-organizer
 // dropped that import from 35 route files at once, and the "green" smoke
 // suite (source-regex assertions that never render) sailed right past it.
 // There is no linter configured in this workspace, so nothing catches the

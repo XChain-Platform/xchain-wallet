@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Screen,
-    ScreenHeader,
+    PageHeader,
     Button,
     Input,
     ChainBadge,
@@ -296,7 +296,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
 
     const titleSuffix = descriptor ? ` on ${descriptor.displayName}` : '';
     const header = (
-        <ScreenHeader
+        <PageHeader
             onBack={onBack}
             title={stage === 'review' || stage === 'submitting'
                 ? 'Review swap'

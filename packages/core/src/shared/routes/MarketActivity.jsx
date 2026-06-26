@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Screen, ScreenHeader, Icon, Skeleton } from '@xchain-wallet/core/ui';
+import { Screen, PageHeader, Icon, Skeleton } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { coinFromChainId } from '../components/BalanceList.jsx';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -176,7 +176,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
     }
 
     const header = (
-        <ScreenHeader
+        <PageHeader
             onBack={onBack}
             backLabel="Back"
             title="Marketplace"

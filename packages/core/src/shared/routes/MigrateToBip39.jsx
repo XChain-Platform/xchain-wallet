@@ -11,7 +11,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
     Screen,
-    ScreenHeader,
+    PageHeader,
     Button,
     Input,
     ChainBadge,
@@ -151,7 +151,7 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated }) {
     }
 
         const header = (
-        <ScreenHeader
+        <PageHeader
             onBack={onBack}
             title="{stage === 'done' ? 'BIP39 wallet created' : 'Migrate to BIP39'}"
         />

@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useState } from 'react';
-import { Screen, Icon, ScreenHeader } from '@xchain-wallet/core/ui';
+import { Screen, Icon, PageHeader } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './ActionsMenu.module.css';
 import pickerStyles from './WalletPicker.module.css';
@@ -55,7 +55,7 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
     }, [walletId, messaging]);
 
     const header = (
-        <ScreenHeader
+        <PageHeader
             onBack={onBack}
             title="Accounts"
             trailing={(

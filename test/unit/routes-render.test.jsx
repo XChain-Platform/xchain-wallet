@@ -17,8 +17,8 @@
 // The wallet is largely AI-generated and several route screens shipped
 // having clearly never been rendered. Crash classes that slipped through
 // a "green" suite:
-//   * a botched import-organizer dropped the `ScreenHeader` import from
-//     35 route files → `ReferenceError: ScreenHeader is not defined` →
+//   * a botched import-organizer dropped the `PageHeader` import from
+//     35 route files → `ReferenceError: PageHeader is not defined` →
 //     white screen on mount;
 //   * a `StakeForm` effect dep-array referenced `fromAddress` before its
 //     `const fromAddress = useMemo(...)` → TDZ `ReferenceError: Cannot

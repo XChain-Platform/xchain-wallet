@@ -11,7 +11,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
     Screen,
-    ScreenHeader,
+    PageHeader,
     Button,
     Input,
     ChainBadge,
@@ -99,7 +99,7 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
     }
 
         const header = (
-        <ScreenHeader
+        <PageHeader
             onBack={onBack}
             title="Dispenser explorer"
         />

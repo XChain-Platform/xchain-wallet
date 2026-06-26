@@ -11,7 +11,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
     Screen,
-    ScreenHeader,
+    PageHeader,
     Button,
     AddressText,
     Icon,
@@ -128,7 +128,7 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
     }
 
     const header = (
-        <ScreenHeader
+        <PageHeader
             onBack={onBack}
             title="Show private key"
             titleIcon={<Icon.LockIcon />}

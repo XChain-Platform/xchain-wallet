@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Screen,
-    ScreenHeader,
+    PageHeader,
     Button,
     Input,
     ChainBadge,
@@ -254,7 +254,7 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, onBa
     }
 
     const header = (
-        <ScreenHeader
+        <PageHeader
             onBack={onBack}
             backLabel="Back to contract"
             title={`Stake on contract #${contractActionIndex}`}

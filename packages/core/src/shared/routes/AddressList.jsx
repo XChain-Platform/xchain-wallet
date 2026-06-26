@@ -11,7 +11,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     Screen,
-    ScreenHeader,
+    PageHeader,
     Button,
     AddressText,
     MultisigBadge,
@@ -382,7 +382,7 @@ export function AddressList({
     }, [addressesByChain, network, query, sourceFilter, multisigs]);
 
     const header = (
-        <ScreenHeader
+        <PageHeader
             onBack={onBack}
             title="Addresses"
             titleIcon={<Icon.ScanIcon />}
@@ -523,7 +523,7 @@ export function AddressList({
             }
         };
         return (
-            <Screen variant={variant} header={<ScreenHeader onBack={() => setSelected(null)} title="View Address" titleIcon={<Icon.ScanIcon />} />}>
+            <Screen variant={variant} header={<PageHeader onBack={() => setSelected(null)} title="View Address" titleIcon={<Icon.ScanIcon />} />}>
                 <div className={local.detailTop}>
                     <div className={local.detailLabelRow}>
                         <span className={local.detailLabel}>Address</span>

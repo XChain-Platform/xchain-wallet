@@ -23,7 +23,7 @@
 // drive the four supported routes.
 
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { Screen, ScreenHeader, Button, Icon, QrScanner, StatusMessage } from '@xchain-wallet/core/ui';
+import { Screen, PageHeader, Button, Icon, QrScanner, StatusMessage } from '@xchain-wallet/core/ui';
 import { detectQrContent } from '../../uri/detectQrContent.js';
 import { parseXchainUri } from '../../uri/xchainUri.js';
 import { t } from '../../i18n/index.js';
@@ -180,7 +180,7 @@ export function ScanRoute({ onClassified, onBack, chainRegistry }) {
     }, [classify, paste]);
 
     const header = useMemo(() => (
-        <ScreenHeader
+        <PageHeader
             onBack={onBack}
             backLabel={t('common.back')}
             title={t('scan.title')}

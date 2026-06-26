@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Screen,
-    ScreenHeader,
+    PageHeader,
     Button,
     Input,
     ChainBadge,
@@ -497,7 +497,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
 
     const titleSuffix = descriptor ? ` on ${descriptor.displayName}` : '';
         const header = (
-        <ScreenHeader
+        <PageHeader
             onBack={onBack}
             title="{stage === 'review' || stage === 'submitting'
                     ? 'Review dispenser'

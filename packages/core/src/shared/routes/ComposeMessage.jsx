@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Screen,
-    ScreenHeader,
+    PageHeader,
     Button,
     Input,
     Textarea,
@@ -433,7 +433,7 @@ export function ComposeMessage({
     }
 
         const header = (
-        <ScreenHeader
+        <PageHeader
             onBack={onBack}
             title={stage === 'review' || stage === 'submitting' ? 'Review message' : 'New message'}
             titleIcon={<Icon.MessageIcon />}
@@ -652,7 +652,8 @@ export function ComposeMessage({
             {/* 5. Network fee (Low / Normal / Fast / Custom slider) */}
             {feeTiers ? (
                 <FeeSelector
-                    label="Network fee"
+                    label="Priority"
+                    coinTicker={descriptor?.coin ? (NATIVE_TICKER_BY_CHAIN[descriptor.coin] || descriptor.coin.toUpperCase()) : ''}
                     formatFiat={fiatForFee}
                     tiers={feeTiers}
                     value={feePick}

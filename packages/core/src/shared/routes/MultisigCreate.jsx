@@ -11,7 +11,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
     Screen,
-    ScreenHeader,
+    PageHeader,
     Button,
     Input,
     ChainBadge,
@@ -231,7 +231,7 @@ export function MultisigCreate({ walletId, onBack }) {
     }
 
         const header = (
-        <ScreenHeader
+        <PageHeader
             onBack={onBack}
             title="Create multisig"
         />

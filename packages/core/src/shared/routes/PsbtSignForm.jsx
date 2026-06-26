@@ -54,7 +54,7 @@ import {
     Icon,
     StatusMessage,
     QrScanner,
-    ScreenHeader,
+    PageHeader,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -480,7 +480,7 @@ export function PsbtSignForm({ walletId, onBack }) {
     }
 
     const header = (
-        <ScreenHeader onBack={onBack} backDisabled={busy} title="Sign transaction" />
+        <PageHeader onBack={onBack} backDisabled={busy} title="Sign transaction" />
     );
 
     if (loadError) {

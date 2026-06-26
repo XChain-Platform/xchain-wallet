@@ -11,7 +11,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
     Screen,
-    ScreenHeader,
+    PageHeader,
     Button,
     ChainBadge,
     AddressText,
@@ -155,7 +155,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onB
     }, [addressesByChain]);
 
         const header = (
-        <ScreenHeader
+        <PageHeader
             onBack={onBack}
             backLabel="Back to home"
             title="My dispensers"

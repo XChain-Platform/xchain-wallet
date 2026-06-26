@@ -11,7 +11,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     Screen,
-    ScreenHeader,
+    PageHeader,
     Button,
     Input,
     ChainBadge,
@@ -279,7 +279,7 @@ export function TokenWizard({ walletId, onBack }) {
     }
 
         const header = (
-        <ScreenHeader
+        <PageHeader
             onBack={onBack}
             backLabel="Back to home"
             title="Create a token"

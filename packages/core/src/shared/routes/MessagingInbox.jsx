@@ -11,7 +11,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Screen,
-    ScreenHeader,
+    PageHeader,
     Button,
     Input,
     AddressText,
@@ -440,7 +440,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack })
     }
 
     const header = (
-        <ScreenHeader
+        <PageHeader
             onBack={onBack}
             title="Messaging"
             titleIcon={<Icon.MessageIcon />}
@@ -639,7 +639,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack })
             <Screen
                 variant={variant}
                 header={(
-                    <ScreenHeader
+                    <PageHeader
                         onBack={() => setSelectedCounterparty(null)}
                         title={cpName || <AddressText address={selectedCounterparty} />}
                         titleIcon={<Icon.MessageIcon />}
@@ -945,7 +945,7 @@ function SendConfirm({
         <Screen
             variant={variant}
             header={(
-                <ScreenHeader
+                <PageHeader
                     onBack={onCancel}
                     title="Send message"
                     titleIcon={<Icon.MessageIcon />}

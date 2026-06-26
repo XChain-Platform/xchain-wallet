@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Screen,
-    ScreenHeader,
+    PageHeader,
     Button,
     Input,
     AddressCombobox,
@@ -1021,7 +1021,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
     }
 
     const header = (
-        <ScreenHeader
+        <PageHeader
             onBack={onBack}
             backLabel="Back to home"
             title={stage === 'review' || stage === 'submitting' ? 'Review & Send' : 'Send'}
@@ -1332,7 +1332,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
     // fills the To field and returns to the form with all other state intact.
     if (contactsPickerOpen) {
         const pickerHeader = (
-            <ScreenHeader
+            <PageHeader
                 onBack={() => setContactsPickerOpen(false)}
                 title="Contacts"
                 titleIcon={<Icon.UsersIcon />}
@@ -1520,7 +1520,8 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
             />
             {feeTiers ? (
                 <FeeSelector
-                    label="Network fee"
+                    label="Priority"
+                    coinTicker={nativeTickerFor(descriptor)}
                     tiers={feeTiers}
                     value={feePick}
                     onChange={setFeePick}

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { Screen, ScreenHeader } from '@xchain-wallet/core/ui';
+import { Screen, PageHeader } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from '../components/AlertsOverlay.module.css';
 
@@ -20,7 +20,7 @@ import styles from '../components/AlertsOverlay.module.css';
 export function AlertsRoute({ onBack, alerts = [] }) {
     const { shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const header = <ScreenHeader onBack={onBack} title="Alerts" />;
+    const header = <PageHeader onBack={onBack} title="Alerts" />;
 
     return (
         <Screen variant={variant} header={header}>

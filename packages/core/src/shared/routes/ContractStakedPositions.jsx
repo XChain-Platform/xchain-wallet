@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useState } from 'react';
-import { Screen, ScreenHeader, Button, AddressText } from '@xchain-wallet/core/ui';
+import { Screen, PageHeader, Button, AddressText } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './History.module.css';
 
@@ -105,7 +105,7 @@ export function ContractStakedPositions({ walletId, chainId, onBack, onStakeToCo
     }, [walletId, chainId, messaging]);
 
     const header = (
-        <ScreenHeader
+        <PageHeader
             onBack={onBack}
             backLabel="Back"
             title="Your contract stakes"

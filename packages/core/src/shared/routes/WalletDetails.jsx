@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useState } from 'react';
-import { Screen, Button, Icon, ScreenHeader } from '@xchain-wallet/core/ui';
+import { Screen, Button, Icon, PageHeader } from '@xchain-wallet/core/ui';
 import { isDemoWallet, clearDemoWalletId, getDemoWalletExpiry } from '@xchain-wallet/core/flows';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { clearLastView } from '../utils/lastViewMemory.js';
@@ -95,7 +95,7 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
     }, [walletId, messaging]);
 
     const header = (
-        <ScreenHeader onBack={onBack} title="Wallet details" />
+        <PageHeader onBack={onBack} title="Wallet details" />
     );
 
     if (error) {

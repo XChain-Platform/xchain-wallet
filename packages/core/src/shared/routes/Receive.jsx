@@ -12,7 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import {
     Screen,
-    ScreenHeader,
+    PageHeader,
     ChainBadge,
     AddressText,
     Button,
@@ -435,7 +435,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     }, [qrDataUrl, address?.address, qrFileName, showToast]);
 
     const header = (
-        <ScreenHeader
+        <PageHeader
             onBack={onBack}
             backLabel="Back to home"
             title="Receive"
@@ -543,7 +543,8 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                         inputRef={amountInputRef}
                     />
                     <FeeSelector
-                        label="Fee priority"
+                        label="Priority"
+                        coinTicker={nativeTickerFor(descriptor)}
                         tiers={feeTiers}
                         value={feePick}
                         onChange={setFeePick}

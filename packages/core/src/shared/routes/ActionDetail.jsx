@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useState } from 'react';
-import { Screen, ScreenHeader, Icon } from '@xchain-wallet/core/ui';
+import { Screen, PageHeader, Icon } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -63,7 +63,7 @@ export function ActionDetail({ entry, walletId, chainTip, onBack }) {
     if (!entry) {
         return (
             <Screen variant={variant} header={(
-                <ScreenHeader onBack={onBack} backLabel="Back to history" title="Action" />
+                <PageHeader onBack={onBack} backLabel="Back to history" title="Action" />
             )}>
                 <p className={styles.empty}>No action selected.</p>
             </Screen>
@@ -73,7 +73,7 @@ export function ActionDetail({ entry, walletId, chainTip, onBack }) {
     const descriptor = entry.chainId ? chainRegistry.get(entry.chainId) : null;
     const iconUrl = descriptor ? branding.chainIconSmallUrl(descriptor.id) : null;
     const header = (
-        <ScreenHeader
+        <PageHeader
             onBack={onBack}
             backLabel="Back to history"
             title={`${entry.action} #${Number(entry.actionIndex || 0).toLocaleString('en-US')}`}

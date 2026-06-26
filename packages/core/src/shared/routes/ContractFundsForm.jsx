@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Screen,
-    ScreenHeader,
+    PageHeader,
     Button,
     Input,
     ChainBadge,
@@ -214,7 +214,7 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
     }
 
         const header = (
-        <ScreenHeader
+        <PageHeader
             onBack={onBack}
             title="{stage === 'review' || stage === 'submitting'
                     ? `Review ${verb.toLowerCase()}`

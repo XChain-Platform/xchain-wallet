@@ -11,7 +11,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
     Screen,
-    ScreenHeader,
+    PageHeader,
     Button,
     ChainBadge,
  Icon,} from '@xchain-wallet/core/ui';
@@ -114,7 +114,7 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
         : 'var(--xc-text-muted)';
 
     const header = (
-        <ScreenHeader
+        <PageHeader
             onBack={onBack}
             title={`${tick1}/${tick2}`}
         />

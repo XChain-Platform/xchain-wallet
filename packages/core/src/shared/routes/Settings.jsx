@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Screen, ScreenHeader, Icon } from '@xchain-wallet/core/ui';
+import { Screen, PageHeader, Icon } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { WALLET_VERSION } from '../../buildInfo.js';
@@ -274,7 +274,7 @@ export function Settings({
         if (section && section.kind === 'internal-drill' && section.Component) {
             const SectionComponent = section.Component;
             const subpageHeader = (
-                <ScreenHeader
+                <PageHeader
                     onBack={() => setSubpageId(null)}
                     backLabel="Back to settings"
                     title={section.title}
@@ -294,7 +294,7 @@ export function Settings({
 
     // ─── List view ────────────────────────────────────────────────
 
-    const header = <ScreenHeader onBack={onBack} title="Settings" />;
+    const header = <PageHeader onBack={onBack} title="Settings" />;
 
     return (
         <Screen variant={variant} header={header}>

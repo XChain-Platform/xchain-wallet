@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Screen,
-    ScreenHeader,
+    PageHeader,
     Button,
     Input,
     ChainBadge,
@@ -209,7 +209,7 @@ export function StakingActionForm({ mode, walletId, chainId, onBack }) {
     }
 
         const header = (
-        <ScreenHeader
+        <PageHeader
             onBack={onBack}
             title="{stage === 'review' || stage === 'submitting'
                     ? `Review ${verb.toLowerCase()}`

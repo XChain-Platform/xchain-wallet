@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Screen,
-    ScreenHeader,
+    PageHeader,
     Button,
     Input,
     ChainBadge,
@@ -253,7 +253,7 @@ export function ControllerBindForm({ walletId, chainId, tick, onBack }) {
         : 'this address';
 
         const header = (
-        <ScreenHeader
+        <PageHeader
             onBack={onBack}
             title="{stage === 'review' || stage === 'submitting'
                     ? `Review ${verb.toLowerCase()} controller`

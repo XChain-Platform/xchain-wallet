@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { BackIcon } from './icons/index.jsx';
-import styles from './ScreenHeader.module.css';
+import styles from './PageHeader.module.css';
 
 /**
  * Shared secondary-toolbar header used by every routed screen.
@@ -35,7 +35,7 @@ import styles from './ScreenHeader.module.css';
  *   page-scoped actions (filter buttons, scan, etc.). Omit to render an
  *   empty spacer for symmetry.
  */
-export function ScreenHeader({
+export function PageHeader({
     onBack,
     backLabel = 'Back',
     backDisabled = false,

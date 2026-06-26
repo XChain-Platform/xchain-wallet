@@ -11,7 +11,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
     Screen,
-    ScreenHeader,
+    PageHeader,
     Button,
     Input,
     ChainBadge,
@@ -258,7 +258,7 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
     }, [activeChains, messaging]);
 
         const header = (
-        <ScreenHeader
+        <PageHeader
             onBack={onBack}
             backLabel="Back to home"
             title="Contracts"

@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useRef, useState } from 'react';
-import { Screen, Input, Icon, ScreenHeader } from '@xchain-wallet/core/ui';
+import { Screen, Input, Icon, PageHeader } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './CreateWallet.module.css';
 
@@ -72,7 +72,7 @@ export function RenameAccountForm({ accountId, initialName = '', onBack, onRenam
     const saveDisabled = busy || name.trim().length === 0;
 
     const header = (
-        <ScreenHeader
+        <PageHeader
             onBack={onBack}
             backDisabled={busy}
             title="Rename account"

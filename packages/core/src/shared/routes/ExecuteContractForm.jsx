@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Screen,
-    ScreenHeader,
+    PageHeader,
     Button,
     Input,
     ChainBadge,
@@ -240,7 +240,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, on
     }
 
         const header = (
-        <ScreenHeader
+        <PageHeader
             onBack={onBack}
             title="{stage === 'review' || stage === 'submitting'
                     ? 'Review execute'

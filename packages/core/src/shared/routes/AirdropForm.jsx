@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Screen,
-    ScreenHeader,
+    PageHeader,
     Button,
     Input,
     ChainBadge,
@@ -486,7 +486,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     const titleSuffix = descriptor ? ` on ${descriptor.displayName}` : '';
 
         const header = (
-        <ScreenHeader
+        <PageHeader
             onBack={onBack}
             title="{stage === 'review-list' ? 'Review address list'
                     : stage === 'wait-index' ? 'Waiting for list to be indexed'

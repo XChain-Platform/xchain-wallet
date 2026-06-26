@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Screen, ScreenHeader, ChainBadge, Icon, Button, Input } from '@xchain-wallet/core/ui';
+import { Screen, PageHeader, ChainBadge, Icon, Button, Input } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -195,7 +195,7 @@ export function TokenDetail({
     }, [assetInfo, rowImageUrl, isNative, chainId]);
 
     const header = (
-        <ScreenHeader
+        <PageHeader
             onBack={onBack}
             title={displayName || tick}
             titleIcon={headerIconUrl ? (

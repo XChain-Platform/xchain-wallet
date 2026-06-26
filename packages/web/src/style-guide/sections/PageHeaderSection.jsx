@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { ScreenHeader, Icon } from '@xchain-wallet/core/ui';
+import { PageHeader, Icon } from '@xchain-wallet/core/ui';
 import { AppHeader } from '@xchain-wallet/core/shared/components/AppHeader.jsx';
 import { Section, Guidance, Markup, LiveExample } from '../StyleGuidePage.jsx';
 
@@ -28,7 +28,7 @@ const headerSlot = {
     background: 'var(--xc-surface-raised)',
     borderTop: '1px solid var(--xc-border)',
 };
-// The circular footprint comes from ScreenHeader.module.css `.trailing
+// The circular footprint comes from PageHeader.module.css `.trailing
 // button`; the caller passes a plain button with just the icon + label.
 
 export function PageHeaderSection() {
@@ -42,17 +42,17 @@ export function PageHeaderSection() {
         >
             <Guidance
                 what={<>A three-column layout: leading slot (back chevron or spacer), centered title group (optional <code>titleIcon</code> + label), trailing slot (filter / scan / etc., or spacer). Back chevron and title icon both render in <code>--xc-accent-primary</code>.</>}
-                when={<>Every routed screen below the global App header. Always use <code>&lt;ScreenHeader /&gt;</code> from <code>@xchain-wallet/core/ui</code>; never roll your own <code>.header</code> / <code>.back</code> / <code>.title</code> CSS.</>}
+                when={<>Every routed screen below the global App header. Always use <code>&lt;PageHeader /&gt;</code> from <code>@xchain-wallet/core/ui</code>; never roll your own <code>.header</code> / <code>.back</code> / <code>.title</code> CSS.</>}
                 sizing={<>Because the App header and Page header are always stacked, their edges must agree. The chevron's point aligns with the logo's left edge and the trailing slot's right edge aligns with the App header buttons. The chevron carries a small left nudge (<code>--xc-page-header-chevron-nudge</code>) because the glyph sits ~10px inside its own SVG; tune it there if the chevron is swapped.</>}
                 doRule={<>✓ Pass <code>titleIcon</code> with the matching <code>Icon.XxxIcon</code> so the screen reads as the same action as the launching button (Send screen plus Send icon) · keep the trailing slot for ONE primary action (multiple actions go in a More menu)</>}
                 dontRule={<>✗ Roll your own header CSS · pass JSX into <code>title</code> beyond a string (breaks centering math) · use a custom-colored title icon (always accent; the visual rhythm relies on it)</>}
-                supersedes={<>Per-route header CSS in the picker / form routes still on a bespoke <code>.header</code> (AccountPicker, WalletPicker, the Rename/Sign forms). Source of truth is <code>ScreenHeader.jsx</code> + <code>ScreenHeader.module.css</code>.</>}
+                supersedes={<>Per-route header CSS in the picker / form routes still on a bespoke <code>.header</code> (AccountPicker, WalletPicker, the Rename/Sign forms). Source of truth is <code>PageHeader.jsx</code> + <code>PageHeader.module.css</code>.</>}
             />
 
             <Markup>
-{`import { ScreenHeader, Icon } from '@xchain-wallet/core/ui';
+{`import { PageHeader, Icon } from '@xchain-wallet/core/ui';
 
-<ScreenHeader
+<PageHeader
     onBack={onBack}
     title="Send"
     titleIcon={<Icon.SendIcon />}
@@ -64,7 +64,7 @@ export function PageHeaderSection() {
                 <div style={frame}>
                     <AppHeader onScan={noop} onLock={noop} onMenuOpen={noop} />
                     <div style={headerSlot}>
-                        <ScreenHeader
+                        <PageHeader
                             onBack={noop}
                             title="Send"
                             titleIcon={<Icon.SendIcon />}
@@ -77,7 +77,7 @@ export function PageHeaderSection() {
             <LiveExample label="Receive screen: bare title icon, no trailing action">
                 <div style={frame}>
                     <div style={{ ...headerSlot, borderTop: 'none' }}>
-                        <ScreenHeader
+                        <PageHeader
                             onBack={noop}
                             title="Receive"
                             titleIcon={<Icon.ReceiveIcon />}
@@ -89,7 +89,7 @@ export function PageHeaderSection() {
             <LiveExample label="No back (root view): leading slot is a spacer">
                 <div style={frame}>
                     <div style={{ ...headerSlot, borderTop: 'none' }}>
-                        <ScreenHeader
+                        <PageHeader
                             title="Address book"
                             titleIcon={<Icon.BookIcon />}
                         />

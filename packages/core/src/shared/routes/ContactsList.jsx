@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Screen,
-    ScreenHeader,
+    PageHeader,
     Button,
     Input,
     Icon,
@@ -329,7 +329,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
     }
 
     const header = (
-        <ScreenHeader
+        <PageHeader
             onBack={() => {
                 if (mode !== 'list') {
                     setMode(mode === 'edit' && active ? 'detail' : 'list');

@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Screen, ScreenHeader, Icon, Skeleton } from '@xchain-wallet/core/ui';
+import { Screen, PageHeader, Icon, Skeleton } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import {
     BalanceList,
@@ -300,7 +300,7 @@ export function TokenPicker({
     const headerBackLabel = backLabel ?? 'Back to home';
 
     const header = (
-        <ScreenHeader
+        <PageHeader
             onBack={onBack}
             backLabel={headerBackLabel}
             title={headerTitle}

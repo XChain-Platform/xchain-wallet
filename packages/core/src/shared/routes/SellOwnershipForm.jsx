@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Screen,
-    ScreenHeader,
+    PageHeader,
     Button,
     Input,
     ChainBadge,
@@ -257,7 +257,7 @@ export function SellOwnershipForm({ walletId, onBack, chainId, tick, initialFrom
         ? 'Review sale'
         : `Sell ${tokenUpper} name`;
     const header = (
-        <ScreenHeader onBack={onBack} title={headerTitle} />
+        <PageHeader onBack={onBack} title={headerTitle} />
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>

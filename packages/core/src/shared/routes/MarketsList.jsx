@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     Screen,
-    ScreenHeader,
+    PageHeader,
     Icon,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib, branding as brandingLib, flows as flowsLib } from '@xchain-wallet/core';
@@ -175,7 +175,7 @@ export function MarketsList({
     }, [watchlist, walletId, messaging, loadWatchlist]);
 
     const header = (
-        <ScreenHeader onBack={onBack} title="Decentralized Exchange" titleIcon={<Icon.MarketIcon />} />
+        <PageHeader onBack={onBack} title="Decentralized Exchange" titleIcon={<Icon.MarketIcon />} />
     );
 
     const selectorDescriptor = selectedAsset ? chainRegistry.get(selectedAsset.chainId) : null;

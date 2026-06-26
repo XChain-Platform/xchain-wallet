@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Screen,
-    ScreenHeader,
+    PageHeader,
     Button,
     ChainBadge,
     AddressText,
@@ -278,7 +278,7 @@ export function CoinpayForm({
         ? 'Review payment'
         : 'Pay COINPAY';
     const header = (
-        <ScreenHeader
+        <PageHeader
             onBack={onBack}
             title={titleText}
         />

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { Screen, ScreenHeader, Icon } from '@xchain-wallet/core/ui';
+import { Screen, PageHeader, Icon } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './ActionsMenu.module.css';
 
@@ -36,7 +36,7 @@ export function ActionsMenu({ entries, onBack }) {
     const isFull = variant === 'full';
 
     const header = (
-        <ScreenHeader
+        <PageHeader
             onBack={onBack}
             backLabel="Back to home"
             title="Token Actions"

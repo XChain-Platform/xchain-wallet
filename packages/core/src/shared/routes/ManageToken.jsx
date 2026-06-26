@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Screen, ScreenHeader, Icon, Skeleton } from '@xchain-wallet/core/ui';
+import { Screen, PageHeader, Icon, Skeleton } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -427,7 +427,7 @@ export function ManageToken({
     }, [moreOpen]);
 
     const header = (
-        <ScreenHeader
+        <PageHeader
             onBack={onBack}
             backLabel="Back to my tokens"
             title="Manage Token"

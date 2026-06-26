@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Screen,
-    ScreenHeader,
+    PageHeader,
     Button,
     Input,
     ChainBadge,
@@ -318,7 +318,7 @@ export function LinkForm({ walletId, onBack }) {
 
     const isReviewOrSubmitting = stage === 'review' || stage === 'submitting';
     const header = (
-        <ScreenHeader
+        <PageHeader
             onBack={onBack}
             title={isReviewOrSubmitting ? 'Review link' : 'Link two actions across chains'}
         />

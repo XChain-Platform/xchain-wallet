@@ -28,7 +28,7 @@ import {
     Input,
     ChainPicker,
     Icon,
-    ScreenHeader,
+    PageHeader,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -87,7 +87,7 @@ export function VerifySignatureForm({ onBack }) {
     }
 
     const header = (
-        <ScreenHeader onBack={onBack} backDisabled={busy} title="Verify signature" />
+        <PageHeader onBack={onBack} backDisabled={busy} title="Verify signature" />
     );
 
     const formBody = (

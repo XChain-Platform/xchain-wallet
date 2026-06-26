@@ -11,7 +11,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
     Screen,
-    ScreenHeader,
+    PageHeader,
     Input,
     Skeleton,
     Icon,
@@ -140,7 +140,7 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
         && filteredTokens !== null && filteredTokens.length === 0;
 
     const header = (
-        <ScreenHeader
+        <PageHeader
             onBack={onBack}
             backLabel="Back to home"
             title="My Tokens"

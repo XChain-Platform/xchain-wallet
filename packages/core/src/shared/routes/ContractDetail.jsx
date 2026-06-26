@@ -11,7 +11,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
     Screen,
-    ScreenHeader,
+    PageHeader,
     Button,
     ChainBadge,
     AddressText,
@@ -156,7 +156,7 @@ export function ContractDetail({
     const isStakeable = cooldownBlocks !== null && cooldownBlocks !== undefined;
 
         const header = (
-        <ScreenHeader
+        <PageHeader
             onBack={onBack}
             backLabel="Back to contracts list"
             title="Contract #{contractActionIndex}"

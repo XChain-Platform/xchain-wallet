@@ -15,7 +15,7 @@
 // dead code, its trigger was never rendered). It still reuses
 // `HeaderActionMenu.module.css` for row styling.
 
-import { Screen, ScreenHeader, Icon } from '@xchain-wallet/core/ui';
+import { Screen, PageHeader, Icon } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { LayoutModeToggle } from '../components/LayoutModeToggle.jsx';
 import menuStyles from '../components/HeaderActionMenu.module.css';
@@ -88,7 +88,7 @@ export function MenuRoute({
         // separately below), not part of this sort.
         .sort((a, b) => a.label.localeCompare(b.label));
 
-    const header = <ScreenHeader onBack={onBack} title="Menu" />;
+    const header = <PageHeader onBack={onBack} title="Menu" />;
 
     return (
         <Screen variant={variant} header={header}>

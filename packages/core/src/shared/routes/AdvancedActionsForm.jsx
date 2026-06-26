@@ -13,7 +13,7 @@ import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 import {
     Screen,
-    ScreenHeader,
+    PageHeader,
     Button,
     Input,
     ChainBadge,
@@ -354,7 +354,7 @@ export function AdvancedActionsForm({ walletId, onBack }) {
     }
 
         const header = (
-        <ScreenHeader
+        <PageHeader
             onBack={onBack}
             title="{stage === 'review' || stage === 'submitting'
                     ? `Review ${action || 'action'}`

@@ -6,13 +6,13 @@ Living doc. The rule it exists to enforce: **if you find yourself copying CSS or
 
 Every routed screen has a secondary toolbar below the global AppHeader. It carries: a back chevron, a centered title (optionally with a route-action icon), and an optional trailing action slot.
 
-**Use `<ScreenHeader />` from `@xchain-wallet/core/ui`.** Do not roll your own `.header` / `.back` / `.title` CSS.
+**Use `<PageHeader />` from `@xchain-wallet/core/ui`.** Do not roll your own `.header` / `.back` / `.title` CSS.
 
 ```jsx
-import { Screen, ScreenHeader, Icon } from '@xchain-wallet/core/ui';
+import { Screen, PageHeader, Icon } from '@xchain-wallet/core/ui';
 
 const header = (
-    <ScreenHeader
+    <PageHeader
         onBack={onBack}
         title="Send"
         titleIcon={<Icon.SendIcon />}
@@ -32,7 +32,7 @@ return <Screen variant={variant} header={header}>{...}</Screen>;
 | `titleIcon` | optional inline icon to the left of the title (accent-colored) |
 | `trailing` | optional right-side slot for page-scoped actions (filter, scan, etc.) |
 
-**Why the chevron alignment is non-obvious**: AppHeader pads the outer bar by `space-3`; Screen.header pads by `space-4`. `<ScreenHeader />` cancels that delta with a `margin-inline-start: calc(var(--xc-space-3) - var(--xc-space-4))` on the back button so the chevron's left edge lines up with the X-Chain logo above. Trailing slot mirrors on the right.
+**Why the chevron alignment is non-obvious**: AppHeader pads the outer bar by `space-3`; Screen.header pads by `space-4`. `<PageHeader />` cancels that delta with a `margin-inline-start: calc(var(--xc-space-3) - var(--xc-space-4))` on the back button so the chevron's left edge lines up with the X-Chain logo above. Trailing slot mirrors on the right.
 
 ## Buttons
 
@@ -279,7 +279,7 @@ If you genuinely need a one-off layout that doesn't fit any existing pattern, **
 
 ## Migration status
 
-- [x] `<ScreenHeader />` exists and is exported from `@xchain-wallet/core/ui`.
-- [ ] All existing routes use `<ScreenHeader />`. Migration tracked in TODO.md.
+- [x] `<PageHeader />` exists and is exported from `@xchain-wallet/core/ui`.
+- [ ] All existing routes use `<PageHeader />`. Migration tracked in TODO.md.
 
 When you touch a route that still rolls its own header, please convert it. That's how the codebase converges over time without anyone having to do a big-bang refactor.

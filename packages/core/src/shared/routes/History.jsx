@@ -10,7 +10,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Screen,
-    ScreenHeader, Button, Icon, Skeleton, VerifiedBadge } from '@xchain-wallet/core/ui';
+    PageHeader, Button, Icon, Skeleton, VerifiedBadge } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import {
@@ -595,7 +595,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     };
 
         const header = (
-        <ScreenHeader
+        <PageHeader
             onBack={onBack}
             backLabel="Back to home"
             title="History"

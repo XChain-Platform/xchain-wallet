@@ -33,7 +33,7 @@ import {
     CopyButton,
     Icon,
     StatusMessage,
-    ScreenHeader,
+    PageHeader,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -192,7 +192,7 @@ export function SignMessageForm({ walletId, onBack }) {
     }
 
     const header = (
-        <ScreenHeader onBack={onBack} backDisabled={busy} title="Sign message" />
+        <PageHeader onBack={onBack} backDisabled={busy} title="Sign message" />
     );
 
     if (loadError) {

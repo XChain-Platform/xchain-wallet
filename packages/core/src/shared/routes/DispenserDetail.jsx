@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Screen,
-    ScreenHeader,
+    PageHeader,
     Button,
     Input,
     ChainBadge,
@@ -345,7 +345,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     }
 
         const header = (
-        <ScreenHeader
+        <PageHeader
             onBack={onBack}
             title="{cancelStage === 'confirm' || cancelStage === 'submitting'
                     ? 'Confirm cancel'
