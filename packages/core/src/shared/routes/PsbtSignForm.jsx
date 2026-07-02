@@ -63,6 +63,7 @@ import { useDropZone } from '../hooks/useDropZone.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { HwSignBlock } from '../components/HwSignBlock.jsx';
 import { decodeBbqrPsbt } from '../../uri/bbqrPsbt.js';
+import { decodeUrPsbt, UrPsbtDecoder } from '../../uri/urPsbt.js';
 import { detectQrFrameFormat, describeUnsupportedFormat } from '../../uri/qrPsbtFormat.js';
 import {
     createXcwCollector,
@@ -95,10 +96,12 @@ const BASE64_PSBT_PREFIX = 'cHNid';
  *   • hex: 0-9a-f, even-length
  *   • base64: starts with the standard PSBT magic ("cHNidP")
  *   • BBQr (H / B / Z): single or multi-frame, line-separated
- *                    (§20.4 / G043). All three encodings decode now;
- *                    UR is recognized but not yet supported and
- *                    surfaces null here so the caller's detector can
- *                    branch on `detectQrFrameFormat`.
+ *                    (§20.4 / G043). All three encodings decode now.
+ *   • UR (crypto-psbt): single or multi-part fountain frames,
+ *                    line-separated (§20.4 Cluster U FU 2). Returns
+ *                    null when the captured frames are insufficient to
+ *                    reassemble (e.g. a partial multi-part paste), so
+ *                    the caller's hint logic can explain why.
  *
  * @param {string} raw
  * @returns {string | null}
@@ -108,14 +111,21 @@ export function normalizePsbtInput(raw) {
     const trimmedRaw = raw.trim();
     if (trimmedRaw.length === 0) return null;
 
-    // BBQr: multi-frame inputs may arrive as one big paste with line
-    // breaks between frames. Split on whitespace, detect each line,
-    // and route to the BBQr decoder if every non-empty line looks
-    // like a BBQr frame.
+    // BBQr / UR: multi-frame inputs may arrive as one big paste with line
+    // breaks between frames. Split on whitespace, detect each line, and
+    // route to the matching decoder when every non-empty line is the same
+    // known animated-QR format.
     const frames = trimmedRaw.split(/\s+/).filter((s) => s.length > 0);
     if (frames.length > 0 && frames.every((f) => detectQrFrameFormat(f) === 'bbqr')) {
         try {
             return decodeBbqrPsbt(frames).psbtHex;
+        } catch {
+            return null;
+        }
+    }
+    if (frames.length > 0 && frames.every((f) => detectQrFrameFormat(f) === 'ur')) {
+        try {
+            return decodeUrPsbt(frames).psbtHex;
         } catch {
             return null;
         }
@@ -205,6 +215,15 @@ export function PsbtSignForm({ walletId, onBack }) {
                 return e?.message ?? 'BBQr decode failed';
             }
         }
+        if (fmt === 'ur') {
+            // Detected as UR but not decoded: usually an incomplete
+            // multi-part fountain capture (one frame of many). Surface
+            // the UR-specific message so the user knows to keep
+            // scanning / paste every frame rather than thinking it failed.
+            try { decodeUrPsbt([firstToken]); } catch (e) {
+                return e?.message ?? 'UR decode failed';
+            }
+        }
         return null;
     }, [pasted, psbtHex]);
 
@@ -215,11 +234,16 @@ export function PsbtSignForm({ walletId, onBack }) {
     //   • BBQr / hex / base64: each detected frame is appended to the
     //     paste textarea (newline-separated for BBQr); the existing
     //     `normalizePsbtInput` pipeline handles assembly.
-    //   • UR: not yet supported (Cluster U FOLLOWUP 2 tracks this);
-    //     the scanner ignores UR frames so the user sees the same
-    //     paste-time copy.
+    //   • UR (crypto-psbt): each frame feeds a fountain decoder; the
+    //     wallet emits the PSBT once enough frames reduce to the full
+    //     message (Cluster U FOLLOWUP 2).
     const [scannerOpen, setScannerOpen] = useState(false);
     const [xcwCollector, setXcwCollector] = useState(() => createXcwCollector());
+    // UR multi-part fountain frames accrue into a stateful decoder; it emits
+    // the PSBT once enough frames have been mixed/reduced to recover the whole
+    // message (Cluster U FU 2). A fresh decoder is minted on each completion
+    // and on scanner re-open.
+    const [urDecoder, setUrDecoder] = useState(() => new UrPsbtDecoder());
     const handleScannerFrame = useCallback((text) => {
         if (typeof text !== 'string' || text.length === 0) return;
         if (text.startsWith(XCW_PREFIX)) {
@@ -246,6 +270,26 @@ export function PsbtSignForm({ walletId, onBack }) {
             return;
         }
         const fmt = detectQrFrameFormat(text);
+        if (fmt === 'ur') {
+            // UR animated QR: feed each frame into the fountain decoder.
+            // Malformed frames are ignored so an unrelated UR (e.g. an
+            // address QR) doesn't abort the capture. When the decoder has
+            // recovered the whole PSBT, hand it to the paste pipeline.
+            let done = false;
+            try {
+                urDecoder.receive(text);
+                done = urDecoder.complete;
+            } catch {
+                return;
+            }
+            if (done) {
+                setPasted(urDecoder.psbtHex);
+                setScannerOpen(false);
+                if (error) setError(null);
+                setUrDecoder(new UrPsbtDecoder());
+            }
+            return;
+        }
         if (fmt === 'bbqr') {
             // Append BBQr frames newline-separated; the paste-pipeline
             // detects the multi-frame BBQr shape and decodes when all
@@ -260,15 +304,18 @@ export function PsbtSignForm({ walletId, onBack }) {
             if (error) setError(null);
             return;
         }
-        // Unrecognized / UR / unsupported: silently ignore so the
-        // scanner can keep running without flashing errors at every
-        // unrelated QR the camera spots.
-    }, [error]);
+        // Unrecognized / unsupported: silently ignore so the scanner can
+        // keep running without flashing errors at every unrelated QR the
+        // camera spots.
+    }, [error, urDecoder]);
 
     // Reset XCW collector whenever the scanner re-opens so a partial
     // earlier set doesn't pollute a fresh capture.
     useEffect(() => {
-        if (scannerOpen) setXcwCollector(createXcwCollector());
+        if (scannerOpen) {
+            setXcwCollector(createXcwCollector());
+            setUrDecoder(new UrPsbtDecoder());
+        }
     }, [scannerOpen]);
 
     // .psbt file drop / picker: binary blobs are read as ArrayBuffer and

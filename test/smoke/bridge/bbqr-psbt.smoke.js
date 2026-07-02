@@ -8,9 +8,10 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §20.4 / G043: BBQr / UR PSBT QR. BBQr H + B + Z all
-// decode now (Cluster U FOLLOWUP 1 wired Z via pako); UR is still
-// recognized but throws "not yet supported" pending Cluster U FU 2.
+// Smoke for §20.4 / G043: BBQr / UR PSBT QR. BBQr H + B + Z all decode
+// (Cluster U FOLLOWUP 1 wired Z via pako); UR crypto-psbt (single + fountain
+// multi-part) decodes via urPsbt.js (Cluster U FOLLOWUP 2). Deep UR codec
+// coverage lives in test/unit/uri/urPsbt.test.js against bc-ur gold vectors.
 
 import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
@@ -52,11 +53,14 @@ assert.equal(detectQrFrameFormat(''), null);
 assert.equal(detectQrFrameFormat(null), null);
 assert.equal(detectQrFrameFormat(123), null);
 
-assert.ok(describeUnsupportedFormat('ur')?.includes('UR'),
-    'describeUnsupportedFormat surfaces a UR-specific message');
+// All three QR PSBT formats decode now (UR landed in Cluster U FOLLOWUP 2),
+// so describeUnsupportedFormat flags none of them; it stays for any future
+// format added before its decoder.
+assert.equal(describeUnsupportedFormat('ur'), null,
+    'UR is supported now (Cluster U FU 2); no unsupported message');
 assert.equal(describeUnsupportedFormat('xcw'), null);
 assert.equal(describeUnsupportedFormat('bbqr'), null,
-    'BBQr is supported (H/B); unsupported variants surface via the BBQr decoder error');
+    'BBQr is supported (H/B/Z); unsupported variants surface via the BBQr decoder error');
 assert.equal(describeUnsupportedFormat(null), null);
 
 // 3. Runtime: BBQr decode (single-frame H).

@@ -16,15 +16,16 @@
 //   • BBQr: Sparrow / Coldcard / SeedSigner standard
 //           (`B$EFNNXX<payload>`)
 //   • UR: Foundation Passport / Keystone CBOR-bytewords format
-//         (`ur:crypto-psbt/...`); fountain-coded multi-part variant
-//         not yet supported
+//         (`ur:crypto-psbt/...`), including the fountain-coded
+//         multi-part variant (decoded by urPsbt.js)
 //
 // `detectQrFrameFormat(frame)` returns the format name (or null when
 // the frame matches none of the known prefixes). Callers dispatch on
-// the answer, route the frame to the right collector, and surface a
-// clear "format X is not yet supported by this wallet" error for
-// formats with no decoder yet (currently UR; BBQr H/B/Z all decode
-// as of Cluster U FOLLOWUP 1; UR remains tracked as Cluster U FU 2).
+// the answer and route the frame to the right collector. All three
+// formats decode today (XCW; BBQr H/B/Z as of Cluster U FOLLOWUP 1; UR
+// as of Cluster U FOLLOWUP 2), so `describeUnsupportedFormat` no longer
+// flags any of them; it is retained for any future format added ahead
+// of its decoder.
 
 export const QR_PSBT_FORMATS = /** @type {const} */ (['xcw', 'bbqr', 'ur']);
 
@@ -52,8 +53,9 @@ export function detectQrFrameFormat(frame) {
  * @returns {string | null}
  */
 export function describeUnsupportedFormat(format) {
-    if (format === 'ur') {
-        return 'UR (Foundation / Keystone CBOR-bytewords) PSBT QR is recognized but not yet supported by this wallet. Use BBQr or XCW from your other wallet, or paste the PSBT hex directly.';
-    }
+    // XCW, BBQr (H/B/Z), and UR (crypto-psbt) all decode today. This hook
+    // stays so a future format can be flagged as recognized-but-unsupported
+    // in the window between adding detection and shipping its decoder.
+    void format;
     return null;
 }

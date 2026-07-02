@@ -36,6 +36,17 @@ export {
     DEFAULT_CHUNK_BYTES,
 } from './psbtQr.js';
 export {
+    UR_PREFIX,
+    UR_PSBT_TYPE,
+    UrError,
+    UrPsbtDecoder,
+    decodeUrPsbt,
+    parseUrFrame,
+    decodeBytewordsMinimal,
+    cborUnwrapBytes,
+    chooseFragments,
+} from './urPsbt.js';
+export {
     ENVELOPE_VERSION as MULTISIG_ENVELOPE_VERSION,
     ENVELOPE_PREFIX as MULTISIG_ENVELOPE_PREFIX,
     MULTISIG_ENVELOPE_KINDS,
