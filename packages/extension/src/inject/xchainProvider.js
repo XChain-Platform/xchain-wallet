@@ -95,6 +95,7 @@
         signMessage(params) { return send('bridge.signMessage', params); },
         signAction(params) { return send('bridge.signAction', params); },
         signPsbt(params) { return send('bridge.signPsbt', params); },
+        coSign(params) { return send('bridge.coSign', params); },
         signIn(params) { return send('bridge.signIn', params); },
 
         parallel(actions) {

@@ -27,6 +27,7 @@ import { CURRENT_VERSION as SIGNER_VERSION } from './signer.js';
 import { CURRENT_VERSION as PENDING_AIRDROP_VERSION } from './pendingAirdrop.js';
 import { CURRENT_VERSION as WATCHLIST_VERSION } from './watchlistEntry.js';
 import { CURRENT_VERSION as PRICE_ALERT_VERSION } from './priceAlert.js';
+import { CURRENT_VERSION as COSIGNER_ACCOUNT_VERSION } from './coSignerAccount.js';
 import { randomUUID } from '../util/uuid.js';
 import { tickerForCoin } from '../registry/coinTicker.js';
 
@@ -171,6 +172,9 @@ export const watchlistEntryMigrations = {};
 /** @type {MigrationMap} */
 export const priceAlertMigrations = {};
 
+// CoSignerAccount (§22, P4) is a base-v1 schema; no upgrade steps yet.
+export const coSignerAccountMigrations = {};
+
 /**
  * Walk `record` forward through `migrations` until it reaches `target`.
  * Throws if a step is missing; the caller must fall back to read-only
@@ -229,3 +233,5 @@ export const migrateWatchlistEntry = (r) =>
     migrate(r, watchlistEntryMigrations, WATCHLIST_VERSION);
 export const migratePriceAlert = (r) =>
     migrate(r, priceAlertMigrations, PRICE_ALERT_VERSION);
+export const migrateCoSignerAccount = (r) =>
+    migrate(r, coSignerAccountMigrations, COSIGNER_ACCOUNT_VERSION);

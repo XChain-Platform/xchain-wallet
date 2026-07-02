@@ -166,6 +166,11 @@ export {
     pendingCosignerPubkeys,
 } from './multisigSigning.js';
 export { signMultisigLocally } from './multisigSignLocally.js';
+export { passiveCoSign } from './passiveCoSign.js';
+export { passiveCoSignForAccount, CoSignerAccountNotFoundError } from './passiveCoSignForAccount.js';
+export { provisionCoSignerAccount } from './provisionCoSignerAccount.js';
+export { previewCoSignRequest } from './previewCoSignRequest.js';
+export { listCoSignerAccounts, findCoSignerAccountByAddress } from './coSignerAccountQueries.js';
 export {
     contractValidate,
     contractCheckCodeSize,

@@ -116,3 +116,16 @@ export function getSettings() {
 export function parsePsbt(opts) {
     return /** @type {any} */ (sendMessage('psbt.parse', opts));
 }
+
+/**
+ * Build the read-only preview for a co-sign approval (§22 / P4): the decoded
+ * action + amount + destinations and whether the request is within the agent
+ * account's policy. Routes to the `coSign.parse` host handler
+ * (flows.previewCoSignRequest); derives no key and signs nothing.
+ *
+ * @param {{ accountId: string, psbtHex: string }} opts
+ * @returns {Promise<import('@xchain-wallet/core/flows/previewCoSignRequest.js').CoSignPreview>}
+ */
+export function parseCoSign(opts) {
+    return /** @type {any} */ (sendMessage('coSign.parse', opts));
+}

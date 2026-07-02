@@ -324,6 +324,55 @@ export interface SignPsbtSuccess {
 export type SignPsbtResult = SignPsbtSuccess | BridgeErrorResult;
 
 // ---------------------------------------------------------------------------
+// coSign: MuSig2 passive co-signature (§22 / P4)
+//
+// An agent holding one key of a 2-of-2 MuSig2 account asks the wallet (the
+// policy co-signer / daemon half) to co-sign a spend. The wallet decodes the
+// action from the PSBT, ALWAYS prompts the user, and on approval returns its
+// deterministic partial signature (or a structured refusal when the action is
+// out of policy). On-chain the completed spend is a single Schnorr signature.
+
+export interface CoSignParams {
+    chainId: ChainId;
+    // The funded 2-of-2 aggregate (P2TR) address identifying which stored
+    // co-signer account this request targets.
+    aggregateAddress: string;
+    psbtHex: string;
+    // The agent's 66-byte public nonce (hex). Single-input form.
+    agentPublicNonce?: string;
+    // The input this group signs (single-input form; default 0).
+    inputIndex?: number;
+    // Multi-input form: one { index, agentPublicNonce } per input to co-sign.
+    inputs?: Array<{ index: number; agentPublicNonce: string }>;
+    sighashType?: number;
+}
+
+export interface CoSignApprovedSuccess {
+    ok: true;
+    approved: true;
+    // Single-input approval.
+    publicNonce?: string;
+    sig?: string;
+    msg?: string;
+    // Multi-input approval.
+    signatures?: Array<{ index: number; publicNonce: string; sig: string; msg: string }>;
+    // The action the wallet decoded from the PSBT.
+    action?: string;
+}
+
+// The wallet ran and refused (out of policy, panic mode, disabled account,
+// unauthorized output, etc.). Distinct from a BridgeErrorResult (protocol /
+// transport failure): the request was well-formed but denied.
+export interface CoSignRefused {
+    ok: true;
+    approved: false;
+    reason: string;
+    detail?: unknown;
+}
+
+export type CoSignResult = CoSignApprovedSuccess | CoSignRefused | BridgeErrorResult;
+
+// ---------------------------------------------------------------------------
 // signIn — Sign-in with XChain (§43.6)
 // ---------------------------------------------------------------------------
 
@@ -471,6 +520,8 @@ export interface XChainProvider {
         params: SignActionParams<TParams>,
     ): Promise<SignActionResult>;
     signPsbt(params: SignPsbtParams): Promise<SignPsbtResult>;
+
+    coSign(params: CoSignParams): Promise<CoSignResult>;
 
     signIn(params: SignInParams): Promise<SignInResult>;
 

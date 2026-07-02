@@ -24,6 +24,7 @@ import {
     getAddressesByChain,
     getSettings,
     parsePsbt,
+    parseCoSign,
     getTokenInfo,
 } from '../messaging.js';
 import shared from '../approval.module.css';
@@ -55,6 +56,7 @@ const KIND_TITLE = {
     signMessage: 'Sign message',
     signPsbt: 'Sign transaction',
     signAction: 'Sign action',
+    coSign: 'Co-sign transaction',
     signIn: 'Sign in',
 };
 
@@ -270,6 +272,34 @@ export function SignApproval({ id, kind, payload, onReject }) {
         return () => { cancelled = true; };
     }, [kind, chainId, psbtHexForSign, walletId]);
 
+    // §22 / P4 co-sign preview: decode the action the agent wants co-signed and
+    // dry-run the account policy, so the user approves a legible request (which
+    // account, which action, in-policy or not) rather than an opaque hex.
+    const coSignAccountId = kind === 'coSign' ? payload?.payload?.accountId : null;
+    const coSignPsbtHex = kind === 'coSign' ? payload?.payload?.psbtHex : null;
+    const [coSignPreview, setCoSignPreview] = useState(
+        /** @type {{ loading: boolean, error: string | null, preview: any | null }} */
+        ({ loading: false, error: null, preview: null }),
+    );
+    useEffect(() => {
+        if (kind !== 'coSign') return undefined;
+        if (!coSignAccountId || !coSignPsbtHex) {
+            setCoSignPreview({ loading: false, error: 'Missing co-sign request details.', preview: null });
+            return undefined;
+        }
+        let cancelled = false;
+        setCoSignPreview({ loading: true, error: null, preview: null });
+        (async () => {
+            try {
+                const preview = await parseCoSign({ accountId: coSignAccountId, psbtHex: coSignPsbtHex });
+                if (!cancelled) setCoSignPreview({ loading: false, error: null, preview });
+            } catch (err) {
+                if (!cancelled) setCoSignPreview({ loading: false, error: err?.message || 'Failed to decode the co-sign request.', preview: null });
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [kind, coSignAccountId, coSignPsbtHex]);
+
     const title = KIND_TITLE[kind] ?? 'Approval required';
     const showSavePermanent =
         kind === 'signAction' ||
@@ -387,6 +417,14 @@ export function SignApproval({ id, kind, payload, onReject }) {
                     error={psbtIntent.error}
                     decomposed={psbtIntent.decomposed}
                     ownAddresses={psbtIntent.ownAddresses}
+                />
+            ) : null}
+
+            {kind === 'coSign' ? (
+                <CoSignIntentSummary
+                    loading={coSignPreview.loading}
+                    error={coSignPreview.error}
+                    preview={coSignPreview.preview}
                 />
             ) : null}
 
@@ -539,6 +577,80 @@ function SignSummary({ kind, payload }) {
  * hex string. Outputs paying the user's own addresses are labelled as
  * change; everything else is money leaving the wallet.
  */
+/**
+ * Co-sign intent summary (§22 / P4). Shows which agent account is being asked
+ * to co-sign, the action decoded from the PSBT (with amount + destinations),
+ * and whether the request is within the account's stored policy. The wallet
+ * always prompts: the policy is a safety net, the user is the final gate.
+ */
+function CoSignIntentSummary({ loading, error, preview }) {
+    if (loading) {
+        return (
+            <div className={shared.summary}>
+                <p className={shared.summaryLabel}>Co-sign request</p>
+                <p className={shared.summaryValue} style={{ whiteSpace: 'normal' }}>Decoding request…</p>
+            </div>
+        );
+    }
+    if (error || !preview) {
+        return (
+            <ul className={styles.warnings} role="alert">
+                <li>
+                    {error
+                        ? `This co-sign request could not be decoded (${error}). `
+                        : 'This co-sign request could not be decoded. '}
+                    Only approve it if you trust the source.
+                </li>
+            </ul>
+        );
+    }
+
+    const acct = preview.account || {};
+    const dests = Array.isArray(preview.destinations) ? preview.destinations : [];
+
+    return (
+        <div className={shared.summary}>
+            <p className={shared.summaryLabel}>Agent account</p>
+            <p className={shared.summaryValue} style={{ whiteSpace: 'normal' }}>
+                {acct.name || 'Co-signer account'}
+                {acct.aggregateAddress ? ` (${acct.aggregateAddress})` : ''}
+            </p>
+
+            {preview.decodeOk ? (
+                <>
+                    <p className={shared.summaryLabel}>Action</p>
+                    <p className={shared.summaryValue} style={{ whiteSpace: 'normal' }}>
+                        {preview.action}
+                        {preview.amount !== undefined ? ` ${preview.amount}` : ''}
+                        {preview.tick ? ` ${preview.tick}` : ''}
+                    </p>
+                    {dests.length > 0 ? (
+                        <>
+                            <p className={shared.summaryLabel}>To</p>
+                            <p className={shared.summaryValue} style={{ whiteSpace: 'normal' }}>{dests.join(', ')}</p>
+                        </>
+                    ) : null}
+                </>
+            ) : (
+                <ul className={styles.warnings} role="alert">
+                    <li>The action could not be decoded from this transaction ({preview.decodeReason}).</li>
+                </ul>
+            )}
+
+            {preview.decodeOk && !preview.policyOk ? (
+                <ul className={styles.warnings} role="alert">
+                    <li>This request is outside the account policy ({preview.policyReason}). The co-signer will refuse it even if you approve.</li>
+                </ul>
+            ) : null}
+            {preview.decodeOk && preview.policyOk && preview.needsConfirmation ? (
+                <p className={shared.summaryValue} style={{ whiteSpace: 'normal' }}>
+                    Above the policy confirm-threshold: review carefully before approving.
+                </p>
+            ) : null}
+        </div>
+    );
+}
+
 function PsbtIntentSummary({ loading, error, decomposed, ownAddresses }) {
     if (loading) {
         return (

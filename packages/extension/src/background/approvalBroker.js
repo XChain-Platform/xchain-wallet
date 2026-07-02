@@ -106,6 +106,8 @@ export class ApprovalBroker {
     /** @param {import('../bridge/Approvals.js').SignApprovalRequest} req */
     signPsbt(req) { return this._request('signPsbt', req); }
     /** @param {import('../bridge/Approvals.js').SignApprovalRequest} req */
+    coSign(req) { return this._request('coSign', req); }
+    /** @param {import('../bridge/Approvals.js').SignApprovalRequest} req */
     signIn(req) { return this._request('signIn', req); }
 
     // -- Broker-side surface, called by the approval popup via -----------

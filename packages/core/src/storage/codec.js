@@ -50,6 +50,7 @@ export function emptyDocument() {
         watchlistEntries: [],
         priceAlerts: [],
         multisigSigningSessions: [],
+        coSignerAccounts: [],
         settings: null,
     };
 }
@@ -68,6 +69,7 @@ export function emptyDocument() {
  * @property {import('../schemas/watchlistEntry.js').WatchlistEntry[]} watchlistEntries
  * @property {import('../schemas/priceAlert.js').PriceAlert[]} priceAlerts
  * @property {import('../schemas/multisigSigningSession.js').MultisigSigningSession[]} multisigSigningSessions
+ * @property {import('../schemas/coSignerAccount.js').CoSignerAccount[]} coSignerAccounts
  * @property {import('../schemas/settings.js').Settings | null} settings
  */
 
@@ -132,6 +134,7 @@ export async function decodeDocument(masterKey, blob, aad) {
         watchlistEntries: parsed.watchlistEntries ?? empty.watchlistEntries,
         priceAlerts: parsed.priceAlerts ?? empty.priceAlerts,
         multisigSigningSessions: parsed.multisigSigningSessions ?? empty.multisigSigningSessions,
+        coSignerAccounts: parsed.coSignerAccounts ?? empty.coSignerAccounts,
         settings: parsed.settings ?? empty.settings,
     };
 }

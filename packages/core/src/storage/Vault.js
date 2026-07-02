@@ -40,6 +40,7 @@ import {
     migrateConnectedSite,
     migrateContact,
     migrateMultisigSigningSession,
+    migrateCoSignerAccount,
     migratePendingAirdrop,
     migratePendingTx,
     migrateSettings,
@@ -55,6 +56,7 @@ import { validateContact } from '../schemas/contact.js';
 import { validatePendingAirdrop } from '../schemas/pendingAirdrop.js';
 import { validatePendingTx } from '../schemas/pendingTx.js';
 import { validateMultisigSigningSession } from '../schemas/multisigSigningSession.js';
+import { validateCoSignerAccount } from '../schemas/coSignerAccount.js';
 import { validateSettings } from '../schemas/settings.js';
 import { validateSignerRecord } from '../schemas/signer.js';
 import { validateWallet } from '../schemas/wallet.js';
@@ -146,6 +148,12 @@ export class Vault {
             'multisigSigningSessions',
             migrateMultisigSigningSession,
             validateMultisigSigningSession,
+        );
+        this.coSignerAccounts = makeCollection(
+            this,
+            'coSignerAccounts',
+            migrateCoSignerAccount,
+            validateCoSignerAccount,
         );
         this.settings = makeSingleton(this, 'settings', migrateSettings, validateSettings);
     }

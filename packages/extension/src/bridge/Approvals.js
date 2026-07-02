@@ -50,7 +50,7 @@
 /**
  * @typedef {Object} SignApprovalRequest
  * @property {string} origin
- * @property {'signAction' | 'signMessage' | 'signPsbt' | 'signIn'} kind
+ * @property {'signAction' | 'signMessage' | 'signPsbt' | 'coSign' | 'signIn'} kind
  * @property {string} [chainId]
  * @property {string} [action]
  * @property {unknown} [payload]
@@ -72,6 +72,7 @@
  * @property {(req: SignApprovalRequest) => Promise<SignApprovalResult>} signAction
  * @property {(req: SignApprovalRequest) => Promise<SignApprovalResult>} signMessage
  * @property {(req: SignApprovalRequest) => Promise<SignApprovalResult>} signPsbt
+ * @property {(req: SignApprovalRequest) => Promise<SignApprovalResult>} coSign
  * @property {(req: SignApprovalRequest) => Promise<SignApprovalResult>} signIn
  */
 
@@ -88,6 +89,7 @@ export const rejectAllApprovals = {
     async signAction() { throw new ApprovalRequiredError('signAction'); },
     async signMessage() { throw new ApprovalRequiredError('signMessage'); },
     async signPsbt() { throw new ApprovalRequiredError('signPsbt'); },
+    async coSign() { throw new ApprovalRequiredError('coSign'); },
     async signIn() { throw new ApprovalRequiredError('signIn'); },
 };
 

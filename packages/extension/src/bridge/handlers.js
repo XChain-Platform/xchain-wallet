@@ -51,6 +51,8 @@ const {
     submitAction,
     createSignThrottle,
     isOriginBlocked,
+    passiveCoSignForAccount,
+    findCoSignerAccountByAddress,
 } = flows;
 
 const SUPPORTED_BRIDGE_ACTIONS = ['SEND', 'SWEEP'];
@@ -402,6 +404,57 @@ export function registerBridgeHandlers(host, opts = {}) {
             chainId: req.chainId,
             psbtHex: req.psbtHex,
             signingPaths: req.signingPaths,
+        });
+    });
+
+    // §22 / P4: the wallet as passive MuSig2 co-signer. An agent sends the
+    // PSBT + its public nonce + the aggregate address of the 2-of-2 account it
+    // wants co-signed. We resolve the stored CoSignerAccount, ALWAYS prompt the
+    // user (the policy is a safety net; the human is the final gate), and on
+    // approval derive the daemon key transiently to return the partial
+    // signature or a structured refusal.
+    register('bridge.coSign', async (req, deps) => {
+        await assertNotBlocked(req, deps);
+        const site = await requireSite(deps.vault, req);
+        assertChainPermitted(site, req.chainId);
+        assertNotThrottled(signThrottle, req);
+        const account = await findCoSignerAccountByAddress({
+            vault: deps.vault,
+            chainId: req.chainId,
+            aggregateAddress: req.aggregateAddress,
+        });
+        if (!account) {
+            throw bridgeError('UNKNOWN_COSIGNER_ACCOUNT', `no enabled co-signer account for ${req.aggregateAddress} on ${req.chainId}`);
+        }
+        const decision = await approvals.coSign({
+            origin: req.origin,
+            kind: 'coSign',
+            chainId: req.chainId,
+            payload: {
+                accountId: account.id,
+                aggregateAddress: account.aggregateAddress,
+                accountName: account.name,
+                psbtHex: req.psbtHex,
+                agentPublicNonce: req.agentPublicNonce,
+                inputIndex: req.inputIndex,
+                inputs: req.inputs,
+            },
+        });
+        if (!decision?.approved) throw new UserRejectedError('coSign');
+        if (!decision.password) throw bridgeError('NO_PASSWORD', 'approvals must return password');
+        return passiveCoSignForAccount({
+            vault: deps.vault,
+            chainRegistry: deps.chainRegistry,
+            sdkRegistry: deps.sdkRegistry,
+            accountId: account.id,
+            password: decision.password,
+            bip39Passphrase: decision.bip39Passphrase,
+            request: {
+                psbt: req.psbtHex,
+                agentPublicNonce: req.agentPublicNonce,
+                inputIndex: req.inputIndex,
+                inputs: req.inputs,
+            },
         });
     });
 

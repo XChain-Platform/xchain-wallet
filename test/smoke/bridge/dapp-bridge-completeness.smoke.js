@@ -39,6 +39,7 @@ for (const method of [
     'signMessage',
     'signAction',
     'signPsbt',
+    'coSign',
     'signIn',
     'parallel',
     'on',
@@ -74,6 +75,7 @@ for (const route of [
     'bridge.signMessage',
     'bridge.signAction',
     'bridge.signPsbt',
+    'bridge.coSign',
     'bridge.signIn',
 ]) {
     // v0.290.0 / Cluster Q FOLLOWUP 4: handlers.js shadows host.register

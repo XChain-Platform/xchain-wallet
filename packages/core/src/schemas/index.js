@@ -27,6 +27,7 @@ export * as signer from './signer.js';
 export * as pendingAirdrop from './pendingAirdrop.js';
 export * as watchlistEntry from './watchlistEntry.js';
 export * as priceAlert from './priceAlert.js';
+export * as coSignerAccount from './coSignerAccount.js';
 export * as migrations from './migrations.js';
 
 export { createWallet, validateWallet } from './wallet.js';

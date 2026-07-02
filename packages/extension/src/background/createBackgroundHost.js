@@ -1606,6 +1606,18 @@ export function createBackgroundHost(deps) {
         return { decomposed };
     });
 
+    // §22 / P4: read-only preview for the co-sign approval screen. Decodes the
+    // action from the PSBT and dry-runs the agent account's policy; no key is
+    // derived and nothing is signed (that happens on approval via bridge.coSign).
+    host.register('coSign.parse', async (req, { vault, sdkRegistry }) => {
+        return flows.previewCoSignRequest({
+            vault,
+            sdkRegistry,
+            accountId: req?.accountId,
+            request: { psbt: req?.psbtHex },
+        });
+    });
+
     // §30.4 / G088: user-initiated PSBT signing. The caller supplies the
     // wallet address whose key should sign; the handler decomposes the
     // PSBT and matches inputs by address to build signingPaths. Mixed-
