@@ -1618,6 +1618,26 @@ export function createBackgroundHost(deps) {
         });
     });
 
+    // §22 / P4 passive co-signer management. Provision an agent account
+    // (derives the aggregate address via the SDK), list/read them, and update
+    // policy / enable state. The management routes gate to BTC; these handlers
+    // stay chain-neutral and let provisioning's SDK lookup enforce it.
+    host.register('coSigner.provision', async (req, { vault, sdkRegistry }) => {
+        return flows.provisionCoSignerAccount({ ...req, vault, sdkRegistry });
+    });
+
+    host.register('coSigner.list', async (req, { vault }) => {
+        return flows.listCoSignerAccounts(vault, req?.walletId);
+    });
+
+    host.register('coSigner.get', async (req, { vault }) => {
+        return flows.getCoSignerAccount(vault, req?.id);
+    });
+
+    host.register('coSigner.update', async (req, { vault }) => {
+        return flows.updateCoSignerAccount({ vault, id: req?.id, patch: req?.patch });
+    });
+
     // §30.4 / G088: user-initiated PSBT signing. The caller supplies the
     // wallet address whose key should sign; the handler decomposes the
     // PSBT and matches inputs by address to build signingPaths. Mixed-

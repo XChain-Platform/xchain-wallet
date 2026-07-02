@@ -196,7 +196,7 @@ export function createCoSignerAccount(input) {
 
 // Store the policy in the shape the SDK evaluator consumes (uppercase action
 // names; arrays not Sets, since the record is serialized to the vault blob).
-function normalizeStoredPolicy(policy) {
+export function normalizeStoredPolicy(policy) {
     return {
         allowedActions: policy.allowedActions.map((a) => String(a).toUpperCase()),
         allowedDestinations: policy.allowedDestinations == null

@@ -98,6 +98,9 @@ import { CrossChainSwapForm } from '@xchain-wallet/core/shared/routes/CrossChain
 import { CrossChainTemplates } from '@xchain-wallet/core/shared/routes/CrossChainTemplates.jsx';
 import { MultisigCreate } from '@xchain-wallet/core/shared/routes/MultisigCreate.jsx';
 import { MultisigSigningSession } from '@xchain-wallet/core/shared/routes/MultisigSigningSession.jsx';
+import { CoSignerAccountList } from '@xchain-wallet/core/shared/routes/CoSignerAccountList.jsx';
+import { CoSignerProvision } from '@xchain-wallet/core/shared/routes/CoSignerProvision.jsx';
+import { CoSignerAccountDetail } from '@xchain-wallet/core/shared/routes/CoSignerAccountDetail.jsx';
 import { AddressList } from '@xchain-wallet/core/shared/routes/AddressList.jsx';
 import { PairSignerForm } from '@xchain-wallet/core/shared/routes/PairSignerForm.jsx';
 import { SignMessageForm } from '@xchain-wallet/core/shared/routes/SignMessageForm.jsx';
@@ -128,9 +131,10 @@ function AppInner() {
         /** @type {'welcome' | 'create' | 'import' | 'import-freewallet'} */ ('welcome'),
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'link-form' | 'attach-content' | 'project-roster' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'addresses' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'sign-message' | 'verify-signature' | 'sign-psbt' | 'scan'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'link-form' | 'attach-content' | 'project-roster' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'sign-message' | 'verify-signature' | 'sign-psbt' | 'scan'} */ ('home'),
     );
     const [walletDetailsId, setWalletDetailsId] = useState(/** @type {string | null} */ (null));
+    const [coSignerAccountId, setCoSignerAccountId] = useState(/** @type {string | null} */ (null));
     const [walletRenameTarget, setWalletRenameTarget] = useState(
         /** @type {{ id: string, name: string } | null} */ (null),
     );
@@ -847,6 +851,33 @@ function AppInner() {
                     />
                 );
             }
+            if (unlockedView === 'cosigner-accounts' && activeWalletId) {
+                return (
+                    <CoSignerAccountList
+                        walletId={activeWalletId}
+                        onProvision={() => setUnlockedView('cosigner-provision')}
+                        onOpen={(id) => { setCoSignerAccountId(id); setUnlockedView('cosigner-detail'); }}
+                        onBack={() => setUnlockedView('home')}
+                    />
+                );
+            }
+            if (unlockedView === 'cosigner-provision' && activeWalletId) {
+                return (
+                    <CoSignerProvision
+                        walletId={activeWalletId}
+                        onDone={(id) => { setCoSignerAccountId(id || null); setUnlockedView(id ? 'cosigner-detail' : 'cosigner-accounts'); }}
+                        onBack={() => setUnlockedView('cosigner-accounts')}
+                    />
+                );
+            }
+            if (unlockedView === 'cosigner-detail' && activeWalletId && coSignerAccountId) {
+                return (
+                    <CoSignerAccountDetail
+                        accountId={coSignerAccountId}
+                        onBack={() => setUnlockedView('cosigner-accounts')}
+                    />
+                );
+            }
             if (unlockedView === 'multisig-sign' && activeWalletId) {
                 return (
                     <MultisigSigningSession
@@ -1193,6 +1224,7 @@ function AppInner() {
                             onCrossChainTemplates: () => setUnlockedView('cross-chain-templates'),
                             onMultisigCreate: hasBtcAddress ? () => setUnlockedView('multisig-create') : undefined,
                             onMultisigSign: hasBtcAddress ? () => setUnlockedView('multisig-sign') : undefined,
+                            onCoSignerAccounts: hasBtcAddress ? () => setUnlockedView('cosigner-accounts') : undefined,
                             onContacts: () => setUnlockedView('contacts'),
                         })}
                         onBack={() => setUnlockedView('home')}
@@ -1499,6 +1531,7 @@ function buildActionEntries({
     onCrossChainTemplates,
     onMultisigCreate,
     onMultisigSign,
+    onCoSignerAccounts,
     onContacts,
 }) {
     return [
@@ -1621,6 +1654,12 @@ function buildActionEntries({
             label: 'Multisig signing',
             description: 'Resume an in-flight §22.3 multisig spend. Tracks signatures (P2SH/P2WSH) or two-round nonces + partial sigs (MuSig2).',
             onSelect: onMultisigSign,
+        },
+        {
+            id: 'cosigner-accounts',
+            label: 'Agent accounts',
+            description: 'Share a 2-of-2 address with an automated agent. This wallet co-signs each request that fits the policy you set. Bitcoin only at launch.',
+            onSelect: onCoSignerAccounts,
         },
         {
             id: 'contacts',

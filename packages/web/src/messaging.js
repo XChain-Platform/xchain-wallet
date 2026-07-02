@@ -756,6 +756,27 @@ export function createMultisigConfig(req) {
     return /** @type {any} */ (sendMessage('multisig.create', req));
 }
 
+// §22 / P4 passive co-signer (agent account) management.
+/** @param {object} req */
+export function provisionCoSignerAccount(req) {
+    return /** @type {any} */ (sendMessage('coSigner.provision', req));
+}
+
+/** @param {{ walletId: string }} req */
+export function listCoSignerAccounts(req) {
+    return /** @type {any} */ (sendMessage('coSigner.list', req));
+}
+
+/** @param {{ id: string }} req */
+export function getCoSignerAccount(req) {
+    return /** @type {any} */ (sendMessage('coSigner.get', req));
+}
+
+/** @param {{ id: string, patch: object }} req */
+export function updateCoSignerAccount(req) {
+    return /** @type {any} */ (sendMessage('coSigner.update', req));
+}
+
 /** @param {{ walletId: string, chainId: string }} req */
 export function getMultisigReceiveAddress(req) {
     return /** @type {any} */ (sendMessage('multisig.receiveAddress', req));

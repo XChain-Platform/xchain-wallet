@@ -29,6 +29,20 @@ export async function listCoSignerAccounts(vault, walletId) {
 }
 
 /**
+ * Fetch a single co-signer account by id (or null if absent). Backs the
+ * management detail route.
+ *
+ * @param {import('../storage/Vault.js').Vault} vault
+ * @param {string} id
+ * @returns {Promise<import('../schemas/coSignerAccount.js').CoSignerAccount | null>}
+ */
+export async function getCoSignerAccount(vault, id) {
+    if (!vault || !vault.coSignerAccounts) throw new Error('getCoSignerAccount: vault is required');
+    if (typeof id !== 'string' || id.length === 0) throw new Error('getCoSignerAccount: id is required');
+    return vault.coSignerAccounts.get(id);
+}
+
+/**
  * Resolve the enabled co-signer account that owns an aggregate address on a
  * chain. The aggregate address is unique per (agent, daemon) key pair, so at
  * most one enabled match exists; a disabled account is not returned (the

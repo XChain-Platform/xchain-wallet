@@ -170,7 +170,8 @@ export { passiveCoSign } from './passiveCoSign.js';
 export { passiveCoSignForAccount, CoSignerAccountNotFoundError } from './passiveCoSignForAccount.js';
 export { provisionCoSignerAccount } from './provisionCoSignerAccount.js';
 export { previewCoSignRequest } from './previewCoSignRequest.js';
-export { listCoSignerAccounts, findCoSignerAccountByAddress } from './coSignerAccountQueries.js';
+export { listCoSignerAccounts, findCoSignerAccountByAddress, getCoSignerAccount } from './coSignerAccountQueries.js';
+export { updateCoSignerAccount, CoSignerAccountNotFoundError as CoSignerAccountUpdateNotFoundError } from './updateCoSignerAccount.js';
 export {
     contractValidate,
     contractCheckCodeSize,
