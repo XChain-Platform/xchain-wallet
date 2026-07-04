@@ -107,6 +107,10 @@ import { StakingDashboard } from '@xchain-wallet/core/shared/routes/StakingDashb
 import { StakeForm } from '@xchain-wallet/core/shared/routes/StakeForm.jsx';
 import { StakingActionForm } from '@xchain-wallet/core/shared/routes/StakingActionForm.jsx';
 import { DelegationActionForm } from '@xchain-wallet/core/shared/routes/DelegationActionForm.jsx';
+import { GovernancePolls } from '@xchain-wallet/core/shared/routes/GovernancePolls.jsx';
+import { CreatePollForm } from '@xchain-wallet/core/shared/routes/CreatePollForm.jsx';
+import { PollDetail } from '@xchain-wallet/core/shared/routes/PollDetail.jsx';
+import { DelegateVoteForm } from '@xchain-wallet/core/shared/routes/DelegateVoteForm.jsx';
 import { OperatorDashboard } from '@xchain-wallet/core/shared/routes/OperatorDashboard.jsx';
 import { History } from '@xchain-wallet/core/shared/routes/History.jsx';
 import { ActionDetail } from '@xchain-wallet/core/shared/routes/ActionDetail.jsx';
@@ -129,6 +133,7 @@ import { CoSignerAccountDetail } from '@xchain-wallet/core/shared/routes/CoSigne
 import { AddressList } from '@xchain-wallet/core/shared/routes/AddressList.jsx';
 import { PairSignerForm } from '@xchain-wallet/core/shared/routes/PairSignerForm.jsx';
 import { useBtcAddressesPresent } from '@xchain-wallet/core/shared/hooks/useBtcAddressesPresent.js';
+import { useGovernanceAddressesPresent } from '@xchain-wallet/core/shared/hooks/useGovernanceAddressesPresent.js';
 import { pairTrezorSigner } from './signers/trezorFactory.js';
 import { pairLedgerSigner } from './signers/ledgerFactory.js';
 import { registerSigner as registerLocalSigner } from './signerBridge.js';
@@ -315,6 +320,9 @@ function AppInner() {
     const [contractRef, setContractRef] = useState(
         /** @type {{ chainId: string, contractActionIndex: string } | null} */ (null),
     );
+    const [governanceRef, setGovernanceRef] = useState(
+        /** @type {{ chainId: string, pollIndex?: string | number } | null} */ (null),
+    );
     const [stakingRef, setStakingRef] = useState(
         /** @type {{ chainId: string, address: string } | null} */ (null),
     );
@@ -494,6 +502,7 @@ function AppInner() {
     // §42.2 Contracts nav: show only when a BTC wallet address exists
     // (VM actions are BTC-only at launch per BITCOIN_ACTIONS).
     const hasBtcAddress = useBtcAddressesPresent(activeWalletId);
+    const hasGovernanceAddress = useGovernanceAddressesPresent(activeWalletId);
 
     // Wallet-level alerts surfaced in the pancake menu's Alerts panel.
     // Mirrors Home.jsx's `alerts` array so the web MenuRoute shows the
@@ -1128,6 +1137,47 @@ function AppInner() {
                     />
                 );
             }
+            if (unlockedView === 'governance-polls' && activeWalletId) {
+                return (
+                    <GovernancePolls
+                        walletId={activeWalletId}
+                        onCreate={(chainId) => { setGovernanceRef({ chainId }); setUnlockedView('governance-create-poll'); }}
+                        onOpenPoll={(chainId, pollIndex) => { setGovernanceRef({ chainId, pollIndex }); setUnlockedView('governance-poll-detail'); }}
+                        onDelegate={(chainId) => { setGovernanceRef({ chainId }); setUnlockedView('governance-delegate'); }}
+                        onBack={() => setUnlockedView('home')}
+                    />
+                );
+            }
+            if (unlockedView === 'governance-create-poll' && activeWalletId && governanceRef) {
+                return (
+                    <CreatePollForm
+                        walletId={activeWalletId}
+                        chainId={governanceRef.chainId}
+                        onBack={() => setUnlockedView('governance-polls')}
+                        onCreated={() => setUnlockedView('governance-polls')}
+                    />
+                );
+            }
+            if (unlockedView === 'governance-poll-detail' && activeWalletId && governanceRef) {
+                return (
+                    <PollDetail
+                        walletId={activeWalletId}
+                        chainId={governanceRef.chainId}
+                        pollIndex={governanceRef.pollIndex}
+                        onBack={() => setUnlockedView('governance-polls')}
+                    />
+                );
+            }
+            if (unlockedView === 'governance-delegate' && activeWalletId && governanceRef) {
+                return (
+                    <DelegateVoteForm
+                        mode="delegate"
+                        walletId={activeWalletId}
+                        chainId={governanceRef.chainId}
+                        onBack={() => setUnlockedView('governance-polls')}
+                    />
+                );
+            }
             if (unlockedView === 'cosigner-accounts' && activeWalletId) {
                 return (
                     <CoSignerAccountList
@@ -1569,6 +1619,7 @@ function AppInner() {
                             onMultisigCreate: hasBtcAddress ? () => setUnlockedView('multisig-create') : undefined,
                             onMultisigSign: hasBtcAddress ? () => setUnlockedView('multisig-sign') : undefined,
                             onCoSignerAccounts: hasBtcAddress ? () => setUnlockedView('cosigner-accounts') : undefined,
+                            onVoteGovernance: hasGovernanceAddress ? () => setUnlockedView('governance-polls') : undefined,
                             onContacts: () => setUnlockedView('contacts'),
                             onSignMessage: () => setUnlockedView('sign-message'),
                             onVerifySignature: () => setUnlockedView('verify-signature'),
@@ -1828,6 +1879,7 @@ function AppInner() {
                             onMultisigCreate: hasBtcAddress ? () => setUnlockedView('multisig-create') : undefined,
                             onMultisigSign: hasBtcAddress ? () => setUnlockedView('multisig-sign') : undefined,
                             onCoSignerAccounts: hasBtcAddress ? () => setUnlockedView('cosigner-accounts') : undefined,
+                            onVoteGovernance: hasGovernanceAddress ? () => setUnlockedView('governance-polls') : undefined,
                             onContacts: () => setUnlockedView('contacts'),
                             onSignMessage: () => setUnlockedView('sign-message'),
                             onVerifySignature: () => setUnlockedView('verify-signature'),
@@ -1985,6 +2037,7 @@ function buildActionEntries({
     onMultisigCreate,
     onMultisigSign,
     onCoSignerAccounts,
+    onVoteGovernance,
     onContacts,
     onSignMessage,
     onVerifySignature,
@@ -2110,6 +2163,12 @@ function buildActionEntries({
             label: 'Multisig signing',
             description: 'Collect approvals for a shared-wallet payment. Add your signature to complete or advance the signing round.',
             onSelect: onMultisigSign,
+        },
+        {
+            id: 'governance-polls',
+            label: 'Governance',
+            description: 'Create and vote on token-weighted polls, and delegate your voting weight.',
+            onSelect: onVoteGovernance,
         },
         {
             id: 'cosigner-accounts',

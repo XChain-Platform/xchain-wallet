@@ -736,6 +736,57 @@ export function revokeDelegationActionHw(opts) {
     return /** @type {any} */ (sendMessage('action.revokeDelegation.hw', opts));
 }
 
+// VOTE governance authoring (v0 create poll, v1 cast ballot, v3 delegate / clear).
+// Software + .hw twins mirror the delegate lane above.
+export function createPollAction(opts) {
+    return /** @type {any} */ (sendMessage('action.createPoll', opts));
+}
+
+export function createPollActionHw(opts) {
+    return /** @type {any} */ (sendMessage('action.createPoll.hw', opts));
+}
+
+export function castBallotAction(opts) {
+    return /** @type {any} */ (sendMessage('action.castBallot', opts));
+}
+
+export function castBallotActionHw(opts) {
+    return /** @type {any} */ (sendMessage('action.castBallot.hw', opts));
+}
+
+export function delegateVoteAction(opts) {
+    return /** @type {any} */ (sendMessage('action.delegateVote', opts));
+}
+
+export function delegateVoteActionHw(opts) {
+    return /** @type {any} */ (sendMessage('action.delegateVote.hw', opts));
+}
+
+export function clearVoteDelegationAction(opts) {
+    return /** @type {any} */ (sendMessage('action.clearVoteDelegation', opts));
+}
+
+export function clearVoteDelegationActionHw(opts) {
+    return /** @type {any} */ (sendMessage('action.clearVoteDelegation.hw', opts));
+}
+
+// VOTE governance reads (no signing): poll list / detail / frozen results / ballots.
+export function governancePolls(req) {
+    return /** @type {any} */ (sendMessage('governance.polls', req));
+}
+
+export function governancePoll(req) {
+    return /** @type {any} */ (sendMessage('governance.poll', req));
+}
+
+export function governancePollResults(req) {
+    return /** @type {any} */ (sendMessage('governance.pollResults', req));
+}
+
+export function governanceVotes(req) {
+    return /** @type {any} */ (sendMessage('governance.votes', req));
+}
+
 /** @param {{ chainId: string, address: string, opts?: object }} req */
 export function getBroadcastsForAddress(req) {
     return /** @type {any} */ (sendMessage('broadcasts.forAddress', req));

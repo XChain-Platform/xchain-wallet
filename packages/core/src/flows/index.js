@@ -139,6 +139,18 @@ export { stakeAction } from './stakeAction.js';
 export { contractStakeAction } from './contractStakeAction.js';
 export { unstakeAction, collectAction } from './unstakeClaimActions.js';
 export { delegateAction, revokeDelegationAction } from './delegateRevokeActions.js';
+export {
+    createPollAction,
+    castBallotAction,
+    delegateVoteAction,
+    clearVoteDelegationAction,
+} from './voteActions.js';
+export {
+    pollsForChain,
+    pollDetail,
+    pollResults,
+    votesForQuery,
+} from './voteQueries.js';
 export { broadcastsForAddress } from './broadcastQueries.js';
 export { linksForAddress } from './linkQueries.js';
 export {

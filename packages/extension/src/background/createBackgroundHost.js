@@ -109,6 +109,14 @@ const {
     collectAction,
     delegateAction,
     revokeDelegationAction,
+    createPollAction,
+    castBallotAction,
+    delegateVoteAction,
+    clearVoteDelegationAction,
+    pollsForChain,
+    pollDetail,
+    pollResults,
+    votesForQuery,
     contractStakeAction,
     broadcastsForAddress,
     linksForAddress,
@@ -1824,6 +1832,10 @@ export function createBackgroundHost(deps) {
     registerHwHandler('action.collect.hw', collectAction);
     registerHwHandler('action.delegate.hw', delegateAction);
     registerHwHandler('action.revokeDelegation.hw', revokeDelegationAction);
+    registerHwHandler('action.createPoll.hw', createPollAction);
+    registerHwHandler('action.castBallot.hw', castBallotAction);
+    registerHwHandler('action.delegateVote.hw', delegateVoteAction);
+    registerHwHandler('action.clearVoteDelegation.hw', clearVoteDelegationAction);
     registerHwHandler('action.contractStake.hw', contractStakeAction);
 
     // Signer status probe: routes straight through the signer bridge
@@ -2114,6 +2126,41 @@ export function createBackgroundHost(deps) {
 
     host.register('action.revokeDelegation', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
         return revokeDelegationAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+    });
+
+    // VOTE governance authoring (v0 create poll, v1 cast ballot, v3 delegate / clear).
+    // Software-signed passthroughs; the .hw twins are registered via registerHwHandler above.
+    host.register('action.createPoll', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        return createPollAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+    });
+
+    host.register('action.castBallot', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        return castBallotAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+    });
+
+    host.register('action.delegateVote', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        return delegateVoteAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+    });
+
+    host.register('action.clearVoteDelegation', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        return clearVoteDelegationAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+    });
+
+    // VOTE governance reads (no signing): poll list / detail / frozen results / ballots.
+    host.register('governance.polls', async (req, { sdkRegistry }) => {
+        return pollsForChain({ ...req, sdkRegistry });
+    });
+
+    host.register('governance.poll', async (req, { sdkRegistry }) => {
+        return pollDetail({ ...req, sdkRegistry });
+    });
+
+    host.register('governance.pollResults', async (req, { sdkRegistry }) => {
+        return pollResults({ ...req, sdkRegistry });
+    });
+
+    host.register('governance.votes', async (req, { sdkRegistry }) => {
+        return votesForQuery({ ...req, sdkRegistry });
     });
 
     // Contract-targeted staking: parallel to the capability staking passthroughs above.

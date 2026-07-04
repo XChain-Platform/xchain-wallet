@@ -34,6 +34,7 @@ export const COMMON_ACTIONS = /** @type {const} */ ([
     'SLEEP',
     'SWAP',
     'SWEEP',
+    'VOTE',
 ]);
 
 // Actions available only on Bitcoin at launch: staking (STAKE/UNSTAKE/
