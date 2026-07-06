@@ -216,7 +216,7 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
         }
         return wrap(
             <>
-                <p className={styles.summary}>Ballot cast. It counts once the indexer processes the action; weight is measured at the poll's close block.</p>
+                <p className={styles.summary}>Ballot cast. It counts once the network records the action; weight is measured at the poll's close block.</p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Txid</dt>
                     <dd className={styles.detailsValue}>{String(txid || 'n/a')}</dd>

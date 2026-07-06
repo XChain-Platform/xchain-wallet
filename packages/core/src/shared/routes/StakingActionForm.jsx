@@ -243,8 +243,8 @@ export function StakingActionForm({ mode, walletId, chainId, onBack }) {
             <>
                 <p className={styles.summary}>
                     {isUnstake
-                        ? 'Unstake broadcast. The indexer will return your staked XCHAIN after the on-chain confirmation window.'
-                        : 'Claim broadcast. Pending rewards will be credited after the indexer processes the action.'}
+                        ? 'Unstake broadcast. The network will return your staked XCHAIN after the on-chain confirmation window.'
+                        : 'Claim broadcast. Pending rewards will be credited after the network records the action.'}
                 </p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Txid</dt>

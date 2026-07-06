@@ -581,8 +581,8 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             </dl>
 
             <p className={styles.hint}>
-                Remaining escrow and dispense count aren't published by the indexer yet.
-                Watch this surface for updates as the indexer fills in dispenser state.
+                Remaining escrow and dispense count aren't published by the network yet.
+                Watch this surface for updates as the network fills in dispenser state.
             </p>
 
             {matchingDispenses.length > 0 ? (

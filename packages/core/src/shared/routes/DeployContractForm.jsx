@@ -355,7 +355,7 @@ export function DeployContractForm({ walletId, onBack }) {
         return wrap(
             <>
                 <p className={styles.summary}>
-                    Contract deployed. The transaction was broadcast; the indexer will record it shortly.
+                    Contract deployed. The transaction was broadcast; the network will record it shortly.
                 </p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Txid</dt>

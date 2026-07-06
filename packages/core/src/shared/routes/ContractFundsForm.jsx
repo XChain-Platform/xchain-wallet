@@ -251,7 +251,7 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
         return wrap(
             <>
                 <p className={styles.summary}>
-                    {verb} broadcast. The indexer will credit the {isDeposit ? 'contract' : 'address'} shortly.
+                    {verb} broadcast. The network will credit the {isDeposit ? 'contract' : 'address'} shortly.
                 </p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Txid</dt>

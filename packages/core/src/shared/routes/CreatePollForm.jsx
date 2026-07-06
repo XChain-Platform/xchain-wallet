@@ -243,7 +243,7 @@ export function CreatePollForm({ walletId, chainId, presetTick, onBack, onCreate
         return wrap(
             <>
                 <p className={styles.summary}>
-                    Poll created. Holders of {tick} can vote once the indexer processes the action;
+                    Poll created. Holders of {tick} can vote once the network records the action;
                     it closes at block {endBlock}.
                 </p>
                 <dl className={styles.detailsList}>

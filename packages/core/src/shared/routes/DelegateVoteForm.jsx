@@ -195,7 +195,7 @@ export function DelegateVoteForm({ mode: initialMode = 'delegate', walletId, cha
             <>
                 <p className={styles.summary}>
                     {isClear
-                        ? `Delegation cleared. Your ${tick} voting weight stops flowing once the indexer processes the action.`
+                        ? `Delegation cleared. Your ${tick} voting weight stops flowing once the network records the action.`
                         : `Delegation set. Your ${tick} voting weight flows to the delegate for polls you do not vote on directly.`}
                 </p>
                 <dl className={styles.detailsList}>

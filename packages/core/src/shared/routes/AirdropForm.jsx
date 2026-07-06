@@ -513,7 +513,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 <h2 className={styles.successTitle}>Not available in watcher mode</h2>
                 <p className={styles.hint}>
                     Airdrop is a two-phase action: the wallet broadcasts a
-                    recipient-list transaction, waits for the indexer to
+                    recipient-list transaction, waits for the network to
                     confirm it, then broadcasts the airdrop transaction
                     referencing the list. A watcher-mode wallet can't observe
                     the recipient list landing on-chain (broadcasting happens on a different
@@ -685,7 +685,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 ) : null}
                 <p className={styles.hint}>
                     AIRDROP charges an XChain fee based on the number of
-                    recipients (§AIRDROP.md). The indexer computes the exact
+                    recipients (§AIRDROP.md). The network computes the exact
                     fee at execute time; make sure the source address holds
                     enough of {token.trim().toUpperCase() || 'the token'} +
                     fee tick to cover the full distribution.

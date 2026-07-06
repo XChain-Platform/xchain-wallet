@@ -481,10 +481,10 @@ export function StakeForm({ walletId, chainId, onBack }) {
                 </label>
                 {detectStatus !== 'idle' ? (
                     <p style={{ fontSize: '0.8rem', margin: '0.5rem 0 0', color: 'var(--muted, #666)' }}>
-                        {detectStatus === 'checking' && 'Checking the indexer for an existing stake…'}
+                        {detectStatus === 'checking' && 'Checking the network for an existing stake…'}
                         {detectStatus === 'new' && '✓ No existing stake for this pubkey; defaulting to New stake.'}
                         {detectStatus === 'topup' && '✓ Existing stake found; defaulting to Top up. (Choose New stake to force-reject as duplicate.)'}
-                        {detectStatus === 'error' && 'Couldn\'t reach the indexer. Pick the mode manually; the indexer will reject if the wrong one is chosen.'}
+                        {detectStatus === 'error' && 'Couldn\'t reach the network. Pick the mode manually; the network will reject if the wrong one is chosen.'}
                     </p>
                 ) : null}
             </fieldset>
@@ -551,7 +551,7 @@ export function StakeForm({ walletId, chainId, onBack }) {
 
             <Input
                 label="Signing pubkey"
-                hint="64-character hex-encoded Ed25519 public key. This key signs hub PBFT votes on your behalf."
+                hint="64-character hex-encoded Ed25519 public key. This key votes on the network on your behalf."
                 value={signingPubkey}
                 onChange={(e) => setSigningPubkey(e.target.value)}
                 autoComplete="off"

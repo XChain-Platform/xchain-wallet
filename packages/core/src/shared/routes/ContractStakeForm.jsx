@@ -305,7 +305,7 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, onBa
             <>
                 <p className={styles.summary}>
                     {mode === 'stake' ? 'Stake' : mode === 'unstake' ? 'Unstake' : 'Delegation'} submitted.
-                    The transaction was broadcast; the indexer will record it shortly.
+                    The transaction was broadcast; the network will record it shortly.
                 </p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Txid</dt>

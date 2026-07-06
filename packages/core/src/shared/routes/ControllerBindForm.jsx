@@ -290,7 +290,7 @@ export function ControllerBindForm({ walletId, chainId, tick, onBack }) {
         return wrap(
             <>
                 <p className={styles.summary}>
-                    {verb} broadcast. The indexer will apply the controller change shortly.
+                    {verb} broadcast. The network will apply the controller change shortly.
                 </p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Txid</dt>

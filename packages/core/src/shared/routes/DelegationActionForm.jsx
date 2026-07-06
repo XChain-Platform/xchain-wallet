@@ -261,8 +261,8 @@ export function DelegationActionForm({ mode, walletId, chainId, onBack }) {
             <>
                 <p className={styles.summary}>
                     {isDelegate
-                        ? 'Delegation broadcast. The new signing key becomes active after the indexer processes the action.'
-                        : 'Revocation broadcast. The signing key will stop authorizing hub PBFT votes once the indexer processes the action.'}
+                        ? 'Delegation broadcast. The new signing key becomes active after the network records the action.'
+                        : 'Revocation broadcast. The signing key will stop voting on your behalf once the network records the action.'}
                 </p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Txid</dt>

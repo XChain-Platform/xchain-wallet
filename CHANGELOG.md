@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Agent-account management UI (§22 P4): provision wizard, policy editor, and account list/detail with an enable/disable toggle, wired across all three shells (Bitcoin only at launch).
 
+### Changed
+- Drop internal-service jargon from user-facing copy across ~14 staking/contract/poll/dispenser screens: "the indexer" now reads as "the network", and the "hub PBFT" consensus jargon is gone from the delegate-key hint and revocation message.
+
 ### Fixed
 - Align `signers-ledger` `@noble/hashes` to `^1.8.0` (was `^1.5.0`); `LedgerSigner` imports from `@noble/hashes/sha2`, a path only present in >=1.7, so the old range was a latent breakage on an isolated install.
 

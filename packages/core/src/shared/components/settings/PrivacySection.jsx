@@ -118,7 +118,7 @@ export function PrivacySection() {
             />
             <ToggleRow
                 label="Fetch token metadata"
-                hint="When a token's description points at a Token Information Standard (TIS) JSON document, the wallet downloads it and renders the embedded artwork, audio, video, website, and social links on the token detail page. Reveals to the host of that document (and any embedded media URLs, including IPFS gateways and third-party CDNs) that you're looking at this token. Disable to render only the indexer-supplied fields with zero extra network calls."
+                hint="When a token's description points at a Token Information Standard (TIS) JSON document, the wallet downloads it and renders the embedded artwork, audio, video, website, and social links on the token detail page. Reveals to the host of that document (and any embedded media URLs, including IPFS gateways and third-party CDNs) that you're looking at this token. Disable to render only the on-chain fields with zero extra network calls."
                 checked={settings.privacy.metadataFetchEnabled !== false}
                 onChange={(v) => onToggle('metadataFetchEnabled', v)}
             />

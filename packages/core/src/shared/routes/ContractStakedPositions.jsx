@@ -124,7 +124,7 @@ export function ContractStakedPositions({ walletId, chainId, onBack, onStakeToCo
                 <p className={styles.empty}>
                     Contract-stake queries require explorer/SDK methods (getContractStakes,
                     getContractUnstakes, getSlashEvents) that land alongside this UI in a
-                    Phase 7 follow-up. The protocol-level data is present in the indexer.
+                    Phase 7 follow-up. The protocol-level data is present on the network.
                 </p>
                 <div className={styles.actions}><Button variant="ghost" onClick={onBack}>Back</Button></div>
             </>,
