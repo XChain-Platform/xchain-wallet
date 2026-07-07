@@ -18,6 +18,7 @@ import {
  Icon,} from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { extractSingle } from './contractResponseShape.js';
 import styles from './ActionsMenu.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -426,14 +427,6 @@ function extractRows(resp) {
     if (Array.isArray(resp.data)) return resp.data;
     if (Array.isArray(resp.rows)) return resp.rows;
     return [];
-}
-
-function extractSingle(resp) {
-    if (!resp) return null;
-    if (resp.data && !Array.isArray(resp.data)) return resp.data;
-    if (Array.isArray(resp.data) && resp.data.length > 0) return resp.data[0];
-    if (Array.isArray(resp) && resp.length > 0) return resp[0];
-    return resp;
 }
 
 function stateKeyCount(state) {

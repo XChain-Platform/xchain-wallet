@@ -14,6 +14,7 @@ import {
     PageHeader,
     Button,
     Input,
+    Select,
     ChainBadge,
     AddressText,
  Icon,} from '@xchain-wallet/core/ui';
@@ -25,6 +26,7 @@ import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { useContractManifest } from '../hooks/useContractManifest.js';
+import { extractSingle } from './contractResponseShape.js';
 import { ContractConsentPanel } from '../components/ContractConsentPanel.jsx';
 import { preferredSourceId } from '../addressSelection.js';
 import styles from './IssueTokenForm.module.css';
@@ -34,11 +36,12 @@ const chainRegistry = registryLib.defaultRegistry();
 /**
  * EXECUTE contract method form (§42.4).
  *
- * Manual authoring lane only: method name + pipe-delimited params.
- * The spec's ABI-driven lane ("if a contract publishes an ABI, the
- * wallet populates a method selector and typed parameter inputs") is
- * deferred until the platform defines the ABI publishing convention
- * (FOLLOWUP 2 in claude/reports/specs/2026-04-24_phase4-monaco-editor.md).
+ * Two authoring lanes. When the contract publishes an `abi` block
+ * (xchain-documentation/protocol/Contract_ABI.md, surfaced by the explorer
+ * on /api/contract/{idx}), the form renders a method selector plus one
+ * typed input per declared param; a manual lane (free-text method name +
+ * pipe-delimited params) remains the fallback and an explicit toggle,
+ * because the abi is self-declared metadata that may be absent or wrong.
  *
  * Inputs split the pipe-delimited parameter string into an array on
  * submit. The SDK validator expects PARAMS as an array, not a single
@@ -49,13 +52,19 @@ const chainRegistry = registryLib.defaultRegistry();
  * from the contract row alone, so an execute-time estimate isn't
  * automatic. Users override freely.
  *
+ * The initial* props prefill the form from an xchain:{COIN}/execute deep
+ * link (explorer Write-tab handoff); all optional.
+ *
  * @param {object} props
  * @param {string} props.walletId
  * @param {string} props.chainId
  * @param {string} props.contractActionIndex
+ * @param {string} [props.initialMethod]
+ * @param {string} [props.initialParamsText]
+ * @param {string} [props.initialGasLimit]
  * @param {() => void} props.onBack
  */
-export function ExecuteContractForm({ walletId, chainId, contractActionIndex, onBack }) {
+export function ExecuteContractForm({ walletId, chainId, contractActionIndex, initialMethod, initialParamsText, initialGasLimit, onBack }) {
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
@@ -67,10 +76,18 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, on
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
 
     const [fromAddressId, setFromAddressId] = useState(/** @type {string | null} */ (null));
-    const [method, setMethod] = useState('');
-    const [paramsText, setParamsText] = useState('');
-    const [gasLimit, setGasLimit] = useState('');
+    const [method, setMethod] = useState(initialMethod || '');
+    const [paramsText, setParamsText] = useState(initialParamsText || '');
+    const [gasLimit, setGasLimit] = useState(initialGasLimit || '');
     const [password, setPassword] = useState('');
+
+    // ABI lane state: the contract's self-declared method metadata (null =
+    // none published / not loaded), an explicit manual-mode escape hatch,
+    // and per-param values for the selected method (joined into paramsText,
+    // which stays the single source of truth for submit).
+    const [contractAbi, setContractAbi] = useState(/** @type {{version: number, methods: Record<string, any>} | null} */ (null));
+    const [manualMode, setManualMode] = useState(false);
+    const [abiParamValues, setAbiParamValues] = useState(/** @type {string[]} */ ([]));
 
     const [stage, setStage] = useState(
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
@@ -111,6 +128,40 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, on
         if (stage === 'review') setTimeout(() => passwordRef.current?.focus(), 0);
     }, [stage]);
 
+    // Fetch the contract's declared abi once (same explorer row ContractDetail
+    // reads). Absence or fetch failure just leaves the manual lane in place;
+    // the abi is optional display metadata. Reconciles with any deep-link
+    // prefill: a prefilled method the abi knows seeds its typed inputs, a
+    // method the abi does NOT know keeps manual mode so the link's intent
+    // is preserved verbatim.
+    useEffect(() => {
+        if (typeof messaging.getContractByActionIndex !== 'function') return undefined;
+        let cancelled = false;
+        messaging.getContractByActionIndex({ chainId, contractActionIndex })
+            .then((resp) => {
+                if (cancelled) return;
+                const row = extractSingle(resp);
+                const abi = row && row.abi && row.abi.methods && Object.keys(row.abi.methods).length > 0 ? row.abi : null;
+                if (!abi) return;
+                setContractAbi(abi);
+                const names = Object.keys(abi.methods);
+                if (initialMethod && names.includes(initialMethod)) {
+                    const declared = abi.methods[initialMethod].params || [];
+                    const given = (initialParamsText || '').split('|');
+                    setAbiParamValues(declared.map((p, i) => (given[i] !== undefined ? given[i] : '')));
+                } else if (initialMethod) {
+                    setManualMode(true);
+                } else {
+                    const first = names[0];
+                    setMethod(first);
+                    setAbiParamValues(new Array((abi.methods[first].params || []).length).fill(''));
+                }
+            })
+            .catch(() => { /* optional metadata; manual lane covers absence */ });
+        return () => { cancelled = true; };
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- initial* are mount-time prefill constants
+    }, [chainId, contractActionIndex, messaging]);
+
     const descriptor = chainRegistry.get(chainId);
     const fromAddress = useMemo(() => {
         if (!fromAddressId || !addressesByChain) return null;
@@ -140,6 +191,43 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, on
         () => paramsText.split('|').map((s) => s.trim()).filter((s) => s !== ''),
         [paramsText],
     );
+
+    // ABI lane derivations. Params are positional on the wire, so a blank
+    // middle value would silently shift later args after the empty-filter in
+    // paramsArray; the lane therefore requires every declared param filled
+    // before Preview enables.
+    const abiActive = Boolean(contractAbi) && !manualMode;
+    const abiSpec = abiActive && method && contractAbi.methods[method] ? contractAbi.methods[method] : null;
+    const abiParams = abiSpec ? (abiSpec.params || []) : [];
+    const abiIncomplete = abiParams.length > 0 && abiParamValues.some((v) => !String(v).trim());
+
+    function selectAbiMethod(name) {
+        setMethod(name);
+        const count = ((contractAbi.methods[name] || {}).params || []).length;
+        setAbiParamValues(new Array(count).fill(''));
+        setParamsText('');
+    }
+
+    function setAbiParam(i, value) {
+        const next = abiParamValues.slice();
+        next[i] = value;
+        setAbiParamValues(next);
+        setParamsText(next.join('|'));
+    }
+
+    // Placeholder text per declared param type; purely an input hint, the
+    // wire value is always a string.
+    function abiPlaceholder(type) {
+        switch (type) {
+            case 'number': return 'e.g. 42';
+            case 'amount': return 'e.g. 1.50000000';
+            case 'address': return 'address';
+            case 'tick': return 'e.g. XCHAIN';
+            case 'bool': return 'true or false';
+            case 'json': return '{"key":"value"}';
+            default: return '';
+        }
+    }
 
     const actionParams = useMemo(() => {
         /** @type {Record<string, any>} */
@@ -390,26 +478,75 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, on
                     <AddressText address={fromAddress.address} />
                 </div>
             ) : null}
-            <Input
-                label="Method"
-                hint="Name of the contract method to call."
-                value={method}
-                onChange={(e) => setMethod(e.target.value)}
-                autoComplete="off"
-                autoCapitalize="none"
-                autoCorrect="off"
-                spellCheck={false}
-            />
-            <Input
-                label="Params (optional)"
-                hint="Pipe-delimited arguments, e.g. foo|42|bc1q… Leave blank for no-arg methods."
-                value={paramsText}
-                onChange={(e) => setParamsText(e.target.value)}
-                autoComplete="off"
-                autoCapitalize="none"
-                autoCorrect="off"
-                spellCheck={false}
-            />
+            {abiActive ? (
+                <>
+                    <Select
+                        label="Method"
+                        hint={abiSpec ? [abiSpec.summary, abiSpec.view ? '(declared read-only)' : null].filter(Boolean).join(' ') || undefined : undefined}
+                        value={method}
+                        onChange={(e) => selectAbiMethod(e.target.value)}
+                    >
+                        {Object.keys(contractAbi.methods).map((name) => (
+                            <option key={name} value={name}>{name}</option>
+                        ))}
+                    </Select>
+                    {abiParams.map((p, i) => (
+                        <Input
+                            key={`${method}:${p.name}`}
+                            label={`${p.name} (${p.type})`}
+                            placeholder={abiPlaceholder(p.type)}
+                            inputMode={p.type === 'number' || p.type === 'amount' ? 'decimal' : undefined}
+                            value={abiParamValues[i] || ''}
+                            onChange={(e) => setAbiParam(i, e.target.value)}
+                            autoComplete="off"
+                            autoCapitalize="none"
+                            autoCorrect="off"
+                            spellCheck={false}
+                        />
+                    ))}
+                    <Button type="button" variant="ghost" onClick={() => setManualMode(true)}>
+                        Enter method manually
+                    </Button>
+                </>
+            ) : (
+                <>
+                    <Input
+                        label="Method"
+                        hint="Name of the contract method to call."
+                        value={method}
+                        onChange={(e) => setMethod(e.target.value)}
+                        autoComplete="off"
+                        autoCapitalize="none"
+                        autoCorrect="off"
+                        spellCheck={false}
+                    />
+                    <Input
+                        label="Params (optional)"
+                        hint="Pipe-delimited arguments, e.g. foo|42|bc1q… Leave blank for no-arg methods."
+                        value={paramsText}
+                        onChange={(e) => setParamsText(e.target.value)}
+                        autoComplete="off"
+                        autoCapitalize="none"
+                        autoCorrect="off"
+                        spellCheck={false}
+                    />
+                    {contractAbi ? (
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            onClick={() => {
+                                // Back to the declared-methods lane; reselect the
+                                // current method when the abi knows it, else the first.
+                                const names = Object.keys(contractAbi.methods);
+                                setManualMode(false);
+                                selectAbiMethod(names.includes(method) ? method : names[0]);
+                            }}
+                        >
+                            Use declared methods
+                        </Button>
+                    ) : null}
+                </>
+            )}
             <Input
                 label="Gas limit"
                 hint="Upper bound of VM gas this call may consume. Default 50000."
@@ -425,7 +562,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, on
                 <Button
                     type="submit"
                     variant="primary"
-                    disabled={!fromAddress || !method.trim()}
+                    disabled={!fromAddress || !method.trim() || (abiActive && abiIncomplete)}
                 >
                     Preview
                 </Button>

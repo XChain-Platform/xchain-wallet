@@ -72,8 +72,8 @@ assert.ok(
     /new URLSearchParams\(window\.location\.search\)[\s\S]*?\.get\('uri'\)/.test(webApp),
     'web App reads ?uri= from location.search',
 );
-assert.ok(/coreUri\.parseXchainUri\(raw\)/.test(webApp),
-    'web App passes the raw URI through coreUri.parseXchainUri');
+assert.ok(/coreUri\.parseXchainUri\(raw,\s*\{\s*chainRegistry:\s*APP_CHAIN_REGISTRY\s*\}\)/.test(webApp),
+    'web App passes the raw URI through coreUri.parseXchainUri WITH the chain registry (coin-code URIs need it to resolve chainId)');
 assert.ok(
     /intent\.kind === 'send'[\s\S]*?setSendPrefill\([\s\S]*?setUnlockedView\('send'\)/.test(webApp),
     'web App routes kind:send → setSendPrefill + setUnlockedView(send)',
@@ -81,6 +81,20 @@ assert.ok(
 assert.ok(
     /intent\.kind === 'receive'[\s\S]*?setUnlockedView\('receive'\)/.test(webApp),
     'web App routes kind:receive → setUnlockedView(receive)',
+);
+assert.ok(
+    /intent\.kind === 'execute' && intent\.contractActionIndex && intent\.chainId[\s\S]*?setContractRef\([\s\S]*?setExecutePrefill\([\s\S]*?setUnlockedView\('contract-execute'\)/.test(webApp),
+    'web App routes kind:execute (guarded on contract index + chainId) → setContractRef + setExecutePrefill + contract-execute view',
+);
+assert.ok(/const \[executePrefill, setExecutePrefill\] = useState/.test(webApp),
+    'web App declares an executePrefill state slot');
+assert.ok(
+    /initialMethod=\{executePrefill\?\.method\}[\s\S]*?initialParamsText=\{executePrefill\?\.paramsText\}[\s\S]*?initialGasLimit=\{executePrefill\?\.gasLimit\}/.test(webApp),
+    'contract-execute route passes the executePrefill fields into ExecuteContractForm',
+);
+assert.ok(
+    /setExecutePrefill\(null\);\s*setUnlockedView\('contract-detail'\)/.test(webApp),
+    'contract-execute onBack clears the executePrefill',
 );
 
 // --- 4. URL clean-up via history.replaceState --------------------------

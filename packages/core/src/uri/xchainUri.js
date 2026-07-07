@@ -44,6 +44,11 @@ const BIP21_PREFIX = 'xchain:';
 // preserved in `intent.action` so new screens can route on it.
 const RECEIVE_ACTIONS = new Set(['receive']);
 
+// Actions that map to `kind: 'execute'` (contract method invocation,
+// protocol/XChain_URI_Scheme.md `execute` section). Explorers build these
+// links so a "Write Contract" button lands on the EXECUTE form prefilled.
+const EXECUTE_ACTIONS = new Set(['execute']);
+
 const FEE_PRIORITIES = new Set(['low', 'normal', 'fast']);
 
 function normalizeFeePriority(raw) {
@@ -54,8 +59,12 @@ function normalizeFeePriority(raw) {
 
 /**
  * @typedef {Object} XchainUriIntent
- * @property {'send' | 'receive' | 'unknown'} kind   routing bucket the wallet uses to pick a screen
+ * @property {'send' | 'receive' | 'execute' | 'unknown'} kind   routing bucket the wallet uses to pick a screen
  * @property {string} [action]                      literal action segment from a coin-code URI ('send' / 'receive' / 'execute' / etc.) when present
+ * @property {string} [contractActionIndex]         execute: the deployed contract's action_index
+ * @property {string} [method]                      execute: contract method name to invoke
+ * @property {string} [executeParams]               execute: raw pipe-delimited positional params string
+ * @property {string} [gasLimit]                    execute: gas limit override
  * @property {string} [chainId]                     resolved chainId for coin-code or legacy path-style URIs
  * @property {string} [tick]                       'BTC' / 'XCP' / '^TICK_ID' / etc.
  * @property {string} [address]                     destination (send) or wallet address (receive)
@@ -119,11 +128,21 @@ function parseCoinCodeStyle(raw, chainRegistry) {
 
     /** @type {XchainUriIntent} */
     const intent = {
-        kind: RECEIVE_ACTIONS.has(action) ? 'receive' : 'send',
+        kind: EXECUTE_ACTIONS.has(action) ? 'execute'
+            : (RECEIVE_ACTIONS.has(action) ? 'receive' : 'send'),
         action,
     };
     const chainId = chainRegistry ? chainIdForCoinCode(code, chainRegistry) : null;
     if (chainId) intent.chainId = chainId;
+    // Execute intents carry the contract call target. `params` (the query
+    // param) holds the raw pipe-delimited positional string; parseQuery has
+    // already percent-decoded it, so `|` separators round-trip intact.
+    if (intent.kind === 'execute') {
+        if (params.contract) intent.contractActionIndex = params.contract;
+        if (params.method) intent.method = params.method;
+        if (params.params) intent.executeParams = params.params;
+        if (params.gas) intent.gasLimit = params.gas;
+    }
     if (params.tick) intent.tick = params.tick;
     if (params.to) intent.address = params.to;
     if (params.amount) intent.amount = params.amount;
@@ -252,6 +271,17 @@ export function describeXchainIntent(intent, deps) {
     }
     if (!intent || intent.kind === 'unknown') {
         return t('uri.intent.unknown');
+    }
+    // Contract EXECUTE intents (explorer Write-tab deep links). A missing
+    // contract index is unroutable, so it reads as an unrecognized link.
+    if (intent.kind === 'execute') {
+        if (!intent.contractActionIndex) return t('uri.intent.unknown');
+        const evars = { contract: intent.contractActionIndex };
+        if (intent.method) {
+            evars.method = intent.method;
+            return t('uri.intent.executeMethod', evars);
+        }
+        return t('uri.intent.execute', evars);
     }
     const isReceive = intent.kind === 'receive';
     const hasAmount = Boolean(intent.amount && intent.tick);

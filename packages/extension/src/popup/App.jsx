@@ -26,6 +26,11 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { uri as coreUri } from '@xchain-wallet/core';
+import { registry as registryLib } from '@xchain-wallet/core';
+
+// Resolves coin-code URIs (xchain:TBTC/...) to chainIds in the boot-time
+// deep-link parse; same instance pattern as the web shell's App.jsx.
+const APP_CHAIN_REGISTRY = registryLib.defaultRegistry();
 import { useLastView } from '@xchain-wallet/core/shared/hooks/useLastView.js';
 import { MessagingProvider } from '@xchain-wallet/core/shared/MessagingProvider.jsx';
 import { Loading } from '@xchain-wallet/core/shared/routes/Loading.jsx';
@@ -213,6 +218,12 @@ function AppInner() {
     const [sendPrefill, setSendPrefill] = useState(
         /** @type {{ address?: string, amount?: string, tick?: string, chainId?: string, memo?: string } | null} */ (null),
     );
+    // Deep-link prefill for contract EXECUTE (explorer Write-tab links,
+    // xchain:{COIN}/execute?...). Mirrors `sendPrefill`; consumed by the
+    // 'contract-execute' route and cleared when the user backs out.
+    const [executePrefill, setExecutePrefill] = useState(
+        /** @type {{ method?: string, paramsText?: string, gasLimit?: string } | null} */ (null),
+    );
     // Which view Send should return to when the user hits Back. Defaults
     // to 'home'; SendPicker → Send sets it to 'send-picker' so backing
     // out lands on the token list the user was just browsing.
@@ -287,7 +298,10 @@ function AppInner() {
         const raw = params.get('uri');
         if (!raw) return;
         try {
-            const intent = coreUri.parseXchainUri(raw);
+            // Pass the registry so coin-code URIs (xchain:TBTC/...) resolve to
+            // a chainId; without it intent.chainId is always undefined, which
+            // Send tolerated but contract routes cannot.
+            const intent = coreUri.parseXchainUri(raw, { chainRegistry: APP_CHAIN_REGISTRY });
             if (intent && intent.kind === 'send') {
                 setSendPrefill({
                     address: intent.address,
@@ -299,6 +313,17 @@ function AppInner() {
                 setUnlockedView('send');
             } else if (intent && intent.kind === 'receive') {
                 setUnlockedView('receive');
+            } else if (intent && intent.kind === 'execute' && intent.contractActionIndex && intent.chainId) {
+                // Explorer Write-tab deep link: land on the EXECUTE form
+                // prefilled. Unroutable without a contract index and a
+                // resolved chain, so both are required.
+                setContractRef({ chainId: intent.chainId, contractActionIndex: intent.contractActionIndex });
+                setExecutePrefill({
+                    method: intent.method || '',
+                    paramsText: intent.executeParams || '',
+                    gasLimit: intent.gasLimit || '',
+                });
+                setUnlockedView('contract-execute');
             }
         } catch {
             // Parser surfaces unknown via kind === 'unknown'; defensive
@@ -1083,7 +1108,10 @@ function AppInner() {
                         walletId={activeWalletId}
                         chainId={contractRef.chainId}
                         contractActionIndex={contractRef.contractActionIndex}
-                        onBack={() => setUnlockedView('contract-detail')}
+                        initialMethod={executePrefill?.method}
+                        initialParamsText={executePrefill?.paramsText}
+                        initialGasLimit={executePrefill?.gasLimit}
+                        onBack={() => { setExecutePrefill(null); setUnlockedView('contract-detail'); }}
                     />
                 );
             }

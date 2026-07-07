@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `xchain:{COIN}/execute` deep links (web + extension): the boot-time `?uri=` handler routes contract/method/params/gas into a prefilled ExecuteContractForm.
+- ABI-driven EXECUTE lane: when a contract declares an `abi` block, the form renders a method selector plus named/typed parameter inputs, with the manual lane as an explicit fallback.
 - Chain-registry sync (§9.7/G007): web and extension shells fetch the hub's signed public registry at boot, verify its Ed25519 signature against the pinned federation key, and hot-swap verified descriptors additively (fail-closed; user-added chains are never clobbered).
 - Desktop shell chain-registry sync: Electron main fetches and verifies the hub registry at boot (the renderer CSP blocks external fetches) and renderer realms pull the verified batch over a new `xchain:chain-registry` IPC bridge.
 - `bin/sync-chain-registry.mjs`: snapshots the bundled chain descriptors into the hub's served `GET /api/v1/chain-registry` payload (drift-guarded in platform CI).

@@ -72,10 +72,10 @@ assert.ok(
     /new URLSearchParams\(window\.location\.search\)[\s\S]*?\.get\('uri'\)/.test(popup),
     'popup reads ?uri= from location.search',
 );
-assert.ok(/coreUri\.parseXchainUri\(raw\)/.test(popup),
-    'popup runs the raw URI through coreUri.parseXchainUri');
+assert.ok(/coreUri\.parseXchainUri\(raw,\s*\{\s*chainRegistry:\s*APP_CHAIN_REGISTRY\s*\}\)/.test(popup),
+    'popup runs the raw URI through coreUri.parseXchainUri WITH the chain registry (coin-code URIs need it to resolve chainId)');
 
-// --- 4. Send/receive routing ---------------------------------------
+// --- 4. Send/receive/execute routing --------------------------------
 
 assert.ok(
     /intent\.kind === 'send'[\s\S]*?setSendPrefill\([\s\S]*?setUnlockedView\('send'\)/.test(popup),
@@ -84,6 +84,16 @@ assert.ok(
 assert.ok(
     /intent\.kind === 'receive'[\s\S]*?setUnlockedView\('receive'\)/.test(popup),
     'popup routes kind:receive → setUnlockedView(receive)',
+);
+assert.ok(
+    /intent\.kind === 'execute' && intent\.contractActionIndex && intent\.chainId[\s\S]*?setContractRef\([\s\S]*?setExecutePrefill\([\s\S]*?setUnlockedView\('contract-execute'\)/.test(popup),
+    'popup routes kind:execute (guarded on contract index + chainId) → setContractRef + setExecutePrefill + contract-execute view',
+);
+assert.ok(/const \[executePrefill, setExecutePrefill\] = useState/.test(popup),
+    'popup declares an executePrefill state slot');
+assert.ok(
+    /initialMethod=\{executePrefill\?\.method\}[\s\S]*?initialParamsText=\{executePrefill\?\.paramsText\}[\s\S]*?initialGasLimit=\{executePrefill\?\.gasLimit\}/.test(popup),
+    'popup contract-execute route passes the executePrefill fields into ExecuteContractForm',
 );
 
 // --- 5. URL clean-up via history.replaceState ----------------------

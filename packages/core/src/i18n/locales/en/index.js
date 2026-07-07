@@ -120,6 +120,8 @@ export const en = {
     'uri.intent.receiveAssetAt': 'Receive {tick} at {address}',
     'uri.intent.receiveAmount': 'Receive {amount} {tick}',
     'uri.intent.receiveAmountAt': 'Receive {amount} {tick} at {address}',
+    'uri.intent.execute': 'Call contract #{contract}',
+    'uri.intent.executeMethod': 'Call {method} on contract #{contract}',
     'uri.intent.unknown': 'Unrecognized link',
 
     // --- scan route (Cluster R FOLLOWUP 2: i18n migration beachhead) -

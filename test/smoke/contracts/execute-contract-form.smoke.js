@@ -126,6 +126,42 @@ for (const [shell, appPath] of [
         `${shell} ExecuteContractForm back returns to contract-detail`);
 }
 
+// --- Deep-link prefill props + ABI lane (Contract_ABI.md FOLLOWUP 2) ----
+
+assert.ok(
+    /initialMethod, initialParamsText, initialGasLimit/.test(formSrc),
+    'ExecuteContractForm accepts the three deep-link prefill props',
+);
+assert.ok(
+    /useState\(initialMethod \|\| ''\)[\s\S]*?useState\(initialParamsText \|\| ''\)[\s\S]*?useState\(initialGasLimit \|\| ''\)/.test(formSrc),
+    'prefill props seed the method/paramsText/gasLimit state initializers',
+);
+assert.ok(
+    /messaging\.getContractByActionIndex\(\{ chainId, contractActionIndex \}\)/.test(formSrc),
+    'ABI lane fetches the explorer contract row through the existing bridge call',
+);
+assert.ok(
+    /const \[contractAbi, setContractAbi\] = useState/.test(formSrc)
+        && /const \[manualMode, setManualMode\] = useState/.test(formSrc),
+    'ABI lane state: contractAbi + explicit manualMode escape hatch',
+);
+assert.ok(
+    /<Select[\s\S]*?selectAbiMethod\(e\.target\.value\)/.test(formSrc),
+    'ABI lane renders a method Select wired to selectAbiMethod',
+);
+assert.ok(
+    /abiActive && abiIncomplete/.test(formSrc),
+    'Preview is gated on all declared params being filled (positional wire format)',
+);
+assert.ok(
+    /Enter method manually/.test(formSrc) && /Use declared methods/.test(formSrc),
+    'both lane-toggle affordances exist (abi is self-declared; manual stays available)',
+);
+assert.ok(
+    !/2026-04-24_phase4-monaco-editor\.md/.test(formSrc),
+    'stale FOLLOWUP-2 spec pointer replaced (convention now lives in Contract_ABI.md)',
+);
+
 console.log(
-    'OK: execute contract form smoke (ExecuteContractForm shared route + executeAction + bg handlers + 3-shell messaging + ContractDetail onExecute wire-through)',
+    'OK: execute contract form smoke (ExecuteContractForm shared route + executeAction + bg handlers + 3-shell messaging + ContractDetail onExecute wire-through + deep-link prefill props + ABI lane with manual fallback)',
 );
