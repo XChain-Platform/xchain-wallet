@@ -51,6 +51,15 @@ const EXECUTE_ACTIONS = new Set(['execute']);
 
 const FEE_PRIORITIES = new Set(['low', 'normal', 'fast']);
 
+// Numeric URI fields (contract action_index, gas limit). Same gate the
+// explorer applies to its /contract/{idx} route params.
+const NUMERIC_RE = /^[0-9]+$/;
+
+// Raw chainIds accepted from legacy path-style / BIP21 `chain=` input
+// (registry ids look like 'bitcoin-mainnet'). Anything else is dropped so an
+// unvetted string never rides the intent into screen state.
+const CHAIN_ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/i;
+
 function normalizeFeePriority(raw) {
     if (typeof raw !== 'string') return undefined;
     const lower = raw.toLowerCase();
@@ -134,19 +143,24 @@ function parseCoinCodeStyle(raw, chainRegistry) {
     };
     const chainId = chainRegistry ? chainIdForCoinCode(code, chainRegistry) : null;
     if (chainId) intent.chainId = chainId;
-    // Execute intents carry the contract call target. `params` (the query
-    // param) holds the raw pipe-delimited positional string; parseQuery has
-    // already percent-decoded it, so `|` separators round-trip intact.
+    // Execute intents carry ONLY the contract call target: send-shaped fields
+    // (tick/to/amount/memo) must not leak into an EXECUTE prefill, and the
+    // numeric fields are gated so a crafted link can't ride an arbitrary
+    // string into screen state (a failed gate just drops the field; the
+    // route falls back to its manual form). `params` (the query param) holds
+    // the raw pipe-delimited positional string; parseQuery has already
+    // percent-decoded it, so `|` separators round-trip intact.
     if (intent.kind === 'execute') {
-        if (params.contract) intent.contractActionIndex = params.contract;
+        if (params.contract && NUMERIC_RE.test(params.contract)) intent.contractActionIndex = params.contract;
         if (params.method) intent.method = params.method;
         if (params.params) intent.executeParams = params.params;
-        if (params.gas) intent.gasLimit = params.gas;
+        if (params.gas && NUMERIC_RE.test(params.gas)) intent.gasLimit = params.gas;
+    } else {
+        if (params.tick) intent.tick = params.tick;
+        if (params.to) intent.address = params.to;
+        if (params.amount) intent.amount = params.amount;
+        if (params.memo) intent.memo = params.memo;
     }
-    if (params.tick) intent.tick = params.tick;
-    if (params.to) intent.address = params.to;
-    if (params.amount) intent.amount = params.amount;
-    if (params.memo) intent.memo = params.memo;
     if (params.label) intent.label = params.label;
     if (params.message) intent.message = params.message;
     const feePriority = normalizeFeePriority(params.feePriority);
@@ -169,7 +183,7 @@ function parsePathStyle(raw) {
     /** @type {XchainUriIntent} */
     const intent = {
         kind: 'send',
-        chainId: segments[0],
+        chainId: CHAIN_ID_RE.test(segments[0]) ? segments[0] : undefined,
         tick: segments.length > 1 ? segments[1] : undefined,
     };
 
@@ -208,7 +222,7 @@ function parseBip21Style(raw) {
     if (parts.message) intent.message = parts.message;
     if (parts.params?.memo) intent.memo = parts.params.memo;
     if (parts.params?.tick) intent.tick = parts.params.tick;
-    if (parts.params?.chain) intent.chainId = parts.params.chain;
+    if (parts.params?.chain && CHAIN_ID_RE.test(parts.params.chain)) intent.chainId = parts.params.chain;
     const feePriority = normalizeFeePriority(parts.params?.feePriority);
     if (feePriority) intent.feePriority = feePriority;
     if (parts.required?.length > 0) intent.required = parts.required;

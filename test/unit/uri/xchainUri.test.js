@@ -62,6 +62,37 @@ describe('parseXchainUri execute action', () => {
         expect(parseXchainUri('xchain:TBTC/receive', { chainRegistry }).kind).toBe('receive');
     });
 
+    it('does not leak send-shaped fields (tick/to/amount/memo) into an execute intent', () => {
+        const intent = parseXchainUri(
+            'xchain:RBTC/execute?contract=9&method=m&tick=PEPECREATURE&to=bcrt1qattacker&amount=99&memo=hi',
+            { chainRegistry },
+        );
+        expect(intent.kind).toBe('execute');
+        expect(intent.tick).toBeUndefined();
+        expect(intent.address).toBeUndefined();
+        expect(intent.amount).toBeUndefined();
+        expect(intent.memo).toBeUndefined();
+        expect(intent.contractActionIndex).toBe('9');
+    });
+
+    it('drops a non-numeric contract index and gas limit (falls back to the manual form)', () => {
+        const intent = parseXchainUri(
+            'xchain:RBTC/execute?contract=<script>&method=m&gas=lots',
+            { chainRegistry },
+        );
+        expect(intent.kind).toBe('execute');
+        expect(intent.contractActionIndex).toBeUndefined();
+        expect(intent.gasLimit).toBeUndefined();
+    });
+
+    it('drops a malformed raw chainId from legacy path-style and BIP21 chain= input', () => {
+        const pathStyle = parseXchainUri('xchain://not a chain id!/PEPECREATURE?amount=1');
+        expect(pathStyle.kind).toBe('send');
+        expect(pathStyle.chainId).toBeUndefined();
+        const legacyOk = parseXchainUri('xchain://bitcoin-regtest/PEPECREATURE?amount=1');
+        expect(legacyOk.chainId).toBe('bitcoin-regtest');
+    });
+
     it('describes execute intents for confirmation copy', () => {
         const t = (key, vars) => `${key}:${JSON.stringify(vars || {})}`;
         const withMethod = parseXchainUri('xchain:RBTC/execute?contract=7&method=claim', { chainRegistry });
