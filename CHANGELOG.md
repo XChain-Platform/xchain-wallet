@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `bin/sync-chain-registry.mjs`: snapshots the bundled chain descriptors into the hub's served `GET /api/v1/chain-registry` payload (drift-guarded in platform CI).
 - Agent-account management UI (§22 P4): provision wizard, policy editor, and account list/detail with an enable/disable toggle, wired across all three shells (Bitcoin only at launch).
 
 ### Changed
