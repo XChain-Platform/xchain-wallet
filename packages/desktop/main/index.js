@@ -80,6 +80,14 @@ let runtime = /** @type {ReturnType<typeof createRuntime> | null} */ (null);
 /** @type {{ scheme: string, raw: string, parsed: any } | null} */
 let pendingDeepLink = null;
 
+// §9.7 / G007: boot-time chain-registry sync promise. Main owns the
+// network fetch (the renderer CSP pins connect-src 'self'); the verified
+// descriptor batch is re-served to every renderer realm via the
+// `xchain:chain-registry` IPC handler, which awaits this promise so a
+// renderer that boots before the sync settles still gets the result.
+/** @type {Promise<{ ok: boolean, descriptors?: object[], generatedAt?: string, reason?: string }> | null} */
+let chainRegistrySync = null;
+
 function liveWindows() {
     return [...windows].filter((w) => !w.isDestroyed());
 }
@@ -175,7 +183,7 @@ function createWindow(opts = {}) {
         minWidth: 360,
         minHeight: 600,
         webPreferences: {
-            preload: join(here, '..', 'preload.js'),
+            preload: join(here, '..', 'preload.cjs'),
             contextIsolation: true,
             nodeIntegration: false,
             sandbox: true,
@@ -326,6 +334,26 @@ if (!deepLinkCtx.gotLock) {
 
 app.whenReady().then(async () => {
     runtime = buildRuntime();
+
+    // §9.7 / G007: refresh chain descriptors from the hub's signed public
+    // registry snapshot. Same soft-enhancement contract as the web +
+    // extension shells: the signature must verify against the pinned
+    // federation key or nothing changes, and any failure (offline,
+    // tampered, unsigned) leaves the bundled descriptors serving. The
+    // main-realm defaultRegistry() singleton is the one buildRuntime()
+    // handed to the SDKRegistry, so a successful apply reaches the host
+    // side immediately; renderer realms pull the same verified batch via
+    // `xchain:chain-registry` below. Never blocks boot.
+    try {
+        chainRegistrySync = registryLib
+            .syncChainRegistryFromHub({ registry: registryLib.defaultRegistry() })
+            .then((r) => {
+                if (!r.ok) console.info('[xchain] desktop: chain-registry sync skipped:', r.reason);
+                return r;
+            })
+            .catch((err) => ({ ok: false, reason: String(err?.message ?? err) }));
+    } catch { /* soft enhancement; bundled descriptors keep serving */ }
+
     // Best-effort auto-unlock. Failure here is logged but doesn't block
     // startup; the renderer will see `state: 'locked'` and prompt for
     // the password.
@@ -393,6 +421,20 @@ app.whenReady().then(async () => {
         } catch (err) {
             return { ok: false, error: String(err?.message ?? err) };
         }
+    });
+
+    // §9.7 / G007: hand the verified registry batch to renderer realms.
+    // Awaits the boot sync so early callers don't race it; a failed or
+    // skipped sync resolves { ok: false } and the renderer keeps its
+    // bundled descriptors. Descriptors are already signature-verified
+    // and schema-validated here in main; the renderer still re-validates
+    // inside applyRemoteDescriptors.
+    ipcMain.handle('xchain:chain-registry', async () => {
+        if (!chainRegistrySync) return { ok: false, reason: 'registry sync not started' };
+        const r = await chainRegistrySync;
+        return r.ok
+            ? { ok: true, descriptors: r.descriptors, generatedAt: r.generatedAt }
+            : { ok: false, reason: r.reason };
     });
 
     // Wire the signer-bridge ipc listener so renderer-hosted HW

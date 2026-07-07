@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// electron-builder configuration — Phase 2 Step 19 (§40.12, §51).
+// electron-builder configuration: Phase 2 Step 19 (§40.12, §51).
 //
 // Goals:
 //   - Produce an installable artifact on all three target OSes (macOS,
@@ -16,7 +16,7 @@
 //   - Level-2 reproducibility for the pre-signing artifact: a Docker
 //     image + build script can produce a byte-identical zip/tar of the
 //     app contents across independent builders. See REPRODUCIBLE_BUILDS.md.
-//   - Code-signing structured but env-var-driven — no certs in repo.
+//   - Code-signing structured but env-var-driven; no certs in repo.
 //     `pnpm run dist` works without any cert config (produces unsigned
 //     dev artifacts). Signed releases happen when CSC_LINK +
 //     CSC_KEY_PASSWORD (or equivalents) are set in the environment.
@@ -25,7 +25,7 @@
 //     registered so the OS knows we CAN handle them, but
 //     `setAsDefaultProtocolClient` is runtime-gated in main/protocol.js.
 //   - Hardened runtime + notarization entitlements (macOS) + publisher
-//     metadata (Windows) wired via env vars — skipped cleanly when the
+//     metadata (Windows) wired via env vars, skipped cleanly when the
 //     env doesn't supply them.
 //
 // This file stays .cjs because electron-builder's config loader
@@ -42,9 +42,9 @@ const rootPkg = JSON.parse(
     readFileSync(join(here, '..', '..', 'package.json'), 'utf8'),
 );
 
-// Deterministic clock source — electron-builder injects a build
+// Deterministic clock source: electron-builder injects a build
 // timestamp into several places (zip entries, PE headers). Pinning
-// SOURCE_DATE_EPOCH (Reproducible Builds spec — https://reproducible-builds.org/docs/source-date-epoch/)
+// SOURCE_DATE_EPOCH (Reproducible Builds spec, https://reproducible-builds.org/docs/source-date-epoch/)
 // makes the output stable across independent builders. reproduce.sh
 // sets this to the HEAD commit's author date; leaving it unset means
 // `new Date()` at build time, so CI dev builds differ between runs.
@@ -58,18 +58,19 @@ const config = {
     productName: 'XChain Wallet',
     copyright: 'Copyright © Dankest, LLC',
 
-    // Explicit asar — reduces startup I/O + lets electron-builder
+    // Explicit asar: reduces startup I/O + lets electron-builder
     // write deterministic archive entries. Native modules (none right
-    // now — WebHID + Trezor Connect are pure JS) would need
+    // now: WebHID + Trezor Connect are pure JS) would need
     // asarUnpack; revisit if node-HID is ever added.
     asar: true,
 
     // Resources we ship alongside the app bundle. The renderer build
-    // output lives at renderer/dist/; main/ + preload.js are copied as
-    // source (Electron can load ESM directly from asar).
+    // output lives at renderer/dist/; main/ + preload.cjs are copied as
+    // source (Electron loads main's ESM directly from asar; the preload
+    // is CJS because sandboxed preloads cannot be ESM).
     files: [
         'main/**/*',
-        'preload.js',
+        'preload.cjs',
         'renderer/dist/**/*',
         'package.json',
         '!**/node_modules/*/{test,__tests__,tests,example,examples}',
@@ -78,7 +79,7 @@ const config = {
     ],
 
     // `npmRebuild: false` skips electron-builder's post-install
-    // rebuild step — we have no native deps, so the step is
+    // rebuild step; we have no native deps, so the step is
     // unnecessary noise and a source of non-determinism (it invokes
     // node-gyp which touches timestamps).
     npmRebuild: false,
@@ -95,7 +96,7 @@ const config = {
         buildResources: 'build',
     },
 
-    // URI schemes — §40.12 Tier 1 + Tier 2 as documented in main/protocol.js.
+    // URI schemes: §40.12 Tier 1 + Tier 2 as documented in main/protocol.js.
     // This declares the OS metadata; runtime claim (setAsDefaultProtocolClient)
     // is gated per-scheme in main/protocol.js so users who already have
     // a primary BTC/LTC/DOGE wallet don't get silently overridden.
@@ -136,10 +137,10 @@ const config = {
         ],
         // Signing identity comes from CSC_LINK / CSC_KEY_PASSWORD
         // (electron-builder picks these up automatically). If unset,
-        // build produces an unsigned .app — fine for dev, rejected on
+        // build produces an unsigned .app: fine for dev, rejected on
         // Gatekeeper-strict configs on user machines.
         identity: process.env.CSC_IDENTITY_NAME || null,
-        // Notarization — only runs when APPLE_API_KEY_ID + APPLE_API_ISSUER
+        // Notarization only runs when APPLE_API_KEY_ID + APPLE_API_ISSUER
         // are present. Skipped cleanly otherwise.
         notarize: process.env.APPLE_API_KEY_ID
             ? {
@@ -158,7 +159,7 @@ const config = {
             { target: 'zip', arch: ['x64', 'arm64'] },
         ],
         publisherName: 'Dankest, LLC',
-        // Authenticode — CSC_LINK + CSC_KEY_PASSWORD drive signing.
+        // Authenticode: CSC_LINK + CSC_KEY_PASSWORD drive signing.
         // Timestamp server pinned so signatures remain verifiable after
         // cert expiry (RFC 3161 SHA256 timestamping).
         signingHashAlgorithms: ['sha256'],
@@ -169,7 +170,7 @@ const config = {
         allowToChangeInstallationDirectory: true,
         perMachine: false,
         deleteAppDataOnUninstall: false,
-        // Deterministic uninstaller name — default injects a timestamp.
+        // Deterministic uninstaller name; the default injects a timestamp.
         uninstallDisplayName: '${productName}',
     },
 
@@ -200,7 +201,7 @@ const config = {
     },
 
     // --- electron-updater --------------------------------------------
-    // Update channel config (§40.12 Step 19 Q3 — electron-updater over
+    // Update channel config (§40.12 Step 19 Q3: electron-updater over
     // generic https). `publish: null` means the build CLI doesn't
     // auto-upload; we control release cadence manually. The renderer
     // still gets update checks at runtime via `main/updater.js`, which

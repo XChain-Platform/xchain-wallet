@@ -30,7 +30,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
 
 const mainPath = join(wsRoot, 'packages', 'desktop', 'main', 'index.js');
-const preloadPath = join(wsRoot, 'packages', 'desktop', 'preload.js');
+const preloadPath = join(wsRoot, 'packages', 'desktop', 'preload.cjs');
 const appPath = join(wsRoot, 'packages', 'desktop', 'renderer', 'App.jsx');
 const historyPath = join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', 'History.jsx');
 const lastViewPath = join(wsRoot, 'packages', 'core', 'src', 'shared', 'hooks', 'useLastView.js');

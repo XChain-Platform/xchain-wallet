@@ -143,10 +143,45 @@ export class ChainRegistry {
         }
         return this._entries.delete(chainId);
     }
+
+    /**
+     * Hot-swap verified remote descriptors in place (§9.7 registry sync).
+     * Additive-only: existing ids are replaced with the remote copy, new ids
+     * are added, nothing is ever removed, and a user-added custom chain is
+     * never clobbered by a remote id collision (the user's copy wins).
+     * Callers MUST have signature-verified and validated the batch first
+     * (syncChainRegistryFromHub in ./remote.js is the sanctioned path).
+     *
+     * @param {import('./validate.js').ChainDescriptor[]} descriptors
+     * @returns {{ added: string[], updated: string[], skipped: string[] }}
+     */
+    applyRemoteDescriptors(descriptors) {
+        const added = [], updated = [], skipped = [];
+        for (const d of descriptors) {
+            const res = validateChainDescriptor(d);
+            if (!res.ok) {
+                throw new Error(
+                    `ChainRegistry: invalid remote descriptor "${d?.id}": ${res.errors.join('; ')}`,
+                );
+            }
+        }
+        for (const d of descriptors) {
+            const existing = this._entries.get(d.id);
+            if (existing?.isUserAdded) { skipped.push(d.id); continue; }
+            this._entries.set(d.id, { ...d, isUserAdded: false });
+            (existing ? updated : added).push(d.id);
+        }
+        return { added, updated, skipped };
+    }
 }
 
-/** Convenience: shared default instance with only the bundled descriptors. */
-export const defaultRegistry = () => new ChainRegistry();
+// Shared default instance (lazy singleton). Consumers across the app hold
+// module-level `defaultRegistry()` references; sharing one instance is what
+// lets a verified remote registry sync (applyRemoteDescriptors) hot-swap
+// descriptors for every surface at once. Tests that mutate build their own
+// `new ChainRegistry()` instead.
+let _defaultRegistry = null;
+export const defaultRegistry = () => (_defaultRegistry ??= new ChainRegistry());
 
 export { BUNDLED_DESCRIPTORS } from './descriptors/index.js';
 export { validateChainDescriptor } from './validate.js';
@@ -164,3 +199,10 @@ export {
     isDonationAddressConfigured,
 } from './validate.js';
 export { filterChainsForUser, isChainVisibleToUser } from './visibility.js';
+export {
+    verifyChainRegistry,
+    syncChainRegistryFromHub,
+    REGISTRY_SIGNING_DOMAIN,
+    REGISTRY_PINNED_PUBKEY_HEX,
+    REGISTRY_DEFAULT_URL,
+} from './remote.js';

@@ -71,6 +71,18 @@ attachLayoutModeListener();
 
 const chainRegistry = registryLib.defaultRegistry();
 
+// §9.7 / G007: refresh chain descriptors from the hub's signed public
+// registry snapshot on worker boot. Fire-and-forget soft enhancement: the
+// signature must verify against the pinned federation key or nothing
+// changes; any failure leaves the bundled descriptors serving.
+try {
+    registryLib.syncChainRegistryFromHub({ registry: chainRegistry })
+        .then((r) => {
+            if (!r.ok) console.info('[xchain] chain-registry sync skipped:', r.reason);
+        })
+        .catch(() => { /* soft enhancement; bundled descriptors keep serving */ });
+} catch { /* never block worker boot */ }
+
 // Build the SDKRegistry against the dev mock synchronously so the
 // service worker can register handlers immediately, then swap in the
 // real `xchain-sdk`-backed factory once the dynamic import settles.

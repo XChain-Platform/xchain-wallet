@@ -13,8 +13,22 @@
 // design-token custom properties install on `:root` for every route.
 
 import { createRoot } from 'react-dom/client';
+import { registry } from '@xchain-wallet/core';
 import '@xchain-wallet/core/ui/tokens.css';
 import { App } from './App.jsx';
+
+// §9.7 / G007: refresh chain descriptors from the hub's signed public
+// registry snapshot. Fire-and-forget soft enhancement: the signature must
+// verify against the pinned federation key or nothing changes, and any
+// failure (offline, tampered, unsigned) leaves the bundled descriptors
+// serving. Never blocks boot.
+try {
+    registry.syncChainRegistryFromHub({ registry: registry.defaultRegistry() })
+        .then((r) => {
+            if (!r.ok) console.info('web: chain-registry sync skipped:', r.reason);
+        })
+        .catch(() => { /* soft enhancement; bundled descriptors keep serving */ });
+} catch { /* never block app boot */ }
 
 // §47.1 / G143: register this origin as a handler for `xchain:` URIs so
 // the OS / browser can open the web wallet when the user clicks an

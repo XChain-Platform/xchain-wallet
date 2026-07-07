@@ -31,12 +31,25 @@
 //     §24.6 / Cluster Y FOLLOWUP 4 detach-pending-tx. The renderer
 //     asks main to spawn a fresh BrowserWindow pre-routed to the
 //     specified view + context (e.g. a pending tx detail).
+//
+//   - `xchainWalletRegistry.getRemoteDescriptors()`: §9.7 / G007
+//     chain-registry sync. The renderer CSP pins connect-src 'self',
+//     so main performs the hub fetch + Ed25519 verification and the
+//     renderer pulls the verified descriptor batch through this call
+//     to hot-swap its own registry realm.
 
-import { contextBridge, ipcRenderer } from 'electron';
+// CommonJS on purpose: Electron loads sandboxed preloads (webPreferences
+// sandbox: true) through its CJS wrapper, so an ESM `import` here throws
+// "Cannot use import statement outside a module" and NO bridge gets
+// exposed. The package's "type": "module" makes plain .js files ESM,
+// hence the .cjs extension. `require('electron')` is the only module a
+// sandboxed preload may pull in.
+const { contextBridge, ipcRenderer } = require('electron');
 
 const MESSAGE_CHANNEL = 'xchain-wallet:message';
 const SIGNER_BRIDGE_CHANNEL = 'xchain-wallet:signer-bridge';
 const OPEN_WINDOW_CHANNEL = 'xchain:open-window';
+const CHAIN_REGISTRY_CHANNEL = 'xchain:chain-registry';
 
 contextBridge.exposeInMainWorld('xchainWalletBridge', {
     /**
@@ -58,6 +71,19 @@ contextBridge.exposeInMainWorld('xchainWalletWindow', {
      */
     openDetached(args) {
         return ipcRenderer.invoke(OPEN_WINDOW_CHANNEL, args);
+    },
+});
+
+contextBridge.exposeInMainWorld('xchainWalletRegistry', {
+    /**
+     * Fetch the signature-verified remote chain-registry batch main
+     * applied at boot (awaits the in-flight sync, so callers never
+     * race it). `{ ok: false, reason }` means the sync failed or was
+     * skipped and the bundled descriptors should keep serving.
+     * @returns {Promise<{ ok: true, descriptors: object[], generatedAt?: string } | { ok: false, reason?: string }>}
+     */
+    getRemoteDescriptors() {
+        return ipcRenderer.invoke(CHAIN_REGISTRY_CHANNEL);
     },
 });
 

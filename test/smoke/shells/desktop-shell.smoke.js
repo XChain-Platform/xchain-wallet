@@ -14,7 +14,7 @@
 // Coverage:
 //
 //   1. Main-process files exist: index.js, messageHost.js, storage.js.
-//   2. Preload lives at `packages/desktop/preload.js` and exposes
+//   2. Preload lives at `packages/desktop/preload.cjs` and exposes
 //      exactly `window.xchainWalletBridge.sendMessage`: no broader
 //      Node/Electron surface leaks into the renderer.
 //   3. Main reuses `createBackgroundHost` from extension: the
@@ -56,7 +56,7 @@ for (const rel of [
     'main/index.js',
     'main/messageHost.js',
     'main/storage.js',
-    'preload.js',
+    'preload.cjs',
     'renderer/main.jsx',
     'renderer/App.jsx',
     'renderer/index.html',
@@ -78,7 +78,7 @@ assert.ok(
 
 // --- 2. Preload exposes the narrow bridge -----------------------------
 
-const preload = readFileSync(join(desktop, 'preload.js'), 'utf8');
+const preload = readFileSync(join(desktop, 'preload.cjs'), 'utf8');
 assert.ok(
     /contextBridge\.exposeInMainWorld\('xchainWalletBridge'/.test(preload),
     'preload exposes the xchainWalletBridge namespace',
@@ -98,9 +98,21 @@ assert.ok(
     !/from ['"]node:/.test(preload),
     'preload does NOT import node: modules',
 );
+// The preload MUST be CommonJS: Electron's sandboxed-preload wrapper
+// (webPreferences sandbox: true) cannot load ESM, and an `import`
+// statement there throws at load time, exposing NO bridge at all.
+// `require('electron')` is the single module a sandboxed preload may
+// pull in; anything else would smuggle Node capabilities into the
+// contextBridge surface.
 assert.ok(
-    !/require\s*\(/.test(preload),
-    'preload does NOT use require(): contextBridge is the only renderer-facing API',
+    !/^\s*import\s/m.test(preload),
+    'preload is CommonJS: sandboxed preloads cannot use ESM import',
+);
+const preloadRequires = [...preload.matchAll(/require\s*\(\s*['"]([^'"]+)['"]\s*\)/g)]
+    .map((m) => m[1]);
+assert.deepEqual(
+    [...new Set(preloadRequires)], ['electron'],
+    'preload requires electron and nothing else',
 );
 
 // --- 3. Main reuses createBackgroundHost ------------------------------

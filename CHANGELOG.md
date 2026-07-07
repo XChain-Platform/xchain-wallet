@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Chain-registry sync (§9.7/G007): web and extension shells fetch the hub's signed public registry at boot, verify its Ed25519 signature against the pinned federation key, and hot-swap verified descriptors additively (fail-closed; user-added chains are never clobbered).
+- Desktop shell chain-registry sync: Electron main fetches and verifies the hub registry at boot (the renderer CSP blocks external fetches) and renderer realms pull the verified batch over a new `xchain:chain-registry` IPC bridge.
 - `bin/sync-chain-registry.mjs`: snapshots the bundled chain descriptors into the hub's served `GET /api/v1/chain-registry` payload (drift-guarded in platform CI).
 - Agent-account management UI (§22 P4): provision wizard, policy editor, and account list/detail with an enable/disable toggle, wired across all three shells (Bitcoin only at launch).
 
@@ -15,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Drop internal-service jargon from user-facing copy across ~14 staking/contract/poll/dispenser screens: "the indexer" now reads as "the network", and the "hub PBFT" consensus jargon is gone from the delegate-key hint and revocation message.
 
 ### Fixed
+- Desktop preload converted to CommonJS (`preload.cjs`): Electron cannot load ESM preloads under `sandbox: true`, so no contextBridge API was ever exposed and every renderer-to-main call failed in dev and packaged builds.
 - Align `signers-ledger` `@noble/hashes` to `^1.8.0` (was `^1.5.0`); `LedgerSigner` imports from `@noble/hashes/sha2`, a path only present in >=1.7, so the old range was a latent breakage on an isolated install.
 
 ## [0.333.0] - 2026-06-20

@@ -821,7 +821,7 @@ assert.ok(
 );
 
 // 14c. Preload exposes the duplex bridge surface.
-const preloadSrc = readFileSync(join(desktop, 'preload.js'), 'utf8');
+const preloadSrc = readFileSync(join(desktop, 'preload.cjs'), 'utf8');
 assert.ok(
     /xchainWalletSignerBridge/.test(preloadSrc)
     && /contextBridge\.exposeInMainWorld/.test(preloadSrc),
