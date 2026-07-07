@@ -82,6 +82,7 @@ import { createDesktopMessageHost } from './messageHost.js';
  *   host: ReturnType<typeof createDesktopMessageHost> | null,
  *   notificationService: import('@xchain-wallet/core').notifications.NotificationService | null,
  *   priceAlertWatcher: import('@xchain-wallet/core').notifications.PriceAlertWatcher | null,
+ *   governancePollWatcher: import('@xchain-wallet/core').notifications.GovernancePollWatcher | null,
  * }} DesktopRuntime
  */
 
@@ -107,6 +108,7 @@ export function createRuntime(deps) {
         host: null,
         notificationService: null,
         priceAlertWatcher: null,
+        governancePollWatcher: null,
     };
 }
 
@@ -173,6 +175,26 @@ export async function ensureHost(runtime) {
             runtime.priceAlertWatcher.start();
         }
 
+        // §46 governance-poll watcher (new VOTE poll over a held token,
+        // binding polls flagged). Same lifecycle + adapter as above. Seen-state
+        // is in-memory (re-baselines per unlock); persisting it via metaBackend
+        // is a follow-up if restart-gap notifications prove wanted here.
+        if (runtime.notify && !runtime.governancePollWatcher) {
+            runtime.governancePollWatcher = new notificationsLib.GovernancePollWatcher({
+                getActiveAddresses: async () => {
+                    const settings = await flowsLib.getSettings(vault);
+                    return notificationsLib.getActiveAddresses(vault, runtime.chainRegistry, {
+                        activeNetwork: settings.activeNetwork,
+                    });
+                },
+                getSdkForChain: (chainId) => runtime.sdkRegistry.get(chainId),
+                getSettings: () => flowsLib.getSettings(vault),
+                notify: runtime.notify,
+                logger: console,
+            });
+            runtime.governancePollWatcher.start();
+        }
+
         return runtime.host;
     } catch (err) {
         // Cached key doesn't decrypt the vault. Most likely the user
@@ -204,6 +226,10 @@ export function tearDownHost(runtime) {
     if (runtime.priceAlertWatcher) {
         try { runtime.priceAlertWatcher.stop(); } catch (_err) { /* best-effort */ }
         runtime.priceAlertWatcher = null;
+    }
+    if (runtime.governancePollWatcher) {
+        try { runtime.governancePollWatcher.stop(); } catch (_err) { /* best-effort */ }
+        runtime.governancePollWatcher = null;
     }
     if (runtime.vault) {
         try { runtime.vault.close(); } catch (_err) { /* already closed */ }

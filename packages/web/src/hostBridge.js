@@ -260,7 +260,12 @@ let vault = null;
 let signerPool = null;
 let notificationService = null;
 let priceAlertWatcher = null;
+let governancePollWatcher = null;
 let priceOracleInstance = null;
+
+// Seen-state key for the governance-poll watcher (localStorage): notify-once
+// bookkeeping only (chain → open-poll ids already announced), no secrets.
+const GOV_POLL_SEEN_KEY = 'xchain.governancePolls.seen';
 
 // §46: start the live notification watcher once a vault + host exist. All
 // three host-creation paths (create / import / unlock) call this; lock stops
@@ -314,6 +319,37 @@ function startNotifications() {
         });
         priceAlertWatcher.start();
     }
+
+    // §46 governance-poll watcher: notifies when a new VOTE poll opens over a
+    // held token (binding polls flagged). Same lifecycle, same notify adapter;
+    // seen-state persists in localStorage so a reload doesn't re-baseline.
+    if (!governancePollWatcher) {
+        governancePollWatcher = new notificationsLib.GovernancePollWatcher({
+            getActiveAddresses: async () => {
+                const flowsNs = await getFlows();
+                const settings = await flowsNs.getSettings(vault);
+                return notificationsLib.getActiveAddresses(vault, chainRegistry, {
+                    activeNetwork: settings.activeNetwork,
+                });
+            },
+            getSdkForChain: (chainId) => sdkRegistry.get(chainId),
+            getSettings: async () => {
+                const flowsNs = await getFlows();
+                return flowsNs.getSettings(vault);
+            },
+            notify: createWebNotifyAdapter(),
+            loadSeen: () => {
+                try { return JSON.parse(globalThis.localStorage?.getItem(GOV_POLL_SEEN_KEY) || 'null'); }
+                catch (_err) { return null; }
+            },
+            saveSeen: (seen) => {
+                try { globalThis.localStorage?.setItem(GOV_POLL_SEEN_KEY, JSON.stringify(seen)); }
+                catch (_err) { /* quota/private-mode: fall back to in-session only */ }
+            },
+            logger: console,
+        });
+        governancePollWatcher.start();
+    }
 }
 
 function stopNotifications() {
@@ -324,6 +360,10 @@ function stopNotifications() {
     if (priceAlertWatcher) {
         try { priceAlertWatcher.stop(); } catch (_err) { /* best-effort */ }
         priceAlertWatcher = null;
+    }
+    if (governancePollWatcher) {
+        try { governancePollWatcher.stop(); } catch (_err) { /* best-effort */ }
+        governancePollWatcher = null;
     }
 }
 

@@ -101,6 +101,14 @@ const NOTIFICATION_FLAGS = /** @type {const} */ ([
         hint: 'Notify when a watched address receives a message.',
     },
     {
+        key: 'governancePolls',
+        label: 'Governance polls',
+        hint: 'Notify when a new poll opens for a token you hold. Binding polls (their result triggers a contract) are flagged.',
+        // The watcher treats an absent flag as ON (v2-tolerant default), so a
+        // pre-flag settings record must render the toggle as ON too.
+        defaultOn: true,
+    },
+    {
         key: 'dispenserFills',
         label: 'Dispenser fills',
         hint: 'Notify when a dispenser you authored is hit.',
@@ -145,7 +153,7 @@ export function NotificationsSection({ walletId } = {}) {
                     <ToggleRow
                         label={f.label}
                         hint={f.hint}
-                        checked={Boolean(settings.notifications[f.key])}
+                        checked={f.defaultOn ? settings.notifications[f.key] !== false : Boolean(settings.notifications[f.key])}
                         onChange={(v) => onToggle(f.key, v)}
                     />
                     {f.key === 'priceAlerts' ? (

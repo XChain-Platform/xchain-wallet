@@ -118,6 +118,11 @@ let notificationService = null;
 // §46 price-alert poll watcher, paired with notificationService; same
 // guard + cold-restart semantics.
 let priceAlertWatcher = null;
+// §46 governance-poll watcher (new VOTE poll over a held token); same guard +
+// cold-restart semantics. Seen-state persists in chrome.storage.local so an
+// MV3 worker eviction doesn't re-baseline and drop pending announcements.
+let governancePollWatcher = null;
+const GOV_POLL_SEEN_KEY = 'governancePollsSeen';
 
 // §46 delivery adapter for the extension: chrome.notifications works with the
 // popup closed (it's the service worker firing, not a page). type 'basic'
@@ -255,6 +260,35 @@ async function ensureHost() {
         priceAlertWatcher.start();
     }
 
+    // §46: start the governance-poll watcher (new VOTE poll over a held token,
+    // binding polls flagged). One open-poll query per chain per tick; held
+    // ticks are derived locally from the wallet's own balances.
+    if (!governancePollWatcher) {
+        governancePollWatcher = new notificationsLib.GovernancePollWatcher({
+            getActiveAddresses: async () => {
+                const settings = await flowsLib.getSettings(vault);
+                return notificationsLib.getActiveAddresses(vault, chainRegistry, {
+                    activeNetwork: settings.activeNetwork,
+                });
+            },
+            getSdkForChain: (chainId) => sdkRegistry.get(chainId),
+            getSettings: () => flowsLib.getSettings(vault),
+            notify: chromeNotify,
+            loadSeen: async () => {
+                try {
+                    const stored = await chrome.storage.local.get(GOV_POLL_SEEN_KEY);
+                    return stored?.[GOV_POLL_SEEN_KEY] || null;
+                } catch (_err) { return null; }
+            },
+            saveSeen: async (seen) => {
+                try { await chrome.storage.local.set({ [GOV_POLL_SEEN_KEY]: seen }); }
+                catch (_err) { /* best-effort: fall back to in-session only */ }
+            },
+            logger: console,
+        });
+        governancePollWatcher.start();
+    }
+
     return host;
 }
 
@@ -271,6 +305,10 @@ function tearDownHost() {
     if (priceAlertWatcher) {
         try { priceAlertWatcher.stop(); } catch (_err) { /* best-effort */ }
         priceAlertWatcher = null;
+    }
+    if (governancePollWatcher) {
+        try { governancePollWatcher.stop(); } catch (_err) { /* best-effort */ }
+        governancePollWatcher = null;
     }
     if (detachHost) {
         try { detachHost(); } catch (_err) { /* best-effort */ }
