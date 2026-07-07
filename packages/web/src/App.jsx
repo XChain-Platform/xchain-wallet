@@ -28,7 +28,7 @@
 // need to know about web-only chrome. Auto-hides when `window.xchain`
 // isn't injected, or when the user dismisses it for the session.
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLastView } from '@xchain-wallet/core/shared/hooks/useLastView.js';
 import { MessagingProvider } from '@xchain-wallet/core/shared/MessagingProvider.jsx';
 import { useSettings } from '@xchain-wallet/core/shared/hooks/useSettings.js';
@@ -365,6 +365,15 @@ function AppInner() {
     const [executePrefill, setExecutePrefill] = useState(
         /** @type {{ method?: string, paramsText?: string, gasLimit?: string } | null} */ (null),
     );
+    // Deep-link view that must survive the unlock cycle. The `?uri=` boot
+    // handler routes immediately, but `refresh()` (fired by Locked's
+    // onUnlocked) resets the view to 'home', which stomped the route on
+    // every locked boot: on web the session never survives a reload, so
+    // that was every deep-link open. Re-applied once the session reports
+    // unlocked, then cleared.
+    const pendingUriView = useRef(
+        /** @type {'send' | 'receive' | 'contract-execute' | null} */ (null),
+    );
 
     const refresh = useCallback(() => {
         setStatus({ state: 'loading' });
@@ -373,6 +382,10 @@ function AppInner() {
         getSessionStatus()
             .then((next) => {
                 setStatus(next);
+                if (next?.state === 'unlocked' && pendingUriView.current) {
+                    setUnlockedView(pendingUriView.current);
+                    pendingUriView.current = null;
+                }
                 // Settings are only decryptable once unlocked. Notify
                 // useSettings instances mounted above this boundary (e.g.
                 // GatedDevVariantBadge) so they re-read now that the vault
@@ -417,8 +430,10 @@ function AppInner() {
                     memo: intent.memo,
                 });
                 setUnlockedView('send');
+                pendingUriView.current = 'send';
             } else if (intent && intent.kind === 'receive') {
                 setUnlockedView('receive');
+                pendingUriView.current = 'receive';
             } else if (intent && intent.kind === 'execute' && intent.contractActionIndex && intent.chainId) {
                 // Explorer Write-tab deep link: land on the EXECUTE form
                 // prefilled. Unroutable without a contract index and a
@@ -430,6 +445,7 @@ function AppInner() {
                     gasLimit: intent.gasLimit || '',
                 });
                 setUnlockedView('contract-execute');
+                pendingUriView.current = 'contract-execute';
             }
         } catch {
             // Parser surfaces unknown via kind === 'unknown'; nothing else

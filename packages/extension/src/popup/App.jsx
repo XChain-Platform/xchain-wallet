@@ -24,7 +24,7 @@
 // MessagingProvider context (shell="popup"). Popup-local wiring boils
 // down to session-state polling and sub-route navigation.
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { uri as coreUri } from '@xchain-wallet/core';
 import { registry as registryLib } from '@xchain-wallet/core';
 
@@ -274,12 +274,27 @@ function AppInner() {
         }),
     );
 
+    // Deep-link view that must survive the unlock cycle. The `?uri=` boot
+    // handler routes immediately, but `refresh()` (fired by Locked's
+    // onUnlocked) resets the view to 'home', which stomped the route
+    // whenever the popup opened locked. Re-applied once the session
+    // reports unlocked, then cleared.
+    const pendingUriView = useRef(
+        /** @type {'send' | 'receive' | 'contract-execute' | null} */ (null),
+    );
+
     const refresh = useCallback(() => {
         setStatus({ state: 'loading' });
         setOnboardingStep('welcome');
         setUnlockedView('home');
         getSessionStatus()
-            .then((next) => setStatus(next))
+            .then((next) => {
+                setStatus(next);
+                if (next?.state === 'unlocked' && pendingUriView.current) {
+                    setUnlockedView(pendingUriView.current);
+                    pendingUriView.current = null;
+                }
+            })
             .catch((err) =>
                 setStatus({ state: 'error', error: err?.message || String(err) }),
             );
@@ -311,8 +326,10 @@ function AppInner() {
                     memo: intent.memo,
                 });
                 setUnlockedView('send');
+                pendingUriView.current = 'send';
             } else if (intent && intent.kind === 'receive') {
                 setUnlockedView('receive');
+                pendingUriView.current = 'receive';
             } else if (intent && intent.kind === 'execute' && intent.contractActionIndex && intent.chainId) {
                 // Explorer Write-tab deep link: land on the EXECUTE form
                 // prefilled. Unroutable without a contract index and a
@@ -324,6 +341,7 @@ function AppInner() {
                     gasLimit: intent.gasLimit || '',
                 });
                 setUnlockedView('contract-execute');
+                pendingUriView.current = 'contract-execute';
             }
         } catch {
             // Parser surfaces unknown via kind === 'unknown'; defensive

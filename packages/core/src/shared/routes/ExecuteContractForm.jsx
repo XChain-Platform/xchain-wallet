@@ -334,12 +334,12 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
         setStage('form');
     }
 
-        const header = (
+    const header = (
         <PageHeader
             onBack={onBack}
-            title="{stage === 'review' || stage === 'submitting'
+            title={stage === 'review' || stage === 'submitting'
                     ? 'Review execute'
-                    : `Execute on contract #${contractActionIndex}`}"
+                    : `Execute on contract #${contractActionIndex}`}
         />
     );
     const wrap = (children) => (
