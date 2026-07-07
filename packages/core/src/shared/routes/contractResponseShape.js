@@ -19,3 +19,35 @@ export function extractSingle(resp) {
     if (Array.isArray(resp) && resp.length > 0) return resp[0];
     return resp;
 }
+
+// Defensive re-normalization of a contract's self-declared `abi` as served by
+// the explorer. The abi is display metadata the deployer controls and the
+// explorer relays verbatim, so a malformed or hostile shape must never reach
+// render: a method whose `params` is a string (or any non-array) would throw on
+// `.map` and, with no ErrorBoundary in the wallet, white-screen the whole SPA.
+// Fail-closed per method, mirroring the SDK/explorer parseAbi: a method whose
+// `params` is present but not an array is dropped, and a kept method is
+// guaranteed a `params` array of {name,type}. Returns a safe {version, methods}
+// or null when nothing usable remains (callers fall back to the manual lane).
+export function sanitizeAbi(abi) {
+    if (!abi || typeof abi !== 'object') return null;
+    const rawMethods = abi.methods;
+    if (!rawMethods || typeof rawMethods !== 'object') return null;
+    const methods = {};
+    for (const [name, spec] of Object.entries(rawMethods)) {
+        if (!spec || typeof spec !== 'object') continue;
+        let params = [];
+        if (spec.params !== undefined && spec.params !== null) {
+            if (!Array.isArray(spec.params)) continue;
+            params = spec.params
+                .filter((p) => p && typeof p === 'object')
+                .map((p) => ({ name: String(p.name ?? ''), type: String(p.type ?? '') }));
+        }
+        const entry = { params };
+        if (typeof spec.summary === 'string') entry.summary = spec.summary;
+        if (typeof spec.view === 'boolean') entry.view = spec.view;
+        methods[name] = entry;
+    }
+    if (Object.keys(methods).length === 0) return null;
+    return { version: abi.version, methods };
+}

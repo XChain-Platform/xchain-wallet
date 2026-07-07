@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Drop internal-service jargon from user-facing copy across ~14 staking/contract/poll/dispenser screens: "the indexer" now reads as "the network", and the "hub PBFT" consensus jargon is gone from the delegate-key hint and revocation message.
 
 ### Fixed
+- Contract EXECUTE form: a malformed contract `abi` (a method whose `params` is not an array) no longer white-screens the wallet; the abi is sanitized before render and falls back to the manual lane.
+- Contract EXECUTE form: clear stale manual-lane params when an ABI method is auto-selected, so the auto-switch can't submit leftover params.
 - Desktop preload converted to CommonJS (`preload.cjs`): Electron cannot load ESM preloads under `sandbox: true`, so no contextBridge API was ever exposed and every renderer-to-main call failed in dev and packaged builds.
 - Align `signers-ledger` `@noble/hashes` to `^1.8.0` (was `^1.5.0`); `LedgerSigner` imports from `@noble/hashes/sha2`, a path only present in >=1.7, so the old range was a latent breakage on an isolated install.
 

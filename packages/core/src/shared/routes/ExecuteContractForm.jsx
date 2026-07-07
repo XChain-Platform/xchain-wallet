@@ -26,7 +26,7 @@ import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { useContractManifest } from '../hooks/useContractManifest.js';
-import { extractSingle } from './contractResponseShape.js';
+import { extractSingle, sanitizeAbi } from './contractResponseShape.js';
 import { ContractConsentPanel } from '../components/ContractConsentPanel.jsx';
 import { preferredSourceId } from '../addressSelection.js';
 import styles from './IssueTokenForm.module.css';
@@ -141,7 +141,10 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
             .then((resp) => {
                 if (cancelled) return;
                 const row = extractSingle(resp);
-                const abi = row && row.abi && row.abi.methods && Object.keys(row.abi.methods).length > 0 ? row.abi : null;
+                // sanitizeAbi guarantees every kept method has an array `params`,
+                // so the .map sites below (and at render) can never throw on a
+                // malformed/hostile abi. Null => fall back to the manual lane.
+                const abi = sanitizeAbi(row && row.abi);
                 if (!abi) return;
                 setContractAbi(abi);
                 const names = Object.keys(abi.methods);
@@ -155,6 +158,10 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                     const first = names[0];
                     setMethod(first);
                     setAbiParamValues(new Array((abi.methods[first].params || []).length).fill(''));
+                    // Clear any manual-lane text typed before the abi resolved, so
+                    // the auto-selected method can't silently submit stale params
+                    // (mirrors selectAbiMethod's reset).
+                    setParamsText('');
                 }
             })
             .catch(() => { /* optional metadata; manual lane covers absence */ });
@@ -198,7 +205,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
     // before Preview enables.
     const abiActive = Boolean(contractAbi) && !manualMode;
     const abiSpec = abiActive && method && contractAbi.methods[method] ? contractAbi.methods[method] : null;
-    const abiParams = abiSpec ? (abiSpec.params || []) : [];
+    const abiParams = Array.isArray(abiSpec?.params) ? abiSpec.params : [];
     const abiIncomplete = abiParams.length > 0 && abiParamValues.some((v) => !String(v).trim());
 
     function selectAbiMethod(name) {
