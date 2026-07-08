@@ -59,6 +59,7 @@ export {
     handshakeAction,
     getRecipientPubkey,
     PubkeyNotFoundError,
+    PubkeyMismatchError,
 } from './messageAction.js';
 export {
     listContacts,

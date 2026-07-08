@@ -53,6 +53,65 @@ export class PubkeyNotFoundError extends Error {
     }
 }
 
+export class PubkeyMismatchError extends Error {
+    /** @param {string} address */
+    constructor(address) {
+        super(`messageAction: the public key returned for ${address} does not derive to that address. Refusing to encrypt: a malicious or compromised explorer could be substituting its own key to read your message. Verify the recipient address and try again.`);
+        this.name = 'PubkeyMismatchError';
+        this.address = address;
+    }
+}
+
+// Single-key address types we can independently re-derive from a compressed
+// pubkey to confirm the explorer-returned key really controls `address`.
+const VERIFIABLE_ADDRESS_TYPES = ['p2pkh', 'p2wpkh', 'p2sh-p2wpkh'];
+
+/**
+ * Bind an explorer-resolved recipient pubkey to the destination address the
+ * user actually typed. The pubkey comes from a hostile-capable counterpart
+ * (the explorer/indexer); trusting it verbatim lets a malicious indexer
+ * substitute its own key so the "encrypted" message is readable by the
+ * attacker. We re-derive the address from the returned key for each
+ * single-key type the chain supports and require a match.
+ *
+ * A key whose length is not a standard compressed/uncompressed pubkey (e.g. a
+ * 32-byte x-only taproot key), or a destination that is a script/multisig
+ * type we cannot derive from one pubkey, cannot be verified this way; those
+ * fall through to the SDK's own encrypt-time key validation. The common case
+ * (p2pkh/p2wpkh/p2sh-p2wpkh recipients) is enforced.
+ *
+ * @param {object} sdk           chain SDK (needs sdk.wallet.deriveAddress)
+ * @param {string} pubkeyHex
+ * @param {string} address
+ * @param {object} descriptor    chain descriptor (addressTypes)
+ * @returns {boolean}            true = verified match, false = mismatch (reject)
+ */
+function recipientPubkeyMatchesAddress(sdk, pubkeyHex, address, descriptor) {
+    if (typeof pubkeyHex !== 'string' || !/^[0-9a-fA-F]+$/.test(pubkeyHex)) {
+        return false;
+    }
+    const byteLen = pubkeyHex.length / 2;
+    // Only standard compressed (33) / uncompressed (65) keys are derivable
+    // here; anything else we cannot verify, so don't block on it.
+    if (byteLen !== 33 && byteLen !== 65) return true;
+    if (!sdk?.wallet || typeof sdk.wallet.deriveAddress !== 'function') return true;
+    const supported = Array.isArray(descriptor?.addressTypes) ? descriptor.addressTypes : [];
+    const types = VERIFIABLE_ADDRESS_TYPES.filter((t) => supported.includes(t));
+    const candidates = types.length > 0 ? types : VERIFIABLE_ADDRESS_TYPES;
+    let couldDeriveAny = false;
+    for (const type of candidates) {
+        try {
+            if (sdk.wallet.deriveAddress(pubkeyHex, { type }) === address) return true;
+            couldDeriveAny = true;
+        } catch {
+            // Type unsupported on this network (e.g. segwit off); skip it.
+        }
+    }
+    // If no candidate type could be derived at all we can't verify; don't
+    // block. Otherwise the derivable candidates all disagreed -> mismatch.
+    return !couldDeriveAny;
+}
+
 /**
  * @typedef {Object} MessageActionOpts
  * @property {import('../storage/Vault.js').Vault} vault
@@ -160,6 +219,9 @@ export async function messageAction(opts) {
         // wire shape as ECIES (no method/key on the wire).
         const pubkey = await sdk.getPublicKey(opts.destination);
         if (!pubkey) throw new PubkeyNotFoundError(opts.destination);
+        if (!recipientPubkeyMatchesAddress(sdk, pubkey, opts.destination, descriptor)) {
+            throw new PubkeyMismatchError(opts.destination);
+        }
         const wif = await resolveSourceWif();
         const { sharedSecret } = sdk.messaging.deriveSharedSecret(wif, pubkey);
         const encrypted = sdk.messaging.sessionEncrypt(opts.message, sharedSecret);
@@ -172,6 +234,9 @@ export async function messageAction(opts) {
     } else {
         const pubkey = await sdk.getPublicKey(opts.destination);
         if (!pubkey) throw new PubkeyNotFoundError(opts.destination);
+        if (!recipientPubkeyMatchesAddress(sdk, pubkey, opts.destination, descriptor)) {
+            throw new PubkeyMismatchError(opts.destination);
+        }
         const encrypted = sdk.messaging.eciesEncrypt(opts.message, pubkey);
         params = {
             VERSION: '2',
