@@ -278,6 +278,7 @@ export function registerBridgeHandlers(host, opts = {}) {
         await assertNotBlocked(req, deps);
         const site = await requireSite(deps.vault, req);
         assertChainPermitted(site, req.chainId);
+        await assertAddressPermitted(deps, site, req.chainId, req.address);
         assertNotThrottled(signThrottle, req);
 
         if (!site.permissions.canSignMessage) {
@@ -333,6 +334,12 @@ export function registerBridgeHandlers(host, opts = {}) {
         }
         const permission = site.permissions.canSignAction?.[actionName] ?? 'ask';
         if (permission === 'never') throw bridgeError('ACTION_REJECTED_BY_POLICY', actionName);
+
+        // §43.3: enforce the per-account scope granted at connect. SEND/SWEEP
+        // both spend from `params.from`; a site scoped to a subset of accounts
+        // must not initiate a signature for an account it was never granted,
+        // even though the approval prompt would also surface it.
+        await assertAddressPermitted(deps, site, req.chainId, req.params?.from);
 
         const decision = await approvals.signAction({
             origin: req.origin,
@@ -588,6 +595,21 @@ function assertNotThrottled(throttle, req) {
     err.burst = result.burst;
     err.windowMs = result.windowMs;
     throw err;
+}
+
+// Enforce the connect-time per-account scope for a signing address. A site
+// with an empty accounts list is "all permitted" (§43.3), so this only bites
+// when the site was granted a subset. Throws ADDRESS_NOT_PERMITTED when the
+// address is out of scope (or unknown), matching getBalances' gate; the
+// approval prompt is a second gate, not the only one.
+async function assertAddressPermitted(deps, site, chainId, address) {
+    const accountIds = site.permissions?.accounts ?? [];
+    if (accountIds.length === 0) return;  // empty = all permitted
+    if (typeof address !== 'string' || !address) {
+        throw bridgeError('MISSING_ADDRESS', '');
+    }
+    const ok = await siteHasAddress(deps.vault, site, chainId, address, deps.chainRegistry);
+    if (!ok) throw bridgeError('ADDRESS_NOT_PERMITTED', address);
 }
 
 async function siteHasAddress(vault, site, chainId, address, chainRegistry) {

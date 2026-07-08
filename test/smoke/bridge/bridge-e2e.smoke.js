@@ -285,6 +285,48 @@ async function autoApprove(host, fakeWindows, result) {
         'UNSUPPORTED_ACTION did not open an approval window',
     );
 
+    // 4c-scope (BRIDGE-2). The site was granted only `account.id`. A
+    // signAction whose `from` belongs to a DIFFERENT (ungranted) account
+    // must be rejected up front with ADDRESS_NOT_PERMITTED, before any
+    // approval window opens: per-account scope is enforced, not just chain.
+    const otherAccount = schemas.createAccount({
+        walletId: account.walletId,
+        name: 'Other',
+        index: 1,
+    });
+    await vault.accounts.put(otherAccount);
+    const otherAddress = schemas.createAddress({
+        accountId: otherAccount.id,
+        chain: 'bitcoin',
+        network: 'regtest',
+        source: 'hd',
+        addressType: 'p2wpkh',
+        derivationPath: "m/84'/1'/1'/0/0",
+        address: 'bcrt1qOTHERaddr0000000000000000000000000000000',
+        publicKey: 'pk-other',
+        label: 'Other #1',
+    });
+    await vault.addresses.put(otherAddress);
+
+    let scopeErr = null;
+    try {
+        await call(host, 'bridge.signAction', {
+            origin: 'https://dapp.example',
+            chainId: 'bitcoin-regtest',
+            action: 'SEND',
+            params: { from: otherAddress.address, to: 'bcrt1qdest', amount: '1', tick: 'BTC' },
+        });
+    } catch (e) {
+        scopeErr = e;
+    }
+    assert.ok(scopeErr, 'out-of-scope signAction is rejected');
+    assert.match(scopeErr.message, /ADDRESS_NOT_PERMITTED/, 'rejects with ADDRESS_NOT_PERMITTED');
+    assert.equal(
+        fakeWindows._opened().length,
+        0,
+        'out-of-scope signAction opened no approval window',
+    );
+
     // 4d. disconnect.
     const disc = await call(host, 'bridge.disconnect', {
         origin: 'https://dapp.example',
