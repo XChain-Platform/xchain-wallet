@@ -139,10 +139,14 @@ function makeFakeStorage(seed = {}) {
     };
 }
 
+const FAKE_EXT_ID = 'homelocktestextensionid00000000';
+
 function makeFakeRuntime() {
     const listeners = [];
     return {
         runtime: {
+            // Sender gate (BRIDGE-1): trusted UI == origin chrome-extension://<id>.
+            id: FAKE_EXT_ID,
             onMessage: {
                 addListener(fn) { listeners.push(fn); },
                 removeListener(fn) {
@@ -152,12 +156,12 @@ function makeFakeRuntime() {
             },
             lastError: null,
         },
-        fire(message) {
+        fire(message, sender = { origin: `chrome-extension://${FAKE_EXT_ID}` }) {
             return new Promise((resolve) => {
                 const done = (r) => resolve(r);
                 let handled = false;
                 for (const l of listeners) {
-                    const r = l(message, {}, done);
+                    const r = l(message, sender, done);
                     if (r === true) { handled = true; break; }
                 }
                 if (!handled) {

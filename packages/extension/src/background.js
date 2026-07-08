@@ -46,6 +46,13 @@ import {
     resolveSdkFactory,
 } from './background/index.js';
 import { SIGNING_SECRET_SESSION_KEY, loadSigningSecret } from './background/signingSecretSession.js';
+import {
+    readAutoLockState,
+    stampAutoLockActivity,
+    clearAutoLockState,
+    shouldAutoLock,
+} from './background/autoLockState.js';
+import { handleWalletLock } from './background/walletLock.js';
 import { createBridgeEventBroadcaster } from './bridge/bridgeEvents.js';
 import {
     applyLayoutMode,
@@ -217,7 +224,7 @@ async function ensureHost() {
             },
         }),
     });
-    detachHost = attachChromeRuntime(host);
+    detachHost = attachChromeRuntime(host, undefined, { onActivity: noteAutoLockActivity });
 
     // §46: start the live notification watcher once a vault is open. Guarded
     // so the keepalive's repeat ensureHost() calls don't double-start; a cold
@@ -328,6 +335,44 @@ function tearDownHost() {
     host = null;
 }
 
+// --- Auto-lock backstop (§26) ------------------------------------------
+// The foreground `useAutoLock` hook locks on idle only while a popup/tab is
+// open; the extension popup is torn down on close, so its timer stops. These
+// helpers let the service worker enforce the same idle timeout after the popup
+// is gone. The popup ARMS the backstop (armed + idleMs, honouring the demo-
+// wallet skip); the SW stamps activity from trusted-UI message traffic and the
+// keepalive alarm checks + locks.
+
+let lastActivityStampAt = 0;
+function noteAutoLockActivity() {
+    const now = Date.now();
+    // Throttle persisted writes to at most once per 10s; a message burst from
+    // the open popup only needs to keep the idle clock roughly fresh.
+    if (now - lastActivityStampAt < 10_000) return;
+    lastActivityStampAt = now;
+    stampAutoLockActivity(now).catch(() => { /* best-effort */ });
+}
+
+async function lockWalletNow() {
+    await clearAutoLockState();
+    await handleWalletLock(null, {
+        sessionBackend: new ChromeSessionBackend(),
+        signingSecretBackend: new ChromeSessionBackend({ key: SIGNING_SECRET_SESSION_KEY }),
+        onLocked: () => tearDownHost(),
+    });
+}
+
+async function maybeAutoLock() {
+    if (!host || !vault) return;  // already locked; nothing to do
+    let state;
+    try { state = await readAutoLockState(); } catch { return; }
+    if (!shouldAutoLock(state, Date.now())) return;
+    console.log('[xchain] auto-lock: idle timeout reached, locking wallet');
+    try { await lockWalletNow(); } catch (err) {
+        console.error('[xchain] auto-lock lock failed:', err);
+    }
+}
+
 // Pre-host listener runs before the vault is open so the popup can ask
 // "no-wallet / locked / unlocked?" and perform `wallet.unlock`. Both
 // of those need to work when the vault is still encrypted. The host
@@ -340,11 +385,17 @@ attachSessionMetaListener({
     // gets swapped on tearDownHost so the reference can change between
     // unlock cycles. (See sessionMeta.js handling of `signerPool`.)
     signerPool: () => signerPool,
-    onUnlocked: () =>
-        ensureHost().catch((err) => {
+    onUnlocked: () => {
+        // Drop any stale cross-session auto-lock state; the popup re-arms the
+        // backstop (with the correct idleMs + demo-skip) once Home mounts.
+        clearAutoLockState().catch(() => { /* best-effort */ });
+        lastActivityStampAt = 0;
+        return ensureHost().catch((err) => {
             console.error('[xchain] ensureHost after unlock failed:', err);
-        }),
+        });
+    },
     onLocked: () => {
+        clearAutoLockState().catch(() => { /* best-effort */ });
         tearDownHost();
     },
 });
@@ -367,6 +418,10 @@ if (typeof chrome !== 'undefined' && chrome.alarms) {
         if (alarm.name !== 'xchain-ws-keepalive') return;
         ensureHost()
             .then(() => notificationService && notificationService.refresh())
+            // §26 auto-lock backstop: every keepalive tick (~24s) also checks
+            // whether the unlocked session has gone idle past the configured
+            // timeout with the popup closed, and locks if so.
+            .then(() => maybeAutoLock())
             .catch((err) => console.error('[xchain] keepalive ensureHost failed:', err));
     });
 }

@@ -36,11 +36,22 @@
 
 import { crypto as cryptoLib, storage as storageLib } from '@xchain-wallet/core';
 import { saveSigningSecret } from './signingSecretSession.js';
+import { checkUnlockAllowed, recordFailure } from './unlockThrottle.js';
 
 export class InvalidPasswordError extends Error {
     constructor() {
         super('Incorrect password.');
         this.name = 'InvalidPasswordError';
+    }
+}
+
+export class UnlockThrottledError extends Error {
+    /** @param {number} retryAfterMs */
+    constructor(retryAfterMs) {
+        const secs = Math.ceil((retryAfterMs || 0) / 1000);
+        super(`Too many incorrect attempts. Try again in ${secs}s.`);
+        this.name = 'UnlockThrottledError';
+        this.retryAfterMs = retryAfterMs;
     }
 }
 
@@ -57,6 +68,7 @@ export class NoVaultError extends Error {
  * @property {import('../storage/ChromeSessionBackend.js').ChromeSessionBackend} sessionBackend
  * @property {import('../storage/ChromeSessionBackend.js').ChromeSessionBackend} [signingSecretBackend]   session slot for the cached password; when supplied, lets ensureHost re-populate the SignerPool after a service-worker restart
  * @property {import('../storage/ChromeMetaBackend.js').ChromeMetaBackend} metaBackend
+ * @property {{ load: () => Promise<any>, save: (s: any) => Promise<void>, clear: () => Promise<void> }} [unlockThrottleStore]   background-persisted attempt throttle; when absent, unlock is not throttled here (the shell gates it elsewhere)
  * @property {import('@xchain-wallet/core').signers.SignerPool} [signerPool]   when supplied, every Wallet record's signer is unlocked into the pool while the password is in scope; lets account.create / receive.getAddress (etc.) skip the per-op password prompt
  * @property {import('@xchain-wallet/core').registry.ChainRegistry} [chainRegistry]   required iff `signerPool` is supplied
  * @property {import('@xchain-wallet/core').sdk.SDKRegistry} [sdkRegistry]            required iff `signerPool` is supplied
@@ -76,6 +88,18 @@ export async function handleWalletUnlock(request, deps) {
     const meta = /** @type {any} */ (await deps.metaBackend.load());
     if (!meta || !meta.kdfParams) {
         throw new NoVaultError();
+    }
+
+    // Authoritative unlock throttle (checked BEFORE the KDF so a locked-out
+    // attempt costs no CPU). Optional: shells that don't supply a store (e.g.
+    // desktop) keep their own gating. See unlockThrottle.js.
+    const throttle = deps.unlockThrottleStore;
+    if (throttle) {
+        const state = await throttle.load().catch(() => null);
+        const gate = checkUnlockAllowed(state, Date.now());
+        if (!gate.allowed) {
+            throw new UnlockThrottledError(gate.retryAfterMs);
+        }
     }
 
     const masterKey = cryptoLib.deriveMasterKey(password, meta.kdfParams);
@@ -108,6 +132,12 @@ export async function handleWalletUnlock(request, deps) {
             }
         } catch (err) {
             if (isAeadAuthFailure(err)) {
+                // Wrong password: count it against the throttle so repeated
+                // attempts escalate into a backoff.
+                if (throttle) {
+                    const prev = await throttle.load().catch(() => null);
+                    await throttle.save(recordFailure(prev, Date.now())).catch(() => { /* best-effort */ });
+                }
                 throw new InvalidPasswordError();
             }
             throw err;
@@ -116,8 +146,10 @@ export async function handleWalletUnlock(request, deps) {
             vault.close();
         }
 
-        // Password was correct. Persist the master key to the session
+        // Password was correct. Clear the throttle so the next lock/unlock
+        // cycle starts fresh, then persist the master key to the session
         // backend (that's what `ensureHost()` reads to build the host).
+        if (throttle) await throttle.clear().catch(() => { /* best-effort */ });
         await deps.sessionBackend.save(masterKey);
         // Cache the password so the SignerPool can be rebuilt after a
         // service-worker restart (the master key can't decrypt seeds).

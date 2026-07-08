@@ -1817,6 +1817,19 @@ export function updateSettings(patch) {
 }
 
 /**
+ * §26 auto-lock backstop: arm/disarm the service-worker idle-lock. The popup's
+ * foreground timer stops when the popup closes, so Home reports whether
+ * auto-lock applies to the active wallet + the idle threshold; the background
+ * enforces it while the popup is gone. Extension-only (web/desktop keep a
+ * long-lived window and rely on the foreground hook).
+ *
+ * @param {{ armed: boolean, idleMs: number }} signal
+ */
+export function reportAutoLock(signal) {
+    return /** @type {any} */ (sendMessage('session.autolock', signal));
+}
+
+/**
  * §19.4 encrypted backup. Resolves to `{ fileContent }` ; the
  * pretty-printed JSON envelope ready to write to disk.
  *

@@ -474,12 +474,24 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
     // active wallet is the demo wallet so a normal browse session
     // doesn't accidentally lock them out.
     const isDemoActive = flowsLib.isDemoWallet(activeWalletId);
-    useAutoLock(handleLock, {
-        enabled: (shell === 'popup' || shell === 'web' || shell === 'desktop')
-            && !locking
-            && !isDemoActive,
-        idleMs: autolockMinutes * 60 * 1000,
-    });
+    const autoLockEnabled = (shell === 'popup' || shell === 'web' || shell === 'desktop')
+        && !locking
+        && !isDemoActive;
+    const autoLockIdleMs = autolockMinutes * 60 * 1000;
+    useAutoLock(handleLock, { enabled: autoLockEnabled, idleMs: autoLockIdleMs });
+
+    // §26 background backstop (extension only): the foreground hook above only
+    // runs while the popup is open, so report whether auto-lock applies to the
+    // active wallet (armed, honouring the demo-wallet skip) and the idle
+    // threshold, letting the service worker lock after the popup closes.
+    // `reportAutoLock` is implemented by the extension shell only; web/desktop
+    // keep a long-lived window, so their foreground hook is sufficient.
+    useEffect(() => {
+        if (typeof messaging?.reportAutoLock !== 'function') return;
+        Promise.resolve(
+            messaging.reportAutoLock({ armed: autoLockEnabled, idleMs: autoLockIdleMs }),
+        ).catch(() => { /* best-effort */ });
+    }, [messaging, autoLockEnabled, autoLockIdleMs]);
 
     // §7/§8: SPV proof verification. Off for demo wallets (synthetic
     // balances have no real proofs) and when the user opts out via

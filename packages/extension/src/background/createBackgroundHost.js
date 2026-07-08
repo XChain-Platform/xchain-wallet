@@ -27,6 +27,7 @@ import { WALLET_VERSION } from '@xchain-wallet/core/buildInfo.js';
 import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
 import { MessageHost } from './MessageHost.js';
 import { registerBridgeHandlers } from '../bridge/handlers.js';
+import { applyAutoLockSignal } from './autoLockState.js';
 import * as signerBridge from './signerBridge.js';
 import { createBroadcastQueueStorage } from './broadcastQueueStorage.js';
 import { createSignThrottleStorage } from './signThrottleStorage.js';
@@ -820,6 +821,20 @@ export function createBackgroundHost(deps) {
             await refreshThrottleLimitsFromVault();
         }
         return result;
+    });
+
+    // §26: background auto-lock arm/disarm. The foreground `useAutoLock`
+    // hook owns the decision of WHETHER auto-lock applies (it skips demo
+    // wallets and honours the shell) and the idle threshold; it reports that
+    // here so the service worker can lock the wallet after the popup closes,
+    // when the foreground timer no longer runs. Sender-gated to the trusted
+    // extension UI by the transport (not a `bridge.*` type).
+    host.register('session.autolock', async (req) => {
+        await applyAutoLockSignal(
+            { armed: req?.armed === true, idleMs: req?.idleMs },
+            Date.now(),
+        );
+        return { ok: true };
     });
 
     // §19.6: dry-run restore. Derive the first N addresses per active
