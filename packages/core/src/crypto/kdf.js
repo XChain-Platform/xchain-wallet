@@ -23,6 +23,18 @@ export const KDF_MIN_MEMORY_KIB = 64 * 1024;
 export const KDF_MIN_ITERATIONS = 3;
 export const KDF_DEFAULT_PARALLELISM = 1;
 
+// Ceilings enforced on LOAD so an attacker-supplied blob (a hostile
+// backup file or crafted wallet record) can't dictate an unbounded
+// Argon2id cost and OOM/hang the process BEFORE the auth-tag check ever
+// runs. 1 GiB is well above any legitimate per-device calibration
+// (calibrateKdfParams only ever raises `iterations`, never `memory`);
+// 64 iterations / 8 lanes bound the CPU grind. These are validation
+// bounds, not tuning targets.
+export const KDF_MAX_MEMORY_KIB = 1024 * 1024;   // 1 GiB
+export const KDF_MAX_ITERATIONS = 64;
+export const KDF_MAX_PARALLELISM = 8;
+export const KDF_MIN_SALT_BYTES = 8;
+
 export const KDF_KEY_LENGTH = 32;  // 256-bit master key
 
 /**
@@ -34,6 +46,68 @@ export const KDF_KEY_LENGTH = 32;  // 256-bit master key
  * @property {number} parallelism        Argon2 "p" cost
  */
 
+export class KdfParamError extends Error {
+    constructor(reason) {
+        super(`kdf: ${reason}`);
+        this.name = 'KdfParamError';
+    }
+}
+
+const isPositiveSafeInt = (v) =>
+    typeof v === 'number' && Number.isSafeInteger(v) && v > 0;
+
+/**
+ * Validate KDF params supplied from persisted / imported data before they
+ * are handed to Argon2id. This is a trust-boundary check: the params ride
+ * alongside the ciphertext (a backup envelope or a Wallet record), so an
+ * attacker who hands the user a file controls them and could otherwise
+ * demand an unbounded memory/CPU cost that OOMs or hangs the process
+ * BEFORE the AEAD tag (the actual password check) ever runs.
+ *
+ * Enforces positive-integer types and hard CEILINGS (the DoS defence).
+ * The floors (`KDF_MIN_*`) are the defaults for freshly created wallets,
+ * NOT a load-time requirement: a legitimately weak blob exists (the
+ * throwaway demo wallet uses iterations=1 / memory=8 MiB for speed), so a
+ * too-LOW param must still load. A weakened cost only ever weakens the
+ * attacker's own copy of a stolen blob, so it is not a defence boundary;
+ * the too-HIGH direction is.
+ *
+ * @param {KdfParams} params
+ * @throws {KdfParamError}
+ */
+export function validateKdfParams(params) {
+    if (!params || typeof params !== 'object') {
+        throw new KdfParamError('params must be an object');
+    }
+    if (params.algorithm !== 'argon2id') {
+        throw new KdfParamError(`unsupported algorithm "${params.algorithm}"`);
+    }
+    if (!isPositiveSafeInt(params.iterations)) {
+        throw new KdfParamError('iterations must be a positive integer');
+    }
+    if (!isPositiveSafeInt(params.memory)) {
+        throw new KdfParamError('memory must be a positive integer (KiB)');
+    }
+    if (!isPositiveSafeInt(params.parallelism)) {
+        throw new KdfParamError('parallelism must be a positive integer');
+    }
+    if (params.iterations > KDF_MAX_ITERATIONS) {
+        throw new KdfParamError(
+            `iterations ${params.iterations} exceeds max ${KDF_MAX_ITERATIONS}`,
+        );
+    }
+    if (params.memory > KDF_MAX_MEMORY_KIB) {
+        throw new KdfParamError(
+            `memory ${params.memory} KiB exceeds max ${KDF_MAX_MEMORY_KIB}`,
+        );
+    }
+    if (params.parallelism > KDF_MAX_PARALLELISM) {
+        throw new KdfParamError(
+            `parallelism ${params.parallelism} exceeds max ${KDF_MAX_PARALLELISM}`,
+        );
+    }
+}
+
 /**
  * Derive a 32-byte master key from a password and the stored KDF params.
  * Returns a Uint8Array the caller is responsible for zeroing after use.
@@ -43,12 +117,10 @@ export const KDF_KEY_LENGTH = 32;  // 256-bit master key
  * @returns {Uint8Array}
  */
 export function deriveMasterKey(password, params) {
-    if (params.algorithm !== 'argon2id') {
-        throw new Error(`kdf: unsupported algorithm "${params.algorithm}"`);
-    }
+    validateKdfParams(params);
     const salt = base64ToBytes(params.salt);
-    if (salt.length < 8) {
-        throw new Error('kdf: salt must be at least 8 bytes');
+    if (salt.length < KDF_MIN_SALT_BYTES) {
+        throw new KdfParamError(`salt must be at least ${KDF_MIN_SALT_BYTES} bytes`);
     }
     const passwordBytes = new TextEncoder().encode(password);
     try {

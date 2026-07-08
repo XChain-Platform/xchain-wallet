@@ -15,6 +15,8 @@
 import { describe, it, expect } from 'vitest';
 import {
     deriveMasterKey,
+    validateKdfParams,
+    KdfParamError,
     makeFreshKdfParams,
     calibrateKdfParams,
     bytesToBase64,
@@ -139,6 +141,52 @@ describe('crypto/kdf', () => {
 
         it('encodes empty input to an empty string', () => {
             expect(bytesToBase64(new Uint8Array(0))).toBe('');
+        });
+    });
+
+    // Security regression (F1): KDF params ride alongside the ciphertext in a
+    // backup envelope / wallet record, so a hostile file controls them. They
+    // are consumed by Argon2id BEFORE the AEAD tag (the password check), so an
+    // unbounded memory/iterations value is a pre-auth OOM/CPU bomb. These pin
+    // the ceilings enforced at the trust boundary, and that they trip WITHOUT
+    // ever invoking argon2id (they throw synchronously up front).
+    describe('validateKdfParams / deriveMasterKey ceilings (F1)', () => {
+        it('rejects a memory-bomb param before running argon2id', () => {
+            const bomb = { ...PARAMS, memory: 4 * 1024 * 1024 }; // 4 GiB
+            expect(() => validateKdfParams(bomb)).toThrow(/memory .* exceeds max/);
+            // deriveMasterKey must fail up front too (never allocs the 4 GiB).
+            expect(() => deriveMasterKey('p', bomb)).toThrow(KdfParamError);
+        });
+
+        it('rejects an iterations grind param', () => {
+            expect(() => validateKdfParams({ ...PARAMS, iterations: 1_000_000 }))
+                .toThrow(/iterations .* exceeds max/);
+        });
+
+        it('rejects a parallelism blow-up param', () => {
+            expect(() => validateKdfParams({ ...PARAMS, parallelism: 9999 }))
+                .toThrow(/parallelism .* exceeds max/);
+        });
+
+        it('rejects non-integer / NaN / Infinity costs', () => {
+            expect(() => validateKdfParams({ ...PARAMS, memory: Infinity })).toThrow(KdfParamError);
+            expect(() => validateKdfParams({ ...PARAMS, iterations: NaN })).toThrow(KdfParamError);
+            expect(() => validateKdfParams({ ...PARAMS, parallelism: 1.5 })).toThrow(KdfParamError);
+            expect(() => validateKdfParams({ ...PARAMS, memory: '65536' })).toThrow(KdfParamError);
+        });
+
+        it('accepts the throwaway demo wallet\'s deliberately weak params (too-LOW still loads)', () => {
+            // createDemoWallet uses iterations=1 / memory=8 MiB for speed; a
+            // too-low cost must NOT be rejected on load (it only weakens the
+            // owner\'s own copy, and the demo wallet holds nothing).
+            expect(() => validateKdfParams({
+                algorithm: 'argon2id', salt: PARAMS.salt,
+                iterations: 1, memory: 8192, parallelism: 1,
+            })).not.toThrow();
+        });
+
+        it('accepts calibrated params at the max iteration bound', () => {
+            expect(() => validateKdfParams({ ...PARAMS, iterations: 64 })).not.toThrow();
         });
     });
 });
