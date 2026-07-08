@@ -27,6 +27,7 @@
 // listeners stay disjoint and no message ever gets two sendResponses.
 
 import { PRE_HOST_MESSAGE_TYPES } from './sessionMeta.js';
+import { isMessageAllowedFromSender, isTrustedExtensionSender } from '../bridge/publicSurface.js';
 
 /**
  * Attach a MessageHost to a chrome.runtime surface. Returns a function
@@ -34,9 +35,11 @@ import { PRE_HOST_MESSAGE_TYPES } from './sessionMeta.js';
  *
  * @param {import('./MessageHost.js').MessageHost} host
  * @param {{ onMessage: { addListener: Function, removeListener: Function } }} [chromeRuntime]
+ * @param {{ onActivity?: () => void }} [opts]   onActivity fires once per message
+ *        from the trusted extension UI, feeding the background auto-lock backstop.
  * @returns {() => void}                                                       detach fn
  */
-export function attachChromeRuntime(host, chromeRuntime) {
+export function attachChromeRuntime(host, chromeRuntime, opts = {}) {
     const runtime =
         chromeRuntime ?? /** @type {any} */ (globalThis.chrome?.runtime);
     if (!runtime || !runtime.onMessage) {
@@ -44,8 +47,9 @@ export function attachChromeRuntime(host, chromeRuntime) {
             'attachChromeRuntime: chrome.runtime.onMessage is not available; pass a runtime object for tests',
         );
     }
+    const onActivity = typeof opts.onActivity === 'function' ? opts.onActivity : null;
 
-    const listener = (message, _sender, sendResponse) => {
+    const listener = (message, sender, sendResponse) => {
         // Pre-host listener (sessionMeta.js) owns a small set of types
         // that must work before the MessageHost's vault-backed handlers
         // are registered. Skip those here so no message ever sees two
@@ -57,6 +61,30 @@ export function attachChromeRuntime(host, chromeRuntime) {
             PRE_HOST_MESSAGE_TYPES.has(message.type)
         ) {
             return false;
+        }
+        // Trust boundary: the privileged handler surface (wallet.*,
+        // action.*, settings.*, ...) is registered on this same host as
+        // the public `bridge.*` surface. A web page reaches this listener
+        // via the content-script relay, so confine untrusted senders to
+        // `bridge.*` (which self-enforce per-origin permissions). Trusted
+        // extension pages may call anything.
+        const type = message && typeof message === 'object' ? message.type : undefined;
+        if (!isMessageAllowedFromSender(type, sender, runtime.id)) {
+            sendResponse({
+                ok: false,
+                error: {
+                    name: 'BridgeError',
+                    code: 'FORBIDDEN_SENDER',
+                    message: 'this message type is not available to web origins',
+                },
+            });
+            return true;
+        }
+        // A message from the trusted extension UI counts as user activity for
+        // the background auto-lock backstop. A `bridge.*` call from a web page
+        // (allowed above, but not extension-origin) deliberately does NOT.
+        if (onActivity && isTrustedExtensionSender(sender, runtime.id)) {
+            try { onActivity(); } catch { /* best-effort */ }
         }
         Promise.resolve()
             .then(() => host.handle(message))

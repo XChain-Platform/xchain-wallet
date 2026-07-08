@@ -40,6 +40,8 @@ import {
     handleWalletImport,
 } from './walletCreate.js';
 import { SIGNING_SECRET_SESSION_KEY } from './signingSecretSession.js';
+import { isTrustedExtensionSender } from '../bridge/publicSurface.js';
+import { ChromeUnlockThrottleStore } from './unlockThrottle.js';
 
 /**
  * @typedef {Object} PreHostBackends
@@ -83,11 +85,28 @@ export function attachSessionMetaListener(deps = {}, chromeRuntime) {
         return () => {};
     }
 
-    const listener = (message, _sender, sendResponse) => {
+    const listener = (message, sender, sendResponse) => {
         if (!message || typeof message !== 'object') return false;
         const type = message.type;
         if (typeof type !== 'string' || !PRE_HOST_MESSAGE_TYPES.has(type)) {
             return false;
+        }
+        // Trust boundary: session lifecycle (status / unlock / lock /
+        // create / import) is UI-only. None of these are part of the
+        // public `bridge.*` surface, so reject them from any sender that
+        // is not the extension's own page. Otherwise a web page could
+        // probe unlock state (recon) or lock the wallet (DoS) via the
+        // content-script relay.
+        if (!isTrustedExtensionSender(sender, runtime.id)) {
+            sendResponse({
+                ok: false,
+                error: {
+                    name: 'BridgeError',
+                    code: 'FORBIDDEN_SENDER',
+                    message: 'this message type is not available to web origins',
+                },
+            });
+            return true;
         }
         (async () => {
             try {
@@ -96,6 +115,7 @@ export function attachSessionMetaListener(deps = {}, chromeRuntime) {
                     sessionBackend: new ChromeSessionBackend(),
                     signingSecretBackend: new ChromeSessionBackend({ key: SIGNING_SECRET_SESSION_KEY }),
                     metaBackend: new ChromeMetaBackend(),
+                    unlockThrottleStore: new ChromeUnlockThrottleStore(),
                     chainRegistry: deps.chainRegistry,
                     sdkRegistry: deps.sdkRegistry,
                     signerPool: typeof deps.signerPool === 'function'
@@ -154,6 +174,7 @@ export async function dispatchPreHost(type, request, deps) {
                 sessionBackend: deps.sessionBackend,
                 signingSecretBackend: deps.signingSecretBackend,
                 metaBackend: deps.metaBackend,
+                unlockThrottleStore: deps.unlockThrottleStore,
                 signerPool: deps.signerPool,
                 chainRegistry: deps.chainRegistry,
                 sdkRegistry: deps.sdkRegistry,

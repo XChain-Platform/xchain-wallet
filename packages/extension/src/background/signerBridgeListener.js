@@ -22,6 +22,7 @@
 
 import { signers } from '@xchain-wallet/core';
 import * as signerBridge from './signerBridge.js';
+import { isTrustedExtensionSender } from '../bridge/publicSurface.js';
 
 const { createBackgroundTransport } = signers;
 
@@ -43,6 +44,15 @@ export function attachSignerBridgeListener(chromeRuntime) {
 
     const listener = (port) => {
         if (!port || port.name !== 'signer-bridge') return;
+        // Trust boundary: only the extension's own UI may register a HW
+        // signer transport. A web page can also open a port, and without
+        // this check it could register itself as the transport for a
+        // signerId and hijack/observe hardware-signing traffic. Reject
+        // (disconnect) any connection that is not from an extension page.
+        if (!isTrustedExtensionSender(port.sender, runtime.id)) {
+            try { port.disconnect?.(); } catch (_err) { /* best-effort */ }
+            return;
+        }
         const transport = createBackgroundTransport(port);
         /** @type {Set<string>} */
         const ownedIds = new Set();

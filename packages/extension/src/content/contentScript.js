@@ -53,6 +53,27 @@
         if (data.source !== SOURCE) return;
         if (typeof data.id !== 'string' || typeof data.type !== 'string') return;
 
+        // Trust boundary: a web page may reach ONLY the origin-gated
+        // `bridge.*` surface. Refuse to relay privileged extension-internal
+        // types (wallet.*, action.*, settings.*, sites.*, ...) so a hostile
+        // page can't drive the popup-only handler set (which signs with the
+        // pre-unlocked pool and no password). Mirrors publicSurface.isPublicBridgeType;
+        // the background re-checks the sender so this is defence-in-depth, not
+        // the sole gate.
+        if (!data.type.startsWith('bridge.')) {
+            window.postMessage({
+                source: RESPONSE_SOURCE,
+                id: data.id,
+                ok: false,
+                error: {
+                    name: 'BridgeError',
+                    message: 'message type is not available to web pages',
+                    code: 'FORBIDDEN',
+                },
+            }, window.location.origin);
+            return;
+        }
+
         const request = {
             ...(data.request ?? {}),
             origin: window.location.origin,

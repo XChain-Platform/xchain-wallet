@@ -138,10 +138,17 @@ function makeFakeStorage(seed = {}) {
     };
 }
 
+const FAKE_EXT_ID = 'unlockflowtestextensionid000000';
+
 function makeFakeRuntime() {
     const listeners = [];
     return {
         runtime: {
+            // The sessionMeta / ChromeRuntimeAdapter sender gate (BRIDGE-1)
+            // keys "trusted extension UI" on the sender origin matching this
+            // id, so the fake must carry it and fire() must pass a matching
+            // sender to model the real popup.
+            id: FAKE_EXT_ID,
             onMessage: {
                 addListener(fn) { listeners.push(fn); },
                 removeListener(fn) {
@@ -151,12 +158,12 @@ function makeFakeRuntime() {
             },
             lastError: null,
         },
-        async fire(message) {
+        async fire(message, sender = { origin: `chrome-extension://${FAKE_EXT_ID}` }) {
             return new Promise((resolve) => {
                 const done = (response) => resolve(response);
                 let handled = false;
                 for (const l of listeners) {
-                    const r = l(message, {}, done);
+                    const r = l(message, sender, done);
                     if (r === true) { handled = true; break; }
                 }
                 if (!handled) {
