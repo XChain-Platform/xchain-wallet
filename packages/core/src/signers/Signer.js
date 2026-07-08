@@ -132,6 +132,7 @@ export class NotImplementedError extends Error {
  * @property {string[]} cosignerPubkeys     33-byte hex, ordered same as MultisigConfig.cosigners
  * @property {string} msgHash               32-byte hex; sighash of the input being signed
  * @property {string} fingerprint           32-byte hex of the canonicalized sessionRef (multisigPsbtEnvelope.fingerprintSessionRef)
+ * @property {string} nonceUniqueId         per-signing-session unique id (the session UUID); bound into the MuSig2 secret-nonce derivation so two signings of the same tx cannot reuse a nonce (BIP327). Required for taproot-musig2.
  */
 
 /**

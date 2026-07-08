@@ -570,15 +570,24 @@ export class SoftwareSigner extends Signer {
             const ctx = sdk.musig2.aggregateKeys(cosignerKeys);
             const xOnlyPublicKey = ctx.xOnlyPubkey;
             const msg = hexToBytes(sessionRef.msgHash);
-            // Deterministic sessionId so round 2 can re-derive the
-            // same secret nonce without persisting it. Mixes
-            // privKey + fingerprint + path so two cosigners on the
-            // same wallet (theoretical) get distinct nonces, and the
-            // same cosigner across two MuSig2 sessions also gets
-            // distinct nonces (both are necessary BIP327 properties).
+            // Reproducible-within-a-session sessionId so round 2 can
+            // re-derive the same secret nonce without persisting it, mixing
+            // privKey + fingerprint + path + the per-session unique id.
+            //
+            // SECURITY (BIP327 nonce reuse): the fingerprint covers only the
+            // transaction (scheme/threshold/cosignerPubkeys/msgHash/psbtHex),
+            // NOT anything session-unique. Without `nonceUniqueId`, two
+            // signings of the SAME tx would derive the SAME secret nonce; a
+            // malicious coordinator who presents two different aggregate
+            // nonces across those signings gets two partial sigs sharing the
+            // nonce (s1=r+e1·a·x, s2=r+e2·a·x) and solves for the private key.
+            // Binding to the per-session id (a random UUID minted per signing
+            // session) makes every session's nonce distinct while staying
+            // reproducible across this session's two rounds. assertSessionRefShape
+            // requires it, so the deterministic-only path can't be reached.
             const sessionId = sha256(
                 concatBytes(
-                    new TextEncoder().encode(`xcw-musig2:${path}:`),
+                    new TextEncoder().encode(`xcw-musig2:${path}:${sessionRef.nonceUniqueId}:`),
                     hexToBytes(sessionRef.fingerprint),
                     dk.privateKey,
                 ),
@@ -757,6 +766,14 @@ function assertSessionRefShape(ref) {
     }
     if (!isHex(ref.fingerprint) || ref.fingerprint.length !== 64) {
         throw new Error('SoftwareSigner: sessionRef.fingerprint must be 32-byte hex');
+    }
+    // Per-session nonce-uniqueness guard (see the sessionId derivation in
+    // _musig2Round1Internal). Must be present, non-empty, and stable across
+    // this session's two rounds; the flow supplies the session's UUID.
+    if (typeof ref.nonceUniqueId !== 'string' || ref.nonceUniqueId.length === 0) {
+        throw new Error(
+            'SoftwareSigner: sessionRef.nonceUniqueId is required (per-session MuSig2 nonce-uniqueness guard)',
+        );
     }
 }
 

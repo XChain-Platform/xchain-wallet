@@ -146,6 +146,11 @@ export async function signMultisigLocally(opts) {
     const signerSessionRef = {
         ...sessionRef,
         fingerprint,
+        // Per-session MuSig2 nonce-uniqueness guard: the signer mixes this
+        // into the secret-nonce derivation so two signings of the same tx
+        // (same fingerprint) can't reuse a nonce. The session UUID is unique
+        // per signing session and stable across round 1 and round 2.
+        nonceUniqueId: session.id,
     };
 
     const signer = await unlockWallet({
