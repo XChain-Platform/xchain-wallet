@@ -23,7 +23,7 @@
     border-top: none;
 }
 
-/* Clickable variant — applied when an `onSelectToken` handler is wired
+/* Clickable variant - applied when an `onSelectToken` handler is wired
  * through, which turns the row tag into a <button> for the §27.6 token
  * detail page (G071). */
 .rowClickable {

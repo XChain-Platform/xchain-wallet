@@ -1,4 +1,4 @@
-/* Skeleton — §37.1 / G118. Content-shaped placeholder with a subtle
+/* Skeleton - §37.1 / G118. Content-shaped placeholder with a subtle
  * left-to-right shimmer. Static gray block under
  * `prefers-reduced-motion: reduce` (the @media block at the bottom). */
 
@@ -15,7 +15,7 @@
     background-position: -100% 0;
     border-radius: var(--xc-radius-sm);
     animation: xc-skeleton-shimmer 1.4s ease-in-out infinite;
-    /* Stable layout — block-level, fills the parent's width unless an
+    /* Stable layout - block-level, fills the parent's width unless an
      * explicit `width` prop is set inline. */
     display: block;
     width: 100%;
@@ -85,7 +85,7 @@
     100% { background-position:  200% 0; }
 }
 
-/* §53 a11y — under reduced-motion, the shimmer animation collapses to
+/* §53 a11y - under reduced-motion, the shimmer animation collapses to
  * a static gray block. The placeholder still occupies the same layout
  * footprint; only the moving gradient stops. */
 @media (prefers-reduced-motion: reduce) {

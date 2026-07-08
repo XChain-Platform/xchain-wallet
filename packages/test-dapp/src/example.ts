@@ -88,7 +88,7 @@ export async function runExample(): Promise<ExampleReport> {
             validateSignInChallenge(reparsed, {
                 appId: APP_ID,
                 // The origin your backend expects the sign-in to come
-                // from — here the page the example runs on. A challenge
+                // from - here the page the example runs on. A challenge
                 // stamped with any other origin must be rejected.
                 origin: globalThis.location?.origin ?? '',
                 nonce: signInParams.nonce,
@@ -116,7 +116,7 @@ export async function runExample(): Promise<ExampleReport> {
     const sendResult = await provider.signAction(sendParams);
     if (sendResult.ok) report.sendTxid = sendResult.txid;
 
-    // Phase 2+ action — expected to be rejected by a Phase 1 wallet.
+    // Phase 2+ action - expected to be rejected by a Phase 1 wallet.
     const issueResult = await provider.signAction({
         chainId,
         action: 'ISSUE',
@@ -134,17 +134,17 @@ export async function runExample(): Promise<ExampleReport> {
 // ---------------------------------------------------------------------------
 //
 // Bridge results that fail come back as `{ ok: false, error: <code>, ... }`.
-// dApp authors should branch on `error` only — the human-readable
+// dApp authors should branch on `error` only - the human-readable
 // `message` is for logging, not display logic. The `BLOCKED_BY_USER` and
 // `THROTTLED` codes are the §12 security additions; they need explicit
 // UX:
 //
-//   BLOCKED_BY_USER  — user blocked this site in wallet Settings. There
+//   BLOCKED_BY_USER  - user blocked this site in wallet Settings. There
 //                      is no retry that the dApp can do automatically;
-//                      surface a static "Blocked — un-block in wallet
+//                      surface a static "Blocked - un-block in wallet
 //                      Settings" message and stop pushing requests.
 //
-//   THROTTLED        — wallet rate-limited this origin. The result
+//   THROTTLED        - wallet rate-limited this origin. The result
 //                      includes `retryAfterMs` (and optional `burst` /
 //                      `windowMs`); show "Retry in {seconds}s" with a
 //                      disabled retry control that re-enables when the
@@ -183,7 +183,7 @@ export function handleSignActionResult(
         case 'BLOCKED_BY_USER':
             return {
                 kind: 'blocked',
-                message: 'Blocked by user — un-block in wallet Settings.',
+                message: 'Blocked by user - un-block in wallet Settings.',
             };
         case 'THROTTLED': {
             const retryAfterMs = err.retryAfterMs ?? 0;
@@ -191,7 +191,7 @@ export function handleSignActionResult(
             const out: SignActionUiOutcome = {
                 kind: 'throttled',
                 retryAfterMs,
-                message: `Throttled by wallet — retry in ${seconds}s.`,
+                message: `Throttled by wallet - retry in ${seconds}s.`,
             };
             if (typeof err.burst === 'number') out.burst = err.burst;
             if (typeof err.windowMs === 'number') out.windowMs = err.windowMs;
@@ -245,7 +245,7 @@ export async function runErrorScenarios(): Promise<ErrorScenarioReport> {
         },
     };
 
-    // Site is on the user's blocklist — no retry should happen.
+    // Site is on the user's blocklist - no retry should happen.
     const blocked = new MockXChainProvider({ blockedSite: true });
     await blocked.connect({ appName: 'Example dApp' });
     const blockedRaw = await blocked.signAction(params);
@@ -253,7 +253,7 @@ export async function runErrorScenarios(): Promise<ErrorScenarioReport> {
 
     // Wallet is rate-limiting; the helper's setTimeout-based retry
     // resolves to the post-throttle outcome (still THROTTLED in the
-    // mock — the test exercises that retries don't loop forever).
+    // mock - the test exercises that retries don't loop forever).
     const throttled = new MockXChainProvider({
         throttle: { retryAfterMs: 5, burst: 2, windowMs: 1000 },
     });
@@ -266,7 +266,7 @@ export async function runErrorScenarios(): Promise<ErrorScenarioReport> {
         maxRetries: 2,
         sleep: async (ms) => {
             retryAttempts += 1;
-            // Don't actually sleep in the example — keeps the smoke fast.
+            // Don't actually sleep in the example - keeps the smoke fast.
             void ms;
         },
     });

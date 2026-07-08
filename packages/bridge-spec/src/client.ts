@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// @xchain-wallet/bridge-spec — dApp-facing reference client
+// @xchain-wallet/bridge-spec - dApp-facing reference client
 //
 // Small, dependency-free helpers for third-party dApps that want to talk
 // to an XChain wallet injected at `window.xchain`. The actual provider
@@ -32,7 +32,7 @@ export const PROVIDER_READY_EVENT = 'xchain#initialized';
 
 export interface GetProviderOpts {
     // How long to wait for injection. 0 = check once and return.
-    // Default 1000ms — injection is usually instant, but some shells
+    // Default 1000ms - injection is usually instant, but some shells
     // (web-app in iframe, slow extensions) need a beat.
     timeoutMs?: number;
 }
@@ -101,7 +101,7 @@ export function generateNonce(byteLength: number = 16): string {
 }
 
 // Build a SignInParams with a fresh nonce and a sane expiry window.
-// Pure — does not touch the provider.
+// Pure - does not touch the provider.
 export function makeSignInParams(
     appId: string,
     opts: { expiresInMs?: number; nonce?: string } = {},
@@ -114,13 +114,13 @@ export function makeSignInParams(
 }
 
 // Verify a parsed sign-in challenge is current and well-formed. Does NOT
-// verify the signature — callers use `sdk.auth.verifyMessage` for that.
+// verify the signature - callers use `sdk.auth.verifyMessage` for that.
 // Returns null on success or a human-readable reason string on failure.
 //
 // `expected.origin` is mandatory: it is the origin the relying backend
 // serves its dApp from (e.g. 'https://app.example'). The challenge's
 // origin field was stamped by the wallet from the requesting page, so a
-// mismatch means the user signed this challenge on some other site —
+// mismatch means the user signed this challenge on some other site -
 // reject it even when appId and nonce match.
 export function validateSignInChallenge(
     parts: SignInChallengeV2,

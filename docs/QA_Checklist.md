@@ -1,8 +1,8 @@
-# XChain Wallet — Manual QA Checklist
+# XChain Wallet - Manual QA Checklist
 
-Pre-release sanity check. Automated suites (smokes, vitest, Playwright, repro-build) cover code correctness; this checklist covers feature correctness — does the wallet actually behave the way a user expects when they hold it.
+Pre-release sanity check. Automated suites (smokes, vitest, Playwright, repro-build) cover code correctness; this checklist covers feature correctness - does the wallet actually behave the way a user expects when they hold it.
 
-Run this against every shell (web, extension, desktop) before tagging a release. Skip a section only with a written note in the release CHANGELOG explaining why (e.g., "extension only — no desktop changes this cycle").
+Run this against every shell (web, extension, desktop) before tagging a release. Skip a section only with a written note in the release CHANGELOG explaining why (e.g., "extension only - no desktop changes this cycle").
 
 **Status icons:**
 
@@ -32,20 +32,20 @@ Run on a clean profile (extension: fresh install / clear `chrome.storage`; web: 
 - ⬜ License agreement gate appears on first launch.
 - ⬜ License-accept checkbox is disabled until the panel is scrolled to the end.
 - ⬜ Once accepted, license gate does not reappear on subsequent launches.
-- ⬜ Create wallet — 12-word selection — recovery phrase displayed, copy works, verify-quiz mismatch surfaces the offending word.
-- ⬜ Create wallet — 24-word selection — same as above; verify-quiz scales position count.
+- ⬜ Create wallet - 12-word selection - recovery phrase displayed, copy works, verify-quiz mismatch surfaces the offending word.
+- ⬜ Create wallet - 24-word selection - same as above; verify-quiz scales position count.
 - ⬜ BIP39 passphrase advanced toggle: matched-pair input, permanent-loss warning visible, threaded into vault.
-- ⬜ Import recovery phrase — typed input, drag-drop `.txt`, scan QR (where camera is available).
-- ⬜ Import encrypted backup `.xchain-wallet` — file picker + paste both work; backup password unlocks the file.
-- ⬜ Try-before-commit demo mode — entry button works; demo banner mounts; "Exit demo & wipe" clears the wallet.
+- ⬜ Import recovery phrase - typed input, drag-drop `.txt`, scan QR (where camera is available).
+- ⬜ Import encrypted backup `.xchain-wallet` - file picker + paste both work; backup password unlocks the file.
+- ⬜ Try-before-commit demo mode - entry button works; demo banner mounts; "Exit demo & wipe" clears the wallet.
 - ⬜ ADS onboarding consent screen surfaces during create (extension + web; desktop where applicable).
 
 ---
 
 ## Send
 
-- ⬜ Send native coin (BTC / DOGE / LTC) — address paste, amount entry, fee selector.
-- ⬜ Send token — picker shows pinned + visible tokens; hidden hidden until expanded.
+- ⬜ Send native coin (BTC / DOGE / LTC) - address paste, amount entry, fee selector.
+- ⬜ Send token - picker shows pinned + visible tokens; hidden hidden until expanded.
 - ⬜ Recipient autocomplete from contacts + history.
 - ⬜ Address paste runs through paste-integrity check (clipboard hijack rejected).
 - ⬜ Lookalike-address banner fires when an address closely resembles a recent recipient with one differing character.
@@ -53,8 +53,8 @@ Run on a clean profile (extension: fresh install / clear `chrome.storage`; web: 
 - ⬜ Fiat / token amount toggle works; `Max` button populates the form.
 - ⬜ Custom fee mode shows DOGE per-kB unit-aware input.
 - ⬜ RBF toggle defaults from settings; enabling it surfaces the speed-up affordance in History.
-- ⬜ Broadcast success — pending card with txid, copy works, explorer link opens.
-- ⬜ Broadcast cancel from HW — "Transaction cancelled." toast, return to form, no half-state.
+- ⬜ Broadcast success - pending card with txid, copy works, explorer link opens.
+- ⬜ Broadcast cancel from HW - "Transaction cancelled." toast, return to form, no half-state.
 
 ## Receive
 
@@ -86,12 +86,12 @@ Run on a clean profile (extension: fresh install / clear `chrome.storage`; web: 
 
 ## Sign screens
 
-- ⬜ Send sign approval — plain-English summary shows `to`, `amount`, `asset` as the user typed them.
+- ⬜ Send sign approval - plain-English summary shows `to`, `amount`, `asset` as the user typed them.
 - ⬜ Balance-change preview accurate for SEND.
 - ⬜ Raw PSBT viewer expands; bytes match the hex copy.
-- ⬜ User-initiated Sign Message — text → signature → verify with same address succeeds.
-- ⬜ User-initiated Verify Signature — paste signature/address/message → ok / not-ok rendered correctly.
-- ⬜ User-initiated PSBT paste-in form — paste hex → preview → sign → signed PSBT hex output.
+- ⬜ User-initiated Sign Message - text → signature → verify with same address succeeds.
+- ⬜ User-initiated Verify Signature - paste signature/address/message → ok / not-ok rendered correctly.
+- ⬜ User-initiated PSBT paste-in form - paste hex → preview → sign → signed PSBT hex output.
 
 ---
 
@@ -103,17 +103,17 @@ Run on a clean profile (extension: fresh install / clear `chrome.storage`; web: 
 - ⬜ Caps-lock warning appears when caps is active in the password field.
 - ⬜ Privacy blur engages on window blur (extension + desktop).
 - ⬜ Biometric unlock works on supported devices (WebAuthn PRF).
-- ⬜ Panic mode arms — sign attempts reject with `PANIC_MODE`; 24h countdown visible in Settings.
+- ⬜ Panic mode arms - sign attempts reject with `PANIC_MODE`; 24h countdown visible in Settings.
 - ⬜ Duress passphrase silently arms panic mode and shows a decoy wallet.
 
 ---
 
 ## Backup and recovery
 
-- ⬜ Encrypted backup export — file downloads with `.xchain-wallet` extension; size > 0.
-- ⬜ Reveal seed phrase — password gate, tap-to-reveal, words match what was created.
-- ⬜ Dry-run restore — paste mnemonic → preview accounts/addresses without writing.
-- ⬜ Publish labels now — FILE action broadcasts (software wallets only).
+- ⬜ Encrypted backup export - file downloads with `.xchain-wallet` extension; size > 0.
+- ⬜ Reveal seed phrase - password gate, tap-to-reveal, words match what was created.
+- ⬜ Dry-run restore - paste mnemonic → preview accounts/addresses without writing.
+- ⬜ Publish labels now - FILE action broadcasts (software wallets only).
 - ⬜ Backup-reminder card surfaces on Home for an unverified wallet; "Back up now" routes to the right place.
 
 ---
@@ -125,7 +125,7 @@ Run with a real Trezor and Ledger device. Skip the row + add a note if a device 
 - ⬜ Trezor pair flow opens Trezor Connect; address derived correctly.
 - ⬜ Ledger pair flow opens WebHID picker; address derived correctly.
 - ⬜ Signer-select form appears when adding accounts/addresses; HW path skips the wallet password.
-- ⬜ Send via HW signer — full sign + broadcast round-trip.
+- ⬜ Send via HW signer - full sign + broadcast round-trip.
 - ⬜ Show Private Key surface is unavailable for HW addresses (gating enforced).
 
 ---
@@ -145,9 +145,9 @@ Use `packages/test-dapp/` against the extension under test.
 - ⬜ `connect()` opens the approval popup; user can narrow chains.
 - ⬜ Approval popup is OS-rendered (not in-page DOM).
 - ⬜ `getAccounts` / `getBalances` return after connect.
-- ⬜ `signMessage` round-trip — verifiable signature.
-- ⬜ `signAction({ action: 'SEND' })` — approval, sign, broadcast.
-- ⬜ `signIn` round-trip — challenge parses, signature verifies.
+- ⬜ `signMessage` round-trip - verifiable signature.
+- ⬜ `signAction({ action: 'SEND' })` - approval, sign, broadcast.
+- ⬜ `signIn` round-trip - challenge parses, signature verifies.
 - ⬜ `disconnect` fires the `disconnect` event back to the provider; `accountsChanged` fires when the user revokes from Settings.
 - ⬜ `Connected Sites` settings panel shows the test dApp; revoking removes it; revoke fires `disconnect`.
 
@@ -155,9 +155,9 @@ Use `packages/test-dapp/` against the extension under test.
 
 ## Offline / degraded mode
 
-- ⬜ Disable network — `ReachabilityBanner` appears within 30s.
-- ⬜ Attempt a Send while offline — broadcast fails, banner remains; queued-broadcast UI shows the entry (where wired).
-- ⬜ Re-enable network — banner clears; queue prompt appears (when wired).
+- ⬜ Disable network - `ReachabilityBanner` appears within 30s.
+- ⬜ Attempt a Send while offline - broadcast fails, banner remains; queued-broadcast UI shows the entry (where wired).
+- ⬜ Re-enable network - banner clears; queue prompt appears (when wired).
 - ⬜ `StalenessLabel` updates correctly across surfaces that mount it.
 
 ---
@@ -198,37 +198,37 @@ Before sign-off, verify the docs that ship with this release still match
 what the code actually does (Cluster T FOLLOWUP 5). A doc that lies is
 worse than one that's silent.
 
-- ⬜ `docs/ARCHITECTURE.md` — the four-layer signal flow, signer
+- ⬜ `docs/ARCHITECTURE.md` - the four-layer signal flow, signer
   abstraction, storage substrate, and reachability sections still match
   the current code. Look for renamed packages, deleted flows, or new
   bridge surfaces.
-- ⬜ `docs/BRIDGE.md` — every method listed (connect, getAccounts,
+- ⬜ `docs/BRIDGE.md` - every method listed (connect, getAccounts,
   getSupportedChains, getActiveChains, signMessage, signAction,
   signPsbt, signIn, disconnect, parallel, on/off) is registered in
   `packages/extension/src/bridge/handlers.js`. Error code table covers
   every code the handlers throw (BLOCKED_BY_USER, THROTTLED, etc.).
-- ⬜ `docs/Reproducible_Builds.md` — per-target status table reflects
+- ⬜ `docs/Reproducible_Builds.md` - per-target status table reflects
   the current build pipeline. Desktop `reproduce.sh` references the
   hash file the script actually produces.
-- ⬜ `docs/Verify_Release.md` — GPG key fingerprint placeholder is up
+- ⬜ `docs/Verify_Release.md` - GPG key fingerprint placeholder is up
   to date with the actual published key (or still flagged honestly as
   "pending publication").
-- ⬜ `docs/GLOSSARY.md` — newly-added user-facing terms from this
+- ⬜ `docs/GLOSSARY.md` - newly-added user-facing terms from this
   release are present (e.g. when a feature ships a new on-screen word
   the user might not know). Cross-link to `xchain-documentation/Key_Terms.md`
   is current.
-- ⬜ `docs/Threat_Model.md` — controls table and out-of-scope section
+- ⬜ `docs/Threat_Model.md` - controls table and out-of-scope section
   still hold. Anything new in the threat surface (a new bridge method,
   a new signer kind, a new persistent surface) gets a row.
-- ⬜ `MAINTAINERS.md` — lead maintainer + escalation contacts are
+- ⬜ `MAINTAINERS.md` - lead maintainer + escalation contacts are
   current. If a maintainer added or removed since the last release,
   this row blocks until the file is updated.
-- ⬜ `SECURITY.md` — disclosure contact is still active; supported
+- ⬜ `SECURITY.md` - disclosure contact is still active; supported
   versions row reflects the current release window.
-- ⬜ `CONTRIBUTING.md` — Last reviewed footer bumped if any contributor-
+- ⬜ `CONTRIBUTING.md` - Last reviewed footer bumped if any contributor-
   facing process changed (test tiers, smoke baseline rule, version-bump
   rule, governance section).
-- ⬜ `CODE_OF_CONDUCT.md` — reporting contact is still active.
+- ⬜ `CODE_OF_CONDUCT.md` - reporting contact is still active.
 
 ---
 

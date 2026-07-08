@@ -1,11 +1,11 @@
-# Reproducible builds — XChain Wallet (root)
+# Reproducible builds - XChain Wallet (root)
 
 This document is the project-wide entry point for reproducible builds
 across every wallet shell. Each target ships its own deeper `Reproducible_Builds.md`
 or equivalent script under its package; this file orients readers,
 states the project-wide promise, and links out.
 
-**Spec reference:** §51 of `XCHAIN_WALLET_SPEC.md` — Build and Release
+**Spec reference:** §51 of `XCHAIN_WALLET_SPEC.md` - Build and Release
 Per Target.
 
 ---
@@ -34,7 +34,7 @@ What this does NOT protect against (out of scope for Level 2):
   binaries; a self-built Chromium fork is not realistic at our scale).
 - Operating-system-vendor signing infrastructure (Apple notarization,
   Microsoft Authenticode). Signed outputs are inherently maintainer-specific
-  — Level 2 verifies the *content going in to* signing, not the signed
+  - Level 2 verifies the *content going in to* signing, not the signed
   byte stream.
 - The maintainer's signing keys themselves. Key rotation + hardware
   signers + revocation is a separate concern tracked under §51 and
@@ -46,13 +46,13 @@ What this does NOT protect against (out of scope for Level 2):
 
 | Target | Package | Artifact | Status | Doc |
 |---|---|---|---|---|
-| Desktop | `packages/desktop` | Linux pre-signing `linux-unpacked/` directory | Reproducible (Level 2). macOS / Windows publish maintainer-built pre-signing SHAs only — see desktop doc for rationale | [`packages/desktop/Reproducible_Builds.md`](../packages/desktop/Reproducible_Builds.md) |
+| Desktop | `packages/desktop` | Linux pre-signing `linux-unpacked/` directory | Reproducible (Level 2). macOS / Windows publish maintainer-built pre-signing SHAs only - see desktop doc for rationale | [`packages/desktop/Reproducible_Builds.md`](../packages/desktop/Reproducible_Builds.md) |
 | Extension | `packages/extension` | Unpacked extension directory + signed `.zip` for the Chrome / Firefox / Edge stores | Pre-signing reproducibility shipping alongside store-listing automation in §51 follow-up; build is deterministic today (Vite + frozen-lockfile) but the per-release SHA capture is not yet published | tracked in `MAINTAINERS.md` |
 | Web | `packages/web` | Static SPA bundle uploaded to `downloads.xchain.io` | Build is deterministic; artifact integrity ships via Subresource Integrity (SRI) attributes on script / link tags so the browser refuses to execute a tampered file. Per-release SHA-256 capture lands in tandem with extension publishing | same |
 
 ---
 
-## Verification protocol — desktop (Linux)
+## Verification protocol - desktop (Linux)
 
 The end-to-end recipe lives in the desktop doc. Short version:
 
@@ -66,13 +66,13 @@ diff reproduce-out/RELEASE_HASHES.txt \
 ```
 
 Zero-byte diff = reproducible. Any diff means either toolchain drift,
-a regression in our determinism handling, or supply-chain tampering —
+a regression in our determinism handling, or supply-chain tampering -
 see the desktop doc's diagnostics section.
 
-For the broader user-facing story — "I downloaded a release artifact;
-how do I verify it?" — see [`docs/Verify_Release.md`](Verify_Release.md).
+For the broader user-facing story - "I downloaded a release artifact;
+how do I verify it?" - see [`docs/Verify_Release.md`](Verify_Release.md).
 
-## Verification protocol — extension and web
+## Verification protocol - extension and web
 
 These targets do not yet ship a reproduce script. The deterministic-build
 pipeline exists (Vite + `pnpm install --frozen-lockfile` + pinned Node
@@ -106,16 +106,16 @@ Across every shell:
 - **`LC_ALL=C.UTF-8 TZ=UTC`** pinned in both Dockerfile and
   in-container env so locale-sensitive tools (`sort`, `date`) emit
   deterministic output.
-- **Vite** — source maps off in production, deterministic chunk +
+- **Vite** - source maps off in production, deterministic chunk +
   asset filenames, `assetsInlineLimit: 0` to prevent small-file
   inlining variance, no plugin that captures `Date.now()` or random
   IDs.
-- **electron-builder** (desktop) — `npmRebuild: false`,
+- **electron-builder** (desktop) - `npmRebuild: false`,
   `buildDependenciesFromSource: false`, deterministic uninstaller
   names, SHA-256-pinned rfc3161 timestamp server.
 
 If you find a non-determinism source not listed here, file an issue
-under the `reproducibility` label — it is a bug.
+under the `reproducibility` label - it is a bug.
 
 ---
 
@@ -129,5 +129,5 @@ release fingerprint is published in [`SECURITY.md`](../SECURITY.md).
 
 The Electron framework download (used by the desktop shell) and the
 Trezor Connect iframe (loaded at runtime under a strict CSP) are
-documented trust boundaries — see the desktop doc for the full
+documented trust boundaries - see the desktop doc for the full
 narrative including the Trezor on-device-display mitigation.

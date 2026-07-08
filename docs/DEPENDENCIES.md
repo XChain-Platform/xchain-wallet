@@ -3,17 +3,17 @@
 Per spec §9.8, every third-party runtime dependency in XChain Wallet is
 enumerated here with:
 
-- **Why we depend on it** — the specific feature it provides that we
+- **Why we depend on it** - the specific feature it provides that we
   would otherwise have to implement (and review) ourselves
-- **License** — must be permissive (MIT, Apache-2.0, BSD, ISC, CC0)
-- **Maintainer context** — trust signal; we prefer deps from authors who
+- **License** - must be permissive (MIT, Apache-2.0, BSD, ISC, CC0)
+- **Maintainer context** - trust signal; we prefer deps from authors who
   also maintain widely-used adjacent packages
 
 Any new runtime dep requires an addition to this file. CI runs
 `pnpm audit --prod` on every PR; known advisories are surfaced as
 review comments before merge.
 
-> **Scope.** This file tracks *runtime* dependencies — anything that
+> **Scope.** This file tracks *runtime* dependencies - anything that
 > ships in a user-installable artifact. Dev-only tooling (build,
 > lint, test runners) lives in each package's `devDependencies` and
 > is reviewed at bump time but not enumerated here.
@@ -22,7 +22,7 @@ review comments before merge.
 
 ### `@noble/hashes` (^1.5.0)
 
-**Why.** SHA-256, SHA-512, HMAC, Argon2id, PBKDF2 — all the primitives
+**Why.** SHA-256, SHA-512, HMAC, Argon2id, PBKDF2 - all the primitives
 behind the wallet's crypto layer (KDF, seed derivation, commitment
 keys, label-sync, PSBT-QR integrity). Constant-time implementations,
 audited, no native bindings.
@@ -67,7 +67,7 @@ the ubiquitous case and `@scure/bip39` is the audited implementation.
 
 ### `@xchain-wallet/core` (workspace:\*)
 
-Workspace dep. Pulls in all of core's transitive deps listed above —
+Workspace dep. Pulls in all of core's transitive deps listed above -
 no new third-party deps introduced by the extension shell itself.
 
 ## `@xchain-wallet/web`
@@ -100,11 +100,11 @@ definitions; no third-party runtime deps.
 
 ## Review cadence
 
-- **Every PR that touches a `package.json`** — reviewer confirms this
+- **Every PR that touches a `package.json`** - reviewer confirms this
   file is updated for any new / removed / version-bumped runtime dep.
-- **Weekly** — `pnpm outdated -r` run against the lockfile; bumps
+- **Weekly** - `pnpm outdated -r` run against the lockfile; bumps
   scheduled for the next weekly release window.
-- **On advisory** — if `pnpm audit` surfaces a CVE mid-cycle, it goes
+- **On advisory** - if `pnpm audit` surfaces a CVE mid-cycle, it goes
   to the top of the queue regardless of cadence.
 
 ## Floor versions

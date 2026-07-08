@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# check-no-dev-mock.sh — pre-release gate.
+# check-no-dev-mock.sh - pre-release gate.
 #
 # Greps `dist/` bundles for the dev-mock SDK fallback warning. Presence
 # of that string in a production build means xchain-sdk didn't resolve
-# during the Vite bundle pass — shipping it would produce pseudo-addresses
+# during the Vite bundle pass - shipping it would produce pseudo-addresses
 # on mainnet. Hard-fails the release pipeline.
 #
 # Usage:
@@ -42,9 +42,9 @@ done
 
 if [ "$failures" -gt 0 ]; then
     echo
-    echo "Pre-release gate FAILED — dev-SDK stub leaked into a production bundle."
+    echo "Pre-release gate FAILED - dev-SDK stub leaked into a production bundle."
     echo "Fix: ensure xchain-sdk is installed before running the build."
     exit 1
 fi
 
-echo "OK — no dev-SDK markers in dist/"
+echo "OK - no dev-SDK markers in dist/"

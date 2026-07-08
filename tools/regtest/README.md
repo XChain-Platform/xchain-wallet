@@ -1,16 +1,16 @@
-# Regtest integration — `tools/regtest/`
+# Regtest integration - `tools/regtest/`
 
 Spec reference: `claude/reports/xchain-wallet/XCHAIN_WALLET_SPEC.md`
 §52 (testing) and §49 (offline / degraded mode).
 
 This directory holds helpers for running the wallet against a local
-regtest stack — bitcoin / dogecoin / litecoin nodes plus the
+regtest stack - bitcoin / dogecoin / litecoin nodes plus the
 `xchain-decoder` / `xchain-indexer` / `xchain-explorer` / `xchain-hub`
 backend, all auto-mined by `xchain-regtest-miner` for instant block
 confirmations.
 
 The actual stack is **upstream**, not vendored here. It lives at
-`~/Sites/XChain-Platform/xchain-node` — the platform's CLI
+`~/Sites/XChain-Platform/xchain-node` - the platform's CLI
 orchestrator. The scripts here are the thin glue that lets the
 wallet's smoke / E2E tests target it without re-implementing
 docker-compose orchestration.
@@ -22,22 +22,22 @@ docker-compose orchestration.
 Several wallet flows can only be exercised end-to-end against a real
 indexer:
 
-- Cross-chain LINK threading (§23.5) — needs both chains' indexers
+- Cross-chain LINK threading (§23.5) - needs both chains' indexers
   populated and a real LINK action confirmed on-chain.
-- Send + RBF + CPFP (§44) — needs a fee market and a mempool.
-- Reachability + offline banner (§49) — needs an actual RPC endpoint
+- Send + RBF + CPFP (§44) - needs a fee market and a mempool.
+- Reachability + offline banner (§49) - needs an actual RPC endpoint
   to flip on and off.
-- bridge.signAction → broadcast — needs the encoder + decoder loop.
+- bridge.signAction → broadcast - needs the encoder + decoder loop.
 
 The wallet's smokes (`test/smoke/`) and unit tests stay out of this
-loop — they exercise pure logic. Anything that requires an honest
+loop - they exercise pure logic. Anything that requires an honest
 "signed → broadcast → mined → indexed → read back" round-trip lives
 under `test/e2e/` (Playwright) or `test/integration/` (mocha against
 a regtest stack).
 
 ## Path forward
 
-Today this is **scaffolding only** — `bootstrap.sh` checks that the
+Today this is **scaffolding only** - `bootstrap.sh` checks that the
 upstream stack is reachable; `down.sh` is a thin pointer at the
 upstream `xchain-node down` command; tests opt in via
 `XCHAIN_REGTEST_BASE_URL` (default `http://localhost`) and skip when
@@ -45,7 +45,7 @@ the stack isn't running.
 
 Full E2E provisioning (one-shot `pnpm test:integration` that brings
 the stack up, runs every relevant test, tears it down) lands
-alongside G163 (E2E Playwright suite against regtest) — pairs with
+alongside G163 (E2E Playwright suite against regtest) - pairs with
 this row in `claude/reports/xchain-wallet/SPEC_GAPS.md`.
 
 ## Inputs
@@ -64,7 +64,7 @@ via `xchain-node` config):
 | `xchain-hub` | `http://localhost:18001` | Hub fetches (G007 / G127) |
 | `xchain-regtest-miner` | side-car | Auto-mines pending mempool txs |
 
-Wallet configures these via `settings.sdkEndpoints[chainId]` — Settings
+Wallet configures these via `settings.sdkEndpoints[chainId]` - Settings
 → Network & Endpoints panel. The bundled regtest descriptors
 (`packages/core/src/registry/descriptors/{bitcoin,dogecoin,litecoin}.js`)
 already pin the localhost defaults.
@@ -73,12 +73,12 @@ already pin the localhost defaults.
 
 | Script | Purpose | Status |
 |---|---|---|
-| `bootstrap.sh` | Probe the upstream stack; print a readiness report; exit 0 when every service responds. | Scaffolding — runnable today. |
-| `down.sh` | Wrapper around `xchain-node stop` — exists so wallet test runners don't depend on the platform repo's exact stop command. | Scaffolding — runnable today. |
-| `wait-ready.sh` | Block until every required service responds within a timeout; used by `pnpm test:integration` to bring the stack up before running tests. | Scaffolding — runnable today. |
+| `bootstrap.sh` | Probe the upstream stack; print a readiness report; exit 0 when every service responds. | Scaffolding - runnable today. |
+| `down.sh` | Wrapper around `xchain-node stop` - exists so wallet test runners don't depend on the platform repo's exact stop command. | Scaffolding - runnable today. |
+| `wait-ready.sh` | Block until every required service responds within a timeout; used by `pnpm test:integration` to bring the stack up before running tests. | Scaffolding - runnable today. |
 
 All three exit 0 on success and a non-zero code with a structured
-diagnostic on failure. They never start a stack themselves — that
+diagnostic on failure. They never start a stack themselves - that
 lives in `xchain-node`. The contract is "the wallet expects you to
 have run `xchain-node start` first."
 
@@ -93,17 +93,17 @@ have run `xchain-node start` first."
 ## Per-test-suite procedure
 
 ```bash
-# Bring the upstream stack up — once per dev session.
+# Bring the upstream stack up - once per dev session.
 cd ~/Sites/XChain-Platform/xchain-node
 ./xchain-node.sh start
 
 # From the wallet repo:
 bash tools/regtest/wait-ready.sh
 pnpm test:integration                # runs the wallet suite
-bash tools/regtest/down.sh           # optional — leave it up between runs
+bash tools/regtest/down.sh           # optional - leave it up between runs
 ```
 
-Smokes and unit tests do NOT need any of this — they're synthetic.
+Smokes and unit tests do NOT need any of this - they're synthetic.
 Run `pnpm test:smoke` / `pnpm test:unit` against an empty regtest.
 
 ## Status today

@@ -1,4 +1,4 @@
-/* §49.5 — Queued broadcast banner. Lives near the top of the unlocked
+/* §49.5 - Queued broadcast banner. Lives near the top of the unlocked
    tree; only renders when the queue is non-empty.
 */
 
@@ -88,7 +88,7 @@
     opacity: 0.6;
 }
 
-/* §53 / Cluster K FOLLOWUP 2 — explicit focus ring. */
+/* §53 / Cluster K FOLLOWUP 2 - explicit focus ring. */
 .broadcastBtn:focus-visible,
 .discardBtn:focus-visible {
     outline: 2px solid var(--xc-focus-ring);

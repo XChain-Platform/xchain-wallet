@@ -16,7 +16,7 @@
 //   - Type conformance check: if the mock compiles against XChainProvider,
 //     the interface is coherent
 //
-// This is NOT the wallet's production inject script — that lives in
+// This is NOT the wallet's production inject script - that lives in
 // @xchain-wallet/extension once implemented. The shapes here are what a
 // well-behaved provider should return; they are not authoritative responses
 // for any real chain state.
@@ -60,7 +60,7 @@ export interface MockProviderOptions {
     // If true, any sign* method returns USER_REJECTED. Lets tests exercise
     // the error path.
     rejectAll?: boolean;
-    // If true, every connect / sign* call returns BLOCKED_BY_USER —
+    // If true, every connect / sign* call returns BLOCKED_BY_USER -
     // models the "user un-blocks in wallet Settings" flow (§12 / Cluster S
     // FOLLOWUP 5). Higher priority than `rejectAll` so the dApp branch
     // for "blocked, no retry" is reachable.
@@ -149,7 +149,7 @@ export class MockXChainProvider implements XChainProvider {
 
     // Priority: blockedSite > throttle > rejectAll. Returning the
     // matching error result lets sign* methods short-circuit before
-    // doing any work — mirrors how the production wallet checks site
+    // doing any work - mirrors how the production wallet checks site
     // status before opening an approval window.
     private maybeBlockedOrThrottled(): { ok: false; error: 'BLOCKED_BY_USER' } | { ok: false; error: 'THROTTLED'; retryAfterMs: number; burst?: number; windowMs?: number } | null {
         if (this.opts.blockedSite) {

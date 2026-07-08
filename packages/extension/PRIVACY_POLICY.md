@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- Copyright © 2026 Dankest, LLC -->
 
-# XChain Wallet — Privacy Policy
+# XChain Wallet - Privacy Policy
 
 Last updated: 2026-04-24  
 Applies to: XChain Wallet browser extension (Chrome, Edge, Brave, any Chromium-based browser that supports the Chrome Web Store listing).
@@ -32,9 +32,9 @@ No analytics endpoint, crash-reporting endpoint, advertising endpoint, or first-
 
 ## Permissions and what they are used for
 
-- **`storage`** — read and write the encrypted wallet material + public data + dApp grants described above.
-- **`content_scripts` on `http://*/*` and `https://*/*`** — inject the `window.xchain` provider so dApps can request account information and transaction signatures from the wallet. The injected provider proxies requests to the wallet's background service worker through an isolated message channel; the wallet never reads page content.
-- **`web_accessible_resources`** — exposes the injected provider bundle to pages that load it.
+- **`storage`** - read and write the encrypted wallet material + public data + dApp grants described above.
+- **`content_scripts` on `http://*/*` and `https://*/*`** - inject the `window.xchain` provider so dApps can request account information and transaction signatures from the wallet. The injected provider proxies requests to the wallet's background service worker through an isolated message channel; the wallet never reads page content.
+- **`web_accessible_resources`** - exposes the injected provider bundle to pages that load it.
 
 The extension requests no `host_permissions` (no blanket host access beyond what content-script matches expressly grant), no `tabs`, no `webRequest`, no `clipboardRead`, no `cookies`, no `identity`, no `bookmarks`, no `downloads`.
 
@@ -60,11 +60,11 @@ We do not sell your data. We do not transfer your data to a third party. Since t
 - **Deletion.** Uninstalling the extension permanently removes every wallet stored on that browser profile (encrypted material + addresses + contacts + dApp grants). There is no server copy to delete.
 - **Contact.** Questions or complaints: open an issue at <https://github.com/XChain-platform/xchain-wallet/issues> or email <privacy@dankest.llc>.
 
-## Chrome Web Store — single-purpose disclosure
+## Chrome Web Store - single-purpose disclosure
 
 The single purpose of the XChain Wallet extension is to let a user hold and move XChain Platform assets (Bitcoin, Dogecoin, Litecoin, and their XChain-issued tokens) self-custodially from within the browser, and to sign XChain actions on behalf of dApps the user connects.
 
-## Chrome Web Store — limited-use disclosure
+## Chrome Web Store - limited-use disclosure
 
 Our use of information received from Google APIs will adhere to the Chrome Web Store User Data Policy, including the Limited Use requirements. The extension does not use Google APIs and does not process Google user data. This disclosure is included because the CWS listing form requires an affirmative statement.
 

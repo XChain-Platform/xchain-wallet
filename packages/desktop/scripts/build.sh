@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Deterministic build entry point — runs INSIDE the reproducible-build
+# Deterministic build entry point - runs INSIDE the reproducible-build
 # Docker image. See packages/desktop/Dockerfile + scripts/reproduce.sh.
 #
 # Assumptions (enforced by the Dockerfile + reproduce.sh):
@@ -10,16 +10,16 @@
 
 set -euo pipefail
 
-: "${SOURCE_DATE_EPOCH:?SOURCE_DATE_EPOCH must be set — reproduce.sh sets this from the commit date}"
+: "${SOURCE_DATE_EPOCH:?SOURCE_DATE_EPOCH must be set - reproduce.sh sets this from the commit date}"
 
-echo "[xchain-wallet] build.sh — SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH}"
-echo "[xchain-wallet] node: $(node --version) — pnpm: $(pnpm --version)"
+echo "[xchain-wallet] build.sh - SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH}"
+echo "[xchain-wallet] node: $(node --version) - pnpm: $(pnpm --version)"
 
 cd /workspace
 
 # --- 1. Install deps -----------------------------------------------------
 # `--frozen-lockfile` fails the build if pnpm-lock.yaml is out of sync
-# with package.json — critical for reproducibility (unpinned deps are
+# with package.json - critical for reproducibility (unpinned deps are
 # the most common source of non-determinism).
 pnpm install --frozen-lockfile
 
@@ -32,7 +32,7 @@ pnpm --filter @xchain-wallet/desktop run build:renderer
 
 # --- 3. Package --------------------------------------------------------
 # `electron-builder --dir` produces the unpacked app only (no dmg/nsis/
-# AppImage wrapping) — the Level-2 verification target is the
+# AppImage wrapping) - the Level-2 verification target is the
 # pre-signing app bundle. Full packaging happens in the official
 # release path (build-release.sh) where signing certs are present.
 pnpm --filter @xchain-wallet/desktop run dist:unpacked
@@ -47,5 +47,5 @@ find . -type f -not -path '*/node_modules/*' -print0 \
     | xargs -0 sha256sum \
     > /out/RELEASE_HASHES.txt
 
-echo "[xchain-wallet] build.sh — done"
+echo "[xchain-wallet] build.sh - done"
 echo "Manifest: /out/RELEASE_HASHES.txt"

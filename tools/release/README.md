@@ -1,16 +1,16 @@
-# Release-signing pipeline — `tools/release/`
+# Release-signing pipeline - `tools/release/`
 
 Spec reference: `claude/reports/xchain-wallet/XCHAIN_WALLET_SPEC.md` §51.
 
 This directory holds the scripts and conventions for cutting a signed
-release. Today the pipeline ships in **scaffolding form** — the
+release. Today the pipeline ships in **scaffolding form** - the
 scripts run end-to-end against a built artifact set, but the actual
 GPG signing step requires the maintainer's release key to be
 configured. Until the release key is published (G180 in
 `claude/reports/xchain-wallet/SPEC_GAPS.md`), `sign.sh` exits with a
 clear error pointing at `SECURITY.md`.
 
-The companion verification side lives at `docs/Verify_Release.md` —
+The companion verification side lives at `docs/Verify_Release.md` -
 end users follow that recipe to verify what this pipeline produces.
 
 ---
@@ -20,11 +20,11 @@ end users follow that recipe to verify what this pipeline produces.
 The pipeline expects a built artifact directory containing one or
 more of:
 
-- `*.dmg` / `*.app.zip`     — desktop macOS
-- `*.exe` / `*.msi`         — desktop Windows
-- `*.AppImage` / `*.deb`    — desktop Linux
-- `xchain-wallet-extension-vX.Y.Z.zip`  — extension store bundle
-- `xchain-wallet-web-vX.Y.Z.tar.gz`     — static web SPA bundle
+- `*.dmg` / `*.app.zip`     - desktop macOS
+- `*.exe` / `*.msi`         - desktop Windows
+- `*.AppImage` / `*.deb`    - desktop Linux
+- `xchain-wallet-extension-vX.Y.Z.zip`  - extension store bundle
+- `xchain-wallet-web-vX.Y.Z.tar.gz`     - static web SPA bundle
 
 Build invocation per shell is documented in `CONTRIBUTING.md` →
 "Per-shell builds".
@@ -33,8 +33,8 @@ Build invocation per shell is documented in `CONTRIBUTING.md` →
 
 | Script | Purpose | Status |
 |---|---|---|
-| `sign.sh` | Compute SHA-256 manifest of every artifact in the input directory; GPG-sign the manifest with the release key. | Scaffolding — reachable, but errors out if `XCHAIN_RELEASE_GPG_KEY` is unset (G180 pending). |
-| `verify.sh` | Local verification helper: re-compute hashes and verify the GPG signature on a downloaded `RELEASE_HASHES.txt`. Mirrors the recipe in `docs/Verify_Release.md`. | Scaffolding — runnable today. |
+| `sign.sh` | Compute SHA-256 manifest of every artifact in the input directory; GPG-sign the manifest with the release key. | Scaffolding - reachable, but errors out if `XCHAIN_RELEASE_GPG_KEY` is unset (G180 pending). |
+| `verify.sh` | Local verification helper: re-compute hashes and verify the GPG signature on a downloaded `RELEASE_HASHES.txt`. Mirrors the recipe in `docs/Verify_Release.md`. | Scaffolding - runnable today. |
 
 Both scripts use `set -euo pipefail`. Both refuse to overwrite an
 existing manifest / signature file unless `--force` is passed.
@@ -55,7 +55,7 @@ existing manifest / signature file unless `--force` is passed.
 4. Upload `RELEASE_HASHES.txt` + `RELEASE_HASHES.txt.asc` + every artifact to the GitHub release tag.
 5. Run `bash tools/release/verify.sh --input release-artifacts/vX.Y.Z/` from a clean checkout to confirm the round-trip.
 
-The reproducible-build verification is a separate step — see
+The reproducible-build verification is a separate step - see
 [`tools/build-reproduce/`](../build-reproduce/) and
 [`docs/Reproducible_Builds.md`](../../docs/Reproducible_Builds.md).
 

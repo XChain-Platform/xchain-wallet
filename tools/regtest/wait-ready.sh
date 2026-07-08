@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# tools/regtest/wait-ready.sh — block until the upstream regtest
+# tools/regtest/wait-ready.sh - block until the upstream regtest
 # stack is fully up (G004 / §52). Used by `pnpm test:integration`
 # to gate test execution behind a healthy stack.
 #
@@ -27,7 +27,7 @@ while :; do
     fi
     now_ms=$(($(date +%s) * 1000))
     if [[ "$now_ms" -ge "$deadline" ]]; then
-        echo "wait-ready.sh: stack not ready after $((TIMEOUT_MS / 1000))s — failing." >&2
+        echo "wait-ready.sh: stack not ready after $((TIMEOUT_MS / 1000))s - failing." >&2
         bash "$SCRIPT_DIR/bootstrap.sh" >&2 || true
         exit 1
     fi

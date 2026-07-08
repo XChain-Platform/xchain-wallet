@@ -5,13 +5,13 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <!--
             CSP notes (§40.12, Step 19):
-            - `frame-src https://connect.trezor.io` — Trezor Connect loads
+            - `frame-src https://connect.trezor.io` - Trezor Connect loads
               its popup/iframe from this domain. Allow-listing it
               explicitly rather than leaving `frame-src` unset makes the
               trust assumption auditable. See REPRODUCIBLE_BUILDS.md §
               "Trezor Connect trust boundary". A later step can bundle
               Connect locally and drop this directive.
-            - `connect-src` stays 'self' — the renderer itself never
+            - `connect-src` stays 'self' - the renderer itself never
               fetches from connect.trezor.io. Only the Trezor iframe does,
               and it lives in a separate origin bound by frame-src above.
         -->

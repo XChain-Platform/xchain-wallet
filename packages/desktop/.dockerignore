@@ -1,4 +1,4 @@
-# Exclude from Docker build context — keeps the image small + avoids
+# Exclude from Docker build context - keeps the image small + avoids
 # leaking local dev state into the reproducible-build path.
 
 **/node_modules

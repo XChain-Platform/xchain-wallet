@@ -12,7 +12,7 @@
     user-select: none;
     text-decoration: none;
     /* Button labels never wrap. If a label is too long for its container,
-     * shorten the label — wrapping splits a single CTA into a paragraph
+     * shorten the label - wrapping splits a single CTA into a paragraph
      * and breaks alignment with the icon. */
     white-space: nowrap;
 }

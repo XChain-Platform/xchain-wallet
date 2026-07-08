@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Third-party reproduction script — anyone can run this to build the
+# Third-party reproduction script - anyone can run this to build the
 # same pre-signing artifact as an official xchain-wallet-desktop release.
 #
 # Usage:

@@ -1,5 +1,5 @@
 /* Shared styles across the approval kinds. Each kind component adds
- * its own co-located module too — these tokens-only utilities keep
+ * its own co-located module too - these tokens-only utilities keep
  * the headers / footers / summaries consistent. */
 
 .header {

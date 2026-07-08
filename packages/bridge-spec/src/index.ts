@@ -26,7 +26,7 @@
 // Kept in sync with this package's package.json version.
 export const BRIDGE_SPEC_VERSION = '0.1.0';
 
-// Cluster F FOLLOWUP 3 — version negotiation. Versions a wallet
+// Cluster F FOLLOWUP 3 - version negotiation. Versions a wallet
 // claiming to implement BRIDGE_SPEC_VERSION can speak. dApps requesting
 // a version outside this list get a clean BRIDGE_VERSION_MISMATCH from
 // `connect`, instead of a generic error when they later call a method
@@ -54,7 +54,7 @@ export function isBridgeVersionSupported(requested: unknown): boolean {
 // requesting page, so by itself it proves nothing about *where* the
 // sign-in happened; origin is recorded by the wallet from the page
 // that made the request and cannot be chosen by the dApp. Relying
-// backends MUST verify the origin field — it is what lets them reject
+// backends MUST verify the origin field - it is what lets them reject
 // a challenge signed on a look-alike site that passed a legitimate
 // app's appId. v1 challenges (no origin field) fail to parse and
 // should be rejected.
@@ -72,7 +72,7 @@ export const SIGN_IN_DEFAULT_EXPIRY_MS = 5 * 60 * 1000;
 // 'dogecoin-testnet', 'litecoin-regtest'. Treated as an opaque string.
 export type ChainId = string;
 
-// Coin family — groups mainnet/testnet/regtest variants of the same chain.
+// Coin family - groups mainnet/testnet/regtest variants of the same chain.
 export type CoinId = string;
 
 export type NetworkKind = 'mainnet' | 'testnet' | 'regtest';
@@ -84,7 +84,7 @@ export type AddressType = string;
 
 // Subset of ChainDescriptor (§9.7) exposed to dApps via getSupportedChains().
 // Internal-only fields (default encoder/explorer/hub URLs, fee strategy,
-// derivation path templates) are intentionally omitted — dApps don't need
+// derivation path templates) are intentionally omitted - dApps don't need
 // them and exposing them would leak wallet internals.
 export interface ChainDescriptor {
     id: ChainId;
@@ -99,7 +99,7 @@ export interface ChainDescriptor {
     uriScheme: string;
 }
 
-// Account as exposed to dApps — pared down from the wallet-internal schema
+// Account as exposed to dApps - pared down from the wallet-internal schema
 // (§11.3.2). The dApp sees an opaque id + display name only; BIP44 index
 // and creation timestamp are not exposed.
 export interface Account {
@@ -107,7 +107,7 @@ export interface Account {
     name: string;
 }
 
-// Address as exposed to dApps — pared down from §11.3.3. Derivation path
+// Address as exposed to dApps - pared down from §11.3.3. Derivation path
 // and publicKey-of-a-watch-only are not exposed by default.
 export interface Address {
     id: string;
@@ -137,9 +137,9 @@ export interface Balance {
 // ---------------------------------------------------------------------------
 
 // Per-action-type permission:
-//   'always' — wallet signs without prompting
-//   'ask'    — wallet prompts every time (default)
-//   'never'  — wallet rejects without prompting
+//   'always' - wallet signs without prompting
+//   'ask'    - wallet prompts every time (default)
+//   'never'  - wallet rejects without prompting
 export type ActionPermission = 'always' | 'ask' | 'never';
 
 // Permission record the dApp sees after connect(). Shape mirrors
@@ -248,7 +248,7 @@ export interface SendActionParams {
     memo?: string;
 }
 
-// Params for a SWEEP action (Phase 1) — empty a source of all of one asset,
+// Params for a SWEEP action (Phase 1) - empty a source of all of one asset,
 // or all assets if asset is omitted.
 export interface SweepActionParams {
     fromAddress: string;
@@ -275,7 +275,7 @@ export interface SignActionSuccess {
     chainId: ChainId;
 }
 
-// Specific UNSUPPORTED_ACTION shape — includes the current supported-action
+// Specific UNSUPPORTED_ACTION shape - includes the current supported-action
 // list so dApps can surface a useful message to the user.
 export interface UnsupportedActionResult {
     ok: false;
@@ -373,7 +373,7 @@ export interface CoSignRefused {
 export type CoSignResult = CoSignApprovedSuccess | CoSignRefused | BridgeErrorResult;
 
 // ---------------------------------------------------------------------------
-// signIn — Sign-in with XChain (§43.6)
+// signIn - Sign-in with XChain (§43.6)
 // ---------------------------------------------------------------------------
 
 export interface SignInParams {
@@ -392,7 +392,7 @@ export interface SignInChallengeV2 {
     version: 2;
     appId: string;
     // Page origin as stamped by the wallet (the requesting page's
-    // location.origin recorded at the trust boundary) — NOT supplied by
+    // location.origin recorded at the trust boundary) - NOT supplied by
     // the dApp. Relying backends MUST check this equals the origin they
     // serve the dApp from; appId alone is attacker-chosen.
     origin: string;
@@ -420,7 +420,7 @@ export type SignInResult = SignInSuccess | BridgeErrorResult;
 //   `XChain Sign-In v2 | <appId> | <origin> | <address> | <nonce> | <timestamp> | <expiresAt>`
 //
 // All fields are string-serialized, separated by " | ". Pipes inside any
-// field are rejected at format time — dApps must supply appId/nonce values
+// field are rejected at format time - dApps must supply appId/nonce values
 // that do not contain the separator. The versioned prefix lets validators
 // detect the format on the wire; v1 challenges ("XChain Sign-In", no
 // origin field) fail parseSignInChallenge and must be rejected.
@@ -498,7 +498,7 @@ export interface BridgeEventMap {
 export type BridgeEvent = keyof BridgeEventMap;
 
 // ---------------------------------------------------------------------------
-// XChainProvider — the window.xchain object
+// XChainProvider - the window.xchain object
 // ---------------------------------------------------------------------------
 
 export interface XChainProvider {

@@ -8,7 +8,7 @@
     width: 100%;
 }
 
-/* ───── Hero — token identity (no balance, this is the issuer view). ───── */
+/* ───── Hero - token identity (no balance, this is the issuer view). ───── */
 
 .hero {
     position: relative;
@@ -104,7 +104,7 @@
     line-height: 1.4;
 }
 
-/* ───── Market panel — stats strip + chart placeholder. ───── */
+/* ───── Market panel - stats strip + chart placeholder. ───── */
 
 .marketPanel {
     background: var(--xc-surface-raised);
@@ -259,7 +259,7 @@
 
 .manageLabel { font-weight: 600; }
 
-/* "More" dropdown — mirrors Home's quickActionMore. */
+/* "More" dropdown - mirrors Home's quickActionMore. */
 
 .manageMoreWrap {
     position: relative;
@@ -322,7 +322,7 @@
 
 .manageMoreItemDanger .manageMoreItemIcon { color: var(--xc-danger, #DC2626); }
 
-/* ───── Tabs — match TokenDetail's pattern. ───── */
+/* ───── Tabs - match TokenDetail's pattern. ───── */
 
 .tabs {
     display: flex;
@@ -470,7 +470,7 @@ button.row:hover:not(:disabled) {
 
 .inlineLink:hover { text-decoration: underline; }
 
-/* ───── Genesis + subassets section — read-only metadata block at
+/* ───── Genesis + subassets section - read-only metadata block at
    the bottom of the page. Two-column key/value list + chip-style
    subasset list so the bottom of the page has structured info
    without competing with the tabs above. ───── */
@@ -560,7 +560,7 @@ button.row:hover:not(:disabled) {
     margin: var(--xc-space-1) 0;
 }
 
-/* Row variant with a leading TickerIcon — used by OrdersPanel. Switches
+/* Row variant with a leading TickerIcon - used by OrdersPanel. Switches
    the row into a horizontal flex with a fixed icon column on the left
    and the existing header / summary / source / meta stack on the right. */
 .histRowWithIcon {
@@ -693,7 +693,7 @@ button.row:hover:not(:disabled) {
     text-transform: uppercase;
 }
 
-/* ───── "Official token" banner — same treatment as TokenDetail's:
+/* ───── "Official token" banner - same treatment as TokenDetail's:
    green = on a project registry's owner-attested current roster. ───── */
 
 .officialBanner {

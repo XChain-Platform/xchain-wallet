@@ -158,7 +158,7 @@
     white-space: nowrap;
 }
 
-/* Summary row — active wallet / account, click navigates to the
+/* Summary row - active wallet / account, click navigates to the
    picker route. Whole row is the click target; chevron signals
    "tap for more". */
 .summaryRow {

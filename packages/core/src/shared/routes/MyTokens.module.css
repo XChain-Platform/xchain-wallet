@@ -1,6 +1,6 @@
 /* `<Screen>` already provides `padding: var(--xc-space-4)` on its
    inner main element; this wrapper only needs to stack children with
-   a gap. No extra padding, no max-width — match the DEX / MarketsList
+   a gap. No extra padding, no max-width - match the DEX / MarketsList
    layout the rest of the wallet uses. */
 .body {
     display: flex;
@@ -65,7 +65,7 @@
     margin-bottom: 0;
 }
 
-/* Outlined segmented control — adjacent chips share a stroke so the
+/* Outlined segmented control - adjacent chips share a stroke so the
    pair reads as "pick one of these" instead of two independent toggles.
    Height locked to the Input's 36px (via box-sizing) so it baselines
    with the search box. */

@@ -4,7 +4,7 @@ Throughput / latency / memory measurements for hot paths the wallet
 runs at user-facing speed (KDF, AEAD, balance-list formatting, Vault
 open/close).
 
-The harness is intentionally simple — each scenario is a function
+The harness is intentionally simple - each scenario is a function
 that runs N iterations and reports the median + p95. No external
 dependencies, no flame-graph wiring; the goal is "we know if a PR
 made the unlock 2× slower."

@@ -1,7 +1,7 @@
 # Smoke tests
 
 Fast, self-contained Node scripts. Each one exercises a single thin slice
-of wiring — module loads, expected exports, route is mounted in the right
+of wiring - module loads, expected exports, route is mounted in the right
 shell, button calls the right messaging method, etc. They run in plain
 `node` (no Vitest, no jsdom) so they stay cheap.
 
@@ -12,14 +12,14 @@ A smoke fails when:
   the smoke updated).
 
 A smoke does NOT fail just because runtime behaviour misbehaves under load
-or a hardware signer disconnects — those belong in `chaos/`, `boundary/`,
+or a hardware signer disconnects - those belong in `chaos/`, `boundary/`,
 `integration/`, or `e2e/`.
 
 ## Layout
 
 ```
 test/smoke/
-├── _run-smokes.js         walker / runner — drops a smoke anywhere = picked up
+├── _run-smokes.js         walker / runner - drops a smoke anywhere = picked up
 ├── setup.js               (placeholder)
 ├── core/                  decoder, action-decoder, branding, i18n, shared-routes
 ├── audits/                CI gates: a11y, repro-build, manifest, sdk-bundle,
@@ -60,9 +60,9 @@ node test/smoke/_run-smokes.js               # equivalent to test:smoke
 - Filename: `<topic>.smoke.js`. One topic per file.
 - Top-of-file comment: what wiring this asserts and why a future
   refactor would break it.
-- Last line: `console.log('OK — <topic> smoke (<one-line summary>)')`
+- Last line: `console.log('OK - <topic> smoke (<one-line summary>)')`
   so failures are self-locating in CI logs.
 - `cwd` is the wallet repo root (`spawnSync` sets it). Smokes
   resolve project files via plain `packages/...`.
 - New smokes drop into the right subdirectory and are picked up
-  automatically — no manifest, no allowlist.
+  automatically - no manifest, no allowlist.

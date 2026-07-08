@@ -51,7 +51,7 @@
     outline-offset: 2px;
 }
 
-/* ───── Asset balance hero — matches TotalBalanceHero ───── */
+/* ───── Asset balance hero - matches TotalBalanceHero ───── */
 
 .balanceHero {
     background: linear-gradient(180deg, var(--xc-accent-primary) 0%, color-mix(in srgb, var(--xc-accent-primary) 80%, #000) 100%);
@@ -122,7 +122,7 @@
 
 /* Positioning wrapper around the hero icon so the per-chain network
    overlay (visible only for non-native tokens) can anchor to its
-   bottom-right corner — same affordance the Home BalanceList rows
+   bottom-right corner - same affordance the Home BalanceList rows
    use to indicate which chain a token lives on. */
 .balanceHeroIconWrap {
     position: relative;
@@ -168,7 +168,7 @@
     overflow: hidden;
 }
 
-/* AutoShrinkText scaffolding. The wrap is the measurement container —
+/* AutoShrinkText scaffolding. The wrap is the measurement container -
    block-level so it inherits the parent's font-size and width. The
    inner span carries the actual text and is `transform: scale(...)`d
    to fit when overflowing. Origin: left center so shrinking pulls the
@@ -235,7 +235,7 @@
     white-space: nowrap;
 }
 
-/* ───── Quick actions — matches Home's quickActions ───── */
+/* ───── Quick actions - matches Home's quickActions ───── */
 
 .quickActions {
     display: grid;
@@ -343,7 +343,7 @@
     color: var(--xc-accent-primary);
 }
 
-/* ───── Tabs — matches HomeTabs ───── */
+/* ───── Tabs - matches HomeTabs ───── */
 
 .tabs {
     display: flex;
@@ -392,7 +392,7 @@
     min-height: 0;
 }
 
-/* Native-coin layout — no tabs, just stacked sections. Each section
+/* Native-coin layout - no tabs, just stacked sections. Each section
    has its own muted title heading so the user can visually parse the
    structure as they scroll. */
 .stackedSection {
@@ -421,7 +421,7 @@
     flex-direction: column;
     gap: 2px;
     /* Blue accent border to match the Home PortfolioChart and the
-       quick-action buttons immediately below — same accent cue tying
+       quick-action buttons immediately below - same accent cue tying
        the chart card into the page's blue-highlighted controls. */
     border-color: var(--xc-accent-primary);
 }
@@ -454,7 +454,7 @@
 }
 
 /* The third stats cell (24h change) is right-aligned so the +/- pct
-   reads against the chart's right edge — same visual anchor the Home
+   reads against the chart's right edge - same visual anchor the Home
    PortfolioChart uses for its single change line. */
 .stats > .statCell:last-child {
     text-align: end;
@@ -653,7 +653,7 @@
     gap: var(--xc-space-3);
 }
 
-/* Media tab — vertical stack: subtab strip then the active sub-panel. */
+/* Media tab - vertical stack: subtab strip then the active sub-panel. */
 .mediaPanel {
     display: flex;
     flex-direction: column;
@@ -705,7 +705,7 @@
 
 /* Each TIS image type (large / hires / standard / icon) renders in its
    own labeled section so the user can tell what they're looking at at
-   a glance — instead of a generic image dump. */
+   a glance - instead of a generic image dump. */
 .mediaGroup {
     display: flex;
     flex-direction: column;
@@ -1013,7 +1013,7 @@
     font-size: var(--xc-text-sm);
 }
 
-/* ───── "Official token" banner — shown when the token is on a project
+/* ───── "Official token" banner - shown when the token is on a project
    registry's current roster (assetInfo.projects). Green = attested. ───── */
 
 .officialBanner {

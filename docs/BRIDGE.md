@@ -1,6 +1,6 @@
-# XChain Wallet — `window.xchain` dApp Bridge
+# XChain Wallet - `window.xchain` dApp Bridge
 
-Reference for dApp developers integrating with XChain Wallet. The bridge surface is normative in `@xchain-wallet/bridge-spec` (TypeScript); this document is the human-readable companion. Read the type definitions for ground truth — the `.ts` files cannot drift.
+Reference for dApp developers integrating with XChain Wallet. The bridge surface is normative in `@xchain-wallet/bridge-spec` (TypeScript); this document is the human-readable companion. Read the type definitions for ground truth - the `.ts` files cannot drift.
 
 ---
 
@@ -26,7 +26,7 @@ Approval popups are real OS-rendered windows owned by the wallet's origin (`chro
 
 ## Detection
 
-The provider is available as `window.xchain` once the wallet has injected it. Detection should not assume the provider is ready immediately on `DOMContentLoaded` — the extension content script may inject after that.
+The provider is available as `window.xchain` once the wallet has injected it. Detection should not assume the provider is ready immediately on `DOMContentLoaded` - the extension content script may inject after that.
 
 ```js
 import { isXChainAvailable, getProvider, PROVIDER_READY_EVENT } from '@xchain-wallet/bridge-spec';
@@ -49,7 +49,7 @@ if (!provider) { /* not installed or timed out */ }
 Every provider exposes:
 
 ```ts
-provider.version       // "0.1.0" — see "Versioning" below
+provider.version       // "0.1.0" - see "Versioning" below
 provider.isXChainWallet // true
 ```
 
@@ -100,7 +100,7 @@ Opens an approval popup. The user reviews the dApp's identity, requested chains,
 { ok: true; version: string; accounts: Account[]; chains: CoinId[]; permissions: SitePermissions }
 ```
 
-Any failure returns `{ ok: false; error: BridgeErrorCode; message?: string }` — see "Error codes".
+Any failure returns `{ ok: false; error: BridgeErrorCode; message?: string }` - see "Error codes".
 
 ### `disconnect() → Promise<void>`
 
@@ -144,9 +144,9 @@ The dApp describes an XChain ACTION (SEND, SWEEP, ISSUE, ORDER, etc.); the walle
 → { ok: true; txid; actionIndex; chainId } | UnsupportedActionResult | BridgeErrorResult
 ```
 
-`UnsupportedActionResult` includes the wallet's current `supportedActions` list — surface it to the user so they know what the wallet *can* do today. The supported set grows as the wallet matures.
+`UnsupportedActionResult` includes the wallet's current `supportedActions` list - surface it to the user so they know what the wallet *can* do today. The supported set grows as the wallet matures.
 
-The wallet always renders the user's stated `to` / `amount` / `asset` from their original input on the sign screen, independently of what the encoder produces. A malicious or buggy encoder cannot silently swap the destination — the user sees a divergence. The `feeStrategyHint` is a hint only; the user can override at the sign screen.
+The wallet always renders the user's stated `to` / `amount` / `asset` from their original input on the sign screen, independently of what the encoder produces. A malicious or buggy encoder cannot silently swap the destination - the user sees a divergence. The `feeStrategyHint` is a hint only; the user can override at the sign screen.
 
 ### `signPsbt(params: SignPsbtParams) → Promise<SignPsbtResult>`
 
@@ -176,9 +176,9 @@ XChain Sign-In v2 | <appId> | <origin> | <address> | <nonce> | <timestamp> | <ex
 
 All fields string-serialized, separated by ` | `. Pipes inside any field are rejected at format time. The `challenge` string is exactly what was signed; verify with `parseSignInChallenge(challenge)` and any sigtools your stack uses for the chain in question.
 
-`<origin>` is the requesting page's origin as stamped by the **wallet** (at the content-script trust boundary) — the page cannot choose it. `appId` is supplied by the page, so by itself it proves nothing about where the sign-in happened. Your backend MUST verify the challenge's origin equals the origin you serve your dApp from; that check is what prevents a look-alike site from passing your appId and obtaining a sign-in your backend would accept.
+`<origin>` is the requesting page's origin as stamped by the **wallet** (at the content-script trust boundary) - the page cannot choose it. `appId` is supplied by the page, so by itself it proves nothing about where the sign-in happened. Your backend MUST verify the challenge's origin equals the origin you serve your dApp from; that check is what prevents a look-alike site from passing your appId and obtaining a sign-in your backend would accept.
 
-> **Breaking change (v1 → v2):** v1 challenges (`XChain Sign-In | <appId> | <address> | …`, no origin field) are no longer produced. `parseSignInChallenge` returns `null` for them, and `validateSignInChallenge` now requires an `origin` in its `expected` argument. Integrators verifying against the v1 format must update to the snippet below — in particular, add the origin check; backends that keep accepting v1-shaped challenges remain open to appId spoofing.
+> **Breaking change (v1 → v2):** v1 challenges (`XChain Sign-In | <appId> | <address> | …`, no origin field) are no longer produced. `parseSignInChallenge` returns `null` for them, and `validateSignInChallenge` now requires an `origin` in its `expected` argument. Integrators verifying against the v1 format must update to the snippet below - in particular, add the origin check; backends that keep accepting v1-shaped challenges remain open to appId spoofing.
 
 ```js
 import { makeSignInParams, parseSignInChallenge, validateSignInChallenge } from '@xchain-wallet/bridge-spec';
@@ -194,13 +194,13 @@ const failure = parts && validateSignInChallenge(parts, {
   origin: 'https://mydapp.example',   // the origin you serve the dApp from
   nonce: params.nonce,
 });
-if (!parts || failure !== null) { /* reject — challenge tampered, expired, or signed on another site */ return; }
+if (!parts || failure !== null) { /* reject - challenge tampered, expired, or signed on another site */ return; }
 // Now verify result.signature against result.address per the chain's signature scheme.
 ```
 
 ### `parallel(actions: SignActionParams[]) → Promise<SignActionResult[]>`
 
-Phase 4+. Cross-chain parallel composer — the wallet groups every action into one approval modal and signs them in sequence (or atomically where the chain pair supports it). The result array preserves input order; per-action results carry their own `ok` flag.
+Phase 4+. Cross-chain parallel composer - the wallet groups every action into one approval modal and signs them in sequence (or atomically where the chain pair supports it). The result array preserves input order; per-action results carry their own `ok` flag.
 
 ---
 
@@ -237,12 +237,12 @@ A handler removed via `off` will not fire for events emitted after removal.
 | `ACCOUNT_NOT_AUTHORIZED` | The dApp passed an account it doesn't have permission for. |
 | `ADDRESS_NOT_AUTHORIZED` | Same, for addresses. |
 | `UNSUPPORTED_ACTION` | The action kind isn't supported on the target chain or by this wallet version. Result includes `supportedActions`. |
-| `INVALID_PARAMS` | Schema validation failed — fix your call shape. |
+| `INVALID_PARAMS` | Schema validation failed - fix your call shape. |
 | `CHALLENGE_EXPIRED` | The Sign-In challenge's `expiresAt` is in the past. |
 | `BROADCAST_FAILED` | The wallet signed but the network rejected the broadcast. |
 | `PANIC_MODE` | The user has placed the wallet in panic mode (24h signing freeze). All sign methods reject with this until the freeze lifts. |
-| `THROTTLED` | The site exceeded the per-origin sign-request rate limit. Result includes `retryAfterMs` (also `burst` / `windowMs`). Connect / disconnect / read methods are not throttled — only `signMessage` / `signAction` / `signPsbt` / `signIn`. |
-| `BLOCKED_BY_USER` | The user has explicitly blocked this origin from Settings → Connected Sites. `connect` and the four sign methods reject with this; the dApp has no programmatic recovery — the user must un-block the origin first. |
+| `THROTTLED` | The site exceeded the per-origin sign-request rate limit. Result includes `retryAfterMs` (also `burst` / `windowMs`). Connect / disconnect / read methods are not throttled - only `signMessage` / `signAction` / `signPsbt` / `signIn`. |
+| `BLOCKED_BY_USER` | The user has explicitly blocked this origin from Settings → Connected Sites. `connect` and the four sign methods reject with this; the dApp has no programmatic recovery - the user must un-block the origin first. |
 | `BRIDGE_VERSION_MISMATCH` | The dApp's `requiredBridgeVersion` is outside the wallet's supported range. |
 | `INTERNAL_ERROR` | Catch-all for unexpected wallet-side failures. Log it, but don't try to recover programmatically. |
 
@@ -264,7 +264,7 @@ When a user approves a `connect`, the wallet stores a `ConnectedSite` record:
 }
 ```
 
-`canSignAction` starts empty. Per-action permission is an opt-in at sign time — if the user picks "Always allow SEND on this site", the next SEND request signs without a popup. Anything not explicitly `'always'` is `'ask'` and re-prompts.
+`canSignAction` starts empty. Per-action permission is an opt-in at sign time - if the user picks "Always allow SEND on this site", the next SEND request signs without a popup. Anything not explicitly `'always'` is `'ask'` and re-prompts.
 
 Sites can be revoked from `Settings → Connected Sites` at any time. Revocation fires the `disconnect` event back to the provider.
 
@@ -286,7 +286,7 @@ If you depend on a method that lands after `0.1.0`, set `requiredBridgeVersion: 
 
 ## Threat model crossovers
 
-If you're building a dApp, you should also read the wallet's `docs/Threat_Model.md` — particularly §2.3 (network threats) and §4.1 (malicious dApp). It describes the assumptions the wallet makes about your code so you can stay inside them.
+If you're building a dApp, you should also read the wallet's `docs/Threat_Model.md` - particularly §2.3 (network threats) and §4.1 (malicious dApp). It describes the assumptions the wallet makes about your code so you can stay inside them.
 
 ---
 

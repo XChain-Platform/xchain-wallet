@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# tools/regtest/down.sh — stop the upstream regtest stack (G004 /
+# tools/regtest/down.sh - stop the upstream regtest stack (G004 /
 # §52). Thin pointer at `xchain-node stop` so the wallet's test
 # runners don't depend on the platform repo's exact stop command.
 #

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# tools/regtest/bootstrap.sh — probe the upstream regtest stack
+# tools/regtest/bootstrap.sh - probe the upstream regtest stack
 # (G004 / §52). Exits 0 when every required service responds; exits
 # non-zero with a structured diagnostic when one is missing.
 #
@@ -39,7 +39,7 @@ for entry in "${SERVICES[@]}"; do
         echo "bootstrap.sh: probing $label at $url ..." >&2
     fi
     # JSON-RPC nodes (bitcoin / dogecoin / litecoin regtest) don't
-    # serve plain GET — a connection-refused exit is the failure
+    # serve plain GET - a connection-refused exit is the failure
     # signal we care about. Use --max-time to bound each probe.
     if curl -fsS --max-time 3 -o /dev/null "$url" 2>/dev/null \
         || curl -sS --max-time 3 -o /dev/null -w "%{http_code}" "$url" 2>/dev/null \

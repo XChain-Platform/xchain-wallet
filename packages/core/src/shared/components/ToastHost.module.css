@@ -21,7 +21,7 @@
     width: min(28rem, calc(100vw - 2 * var(--xc-space-4)));
 }
 
-/* Cluster D FOLLOWUP 4 — overflow indicator. Surfaces above the
+/* Cluster D FOLLOWUP 4 - overflow indicator. Surfaces above the
    visible stack when more toasts are queued than the VISIBLE_LIMIT
    allows on screen at once. Visual only (aria-hidden) since the
    queued toasts continue to fire their aria-live announcements as

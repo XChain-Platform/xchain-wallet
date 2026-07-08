@@ -1,4 +1,4 @@
-# Reproducible-build image for @xchain-wallet/desktop — §51 / §40.12.
+# Reproducible-build image for @xchain-wallet/desktop - §51 / §40.12.
 #
 # Any third-party verifier can run `docker build` against this file at a
 # specific tag and produce the exact same pre-signing artifact as the
@@ -6,18 +6,18 @@
 # closes the Level-2 verification loop (see REPRODUCIBLE_BUILDS.md).
 #
 # Pinning rules:
-#   - Base image pinned to a specific digest (not a tag) — tags move.
+#   - Base image pinned to a specific digest (not a tag) - tags move.
 #   - Node pinned at the LTS minor release active during the build
 #     window. Changing Node means changing this file (and bumping the
 #     minor version in the README so verifiers know what to use).
-#   - pnpm pinned via corepack — version comes from root package.json
+#   - pnpm pinned via corepack - version comes from root package.json
 #     `packageManager`.
 #   - No `apt-get update` in the build step itself; all system deps
 #     install in this Dockerfile so the base image is a frozen
 #     reference. A verifier re-building the image pulls the same
 #     digest and gets identical system packages.
 #
-# The image does NOT run the build itself — `reproduce.sh` mounts the
+# The image does NOT run the build itself - `reproduce.sh` mounts the
 # source tree read-only + invokes the build. This lets the image be
 # cached + reused across verifications of different release tags.
 
@@ -72,13 +72,13 @@ RUN curl -fsSLO "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-
     && node --version
 
 # pnpm version comes from the root package.json's `packageManager` field
-# at build time — reproduce.sh copies that into a build-arg. Keeping
+# at build time - reproduce.sh copies that into a build-arg. Keeping
 # the version out of this Dockerfile means bumping pnpm doesn't rebuild
 # the image, which speeds up verification runs.
 ARG PNPM_VERSION=9.0.0
 RUN corepack prepare "pnpm@${PNPM_VERSION}" --activate
 
-# Non-root user — matches host-UID on Linux so files produced in the
+# Non-root user - matches host-UID on Linux so files produced in the
 # mounted volume don't land root-owned. reproduce.sh passes `--user`
 # with the invoking uid/gid; this USER is the fallback for manual runs.
 RUN groupadd --gid 1000 builder \

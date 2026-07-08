@@ -1,6 +1,6 @@
 # Test-dApp runbook
 
-Manual smoke pass for the §43 dApp bridge — exercises the full Phase-1 surface against a real Chrome profile with the packaged extension loaded. Complements `packages/core/test/bridge-e2e.smoke.js` which covers the background-side flow in Node; this runbook is the equivalent end-to-end trip through the live browser UI.
+Manual smoke pass for the §43 dApp bridge - exercises the full Phase-1 surface against a real Chrome profile with the packaged extension loaded. Complements `packages/core/test/bridge-e2e.smoke.js` which covers the background-side flow in Node; this runbook is the equivalent end-to-end trip through the live browser UI.
 
 Run this before tagging a Phase-1 release candidate and after any change that touches: bridge handlers, ApprovalBroker, approval screens, content script / inject script, MessageHost wiring.
 
@@ -8,7 +8,7 @@ Run this before tagging a Phase-1 release candidate and after any change that to
 
 - Node 18+ and pnpm 9 installed (matches `packages/*/package.json` `packageManager`).
 - A regtest XChain stack running (`xchain-node regtest` from the monorepo root) so `bitcoin-regtest` endpoints at `http://localhost:18081/18082/18000` respond.
-- A Chromium-family browser — Chrome / Edge / Brave / Arc all work; MV3 contract is the same.
+- A Chromium-family browser - Chrome / Edge / Brave / Arc all work; MV3 contract is the same.
 
 ## 1. Build and load the extension
 
@@ -48,7 +48,7 @@ pnpm -C packages/test-dapp build   # if a build script is configured
 npx http-server packages/test-dapp -p 5500
 ```
 
-Open http://localhost:5500 in the browser — any page served over http/https will have `window.xchain` injected by the content script.
+Open http://localhost:5500 in the browser - any page served over http/https will have `window.xchain` injected by the content script.
 
 ## 4. Run through `runExample`
 
@@ -81,11 +81,11 @@ Click **Run test** and walk through the approval popups that open:
 
 ## 5. Edge cases worth clicking
 
-- **Reject in the popup** — the dApp promise rejects with `USER_REJECTED`. Verify the error surface in the report.
-- **Close the approval window** (X button) — same effect as reject.
-- **Re-connect** — second `connect` on the same origin is idempotent. No popup; promise resolves immediately with existing permissions.
-- **Toggle "Always allow on this origin"** on the signAction screen — next SEND from the same origin skips the approval popup entirely.
-- **Lock the wallet** (popup header) mid-flow — subsequent bridge calls should fail with a "vault not ready" error, not hang. Unlock in the popup, then retry from the dApp side.
+- **Reject in the popup** - the dApp promise rejects with `USER_REJECTED`. Verify the error surface in the report.
+- **Close the approval window** (X button) - same effect as reject.
+- **Re-connect** - second `connect` on the same origin is idempotent. No popup; promise resolves immediately with existing permissions.
+- **Toggle "Always allow on this origin"** on the signAction screen - next SEND from the same origin skips the approval popup entirely.
+- **Lock the wallet** (popup header) mid-flow - subsequent bridge calls should fail with a "vault not ready" error, not hang. Unlock in the popup, then retry from the dApp side.
 
 ## 6. What's covered by the node smoke
 

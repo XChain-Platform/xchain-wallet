@@ -14,7 +14,7 @@ only; `:full` runs every priority.
 1. Reference the defect in the comment block (date + one-line summary).
 2. Reproduce the failing condition under the test.
 3. Tag with `[REGRESSION P0]`, `[REGRESSION P1]`, or `[REGRESSION P2]`.
-4. NEVER remove a regression test — even if the surface it tested is gone,
+4. NEVER remove a regression test - even if the surface it tested is gone,
    document the deletion in the comment and convert to a smoke check that
    the surface is indeed absent.
 

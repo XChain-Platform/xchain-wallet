@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# tools/release/sign.sh — release-signing pipeline (G003 / §51).
+# tools/release/sign.sh - release-signing pipeline (G003 / §51).
 #
 # Computes a SHA-256 manifest over every artifact in the input
 # directory, then GPG-signs the manifest with the release key.
 # Outputs:
-#   <input-dir>/RELEASE_HASHES.txt       — sha256sum-format manifest
-#   <input-dir>/RELEASE_HASHES.txt.asc   — detached GPG signature
+#   <input-dir>/RELEASE_HASHES.txt       - sha256sum-format manifest
+#   <input-dir>/RELEASE_HASHES.txt.asc   - detached GPG signature
 #
 # Usage:
 #   XCHAIN_RELEASE_GPG_KEY=<fingerprint> \
@@ -63,7 +63,7 @@ if [[ -z "${XCHAIN_RELEASE_GPG_KEY:-}" ]]; then
     cat >&2 <<'EOF'
 sign.sh: XCHAIN_RELEASE_GPG_KEY is not set.
 
-The wallet's release GPG key has not yet been published — see G180 in
+The wallet's release GPG key has not yet been published - see G180 in
 claude/reports/xchain-wallet/SPEC_GAPS.md and the disclosure note in
 SECURITY.md. Until the key is published, this pipeline cannot
 produce a signed manifest.
@@ -122,7 +122,7 @@ echo "sign.sh: hashing artifacts in $INPUT_DIR ..." >&2
 )
 
 if [[ ! -s "$MANIFEST" ]]; then
-    echo "sign.sh: no artifacts found in $INPUT_DIR — nothing to sign." >&2
+    echo "sign.sh: no artifacts found in $INPUT_DIR - nothing to sign." >&2
     rm -f "$MANIFEST"
     exit 1
 fi

@@ -1,4 +1,4 @@
-# Verify a release — XChain Wallet
+# Verify a release - XChain Wallet
 
 This is the user-facing recipe for verifying that a release artifact
 you downloaded was produced from the source tree at a specific git
@@ -8,7 +8,7 @@ If you only want a one-line answer: clone the repo, run the platform's
 reproduce script, compare hashes, then verify the GPG signature on the
 hash manifest. The detail below walks you through each step.
 
-**Spec reference:** §51 of `XCHAIN_WALLET_SPEC.md` — Build and Release
+**Spec reference:** §51 of `XCHAIN_WALLET_SPEC.md` - Build and Release
 Per Target. **Companion docs:** [`docs/Reproducible_Builds.md`](Reproducible_Builds.md)
 (what we promise + how we made the bytes deterministic), [`SECURITY.md`](../SECURITY.md)
 (disclosure policy + release key fingerprint).
@@ -19,12 +19,12 @@ Per Target. **Companion docs:** [`docs/Reproducible_Builds.md`](Reproducible_Bui
 
 Three independent claims combine into a real verification:
 
-1. **Bit-for-bit reproducibility** — rebuilding from a tagged commit
+1. **Bit-for-bit reproducibility** - rebuilding from a tagged commit
    produces the same pre-signing artifact bytes that the maintainer
    signed for that tag.
-2. **Hash integrity** — the SHA-256 of the artifact you downloaded
+2. **Hash integrity** - the SHA-256 of the artifact you downloaded
    matches the hash the maintainer published for that tag.
-3. **Signature authenticity** — the maintainer's release GPG key
+3. **Signature authenticity** - the maintainer's release GPG key
    signed the hash manifest, and that key matches the fingerprint
    published in [`SECURITY.md`](../SECURITY.md).
 
@@ -38,7 +38,7 @@ compromised between source and signing.
 ## Prerequisites
 
 - `git`
-- `gpg` (a working GnuPG install — `gpg --version` should show 2.x)
+- `gpg` (a working GnuPG install - `gpg --version` should show 2.x)
 - `sha256sum` (Linux) / `shasum -a 256` (macOS)
 - For desktop reproducibility: `docker` (the reproduce container
   pins toolchain versions so you don't need to install Node / pnpm
@@ -48,7 +48,7 @@ Anything beyond that depends on the target you're verifying.
 
 ---
 
-## Step 1 — Import the maintainer's release key
+## Step 1 - Import the maintainer's release key
 
 The release key fingerprint is published in [`SECURITY.md`](../SECURITY.md).
 Until G180 lands the fingerprint is "to be published alongside the
@@ -62,7 +62,7 @@ gpg --fingerprint <FINGERPRINT>
 
 Cross-check the fingerprint output against `SECURITY.md`. They must
 match exactly. If they do not, **stop** and ask in a public channel
-before proceeding — a mismatching fingerprint is the canonical sign
+before proceeding - a mismatching fingerprint is the canonical sign
 that your view of either the keyserver or the doc is compromised.
 
 If you already have the key from a prior verification, you do not
@@ -70,15 +70,15 @@ need to re-import.
 
 ---
 
-## Step 2 — Download the artifact and its signature
+## Step 2 - Download the artifact and its signature
 
 Every release tag publishes:
 
 - The artifact (`.dmg`, `.exe`, `.AppImage`, `.deb`, `.zip` for
   extension stores).
-- `RELEASE_HASHES.txt` — SHA-256 manifest of every artifact in the
+- `RELEASE_HASHES.txt` - SHA-256 manifest of every artifact in the
   release.
-- `RELEASE_HASHES.txt.asc` — GPG signature on the manifest.
+- `RELEASE_HASHES.txt.asc` - GPG signature on the manifest.
 
 ```bash
 TAG=vX.Y.Z
@@ -92,7 +92,7 @@ Use the artifact filename appropriate for your platform.
 
 ---
 
-## Step 3 — Verify the signature on the hash manifest
+## Step 3 - Verify the signature on the hash manifest
 
 ```bash
 gpg --verify RELEASE_HASHES.txt.asc RELEASE_HASHES.txt
@@ -101,15 +101,15 @@ gpg --verify RELEASE_HASHES.txt.asc RELEASE_HASHES.txt
 You want to see "Good signature from ..." and a key fingerprint that
 matches the one in `SECURITY.md`. A "WARNING: This key is not certified
 with a trusted signature" line is normal unless you've explicitly
-trust-signed the key locally — read the fingerprint regardless.
+trust-signed the key locally - read the fingerprint regardless.
 
 If verification fails: stop. Do not run the artifact. Open a thread
-with the project maintainers — either the manifest or the signature
+with the project maintainers - either the manifest or the signature
 (or both) was tampered with.
 
 ---
 
-## Step 4 — Verify the artifact hash
+## Step 4 - Verify the artifact hash
 
 ```bash
 # Linux / Windows (Git Bash, WSL)
@@ -120,7 +120,7 @@ shasum -a 256 -c <(grep "<artifact-filename>" RELEASE_HASHES.txt)
 ```
 
 You want to see `<artifact-filename>: OK`. A `FAILED` line means the
-file you downloaded does not match the hash the maintainer published —
+file you downloaded does not match the hash the maintainer published -
 likely a corrupt download (rare) or a tampered mirror (rare but
 serious).
 
@@ -129,11 +129,11 @@ or run it.
 
 ---
 
-## Step 5 (optional but recommended) — Reproduce the build
+## Step 5 (optional but recommended) - Reproduce the build
 
 A passing signature plus matching hashes prove that the maintainer
 released what they signed. Reproducing the build proves that what they
-signed is what the source produces — closing the loop against a
+signed is what the source produces - closing the loop against a
 maintainer-machine compromise.
 
 ### Desktop (Linux)
@@ -148,7 +148,7 @@ diff reproduce-out/RELEASE_HASHES.txt RELEASE_HASHES.txt
 ```
 
 A zero-byte diff means the artifact matches what source produces.
-Any diff is diagnostic — see the desktop doc's
+Any diff is diagnostic - see the desktop doc's
 [diagnostics section](../packages/desktop/Reproducible_Builds.md)
 ("Toolchain drift / Timestamp leakage / Supply-chain tampering").
 
@@ -193,7 +193,7 @@ It is one defensive layer among many.
 ## Reporting a verification failure
 
 A signature failure or hash mismatch is a security event. Please file
-it via the channels in [`SECURITY.md`](../SECURITY.md) — preferably
+it via the channels in [`SECURITY.md`](../SECURITY.md) - preferably
 GitHub's private vulnerability reporting, with the failing artifact
 URL, the SHA-256 you computed, and the GPG output. Do not post in a
 public issue first.

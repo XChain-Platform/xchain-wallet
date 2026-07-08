@@ -1,7 +1,7 @@
 /* Override the shared popover styles so the network filter spans the
    full width of the popup body. The shared popover is `position:
    absolute; right: 0` anchored to the .wrap (which sits around the
-   filter button — not the popup edge), so a wide width would clip
+   filter button - not the popup edge), so a wide width would clip
    off-screen-left. Switching to `position: fixed` centered on the
    viewport handles both cases:
    - real Chrome extension popup: viewport = popup body
@@ -22,7 +22,7 @@
     gap: var(--xc-space-2);
 }
 
-/* ───── Token search input — styled as a bordered form box so it
+/* ───── Token search input - styled as a bordered form box so it
    matches the Networks select beneath it. ───── */
 .tokenSearchInput {
     appearance: none;
@@ -42,7 +42,7 @@
     outline-offset: 2px;
 }
 
-/* ───── Custom Networks select — visually mirrors the token input
+/* ───── Custom Networks select - visually mirrors the token input
    above (same border, padding, radius) but opens a popover with
    icon-bearing options instead of native <option> rows. ───── */
 .networkSelectWrap {
@@ -156,7 +156,7 @@
     font-weight: 600;
 }
 
-/* ───── Kind toggle — segmented control for All / Coins / Tokens. ───── */
+/* ───── Kind toggle - segmented control for All / Coins / Tokens. ───── */
 .kindToggle {
     display: grid;
     grid-template-columns: repeat(3, 1fr);

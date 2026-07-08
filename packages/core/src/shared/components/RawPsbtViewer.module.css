@@ -20,7 +20,7 @@
     color: var(--xc-text);
 }
 
-/* §53 / Cluster K FOLLOWUP 2 — focus rings on RawPsbtViewer's
+/* §53 / Cluster K FOLLOWUP 2 - focus rings on RawPsbtViewer's
    <summary> toggle and the inline copy button. */
 .toggle:focus-visible {
     outline: 2px solid var(--xc-focus-ring);

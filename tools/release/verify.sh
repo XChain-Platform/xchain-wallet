@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# tools/release/verify.sh — local verification helper (G003 / §51).
+# tools/release/verify.sh - local verification helper (G003 / §51).
 #
 # Re-computes SHA-256 hashes over every artifact in the input
 # directory and compares against RELEASE_HASHES.txt; optionally
@@ -11,9 +11,9 @@
 #   bash tools/release/verify.sh --input release-artifacts/vX.Y.Z/
 #
 # Modes:
-#   default      — verify hashes AND signature (errors if either fails)
-#   --no-sig     — skip the GPG signature check (useful pre-G180)
-#   --recompute  — write a fresh RELEASE_HASHES.txt without verifying
+#   default      - verify hashes AND signature (errors if either fails)
+#   --no-sig     - skip the GPG signature check (useful pre-G180)
+#   --recompute  - write a fresh RELEASE_HASHES.txt without verifying
 #                  an existing one. Used by sign.sh's "--recompute"
 #                  fallback when the GPG key is not yet configured.
 
@@ -89,7 +89,7 @@ if [[ "$RECOMPUTE" -eq 1 ]]; then
 fi
 
 if [[ ! -f "$MANIFEST" ]]; then
-    echo "verify.sh: $MANIFEST not found — run sign.sh first or pass --recompute" >&2
+    echo "verify.sh: $MANIFEST not found - run sign.sh first or pass --recompute" >&2
     exit 1
 fi
 
@@ -112,7 +112,7 @@ fi
 
 # Signature check.
 if [[ ! -f "$SIG" ]]; then
-    echo "verify.sh: $SIG not found — run sign.sh or pass --no-sig" >&2
+    echo "verify.sh: $SIG not found - run sign.sh or pass --no-sig" >&2
     exit 1
 fi
 if ! command -v gpg >/dev/null 2>&1; then
@@ -123,4 +123,4 @@ fi
 echo "verify.sh: verifying GPG signature on $MANIFEST ..." >&2
 gpg --verify "$SIG" "$MANIFEST"
 
-echo "verify.sh: ok — hashes match and GPG signature is good" >&2
+echo "verify.sh: ok - hashes match and GPG signature is good" >&2

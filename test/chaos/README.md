@@ -1,6 +1,6 @@
 # Chaos tests
 
-Fault injection. The wallet must survive — gracefully — every plausible
+Fault injection. The wallet must survive - gracefully - every plausible
 runtime failure: backend rejects a write, network hangs, hardware
 signer disconnects mid-flow, message handler throws, vendor SDK
 returns malformed data.

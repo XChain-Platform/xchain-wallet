@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
-    macOS hardened-runtime entitlements — §40.12 Step 19.
+    macOS hardened-runtime entitlements - §40.12 Step 19.
     Keep this file as narrow as possible; each entitlement widens the
     attack surface. Notarization will reject anything unused.
 
     - com.apple.security.cs.allow-unsigned-executable-memory: false
       (default). We don't JIT any code.
     - com.apple.security.cs.allow-jit: false. Same.
-    - com.apple.security.device.usb: required for WebHID on macOS —
+    - com.apple.security.device.usb: required for WebHID on macOS -
       @ledgerhq/hw-transport-webhid opens the Ledger HID interface via
       IOKit, which the hardened runtime gates behind this entitlement.
       Same mechanism Trezor Bridge uses when its own HID handoff fires.
@@ -17,7 +17,7 @@
       update manifest fetches + Trezor Connect iframe loading
       connect.trezor.io.
     - com.apple.security.files.user-selected.read-write: NOT currently
-      needed — we use app.getPath('userData') for all storage. If we
+      needed - we use app.getPath('userData') for all storage. If we
       add an "export PSBT" feature that writes to a user-chosen path,
       revisit.
 -->

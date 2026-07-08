@@ -1,7 +1,7 @@
 # Fuzz tests
 
 Property-based tests via `fast-check`. Each property holds for ALL
-inputs in a domain — fast-check generates inputs, the property
+inputs in a domain - fast-check generates inputs, the property
 either holds or fast-check shrinks to a minimal counter-example.
 
 ## Layout

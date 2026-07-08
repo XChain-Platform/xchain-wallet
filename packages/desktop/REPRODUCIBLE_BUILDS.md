@@ -1,4 +1,4 @@
-# Reproducible builds — @xchain-wallet/desktop
+# Reproducible builds - @xchain-wallet/desktop
 
 XChain Wallet aims for **Level-2 reproducibility of the pre-signing
 artifact** per §51 of `XCHAIN_WALLET_SPEC.md`. Any independent
@@ -66,23 +66,23 @@ A zero-byte diff means the build is reproducible and the maintainer's
 pre-signing artifact matches what source produces. Any diff is
 diagnostic:
 
-- **Toolchain drift** — Node/pnpm pinning mismatch. Check your Docker
+- **Toolchain drift** - Node/pnpm pinning mismatch. Check your Docker
   image was built against the tag's `Dockerfile`, not a cached older
   image.
-- **Timestamp leakage** — electron-builder's `SOURCE_DATE_EPOCH`
+- **Timestamp leakage** - electron-builder's `SOURCE_DATE_EPOCH`
   support missed a path. Open an issue; this is a bug on our side.
-- **Supply-chain tampering** — the maintainer's build environment
+- **Supply-chain tampering** - the maintainer's build environment
   produced a different artifact than source does. Investigate.
 
 ## Non-determinism sources we've addressed
 
-- `SOURCE_DATE_EPOCH=<commit author date>` — injected by `reproduce.sh`
+- `SOURCE_DATE_EPOCH=<commit author date>` - injected by `reproduce.sh`
   from the git commit being built. Honoured by electron-builder for
   asar entry mtimes + mksquashfs (AppImage) + ar (deb).
-- `LC_ALL=C.UTF-8 TZ=UTC` — pinned in both the Dockerfile and the
+- `LC_ALL=C.UTF-8 TZ=UTC` - pinned in both the Dockerfile and the
   in-container env so locale-sensitive tools (sort, date) emit
   deterministic output.
-- `pnpm install --frozen-lockfile` — rejects builds against an
+- `pnpm install --frozen-lockfile` - rejects builds against an
   out-of-sync lockfile. Any dep-tree change requires a lockfile
   update + commit before a tag is cut.
 - Vite: source maps off, deterministic chunk/asset filenames,
@@ -99,7 +99,7 @@ diagnostic:
   app's publisher. Downgrade attacks across publishers are blocked.
 - **Linux (.AppImage / .deb)**: the `latest-linux.yml` manifest
   carries the SHA512 of the artifact. The manifest itself is fetched
-  over HTTPS from `downloads.xchain.io` — integrity for Linux users
+  over HTTPS from `downloads.xchain.io` - integrity for Linux users
   depends on HTTPS TLS + the maintainer's control of that hostname.
   A stronger chain (GPG-signed manifests, TUF-style role separation)
   is a post-1.0 consideration.
@@ -109,7 +109,7 @@ diagnostic:
 The desktop app loads the Trezor Connect iframe from
 `https://connect.trezor.io` (see `renderer/index.html`'s CSP). Content
 Security Policy makes this dependency explicit: the renderer's own
-code never fetches from that domain — only the Trezor popup iframe
+code never fetches from that domain - only the Trezor popup iframe
 does, and it lives in a separate origin bound by `frame-src`.
 
 Mitigating factor: Trezor's on-device display is the trust anchor for

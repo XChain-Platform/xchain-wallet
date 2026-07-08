@@ -1,4 +1,4 @@
-/* Tappable market header — shows the selected coin/token and opens the
+/* Tappable market header - shows the selected coin/token and opens the
    shared picker to switch markets (mirrors the DEX market header). */
 .marketSelector {
     display: flex;
