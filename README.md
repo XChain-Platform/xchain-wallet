@@ -21,7 +21,7 @@ Self-custodial multi-chain wallet for the XChain Platform. Runs as a browser web
 ## Features
 
 - **Three shells, one codebase:** `@xchain-wallet/web` (Vite SPA), `@xchain-wallet/extension` (Chrome MV3 popup + full-screen + service worker), `@xchain-wallet/desktop` (Electron with main-process signing isolation); all share `@xchain-wallet/core` for routes, components, flows, and signers
-- **All 28 XChain ACTIONs:** SEND, ISSUE, MINT, DESTROY, ORDER, DISPENSER, DIVIDEND, SWEEP, SWAP, AIRDROP, MESSAGE, LIST, LINK, BROADCAST, PRICE, BATCH, DEPLOY, EXECUTE, DEPOSIT, WITHDRAW, COINPAY, STAKE, UNSTAKE, DELEGATE, COLLECT, CALLBACK, SLEEP, FILE
+- **All 29 XChain ACTIONs:** SEND, ISSUE, MINT, DESTROY, ORDER, DISPENSER, DIVIDEND, SWEEP, SWAP, AIRDROP, MESSAGE, LIST, LINK, BROADCAST, PRICE, VOTE, BATCH, DEPLOY, EXECUTE, DEPOSIT, WITHDRAW, COINPAY, STAKE, UNSTAKE, DELEGATE, COLLECT, CALLBACK, SLEEP, FILE
 - **Self-custodial key management:** BIP39 mnemonic + optional 25th-word passphrase, BIP32 HD derivation per chain, AES-256-GCM vault encrypted with an Argon2id-derived master key (calibrated per device), Counterwallet legacy mnemonic import
 - **Pluggable signer interface:** `SoftwareSigner` (in-vault keys), `TrezorSigner` (Trezor Connect, all current models), `LedgerSigner` (WebHID, all current models), `RemoteSigner` (cross-shell pairing), `MultisigSigner` (classical n-of-m + MuSig2 sessions)
 - **Full token issuance suite:** issue, mint, destroy, distribute, dividend, dispenser create + buy + close, broadcast, airdrop with parsed-recipients preview, sweep, and sell-ownership (lists token ownership for sale via ORDER/DISPENSER with price-in-BTC or token inputs)
