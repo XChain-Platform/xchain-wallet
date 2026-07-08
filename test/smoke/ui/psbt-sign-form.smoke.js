@@ -48,6 +48,19 @@ assert.ok(/messaging\.signPsbtUserInitiated\(/.test(form),
 assert.ok(/cHNid/.test(form),
     'normalizePsbtInput recognises base64 PSBT prefix `cHNid`');
 
+// F2: the preview must enumerate per-output destinations (recipient vs change),
+// not only aggregate totals, so the air-gapped surface allows verifying WHO
+// gets paid. Own-chain addresses classify change; each output shows an address
+// and amount.
+assert.ok(/ownAddressSet\s*=\s*useMemo/.test(form),
+    'PsbtSignForm builds an own-address set to classify change vs recipient');
+assert.ok(/decomposed\.outputs\.map\(/.test(form),
+    'PsbtSignForm enumerates each PSBT output');
+assert.ok(/Change \(back to you\)/.test(form) && /Recipient/.test(form),
+    'each output is labelled change-to-self or external recipient');
+assert.ok(/Where the coins go/.test(form),
+    'the per-output list has a clear heading');
+
 // --- 3. Extension popup messaging exports -------------------------------
 
 const extMsg = readFileSync(join(ext, 'src', 'popup', 'messaging.js'), 'utf8');

@@ -337,9 +337,19 @@ export function SignApproval({ id, kind, payload, onReject }) {
         !psbtIntent.loading &&
         (psbtIntent.error !== null || psbtIntent.decomposed === null);
 
+    // Also hold approval while the independent decode is still in flight:
+    // the intent summary (destinations / amounts / fee) has not rendered
+    // yet, so approving now would be approving effects the user could not
+    // see. Once decode settles this drops to false and either the summary
+    // or `psbtDecodeFailed` governs.
+    const psbtDecodePending =
+        kind === 'signPsbt' && !!psbtHexForSign && psbtIntent.loading;
+
+    const psbtApprovalBlocked = psbtDecodeFailed || psbtDecodePending;
+
     async function handleApprove(event) {
         event.preventDefault();
-        if (busy || password.length === 0 || !walletId || psbtDecodeFailed) return;
+        if (busy || password.length === 0 || !walletId || psbtApprovalBlocked) return;
         setBusy(true);
         setError(null);
         try {
@@ -388,7 +398,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
                         variant="primary"
                         block
                         loading={busy}
-                        disabled={password.length === 0 || !walletId || psbtDecodeFailed}
+                        disabled={password.length === 0 || !walletId || psbtApprovalBlocked}
                     >
                         {approveLabel}
                     </Button>

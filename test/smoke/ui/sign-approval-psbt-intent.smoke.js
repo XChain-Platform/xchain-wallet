@@ -79,4 +79,17 @@ const intentFnSrc = signSrc.slice(intentFnIdx, intentFnIdx + 1600);
 assert.match(intentFnSrc, /role="alert"/, 'undecodable PSBT renders an alert');
 assert.match(intentFnSrc, /could not be decoded/, 'alert explains the transaction could not be decoded');
 
+// --- 6. Approval is held until the decode settles (F1) -------------------
+// Approving before the intent renders would be approving un-verified
+// effects, and a failed decode must hard-block. Both gates funnel through
+// psbtApprovalBlocked, which is used in the Approve handler AND the button.
+assert.match(signSrc, /psbtDecodePending\s*=\s*\n?\s*kind === 'signPsbt' &&[\s\S]*psbtIntent\.loading/,
+    'holds approval while the PSBT decode is still in flight');
+assert.match(signSrc, /psbtApprovalBlocked = psbtDecodeFailed \|\| psbtDecodePending/,
+    'combines the failed and pending gates');
+assert.match(signSrc, /if \(busy \|\| password\.length === 0 \|\| !walletId \|\| psbtApprovalBlocked\) return/,
+    'the Approve handler refuses while blocked');
+assert.match(signSrc, /disabled=\{password\.length === 0 \|\| !walletId \|\| psbtApprovalBlocked\}/,
+    'the Approve button is disabled while blocked');
+
 console.log('sign-approval-psbt-intent smoke OK');

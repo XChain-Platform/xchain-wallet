@@ -465,6 +465,16 @@ export function PsbtSignForm({ walletId, onBack }) {
     }, [decomposed]);
     const fee = totalIn - totalOut;
 
+    // Own addresses on the selected chain, used to mark outputs that pay back
+    // to this wallet (change) vs external recipients. Same signal the
+    // extension's PsbtIntentSummary uses (getAddressesByChain). Without this
+    // the air-gapped surface showed only aggregate totals, so a user could not
+    // verify WHO gets paid (F2).
+    const ownAddressSet = useMemo(
+        () => new Set(addressOptions.map((a) => a.address)),
+        [addressOptions],
+    );
+
     async function handleSubmit(event) {
         event.preventDefault();
         if (busy) return;
@@ -695,6 +705,38 @@ export function PsbtSignForm({ walletId, onBack }) {
             </div>
             <div>
                 <strong>Inputs this address signs:</strong> {ownedInputCount} of {decomposed.inputs.length}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 4 }}>
+                <strong>Where the coins go:</strong>
+                {decomposed.outputs.map((o, i) => {
+                    const own = !!o.address && ownAddressSet.has(o.address);
+                    return (
+                        <div
+                            key={`${o.address || 'data'}-${i}`}
+                            style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}
+                        >
+                            <span
+                                style={{
+                                    color: own ? 'var(--xc-text-muted)' : 'var(--xc-text)',
+                                    fontWeight: own ? 'normal' : 600,
+                                    whiteSpace: 'nowrap',
+                                }}
+                            >
+                                {own ? 'Change (back to you)' : 'Recipient'}
+                            </span>
+                            {o.address ? (
+                                <AddressText address={o.address} />
+                            ) : (
+                                <span style={{ color: 'var(--xc-text-muted)' }}>
+                                    (data / non-address output)
+                                </span>
+                            )}
+                            <span style={{ marginLeft: 'auto', whiteSpace: 'nowrap' }}>
+                                {(o.value || 0).toLocaleString()} sats
+                            </span>
+                        </div>
+                    );
+                })}
             </div>
         </div>
     ) : null;
