@@ -64,11 +64,18 @@ export class FileStorageBackend extends StorageBackend {
     }
 
     async clear() {
-        try {
-            await fs.unlink(this._filePath);
-        } catch (err) {
-            if (err && err.code === 'ENOENT') return;
-            throw err;
+        // Remove both the vault ciphertext and any half-written .tmp sibling
+        // a crash mid-save may have left. clear() runs on Reset, so a stray
+        // vault.bin.tmp holding the encrypted vault document must not outlive
+        // the reset (the durable case: a user who resets then decommissions
+        // the machine).
+        for (const p of [this._filePath, this._tmpPath]) {
+            try {
+                await fs.unlink(p);
+            } catch (err) {
+                if (err && err.code === 'ENOENT') continue;
+                throw err;
+            }
         }
     }
 }

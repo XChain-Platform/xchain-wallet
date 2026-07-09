@@ -60,11 +60,15 @@ export class FileMetaBackend {
     }
 
     async clear() {
-        try {
-            await fs.unlink(this._filePath);
-        } catch (err) {
-            if (err && err.code === 'ENOENT') return;
-            throw err;
+        // Remove both the meta file and any half-written .tmp sibling a
+        // crash mid-save may have left, so a Reset leaves no stray copy.
+        for (const p of [this._filePath, this._tmpPath]) {
+            try {
+                await fs.unlink(p);
+            } catch (err) {
+                if (err && err.code === 'ENOENT') continue;
+                throw err;
+            }
         }
     }
 }

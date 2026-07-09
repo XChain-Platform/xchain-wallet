@@ -100,6 +100,10 @@ export function createRuntime(deps) {
         storageBackend: deps.storageBackend,
         sessionBackend: deps.sessionBackend,
         metaBackend: deps.metaBackend,
+        // Optional file-backed unlock-attempt throttle (§26). When present,
+        // handleWalletUnlock enforces the same pre-KDF lockout the extension
+        // ships; when absent (older callers / tests) unlock is un-throttled.
+        unlockThrottleStore: deps.unlockThrottleStore || null,
         chainRegistry: deps.chainRegistry,
         sdkRegistry: deps.sdkRegistry,
         getDiagnosticContext: deps.getDiagnosticContext,
@@ -259,6 +263,7 @@ export async function handleIpcMessage(runtime, message) {
                 storageBackend: runtime.storageBackend,
                 sessionBackend: runtime.sessionBackend,
                 metaBackend: runtime.metaBackend,
+                unlockThrottleStore: runtime.unlockThrottleStore,
                 chainRegistry: runtime.chainRegistry,
                 sdkRegistry: runtime.sdkRegistry,
                 onUnlocked: async () => {

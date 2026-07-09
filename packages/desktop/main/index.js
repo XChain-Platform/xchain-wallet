@@ -38,7 +38,7 @@
 //     cache is silently disabled; the user re-enters their password
 //     every launch rather than having the key written insecurely.
 
-import { app, BrowserWindow, Menu, ipcMain, safeStorage, session, Notification } from 'electron';
+import { app, BrowserWindow, Menu, ipcMain, safeStorage, session, shell, Notification } from 'electron';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -52,6 +52,8 @@ import { IPC_CHANNEL } from './messageHost.js';
 import { FileStorageBackend, vaultPathFor } from './storage.js';
 import { FileMetaBackend, metaPathFor } from './meta.js';
 import { KeychainSessionBackend, sessionKeyPathFor } from './keychain.js';
+import { FileUnlockThrottleStore, unlockThrottlePathFor } from './unlockThrottle.js';
+import { isHttpUrl, shouldBlockNavigation, isTrustedSenderEvent } from './security.js';
 import { attachHidPermissions } from './permissions.js';
 import {
     attachDeepLinkHandlers,
@@ -87,6 +89,43 @@ let pendingDeepLink = null;
 // renderer that boots before the sync settles still gets the result.
 /** @type {Promise<{ ok: boolean, descriptors?: object[], generatedAt?: string, reason?: string }> | null} */
 let chainRegistrySync = null;
+
+// §9.3.2 navigation lockdown. Every BrowserWindow loads the local
+// renderer with the preload attached, and the preload exposes the
+// privileged `xchainWalletBridge.sendMessage` (unlock / send / sign over
+// an auto-unlocked vault). Electron's defaults would let a renderer
+// `window.open` a child window that INHERITS the preload, or navigate the
+// top-level frame to a remote origin that KEEPS the preload; either puts
+// the bridge in front of non-app content (the desktop analog of the
+// extension's BRIDGE-1 drain). This guard, applied to every webContents
+// the app ever creates, denies all `window.open` (routing http(s) links
+// to the OS browser), blocks any navigation away from the local app, and
+// refuses `<webview>` embedding. See security.js for the pure predicates.
+function hardenWebContents(contents) {
+    if (!contents || typeof contents.setWindowOpenHandler !== 'function') return;
+    contents.setWindowOpenHandler(({ url }) => {
+        // Open real external links in the user's browser, never in a
+        // preload-bearing Electron window.
+        if (isHttpUrl(url)) {
+            shell.openExternal(url).catch((err) => {
+                console.error('[xchain] shell.openExternal failed:', err);
+            });
+        }
+        return { action: 'deny' };
+    });
+    contents.on('will-navigate', (event, url) => {
+        if (shouldBlockNavigation(url)) {
+            event.preventDefault();
+            if (isHttpUrl(url)) {
+                shell.openExternal(url).catch(() => { /* best-effort */ });
+            }
+        }
+    });
+    contents.on('will-attach-webview', (event) => {
+        // The wallet never embeds a <webview>; refuse any attempt.
+        event.preventDefault();
+    });
+}
 
 function liveWindows() {
     return [...windows].filter((w) => !w.isDestroyed());
@@ -127,6 +166,10 @@ function buildRuntime() {
             safeStorage,
             filePath: sessionKeyPathFor(userData),
         }),
+        // §26: file-backed unlock-attempt throttle so desktop wallet.unlock
+        // enforces the same pre-KDF lockout the extension ships (persisted
+        // under userData; survives restart so a relaunch can't reset it).
+        unlockThrottleStore: new FileUnlockThrottleStore(unlockThrottlePathFor(userData)),
         chainRegistry,
         sdkRegistry: new sdkLib.SDKRegistry({
             chainRegistry,
@@ -325,6 +368,15 @@ function buildApplicationMenu() {
 // BEFORE whenReady so a second invocation (e.g. a `bitcoin:` click
 // while the app is already running) routes correctly. `requestSingleInstanceLock`
 // is idempotent and safe to call early.
+// §9.3.2: harden every webContents the app creates (main windows,
+// detached windows, devtools, any future child) the moment it exists, so
+// no preload-bearing frame can be navigated to, or spawn a window loading,
+// remote content. Registered before whenReady so the very first window is
+// covered.
+app.on('web-contents-created', (_event, contents) => {
+    hardenWebContents(contents);
+});
+
 const deepLinkCtx = attachDeepLinkHandlers(app, { onDeepLink: forwardDeepLink });
 if (!deepLinkCtx.gotLock) {
     // Another instance is already running. Quit cleanly; the running
@@ -391,7 +443,16 @@ app.whenReady().then(async () => {
         console.error('[xchain] updater wiring failed:', err);
     }
 
-    ipcMain.handle(IPC_CHANNEL, async (_event, message) => {
+    ipcMain.handle(IPC_CHANNEL, async (event, message) => {
+        // Sender trust boundary (belt-and-suspenders behind the navigation
+        // lockdown): reject a call whose frame is a positively-remote
+        // origin. A legitimate local renderer always passes.
+        if (!isTrustedSenderEvent(event)) {
+            return {
+                ok: false,
+                error: { name: 'ForbiddenSenderError', message: 'desktop: message rejected from untrusted frame' },
+            };
+        }
         if (!runtime) {
             return {
                 ok: false,
@@ -407,7 +468,10 @@ app.whenReady().then(async () => {
     // invokes this channel; main creates a window pre-routed via
     // search-string prefill. Validates shape so a misbehaving
     // renderer can't pass non-serializable junk.
-    ipcMain.handle('xchain:open-window', async (_event, args) => {
+    ipcMain.handle('xchain:open-window', async (event, args) => {
+        if (!isTrustedSenderEvent(event)) {
+            return { ok: false, error: 'open-window: rejected from untrusted frame' };
+        }
         const initialView = typeof args?.initialView === 'string' ? args.initialView : '';
         const initialContext = args?.initialContext && typeof args.initialContext === 'object'
             ? args.initialContext
@@ -429,7 +493,10 @@ app.whenReady().then(async () => {
     // bundled descriptors. Descriptors are already signature-verified
     // and schema-validated here in main; the renderer still re-validates
     // inside applyRemoteDescriptors.
-    ipcMain.handle('xchain:chain-registry', async () => {
+    ipcMain.handle('xchain:chain-registry', async (event) => {
+        if (!isTrustedSenderEvent(event)) {
+            return { ok: false, reason: 'chain-registry: rejected from untrusted frame' };
+        }
         if (!chainRegistrySync) return { ok: false, reason: 'registry sync not started' };
         const r = await chainRegistrySync;
         return r.ok
@@ -441,7 +508,7 @@ app.whenReady().then(async () => {
     // signers (paired via PairSignerForm) become reachable from the
     // main-process MessageHost. `action.*.hw` handlers consult the
     // same process-wide `signerBridge` registry this listener feeds.
-    attachSignerBridgeListener({ ipcMain });
+    attachSignerBridgeListener({ ipcMain, isTrustedSender: isTrustedSenderEvent });
 
     // §24.6 / G057: install the application menu (File → New Window)
     // before opening the primary window so the accelerator is live the

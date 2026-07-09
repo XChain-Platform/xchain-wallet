@@ -161,11 +161,17 @@ export class KeychainSessionBackend {
             this._inMemory.fill(0);
             this._inMemory = null;
         }
-        try {
-            await fs.unlink(this._filePath);
-        } catch (err) {
-            if (err && err.code === 'ENOENT') return;
-            throw err;
+        // Remove both the live ciphertext and any half-written .tmp sibling
+        // a crash mid-save may have left. clear() runs on Lock/Reset, so a
+        // stray session.bin.tmp holding the encrypted master key must not
+        // survive the lock the user believes purged it.
+        for (const p of [this._filePath, this._tmpPath]) {
+            try {
+                await fs.unlink(p);
+            } catch (err) {
+                if (err && err.code === 'ENOENT') continue;
+                throw err;
+            }
         }
     }
 }
@@ -184,11 +190,13 @@ export function sessionKeyPathFor(userDataDir) {
 }
 
 function bytesToHex(bytes) {
-    let s = '';
-    for (let i = 0; i < bytes.length; i += 1) {
-        s += bytes[i].toString(16).padStart(2, '0');
-    }
-    return s;
+    // Single allocation via Buffer rather than `s += ...` concatenation:
+    // safeStorage's encryptString takes only a string, so the master key
+    // must transit one immutable (un-zeroable) hex string here. Building it
+    // incrementally would additionally leave a chain of partial-prefix key
+    // strings resident in the heap until GC; one allocation minimizes that
+    // residue. This is the one place the key exists un-scrubbed.
+    return Buffer.from(bytes).toString('hex');
 }
 
 function hexToBytes(s) {

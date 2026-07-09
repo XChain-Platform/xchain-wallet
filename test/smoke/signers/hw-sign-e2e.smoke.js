@@ -835,7 +835,7 @@ assert.ok(
 // 14d. Main index wires the listener at startup.
 const desktopMainSrc = readFileSync(join(desktop, 'main', 'index.js'), 'utf8');
 assert.ok(
-    /attachSignerBridgeListener\(\{ ipcMain \}\)/.test(desktopMainSrc),
+    /attachSignerBridgeListener\(\{\s*ipcMain\b/.test(desktopMainSrc),
     'desktop main index calls attachSignerBridgeListener with ipcMain',
 );
 

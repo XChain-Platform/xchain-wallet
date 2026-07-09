@@ -40,6 +40,8 @@
 // The allowlist is exported so the `desktop-hw.smoke.js` smoke can
 // verify coverage without duplicating the constants.
 
+import { isRemoteFrameUrl } from './security.js';
+
 export const HID_VENDOR_ALLOWLIST = Object.freeze({
     LEDGER: 0x2C97,
     TREZOR_T: 0x1209,
@@ -65,12 +67,16 @@ export function attachHidPermissions(session) {
         throw new Error('attachHidPermissions: session.setDevicePermissionHandler is missing');
     }
 
-    session.setPermissionRequestHandler((_webContents, permission, callback) => {
-        // `hid` covers navigator.hid.*; we grant unconditionally here
-        // and do the fine-grained vendor allowlist in the device
-        // permission handler below. Everything else stays default-deny.
+    session.setPermissionRequestHandler((webContents, permission, callback) => {
+        // `hid` covers navigator.hid.*; grant it only to the app's own
+        // local renderer, and do the fine-grained vendor allowlist in the
+        // device permission handler below. A frame identified as a remote
+        // origin (which, behind the window navigation lockdown, should
+        // never hold the preload) is denied so it can never reach a paired
+        // Ledger/Trezor. Everything else stays default-deny.
         if (permission === 'hid') {
-            callback(true);
+            const url = webContents?.getURL?.();
+            callback(!isRemoteFrameUrl(url));
             return;
         }
         callback(false);

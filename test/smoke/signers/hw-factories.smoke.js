@@ -382,6 +382,14 @@ assert.equal(isAllowedHidVendor(0x046D), false, 'unrelated vendor (Logitech) rej
     permHandler(null, 'geolocation', (ok) => { granted = ok; });
     assert.equal(granted, false, 'non-hid permission denied');
 
+    // A local file:// renderer is granted hid; a positively-remote frame
+    // (which behind the navigation lockdown should never hold the preload)
+    // is denied so it can never reach a paired Ledger/Trezor.
+    permHandler({ getURL: () => 'file:///app/renderer/dist/index.html' }, 'hid', (ok) => { granted = ok; });
+    assert.equal(granted, true, 'hid granted to local file:// renderer');
+    permHandler({ getURL: () => 'https://evil.example/x' }, 'hid', (ok) => { granted = ok; });
+    assert.equal(granted, false, 'hid denied to a remote https frame');
+
     // Device handler only allows whitelisted vendors.
     assert.equal(
         deviceHandler({ deviceType: 'hid', device: { vendorId: 0x2C97 } }),
