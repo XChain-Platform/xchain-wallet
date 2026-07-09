@@ -166,7 +166,10 @@ function parseCoinCodeStyle(raw, chainRegistry) {
     const feePriority = normalizeFeePriority(params.feePriority);
     if (feePriority) intent.feePriority = feePriority;
     intent.params = params;
-    if (required.length > 0) intent.required = required;
+    // BIP21: a `req-*` param the wallet does not implement invalidates the
+    // whole URI. XChain implements none, so any req- param rejects the URI
+    // rather than silently dropping the required directive.
+    if (required.length > 0) return { kind: 'unknown' };
     return intent;
 }
 
@@ -199,7 +202,8 @@ function parsePathStyle(raw) {
     const feePriority = normalizeFeePriority(params.feePriority);
     if (feePriority) intent.feePriority = feePriority;
     intent.params = params;
-    if (required.length > 0) intent.required = required;
+    // BIP21: reject on any unimplemented req- param (see parseCoinCodeStyle).
+    if (required.length > 0) return { kind: 'unknown' };
     return intent;
 }
 
@@ -225,7 +229,8 @@ function parseBip21Style(raw) {
     if (parts.params?.chain && CHAIN_ID_RE.test(parts.params.chain)) intent.chainId = parts.params.chain;
     const feePriority = normalizeFeePriority(parts.params?.feePriority);
     if (feePriority) intent.feePriority = feePriority;
-    if (parts.required?.length > 0) intent.required = parts.required;
+    // BIP21: reject on any unimplemented req- param (see parseCoinCodeStyle).
+    if (parts.required?.length > 0) return { kind: 'unknown' };
     return intent;
 }
 
@@ -254,9 +259,12 @@ function parseQuery(queryPart) {
         }
         try { key = decodeURIComponent(key); } catch { /* keep raw */ }
         if (key.startsWith('req-')) {
-            const name = key.slice(4);
-            required.push(name);
-            params[name] = value;
+            // Store under the FULL `req-<name>` key (like bip21.js), never the
+            // bare name: a req- value must not be silently applied as if it
+            // were an ordinary param. `required` carries the bare names so the
+            // caller can reject the URI (XChain implements no req- variables).
+            required.push(key.slice(4));
+            params[key] = value;
         } else {
             params[key] = value;
         }

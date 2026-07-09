@@ -20,6 +20,34 @@ const chainRegistry = {
     chainIdFor: (coin, networkKind) => `${coin}-${networkKind}`,
 };
 
+describe('parseXchainUri BIP21 req- enforcement', () => {
+    // BIP21: a req- param the wallet does not implement invalidates the whole
+    // URI. XChain implements none, so any req- rejects (kind:'unknown')
+    // rather than silently dropping the required directive and paying a plain
+    // send / applying the value as an ordinary param.
+    it('rejects a coin-code URI carrying a req- param', () => {
+        expect(
+            parseXchainUri('xchain:TBTC/send?to=addr&amount=1&req-orderbind=42', { chainRegistry }).kind,
+        ).toBe('unknown');
+    });
+
+    it('rejects a path-style URI carrying a req- param', () => {
+        expect(
+            parseXchainUri('xchain://bitcoin-regtest/BTC?amount=1&req-pj=https://x', { chainRegistry }).kind,
+        ).toBe('unknown');
+    });
+
+    it('rejects a BIP21-style xchain: address URI carrying a req- param', () => {
+        expect(
+            parseXchainUri('xchain:bc1qexample?amount=1&req-somethingcritical=1', { chainRegistry }).kind,
+        ).toBe('unknown');
+    });
+
+    it('still parses the same URIs without the req- param', () => {
+        expect(parseXchainUri('xchain:TBTC/send?to=addr&amount=1', { chainRegistry }).kind).toBe('send');
+    });
+});
+
 describe('parseXchainUri execute action', () => {
 
     it('parses contract, method, params, and gas from an execute URI', () => {

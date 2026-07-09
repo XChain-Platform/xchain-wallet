@@ -173,6 +173,12 @@ export function classifyDeepLink(url) {
     // instead of silently ignoring the click.
     try {
         const parsed = parseBip21Uri(url);
+        // BIP21: a `req-*` param the wallet does not implement invalidates the
+        // whole URI. XChain implements none, so reject (parsed: null) rather
+        // than dropping the required directive and paying a plain send.
+        if (parsed.required?.length > 0) {
+            return { scheme, raw: url, parsed: null };
+        }
         return { scheme, raw: url, parsed };
     } catch (err) {
         if (err instanceof InvalidBip21Error) {
