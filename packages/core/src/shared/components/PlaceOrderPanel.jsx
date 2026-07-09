@@ -36,6 +36,7 @@ import { NativeFeeToggle } from './NativeFeeToggle.jsx';
 import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 import { preferredSourceId } from '../addressSelection.js';
 import { estimateNativeSendFee } from '../../flows/feeEstimate.js';
+import { multiplyAmounts } from '../../market/orderMath.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -148,12 +149,12 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
     const descriptor = chainRegistry.get(chainId);
     const coinTicker = descriptor ? (PROTOCOL_COIN_TICKER[descriptor.coin] || '') : '';
 
-    const total = useMemo(() => {
-        const p = Number(price);
-        const s = Number(size);
-        if (!Number.isFinite(p) || !Number.isFinite(s) || p <= 0 || s <= 0) return null;
-        return p * s;
-    }, [price, size]);
+    // Exact price × size as a plain-decimal string (never a float
+    // artifact or scientific notation). This is both what the review
+    // screen shows and what serialises into GIVE_AMOUNT / GET_AMOUNT, so
+    // the two can never disagree. null when price or size isn't a
+    // positive plain-decimal number.
+    const total = useMemo(() => multiplyAmounts(price, size), [price, size]);
 
     const expirationBlocks = useMemo(() => {
         if (expirationId === 'custom') {
