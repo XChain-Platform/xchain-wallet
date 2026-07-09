@@ -67,12 +67,30 @@ export async function coinpayAction(opts) {
     if (typeof opts.payeeAddress !== 'string' || opts.payeeAddress.length === 0) {
         throw new Error('coinpayAction: payeeAddress is required');
     }
-    const coinAmount = Number(opts.coinAmount);
+    // Validate the base-unit amount as an integer that survives JS number
+    // precision. A large DOGE obligation (supply ~1.3e18 koinu) can exceed
+    // Number.MAX_SAFE_INTEGER (~9e15 = ~90M DOGE); silently coercing it
+    // through Number() would round the native-coin output, underpaying
+    // (COINPAY rejected, buyer loses the coin with no settlement) or
+    // overpaying. Reject a non-integer string shape before coercion, then
+    // fail closed on values past safe-integer precision rather than sign a
+    // wrong output. (Full big-value support needs a string/BigInt output
+    // path through the encoder; see sweep report open item.)
+    const rawAmount = typeof opts.coinAmount === 'string'
+        ? opts.coinAmount.trim()
+        : opts.coinAmount;
+    if (typeof rawAmount === 'string' && !/^\d+$/.test(rawAmount)) {
+        throw new Error('coinpayAction: coinAmount must be an integer (base units)');
+    }
+    const coinAmount = Number(rawAmount);
     if (!Number.isFinite(coinAmount) || coinAmount <= 0) {
         throw new Error('coinpayAction: coinAmount must be a positive number (base units)');
     }
     if (!Number.isInteger(coinAmount)) {
         throw new Error('coinpayAction: coinAmount must be an integer (base units)');
+    }
+    if (!Number.isSafeInteger(coinAmount)) {
+        throw new Error('coinpayAction: coinAmount exceeds safe integer precision (base units)');
     }
 
     const source = normalizeSource(opts.from, 'coinpayAction');

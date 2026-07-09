@@ -23,6 +23,7 @@ import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { estimateNativeSendFee } from '../../flows/feeEstimate.js';
+import { coinpayExpiryText } from '../../market/coinpayExpiry.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -166,12 +167,17 @@ export function CoinpayForm({
         if (!selected) return null;
         const o = selected.obligation;
         const payeeAddress = o.payee_address || o.payeeAddress;
-        const amount = Number(o.coin_amount ?? o.coinAmount);
         const expiration = Number(o.expiration);
         return {
             actionIndex: String(o.action_index ?? o.actionIndex),
             payeeAddress,
-            coinAmount: Number.isFinite(amount) ? amount : null,
+            // Base-unit native amount. null when missing OR beyond safe
+            // integer precision (large DOGE): both the real-broadcast and
+            // watcher paths pass this straight to a native output, so an
+            // imprecise value would mispay. Fail closed here (blocks
+            // review) rather than sign a rounded output. Kept in sync with
+            // coinpayAction's guard.
+            coinAmount: safeBaseUnitAmount(o.coin_amount ?? o.coinAmount),
             expiration: Number.isFinite(expiration) ? expiration : null,
         };
     }, [selected]);
@@ -192,7 +198,7 @@ export function CoinpayForm({
         event.preventDefault();
         if (!selected || !summary) return;
         if (summary.coinAmount == null || !summary.payeeAddress) {
-            setSubmitError('Obligation is missing payee or coin amount.');
+            setSubmitError('Obligation has no valid payee or a coin amount too large to pay safely.');
             return;
         }
         setSubmitError(null);
@@ -205,7 +211,7 @@ export function CoinpayForm({
         if (!isWatcherMode && !hw && (!signerReady && password.length === 0)) return;
         if (!isWatcherMode && hw && hwStatus !== 'available') return;
         if (summary.coinAmount == null || !summary.payeeAddress) {
-            setSubmitError('Obligation is missing payee or coin amount.');
+            setSubmitError('Obligation has no valid payee or a coin amount too large to pay safely.');
             return;
         }
         setStage('submitting');
@@ -362,8 +368,8 @@ export function CoinpayForm({
                         label="Amount"
                         value={`${summary.coinAmount} ${coinTicker || 'base units'}`}
                     />
-                    {summary.expiration ? (
-                        <DetailRow label="Expires at" value={`block ${summary.expiration}`} />
+                    {coinpayExpiryText(summary.expiration) ? (
+                        <DetailRow label="Expires" value={coinpayExpiryText(summary.expiration)} />
                     ) : null}
                     <DetailRow label="Network fee" value={feeLabel} />
                 </dl>
@@ -477,8 +483,8 @@ export function CoinpayForm({
                                         </div>
                                         <div style={{ fontSize: '0.75rem', color: 'var(--xc-fg-muted)' }}>
                                             From <AddressText address={row.address} />
-                                            {row.obligation.expiration ? (
-                                                <> · expires at block {row.obligation.expiration}</>
+                                            {coinpayExpiryText(row.obligation.expiration) ? (
+                                                <> · expires {coinpayExpiryText(row.obligation.expiration)}</>
                                             ) : null}
                                         </div>
                                     </button>
@@ -512,11 +518,11 @@ export function CoinpayForm({
                         <dd className={styles.detailsValue}>
                             {summary.coinAmount} {coinTicker || 'base units'}
                         </dd>
-                        {summary.expiration ? (
+                        {coinpayExpiryText(summary.expiration) ? (
                             <>
-                                <dt className={styles.detailsLabel}>Expires at</dt>
+                                <dt className={styles.detailsLabel}>Expires</dt>
                                 <dd className={styles.detailsValue}>
-                                    block {summary.expiration}
+                                    {coinpayExpiryText(summary.expiration)}
                                 </dd>
                             </>
                         ) : null}
@@ -551,6 +557,18 @@ function DetailRow({ label, value }) {
             <dd className={styles.detailsValue}>{value}</dd>
         </>
     );
+}
+
+// Parse a server-supplied base-unit coin amount into a safe positive
+// integer, or null. Rejects non-integer shapes and values past
+// Number.MAX_SAFE_INTEGER so a large-DOGE obligation can't be rounded
+// into a wrong native-coin output.
+function safeBaseUnitAmount(raw) {
+    if (raw == null || raw === '') return null;
+    if (typeof raw === 'string' && !/^\d+$/.test(raw.trim())) return null;
+    const n = Number(raw);
+    if (!Number.isSafeInteger(n) || n <= 0) return null;
+    return n;
 }
 
 function isPendingForPayer(row, address) {
