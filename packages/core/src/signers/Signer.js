@@ -60,6 +60,14 @@ export class NotImplementedError extends Error {
  * @property {number} startIndex
  * @property {number} count
  * @property {string} [addressType]  defaults to the chain's defaultAddressType
+ * @property {boolean} [verify]  hardware signers only: display each derived
+ *        address on the device's trusted screen and require the user to
+ *        confirm it, so a compromised host/transport cannot substitute a
+ *        deposit address the user cannot see. Software signers ignore it
+ *        (their addresses are derived locally, not host-mediated). Use it
+ *        ONLY for a small, deliberate set (a fresh receive address, an
+ *        on-demand "verify this address" tap) - never for silent gap-limit
+ *        scanning, which would prompt the user on-device for every index.
  */
 
 /**

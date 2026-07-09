@@ -43,6 +43,7 @@ const {
     importMnemonic,
     unlockWallet,
     receiveAddress,
+    verifyReceiveAddress,
     dispenserAddress,
     resolveActiveAddresses,
     setActiveAddress,
@@ -1230,6 +1231,29 @@ export function createBackgroundHost(deps) {
             vault,
             chainRegistry,
             sdkRegistry,
+        });
+    });
+
+    // §17.6: confirm a persisted hardware receive address on the device's
+    // trusted screen and cross-check it against what the wallet holds. The
+    // Receive screen's "Verify on your device" action calls this; requires
+    // the paired HW signer (RemoteSigner) named by req.signerId.
+    host.register('receive.verifyAddress', async (req, { vault, chainRegistry, signerPool }) => {
+        const signer = await pickSignerFromRequest({
+            vault,
+            walletId: req?.walletId,
+            signerId: req?.signerId,
+            signerPool,
+        });
+        if (!signer) {
+            throw new Error('receive.verifyAddress: a paired hardware signer is required');
+        }
+        return verifyReceiveAddress({
+            vault,
+            chainId: req?.chainId,
+            addressId: req?.addressId,
+            signer,
+            chainRegistry,
         });
     });
 

@@ -21,6 +21,7 @@
 import { createAddress } from '../schemas/address.js';
 import { tickerForCoin } from '../registry/coinTicker.js';
 import { unlockWallet } from './unlockWallet.js';
+import { HardwareAddressMismatchError } from './verifyReceiveAddress.js';
 
 export class NoMatchingAccountError extends Error {
     constructor(walletId, accountIndex) {
@@ -147,6 +148,7 @@ export async function receiveAddress({
     const signerKind = signer.kind;
     const addressSource = signerKind === 'software' ? 'hd' : signerKind;
 
+    const isHardware = signerKind === 'trezor' || signerKind === 'ledger';
     try {
         const [derived] = await signer.getAddresses({
             chainId,
@@ -156,6 +158,31 @@ export async function receiveAddress({
             count: 1,
             addressType: type,
         });
+        if (isHardware) {
+            // §17.6: a fresh HARDWARE receive address is confirmed on the
+            // device's trusted screen before it is persisted, so a
+            // compromised host/transport cannot silently substitute a
+            // deposit address. The device physically displays the address
+            // (verify:true); the returned value is cross-checked against the
+            // silent derivation as a tripwire against an inconsistent
+            // transport. Mismatch aborts without persisting.
+            const [shown] = await signer.getAddresses({
+                chainId,
+                accountIndex: resolvedAccountIndex,
+                change: 0,
+                startIndex: nextIndex,
+                count: 1,
+                addressType: type,
+                verify: true,
+            });
+            if (!shown || shown.address !== derived.address) {
+                throw new HardwareAddressMismatchError({
+                    expected: derived.address,
+                    deviceAddress: shown?.address,
+                    path: derived.path,
+                });
+            }
+        }
         const record = createAddress({
             accountId: account.id,
             chain: descriptor.coin,

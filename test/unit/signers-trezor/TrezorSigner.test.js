@@ -117,12 +117,16 @@ describe('TrezorSigner.getStatus', () => {
         expect(await s.getStatus()).toBe('disconnected');
     });
 
-    it('returns "available" when device_id is absent (device gives no id)', async () => {
-        // When the observed device reports no id, we can't mismatch: treat as available.
+    it('returns "disconnected" when device_id is absent (identity unconfirmable, fail closed)', async () => {
+        // When the observed device reports neither device_id nor
+        // fw_fingerprint we cannot confirm it is the device we paired
+        // with, so fail closed to 'disconnected' rather than asserting the
+        // paired device is present (which would silently accept a swapped
+        // or counterfeit device that omits both id fields).
         const s = makeSigner({
             getFeatures: vi.fn().mockResolvedValue({ success: true, payload: { internal_model: 'T2T1' } }),
         });
-        expect(await s.getStatus()).toBe('available');
+        expect(await s.getStatus()).toBe('disconnected');
     });
 });
 
@@ -181,6 +185,19 @@ describe('TrezorSigner.getAddresses', () => {
             count: 1,
         });
         expect(rows[0].path).toMatch(/^m\/44'/);
+    });
+
+    it('§17.6: passes showOnTrezor per the verify flag (device confirmation)', async () => {
+        const getAddress = vi.fn().mockResolvedValue({ success: true, payload: { address: 'bc1qmock' } });
+        const s = makeSigner({ getAddress });
+        const params = {
+            chainId: 'bitcoin-mainnet', accountIndex: 0, change: 0, startIndex: 0, count: 1, addressType: 'p2wpkh',
+        };
+        await s.getAddresses(params);
+        expect(getAddress.mock.calls[0][0]).toMatchObject({ showOnTrezor: false });
+        getAddress.mockClear();
+        await s.getAddresses({ ...params, verify: true });
+        expect(getAddress.mock.calls[0][0]).toMatchObject({ showOnTrezor: true });
     });
 });
 

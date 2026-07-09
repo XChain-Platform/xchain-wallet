@@ -1278,6 +1278,17 @@ export function generateReceiveAddress(opts) {
 }
 
 /**
+ * §17.6: confirm a persisted HARDWARE receive address on the device's
+ * trusted screen and cross-check it against the wallet's copy. Rejects
+ * (HardwareAddressMismatchError) if the device reports a different address.
+ * @param {{ walletId: string, chainId: string, addressId: string, signerId: string }} opts
+ * @returns {Promise<{ confirmed: boolean, deviceAddress: string, expectedAddress: string, path: string }>}
+ */
+export function verifyReceiveAddress(opts) {
+    return /** @type {any} */ (sendMessage('receive.verifyAddress', opts));
+}
+
+/**
  * Derive the next dispenser sub-address (change=2) under an account (§16).
  * Same shape as generateReceiveAddress; pass `accountId` to scope it.
  * @param {object} opts

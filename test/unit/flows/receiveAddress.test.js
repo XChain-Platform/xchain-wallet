@@ -170,3 +170,59 @@ describe('receiveAddress (§29.7)', () => {
         expect(rec.derivationPath).toBe("m/84'/0'/0'/0/0");
     });
 });
+
+// §17.6: a fresh HARDWARE receive address is confirmed on the device's
+// trusted screen (verify:true) before it is persisted, so a compromised
+// host cannot silently substitute a deposit address.
+function makeHwSigner(kind, { verifyReturns } = {}) {
+    const calls = [];
+    return {
+        id: `signer-${kind}`,
+        kind,
+        calls,
+        async getAddresses(params) {
+            calls.push(params);
+            const { accountIndex, change, startIndex, verify } = params;
+            const address = verify && verifyReturns
+                ? verifyReturns
+                : `addr_${accountIndex}_${change}_${startIndex}`;
+            return [{
+                index: startIndex,
+                address,
+                publicKey: `pub_${accountIndex}_${change}_${startIndex}`,
+                path: `m/84'/0'/${accountIndex}'/${change}/${startIndex}`,
+            }];
+        },
+        lock() {},
+    };
+}
+
+describe('receiveAddress hardware confirmation (§17.6)', () => {
+    it('confirms the fresh HW address on the device (verify:true) before persisting', async () => {
+        const vault = makeVault({ accounts: [ACCOUNT_A] });
+        const hw = makeHwSigner('trezor');
+        const rec = await receiveAddress(base(vault, hw));
+        expect(rec.source).toBe('trezor');
+        // Two derivations: a silent one, then a device-confirmed one.
+        expect(hw.calls.length).toBe(2);
+        expect(hw.calls[0].verify).toBeFalsy();
+        expect(hw.calls[1].verify).toBe(true);
+        // The device-confirmed address is persisted.
+        expect(await vault.addresses.get(rec.id)).toBeTruthy();
+    });
+
+    it('aborts without persisting when the device shows a different address', async () => {
+        const vault = makeVault({ accounts: [ACCOUNT_A] });
+        const hw = makeHwSigner('ledger', { verifyReturns: 'addr_ATTACKER' });
+        await expect(receiveAddress(base(vault, hw))).rejects.toThrow(/different address/i);
+        expect((await vault.addresses.list()).length).toBe(0);
+    });
+
+    it('software addresses never trigger an on-device verify', async () => {
+        const vault = makeVault({ accounts: [ACCOUNT_A] });
+        const sw = makeSigner('software');
+        await receiveAddress(base(vault, sw));
+        expect(sw.calls.length).toBe(1);
+        expect(sw.calls[0].verify).toBeFalsy();
+    });
+});

@@ -192,4 +192,16 @@
     min-width: 0;
 }
 
+/* §17.6 hardware receive-address confirmation block. */
+.hwVerify {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    margin-top: var(--xc-space-3);
+    padding: var(--xc-space-3);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-md);
+    background: var(--xc-bg-muted);
+}
+
 

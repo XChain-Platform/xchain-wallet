@@ -191,6 +191,26 @@ const rejectSigner = new TrezorSigner({
 });
 assert.equal(await rejectSigner.getStatus(), 'disconnected');
 
+// Fail closed on an unconfirmable identity: a device that reports
+// getFeatures success but omits BOTH device_id and fw_fingerprint cannot
+// be confirmed as the paired device, so it must read 'disconnected' (not
+// 'available', which would silently accept a swapped/counterfeit device).
+const noIdConnect = makeMockConnect({
+    async getFeatures() { return { success: true, payload: { model: 'T2T1' } }; },
+});
+const noIdSigner = new TrezorSigner({
+    id: 'trezor-noid',
+    displayName: 'NoId',
+    model: 'T2T1',
+    deviceIdentifier: 'mock-device-id',
+    connect: noIdConnect,
+});
+assert.equal(
+    await noIdSigner.getStatus(),
+    'disconnected',
+    'device with no device_id/fw_fingerprint fails closed to "disconnected"',
+);
+
 // --- 4. getAddresses derives the right paths --------------------------
 
 const addrs = await signer.getAddresses({

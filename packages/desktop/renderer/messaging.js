@@ -145,6 +145,15 @@ export function generateReceiveAddress(opts) {
     return /** @type {any} */ (sendMessage('receive.getAddress', opts));
 }
 
+/**
+ * §17.6: confirm a persisted HARDWARE receive address on the device's
+ * trusted screen and cross-check it. Rejects on mismatch.
+ * @param {{ walletId: string, chainId: string, addressId: string, signerId: string }} opts
+ */
+export function verifyReceiveAddress(opts) {
+    return /** @type {any} */ (sendMessage('receive.verifyAddress', opts));
+}
+
 /** Derive the next dispenser sub-address (change=2) under an account (§16). @param {object} opts */
 export function generateDispenserAddress(opts) {
     return /** @type {any} */ (sendMessage('dispenser.getAddress', opts));

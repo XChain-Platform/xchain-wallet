@@ -92,6 +92,15 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     const [qrDataUrl, setQrDataUrl] = useState(/** @type {string | null} */ (null));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
 
+    // §17.6 hardware receive-address confirmation. HW addresses are
+    // host-mediated, so a compromised computer could swap the deposit
+    // address the wallet shows. The user confirms it on the device's
+    // trusted screen before depositing. status: idle | checking |
+    // confirmed | mismatch | error.
+    const [hwVerify, setHwVerify] = useState(
+        /** @type {{ status: string, message: string }} */ ({ status: 'idle', message: '' }),
+    );
+
     // §22 + §42.9 multisig receive integration. When the wallet has a
     // persisted MultisigConfig (Step 17) and the active chain is a
     // valid network for that config, we fetch and surface the
@@ -148,6 +157,45 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         })();
         return () => { cancelled = true; };
     }, [walletId, accountId, activeChainId, messaging]);
+
+    // §17.6: is the shown address backed by a hardware signer? Only those
+    // need (and support) on-device confirmation. Reset the verify state
+    // whenever the shown address changes.
+    const isHwAddress = !!address && (address.source === 'trezor' || address.source === 'ledger');
+    const hwDeviceLabel = address?.source === 'ledger'
+        ? 'Ledger'
+        : address?.source === 'trezor' ? 'Trezor' : 'device';
+    useEffect(() => {
+        setHwVerify({ status: 'idle', message: '' });
+    }, [address?.id]);
+
+    const verifyOnDevice = useCallback(async () => {
+        if (!address || !activeChainId) return;
+        if (typeof messaging.verifyReceiveAddress !== 'function') {
+            setHwVerify({ status: 'error', message: 'This app cannot verify on device.' });
+            return;
+        }
+        setHwVerify({ status: 'checking', message: '' });
+        try {
+            const res = await messaging.verifyReceiveAddress({
+                walletId,
+                chainId: activeChainId,
+                addressId: address.id,
+                signerId: address.signerId,
+            });
+            if (res?.confirmed) {
+                setHwVerify({ status: 'confirmed', message: '' });
+            } else {
+                setHwVerify({ status: 'mismatch', message: '' });
+            }
+        } catch (err) {
+            if (err?.name === 'HardwareAddressMismatchError') {
+                setHwVerify({ status: 'mismatch', message: '' });
+            } else {
+                setHwVerify({ status: 'error', message: err?.message || 'Verification failed.' });
+            }
+        }
+    }, [address, activeChainId, walletId, messaging]);
 
     // Derive the multisig output address whenever chain changes, if
     // this wallet has a MultisigConfig. Failures are non-fatal; we
@@ -571,6 +619,45 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                             </Button>
                         ) : null}
                     </div>
+
+                    {isHwAddress ? (
+                        <section
+                            role="group"
+                            aria-label="Confirm this address on your hardware wallet"
+                            className={styles.hwVerify}
+                        >
+                            <div className={styles.addressBox}>
+                                <AddressText address={address.address} truncate={false} size="sm" />
+                                <CopyButton value={address.address} />
+                            </div>
+                            {hwVerify.status === 'confirmed' ? (
+                                <p className={styles.hint} role="status">
+                                    ✅ Confirmed on your {hwDeviceLabel}. Safe to share.
+                                </p>
+                            ) : hwVerify.status === 'mismatch' ? (
+                                <div role="alert" className={styles.error}>
+                                    Your {hwDeviceLabel} showed a different address. Do not deposit here.
+                                    Disconnect and re-pair the device.
+                                </div>
+                            ) : hwVerify.status === 'error' ? (
+                                <div role="alert" className={styles.error}>{hwVerify.message}</div>
+                            ) : (
+                                <p className={styles.hint}>
+                                    Verify this address on your {hwDeviceLabel} before depositing, so a
+                                    compromised computer cannot swap it.
+                                </p>
+                            )}
+                            <Button
+                                variant="secondary"
+                                onClick={verifyOnDevice}
+                                disabled={hwVerify.status === 'checking'}
+                            >
+                                {hwVerify.status === 'checking'
+                                    ? `Check your ${hwDeviceLabel}…`
+                                    : `Verify on your ${hwDeviceLabel}`}
+                            </Button>
+                        </section>
+                    ) : null}
                 </>
             ) : null}
 

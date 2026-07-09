@@ -138,6 +138,19 @@ describe('LedgerSigner.getAddresses', () => {
         await expect(s.getAddresses({ chainId: 'bitcoin-mainnet', accountIndex: 0, change: 0, startIndex: 0, count: 1 }))
             .rejects.toThrow(/getWalletPublicKey failed/);
     });
+
+    it('§17.6: passes verify per the flag (device confirmation)', async () => {
+        const getWalletPublicKey = vi.fn().mockResolvedValue({
+            publicKey: '02' + 'a'.repeat(64), bitcoinAddress: 'bc1qmock', chainCode: 'c'.repeat(64),
+        });
+        const s = makeSigner({ getWalletPublicKey });
+        const params = { chainId: 'bitcoin-mainnet', accountIndex: 0, change: 0, startIndex: 0, count: 1, addressType: 'p2wpkh' };
+        await s.getAddresses(params);
+        expect(getWalletPublicKey.mock.calls[0][1]).toMatchObject({ verify: false });
+        getWalletPublicKey.mockClear();
+        await s.getAddresses({ ...params, verify: true });
+        expect(getWalletPublicKey.mock.calls[0][1]).toMatchObject({ verify: true });
+    });
 });
 
 describe('LedgerSigner.getPublicKey', () => {

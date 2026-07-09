@@ -171,7 +171,7 @@ export class LedgerSigner extends Signer {
      * @param {import('./Signer.js').GetAddressesParams} params
      * @returns {Promise<import('./Signer.js').DerivedAddress[]>}
      */
-    async getAddresses({ chainId, accountIndex, change, startIndex, count, addressType }) {
+    async getAddresses({ chainId, accountIndex, change, startIndex, count, addressType, verify }) {
         const format = ledgerFormatFor(addressType, chainId);
         const out = [];
         for (let i = 0; i < count; i += 1) {
@@ -183,10 +183,14 @@ export class LedgerSigner extends Signer {
                 change,
                 index,
             });
+            // verify: ask the Ledger to display the address on its trusted
+            // screen and require on-device confirmation (defeats a
+            // compromised host/transport substituting a receive address).
+            // Off = silent derivation for gap-limit scanning.
             const res = await runLedger(
                 this._id,
                 'getWalletPublicKey',
-                () => this._app.getWalletPublicKey(path, { verify: false, format }),
+                () => this._app.getWalletPublicKey(path, { verify: !!verify, format }),
             );
             out.push({
                 index,

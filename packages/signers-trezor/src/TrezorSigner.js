@@ -122,7 +122,14 @@ export class TrezorSigner extends Signer {
         // `device_id` or the `fw_fingerprint` field, whichever the
         // pairing flow captured.
         const observedId = features?.device_id ?? features?.fw_fingerprint ?? null;
-        if (observedId && observedId !== this._deviceIdentifier) {
+        // Fail closed on an unconfirmable identity. If the attached device
+        // reports neither device_id nor fw_fingerprint, we cannot confirm
+        // it is the device we paired with, so report 'disconnected' rather
+        // than 'available' (which would assert the paired device is
+        // present). Returning 'available' here would let a swapped or
+        // counterfeit device that omits both id fields pass the paired-
+        // device binding this check exists to enforce.
+        if (!observedId || observedId !== this._deviceIdentifier) {
             return 'disconnected';
         }
         return 'available';
@@ -136,7 +143,7 @@ export class TrezorSigner extends Signer {
      * @param {import('./Signer.js').GetAddressesParams} params
      * @returns {Promise<import('./Signer.js').DerivedAddress[]>}
      */
-    async getAddresses({ chainId, accountIndex, change, startIndex, count, addressType }) {
+    async getAddresses({ chainId, accountIndex, change, startIndex, count, addressType, verify }) {
         const coin = chainIdToTrezorCoin(chainId);
         const out = [];
         for (let i = 0; i < count; i += 1) {
@@ -148,8 +155,12 @@ export class TrezorSigner extends Signer {
                 change,
                 index,
             });
+            // verify: display the address on the Trezor's trusted screen and
+            // require the user to confirm it (defeats a compromised host/
+            // transport substituting a receive address). Off = silent
+            // derivation for gap-limit scanning.
             const [addrRes, pkRes] = await Promise.all([
-                this._connect.getAddress({ path, coin, showOnTrezor: false }),
+                this._connect.getAddress({ path, coin, showOnTrezor: !!verify }),
                 this._connect.getPublicKey({ path, coin }),
             ]);
             if (!addrRes?.success) {
