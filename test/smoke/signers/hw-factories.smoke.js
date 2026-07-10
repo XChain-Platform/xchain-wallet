@@ -273,9 +273,16 @@ assert.ok(
     /@xchain-wallet\/core\/signerFactories|\.\.\/\.\.\/\.\.\/core\/src\/signerFactories/.test(dTrezorSrc),
     'desktop trezorFactory imports core (workspace package or correct relative path)',
 );
+// T-RSL: desktop does NOT bundle @trezor/connect-web; it loads Trezor
+// Connect at runtime from the hosted global build instead.
 assert.ok(
-    /import\(.@trezor\/connect-web.\)/.test(dTrezorSrc),
-    'desktop trezorFactory lazy-imports @trezor/connect-web',
+    /connect\.trezor\.io\/9\/trezor-connect\.js/.test(dTrezorSrc),
+    'desktop trezorFactory loads Trezor Connect from the hosted global build (connect.trezor.io/9)',
+);
+assert.ok(
+    !/import\(\s*['"]@trezor\/connect-web['"]\s*\)/.test(dTrezorSrc)
+        && !/from\s*['"]@trezor\//.test(dTrezorSrc),
+    'desktop trezorFactory does NOT import any @trezor/* npm package (T-RSL)',
 );
 assert.ok(
     /export async function pairTrezorSigner/.test(dTrezorSrc),
@@ -306,8 +313,14 @@ const desktopPkg = JSON.parse(readFileSync(join(desktop, 'package.json'), 'utf8'
 const extPkg = JSON.parse(
     readFileSync(join(wsRoot, 'packages', 'extension', 'package.json'), 'utf8'),
 );
+// T-RSL: no shell declares @trezor/connect-web anymore (web + desktop
+// load the hosted script; the extension drops Trezor). Only the Ledger
+// deps remain, still version-pinned across shells.
+assert.ok(
+    !desktopPkg.dependencies['@trezor/connect-web'],
+    'desktop package.json does NOT declare @trezor/connect-web (loads the hosted script)',
+);
 for (const dep of [
-    '@trezor/connect-web',
     '@ledgerhq/hw-transport-webhid',
     '@ledgerhq/hw-app-btc',
 ]) {

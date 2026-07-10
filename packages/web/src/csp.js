@@ -20,9 +20,15 @@
 // built index.html (see vite.config.js) so it travels with the app.
 //
 // Notes on specific directives:
-//   - script-src 'self': bundled ES modules only. No 'unsafe-inline' and
-//     no 'unsafe-eval'; the crypto stack (@noble/hashes argon2id) is pure
+//   - script-src 'self' + https://connect.trezor.io: bundled ES modules,
+//     plus Trezor's hosted Connect global build which we load at runtime
+//     instead of bundling the T-RSL-licensed @trezor/connect-web npm
+//     package (see signers/trezorFactory.js). No 'unsafe-inline' and no
+//     'unsafe-eval'; the crypto stack (@noble/hashes argon2id) is pure
 //     JS, so no wasm-unsafe-eval is required.
+//   - frame-src 'self' + https://connect.trezor.io: Trezor Connect runs
+//     its signing UI in a cross-origin iframe/popup it hosts. Without this
+//     the directive would fall back to default-src 'self' and block it.
 //   - style-src 'unsafe-inline': the UI uses React inline style attributes
 //     (style={{...}}) and runtime-injected <style> tags extensively. Inline
 //     styles cannot exfiltrate data, so this is a low-risk allowance.
@@ -39,8 +45,9 @@
 /** @type {Record<string, string[]>} */
 const DIRECTIVES = {
     'default-src': ["'self'"],
-    'script-src': ["'self'"],
+    'script-src': ["'self'", 'https://connect.trezor.io'],
     'style-src': ["'self'", "'unsafe-inline'"],
+    'frame-src': ["'self'", 'https://connect.trezor.io'],
     'img-src': ["'self'", 'data:', 'blob:'],
     'font-src': ["'self'", 'data:'],
     'connect-src': [

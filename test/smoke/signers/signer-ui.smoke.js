@@ -201,9 +201,14 @@ for (const [shell, msgPath] of [
 
 // --- 4. App.jsx wiring: pair-signer sub-route + factory imports ------
 
-for (const [shell, appPath] of [
-    ['popup', join(ext, 'src', 'popup', 'App.jsx')],
-    ['web', join(web, 'src', 'App.jsx')],
+// The web shell offers both Trezor + Ledger. The MV3 extension (popup)
+// drops Trezor (it can't load the hosted Connect script under MV3's
+// no-remote-code CSP; see trezorFactory.js), so it imports only the
+// Ledger factory and injects pairTrezor={null} (PairSignerForm renders
+// the Trezor option disabled).
+for (const [shell, appPath, offersTrezor] of [
+    ['popup', join(ext, 'src', 'popup', 'App.jsx'), false],
+    ['web', join(web, 'src', 'App.jsx'), true],
 ]) {
     const app = readFileSync(appPath, 'utf8');
     assert.ok(
@@ -211,18 +216,30 @@ for (const [shell, appPath] of [
         `${shell} App.jsx imports PairSignerForm`,
     );
     assert.ok(
-        /pairTrezorSigner/.test(app) && /pairLedgerSigner/.test(app),
-        `${shell} App.jsx imports both factory fns for DI`,
+        /pairLedgerSigner/.test(app),
+        `${shell} App.jsx imports the Ledger factory fn for DI`,
     );
     assert.ok(
         app.includes("'pair-signer'"),
         `${shell} App.jsx tracks the pair-signer sub-route`,
     );
     assert.ok(
-        /pairTrezor=\{pairTrezorSigner\}/.test(app)
-            && /pairLedger=\{pairLedgerSigner\}/.test(app),
-        `${shell} App.jsx injects both factories into PairSignerForm`,
+        /pairLedger=\{pairLedgerSigner\}/.test(app),
+        `${shell} App.jsx injects the Ledger factory into PairSignerForm`,
     );
+    if (offersTrezor) {
+        assert.ok(
+            /import\s*\{\s*pairTrezorSigner\s*\}/.test(app)
+                && /pairTrezor=\{pairTrezorSigner\}/.test(app),
+            `${shell} App.jsx imports + injects the Trezor factory`,
+        );
+    } else {
+        assert.ok(
+            !/import\s*\{\s*pairTrezorSigner\s*\}/.test(app)
+                && /pairTrezor=\{null\}/.test(app),
+            `${shell} App.jsx drops Trezor: no factory import, pairTrezor={null}`,
+        );
+    }
     assert.ok(
         /id:\s*['"]pair-signer['"]/.test(app),
         `${shell} App.jsx registers the pair-signer entry in buildActionEntries`,
@@ -237,8 +254,12 @@ for (const [shell, appPath] of [
 
 const extAppSrc = readFileSync(join(ext, 'src', 'popup', 'App.jsx'), 'utf8');
 assert.ok(
-    /from ['"]\.\.\/signers\/trezorFactory\.js['"]/.test(extAppSrc),
-    'popup App.jsx uses relative path to trezorFactory',
+    !/from ['"]\.\.\/signers\/trezorFactory\.js['"]/.test(extAppSrc),
+    'popup App.jsx does NOT import the (deleted) Trezor factory: Trezor is dropped from the MV3 extension',
+);
+assert.ok(
+    /from ['"]\.\.\/signers\/ledgerFactory\.js['"]/.test(extAppSrc),
+    'popup App.jsx still imports the Ledger factory via relative path',
 );
 
 const webAppSrc = readFileSync(join(web, 'src', 'App.jsx'), 'utf8');

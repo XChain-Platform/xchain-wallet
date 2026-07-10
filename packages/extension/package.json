@@ -13,7 +13,6 @@
     "dependencies": {
         "@ledgerhq/hw-app-btc": "^10.21.0",
         "@ledgerhq/hw-transport-webhid": "^6.35.0",
-        "@trezor/connect-web": "^9.7.0",
         "@xchain-wallet/core": "workspace:*",
         "lightweight-charts": "^4.2.0",
         "qrcode": "^1.5.4",

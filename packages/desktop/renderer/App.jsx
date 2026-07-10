@@ -16,12 +16,15 @@
 // flows through `messaging.*` → preload `sendMessage` → main
 // MessageHost. No keys live here.
 //
-// HW pairing (§40.12, Step 18): `pairTrezorSigner` + `pairLedgerSigner`
-// use Chromium's WebHID (via `@ledgerhq/hw-transport-webhid`) + Trezor
-// Connect's iframe popup (via `@trezor/connect-web`). Both libs are
-// pure JS (no native node-HID / node-usb), so the desktop factories
-// are thin bindings around the shared core `makeTrezorFactory` /
-// `makeLedgerFactory` builders, same as extension + web.
+// HW pairing (§40.12, Step 18): `pairLedgerSigner` uses Chromium's
+// WebHID (via `@ledgerhq/hw-transport-webhid`), and `pairTrezorSigner`
+// uses Trezor Connect loaded at runtime from Trezor's hosted global
+// build (not the T-RSL `@trezor/connect-web` npm package; see
+// renderer/signerFactories/trezorFactory.js). The Ledger lib is pure JS
+// (no native node-HID / node-usb), so the desktop factories are thin
+// bindings around the shared core `makeTrezorFactory` /
+// `makeLedgerFactory` builders, same as web. (The MV3 extension can't
+// load remote code, so it ships Ledger only.)
 //
 // Main process (`main/permissions.js`) must wire WebHID permission
 // handlers onto `session.defaultSession`. Without them, Electron

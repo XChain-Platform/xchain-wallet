@@ -543,12 +543,15 @@ assert.ok(
 
 // --- 9. Factory files + package.json deps -----------------------------
 //
-// Step 18 hoisted the pair sequence into core's `signerFactories/`
-// module: shell factories are now thin bindings that lazy-import the
-// HW SDK and delegate to `makeTrezorFactory({ getConnect })`. The
-// extension + web + desktop bindings all share the same core logic;
-// only transport init (manifest, connectSrc, permission wiring) is
-// shell-specific.
+// T-RSL: `@trezor/connect-web` (and its `@trezor/*` tree) is under the
+// Trezor Reference Source License, which forbids redistribution. So no
+// shell bundles it. The web + desktop shells load Trezor Connect at
+// runtime from Trezor's hosted global build
+// (`https://connect.trezor.io/9/trezor-connect.js`), bundling zero
+// `@trezor/*` code. The MV3 extension cannot load remote code at all
+// (Chrome bans it), so it drops Trezor entirely and ships Ledger +
+// software signing. The pair sequence stays in core's
+// `makeTrezorFactory({ getConnect })`; shells own only the loader/init.
 
 const coreFactory = join(core, 'src', 'signerFactories', 'trezor.js');
 const coreFactoryIndex = join(core, 'src', 'signerFactories', 'index.js');
@@ -556,7 +559,10 @@ const extFactory = join(ext, 'src', 'signers', 'trezorFactory.js');
 const webFactory = join(web, 'src', 'signers', 'trezorFactory.js');
 assert.ok(existsSync(coreFactory), 'core signerFactories/trezor.js exists');
 assert.ok(existsSync(coreFactoryIndex), 'core signerFactories/index.js exists');
-assert.ok(existsSync(extFactory), 'extension trezorFactory.js exists');
+assert.ok(
+    !existsSync(extFactory),
+    'extension ships NO Trezor factory: MV3 bans remote code, so Trezor is dropped from the extension',
+);
 assert.ok(existsSync(webFactory), 'web trezorFactory.js exists');
 
 const coreFactorySrc = readFileSync(coreFactory, 'utf8');
@@ -585,63 +591,56 @@ assert.ok(
     'core signerFactories/index.js re-exports makeTrezorFactory',
 );
 
-const extFactorySrc = readFileSync(extFactory, 'utf8');
+// Web factory: standalone (no longer re-exports the extension), loads
+// the hosted Trezor Connect script, bundles no @trezor/* code.
+const webFactorySrc = readFileSync(webFactory, 'utf8');
+const webFactoryCode = stripComments(webFactorySrc);
 assert.ok(
-    /@trezor\/connect-web/.test(extFactorySrc),
-    'extension factory references @trezor/connect-web',
+    /connect\.trezor\.io\/9\/trezor-connect\.js/.test(webFactorySrc),
+    'web factory loads Trezor Connect from the hosted global build (connect.trezor.io/9)',
 );
 assert.ok(
-    /export async function getTrezorConnect/.test(extFactorySrc),
-    'extension factory exports getTrezorConnect',
+    !/import\(\s*['"]@trezor\/connect-web['"]\s*\)/.test(webFactoryCode)
+        && !/from\s*['"]@trezor\//.test(webFactoryCode),
+    'web factory does NOT import any @trezor/* npm package (T-RSL): loads the hosted script instead',
 );
 assert.ok(
-    /export async function pairTrezorSigner/.test(extFactorySrc),
-    'extension factory exports pairTrezorSigner',
+    /export async function getTrezorConnect/.test(webFactorySrc)
+        && /export async function pairTrezorSigner/.test(webFactorySrc),
+    'web factory exports getTrezorConnect + pairTrezorSigner',
 );
 assert.ok(
-    /TrezorConnect\.init\(/.test(extFactorySrc),
-    'extension factory calls TrezorConnect.init',
-);
-assert.ok(
-    /manifest/.test(extFactorySrc),
-    'extension factory supplies a Trezor manifest',
-);
-assert.ok(
-    /makeTrezorFactory/.test(extFactorySrc),
-    'extension factory delegates to core makeTrezorFactory',
-);
-assert.ok(
-    /\.\.\/\.\.\/\.\.\/core\/src\/signerFactories\/index\.js/.test(extFactorySrc),
-    'extension factory imports core builder via cross-package relative path',
-);
-assert.ok(
-    /import\(.@trezor\/connect-web.\)/.test(extFactorySrc),
-    'extension factory lazy-imports @trezor/connect-web (so the SDK only loads at pair time)',
+    /makeTrezorFactory/.test(webFactorySrc)
+        && /\.\.\/\.\.\/\.\.\/core\/src\/signerFactories\/index\.js/.test(webFactorySrc),
+    'web factory delegates to core makeTrezorFactory via the cross-package relative path',
 );
 
-const webFactorySrc = readFileSync(webFactory, 'utf8');
+// Extension popup: Trezor is dropped, so PairSignerForm gets a null
+// pairTrezor (rendered disabled) and the factory import is gone.
+const popupAppSrc = readFileSync(join(ext, 'src', 'popup', 'App.jsx'), 'utf8');
 assert.ok(
-    /\.\.\/\.\.\/\.\.\/extension\/src\/signers\/trezorFactory\.js/.test(webFactorySrc),
-    'web factory uses the cross-package relative path (matches hostBridge.js convention)',
+    /pairTrezor=\{null\}/.test(popupAppSrc),
+    'extension popup passes pairTrezor={null} (Trezor unavailable in the MV3 extension)',
+);
+assert.ok(
+    !/from\s*['"]\.\.\/signers\/trezorFactory\.js['"]/.test(popupAppSrc),
+    'extension popup no longer imports the (deleted) Trezor factory',
 );
 
 // --- 10. Package.json deps --------------------------------------------
+// No shell may declare @trezor/connect-web: bundling T-RSL code is the
+// blocker being removed.
 
 const extPkg = JSON.parse(readFileSync(join(ext, 'package.json'), 'utf8'));
 assert.ok(
-    extPkg.dependencies['@trezor/connect-web'],
-    'extension package.json declares @trezor/connect-web',
-);
-assert.match(
-    extPkg.dependencies['@trezor/connect-web'],
-    /^\^9\./,
-    'extension pins @trezor/connect-web to ^9.x',
+    !extPkg.dependencies['@trezor/connect-web'],
+    'extension package.json does NOT declare @trezor/connect-web (Trezor dropped)',
 );
 
 const webPkg = JSON.parse(readFileSync(join(web, 'package.json'), 'utf8'));
 assert.ok(
-    webPkg.dependencies['@trezor/connect-web'],
-    'web package.json declares @trezor/connect-web',
+    !webPkg.dependencies['@trezor/connect-web'],
+    'web package.json does NOT declare @trezor/connect-web (loads the hosted script)',
 );
 
 // --- 10b. Background signer registry handlers + messaging ------------

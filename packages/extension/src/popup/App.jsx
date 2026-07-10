@@ -120,7 +120,13 @@ import { AddressList } from '@xchain-wallet/core/shared/routes/AddressList.jsx';
 import { PairSignerForm } from '@xchain-wallet/core/shared/routes/PairSignerForm.jsx';
 import { useBtcAddressesPresent } from '@xchain-wallet/core/shared/hooks/useBtcAddressesPresent.js';
 import { useGovernanceAddressesPresent } from '@xchain-wallet/core/shared/hooks/useGovernanceAddressesPresent.js';
-import { pairTrezorSigner } from '../signers/trezorFactory.js';
+// Trezor is intentionally NOT offered in the extension shell: MV3 bans
+// remotely-hosted code, so the only way to bundle Trezor Connect here
+// would be the T-RSL-licensed `@trezor/connect-web` npm package, whose
+// license forbids redistribution. The web + desktop shells load Trezor
+// Connect from Trezor's hosted script instead; the extension ships
+// Ledger (WebHID) + software signing only. PairSignerForm renders the
+// Trezor option disabled when `pairTrezor` is null.
 import { pairLedgerSigner } from '../signers/ledgerFactory.js';
 import { registerSigner as registerLocalSigner } from './signerBridge.js';
 import * as messaging from './messaging.js';
@@ -752,7 +758,7 @@ function AppInner() {
                 return (
                     <PairSignerForm
                         walletId={activeWalletId}
-                        pairTrezor={pairTrezorSigner}
+                        pairTrezor={null}
                         pairLedger={pairLedgerSigner}
                         onBack={() => setUnlockedView('actions')}
                         onPaired={() => setUnlockedView('actions')}
@@ -1832,7 +1838,7 @@ function buildActionEntries({
         {
             id: 'pair-signer',
             label: 'Pair hardware signer',
-            description: 'Add a Trezor or Ledger to this wallet (§17.6 / §18.3).',
+            description: 'Add a Ledger to this wallet via WebHID (§18.3). Trezor is available in the XChain web and desktop wallets.',
             onSelect: onPairSigner,
         },
     ];

@@ -55,8 +55,10 @@
 //      packageManager field; SOURCE_DATE_EPOCH handling; reproduce.sh
 //      is executable.
 //
-//   7. CSP: renderer/index.html allow-lists connect.trezor.io for
-//      frame-src only (connect-src stays 'self').
+//   7. CSP: renderer/index.html allow-lists connect.trezor.io in
+//      script-src (hosted Trezor Connect global build, loaded instead
+//      of bundling T-RSL @trezor/connect-web) + frame-src (its signing
+//      iframe); connect-src stays 'self'.
 //
 //   8. REPRODUCIBLE_BUILDS.md exists with key sections.
 
@@ -426,12 +428,16 @@ assert.ok(cspMatch, 'renderer/index.html declares CSP via meta tag');
 const csp = cspMatch[1];
 assert.ok(/default-src 'self'/.test(csp), "CSP defaults to 'self'");
 assert.ok(
+    /script-src 'self' https:\/\/connect\.trezor\.io/.test(csp),
+    'CSP allow-lists connect.trezor.io in script-src for the hosted Trezor Connect build (no bundled @trezor/*)',
+);
+assert.ok(
     /frame-src https:\/\/connect\.trezor\.io/.test(csp),
     'CSP explicitly allow-lists connect.trezor.io for the Trezor iframe',
 );
 assert.ok(
     /connect-src 'self'/.test(csp),
-    "connect-src stays 'self': renderer itself never fetches from connect.trezor.io",
+    "connect-src stays 'self': the wallet's own code never fetches from connect.trezor.io",
 );
 
 // --- 8. REPRODUCIBLE_BUILDS.md sections -------------------------------

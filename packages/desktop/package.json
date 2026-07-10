@@ -17,7 +17,6 @@
     "dependencies": {
         "@ledgerhq/hw-app-btc": "^10.21.0",
         "@ledgerhq/hw-transport-webhid": "^6.35.0",
-        "@trezor/connect-web": "^9.7.0",
         "@xchain-wallet/core": "workspace:*",
         "@xchain-wallet/extension": "workspace:*",
         "electron-updater": "^6.3.0",
