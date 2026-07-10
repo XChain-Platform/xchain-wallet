@@ -92,9 +92,29 @@ export const FEE_STRATEGY_NAMES = /** @type {const} */ ([
  * @property {boolean} [isUserAdded]              set by registry for Developer Mode entries
  */
 
-const isEndpoint = (v) =>
+// Endpoint URLs are consumed directly for live balance/PSBT/hub requests
+// (SDKRegistry): the signed registry authenticates the descriptor blob once,
+// but the API calls it configures carry no signature, so a cleartext scheme
+// is a standing MITM primitive. Require https/wss everywhere except regtest
+// chains and loopback hosts (cleartext to the local machine is not
+// interceptable in transit).
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+const isSecureEndpointUrl = (raw, allowInsecure) => {
+    let url;
+    try {
+        url = new URL(raw);
+    } catch {
+        return false;
+    }
+    if (url.protocol === 'https:' || url.protocol === 'wss:') return true;
+    if (url.protocol !== 'http:' && url.protocol !== 'ws:') return false;
+    return allowInsecure || LOOPBACK_HOSTS.has(url.hostname);
+};
+
+const isEndpoint = (v, allowInsecure = false) =>
     isPlainObject(v) &&
     isString(v.defaultUrl) &&
+    isSecureEndpointUrl(v.defaultUrl, allowInsecure) &&
     isNonNegativeInteger(v.defaultPort);
 
 const isFeeStrategy = (v) => {
@@ -152,9 +172,13 @@ export function validateChainDescriptor(record) {
         Number.isInteger(r.wifVersionByte) && r.wifVersionByte >= 0 && r.wifVersionByte <= 0xff,
         'must be an integer in [0, 255]',
     );
-    check(errors, 'explorer', isEndpoint(r.explorer), 'malformed');
-    check(errors, 'encoder', isEndpoint(r.encoder), 'malformed');
-    check(errors, 'hub', isEndpoint(r.hub), 'malformed');
+    // http/ws endpoints are only acceptable where transit interception is
+    // structurally impossible: regtest chains and loopback hosts.
+    const allowInsecure = r.networkKind === 'regtest';
+    const endpointMsg = 'must be a well-formed https/wss endpoint (http/ws only on regtest or loopback)';
+    check(errors, 'explorer', isEndpoint(r.explorer, allowInsecure), endpointMsg);
+    check(errors, 'encoder', isEndpoint(r.encoder, allowInsecure), endpointMsg);
+    check(errors, 'hub', isEndpoint(r.hub, allowInsecure), endpointMsg);
     check(
         errors,
         'adsDonationAddress',

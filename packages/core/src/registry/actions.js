@@ -8,10 +8,21 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Protocol-level ACTION lists used to populate ChainDescriptor.supportedActions.
-// Source: xchain-documentation/protocol/actions/. "Supported" here means
-// the chain's protocol accepts the action; whether the UI has a native
-// authoring surface is a Phase/release concern (see §38 and §43.2).
+// ACTION lists for the chain registry. Source:
+// xchain-documentation/protocol/actions/ + action-manifest.json.
+//
+// Two distinct contracts live here; keep them apart:
+//   1. COMMON_ACTIONS / BTC_EXCLUSIVE_ACTIONS are the AUTHORABLE sets: the
+//      actions the wallet surfaces a native authoring form for. Their union
+//      is bound to the manifest's `walletForm` slice by
+//      test/unit/ActionManifestConformance.test.js.
+//   2. PROTOCOL_ONLY_ACTIONS are protocol-accepted (wire-decoded, indexed,
+//      user-encodable) but deliberately have NO wallet authoring surface
+//      (plumbing actions; §38 surfacing principle). They still belong in
+//      ChainDescriptor.supportedActions, which advertises what the chain's
+//      protocol accepts (a Phase/release-independent capability surface),
+//      not which forms the UI renders. Bound to the manifest's
+//      userEncodable-without-walletForm slice by the same conformance guard.
 
 export const COMMON_ACTIONS = /** @type {const} */ ([
     'AIRDROP',
@@ -51,8 +62,15 @@ export const BTC_EXCLUSIVE_ACTIONS = /** @type {const} */ ([
     'WITHDRAW',
 ]);
 
-export const BITCOIN_ACTIONS = [...COMMON_ACTIONS, ...BTC_EXCLUSIVE_ACTIONS]
+// Protocol-accepted on every chain, form-less by design (see header note 2).
+// ADDRESS publishes a messaging encryption pubkey; it is emitted as plumbing
+// by the messaging flows, never authored from a menu.
+export const PROTOCOL_ONLY_ACTIONS = /** @type {const} */ ([
+    'ADDRESS',
+]);
+
+export const BITCOIN_ACTIONS = [...COMMON_ACTIONS, ...BTC_EXCLUSIVE_ACTIONS, ...PROTOCOL_ONLY_ACTIONS]
     .slice()
     .sort();
-export const LITECOIN_ACTIONS = [...COMMON_ACTIONS].slice().sort();
-export const DOGECOIN_ACTIONS = [...COMMON_ACTIONS].slice().sort();
+export const LITECOIN_ACTIONS = [...COMMON_ACTIONS, ...PROTOCOL_ONLY_ACTIONS].slice().sort();
+export const DOGECOIN_ACTIONS = [...COMMON_ACTIONS, ...PROTOCOL_ONLY_ACTIONS].slice().sort();

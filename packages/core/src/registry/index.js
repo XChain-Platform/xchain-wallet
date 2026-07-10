@@ -188,6 +188,7 @@ export { validateChainDescriptor } from './validate.js';
 export {
     COMMON_ACTIONS,
     BTC_EXCLUSIVE_ACTIONS,
+    PROTOCOL_ONLY_ACTIONS,
     BITCOIN_ACTIONS,
     DOGECOIN_ACTIONS,
     LITECOIN_ACTIONS,
