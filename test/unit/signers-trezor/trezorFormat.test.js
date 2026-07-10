@@ -31,8 +31,23 @@ describe('chainIdToTrezorCoin', () => {
         expect(() => chainIdToTrezorCoin('bitcoin-testnet')).toThrow(/coin-type 1'/);
     });
 
-    it('maps bitcoin-regtest to regtest', () => {
-        expect(chainIdToTrezorCoin('bitcoin-regtest')).toBe('regtest');
+    // Trezor's 'regtest' coin carries the identical SLIP-44 coin-type 1' hazard
+    // as its 'test' coin, so bitcoin-regtest must be excluded exactly like
+    // bitcoin-testnet rather than silently mapped and left for coinTypeFor to
+    // reject with an unrelated internal error (uuid 8fc65869).
+    it("throws for bitcoin-regtest (same coin-type 1' hazard as bitcoin-testnet)", () => {
+        expect(() => chainIdToTrezorCoin('bitcoin-regtest')).toThrow(/software wallet/);
+        expect(() => chainIdToTrezorCoin('bitcoin-regtest')).toThrow(/coin-type 1'/);
+    });
+
+    it('bitcoin-testnet and bitcoin-regtest produce the identical rejection message', () => {
+        let testnetMsg = null;
+        let regtestMsg = null;
+        try { chainIdToTrezorCoin('bitcoin-testnet'); } catch (e) { testnetMsg = e.message; }
+        try { chainIdToTrezorCoin('bitcoin-regtest'); } catch (e) { regtestMsg = e.message; }
+        expect(testnetMsg).toBeTruthy();
+        expect(regtestMsg).toBeTruthy();
+        expect(regtestMsg.replace('bitcoin-regtest', 'bitcoin-testnet')).toBe(testnetMsg);
     });
 
     it('maps litecoin-mainnet to ltc', () => {

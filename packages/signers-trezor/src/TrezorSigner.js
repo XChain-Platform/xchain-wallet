@@ -434,9 +434,14 @@ function formatBip44Path({ purpose, coin, accountIndex, change, index }) {
  * forces coin-type 1', which diverges from the wallet's 0'-anchored bitcoin
  * derivation, so bitcoin-testnet is rejected upstream in chainIdToTrezorCoin
  * and can never reach this formatter.
+ *
+ * Exported (in addition to its internal use in formatBip44Path) so a parity
+ * test can assert this hardware-signer copy of the coin-type slot never
+ * diverges from the chain descriptors' derivationPaths, which is the copy
+ * the software signer derives against (uuid 980fe12c).
  * @param {string} coin
  */
-function coinTypeFor(coin) {
+export function coinTypeFor(coin) {
     switch (coin) {
         case 'btc': return "0'";
         case 'ltc': return "2'";

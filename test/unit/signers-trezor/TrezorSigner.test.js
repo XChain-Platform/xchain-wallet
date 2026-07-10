@@ -16,8 +16,38 @@ import {
     deviceIdentifierFromFeatures,
     modelFromFeatures,
     firmwareVersionFromFeatures,
+    coinTypeFor,
 } from '../../../packages/signers-trezor/src/TrezorSigner.js';
 import { Signer } from '../../../packages/core/src/signers/Signer.js';
+import { BUNDLED_DESCRIPTORS } from '../../../packages/core/src/registry/descriptors/index.js';
+
+// coinTypeFor's SLIP-44 slots (btc=0', ltc=2', doge=3') are a second,
+// independently-hardcoded copy of the same coin-type the chain descriptors'
+// derivationPaths declare. The two agree today, but nothing guards against a
+// future descriptor edit silently diverging hardware from software derivation
+// for the same account (uuid 980fe12c). This test locks the two together.
+const TREZOR_COIN_TO_MAINNET_DESCRIPTOR_ID = {
+    btc: 'bitcoin-mainnet',
+    ltc: 'litecoin-mainnet',
+    doge: 'dogecoin-mainnet',
+};
+
+function descriptorCoinType(descriptorId) {
+    const descriptor = BUNDLED_DESCRIPTORS.find((d) => d.id === descriptorId);
+    if (!descriptor) throw new Error(`no bundled descriptor "${descriptorId}"`);
+    const [firstTemplate] = Object.values(descriptor.derivationPaths);
+    const m = firstTemplate.match(/^m\/\d+'\/(\d+')\//);
+    if (!m) throw new Error(`${descriptorId}: unrecognized derivation template "${firstTemplate}"`);
+    return m[1];
+}
+
+describe('coinTypeFor vs chain descriptor coin-type parity', () => {
+    Object.entries(TREZOR_COIN_TO_MAINNET_DESCRIPTOR_ID).forEach(([trezorCoin, descriptorId]) => {
+        it(`${trezorCoin}: coinTypeFor matches the ${descriptorId} descriptor's coin-type slot`, () => {
+            expect(coinTypeFor(trezorCoin)).toBe(descriptorCoinType(descriptorId));
+        });
+    });
+});
 
 function makeConnect(overrides = {}) {
     return {

@@ -147,17 +147,16 @@ export function toTrezorSignTransaction({ decomposed, coin, signingPaths }) {
 // software signer for them. Do not "fix" this by pointing them at 'test':
 // that yields Bitcoin-testnet-format addresses, not valid LTC/DOGE ones.
 //
-// bitcoin-testnet is excluded even though the firmware HAS a 'test' coin: that
-// coin forces SLIP-44 coin-type 1', while the wallet's descriptor anchor
-// deliberately pins 0' on every Bitcoin network (software-signer/backend
-// parity). A 1' hardware derivation silently yields addresses the rest of the
-// wallet cannot see (testnet funds appear missing), so the network is
-// hardware-unsupported instead. Do not "fix" this by restoring 'test' unless
-// the firmware can be driven at 0'.
+// bitcoin-testnet and bitcoin-regtest are both excluded even though the
+// firmware HAS 'test' and 'regtest' coins: both force SLIP-44 coin-type 1',
+// while the wallet's descriptor anchor deliberately pins 0' on every Bitcoin
+// network (software-signer/backend parity). A 1' hardware derivation silently
+// yields addresses the rest of the wallet cannot see (funds appear missing),
+// so both networks are hardware-unsupported instead. Do not "fix" this by
+// restoring 'test'/'regtest' unless the firmware can be driven at 0'.
 /** @type {Record<string, string>} */
 const CHAIN_ID_TO_TREZOR_COIN = {
     'bitcoin-mainnet': 'btc',
-    'bitcoin-regtest': 'regtest',
     'litecoin-mainnet': 'ltc',
     'dogecoin-mainnet': 'doge',
 };
@@ -174,12 +173,12 @@ const CHAIN_ID_TO_TREZOR_COIN = {
 export function chainIdToTrezorCoin(chainId) {
     const coin = CHAIN_ID_TO_TREZOR_COIN[chainId];
     if (!coin) {
-        if (chainId === 'bitcoin-testnet') {
+        if (chainId === 'bitcoin-testnet' || chainId === 'bitcoin-regtest') {
             throw new Error(
-                'trezorFormat: bitcoin-testnet is not supported on this hardware '
-                + "signer (Trezor's testnet coin derives at coin-type 1', diverging "
-                + "from the wallet's 0'-anchored derivation); use a software wallet "
-                + 'for this network.',
+                `trezorFormat: ${chainId} is not supported on this hardware `
+                + "signer (Trezor's testnet/regtest coins derive at coin-type 1', "
+                + "diverging from the wallet's 0'-anchored derivation); use a "
+                + 'software wallet for this network.',
             );
         }
         throw new Error(

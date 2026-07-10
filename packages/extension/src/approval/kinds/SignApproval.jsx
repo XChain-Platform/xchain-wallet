@@ -17,6 +17,7 @@ import {
 import { BalanceChanges } from '@xchain-wallet/core/shared/components/BalanceChanges.jsx';
 import { RawPsbtViewer } from '@xchain-wallet/core/shared/components/RawPsbtViewer.jsx';
 import { resolveDisplayTickers } from '@xchain-wallet/core/shared/utils/resolveDisplayTickers.js';
+import { actionDisplayLabel } from '@xchain-wallet/core/shared/utils/actionDisplayLabel.js';
 import {
     listWallets,
     resolveApproval,
@@ -549,7 +550,7 @@ function SignSummary({ kind, payload }) {
             return (
                 <>
                     <div className={shared.summary}>
-                        <p className={shared.summaryLabel}>{payload?.action || 'Action'}</p>
+                        <p className={shared.summaryLabel}>{actionDisplayLabel(payload?.action) || 'Action'}</p>
                         <p
                             className={shared.summaryValue}
                             style={{ whiteSpace: 'normal', fontFamily: 'var(--xc-font-sans)', fontSize: 13, lineHeight: 1.4 }}
@@ -646,7 +647,7 @@ function CoSignIntentSummary({ loading, error, preview }) {
                 <>
                     <p className={shared.summaryLabel}>Action</p>
                     <p className={shared.summaryValue} style={{ whiteSpace: 'normal' }}>
-                        {preview.action}
+                        {actionDisplayLabel(preview.action) || preview.action}
                         {preview.amount !== undefined ? ` ${preview.amount}` : ''}
                         {preview.tick ? ` ${preview.tick}` : ''}
                     </p>

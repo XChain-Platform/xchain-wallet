@@ -21,8 +21,18 @@
 // of silently WIF-encoding keys the backend decodes differently.
 //
 // The SDK is loaded from the sibling checkout (the same link: target the
-// extension/web packages consume). When the sibling is absent (isolated
-// per-repo checkout) the suite skips; CI jobs that check out siblings run it.
+// extension/web packages consume). A `describe.skipIf` gate here used to
+// let this guard vanish silently whenever the sibling wasn't checked out,
+// which is exactly the failure mode the guard exists to catch (uuid
+// 9737f60d): a routine xchain-sdk wif bump would pass CI unnoticed in any
+// job that doesn't happen to check out siblings. The guard must fail loud
+// instead: this suite requires the xchain-sdk sibling to be present.
+//
+// Note: xchain-sdk's coin data (src/coins/*.js) carries no SLIP-44 /
+// coin-type field at all - only wif/bip32/pubKeyHash/etc network params -
+// so the coin-type leg below has nothing in the SDK to read from and stays
+// anchored to the SLIP-44 standard's well-known per-family constant
+// (MAINNET_SLOT), not a hand-copied guess.
 
 import { describe, it, expect } from 'vitest';
 import { existsSync } from 'node:fs';
@@ -39,9 +49,23 @@ const haveSdk = existsSync(sdkNetworksPath);
 // signers, and backend all agree on, on EVERY network of the family.
 const MAINNET_SLOT = { bitcoin: "0'", litecoin: "2'", dogecoin: "3'" };
 
-describe.skipIf(!haveSdk)('wallet descriptors vs xchain-sdk network params', () => {
+describe('wallet descriptors vs xchain-sdk network params', () => {
+    if (!haveSdk) {
+        // Fail loud, never skip: a silently-skipping guard is indistinguishable
+        // from CI green when the descriptor/SDK values have actually drifted.
+        it('REQUIRES the xchain-sdk sibling checkout to run this parity guard', () => {
+            throw new Error(
+                `xchain-sdk sibling not found at ${sdkNetworksPath}. This suite guards ` +
+                'wallet descriptor wifVersionByte/coin-type parity against xchain-sdk and ' +
+                'must run with the sibling checked out (CI jobs must check out siblings); ' +
+                'it will not silently pass when the SDK is absent.'
+            );
+        });
+        return;
+    }
+
     const require = createRequire(import.meta.url);
-    const { NETWORKS } = haveSdk ? require(sdkNetworksPath) : { NETWORKS: {} };
+    const { NETWORKS } = require(sdkNetworksPath);
 
     for (const d of BUNDLED_DESCRIPTORS) {
         it(`${d.id}: wifVersionByte matches xchain-sdk net.wif`, () => {
