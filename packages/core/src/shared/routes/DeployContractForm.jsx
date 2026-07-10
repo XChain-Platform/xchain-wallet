@@ -318,9 +318,9 @@ export function DeployContractForm({ walletId, onBack }) {
         const header = (
         <PageHeader
             onBack={onBack}
-            title="{stage === 'review' || stage === 'submitting'
+            title={stage === 'review' || stage === 'submitting'
                     ? 'Review deploy'
-                    : `Deploy contract${descriptor ? ` on ${descriptor.displayName}` : ''}`}"
+                    : `Deploy contract${descriptor ? ` on ${descriptor.displayName}` : ''}`}
         />
     );
     const wrap = (children) => (

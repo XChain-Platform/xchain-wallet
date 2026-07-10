@@ -488,11 +488,11 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         const header = (
         <PageHeader
             onBack={onBack}
-            title="{stage === 'review-list' ? 'Review address list'
+            title={stage === 'review-list' ? 'Review address list'
                     : stage === 'wait-index' ? 'Waiting for list to be indexed'
                         : stage === 'review-airdrop' ? 'Review airdrop'
                             : stage === 'done' ? 'Airdrop complete'
-                                : `Airdrop tokens${titleSuffix}`}"
+                                : `Airdrop tokens${titleSuffix}`}
         />
     );
     const wrap = (children) => (

@@ -82,14 +82,29 @@ assert.match(intentFnSrc, /could not be decoded/, 'alert explains the transactio
 // --- 6. Approval is held until the decode settles (F1) -------------------
 // Approving before the intent renders would be approving un-verified
 // effects, and a failed decode must hard-block. Both gates funnel through
-// psbtApprovalBlocked, which is used in the Approve handler AND the button.
+// approvalBlocked, which is used in the Approve handler AND the button.
 assert.match(signSrc, /psbtDecodePending\s*=\s*\n?\s*kind === 'signPsbt' &&[\s\S]*psbtIntent\.loading/,
     'holds approval while the PSBT decode is still in flight');
 assert.match(signSrc, /psbtApprovalBlocked = psbtDecodeFailed \|\| psbtDecodePending/,
     'combines the failed and pending gates');
-assert.match(signSrc, /if \(busy \|\| password\.length === 0 \|\| !walletId \|\| psbtApprovalBlocked\) return/,
+assert.match(signSrc, /if \(busy \|\| password\.length === 0 \|\| !walletId \|\| approvalBlocked\) return/,
     'the Approve handler refuses while blocked');
-assert.match(signSrc, /disabled=\{password\.length === 0 \|\| !walletId \|\| psbtApprovalBlocked\}/,
+assert.match(signSrc, /disabled=\{password\.length === 0 \|\| !walletId \|\| approvalBlocked\}/,
     'the Approve button is disabled while blocked');
+
+// --- 7. Co-sign approvals get the same gate (WYSIWYS parity) -------------
+// A coSign request the wallet already knows is undecodable or out-of-policy
+// (the summary even says the co-signer will refuse it) must not leave
+// Approve clickable; the pending-preview state also holds approval.
+assert.match(signSrc, /coSignApprovalBlocked\s*=\s*\n?\s*kind === 'coSign' &&/,
+    'derives a coSign approval gate');
+assert.match(signSrc, /coSignApprovalBlocked[\s\S]*coSignPreview\.loading/,
+    'coSign gate holds while the preview is loading');
+assert.match(signSrc, /coSignApprovalBlocked[\s\S]*decodeOk/,
+    'coSign gate blocks on a failed decode');
+assert.match(signSrc, /coSignApprovalBlocked[\s\S]*policyOk/,
+    'coSign gate blocks on an out-of-policy request');
+assert.match(signSrc, /approvalBlocked = psbtApprovalBlocked \|\| coSignApprovalBlocked/,
+    'both kind gates funnel into the shared approvalBlocked flag');
 
 console.log('sign-approval-psbt-intent smoke OK');

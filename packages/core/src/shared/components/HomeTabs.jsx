@@ -645,7 +645,7 @@ function DemoDefiList({ networkFilter, balances, onSelectEntry }) {
                                             </span>
                                         );
                                     })()}
-                                    <span className={styles.demoActionTag}>{p.action}</span>
+                                    <span className={styles.demoActionTag}>{actionDisplayLabel(p.action)}</span>
                                     <span className={`${styles.statusBadge} ${statusClass}`}>{statusLabel}</span>
                                 </div>
                                 <div className={styles.demoRowPrimary}>

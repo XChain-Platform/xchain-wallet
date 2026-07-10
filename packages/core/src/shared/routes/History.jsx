@@ -2037,7 +2037,7 @@ export function EntryRow({ entry, selected, showConnector, onClick, peerCache, i
                             height={16}
                         />
                     ) : null}
-                    <span className={styles.actionBadge}>{entry.action}</span>
+                    <span className={styles.actionBadge}>{actionDisplayLabel(entry.action)}</span>
                     {entry.link ? (
                         <span
                             className={styles.crosschainBadge}
@@ -2147,12 +2147,15 @@ function GroupCard({ item, expanded, onToggle }) {
     );
 }
 
+// Humanized labels (the badge CSS uppercases visually); raw opcodes like
+// DISPENSER/ORDER route through the shared display map so the copy stays in
+// the house voice if the styling ever changes.
 function groupBadgeLabel(subkind) {
-    if (subkind === 'issue-mint') return 'LAUNCH';
-    if (subkind === 'dispenser-dispense') return 'DISPENSER';
-    if (subkind === 'order-fills') return 'ORDER';
-    if (subkind === 'link-pair') return 'CROSS-CHAIN';
-    return 'GROUP';
+    if (subkind === 'issue-mint') return 'Launch';
+    if (subkind === 'dispenser-dispense') return actionDisplayLabel('DISPENSER');
+    if (subkind === 'order-fills') return actionDisplayLabel('ORDER');
+    if (subkind === 'link-pair') return actionDisplayLabel('LINK');
+    return 'Group';
 }
 
 /** @typedef {{

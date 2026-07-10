@@ -255,9 +255,9 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
         const header = (
         <PageHeader
             onBack={onBack}
-            title="{stage === 'review' || stage === 'submitting'
+            title={stage === 'review' || stage === 'submitting'
                     ? 'Review mint'
-                    : `Mint${titleSuffix}`}"
+                    : `Mint${titleSuffix}`}
         />
     );
     const wrap = (children) => (

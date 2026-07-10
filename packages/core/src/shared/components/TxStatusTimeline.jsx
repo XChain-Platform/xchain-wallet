@@ -59,13 +59,15 @@ export function TxStatusTimeline({ entry, chainTip }) {
             sub: txHash || 'No txid yet',
         },
         {
+            // "Mempool" is protocol jargon; the stage label stays in the
+            // house voice and the sub-text carries the plain explanation.
             key: 'mempool',
-            label: inMempool ? 'In mempool' : (confirmed ? 'Mempool' : 'Pending broadcast'),
+            label: inMempool ? 'Waiting to confirm' : (confirmed ? 'Accepted' : 'Pending broadcast'),
             done: inMempool || confirmed,
             sub: inMempool
-                ? 'Waiting for a miner to include the tx'
+                ? 'Waiting for a miner to include the transaction in a block'
                 : confirmed
-                    ? 'Cleared mempool when the block was mined'
+                    ? 'Picked up when the block was mined'
                     : '',
         },
         {

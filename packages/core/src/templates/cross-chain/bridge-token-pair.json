@@ -1,7 +1,7 @@
 {
     "id": "bridge-token-pair",
     "name": "Bridge token pair",
-    "description": "ISSUE matching tokens on two chains and LINK them as a cross-chain pair. Useful for protocols that intend a token to be redeemable across chains via off-chain bridging.",
+    "description": "Issue matching tokens on two chains and cross-link them as a pair. Useful for protocols that intend a token to be redeemable across chains via off-chain bridging.",
     "personas": ["Jin", "Devi"],
     "actions": [
         {
@@ -26,7 +26,7 @@
                 "DIVISIBLE": "true",
                 "DESCRIPTION": "BRIDGEME on chain B - paired with chain A via LINK"
             },
-            "note": "Issue the mirror supply on chain B. The supplies are independent on-chain - the LINK is metadata, not a balance bridge."
+            "note": "Issue the mirror supply on chain B. The supplies are independent on-chain - the cross-link is metadata, not a balance bridge."
         },
         {
             "chainHint": "primary",

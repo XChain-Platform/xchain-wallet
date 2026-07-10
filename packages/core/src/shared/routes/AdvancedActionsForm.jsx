@@ -356,9 +356,9 @@ export function AdvancedActionsForm({ walletId, onBack }) {
         const header = (
         <PageHeader
             onBack={onBack}
-            title="{stage === 'review' || stage === 'submitting'
+            title={stage === 'review' || stage === 'submitting'
                     ? `Review ${action || 'action'}`
-                    : 'Advanced action'}"
+                    : 'Advanced action'}
         />
     );
     const wrap = (children) => (

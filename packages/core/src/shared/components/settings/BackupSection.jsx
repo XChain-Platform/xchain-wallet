@@ -289,7 +289,7 @@ export function BackupSection({ activeWallet }) {
             ) : (
                 <BackupRow
                     label="Publish labels on-chain"
-                    hint="Encrypt this wallet's labels + contacts and broadcast them as a FILE action so a from-seed restore can pull them back (§19.5.2)."
+                    hint="Encrypt this wallet's labels + contacts and store a copy on the blockchain, so restoring from your seed can recover them."
                     actionLabel="Publish now…"
                     disabled={!activeWallet}
                     onClick={() => { setPublishStage('form'); setPublishError(null); }}
@@ -726,7 +726,7 @@ function PublishLabelsForm({ walletId, busy, error, onCancel, onSubmit }) {
             <div style={{ color: 'var(--xc-text)', fontWeight: 500 }}>Publish labels on-chain</div>
             <div style={ROW_HINT}>
                 The labels + contacts are encrypted under a key derived from this
-                wallet's seed and broadcast as a FILE action. Only someone who already
+                wallet's seed and stored on the blockchain. Only someone who already
                 has your seed can decrypt them. The transaction pays a network fee.
             </div>
             {chains === null ? (

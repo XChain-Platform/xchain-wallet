@@ -14,6 +14,7 @@ import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { DetailCard } from './History.jsx';
+import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import styles from './History.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -76,7 +77,7 @@ export function ActionDetail({ entry, walletId, chainTip, onBack }) {
         <PageHeader
             onBack={onBack}
             backLabel="Back to history"
-            title={`${entry.action} #${Number(entry.actionIndex || 0).toLocaleString('en-US')}`}
+            title={`${actionDisplayLabel(entry.action)} #${Number(entry.actionIndex || 0).toLocaleString('en-US')}`}
             titleIcon={iconUrl ? (
                 <img
                     src={iconUrl}

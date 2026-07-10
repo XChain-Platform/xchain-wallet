@@ -216,9 +216,9 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
         const header = (
         <PageHeader
             onBack={onBack}
-            title="{stage === 'review' || stage === 'submitting'
+            title={stage === 'review' || stage === 'submitting'
                     ? `Review ${verb.toLowerCase()}`
-                    : `${verb} ${preposition} contract #${contractActionIndex}`}"
+                    : `${verb} ${preposition} contract #${contractActionIndex}`}
         />
     );
     const wrap = (children) => (

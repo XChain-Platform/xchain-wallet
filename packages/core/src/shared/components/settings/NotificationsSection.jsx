@@ -121,7 +121,7 @@ const NOTIFICATION_FLAGS = /** @type {const} */ ([
     {
         key: 'priceAlerts',
         label: 'Price alerts',
-        hint: 'Notify on PRICE-oracle alert levels you subscribed to.',
+        hint: 'Notify when a coin hits a price level you set.',
     },
 ]);
 

@@ -76,38 +76,40 @@ export function ReachabilityBanner({ chainIds, intervalMs }) {
     );
 }
 
+// Plain-language summaries only: internal backend service names (encoder /
+// hub / explorer) and dev vocabulary like "endpoint configuration" never
+// belong in user copy. Per-chain detail stays at "partly" vs "fully" down.
 function summariseDegradation(perChain) {
     if (!Array.isArray(perChain) || perChain.length === 0) {
-        return 'No services reachable. Check your network and your endpoint configuration.';
+        return "Can't reach the network. Check your internet connection.";
     }
     const offline = perChain.filter((c) => c.mode === 'offline');
     const degraded = perChain.filter((c) => c.mode === 'degraded');
     if (offline.length === perChain.length) {
-        return 'No services reachable on any active chain.';
+        return "Can't reach the network on any active chain.";
     }
     const summaries = [];
     for (const c of degraded) {
-        const down = listUnreachable(c);
-        if (down.length > 0) {
-            summaries.push(`${c.chainId}: ${down.join(', ')} unreachable.`);
+        if (countUnreachable(c) > 0) {
+            summaries.push(`${c.chainId}: partly unavailable; some features may not work.`);
         }
     }
     for (const c of offline) {
-        summaries.push(`${c.chainId}: all services unreachable.`);
+        summaries.push(`${c.chainId}: can't reach the network.`);
     }
     if (summaries.length === 0) {
-        return 'Some services are unreachable.';
+        return 'Part of the network is unavailable right now.';
     }
     return summaries.join(' ');
 }
 
-function listUnreachable(chainResult) {
-    const out = [];
+function countUnreachable(chainResult) {
     const services = chainResult?.services || {};
+    let n = 0;
     for (const name of ['encoder', 'hub', 'explorer']) {
-        if (services[name] === 'unreachable') out.push(name);
+        if (services[name] === 'unreachable') n += 1;
     }
-    return out;
+    return n;
 }
 
 function formatAgo(diffMs) {

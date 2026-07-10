@@ -108,8 +108,8 @@ assert.ok(
     'Deposit / Withdraw buttons disable without their props',
 );
 assert.ok(
-    /EXECUTE \/ DEPOSIT \/ WITHDRAW forms land/.test(detailSrc),
-    'ContractDetail surfaces the "forms land in upcoming steps" note when no signing props passed',
+    /Contract call, deposit, and withdraw forms are coming/.test(detailSrc),
+    'ContractDetail surfaces the "forms are coming" note when no signing props passed',
 );
 
 // --- 5. Core flows + guards -------------------------------------------

@@ -347,9 +347,25 @@ export function SignApproval({ id, kind, payload, onReject }) {
 
     const psbtApprovalBlocked = psbtDecodeFailed || psbtDecodePending;
 
+    // Same gate for co-sign approvals (WYSIWYS parity with signPsbt): when
+    // the wallet already knows the request is undecodable or out-of-policy,
+    // Approve must not be clickable - the summary even tells the user the
+    // co-signer will refuse it. The co-signer re-decodes and re-checks policy
+    // server-side, so this is defense-in-depth, not the only gate. Also holds
+    // while the preview is still loading (approving unseen effects).
+    const coSignApprovalBlocked =
+        kind === 'coSign' &&
+        (coSignPreview.loading ||
+            coSignPreview.error !== null ||
+            !coSignPreview.preview ||
+            !coSignPreview.preview.decodeOk ||
+            !coSignPreview.preview.policyOk);
+
+    const approvalBlocked = psbtApprovalBlocked || coSignApprovalBlocked;
+
     async function handleApprove(event) {
         event.preventDefault();
-        if (busy || password.length === 0 || !walletId || psbtApprovalBlocked) return;
+        if (busy || password.length === 0 || !walletId || approvalBlocked) return;
         setBusy(true);
         setError(null);
         try {
@@ -398,7 +414,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
                         variant="primary"
                         block
                         loading={busy}
-                        disabled={password.length === 0 || !walletId || psbtApprovalBlocked}
+                        disabled={password.length === 0 || !walletId || approvalBlocked}
                     >
                         {approveLabel}
                     </Button>

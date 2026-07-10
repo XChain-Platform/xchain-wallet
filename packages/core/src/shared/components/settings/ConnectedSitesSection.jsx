@@ -428,11 +428,11 @@ function SignThrottlePanel() {
         <div style={SITE_BLOCK}>
             <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>Sign-request throttle</span>
             <span style={ROW_HINT}>
-                Per-origin token bucket (§12 / G012): caps how many sign requests
-                a single dApp can fire inside a window before further requests
-                reject with <code style={{ fontFamily: 'var(--xc-font-mono, monospace)' }}>THROTTLED</code>.
-                Lower numbers harden against abuse; higher numbers help during
-                heavy normal use. Defaults: {SIGN_THROTTLE_DEFAULT_BURST} per{' '}
+                Limits how many signing requests a single site can make in a
+                short window; anything over the limit is rejected until the
+                window resets. Lower numbers harden against abuse; higher
+                numbers help during heavy normal use. Defaults:{' '}
+                {SIGN_THROTTLE_DEFAULT_BURST} per{' '}
                 {SIGN_THROTTLE_DEFAULT_WINDOW_MS / 1000} s.
             </span>
             <span style={ROW_HINT}>
@@ -498,9 +498,8 @@ function BlockedOriginsPanel({ blocked, manualBlock, setManualBlock, onSubmit, o
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-2)' }}>
                 <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>Blocked origins</span>
                 <span style={ROW_HINT}>
-                    Blocked origins cannot connect or sign. Sign requests reject with{' '}
-                    <code style={{ fontFamily: 'var(--xc-font-mono, monospace)' }}>BLOCKED_BY_USER</code>{' '}
-                    until you remove the origin. Wildcards like{' '}
+                    Blocked sites cannot connect or ask you to sign anything
+                    until you remove them from this list. Wildcards like{' '}
                     <code style={{ fontFamily: 'var(--xc-font-mono, monospace)' }}>*.example.com</code>{' '}
                     block every subdomain (the bare apex is separate; add{' '}
                     <code style={{ fontFamily: 'var(--xc-font-mono, monospace)' }}>example.com</code>{' '}

@@ -16,6 +16,7 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { TickerIcon } from '../components/TickerIcon.jsx';
 import { formatAmount } from '../components/BalanceList.jsx';
+import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { Sparkline, synthesizeTokenChart } from '../components/Sparkline.jsx';
 import { RANGES as CHART_RANGES } from '../components/PortfolioChart.jsx';
 import portfolioChartStyles from '../components/PortfolioChart.module.css';
@@ -941,7 +942,7 @@ function ActivityPanel({ activity, error, onViewAll, tick }) {
                     return (
                         <li key={String(a.action_index || a.tx_hash || i)}>
                             <div className={styles.row}>
-                                <span className={styles.rowMain}>{String(type).toUpperCase()}</span>
+                                <span className={styles.rowMain}>{actionDisplayLabel(type)}</span>
                                 <span className={styles.rowSub}>{when}</span>
                             </div>
                         </li>
@@ -992,7 +993,7 @@ function HistoryRow({ as, chainId, tick, action, status, statusLabel, source, su
                         height={16}
                     />
                 ) : null}
-                <span className={styles.histAction}>{action}</span>
+                <span className={styles.histAction}>{actionDisplayLabel(action)}</span>
                 {statusLabel ? (
                     <span className={`${styles.histStatus} ${statusClass}`}>{statusLabel}</span>
                 ) : null}

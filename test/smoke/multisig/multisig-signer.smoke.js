@@ -65,12 +65,12 @@ const trezor = new TrezorSigner({
 });
 await assert.rejects(
     async () => trezor.signMusig2Round1(),
-    /Update firmware to use MuSig2 on this device/i,
+    /can't co-sign shared-wallet payments yet/i,
     'Trezor MuSig2 round 1 surfaces the spec error',
 );
 await assert.rejects(
     async () => trezor.signMusig2Round2(),
-    /Update firmware to use MuSig2 on this device/i,
+    /can't co-sign shared-wallet payments yet/i,
     'Trezor MuSig2 round 2 surfaces the spec error',
 );
 await assert.rejects(
@@ -88,12 +88,12 @@ const ledger = new LedgerSigner({
 });
 await assert.rejects(
     async () => ledger.signMusig2Round1(),
-    /Update firmware to use MuSig2 on this device/i,
+    /can't co-sign shared-wallet payments yet/i,
     'Ledger MuSig2 round 1 surfaces the spec error',
 );
 await assert.rejects(
     async () => ledger.signMusig2Round2(),
-    /Update firmware to use MuSig2 on this device/i,
+    /can't co-sign shared-wallet payments yet/i,
     'Ledger MuSig2 round 2 surfaces the spec error',
 );
 await assert.rejects(

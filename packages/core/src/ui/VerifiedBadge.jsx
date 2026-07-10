@@ -64,11 +64,14 @@ export function VerifiedBadge({ status, reason, size = 'sm' }) {
     );
 }
 
+// Tooltip copy describes the GUARANTEE, never the mechanism: "quorum-signed
+// checkpoint" and friends are consensus internals a non-technical user cannot
+// interpret (house voice: no jargon without translation).
 const BADGE_SPEC = {
     verified: {
         glyph: '✓',
         label: 'Verified',
-        title: 'Cryptographically verified against a quorum-signed checkpoint',
+        title: 'Independently checked against the network’s signed record; this value is proven',
         bg: '#DCFCE7', fg: '#166534', border: '#86EFAC', // green
     },
     failed: {
@@ -86,7 +89,7 @@ const BADGE_SPEC = {
     pending: {
         glyph: '…',
         label: 'Verifying',
-        title: 'Verifying against a quorum-signed checkpoint',
+        title: 'Checking this value against the network’s signed record',
         bg: '#F1F5F9', fg: '#475569', border: '#CBD5E1', // slate
     },
 };
@@ -94,10 +97,10 @@ const BADGE_SPEC = {
 // Turn a few common light-client reason codes into a short plain phrase for
 // the tooltip; otherwise show the raw code (still useful to a power user).
 const REASON_TEXT = {
-    NOT_YET_CHECKPOINTED: 'block not yet checkpointed',
-    CHECKPOINT_PRE_COMMITMENT: 'state commitment not active yet',
+    NOT_YET_CHECKPOINTED: 'this transaction is too new to verify yet',
+    CHECKPOINT_PRE_COMMITMENT: 'the network does not publish proofs for this block yet',
     SPV_UNSUPPORTED: 'this connection cannot serve proofs',
-    CHECKPOINT_QUORUM_FAILED: 'checkpoint quorum not met',
+    CHECKPOINT_QUORUM_FAILED: 'the network’s proof for this value didn’t check out',
 };
 
 function humanizeReason(reason) {

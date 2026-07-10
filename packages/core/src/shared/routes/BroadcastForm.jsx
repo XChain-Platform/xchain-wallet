@@ -285,9 +285,9 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
         const header = (
         <PageHeader
             onBack={onBack}
-            title="{stage === 'review' || stage === 'submitting'
+            title={stage === 'review' || stage === 'submitting'
                     ? 'Review broadcast'
-                    : `Broadcast${titleSuffix}`}"
+                    : `Broadcast${titleSuffix}`}
         />
     );
     const wrap = (children) => (

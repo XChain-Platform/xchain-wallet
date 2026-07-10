@@ -31,6 +31,10 @@ const multisigSrc = readFileSync(
     join(wsRoot, 'packages', 'core', 'src', 'flows', 'multisigSignLocally.js'),
     'utf8',
 );
+const queuedBroadcastSrc = readFileSync(
+    join(wsRoot, 'packages', 'core', 'src', 'flows', 'queuedBroadcast.js'),
+    'utf8',
+);
 const flowsIndex = readFileSync(
     join(wsRoot, 'packages', 'core', 'src', 'flows', 'index.js'),
     'utf8',
@@ -81,6 +85,24 @@ for (const [src, name] of [
 // signFlows must call assertSigningAllowed in BOTH signMessageFlow + signPsbtFlow.
 const signFlowsCalls = signFlowsSrc.match(/assertSigningAllowed\(\)/g) || [];
 assert.equal(signFlowsCalls.length, 2, 'signFlows.js gates both flows (signMessage + signPsbt)');
+
+// --- broadcast-only effector: drainQueuedBroadcast also gated ---------
+//
+// Broadcasting an already-signed tx invokes no signer, so it is invisible
+// to a gate scoped to "sign-path" chokepoints. drainQueuedBroadcast is the
+// core-package broadcast effector every shell inherits; pin it here so the
+// next unguarded broadcast route cannot land silently.
+
+assert.match(
+    queuedBroadcastSrc,
+    /import \{ assertSigningAllowed \} from '\.\/panicMode\.js'/,
+    'queuedBroadcast.js imports assertSigningAllowed',
+);
+assert.match(
+    queuedBroadcastSrc,
+    /assertSigningAllowed\(\)/,
+    'drainQueuedBroadcast calls assertSigningAllowed()',
+);
 
 // --- SafetySection wiring ---------------------------------------------
 

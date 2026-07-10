@@ -1,7 +1,7 @@
 {
     "id": "cross-chain-airdrop",
     "name": "Cross-chain airdrop",
-    "description": "Distribute the same token to recipient lists on multiple chains in parallel from a single composer pass. Each row is an independent AIRDROP - the composer's no-rollback warning applies.",
+    "description": "Distribute the same token to recipient lists on multiple chains in parallel from a single composer pass. Each row is an independent airdrop - the composer's no-rollback warning applies.",
     "personas": ["Jin"],
     "actions": [
         {
@@ -13,7 +13,7 @@
                 "LIST_ACTION_INDEX": "<LIST action_index for chain A recipients>",
                 "MEMO": "airdrop chain A"
             },
-            "note": "Reference a previously-broadcast LIST on chain A (use the §40.9 Airdrop form to create the LIST first if you don't have one yet)."
+            "note": "Reference a previously-broadcast recipient list on chain A (use the Airdrop form to create the list first if you don't have one yet)."
         },
         {
             "chainHint": "secondary",
@@ -24,7 +24,7 @@
                 "LIST_ACTION_INDEX": "<LIST action_index for chain B recipients>",
                 "MEMO": "airdrop chain B"
             },
-            "note": "Reference a separate LIST on chain B. The two AIRDROP actions broadcast independently - failures on one chain do not affect the other."
+            "note": "Reference a separate recipient list on chain B. The two airdrops broadcast independently - failures on one chain do not affect the other."
         },
         {
             "chainHint": "tertiary",

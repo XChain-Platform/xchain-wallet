@@ -332,16 +332,16 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
         }
         return wrap(
             <>
-                <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>SWAP broadcast</p>
+                <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>Swap sent</p>
                 {txid ? (
                     <p style={{ margin: '0 0 0.5rem' }}>
                         Transaction: <code>{txid}</code>
                     </p>
                 ) : null}
                 <p className={styles.hint}>
-                    Your swap is now open. It will settle atomically when a
-                    counterparty matches it; cancel or edit before match via
-                    the SWAP action index.
+                    Your swap is now open. It settles automatically when a
+                    counterparty matches it; until then you can cancel or edit
+                    it from its entry in your activity.
                 </p>
                 <div className={styles.actions}>
                     <Button variant="primary" onClick={onBack}>Done</Button>

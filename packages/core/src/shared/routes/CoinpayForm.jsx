@@ -92,7 +92,7 @@ export function CoinpayForm({
                 setAddressesByChain(byChain);
                 if (!byChain || Object.keys(byChain).length === 0) {
                     setLoadError(
-                        'No addresses in this wallet. COINPAY requires a funded payer address.',
+                        'No addresses in this wallet. Paying a matched order requires a funded address.',
                     );
                 }
             })
@@ -282,7 +282,7 @@ export function CoinpayForm({
 
     const titleText = (stage === 'review' || stage === 'submitting')
         ? 'Review payment'
-        : 'Pay COINPAY';
+        : 'Pay for matched order';
     const header = (
         <PageHeader
             onBack={onBack}
@@ -318,7 +318,7 @@ export function CoinpayForm({
         }
         return wrap(
             <>
-                <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>COINPAY broadcast</p>
+                <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>Payment broadcast</p>
                 {txid ? (
                     <p style={{ margin: '0 0 0.5rem' }}>
                         Transaction: <code>{txid}</code>
@@ -344,8 +344,8 @@ export function CoinpayForm({
         return wrap(
             <form onSubmit={handleSubmit} noValidate>
                 <p className={styles.summary}>
-                    Pay {summary.coinAmount} {coinTicker || 'base units'} to settle
-                    ORDER_MATCH #{summary.actionIndex}.
+                    Pay {summary.coinAmount} {coinTicker || 'base units'} to complete
+                    matched order #{summary.actionIndex}.
                 </p>
                 <dl className={styles.detailsList}>
                     <DetailRow
@@ -357,7 +357,7 @@ export function CoinpayForm({
                         value={<AddressText address={selected.address} />}
                     />
                     <DetailRow
-                        label="ORDER_MATCH"
+                        label="Matched order"
                         value={<code>{summary.actionIndex}</code>}
                     />
                     <DetailRow
@@ -416,7 +416,7 @@ export function CoinpayForm({
                             ? 'Create unsigned transaction'
                             : hw
                                 ? `Sign on ${selected.addr.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : 'Sign COINPAY'}
+                                : 'Sign payment'}
                     </Button>
                 </div>
             </form>,
@@ -428,13 +428,12 @@ export function CoinpayForm({
     return wrap(
         <>
             {scanning && obligations.length === 0 ? (
-                <p className={styles.hint}>Scanning for pending COINPAY obligations…</p>
+                <p className={styles.hint}>Scanning for payments due…</p>
             ) : null}
             {!scanning && obligations.length === 0 ? (
                 <p className={styles.hint}>
-                    No pending COINPAY obligations. COINPAY settles matched
-                    orders between a token and a native coin; a new entry
-                    appears here once one of your orders matches.
+                    No payments due right now. When one of your orders
+                    matches, the coin payment for it appears here.
                 </p>
             ) : null}
 
@@ -474,7 +473,7 @@ export function CoinpayForm({
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                             {d ? <ChainBadge descriptor={d} size="sm" /> : <span>{row.chainId}</span>}
                                             <span style={{ fontWeight: 600 }}>
-                                                ORDER_MATCH #{String(row.obligation.action_index)}
+                                                Matched order #{String(row.obligation.action_index)}
                                             </span>
                                         </div>
                                         <div style={{ fontSize: '0.8rem', marginTop: '0.25rem' }}>
@@ -502,7 +501,7 @@ export function CoinpayForm({
                         <dd className={styles.detailsValue}>
                             {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : selected.chainId}
                         </dd>
-                        <dt className={styles.detailsLabel}>ORDER_MATCH</dt>
+                        <dt className={styles.detailsLabel}>Matched order</dt>
                         <dd className={styles.detailsValue}>
                             <code>{summary.actionIndex}</code>
                         </dd>

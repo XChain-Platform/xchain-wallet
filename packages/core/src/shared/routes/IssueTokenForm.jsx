@@ -309,9 +309,9 @@ export function IssueTokenForm({ walletId, onBack }) {
         const header = (
         <PageHeader
             onBack={onBack}
-            title="{stage === 'review' || stage === 'submitting'
+            title={stage === 'review' || stage === 'submitting'
                     ? 'Review issue'
-                    : `Issue token${titleSuffix}`}"
+                    : `Issue token${titleSuffix}`}
         />
     );
     const wrap = (children) => (

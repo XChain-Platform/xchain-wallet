@@ -41,10 +41,20 @@ describe('<VerifiedBadge>', () => {
         expect(screen.queryByTestId('verified-badge')).toBeNull();
     });
 
-    it('humanizes a known reason code in the tooltip', () => {
+    it('humanizes a known reason code in the tooltip (plain language, no consensus jargon)', () => {
         render(<VerifiedBadge status="unavailable" reason="NOT_YET_CHECKPOINTED" />);
         const el = screen.getByTestId('verified-badge');
-        expect(el.getAttribute('title')).toContain('block not yet checkpointed');
+        expect(el.getAttribute('title')).toContain('too new to verify');
+        expect(el.getAttribute('title')).not.toMatch(/checkpoint|quorum/i);
+    });
+
+    it('keeps consensus jargon out of every badge tooltip', () => {
+        for (const status of ['verified', 'pending', 'failed', 'unavailable']) {
+            const { unmount } = render(<VerifiedBadge status={status} />);
+            const el = screen.getByTestId('verified-badge');
+            expect(el.getAttribute('title')).not.toMatch(/quorum|checkpoint|state commitment/i);
+            unmount();
+        }
     });
 
     it('falls back to the raw reason code when not in the humanized map', () => {

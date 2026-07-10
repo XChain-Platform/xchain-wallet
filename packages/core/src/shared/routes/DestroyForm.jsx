@@ -252,9 +252,9 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
         const header = (
         <PageHeader
             onBack={onBack}
-            title="{stage === 'review' || stage === 'submitting'
+            title={stage === 'review' || stage === 'submitting'
                     ? 'Review destroy'
-                    : `Destroy${titleSuffix}`}"
+                    : `Destroy${titleSuffix}`}
         />
     );
     const wrap = (children) => (

@@ -211,9 +211,9 @@ export function StakingActionForm({ mode, walletId, chainId, onBack }) {
         const header = (
         <PageHeader
             onBack={onBack}
-            title="{stage === 'review' || stage === 'submitting'
+            title={stage === 'review' || stage === 'submitting'
                     ? `Review ${verb.toLowerCase()}`
-                    : verb}"
+                    : verb}
         />
     );
     const wrap = (children) => <Screen variant={variant} header={header}>{children}</Screen>;

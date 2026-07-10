@@ -499,9 +499,9 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         const header = (
         <PageHeader
             onBack={onBack}
-            title="{stage === 'review' || stage === 'submitting'
+            title={stage === 'review' || stage === 'submitting'
                     ? 'Review dispenser'
-                    : `Create dispenser${titleSuffix}`}"
+                    : `Create dispenser${titleSuffix}`}
         />
     );
     const wrap = (children) => (

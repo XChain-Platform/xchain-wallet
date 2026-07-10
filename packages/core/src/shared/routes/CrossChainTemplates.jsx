@@ -14,6 +14,7 @@ import { Screen,
 import { registry as registryLib } from '@xchain-wallet/core';
 import { CROSS_CHAIN_TEMPLATES } from '../../templates/cross-chain/index.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import styles from './ActionsMenu.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -147,7 +148,7 @@ export function CrossChainTemplates({ walletId, onLaunch, onBack }) {
                 <ol style={{ margin: '0.5rem 0 0', paddingLeft: '1.25rem', fontSize: '0.85em' }}>
                     {t.actions.map((row, i) => (
                         <li key={i} style={{ marginBottom: '0.25rem' }}>
-                            <strong>{row.action}</strong> on{' '}
+                            <strong>{actionDisplayLabel(row.action)}</strong> on{' '}
                             <em>{labelForChainHint(row.chainHint, chainsWithAddresses)}</em>
                             {row.note ? <> <span style={{ opacity: 0.8 }}>({row.note})</span></> : null}
                         </li>

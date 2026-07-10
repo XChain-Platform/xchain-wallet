@@ -17,7 +17,12 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { COMMON_ACTIONS, BTC_EXCLUSIVE_ACTIONS } from '../../packages/core/src/registry/actions.js';
+import {
+    COMMON_ACTIONS,
+    BTC_EXCLUSIVE_ACTIONS,
+    PROTOCOL_ONLY_ACTIONS,
+    BITCOIN_ACTIONS,
+} from '../../packages/core/src/registry/actions.js';
 import MANIFEST from '../fixtures/action-manifest.json';
 
 // vitest anchors its root to the wallet repo, so cwd is the repo root.
@@ -40,6 +45,26 @@ describe('ACTION manifest conformance: wallet walletForm set @regression', () =>
             'wallet registry/actions.js drifted from action-manifest.json walletForm set. ' +
             'Edit xchain-documentation/protocol/action-manifest.json + re-vendor, or update the registry.'
         ).toEqual({ missing: [], extra: [] });
+    });
+
+    // The protocol-only set (supportedActions capability surface, no authoring
+    // form) must equal the manifest's userEncodable-without-walletForm slice,
+    // so the two contracts in registry/actions.js can never re-conflate: a new
+    // protocol-accepted-but-formless action lands here, a new form there.
+    it('PROTOCOL_ONLY_ACTIONS exactly equals the manifest userEncodable-without-walletForm slice', () => {
+        const expected = Object.entries(MANIFEST.actions)
+            .filter(([, v]) => v.userEncodable && !v.walletForm)
+            .map(([k]) => k)
+            .sort();
+        expect([...PROTOCOL_ONLY_ACTIONS].sort()).toEqual(expected);
+    });
+
+    // ChainDescriptor.supportedActions advertises protocol capability, so it
+    // carries the protocol-only actions on top of the authorable sets.
+    it('descriptor supportedActions include the protocol-only actions', () => {
+        for (const a of PROTOCOL_ONLY_ACTIONS) {
+            expect(BITCOIN_ACTIONS, a).toContain(a);
+        }
     });
 
     // IDENTITY: vendored copy must match canonical (skip when sibling absent).

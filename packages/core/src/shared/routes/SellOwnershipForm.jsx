@@ -460,7 +460,7 @@ export function SellOwnershipForm({ walletId, onBack, chainId, tick, initialFrom
             <Input
                 label={`Price${wantLabel ? ` (in ${wantLabel})` : ''}`}
                 hint={getMode === 'coin'
-                    ? 'When a buyer matches, they pay this in coin via COINPAY and ownership is delivered on settlement.'
+                    ? 'When a buyer matches, they pay this in coin and ownership is delivered on settlement.'
                     : 'The buyer transfers this many tokens; ownership swaps atomically on match.'}
                 type="text"
                 inputMode="decimal"

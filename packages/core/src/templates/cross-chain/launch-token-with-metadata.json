@@ -1,7 +1,7 @@
 {
     "id": "launch-token-with-metadata",
     "name": "Launch token with cross-chain metadata",
-    "description": "ISSUE a token on chain A, store its metadata as a FILE action on chain B (cheaper / cleaner medium), then LINK the two so explorers thread the metadata to the issuance.",
+    "description": "Issue a token on chain A, store its metadata as a file on chain B (cheaper / cleaner medium), then cross-link the two so explorers thread the metadata to the issuance.",
     "personas": ["Jin"],
     "actions": [
         {
@@ -24,7 +24,7 @@
                 "MIME_TYPE": "application/json",
                 "DATA": "{\"name\":\"MYTOKEN\",\"image\":\"ipfs://...\",\"attributes\":[]}"
             },
-            "note": "Upload the metadata JSON on a cheaper chain (e.g. Dogecoin or Litecoin) - DATA is hex / utf8 per the FILE format."
+            "note": "Upload the metadata JSON on a cheaper chain (e.g. Dogecoin or Litecoin) - the data is hex / utf8 encoded."
         },
         {
             "chainHint": "primary",
@@ -37,7 +37,7 @@
                 "COIN2_ACTION_INDEX": "<FILE action_index from row 2>",
                 "MEMO": "metadata for MYTOKEN"
             },
-            "note": "Fill the COIN1/COIN2 tickers and action indices after rows 1 + 2 confirm. The LINK threads them in History (§23.5)."
+            "note": "Fill the COIN1/COIN2 tickers and action indices after rows 1 + 2 confirm. The cross-link threads them together in History."
         }
     ]
 }

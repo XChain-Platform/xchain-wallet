@@ -326,7 +326,7 @@ export function StakeForm({ walletId, chainId, onBack }) {
         const header = (
         <PageHeader
             onBack={onBack}
-            title="{stage === 'review' || stage === 'submitting' ? 'Review stake' : 'Stake on Bitcoin'}"
+            title={stage === 'review' || stage === 'submitting' ? 'Review stake' : 'Stake on Bitcoin'}
         />
     );
     const wrap = (children) => <Screen variant={variant} header={header}>{children}</Screen>;

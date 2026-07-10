@@ -139,8 +139,8 @@ export function FeesSection() {
                         ) : null}
 
                         <ToggleRow
-                            label="RBF by default"
-                            hint="Replace-by-fee opt-in stays sticky for outgoing sends on this chain."
+                            label="Allow fee bump (Replace-by-Fee)"
+                            hint="Keep this on so you can raise the fee later to speed up a stuck send on this chain."
                             checked={Boolean(fees.rbfByDefault)}
                             onChange={(v) => onPatch(chainId, {
                                 strategy: fees.strategy,
@@ -150,7 +150,7 @@ export function FeesSection() {
                             disabled={!descriptor?.feeStrategy?.rbfSupported}
                         />
                         {!descriptor?.feeStrategy?.rbfSupported ? (
-                            <div style={ROW_HINT}>RBF is not supported on {displayName}.</div>
+                            <div style={ROW_HINT}>Fee bumping is not supported on {displayName}.</div>
                         ) : null}
                     </div>
                 );

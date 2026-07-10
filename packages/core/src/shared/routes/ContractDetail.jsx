@@ -160,7 +160,7 @@ export function ContractDetail({
         <PageHeader
             onBack={onBack}
             backLabel="Back to contracts list"
-            title="Contract #{contractActionIndex}"
+            title={`Contract #${contractActionIndex}`}
         />
     );
     if (contractError) {
@@ -213,7 +213,7 @@ export function ContractDetail({
                     </dl>
                     {deployError ? (
                         <p role="alert" className={styles.entryDescription}>
-                            Couldn't load DEPLOY action metadata: {deployError}
+                            Couldn't load deploy details: {deployError}
                         </p>
                     ) : null}
                 </section>
@@ -266,7 +266,7 @@ export function ContractDetail({
                         </p>
                     ) : executions.length === 0 ? (
                         <p className={styles.entryDescription}>
-                            No EXECUTE calls recorded against this contract yet.
+                            No contract calls recorded against this contract yet.
                         </p>
                     ) : (
                         <>
@@ -327,8 +327,8 @@ export function ContractDetail({
                 </div>
                 {!onExecute && !onDeposit && !onWithdraw ? (
                     <p className={styles.entryDescription}>
-                        EXECUTE / DEPOSIT / WITHDRAW forms land in upcoming Phase 4
-                        steps (§42.4 / §42.5). Viewing is available now.
+                        Contract call, deposit, and withdraw forms are coming in
+                        an upcoming release. Viewing is available now.
                     </p>
                 ) : null}
             </div>

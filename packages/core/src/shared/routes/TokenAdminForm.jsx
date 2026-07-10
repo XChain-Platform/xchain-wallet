@@ -270,9 +270,9 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         const header = (
         <PageHeader
             onBack={onBack}
-            title="{stage === 'review' || stage === 'submitting'
+            title={stage === 'review' || stage === 'submitting'
                     ? `Review ${MODE_LABEL_LOWER[mode]}`
-                    : `${MODE_LABEL[mode]}${titleSuffix}`}"
+                    : `${MODE_LABEL[mode]}${titleSuffix}`}
         />
     );
     const wrap = (children) => (

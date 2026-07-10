@@ -332,9 +332,9 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
         const header = (
         <PageHeader
             onBack={onBack}
-            title="{stage === 'review' || stage === 'submitting'
+            title={stage === 'review' || stage === 'submitting'
                     ? 'Review dividend'
-                    : `Pay dividend${titleSuffix}`}"
+                    : `Pay dividend${titleSuffix}`}
         />
     );
     const wrap = (children) => (

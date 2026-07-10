@@ -255,9 +255,9 @@ export function ControllerBindForm({ walletId, chainId, tick, onBack }) {
         const header = (
         <PageHeader
             onBack={onBack}
-            title="{stage === 'review' || stage === 'submitting'
+            title={stage === 'review' || stage === 'submitting'
                     ? `Review ${verb.toLowerCase()} controller`
-                    : `${verb} controller`}"
+                    : `${verb} controller`}
         />
     );
     const wrap = (children) => (

@@ -347,11 +347,11 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         const header = (
         <PageHeader
             onBack={onBack}
-            title="{cancelStage === 'confirm' || cancelStage === 'submitting'
+            title={cancelStage === 'confirm' || cancelStage === 'submitting'
                     ? 'Confirm cancel'
                     : buyStage === 'confirm' || buyStage === 'submitting'
                         ? 'Review buy'
-                        : 'Dispenser detail'}"
+                        : 'Dispenser detail'}
         />
     );
     const wrap = (children) => (
@@ -432,9 +432,10 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     <dd className={styles.detailsValue}>{giveAmount} {giveTick}</dd>
                 </dl>
                 <p className={styles.hint}>
-                    The dispenser triggers when this SEND confirms. If the dispenser closes
-                    or runs out before confirmation, the payment reaches the creator but
-                    no {giveTick} is released. This is an inherent risk of UTXO-chain buys.
+                    The dispenser triggers when your payment confirms. If the dispenser
+                    closes or runs out before then, the payment reaches the creator but
+                    no {giveTick} is released. This is a normal risk when buying on
+                    these chains.
                 </p>
                 <SignCredentials
                         unlocked={signerReady}

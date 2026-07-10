@@ -2157,8 +2157,8 @@ function buildActionEntries({
         },
         {
             id: 'coinpay',
-            label: 'Pay COINPAY',
-            description: 'Settle a pending token/coin order match by paying the native-coin leg.',
+            label: 'Pay for a matched order',
+            description: 'Finish a matched order by paying the coin side.',
             onSelect: onPayCoinpay,
         },
         {

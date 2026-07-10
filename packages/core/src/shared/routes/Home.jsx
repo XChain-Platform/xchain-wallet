@@ -633,8 +633,8 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
                                 </span>
                                 <span className={styles.pendingAirdropHint}>
                                     {rec.stage === 'waiting-index'
-                                        ? 'LIST broadcast, waiting for index'
-                                        : 'Ready to sign AIRDROP'}
+                                        ? 'Recipient list sent, waiting to be indexed'
+                                        : 'Ready to sign the airdrop'}
                                 </span>
                             </button>
                         ))}
@@ -642,7 +642,7 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
                 ) : null}
 
                 {pendingCoinpays.length > 0 && onResumeCoinpay ? (
-                    <div role="group" aria-label="Pending COINPAY obligations">
+                    <div role="group" aria-label="Pending payments due">
                         {pendingCoinpays.map((rec) => (
                             <button
                                 key={`${rec.chainId}-${rec.orderMatchActionIndex}`}
@@ -655,10 +655,10 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
                                 })}
                             >
                                 <span className={styles.pendingAirdropTitle}>
-                                    Pending COINPAY: pay {rec.coinAmount} for ORDER_MATCH #{rec.orderMatchActionIndex}
+                                    Payment due: pay {rec.coinAmount} to complete matched order #{rec.orderMatchActionIndex}
                                 </span>
                                 <span className={styles.pendingAirdropHint}>
-                                    Sign COINPAY to settle the native-coin leg of your matched order.
+                                    Sign to finish paying for your matched order.
                                 </span>
                             </button>
                         ))}

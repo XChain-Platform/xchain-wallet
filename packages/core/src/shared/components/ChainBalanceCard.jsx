@@ -80,8 +80,11 @@ export function ChainBalanceCard({ descriptor, entries, multisig }) {
             ) : null}
 
             {allError ? (
-                <p className={styles.fallback}>
-                    Balance unavailable: {errors[0].error}
+                // Plain copy only; the raw backend error is unpredictable
+                // (may name endpoints/RPC internals) so it lives in the
+                // hover title for power users, never in the visible line.
+                <p className={styles.fallback} title={String(errors[0].error || '')}>
+                    Balance unavailable. We couldn’t reach the network; try again in a moment.
                 </p>
             ) : !native && totals.tokens.length === 0 ? (
                 <p className={styles.fallback}>No balances on this chain.</p>
