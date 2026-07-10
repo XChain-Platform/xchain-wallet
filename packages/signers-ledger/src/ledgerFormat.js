@@ -42,11 +42,23 @@ export function chainIdToLedgerCurrency(chainId) {
     // Bitcoin Test, Litecoin, and Dogecoin apps, but NO Litecoin-testnet,
     // Dogecoin-testnet, or regtest apps. Those chainIds fall through to the
     // throw, and the wallet uses a software signer for them.
+    //
+    // bitcoin-testnet is excluded even though the Bitcoin Test app exists: that
+    // app forces SLIP-44 coin-type 1', while the wallet's descriptor anchor
+    // deliberately pins 0' on every Bitcoin network (software-signer/backend
+    // parity). A 1' hardware derivation silently yields addresses the rest of
+    // the wallet cannot see, so the network is hardware-unsupported instead.
     switch (chainId) {
         case 'bitcoin-mainnet': return 'bitcoin';
-        case 'bitcoin-testnet': return 'bitcoin_testnet';
         case 'litecoin-mainnet': return 'litecoin';
         case 'dogecoin-mainnet': return 'dogecoin';
+        case 'bitcoin-testnet':
+            throw new Error(
+                'ledgerFormat: bitcoin-testnet is not supported on this hardware '
+                + "signer (the Bitcoin Test app derives at coin-type 1', diverging "
+                + "from the wallet's 0'-anchored derivation); use a software "
+                + 'wallet for this network.',
+            );
         default:
             throw new Error(
                 `ledgerFormat: unsupported chainId "${chainId}". No Ledger app `

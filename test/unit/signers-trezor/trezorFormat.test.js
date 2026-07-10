@@ -22,8 +22,13 @@ describe('chainIdToTrezorCoin', () => {
         expect(chainIdToTrezorCoin('bitcoin-mainnet')).toBe('btc');
     });
 
-    it('maps bitcoin-testnet to test', () => {
-        expect(chainIdToTrezorCoin('bitcoin-testnet')).toBe('test');
+    // The firmware HAS a 'test' coin, but it derives at SLIP-44 coin-type 1'
+    // while the descriptor anchor pins 0' on every Bitcoin network, so mapping
+    // it would silently derive addresses the software signer/backend cannot
+    // see. Hardware-unsupported instead (see CHAIN_ID_TO_TREZOR_COIN).
+    it("throws for bitcoin-testnet (coin-type parity with the 0' descriptor anchor)", () => {
+        expect(() => chainIdToTrezorCoin('bitcoin-testnet')).toThrow(/software wallet/);
+        expect(() => chainIdToTrezorCoin('bitcoin-testnet')).toThrow(/coin-type 1'/);
     });
 
     it('maps bitcoin-regtest to regtest', () => {

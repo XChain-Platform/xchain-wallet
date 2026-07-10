@@ -41,6 +41,20 @@
 import { Signer, SignerStatusError } from '../../core/src/signers/Signer.js';
 import { chainIdToTrezorCoin, toTrezorSignTransaction } from './trezorFormat.js';
 
+// Plain-language error for the hardware MuSig2 gap: this message is what the
+// sign screen renders directly, so it stays house-voice (no Class.method:
+// breadcrumb, no repeated jargon). `err.code` gives callers a stable
+// identifier to branch on; `err.cause` keeps the qualified technical string
+// for logs.
+function hwMusig2UnsupportedError(qualifiedMethod, detail) {
+    const err = new Error(
+        'This Trezor can\'t co-sign shared-wallet payments yet. Update its firmware, or sign with this wallet\'s built-in signer.',
+        { cause: `${qualifiedMethod}: ${detail}` },
+    );
+    err.code = 'HW_MUSIG2_UNSUPPORTED';
+    return err;
+}
+
 /**
  * @typedef {Object} TrezorConnectResponse
  * @property {boolean} success
@@ -280,16 +294,14 @@ export class TrezorSigner extends Signer {
     // the supported MuSig2 path on this device.
     /** @returns {Promise<import('./Signer.js').SignMusig2Round1Return>} */
     async signMusig2Round1() {
-        throw new Error(
-            'TrezorSigner.signMusig2Round1: hardware MuSig2 is not supported on Trezor. Update firmware to use MuSig2 on this device, or use the wallet\'s software signer for the MuSig2 cosigner.',
-        );
+        throw hwMusig2UnsupportedError('TrezorSigner.signMusig2Round1',
+            'hardware MuSig2 is not supported on Trezor. Update firmware to use MuSig2 on this device, or use the wallet\'s software signer for the MuSig2 cosigner.');
     }
 
     /** @returns {Promise<import('./Signer.js').SignMusig2Round2Return>} */
     async signMusig2Round2() {
-        throw new Error(
-            'TrezorSigner.signMusig2Round2: hardware MuSig2 is not supported on Trezor. Update firmware to use MuSig2 on this device, or use the wallet\'s software signer for the MuSig2 cosigner.',
-        );
+        throw hwMusig2UnsupportedError('TrezorSigner.signMusig2Round2',
+            'hardware MuSig2 is not supported on Trezor. Update firmware to use MuSig2 on this device, or use the wallet\'s software signer for the MuSig2 cosigner.');
     }
 
     // P2SH / P2WSH classical multisig signing isn't wired through
@@ -416,13 +428,17 @@ function formatBip44Path({ purpose, coin, accountIndex, change, index }) {
 }
 
 /**
- * SLIP-44 coin types for the chains the wallet supports.
+ * SLIP-44 coin types for the chains the wallet supports. Mainnet slots only,
+ * matching the chain descriptors' parity anchor (coin-type stays at the mainnet
+ * slot on every network). Trezor's 'test' coin is intentionally absent: it
+ * forces coin-type 1', which diverges from the wallet's 0'-anchored bitcoin
+ * derivation, so bitcoin-testnet is rejected upstream in chainIdToTrezorCoin
+ * and can never reach this formatter.
  * @param {string} coin
  */
 function coinTypeFor(coin) {
     switch (coin) {
         case 'btc': return "0'";
-        case 'test': return "1'";
         case 'ltc': return "2'";
         case 'doge': return "3'";
         default:

@@ -76,25 +76,56 @@ import {
  * BIP44-coin variants the wallet supports run on Ledger's Bitcoin
  * app; the `currency` parameter inside the app handles the
  * per-coin differences.
+ *
+ * bitcoin-testnet is deliberately absent (see coinTypeFor): the Bitcoin Test
+ * app forces SLIP-44 coin-type 1', which diverges from the wallet's
+ * 0'-anchored derivation, so the network is hardware-unsupported.
  */
 const LEDGER_APP_NAME_FOR_CHAIN = {
     'bitcoin-mainnet': 'Bitcoin',
-    'bitcoin-testnet': 'Bitcoin Test',
     'litecoin-mainnet': 'Litecoin',
     'dogecoin-mainnet': 'Dogecoin',
 };
 
+// Plain-language error for the hardware MuSig2 gap: this message is what the
+// sign screen renders directly, so it stays house-voice (no Class.method:
+// breadcrumb, no repeated jargon). `err.code` gives callers a stable
+// identifier to branch on; `err.cause` keeps the qualified technical string
+// for logs.
+function hwMusig2UnsupportedError(qualifiedMethod, detail) {
+    const err = new Error(
+        'This Ledger can\'t co-sign shared-wallet payments yet. Update its Bitcoin app, or sign with this wallet\'s built-in signer.',
+        { cause: `${qualifiedMethod}: ${detail}` },
+    );
+    err.code = 'HW_MUSIG2_UNSUPPORTED';
+    return err;
+}
+
 function chainIdToLedgerFormat(chainId) {
     switch (chainId) {
         case 'bitcoin-mainnet':
-        case 'bitcoin-testnet':
         case 'litecoin-mainnet':
         case 'dogecoin-mainnet':
             return 'bech32';
+        case 'bitcoin-testnet':
+            throw new Error(UNSUPPORTED_BITCOIN_TESTNET);
         default:
             throw new Error(`LedgerSigner: unsupported chainId "${chainId}"`);
     }
 }
+
+// Bitcoin-testnet is disabled on the Ledger signer for derivation parity, the
+// same way LTC/DOGE testnet + regtest are (ledgerFormat.js): the chain
+// descriptors deliberately pin SLIP-44 coin-type 0' on EVERY Bitcoin network so
+// derivation matches the software signer and the backend, but Ledger's Bitcoin
+// Test app forces the generic testnet coin-type 1'. Deriving here would
+// silently produce m/84'/1'/... addresses the rest of the wallet cannot see
+// (testnet funds appear missing). Throw instead of diverging.
+const UNSUPPORTED_BITCOIN_TESTNET =
+    'LedgerSigner: bitcoin-testnet is not supported on this hardware signer. '
+    + "The Ledger Bitcoin Test app derives at SLIP-44 coin-type 1', which diverges "
+    + "from the wallet's 0'-anchored derivation (descriptor/backend parity); "
+    + 'use a software wallet for this network.';
 
 export class LedgerSigner extends Signer {
     /**
@@ -319,18 +350,22 @@ export class LedgerSigner extends Signer {
     // expose nonce generation or partial signing as first-class
     // methods. Surface a clear error so the sign screen can prompt
     // the user to update or fall back to the wallet's software signer.
+    //
+    // The message itself is what the sign screen renders, so it stays
+    // plain-language (house voice: no jargon without translation, no
+    // Class.method: developer breadcrumb). `err.code` carries the typed
+    // identifier for any caller that wants to branch on it; the original
+    // qualified string survives as `err.cause` for logs.
     /** @returns {Promise<import('./Signer.js').SignMusig2Round1Return>} */
     async signMusig2Round1() {
-        throw new Error(
-            'LedgerSigner.signMusig2Round1: hardware MuSig2 is not supported on this Ledger Bitcoin app. Update firmware to use MuSig2 on this device, or use the wallet\'s software signer for the MuSig2 cosigner.',
-        );
+        throw hwMusig2UnsupportedError('LedgerSigner.signMusig2Round1',
+            'hardware MuSig2 is not supported on this Ledger Bitcoin app. Update firmware to use MuSig2 on this device, or use the wallet\'s software signer for the MuSig2 cosigner.');
     }
 
     /** @returns {Promise<import('./Signer.js').SignMusig2Round2Return>} */
     async signMusig2Round2() {
-        throw new Error(
-            'LedgerSigner.signMusig2Round2: hardware MuSig2 is not supported on this Ledger Bitcoin app. Update firmware to use MuSig2 on this device, or use the wallet\'s software signer for the MuSig2 cosigner.',
-        );
+        throw hwMusig2UnsupportedError('LedgerSigner.signMusig2Round2',
+            'hardware MuSig2 is not supported on this Ledger Bitcoin app. Update firmware to use MuSig2 on this device, or use the wallet\'s software signer for the MuSig2 cosigner.');
     }
 
     // P2SH / P2WSH classical multisig signing on Ledger goes through
@@ -394,12 +429,19 @@ function formatBip44Path({ purpose, chainId, accountIndex, change, index }) {
     return `m/${purpose}/${coinType}/${accountIndex}'/${change}/${index}`;
 }
 
+// Mainnet SLIP-44 slots only, matching the chain descriptors' parity anchor
+// (registry/descriptors: coin-type stays at the mainnet slot on every network).
+// bitcoin-testnet must NOT map to 1' here: the descriptor/SoftwareSigner/backend
+// derive it at 0', so a 1' hardware derivation yields different addresses for
+// the same seed (funds appear missing). Since the Ledger firmware cannot honor
+// 0' on its testnet app, the network throws as hardware-unsupported instead.
 function coinTypeFor(chainId) {
     switch (chainId) {
         case 'bitcoin-mainnet': return "0'";
-        case 'bitcoin-testnet': return "1'";
         case 'litecoin-mainnet': return "2'";
         case 'dogecoin-mainnet': return "3'";
+        case 'bitcoin-testnet':
+            throw new Error(UNSUPPORTED_BITCOIN_TESTNET);
         default:
             throw new Error(`LedgerSigner: unsupported chainId "${chainId}"`);
     }

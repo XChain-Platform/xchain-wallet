@@ -206,12 +206,27 @@ describe('LedgerSigner.signPsbt', () => {
 });
 
 describe('LedgerSigner multisig stubs', () => {
-    it('signMusig2Round1 throws not-supported', async () => {
-        await expect(makeSigner().signMusig2Round1()).rejects.toThrow(/not supported/);
+    // The message is what the sign screen renders directly (user-facing-
+    // language: no Class.method: developer breadcrumb, no raw "MuSig2"/
+    // "cosigner" jargon repeated). err.code carries the typed identifier
+    // for callers that want to branch, and the qualified technical string
+    // survives as err.cause for logs.
+    it('signMusig2Round1 throws a plain-language hardware-unsupported error', async () => {
+        await expect(makeSigner().signMusig2Round1()).rejects.toMatchObject({
+            code: 'HW_MUSIG2_UNSUPPORTED',
+            cause: expect.stringMatching(/^LedgerSigner\.signMusig2Round1:/),
+        });
+        await expect(makeSigner().signMusig2Round1())
+            .rejects.not.toThrow(/LedgerSigner\.signMusig2Round1:/);
     });
 
-    it('signMusig2Round2 throws not-supported', async () => {
-        await expect(makeSigner().signMusig2Round2()).rejects.toThrow(/not supported/);
+    it('signMusig2Round2 throws a plain-language hardware-unsupported error', async () => {
+        await expect(makeSigner().signMusig2Round2()).rejects.toMatchObject({
+            code: 'HW_MUSIG2_UNSUPPORTED',
+            cause: expect.stringMatching(/^LedgerSigner\.signMusig2Round2:/),
+        });
+        await expect(makeSigner().signMusig2Round2())
+            .rejects.not.toThrow(/LedgerSigner\.signMusig2Round2:/);
     });
 
     it('signMultisigClassical throws not-yet-wired', async () => {

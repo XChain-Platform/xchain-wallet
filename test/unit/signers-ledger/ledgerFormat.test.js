@@ -25,8 +25,13 @@ describe('chainIdToLedgerCurrency', () => {
         expect(chainIdToLedgerCurrency('bitcoin-mainnet')).toBe('bitcoin');
     });
 
-    it('maps bitcoin-testnet to bitcoin_testnet', () => {
-        expect(chainIdToLedgerCurrency('bitcoin-testnet')).toBe('bitcoin_testnet');
+    // A Bitcoin Test app exists, but it derives at SLIP-44 coin-type 1' while
+    // the descriptor anchor pins 0' on every Bitcoin network, so mapping it
+    // would silently derive addresses the software signer/backend cannot see.
+    // Hardware-unsupported instead (see chainIdToLedgerCurrency).
+    it("throws for bitcoin-testnet (coin-type parity with the 0' descriptor anchor)", () => {
+        expect(() => chainIdToLedgerCurrency('bitcoin-testnet')).toThrow(/software wallet/);
+        expect(() => chainIdToLedgerCurrency('bitcoin-testnet')).toThrow(/coin-type 1'/);
     });
 
     it('maps litecoin-mainnet to litecoin', () => {
