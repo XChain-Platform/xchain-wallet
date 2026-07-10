@@ -27,6 +27,7 @@
 // record to preserve the work.
 
 import { createPendingTx } from '../schemas/pendingTx.js';
+import { assertSigningAllowed } from './panicMode.js';
 
 export class NoQueuedTxError extends Error {
     constructor(id) {
@@ -155,6 +156,14 @@ export async function drainQueuedBroadcast({
     if (!existing.txHex) {
         throw new Error(`drainQueuedBroadcast: PendingTx "${pendingTxId}" has no txHex`);
     }
+
+    // §26.5 panic-mode freeze. Broadcasting an already-signed tx invokes no
+    // signer, so it would otherwise sail straight through an active freeze -
+    // exactly the irreversible-effector gap the freeze exists to close.
+    // Checked before touching the network; on a freeze the PendingTx stays
+    // 'queued' (no mutation, no partial state) and PanicModeActiveError
+    // propagates to the caller.
+    assertSigningAllowed();
 
     // Resolve the SDK instance for the chain by matching (coin, network)
     // in the registry.

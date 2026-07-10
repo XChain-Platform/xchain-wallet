@@ -360,9 +360,24 @@ export function registerBridgeHandlers(host, opts = {}) {
             }, { events });
         }
 
+        // dApp-controlled params spread FIRST, trusted keys after: the approval
+        // popup and assertChainPermitted validated req.chainId, so params must
+        // never be able to override it (or the vault/password/registry deps)
+        // with an unchecked value. Spread-last let params.chainId re-route the
+        // signed action onto a chain the site was never permitted for.
+        //
+        // trackPendingTx is a trusted key for the same reason: it is not a
+        // protocol param, it is an internal control flag that gates whether
+        // submitAction writes the pre-spend PendingTx audit row. Left in the
+        // spread, a dApp could send trackPendingTx: false and get a
+        // user-approved spend that leaves no audit record and no
+        // BroadcastFailedError recovery. Re-applying it after the spread
+        // forces every bridge-driven spend to keep tracking on regardless of
+        // what the caller sent.
         const params = req.params ?? {};
         if (actionName === 'SEND') {
             return sendToken({
+                ...params,
                 vault: deps.vault,
                 walletId: decision.walletId ?? (await walletIdForAddress(deps.vault, params.from)),
                 password: decision.password,
@@ -370,19 +385,20 @@ export function registerBridgeHandlers(host, opts = {}) {
                 chainRegistry: deps.chainRegistry,
                 sdkRegistry: deps.sdkRegistry,
                 chainId: req.chainId,
-                ...params,
+                trackPendingTx: true,
             });
         }
         if (actionName === 'SWEEP') {
             return sweepToken({
+                ...params,
                 vault: deps.vault,
                 walletId: decision.walletId ?? (await walletIdForAddress(deps.vault, params.from)),
                 password: decision.password,
                 bip39Passphrase: decision.bip39Passphrase,
                 chainRegistry: deps.chainRegistry,
                 sdkRegistry: deps.sdkRegistry,
+                trackPendingTx: true,
                 chainId: req.chainId,
-                ...params,
             });
         }
         throw bridgeError('UNREACHABLE', 'supported action fell through');
