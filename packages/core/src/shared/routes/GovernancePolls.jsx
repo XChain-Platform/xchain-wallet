@@ -29,11 +29,21 @@ function statusColor(status) {
     if (status === 'failed_quorum') return { bg: '#8e1c1c', fg: '#fff' };
     return { bg: '#8a6d00', fg: '#fff' };
 }
+// Poll lifecycle code -> plain-language pill label. Mirrors statusColor:
+// open = live, finalized = decided, failed_quorum = did not pass. Unknown
+// codes degrade to a Title Case humanization rather than a raw token.
+function statusLabel(status) {
+    if (status === 'finalized') return 'Decided';
+    if (status === 'failed_quorum') return 'Did not pass';
+    if (status === 'open' || !status) return 'Open';
+    const words = String(status).trim().toLowerCase().replace(/[_-]+/g, ' ');
+    return words.charAt(0).toUpperCase() + words.slice(1);
+}
 function StatusPill({ status }) {
     const c = statusColor(status);
     return (
         <span style={{ background: c.bg, color: c.fg, borderRadius: '999px', padding: '0.1rem 0.5rem', fontSize: '0.72rem', whiteSpace: 'nowrap' }}>
-            {status || 'open'}
+            {statusLabel(status)}
         </span>
     );
 }

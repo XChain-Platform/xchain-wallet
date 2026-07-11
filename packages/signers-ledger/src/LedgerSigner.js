@@ -108,24 +108,30 @@ function chainIdToLedgerFormat(chainId) {
         case 'dogecoin-mainnet':
             return 'bech32';
         case 'bitcoin-testnet':
-            throw new Error(UNSUPPORTED_BITCOIN_TESTNET);
+        case 'bitcoin-regtest':
+            throw unsupportedBitcoinNetworkError(chainId);
         default:
             throw new Error(`LedgerSigner: unsupported chainId "${chainId}"`);
     }
 }
 
-// Bitcoin-testnet is disabled on the Ledger signer for derivation parity, the
-// same way LTC/DOGE testnet + regtest are (ledgerFormat.js): the chain
-// descriptors deliberately pin SLIP-44 coin-type 0' on EVERY Bitcoin network so
-// derivation matches the software signer and the backend, but Ledger's Bitcoin
-// Test app forces the generic testnet coin-type 1'. Deriving here would
-// silently produce m/84'/1'/... addresses the rest of the wallet cannot see
-// (testnet funds appear missing). Throw instead of diverging.
-const UNSUPPORTED_BITCOIN_TESTNET =
-    'LedgerSigner: bitcoin-testnet is not supported on this hardware signer. '
-    + "The Ledger Bitcoin Test app derives at SLIP-44 coin-type 1', which diverges "
-    + "from the wallet's 0'-anchored derivation (descriptor/backend parity); "
-    + 'use a software wallet for this network.';
+// Bitcoin-testnet and bitcoin-regtest are both disabled on the Ledger signer
+// for derivation parity, the same way LTC/DOGE testnet + regtest are
+// (ledgerFormat.js): the chain descriptors deliberately pin SLIP-44 coin-type
+// 0' on EVERY Bitcoin network so derivation matches the software signer and the
+// backend, but Ledger's Bitcoin Test app forces the generic testnet coin-type
+// 1'. Deriving either would silently produce m/84'/1'/... addresses the rest of
+// the wallet cannot see (funds appear missing). Throw instead of diverging.
+// Mirror the parity-explaining wording the Trezor side uses for both networks
+// (trezorFormat.js chainIdToTrezorCoin) so the "do not 'fix' this by mapping to
+// the Test app" guardrail attaches to the regtest branch too.
+function unsupportedBitcoinNetworkError(chainId) {
+    return new Error(
+        `This hardware device can't be used on ${chainId} - use a software wallet for this network. `
+        + "(The Ledger Bitcoin Test app derives at SLIP-44 coin-type 1', which diverges "
+        + "from the wallet's 0'-anchored derivation, so funds would appear missing.)",
+    );
+}
 
 export class LedgerSigner extends Signer {
     /**
@@ -435,13 +441,14 @@ function formatBip44Path({ purpose, chainId, accountIndex, change, index }) {
 // derive it at 0', so a 1' hardware derivation yields different addresses for
 // the same seed (funds appear missing). Since the Ledger firmware cannot honor
 // 0' on its testnet app, the network throws as hardware-unsupported instead.
-function coinTypeFor(chainId) {
+export function coinTypeFor(chainId) {
     switch (chainId) {
         case 'bitcoin-mainnet': return "0'";
         case 'litecoin-mainnet': return "2'";
         case 'dogecoin-mainnet': return "3'";
         case 'bitcoin-testnet':
-            throw new Error(UNSUPPORTED_BITCOIN_TESTNET);
+        case 'bitcoin-regtest':
+            throw unsupportedBitcoinNetworkError(chainId);
         default:
             throw new Error(`LedgerSigner: unsupported chainId "${chainId}"`);
     }

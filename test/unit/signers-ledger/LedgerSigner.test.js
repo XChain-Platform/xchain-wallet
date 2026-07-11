@@ -15,8 +15,46 @@ import {
     LedgerSigner,
     deriveLedgerDeviceIdentifier,
     modelFromLedgerTransport,
+    coinTypeFor,
 } from '../../../packages/signers-ledger/src/LedgerSigner.js';
 import { Signer } from '../../../packages/core/src/signers/Signer.js';
+import { BUNDLED_DESCRIPTORS } from '../../../packages/core/src/registry/descriptors/index.js';
+
+// coinTypeFor's SLIP-44 slots (bitcoin-mainnet=0', litecoin-mainnet=2',
+// dogecoin-mainnet=3') are a second, independently-hardcoded copy of the same
+// coin-type the chain descriptors' derivationPaths declare, and a third copy
+// lives in the Trezor signer. They agree today, but nothing guards against a
+// future descriptor edit silently diverging hardware from software derivation
+// for the same account (funds appear missing). This mirrors the Trezor
+// parity test (test/unit/signers-trezor/TrezorSigner.test.js) so both hardware
+// signers are locked to the descriptor coin-type slot.
+const LEDGER_CHAIN_TO_MAINNET_DESCRIPTOR_ID = {
+    'bitcoin-mainnet': 'bitcoin-mainnet',
+    'litecoin-mainnet': 'litecoin-mainnet',
+    'dogecoin-mainnet': 'dogecoin-mainnet',
+};
+
+function descriptorCoinType(descriptorId) {
+    const descriptor = BUNDLED_DESCRIPTORS.find((d) => d.id === descriptorId);
+    if (!descriptor) throw new Error(`no bundled descriptor "${descriptorId}"`);
+    const [firstTemplate] = Object.values(descriptor.derivationPaths);
+    const m = firstTemplate.match(/^m\/\d+'\/(\d+')\//);
+    if (!m) throw new Error(`${descriptorId}: unrecognized derivation template "${firstTemplate}"`);
+    return m[1];
+}
+
+describe('coinTypeFor vs chain descriptor coin-type parity', () => {
+    Object.entries(LEDGER_CHAIN_TO_MAINNET_DESCRIPTOR_ID).forEach(([chainId, descriptorId]) => {
+        it(`${chainId}: coinTypeFor matches the ${descriptorId} descriptor's coin-type slot`, () => {
+            expect(coinTypeFor(chainId)).toBe(descriptorCoinType(descriptorId));
+        });
+    });
+
+    it('rejects bitcoin-testnet and bitcoin-regtest rather than deriving at 1', () => {
+        expect(() => coinTypeFor('bitcoin-testnet')).toThrow(/software wallet/);
+        expect(() => coinTypeFor('bitcoin-regtest')).toThrow(/software wallet/);
+    });
+});
 
 function makeApp(overrides = {}) {
     return {

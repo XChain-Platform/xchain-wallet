@@ -21,6 +21,7 @@ import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
+import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -282,7 +283,7 @@ export function ParallelComposer({ walletId, onBack, initialRows }) {
                 <SummaryList rows={rows} />
                 <p className={styles.hint}>
                     {allDoneOrSkipped
-                        ? 'All rows broadcast. They will thread together in History via §23.5 if you LINK them in a follow-up action.'
+                        ? 'All rows broadcast. Link them in a follow-up action to thread them together in your History.'
                         : 'Some rows did not finish. Return to the composer to retry the rest.'}
                 </p>
                 <div className={styles.actions}>
@@ -381,9 +382,9 @@ export function ParallelComposer({ walletId, onBack, initialRows }) {
                     <p className={styles.warning}>
                         Each action signs and broadcasts independently.
                         If row 2 fails after row 1 succeeds, row 1 is NOT
-                        rolled back. Cross-chain atomicity is not a
-                        protocol primitive; only individual SWAPs are
-                        atomic.
+                        rolled back. Actions on different chains are not
+                        settled as one unit; only an individual swap
+                        completes together.
                     </p>
                 </div>
                 <label className={styles.checkRow}>
@@ -421,9 +422,8 @@ export function ParallelComposer({ walletId, onBack, initialRows }) {
         <>
             <p className={styles.hint} style={{ textAlign: 'left' }}>
                 Compose any number of independent actions on any combination of
-                chains. Submitted via the existing Advanced action handler; each
-                row is treated as its own ACTION. Review the no-rollback warning
-                before signing.
+                chains. Each row is submitted as its own independent action.
+                Review the no-rollback warning before signing.
             </p>
             <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
                 {rows.map((row, i) => (
@@ -526,7 +526,7 @@ function RowEditor({ index, row, chainIds, addressesByChain, actionsList, onChan
                 >
                     <option value="">Select action</option>
                     {actionsList.map((a) => (
-                        <option key={a} value={a}>{a}</option>
+                        <option key={a} value={a}>{actionDisplayLabel(a)} ({a})</option>
                     ))}
                 </select>
             </label>
@@ -577,7 +577,7 @@ function RowDetail({ row, addressesByChain }) {
                 {fromAddress ? <AddressText address={fromAddress.address} /> : 'unknown'}
             </dd>
             <dt className={styles.detailsLabel}>Action</dt>
-            <dd className={styles.detailsValue}>{row.action}</dd>
+            <dd className={styles.detailsValue}>{row.action ? actionDisplayLabel(row.action) : 'none'}</dd>
             <dt className={styles.detailsLabel}>Params</dt>
             <dd className={styles.detailsValue} style={{ fontFamily: 'var(--xc-font-mono, monospace)', fontSize: 'var(--xc-text-xs)' }}>
                 {row.paramsJson}
@@ -593,7 +593,7 @@ function SummaryList({ rows }) {
                 const d = r.chainId ? chainRegistry.get(r.chainId) : null;
                 return (
                     <li key={r.id} style={{ margin: 'var(--xc-space-1) 0' }}>
-                        <span style={{ fontWeight: 600 }}>{r.action || 'none'}</span>
+                        <span style={{ fontWeight: 600 }}>{r.action ? actionDisplayLabel(r.action) : 'none'}</span>
                         {' on '}
                         {d ? d.displayName : r.chainId}
                         {' - '}

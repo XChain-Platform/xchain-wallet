@@ -387,7 +387,7 @@ export function AdvancedActionsForm({ walletId, onBack }) {
         }
         return wrap(
             <>
-                <h2 className={styles.successTitle}>{action} sent</h2>
+                <h2 className={styles.successTitle}>{actionDisplayLabel(action)} sent</h2>
                 {txid ? (
                     <>
                         <p className={styles.successLabel}>Transaction ID</p>

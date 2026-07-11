@@ -56,7 +56,7 @@ const INPUT_SCRIPT_TYPE = {
  *
  * @param {Object} opts
  * @param {import('./types').DecomposedPsbt} opts.decomposed   from sdk.wallet.decomposePsbt
- * @param {string} opts.coin                                    Trezor coin short name ('btc' | 'test' | 'regtest' | 'ltc' | 'doge')
+ * @param {string} opts.coin                                    Trezor coin short name ('btc' | 'ltc' | 'doge'). Testnet/regtest are deliberately absent (see CHAIN_ID_TO_TREZOR_COIN).
  * @param {Array<{inputIndex: number, path: string, sighashType?: number}>} opts.signingPaths
  * @returns {{ coin: string, inputs: object[], outputs: object[], refTxs: object[] }}
  */
@@ -175,10 +175,9 @@ export function chainIdToTrezorCoin(chainId) {
     if (!coin) {
         if (chainId === 'bitcoin-testnet' || chainId === 'bitcoin-regtest') {
             throw new Error(
-                `trezorFormat: ${chainId} is not supported on this hardware `
-                + "signer (Trezor's testnet/regtest coins derive at coin-type 1', "
-                + "diverging from the wallet's 0'-anchored derivation); use a "
-                + 'software wallet for this network.',
+                `This hardware device can't be used on ${chainId} - use a software `
+                + "wallet for this network. (Trezor's testnet/regtest coins derive at "
+                + "coin-type 1', diverging from the wallet's 0'-anchored derivation.)",
             );
         }
         throw new Error(

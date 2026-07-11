@@ -31,6 +31,7 @@ import { useMessaging } from '../../useMessaging.js';
 import { useSettings } from '../../hooks/useSettings.js';
 import { useToast } from '../ToastHost.jsx';
 import { ROW_HINT, STACK, Status } from './_settingsPrimitives.jsx';
+import { actionDisplayLabel } from '../../utils/actionDisplayLabel.js';
 import {
     SIGN_THROTTLE_BURST_MIN,
     SIGN_THROTTLE_BURST_MAX,
@@ -572,7 +573,8 @@ function PermissionsSummary({ permissions }) {
                     <ul style={{ margin: 0, paddingLeft: 'var(--xc-space-3)', listStyle: 'disc' }}>
                         {Object.entries(actions).map(([action, perm]) => (
                             <li key={action} style={{ color: 'var(--xc-text)' }}>
-                                <code style={{ fontFamily: 'var(--xc-font-mono, monospace)' }}>{action}</code>
+                                {actionDisplayLabel(action)}{' '}
+                                (<code style={{ fontFamily: 'var(--xc-font-mono, monospace)' }}>{action}</code>)
                                 {': '}
                                 <span style={{ color: permColor(perm) }}>{perm}</span>
                             </li>
