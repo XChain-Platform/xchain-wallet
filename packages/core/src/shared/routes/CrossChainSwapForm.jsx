@@ -18,6 +18,7 @@ import {
     AddressText,
  Icon,} from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
+import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
@@ -209,13 +210,13 @@ export function CrossChainSwapForm({ walletId, onBack }) {
     const validationError = useMemo(() => {
         if (!giveCoinTicker || !getCoinTicker) return null;
         if (giveCoinTicker === getCoinTicker) {
-            return 'Give and get chains must differ. For same-chain swaps use Swap tokens (§41.5).';
+            return 'Give and get chains must differ. For same-chain swaps use Swap tokens.';
         }
         if (giveTick && giveTick.toUpperCase() === giveCoinTicker) {
-            return `SWAP cannot give ${giveCoinTicker}. Use DISPENSER for token to native coin.`;
+            return `${actionDisplayLabel('SWAP')} cannot give ${giveCoinTicker}. Use ${actionDisplayLabel('DISPENSER')} for token to native coin.`;
         }
         if (getTick && getTick.toUpperCase() === getCoinTicker) {
-            return `SWAP cannot get ${getCoinTicker}. Use DISPENSER for token to native coin.`;
+            return `${actionDisplayLabel('SWAP')} cannot get ${getCoinTicker}. Use ${actionDisplayLabel('DISPENSER')} for token to native coin.`;
         }
         if (expirationBlocks && !/^\d+$/.test(expirationBlocks)) {
             return 'Expiration must be a positive integer.';

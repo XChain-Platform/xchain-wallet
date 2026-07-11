@@ -42,12 +42,12 @@ assert.ok(/getAddressTouched/.test(src),
 
 // Cross-chain SWAP requires GIVE_COIN ≠ GET_COIN.
 assert.ok(/Give and get chains must differ/.test(src),
-    'CrossChainSwapForm rejects same-chain swaps and points to §41.5');
+    'CrossChainSwapForm rejects same-chain swaps and points users to Swap tokens');
 
-// Native-coin rule still enforced (DISPENSER lane).
-assert.ok(/SWAP cannot give/.test(src),
+// Native-coin rule still enforced (DISPENSER lane, humanized copy).
+assert.ok(/cannot give/i.test(src),
     'CrossChainSwapForm preserves the native-coin DISPENSER rule on the give side');
-assert.ok(/SWAP cannot get/.test(src),
+assert.ok(/cannot get/i.test(src),
     'CrossChainSwapForm preserves the native-coin DISPENSER rule on the get side');
 
 // Reuses the existing swapAction handler; no new core flow needed.

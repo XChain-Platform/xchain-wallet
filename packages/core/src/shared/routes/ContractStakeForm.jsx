@@ -281,9 +281,9 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, onBa
         return wrap(
             <>
                 <div role="alert" className={styles.error}>
-                    Contract #{contractActionIndex} is not stakeable. Its DEPLOY did not
-                    set a cooldown duration. Staking is only available on contracts that
-                    explicitly opted in at deploy time.
+                    Contract #{contractActionIndex} is not stakeable. Its deploy
+                    transaction did not set a cooldown duration. Staking is only
+                    available on contracts that explicitly opted in at deploy time.
                 </div>
                 <div className={styles.actions}><Button variant="ghost" onClick={onBack}>Back</Button></div>
             </>,

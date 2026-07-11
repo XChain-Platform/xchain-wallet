@@ -104,6 +104,39 @@ assert.match(
     'drainQueuedBroadcast calls assertSigningAllowed()',
 );
 
+// --- host broadcast routes: both gated (item a6f2ffd5 / 303056b9) -----
+//
+// createBackgroundHost maintains its OWN broadcast queue and a raw
+// broadcast.signedTx route, both bypassing core drainQueuedBroadcast, so the
+// core gate above does not cover them. Each pushes an already-signed tx (no
+// signer), which would otherwise sail through an active freeze without a
+// password. Pin both so a future edit cannot silently drop the gate.
+
+const hostSrc = readFileSync(
+    join(wsRoot, 'packages', 'extension', 'src', 'background', 'createBackgroundHost.js'),
+    'utf8',
+);
+const hostBroadcastGates = hostSrc.match(/flows\.assertSigningAllowed\(\)/g) || [];
+assert.ok(
+    hostBroadcastGates.length >= 2,
+    'createBackgroundHost gates both broadcast routes (queue.broadcast + signedTx) via flows.assertSigningAllowed()',
+);
+
+// Effector-safety half of 303056b9: broadcast.signedTx must ALSO persist a
+// PendingTx audit row BEFORE the irreversible broadcast (matching the
+// submitAction invariant), so a spend through this route always leaves a local
+// trace. Pin the write-before-broadcast ordering.
+const sigIdx = hostSrc.indexOf("host.register('broadcast.signedTx'");
+assert.notEqual(sigIdx, -1, 'broadcast.signedTx handler present');
+const sigBlock = hostSrc.slice(sigIdx, sigIdx + 2400);
+const auditPutIdx = sigBlock.indexOf('vault.pendingTxs.put(pending)');
+const auditBcIdx = sigBlock.indexOf('await sdk.encoder.broadcastTx(txHex)');
+assert.match(sigBlock, /schemas\.createPendingTx\(/, 'broadcast.signedTx builds a PendingTx audit record');
+assert.ok(
+    auditPutIdx !== -1 && auditBcIdx !== -1 && auditPutIdx < auditBcIdx,
+    'broadcast.signedTx persists the PendingTx audit row BEFORE calling broadcastTx',
+);
+
 // --- SafetySection wiring ---------------------------------------------
 
 assert.match(safetySrc, /import \{ PanicModeRow \}/, 'SafetySection imports PanicModeRow');

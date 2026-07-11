@@ -22,7 +22,7 @@
 // therefore trusted, keeping that data off the wire narrows the blast
 // radius of any future logging or telemetry bug in the popup layer.
 
-import { flows } from '@xchain-wallet/core';
+import { flows, schemas } from '@xchain-wallet/core';
 import { WALLET_VERSION } from '@xchain-wallet/core/buildInfo.js';
 import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
 import { MessageHost } from './MessageHost.js';
@@ -1571,6 +1571,12 @@ export function createBackgroundHost(deps) {
         if (typeof sdk?.wallet?.broadcastTx !== 'function') {
             throw new Error(`broadcast.queue: SDK for "${entry.chainId}" lacks wallet.broadcastTx`);
         }
+        // Panic-mode freeze. Broadcasting an already-signed tx invokes no signer,
+        // so without this it sails straight through an active freeze - the exact
+        // irreversible-effector gap the freeze exists to close. This host route
+        // maintains its own queue and bypasses core drainQueuedBroadcast (which
+        // already gates), so the same assertion is applied here at the new call site.
+        flows.assertSigningAllowed();
         const result = await sdk.wallet.broadcastTx(entry.signedTxHex);
         q.splice(idx, 1);
         await persistQueue();
@@ -1610,7 +1616,7 @@ export function createBackgroundHost(deps) {
     // result page wires this so a Full-mode wallet can broadcast PSBTs
     // round-tripped from a Watcher / Signer pair without the user having
     // to copy-paste the txHex out to a block explorer.
-    host.register('broadcast.signedTx', async (req, { sdkRegistry }) => {
+    host.register('broadcast.signedTx', async (req, { sdkRegistry, vault, chainRegistry }) => {
         const chainId = req?.chainId;
         const txHex = req?.txHex;
         if (typeof chainId !== 'string' || !chainId) {
@@ -1623,7 +1629,46 @@ export function createBackgroundHost(deps) {
         if (typeof sdk?.encoder?.broadcastTx !== 'function') {
             throw new Error(`broadcast.signedTx: SDK encoder for "${chainId}" lacks broadcastTx`);
         }
-        const result = await sdk.encoder.broadcastTx(txHex);
+        // Panic-mode freeze: this pushes an already-signed tx (no signer invoked),
+        // so it would otherwise bypass an active freeze. Gate at the new call site,
+        // same pattern as the signing chokepoints and drainQueuedBroadcast.
+        flows.assertSigningAllowed();
+
+        // Audit invariant (matches the submitAction path, §11.3.8): persist a
+        // PendingTx record BEFORE the irreversible broadcast so a spend through
+        // this route always leaves a local trace in history / the tx-status
+        // timeline, and fail closed if it cannot be recorded (an unauditable
+        // irreversible effector must not fire). We only have chainId + txHex
+        // here, so fromAddress/toAddress are recorded as unknown; the descriptor
+        // supplies coin/network and the record is transitioned to broadcast /
+        // failed once the SDK returns.
+        if (!vault) {
+            throw new Error('broadcast.signedTx: vault is required to record the broadcast');
+        }
+        const descriptor = chainRegistry?.get?.(chainId);
+        if (!descriptor) {
+            throw new Error(`broadcast.signedTx: no registered chain descriptor for "${chainId}"`);
+        }
+        let pending = schemas.createPendingTx({
+            chain: descriptor.coin,
+            network: descriptor.networkKind,
+            fromAddress: 'unknown',
+            toAddress: 'unknown',
+            action: 'BROADCAST_SIGNED_TX',
+            actionSummary: 'Raw signed transaction broadcast via broadcast.signedTx',
+            psbtHex: '',
+        });
+        pending = { ...pending, status: 'broadcasting', txHex };
+        await vault.pendingTxs.put(pending);
+
+        let result;
+        try {
+            result = await sdk.encoder.broadcastTx(txHex);
+        } catch (err) {
+            const msg = err && err.message ? String(err.message) : String(err);
+            await vault.pendingTxs.put({ ...pending, status: 'failed', error: msg });
+            throw err;
+        }
         // Encoder result shape varies by chain (some return { txid }, some
         // return the txid string directly). Normalize so the caller always
         // sees { txid }.
@@ -1631,8 +1676,15 @@ export function createBackgroundHost(deps) {
             ? result
             : (result?.txid ?? result?.tx_hash ?? null);
         if (typeof txid !== 'string' || !txid) {
+            await vault.pendingTxs.put({ ...pending, status: 'failed', error: 'SDK did not return a txid' });
             throw new Error('broadcast.signedTx: SDK did not return a txid');
         }
+        await vault.pendingTxs.put({
+            ...pending,
+            status: 'broadcast',
+            broadcastAt: new Date().toISOString(),
+            txid,
+        });
         return { txid };
     });
 

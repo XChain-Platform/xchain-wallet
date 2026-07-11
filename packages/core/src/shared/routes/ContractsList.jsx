@@ -19,6 +19,7 @@ import {
  Icon,} from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import styles from './ActionsMenu.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -283,9 +284,10 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
     if (btcChainsWithAddresses.length === 0) {
         return wrap(
             <p className={styles.entryDescription}>
-                Contracts are available on Bitcoin only at launch (VM actions
-                DEPLOY / EXECUTE / DEPOSIT / WITHDRAW). Use Receive on a
-                Bitcoin network to generate an address first.
+                Contracts are available on Bitcoin only at launch
+                ({actionDisplayLabel('DEPLOY')} / {actionDisplayLabel('EXECUTE')} /
+                {' '}{actionDisplayLabel('DEPOSIT')} / {actionDisplayLabel('WITHDRAW')}).
+                Use Receive on a Bitcoin network to generate an address first.
             </p>,
         );
     }
@@ -332,16 +334,16 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                     const rows = applySearch(state.rows, searchQuery);
                     return (
                         <ChainGroup key={cid} descriptor={d} chainId={cid} state={{ ...state, rows }}
-                                    emptyText="No DEPOSIT or WITHDRAW actions recorded against this chain's addresses yet."
+                                    emptyText={`No ${actionDisplayLabel('DEPOSIT').toLowerCase()} or ${actionDisplayLabel('WITHDRAW').toLowerCase()} actions recorded against this chain's addresses yet.`}
                                     onOpenContract={onOpenContract}
                                     renderRow={(row) => <InteractionRow row={row} />} />
                     );
                 })}
                 <p className={styles.entryDescription}>
-                    EXECUTE-only interactions (method calls with no deposit)
-                    are not yet listed. The SDK's getExecutions is
-                    contract-scoped today; that lane surfaces on the contract
-                    detail page.
+                    {actionDisplayLabel('EXECUTE')}-only interactions (method
+                    calls with no deposit) are not yet listed. The SDK's
+                    getExecutions is contract-scoped today; that lane surfaces
+                    on the contract detail page.
                 </p>
             </Section>
             <Section title="Browse all contracts">

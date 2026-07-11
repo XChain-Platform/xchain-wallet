@@ -12,9 +12,10 @@
 // in-wallet broadcast.
 //
 // Pins:
-//   - createBackgroundHost registers `broadcast.signedTx` (sdkRegistry-only,
-//     no vault), validates inputs, calls sdk.encoder.broadcastTx, and
-//     normalizes the result to `{ txid }`.
+//   - createBackgroundHost registers `broadcast.signedTx`, validates inputs,
+//     asserts the panic-mode kill switch, persists a PendingTx audit row BEFORE
+//     the irreversible broadcast (effector-safety finding), calls
+//     sdk.encoder.broadcastTx, and normalizes the result to `{ txid }`.
 //   - All three messaging shims expose `broadcastSignedTxRequest`.
 //   - PsbtSignForm captures `signedTxHex` from the sign result, exposes
 //     a `broadcast` state machine, renders a Broadcast button gated on
@@ -54,15 +55,24 @@ const formSrc = readFileSync(
 
 const handlerIdx = hostSrc.indexOf("host.register('broadcast.signedTx'");
 assert.notEqual(handlerIdx, -1, 'broadcast.signedTx handler registered');
-const handlerBlock = hostSrc.slice(handlerIdx, handlerIdx + 800);
+const handlerBlock = hostSrc.slice(handlerIdx, handlerIdx + 2400);
 assert.match(handlerBlock, /chainId is required/, 'validates chainId presence');
 assert.match(handlerBlock, /txHex is required/, 'validates txHex presence');
 assert.match(handlerBlock, /sdkRegistry\.get\(chainId\)/, 'looks up SDK by chainId');
 assert.match(handlerBlock, /sdk\?\.encoder\?\.broadcastTx/, 'guards against missing encoder.broadcastTx');
 assert.match(handlerBlock, /await sdk\.encoder\.broadcastTx\(txHex\)/, 'calls broadcastTx with txHex');
 assert.match(handlerBlock, /return \{ txid \}/, 'normalizes return to { txid }');
-// Vault should NOT appear; broadcast is read-only-ish, no unlock required.
-assert.doesNotMatch(handlerBlock, /\bvault\b/, 'handler does not require vault');
+// Kill-switch gate stays wired on this irreversible effector.
+assert.match(handlerBlock, /flows\.assertSigningAllowed\(\)/, 'panic-mode kill switch asserted');
+// Effector-safety finding: a PendingTx audit row is persisted BEFORE the
+// broadcast, matching the submitAction invariant, and fails closed without a
+// vault. The write-before-broadcast ordering is what the finding requires.
+assert.match(handlerBlock, /vault is required to record the broadcast/, 'fails closed without a vault');
+assert.match(handlerBlock, /schemas\.createPendingTx\(/, 'builds a PendingTx audit record');
+const putIdx = handlerBlock.indexOf('vault.pendingTxs.put(pending)');
+const bcIdx = handlerBlock.indexOf('await sdk.encoder.broadcastTx(txHex)');
+assert.notEqual(putIdx, -1, 'persists the PendingTx audit row');
+assert.ok(putIdx !== -1 && bcIdx !== -1 && putIdx < bcIdx, 'audit row is written BEFORE the broadcast');
 
 // ─── 2. messaging shims ---------------------------------------------
 

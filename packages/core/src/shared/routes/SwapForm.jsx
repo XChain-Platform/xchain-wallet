@@ -25,6 +25,7 @@ import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
+import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 import { preferredSourceId } from '../addressSelection.js';
@@ -172,10 +173,10 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
         if (!getTick) return null;
         // SWAP does NOT work with native coin per protocol rules.
         if (coinTicker && giveTick.toUpperCase() === coinTicker) {
-            return `SWAP cannot give ${coinTicker}. Use DISPENSER for token to native coin.`;
+            return `${actionDisplayLabel('SWAP')} cannot give ${coinTicker}. Use ${actionDisplayLabel('DISPENSER')} for token to native coin.`;
         }
         if (coinTicker && getTick.toUpperCase() === coinTicker) {
-            return `SWAP cannot get ${coinTicker}. Use DISPENSER for token to native coin.`;
+            return `${actionDisplayLabel('SWAP')} cannot get ${coinTicker}. Use ${actionDisplayLabel('DISPENSER')} for token to native coin.`;
         }
         if (giveTick.toUpperCase() === getTick.toUpperCase()) {
             return 'Give and get tickers must differ.';

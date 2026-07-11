@@ -114,7 +114,7 @@ assert.ok(
     'ContractsList surfaces the empty "My contracts" state per chain',
 );
 assert.ok(
-    /No DEPOSIT or WITHDRAW/.test(listSrc),
+    /No deposit or withdraw/i.test(listSrc),
     'ContractsList surfaces the empty "My interactions" state per chain',
 );
 assert.ok(
