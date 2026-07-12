@@ -269,7 +269,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
         // clearly below.
         for (const p of paramsArray) {
             if (p.includes(';')) {
-                setFormError(`Parameter "${p}" contains a semicolon, which is not allowed in PARAMS.`);
+                setFormError(`Parameter "${p}" contains a semicolon, which is not allowed in parameters.`);
                 return;
             }
         }

@@ -72,7 +72,7 @@ describe('ACTION manifest conformance: wallet walletForm set @regression', () =>
         const DOCS = process.env.XCHAIN_DOCS_DIR
             ? join(process.env.XCHAIN_DOCS_DIR, 'protocol', 'action-manifest.json')
             : join(process.cwd(), '..', 'xchain-documentation', 'protocol', 'action-manifest.json');
-        if (!existsSync(DOCS)) { ctx.skip(); return; }
+        if (!existsSync(DOCS)) { if (process.env.XCHAIN_REQUIRE_SIBLINGS === '1') throw new Error('XCHAIN_REQUIRE_SIBLINGS=1 but canonical action-manifest.json not found at ' + DOCS); ctx.skip(); return; }
         expect(readFileSync(VENDORED, 'utf8'),
             'vendored action-manifest.json drifted from canonical; edit ' +
             'xchain-documentation/protocol/action-manifest.json and re-vendor all copies.'

@@ -22,7 +22,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 /**
- * @typedef {'idle'|'available'|'locked'|'disconnected'|'wrong-app'|'error'} SignerStatus
+ * @typedef {'idle'|'available'|'locked'|'disconnected'|'wrong-app'|'unsupported-network'|'error'} SignerStatus
  */
 
 const FAST_INTERVAL_MS = 2000;

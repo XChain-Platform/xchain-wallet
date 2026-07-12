@@ -136,6 +136,22 @@ describe('LedgerSigner.getStatus', () => {
         const s = makeSigner({ getAppAndVersion: vi.fn().mockResolvedValue({ version: '1.0' }) });
         expect(await s.getStatus()).toBe('disconnected');
     });
+
+    // Hardware-unsupported chainIds (non-mainnet BTC, and LTC/DOGE non-mainnet)
+    // are absent from LEDGER_APP_NAME_FOR_CHAIN and throw at derivation time in
+    // coinTypeFor/chainIdToLedgerFormat. getStatus must surface that up front
+    // instead of reporting 'available' and failing on the next call.
+    for (const chainId of [
+        'bitcoin-testnet',
+        'bitcoin-regtest',
+        'litecoin-testnet',
+        'dogecoin-regtest',
+    ]) {
+        it(`returns "unsupported-network" for ${chainId}`, async () => {
+            const s = makeSigner({ getAppAndVersion: vi.fn().mockResolvedValue({ name: 'Bitcoin', version: '2.0' }) });
+            expect(await s.getStatus({ chainId })).toBe('unsupported-network');
+        });
+    }
 });
 
 describe('LedgerSigner.getAddresses', () => {

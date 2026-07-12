@@ -42,6 +42,15 @@ export function NetworkSection() {
         ? settings.activeNetwork
         : NETWORK_DEFAULT;
 
+    // Regtest is a developer-only local network. Hide it from ordinary
+    // users (the app already promises this in the Developer Mode copy),
+    // but keep it visible when it is the active network so a user who is
+    // already on regtest with dev mode off still has a way to switch back.
+    const showRegtest = Boolean(settings.developerMode) || current === 'regtest';
+    const options = showRegtest
+        ? NETWORK_OPTIONS
+        : NETWORK_OPTIONS.filter((opt) => opt.value !== 'regtest');
+
     const onChange = async (next) => {
         if (!NETWORKS.includes(next)) return;
         if (next === current) return;
@@ -63,7 +72,7 @@ export function NetworkSection() {
                 aria-label="Active network"
                 style={SELECT}
             >
-                {NETWORK_OPTIONS.map((opt) => (
+                {options.map((opt) => (
                     <option key={opt.value} value={opt.value}>{opt.label}</option>
                 ))}
             </select>

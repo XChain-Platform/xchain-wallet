@@ -116,10 +116,14 @@ export class ChainRegistry {
         if (!d) return null;
         const template = d.derivationPaths[addressType];
         if (!template) return null;
-        return template
-            .replace('A', String(accountIndex))
-            .replace('C', String(change))
-            .replace('I', String(index));
+        // Anchored expansion of the fixed `A'/C/I` tail (validateChainDescriptor
+        // guarantees the `m/<purpose>'/<coin-type>'/A'/C/I` shape). Matching the
+        // trailing segment as a unit prevents an un-anchored single-char replace
+        // from ever landing a substitution in the wrong path segment.
+        return template.replace(
+            /A'\/C\/I$/,
+            `${accountIndex}'/${change}/${index}`,
+        );
     }
 
     /**
@@ -184,7 +188,7 @@ let _defaultRegistry = null;
 export const defaultRegistry = () => (_defaultRegistry ??= new ChainRegistry());
 
 export { BUNDLED_DESCRIPTORS } from './descriptors/index.js';
-export { validateChainDescriptor } from './validate.js';
+export { validateChainDescriptor, FAMILY_MAINNET_COIN_TYPE_SLOT, FAMILY_NETWORK_WIF_BYTE } from './validate.js';
 export {
     COMMON_ACTIONS,
     BTC_EXCLUSIVE_ACTIONS,

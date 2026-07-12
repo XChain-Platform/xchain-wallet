@@ -220,7 +220,8 @@ export function BackupSection({ activeWallet }) {
             ) : (
                 <BackupRow
                     label="Export encrypted backup"
-                    hint="Saves a .xchain-wallet file containing this wallet's seed (encrypted), addresses, labels, contacts, and settings. Per §19.4."
+                    /* Spec §19.4 */
+                    hint="Saves a .xchain-wallet file containing this wallet's seed (encrypted), addresses, labels, contacts, and settings."
                     actionLabel="Export…"
                     disabled={!activeWallet}
                     onClick={() => { setPendingPassword(''); setExportError(null); }}
@@ -267,7 +268,8 @@ export function BackupSection({ activeWallet }) {
             ) : (
                 <BackupRow
                     label="Test backup (dry-run restore)"
-                    hint="Re-derive addresses from a candidate mnemonic and confirm they match this wallet's existing addresses (§19.6). Nothing persists; the candidate mnemonic is zeroed after the comparison runs."
+                    /* Spec §19.6 */
+                    hint="Check that a recovery phrase matches this wallet's existing addresses. Nothing is saved, and the phrase is erased from memory after the check."
                     actionLabel="Test…"
                     disabled={!activeWallet}
                     onClick={() => { setDryRunStage('form'); setDryRunError(null); }}

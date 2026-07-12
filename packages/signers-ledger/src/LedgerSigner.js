@@ -172,6 +172,8 @@ export class LedgerSigner extends Signer {
      *   - `'available'`: expected app open; device responsive
      *   - `'wrong-app'`: device responsive but a different app open;
      *                    UI should prompt the user to open the right one
+     *   - `'unsupported-network'`: a chainId was passed that the Ledger path
+     *                    cannot derive (no app / non-mainnet coin-type)
      *   - `'disconnected'`: `getAppAndVersion` throws (cable unplugged,
      *                       PIN locked, transport error)
      *
@@ -191,6 +193,15 @@ export class LedgerSigner extends Signer {
         }
         if (!info || typeof info.name !== 'string') {
             return 'disconnected';
+        }
+        // A provided chainId absent from the app-name map is one the Ledger
+        // path cannot derive (coinTypeFor / chainIdToLedgerFormat throw for it
+        // at getAddresses/sign time). Surface that here rather than reporting
+        // 'available' and letting the very next call fail, matching Trezor's
+        // fail-early status gating. The omitted-chainId case still accepts any
+        // open app.
+        if (opts.chainId && !Object.prototype.hasOwnProperty.call(LEDGER_APP_NAME_FOR_CHAIN, opts.chainId)) {
+            return 'unsupported-network';
         }
         const expected = opts.chainId ? LEDGER_APP_NAME_FOR_CHAIN[opts.chainId] : null;
         if (expected && info.name !== expected) {

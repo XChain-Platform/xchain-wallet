@@ -39,15 +39,17 @@ import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { BUNDLED_DESCRIPTORS } from '../../../packages/core/src/registry/index.js';
+import { BUNDLED_DESCRIPTORS, FAMILY_MAINNET_COIN_TYPE_SLOT } from '../../../packages/core/src/registry/index.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const sdkNetworksPath = join(here, '..', '..', '..', '..', 'xchain-sdk', 'src', 'networks.js');
 const haveSdk = existsSync(sdkNetworksPath);
 
 // Mainnet SLIP-44 slot per chain family: the parity anchor the descriptors,
-// signers, and backend all agree on, on EVERY network of the family.
-const MAINNET_SLOT = { bitcoin: "0'", litecoin: "2'", dogecoin: "3'" };
+// signers, and backend all agree on, on EVERY network of the family. Sourced
+// from the registry (validate.js) so the runtime install-time guard and this
+// CI guard cannot drift apart.
+const MAINNET_SLOT = FAMILY_MAINNET_COIN_TYPE_SLOT;
 
 describe('wallet descriptors vs xchain-sdk network params', () => {
     if (!haveSdk) {

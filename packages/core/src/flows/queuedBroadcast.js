@@ -29,6 +29,14 @@
 import { createPendingTx } from '../schemas/pendingTx.js';
 import { assertSigningAllowed } from './panicMode.js';
 
+// In-flight drain guard. `broadcastTx` is an irreversible effector, so two
+// concurrent drains of the same record (double-click, or popup + background
+// racing) must not both reach the network. A drain claims its id here
+// synchronously before its first await, so a second call started in the same
+// context sees the claim and short-circuits. Cross-context / crash recovery is
+// handled by the persisted 'broadcasting' status transition.
+const inFlightDrains = new Set();
+
 export class NoQueuedTxError extends Error {
     constructor(id) {
         super(`queuedBroadcast: no queued PendingTx with id "${id}"`);
@@ -146,58 +154,82 @@ export async function drainQueuedBroadcast({
         throw new Error('drainQueuedBroadcast: pendingTxId is required');
     }
 
-    const existing = await vault.pendingTxs.get(pendingTxId);
-    if (!existing) throw new NoQueuedTxError(pendingTxId);
-    if (existing.status !== 'queued') {
+    // Claim the drain synchronously, before any await, so a concurrent call in
+    // the same context short-circuits instead of double-broadcasting.
+    if (inFlightDrains.has(pendingTxId)) {
         throw new Error(
-            `drainQueuedBroadcast: PendingTx "${pendingTxId}" is not queued (status=${existing.status})`,
+            `drainQueuedBroadcast: PendingTx "${pendingTxId}" is already being broadcast`,
         );
     }
-    if (!existing.txHex) {
-        throw new Error(`drainQueuedBroadcast: PendingTx "${pendingTxId}" has no txHex`);
-    }
-
-    // §26.5 panic-mode freeze. Broadcasting an already-signed tx invokes no
-    // signer, so it would otherwise sail straight through an active freeze -
-    // exactly the irreversible-effector gap the freeze exists to close.
-    // Checked before touching the network; on a freeze the PendingTx stays
-    // 'queued' (no mutation, no partial state) and PanicModeActiveError
-    // propagates to the caller.
-    assertSigningAllowed();
-
-    // Resolve the SDK instance for the chain by matching (coin, network)
-    // in the registry.
-    const chainId = chainRegistry.chainIdFor(existing.chain, existing.network);
-    if (!chainId) {
-        throw new Error(
-            `drainQueuedBroadcast: no registered chain for ${existing.chain}/${existing.network}`,
-        );
-    }
-    const sdk = sdkRegistry.get(chainId);
-
-    if (onProgress) {
-        try { onProgress('broadcasting', { pendingTxId }); } catch { /* swallow */ }
-    }
+    inFlightDrains.add(pendingTxId);
     try {
-        await sdk.encoder.broadcastTx(existing.txHex);
-    } catch (err) {
-        const msg = err && err.message ? String(err.message) : String(err);
-        await vault.pendingTxs.put({ ...existing, error: msg });
-        const refreshed = await vault.pendingTxs.get(pendingTxId);
-        return { pendingTx: refreshed, broadcast: false, error: msg };
-    }
+        const existing = await vault.pendingTxs.get(pendingTxId);
+        if (!existing) throw new NoQueuedTxError(pendingTxId);
+        // 'queued' is the normal case; 'broadcasting' means a previous drain was
+        // interrupted (crash / SW teardown) after claiming the record but before
+        // recording its result, so this is a deliberate resume rather than a
+        // fresh broadcast. Any other status is terminal and must not re-broadcast.
+        if (existing.status !== 'queued' && existing.status !== 'broadcasting') {
+            throw new Error(
+                `drainQueuedBroadcast: PendingTx "${pendingTxId}" is not queued (status=${existing.status})`,
+            );
+        }
+        if (!existing.txHex) {
+            throw new Error(`drainQueuedBroadcast: PendingTx "${pendingTxId}" has no txHex`);
+        }
 
-    const broadcast = {
-        ...existing,
-        status: 'broadcast',
-        broadcastAt: new Date().toISOString(),
-        error: null,
-    };
-    await vault.pendingTxs.put(broadcast);
-    if (onProgress) {
-        try { onProgress('broadcast', { pendingTxId }); } catch { /* swallow */ }
+        // §26.5 panic-mode freeze. Broadcasting an already-signed tx invokes no
+        // signer, so it would otherwise sail straight through an active freeze -
+        // exactly the irreversible-effector gap the freeze exists to close.
+        // Checked before touching the network; on a freeze the PendingTx stays
+        // 'queued' (no mutation, no partial state) and PanicModeActiveError
+        // propagates to the caller.
+        assertSigningAllowed();
+
+        // Resolve the SDK instance for the chain by matching (coin, network)
+        // in the registry.
+        const chainId = chainRegistry.chainIdFor(existing.chain, existing.network);
+        if (!chainId) {
+            throw new Error(
+                `drainQueuedBroadcast: no registered chain for ${existing.chain}/${existing.network}`,
+            );
+        }
+        const sdk = sdkRegistry.get(chainId);
+
+        // Persist the in-flight status before the network call so a crash
+        // between broadcast and the result write leaves a record that resumes
+        // deliberately instead of re-broadcasting as a fresh 'queued' drain.
+        const inFlight = { ...existing, status: 'broadcasting', error: null };
+        await vault.pendingTxs.put(inFlight);
+
+        if (onProgress) {
+            try { onProgress('broadcasting', { pendingTxId }); } catch { /* swallow */ }
+        }
+        try {
+            await sdk.encoder.broadcastTx(existing.txHex);
+        } catch (err) {
+            const msg = err && err.message ? String(err.message) : String(err);
+            // Broadcast failed: revert to 'queued' so the user can retry, and
+            // record the error for the caller.
+            await vault.pendingTxs.put({ ...existing, status: 'queued', error: msg });
+            const refreshed = await vault.pendingTxs.get(pendingTxId);
+            return { pendingTx: refreshed, broadcast: false, error: msg };
+        }
+
+        const broadcast = {
+            ...existing,
+            status: 'broadcast',
+            broadcastAt: new Date().toISOString(),
+            error: null,
+        };
+        await vault.pendingTxs.put(broadcast);
+        if (onProgress) {
+            try { onProgress('broadcast', { pendingTxId }); } catch { /* swallow */ }
+        }
+        return { pendingTx: broadcast, broadcast: true, error: null };
+    } finally {
+        inFlightDrains.delete(pendingTxId);
     }
-    return { pendingTx: broadcast, broadcast: true, error: null };
 }
 
 /**

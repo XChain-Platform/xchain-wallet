@@ -124,3 +124,113 @@ describe('drainQueuedBroadcast: panic-mode freeze', () => {
         })).rejects.toBeInstanceOf(NoQueuedTxError);
     });
 });
+
+describe('drainQueuedBroadcast: in-flight / idempotency guard', () => {
+    afterEach(() => {
+        deactivatePanicMode();
+    });
+
+    it('short-circuits a concurrent drain of the same record so broadcastTx runs once', async () => {
+        const pendingTxs = memCollection([queuedPendingTx()]);
+        const vault = { pendingTxs };
+        let broadcastCalls = 0;
+        let releaseBroadcast;
+        const sdkRegistry = {
+            get: () => ({
+                encoder: {
+                    broadcastTx: () => {
+                        broadcastCalls += 1;
+                        return new Promise((resolve) => { releaseBroadcast = resolve; });
+                    },
+                },
+            }),
+        };
+
+        // First drain claims the record and parks inside broadcastTx.
+        const first = drainQueuedBroadcast({
+            vault, sdkRegistry, chainRegistry, pendingTxId: 'ptx-1',
+        });
+        // Second drain, started before the first resolves, must not broadcast.
+        const second = drainQueuedBroadcast({
+            vault, sdkRegistry, chainRegistry, pendingTxId: 'ptx-1',
+        });
+
+        await expect(second).rejects.toThrow(/already being broadcast/);
+
+        releaseBroadcast({ txid: 'tx123' });
+        const firstResult = await first;
+
+        expect(broadcastCalls).toBe(1);
+        expect(firstResult.broadcast).toBe(true);
+        expect(firstResult.pendingTx.status).toBe('broadcast');
+    });
+
+    it('resumes a record left in broadcasting by an interrupted drain', async () => {
+        const pendingTxs = memCollection([queuedPendingTx({ status: 'broadcasting' })]);
+        const vault = { pendingTxs };
+        let broadcastCalls = 0;
+        const sdkRegistry = {
+            get: () => ({
+                encoder: {
+                    broadcastTx: async () => { broadcastCalls += 1; return { txid: 'tx123' }; },
+                },
+            }),
+        };
+
+        const result = await drainQueuedBroadcast({
+            vault, sdkRegistry, chainRegistry, pendingTxId: 'ptx-1',
+        });
+
+        expect(broadcastCalls).toBe(1);
+        expect(result.broadcast).toBe(true);
+        expect(result.pendingTx.status).toBe('broadcast');
+    });
+
+    it('reverts to queued and records the error when broadcast fails', async () => {
+        const pendingTxs = memCollection([queuedPendingTx()]);
+        const vault = { pendingTxs };
+        const sdkRegistry = {
+            get: () => ({
+                encoder: {
+                    broadcastTx: async () => { throw new Error('network down'); },
+                },
+            }),
+        };
+
+        const result = await drainQueuedBroadcast({
+            vault, sdkRegistry, chainRegistry, pendingTxId: 'ptx-1',
+        });
+
+        expect(result.broadcast).toBe(false);
+        expect(result.error).toMatch(/network down/);
+        const after = await pendingTxs.get('ptx-1');
+        expect(after.status).toBe('queued');
+        expect(after.error).toMatch(/network down/);
+    });
+
+    it('releases the in-flight claim so a later drain of the same id can proceed', async () => {
+        const pendingTxs = memCollection([queuedPendingTx()]);
+        const vault = { pendingTxs };
+        let broadcastCalls = 0;
+        const sdkRegistry = {
+            get: () => ({
+                encoder: {
+                    broadcastTx: async () => { broadcastCalls += 1; return { txid: 'tx123' }; },
+                },
+            }),
+        };
+
+        // Fail the first drain, then re-queue and drain again: the claim from
+        // the first attempt must not linger and block the retry.
+        const failing = {
+            get: () => ({ encoder: { broadcastTx: async () => { throw new Error('boom'); } } }),
+        };
+        await drainQueuedBroadcast({ vault, sdkRegistry: failing, chainRegistry, pendingTxId: 'ptx-1' });
+
+        const result = await drainQueuedBroadcast({
+            vault, sdkRegistry, chainRegistry, pendingTxId: 'ptx-1',
+        });
+        expect(broadcastCalls).toBe(1);
+        expect(result.broadcast).toBe(true);
+    });
+});

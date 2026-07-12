@@ -56,7 +56,7 @@ export function TxStatusTimeline({ entry, chainTip }) {
             key: 'broadcast',
             label: 'Broadcast',
             done: txHash.length > 0,
-            sub: txHash || 'No txid yet',
+            sub: txHash || 'Not sent yet',
         },
         {
             // "Mempool" is protocol jargon; the stage label stays in the

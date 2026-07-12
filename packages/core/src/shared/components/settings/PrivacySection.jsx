@@ -100,7 +100,8 @@ export function PrivacySection() {
             />
             <ToggleRow
                 label="Labels survive restore"
-                hint="Opts into §19.5.2 on-chain label sync (FILE-action transport). Submit/fetch wiring lands separately; the toggle persists the preference today."
+                /* Spec §19.5.2: on-chain label sync via FILE-action transport; submit/fetch wiring lands separately. */
+                hint="Sync your address labels on-chain so your other devices can restore them. This feature is not active yet; your choice is saved."
                 checked={Boolean(settings.privacy.labelsSurviveRestore)}
                 onChange={(v) => onToggle('labelsSurviveRestore', v)}
             />

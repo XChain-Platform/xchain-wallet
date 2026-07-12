@@ -46,6 +46,7 @@ import {
     resolveSdkFactory,
 } from './background/index.js';
 import { SIGNING_SECRET_SESSION_KEY, loadSigningSecret } from './background/signingSecretSession.js';
+import { initPanicModePersistence } from './background/panicModeStorage.js';
 import {
     readAutoLockState,
     stampAutoLockActivity,
@@ -192,6 +193,13 @@ async function ensureHost() {
             console.error('[xchain] SignerPool rehydrate failed:', err);
         }
     }
+
+    // §26.5 panic-mode freeze. localStorage does not exist in an MV3 service
+    // worker, so the freeze state must persist in chrome.storage.local to
+    // survive worker teardown and to stay visible across popup / approval /
+    // background. Start hydration before the host serves any signing route;
+    // assertSigningAllowed fails closed until the initial load resolves.
+    await initPanicModePersistence(flowsLib);
 
     host = createBackgroundHost({
         vault,

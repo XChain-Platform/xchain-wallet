@@ -14,8 +14,15 @@
 // signAction / signIn).
 
 import { createRoot } from 'react-dom/client';
+import { flows } from '@xchain-wallet/core';
 import '@xchain-wallet/core/ui/tokens.css';
 import { Router } from './Router.jsx';
+import { initPanicModePersistence } from '../background/panicModeStorage.js';
+
+// §26.5 panic-mode freeze. Share the freeze state with the background worker
+// via chrome.storage.local so a freeze set here is visible to the enforcement
+// gate that runs in the service worker.
+void initPanicModePersistence(flows);
 
 const container = document.getElementById('xchain-approval-root');
 if (!container) {

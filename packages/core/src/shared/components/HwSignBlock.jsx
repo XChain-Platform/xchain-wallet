@@ -126,6 +126,8 @@ function statusCopy(status, signerKind, chainId, detail) {
             return 'Ready to sign. Confirm on your device when you tap Send.';
         case 'wrong-app':
             return `Open the ${coinNameFor(chainId) || 'correct'} app on your Ledger and try again.`;
+        case 'unsupported-network':
+            return `This device can't sign on ${coinNameFor(chainId) || 'this network'}. Use the software signer instead.`;
         case 'locked':
             return signerKind === 'trezor'
                 ? 'Device is locked. Enter your PIN on the Trezor.'

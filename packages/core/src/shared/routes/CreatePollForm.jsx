@@ -354,7 +354,7 @@ export function CreatePollForm({ walletId, chainId, presetTick, onBack, onCreate
             </Button>
             {showAdvanced ? (
                 <>
-                    <Input label="Quorum (optional)" hint="Minimum counted-weight fraction of supply, e.g. 0.2 for 20%."
+                    <Input label="Quorum (optional)" hint="Smallest share of the token supply that must vote for the result to count, e.g. 0.2 means 20%."
                         value={quorum} onChange={(e) => setQuorum(e.target.value)} autoComplete="off" />
                     <Input label="Minimum voters (optional)" hint="Minimum distinct qualifying voters."
                         value={minVoters} onChange={(e) => setMinVoters(e.target.value)} inputMode="numeric" autoComplete="off" />
@@ -362,7 +362,7 @@ export function CreatePollForm({ walletId, chainId, presetTick, onBack, onCreate
                         value={minVoteBalance} onChange={(e) => setMinVoteBalance(e.target.value)} autoComplete="off" />
                     <Input label="Early-decide threshold (optional)" hint="Fraction of supply an option must reach to close the poll early."
                         value={decideThreshold} onChange={(e) => setDecideThreshold(e.target.value)} autoComplete="off" />
-                    <Input label="Creation deposit (optional)" hint="GAS escrowed at creation as anti-spam; refunded on finalize, forfeited on failed quorum."
+                    <Input label="Creation deposit (optional)" hint="A GAS deposit held while the poll runs as anti-spam: returned when the poll closes, kept if too few people vote."
                         value={deposit} onChange={(e) => setDeposit(e.target.value)} autoComplete="off" />
                 </>
             ) : null}

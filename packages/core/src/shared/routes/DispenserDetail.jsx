@@ -24,6 +24,7 @@ import {
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
+import { multiplyAmounts } from '../../market/orderMath.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -218,20 +219,18 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
 
     const totalPayAmount = useMemo(() => {
         if (!getAmount || fillsNum <= 0) return null;
-        const base = Number(getAmount);
-        if (!Number.isFinite(base)) return null;
-        // Protocol `GET_AMOUNT` is a string; multiplying with floats is
-        // precision-risky for small satoshi fractions, but the detail
-        // page is display-only. Downstream SEND composition sends the
-        // exact stringified value and relies on the SDK for precision.
-        return (base * fillsNum).toString();
+        // `handleBuy` sends this exact value on the wire as the SEND amount,
+        // so it must be computed in exact decimal space. Float multiplication
+        // drifts ('0.1' x 3 -> '0.30000000000000004') and collapses tiny
+        // amounts to scientific notation ('0.00000001' x 3 -> '3e-8'), either
+        // of which the encoder rejects or mis-prices. The display string is
+        // derived from this same exact value.
+        return multiplyAmounts(getAmount, String(fillsNum));
     }, [getAmount, fillsNum]);
 
     const totalReceive = useMemo(() => {
         if (!giveAmount || fillsNum <= 0) return null;
-        const base = Number(giveAmount);
-        if (!Number.isFinite(base)) return null;
-        return (base * fillsNum).toString();
+        return multiplyAmounts(giveAmount, String(fillsNum));
     }, [giveAmount, fillsNum]);
 
     async function handleCopy(text, label) {

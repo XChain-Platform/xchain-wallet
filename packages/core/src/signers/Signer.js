@@ -50,7 +50,7 @@ export class NotImplementedError extends Error {
 }
 
 /** @typedef {'software' | 'trezor' | 'ledger' | 'multisig' | 'airgap'} SignerKind */
-/** @typedef {'available' | 'locked' | 'disconnected' | 'wrong-app' | 'error'} SignerStatus */
+/** @typedef {'available' | 'locked' | 'disconnected' | 'wrong-app' | 'unsupported-network' | 'error'} SignerStatus */
 
 /**
  * @typedef {Object} GetAddressesParams

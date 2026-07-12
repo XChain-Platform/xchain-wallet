@@ -330,6 +330,8 @@ export {
     deactivatePanicMode,
     clearPanicModeState,
     assertSigningAllowed,
+    configurePanicModePersistence,
+    applyExternalPanicModeState,
     PanicModeActiveError,
     DEFAULT_DURATION_MS as PANIC_MODE_DEFAULT_DURATION_MS,
     MIN_DURATION_MS as PANIC_MODE_MIN_DURATION_MS,

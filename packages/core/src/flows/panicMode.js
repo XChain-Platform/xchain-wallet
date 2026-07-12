@@ -14,10 +14,20 @@
 // are (a) the timer expires or (b) the user explicitly deactivates
 // from Settings → Safety with their wallet open.
 //
-// State persists in localStorage so the freeze survives popup close,
-// tab reload, even browser restart. The schema preference
-// `settings.panicMode.enabled` is independent; it gates whether the
-// feature is offered, not whether it is currently active.
+// State persists so the freeze survives popup close, tab reload, even
+// browser restart. Two persistence backends:
+//   - Default (web/desktop renderers, tests): `localStorage`, read
+//     synchronously on every access.
+//   - Extension: an injected async store (chrome.storage.local) wired via
+//     `configurePanicModePersistence`. localStorage does not exist in an
+//     MV3 background service worker, and even in extension pages it is not
+//     shared with the worker, so a freeze must live in chrome.storage.local
+//     to (a) survive service-worker teardown and (b) be visible across the
+//     popup / approval / background contexts. When configured, an in-memory
+//     cache backs the synchronous reads and is hydrated at host boot; while
+//     hydration is pending, `assertSigningAllowed` fails closed.
+// The schema preference `settings.panicMode.enabled` is independent; it
+// gates whether the feature is offered, not whether it is currently active.
 //
 // Threat model (Step 1 / signing freeze):
 //   - Reading the locked-down vault is unaffected. The freeze is on
@@ -38,6 +48,17 @@ export const MAX_DURATION_MS = 7 * 24 * 60 * 60 * 1000;     // 7d cap
 
 let memoryFallback = null;
 
+// Injected async persistence (extension: chrome.storage.local). When set, it
+// is authoritative: reads come from the `memoryFallback` cache (hydrated from
+// the store), and localStorage is bypassed so every extension context shares
+// one source of truth.
+/** @type {{ load: () => Promise<unknown>, save: (s: PanicModeState) => Promise<void>, clear: () => Promise<void> } | null} */
+let persistentStore = null;
+// True between `configurePanicModePersistence` and the first hydrate resolving.
+// While true, `assertSigningAllowed` fails closed: we may be inside an active
+// freeze whose state has not loaded yet after a service-worker restart.
+let awaitingHydration = false;
+
 /**
  * @typedef {Object} PanicModeState
  * @property {number} activatedAt   epoch-ms; 0 when inactive
@@ -46,8 +67,8 @@ let memoryFallback = null;
  */
 
 export class PanicModeActiveError extends Error {
-    constructor(remainingMs) {
-        super(`Signing is frozen by panic mode (${Math.ceil(remainingMs / 60000)} min remaining)`);
+    constructor(remainingMs, message) {
+        super(message || `Signing is frozen by panic mode (${Math.ceil(remainingMs / 60000)} min remaining)`);
         this.name = 'PanicModeActiveError';
         this.remainingMs = remainingMs;
     }
@@ -67,30 +88,46 @@ function getStorage() {
     return null;
 }
 
+/**
+ * Coerce an untrusted parsed record into a valid PanicModeState, falling back
+ * to empty on anything malformed.
+ * @param {unknown} parsed
+ * @returns {PanicModeState}
+ */
+function coercePanicState(parsed) {
+    const p = /** @type {any} */ (parsed);
+    if (
+        !p
+        || typeof p.activatedAt !== 'number'
+        || typeof p.expiresAt !== 'number'
+        || typeof p.durationMs !== 'number'
+        || p.activatedAt < 0
+        || p.expiresAt < 0
+        || p.durationMs < 0
+    ) {
+        return emptyPanicModeState();
+    }
+    return {
+        activatedAt: Math.floor(p.activatedAt),
+        expiresAt: Math.floor(p.expiresAt),
+        durationMs: Math.floor(p.durationMs),
+    };
+}
+
 /** @returns {PanicModeState} */
 function readState() {
+    // Injected persistence is authoritative: serve from the sync cache that
+    // hydration / onChanged keeps current. localStorage is bypassed so the
+    // cache is the single cross-context source of truth.
+    if (persistentStore) {
+        return memoryFallback ? { ...memoryFallback } : emptyPanicModeState();
+    }
     const store = getStorage();
     if (!store) return memoryFallback ? { ...memoryFallback } : emptyPanicModeState();
     try {
         const raw = store.getItem(STORAGE_KEY);
         if (!raw) return emptyPanicModeState();
-        const parsed = JSON.parse(raw);
-        if (
-            !parsed
-            || typeof parsed.activatedAt !== 'number'
-            || typeof parsed.expiresAt !== 'number'
-            || typeof parsed.durationMs !== 'number'
-            || parsed.activatedAt < 0
-            || parsed.expiresAt < 0
-            || parsed.durationMs < 0
-        ) {
-            return emptyPanicModeState();
-        }
-        return {
-            activatedAt: Math.floor(parsed.activatedAt),
-            expiresAt: Math.floor(parsed.expiresAt),
-            durationMs: Math.floor(parsed.durationMs),
-        };
+        return coercePanicState(JSON.parse(raw));
     } catch (_err) {
         return emptyPanicModeState();
     }
@@ -98,6 +135,16 @@ function readState() {
 
 /** @param {PanicModeState} state */
 function writeState(state) {
+    if (persistentStore) {
+        // Cache first so synchronous reads reflect the write immediately, then
+        // mirror to the async store (best-effort; the cache already holds it).
+        memoryFallback = state.expiresAt === 0 ? null : { ...state };
+        try {
+            if (state.expiresAt === 0) void persistentStore.clear();
+            else void persistentStore.save({ ...state });
+        } catch (_err) { /* best-effort; cache is source of truth this session */ }
+        return;
+    }
     const store = getStorage();
     if (!store) {
         memoryFallback = { ...state };
@@ -112,6 +159,43 @@ function writeState(state) {
     } catch (_err) {
         memoryFallback = { ...state };
     }
+}
+
+/**
+ * Wire an async persistence backend (extension: chrome.storage.local) and
+ * hydrate the synchronous cache from it. Call once per context at boot. While
+ * the initial load is in flight, `assertSigningAllowed` fails closed.
+ *
+ * @param {{ load: () => Promise<unknown>, save: (s: PanicModeState) => Promise<void>, clear: () => Promise<void> } | null} store
+ * @returns {Promise<void>}
+ */
+export async function configurePanicModePersistence(store) {
+    persistentStore = store || null;
+    if (!persistentStore) {
+        awaitingHydration = false;
+        return;
+    }
+    awaitingHydration = true;
+    try {
+        const persisted = await persistentStore.load();
+        applyExternalPanicModeState(persisted);
+    } catch (_err) {
+        // Load failed: leave the cache empty. A subsequent onChanged or write
+        // will repopulate it; fail-closed only covers the load window.
+    } finally {
+        awaitingHydration = false;
+    }
+}
+
+/**
+ * Apply a state snapshot observed from the persistent store (initial hydrate
+ * or a cross-context `storage.onChanged` event) into the synchronous cache.
+ *
+ * @param {unknown} raw
+ */
+export function applyExternalPanicModeState(raw) {
+    const state = coercePanicState(raw);
+    memoryFallback = state.expiresAt === 0 ? null : state;
 }
 
 /** @param {number} durationMs @returns {number} clamped */
@@ -177,6 +261,8 @@ export function deactivatePanicMode() {
 /** Reset for tests. */
 export function clearPanicModeState() {
     memoryFallback = null;
+    persistentStore = null;
+    awaitingHydration = false;
     const store = getStorage();
     if (store) {
         try { store.removeItem(STORAGE_KEY); } catch (_err) { /* ignore */ }
@@ -190,6 +276,14 @@ export function clearPanicModeState() {
  * @param {number} [nowMs]
  */
 export function assertSigningAllowed(nowMs = Date.now()) {
+    // Fail closed while persisted freeze state is still loading (e.g. right
+    // after a service-worker restart): a freeze may be active but unread.
+    if (awaitingHydration) {
+        throw new PanicModeActiveError(
+            0,
+            'Signing is paused while panic-mode state finishes loading',
+        );
+    }
     const state = readState();
     if (state.expiresAt === 0) return;
     if (state.expiresAt <= nowMs) {

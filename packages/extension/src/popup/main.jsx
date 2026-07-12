@@ -16,8 +16,15 @@
 // design-token custom properties on :root.
 
 import { createRoot } from 'react-dom/client';
+import { flows } from '@xchain-wallet/core';
 import '@xchain-wallet/core/ui/tokens.css';
 import { App } from './App.jsx';
+import { initPanicModePersistence } from '../background/panicModeStorage.js';
+
+// §26.5 panic-mode freeze. Share the freeze state with the background worker
+// and the approval window via chrome.storage.local: activating panic here must
+// be visible to the enforcement gate that runs in the service worker.
+void initPanicModePersistence(flows);
 
 const container = document.getElementById('xchain-popup-root');
 if (!container) {

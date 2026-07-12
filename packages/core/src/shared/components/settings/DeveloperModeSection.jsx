@@ -85,7 +85,8 @@ export function DeveloperModeSection() {
             <CustomChainsRow developerMode={Boolean(settings.developerMode)} />
             <ToggleRow
                 label="Raw PSBT inspector"
-                hint="Coming soon: reveals the raw PSBT hex + parsed fields on sign screens. §48.4."
+                /* Spec §48.4 */
+                hint="Coming soon: reveals the raw PSBT hex + parsed fields on sign screens."
                 checked={false}
                 disabled
                 onChange={() => {}}

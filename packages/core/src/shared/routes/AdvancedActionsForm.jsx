@@ -35,6 +35,25 @@ const chainRegistry = registryLib.defaultRegistry();
 
 const PROTOCOL_COIN_TICKER = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
 
+/**
+ * Turn an SDK validator error into text a human (and a screen reader) can
+ * read. The SDK's error shape is not contractual, so a message-less object
+ * must never reach the alert as a raw JSON dump.
+ *
+ * @param {unknown} err
+ * @returns {string}
+ */
+export function formatValidationError(err) {
+    if (typeof err === 'string') return err;
+    if (err && typeof err === 'object') {
+        const message = /** @type {{ message?: unknown }} */ (err).message;
+        if (typeof message === 'string' && message) return message;
+        const field = /** @type {{ field?: unknown }} */ (err).field;
+        if (typeof field === 'string' && field) return `${field}: invalid value`;
+    }
+    return 'Invalid value';
+}
+
 // Rest-fields carry a '...' prefix in the SDK's field list (see
 // xchain-sdk/src/formatSelector.js). The form splits array input on
 // newlines/commas, same convention as AirdropForm's paste box.
@@ -586,9 +605,7 @@ export function AdvancedActionsForm({ walletId, onBack }) {
                 <div role="alert" className={styles.warnings}>
                     {validation.errors.map((err, i) => (
                         <p key={i} className={styles.warning}>
-                            {typeof err === 'string'
-                                ? err
-                                : err?.message || JSON.stringify(err)}
+                            {formatValidationError(err)}
                         </p>
                     ))}
                 </div>

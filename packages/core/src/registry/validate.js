@@ -129,11 +129,44 @@ const isFeeStrategy = (v) => {
     return true;
 };
 
+// A derivation-path template is `m/<purpose>'/<coin-type>'/A'/C/I`: two
+// hardened numeric segments (purpose, coin-type) followed by the fixed
+// account/change/index placeholders. Anchoring the shape here means the
+// placeholder expansion in derivationPathFor (index.js) can never land a
+// substitution in the wrong segment, and a malformed untrusted descriptor
+// (Developer Mode paste, remote sync) is rejected at install time instead
+// of silently deriving a wrong-but-plausible path into the signer (§16).
+const DERIVATION_TEMPLATE_RE = /^m\/\d+'\/\d+'\/A'\/C\/I$/;
+
+// SLIP-44 mainnet coin-type slot per known chain family. Every network in a
+// family (testnet/regtest included) anchors to the mainnet slot to match
+// xchain-sdk and the backend CryptoNetworks, not SLIP-44's generic 1'
+// testnet slot. Promoted from the derivation-parity integration test so that
+// remote/custom descriptor installs enforce the same invariant the bundled
+// descriptors are CI-tested against; unknown families stay unconstrained.
+export const FAMILY_MAINNET_COIN_TYPE_SLOT = { bitcoin: "0'", litecoin: "2'", dogecoin: "3'" };
+
+// WIF version byte per known chain family and network. Like the coin-type
+// slot above, wifVersionByte is a hand-maintained copy of an xchain-sdk
+// registry value (SoftwareSigner WIF-encodes with descriptor.wifVersionByte,
+// while address encoding rides the SDK's own networks.js). Range-checking it
+// alone lets a remote/Developer-Mode descriptor override e.g. bitcoin-regtest
+// with the mainnet prefix 0x80, so the wallet WIF-encodes regtest keys with a
+// prefix the SDK decodes differently. Pinning known (coin, networkKind) pairs
+// here closes the second leg of the descriptor<->SDK parity contract; unknown
+// families stay range-checked only, so custom chains remain installable.
+export const FAMILY_NETWORK_WIF_BYTE = {
+    bitcoin: { mainnet: 0x80, testnet: 0xef, regtest: 0xef },
+    litecoin: { mainnet: 0xb0, testnet: 0xef, regtest: 0xef },
+    dogecoin: { mainnet: 0x9e, testnet: 0xf1, regtest: 0xef },
+};
+
 const isDerivationPaths = (v) => {
     if (!isPlainObject(v)) return false;
     for (const [k, val] of Object.entries(v)) {
         if (!isNonEmptyString(k)) return false;
         if (!isNonEmptyString(val)) return false;
+        if (!DERIVATION_TEMPLATE_RE.test(val)) return false;
     }
     return true;
 };
@@ -154,6 +187,23 @@ export function validateChainDescriptor(record) {
     check(errors, 'color', isNonEmptyString(r.color), 'must be a non-empty string');
     check(errors, 'icon', isString(r.icon), 'must be a string');
     check(errors, 'derivationPaths', isDerivationPaths(r.derivationPaths), 'malformed');
+    // For a known coin family, every template's coin-type slot must equal the
+    // family's mainnet SLIP-44 slot. A remote/custom descriptor overriding a
+    // bundled id with a drifted slot (e.g. the SLIP-44 1' "testnet fix" on
+    // bitcoin-testnet) would otherwise install cleanly and silently derive
+    // addresses the backend does not watch (funds appear missing).
+    const familySlot = FAMILY_MAINNET_COIN_TYPE_SLOT[r.coin];
+    if (familySlot && isPlainObject(r.derivationPaths)) {
+        for (const [addressType, template] of Object.entries(r.derivationPaths)) {
+            const m = typeof template === 'string' ? template.match(/^m\/\d+'\/(\d+')\//) : null;
+            check(
+                errors,
+                `derivationPaths.${addressType}`,
+                Boolean(m) && m[1] === familySlot,
+                `coin-type slot must be ${familySlot} for the ${r.coin} family`,
+            );
+        }
+    }
     checkEach(errors, 'addressTypes', r.addressTypes, isNonEmptyString, 'must be a non-empty string');
     check(
         errors,
@@ -172,6 +222,19 @@ export function validateChainDescriptor(record) {
         Number.isInteger(r.wifVersionByte) && r.wifVersionByte >= 0 && r.wifVersionByte <= 0xff,
         'must be an integer in [0, 255]',
     );
+    // For a known coin family/network, wifVersionByte must equal the SDK's
+    // pinned value. Prevents an override from WIF-encoding testnet/regtest keys
+    // with a mainnet prefix (see FAMILY_NETWORK_WIF_BYTE above). Unknown coins
+    // and networkKinds fall through to the range check only.
+    const familyWifByte = FAMILY_NETWORK_WIF_BYTE[r.coin]?.[r.networkKind];
+    if (familyWifByte !== undefined) {
+        check(
+            errors,
+            'wifVersionByte',
+            r.wifVersionByte === familyWifByte,
+            `must be ${familyWifByte} for ${r.coin} ${r.networkKind}`,
+        );
+    }
     // http/ws endpoints are only acceptable where transit interception is
     // structurally impossible: regtest chains and loopback hosts.
     const allowInsecure = r.networkKind === 'regtest';

@@ -183,8 +183,12 @@ export function Settings({
         {
             id: 'network',
             title: 'Network',
-            description: 'Choose Mainnet, Testnet, or Regtest. Filters every visible chain and stops queries to the inactive networks. The page reloads on change.',
-            keywords: 'network mainnet testnet regtest active filter chain switch mode dev',
+            description: settings.developerMode
+                ? 'Choose Mainnet, Testnet, or Regtest. Filters every visible chain and stops queries to the inactive networks. The page reloads on change.'
+                : 'Choose Mainnet or Testnet. Filters every visible chain and stops queries to the inactive networks. The page reloads on change.',
+            keywords: settings.developerMode
+                ? 'network mainnet testnet regtest active filter chain switch mode dev'
+                : 'network mainnet testnet active filter chain switch mode',
             kind: 'panel',
             Component: NetworkSection,
         },

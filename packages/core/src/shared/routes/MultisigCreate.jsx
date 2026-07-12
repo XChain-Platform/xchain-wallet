@@ -121,8 +121,9 @@ export function MultisigCreate({ walletId, onBack }) {
                     (cid) => Array.isArray(byChain?.[cid]) && byChain[cid].length > 0,
                 );
                 if (!btcWithAddresses) {
+                    // Spec §10.3: multisig is Bitcoin-only at launch.
                     setLoadError(
-                        'Multisig is Bitcoin-only at launch (§10.3). Use Receive on a BTC network to generate an address before configuring multisig.',
+                        'Multisig is available on Bitcoin only for now. Use Receive on a Bitcoin network to generate an address first.',
                     );
                     return;
                 }
