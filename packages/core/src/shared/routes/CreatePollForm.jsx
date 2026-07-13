@@ -40,6 +40,19 @@ const WEIGHT_MODE_HINT = {
     quadratic: 'Weight = square root of balance (needs a per-voter floor)',
     time_weighted: 'Weight = time-averaged balance',
 };
+// Display labels for the pickers. The protocol enum ids above stay the submitted
+// `value`; only the visible text is humanized (otherwise a voter sees raw ids like
+// `time_weighted`, underscore and all).
+const TALLY_MODE_LABEL = {
+    approval: 'Approval',
+    split: 'Split',
+};
+const WEIGHT_MODE_LABEL = {
+    balance: 'Balance',
+    flat: 'Flat (one address, one vote)',
+    quadratic: 'Quadratic',
+    time_weighted: 'Time-weighted',
+};
 
 /**
  * VOTE v0: create a governance poll. Core fields (token, question, options,
@@ -338,12 +351,12 @@ export function CreatePollForm({ walletId, chainId, presetTick, onBack, onCreate
 
             <Select label="Tally mode" value={tallyMode} onChange={(e) => setTallyMode(e.target.value)}
                 hint="Approval: full weight on each chosen option. Split: weight divided by your per-option shares.">
-                {TALLY_MODES.map((m) => <option key={m} value={m}>{m}</option>)}
+                {TALLY_MODES.map((m) => <option key={m} value={m}>{TALLY_MODE_LABEL[m] || m}</option>)}
             </Select>
 
             <Select label="Weight mode" value={weightMode} onChange={(e) => setWeightMode(e.target.value)}
                 hint={WEIGHT_MODE_HINT[weightMode]}>
-                {WEIGHT_MODES.map((m) => <option key={m} value={m}>{m}</option>)}
+                {WEIGHT_MODES.map((m) => <option key={m} value={m}>{WEIGHT_MODE_LABEL[m] || m}</option>)}
             </Select>
 
             <Input label="Max selections" hint="How many options one ballot may list (1 = single choice)."

@@ -42,7 +42,7 @@ const SCHEMES = [
     },
     {
         value: 'taproot-musig2',
-        label: 'Taproot-MuSig2',
+        label: 'Taproot multi-signature (most private)',
         description: 'MuSig2 aggregated key + signature under a single P2TR output. Most private (looks like single-sig on-chain) but requires every cosigner to support MuSig2 (Ledger Bitcoin app ≥ 2.4.0; Trezor T per current firmware).',
     },
 ];
