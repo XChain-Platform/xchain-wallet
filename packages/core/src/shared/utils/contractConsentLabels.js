@@ -50,6 +50,7 @@ const VERB_MAP = /** @type {Record<string, string>} */ ({
     SLEEP: 'schedule delays',
     SWAP: 'swap tokens',
     SWEEP: 'sweep balances',
+    VOTE: 'cast votes',
     // BTC-exclusive (staking + smart-contract sub-actions)
     COLLECT: 'collect staking rewards',
     DELEGATE: 'delegate stake',

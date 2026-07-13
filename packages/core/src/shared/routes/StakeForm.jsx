@@ -34,7 +34,7 @@ const CAPABILITY_LABELS = {
     price:          'Price feeds',
     cross_chain:    'Cross-chain',
     oracle_publish: 'Oracle publishing',
-    attestation:    'Attestation',
+    attestation:    'Attestations',
 };
 
 /**
