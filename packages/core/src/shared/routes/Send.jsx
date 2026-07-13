@@ -30,6 +30,7 @@ import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { buildRecentDestinations } from '../../flows/recentDestinations.js';
+import { detectAddressCoin, isValidAddressForChain } from '../utils/addressValidation.js';
 import { findLookalike } from '../utils/lookalike.js';
 import { checkPasteIntegrity } from '../utils/pasteIntegrity.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -86,34 +87,31 @@ function nativeTickerFor(descriptor) {
 
 const COIN_DISPLAY = { bitcoin: 'Bitcoin', litecoin: 'Litecoin', dogecoin: 'Dogecoin' };
 
-// Best-effort detection of which coin an address belongs to, used only to
-// catch an obviously wrong-chain destination (e.g. a Dogecoin address while
-// sending Bitcoin). Returns 'bitcoin' | 'litecoin' | 'dogecoin' only when the
-// prefix is COIN-EXCLUSIVE; ambiguous prefixes (the shared '3' p2sh, the
-// shared 'm'/'n'/'2' testnet leaders) return null so we never false-flag a
-// valid address. This is a guard, not full validation; the encoder still has
-// the final say.
-function confidentAddressCoin(address) {
+// Validate the destination against the chain the SEND will be broadcast on.
+// A SEND pays an on-chain output on that chain, so an address for another coin,
+// for the right coin on the wrong network, or simply mistyped, is unspendable:
+// the tokens are gone. `isValidAddressForChain` decodes the base58check checksum
+// (or bech32) against that coin+network's parameters, so it catches all three -
+// unlike a leading-character guess, which passes any typo that preserves the
+// first letter and cannot tell mainnet from testnet on the shared 'm'/'n'/'2'
+// leaders. Returns an error string, or null when the address is good (or when
+// there is not yet a chain to validate against).
+function destinationAddressError(address, descriptor) {
     const a = (address || '').trim();
-    if (!a) return null;
-    const lower = a.toLowerCase();
-    if (lower.startsWith('bc1') || lower.startsWith('tb1') || lower.startsWith('bcrt1')) return 'bitcoin';
-    if (lower.startsWith('ltc1') || lower.startsWith('tltc1') || lower.startsWith('rltc1')) return 'litecoin';
-    if (a.startsWith('1')) return 'bitcoin';          // BTC p2pkh
-    if (a.startsWith('L') || a.startsWith('M')) return 'litecoin'; // LTC p2pkh / p2sh
-    if (a.startsWith('D') || a.startsWith('A') || a.startsWith('9')) return 'dogecoin'; // DOGE p2pkh / p2sh
-    return null;                                       // '3', m/n/2, etc. -> ambiguous
-}
+    if (!a || !descriptor?.coin || !descriptor?.networkKind) return null;
+    if (isValidAddressForChain(a, descriptor.coin, descriptor.networkKind)) return null;
 
-// Returns an error string when `address` is confidently a different coin than
-// `coin` (the selected send chain's coin family), else null.
-function wrongChainAddressError(address, coin) {
-    if (!coin) return null;
-    const detected = confidentAddressCoin(address);
-    if (detected && detected !== coin) {
-        return `This looks like a ${COIN_DISPLAY[detected] || detected} address, not a ${COIN_DISPLAY[coin] || coin} address.`;
+    const chainName = COIN_DISPLAY[descriptor.coin] || descriptor.coin;
+    // Name the coin it *does* look like when that's unambiguous: a much more
+    // useful error than "invalid" when someone pastes the wrong address.
+    const detected = detectAddressCoin(a);
+    if (detected && detected !== descriptor.coin) {
+        return `This looks like a ${COIN_DISPLAY[detected] || detected} address, not a ${chainName} address.`;
     }
-    return null;
+    const where = descriptor.networkKind === 'mainnet'
+        ? chainName
+        : `${chainName} ${descriptor.networkKind}`;
+    return `This is not a valid ${where} address. Check it for typos.`;
 }
 
 /**
@@ -860,10 +858,10 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
             setFormError('Destination address is required.');
             return;
         }
-        const chainMismatch = wrongChainAddressError(toAddress, chainCoinFor(chainId));
-        if (chainMismatch) {
-            setToError(chainMismatch);
-            setFormError(chainMismatch);
+        const addressError = destinationAddressError(toAddress, descriptor);
+        if (addressError) {
+            setToError(addressError);
+            setFormError(addressError);
             return;
         }
         if (!tick.trim()) {

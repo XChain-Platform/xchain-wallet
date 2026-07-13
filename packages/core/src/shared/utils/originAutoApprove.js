@@ -61,3 +61,58 @@ export function shouldAutoApproveConnect({ origin, settings }) {
     if (!settings.autoApproveLocalhost) return false;
     return isLocalhostOrigin(origin);
 }
+
+/**
+ * Resolve the concrete permission scope an auto-approved connect may be granted.
+ *
+ * The permission model (§43.3) reads an EMPTY `chains` / `accounts` list as a
+ * wildcard: `assertChainPermitted` returns early on `chains.length === 0`, and
+ * `getAccounts` / `getAddresses` fall back to every account when the account set
+ * is empty. Auto-approve therefore must never store an empty list. Echoing the
+ * dApp's request back verbatim has the same defect from the other side: a
+ * `connect()` that names no chains or accounts (the common case) would persist a
+ * wildcard read grant over every chain and every account, without a prompt.
+ *
+ * So the scope is resolved from the WALLET's state, then narrowed by the
+ * request, never widened by it:
+ *   - chains:   the request intersected with the user's active-network chains,
+ *               or all active-network chains when the request names none.
+ *   - accounts: the request intersected with real account ids, or the primary
+ *               account alone when the request names none. A dApp cannot
+ *               enumerate the user's other accounts by asking for nothing.
+ *
+ * Returns null when no meaningful grant can be synthesized (no active chains, no
+ * accounts, or the request asks only for things the wallet doesn't have). The
+ * caller falls back to the approval prompt rather than guessing.
+ *
+ * @param {object} args
+ * @param {unknown} args.requestedChains     req.chains as received from the dApp
+ * @param {unknown} args.requestedAccounts   req.accounts as received from the dApp
+ * @param {string[]} args.activeChainIds     chain ids on the user's active network
+ * @param {string[]} args.accountIds         account ids that exist in the vault, primary first
+ * @returns {{ chains: string[], accounts: string[] } | null}
+ */
+export function resolveAutoApproveScope({
+    requestedChains,
+    requestedAccounts,
+    activeChainIds,
+    accountIds,
+}) {
+    const ids = (v) => (Array.isArray(v) ? v.filter((s) => typeof s === 'string' && s.length > 0) : []);
+    const active = ids(activeChainIds);
+    const accounts = ids(accountIds);
+    if (active.length === 0 || accounts.length === 0) return null;
+
+    const wantChains = ids(requestedChains);
+    const chains = wantChains.length > 0
+        ? active.filter((c) => wantChains.includes(c))
+        : [...active];
+
+    const wantAccounts = ids(requestedAccounts);
+    const granted = wantAccounts.length > 0
+        ? accounts.filter((a) => wantAccounts.includes(a))
+        : [accounts[0]];
+
+    if (chains.length === 0 || granted.length === 0) return null;
+    return { chains, accounts: granted };
+}

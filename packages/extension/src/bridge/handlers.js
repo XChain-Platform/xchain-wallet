@@ -30,7 +30,10 @@
 // `NOT_CONNECTED` if no record exists.
 
 import { flows, schemas } from '@xchain-wallet/core';
-import { shouldAutoApproveConnect } from '@xchain-wallet/core/shared/utils/originAutoApprove.js';
+import {
+    resolveAutoApproveScope,
+    shouldAutoApproveConnect,
+} from '@xchain-wallet/core/shared/utils/originAutoApprove.js';
 import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
 import {
     BRIDGE_SPEC_VERSION,
@@ -53,6 +56,7 @@ const {
     isOriginBlocked,
     passiveCoSignForAccount,
     findCoSignerAccountByAddress,
+    filterChainIdsByActiveNetwork,
 } = flows;
 
 const SUPPORTED_BRIDGE_ACTIONS = ['SEND', 'SWEEP'];
@@ -119,41 +123,72 @@ export function registerBridgeHandlers(host, opts = {}) {
         }
         const { origin, appName = origin, appIcon } = req;
 
-        const existing = await findConnectedSite(deps.vault, origin);
-        if (existing) {
-            await touchLastUsed(deps.vault, existing);
-            return {
-                version: req.bridgeVersion ?? BRIDGE_SPEC_VERSION,
-                supportedVersions: [...BRIDGE_SUPPORTED_VERSIONS],
-                chains: existing.permissions.chains,
-                accounts: existing.permissions.accounts,
-            };
-        }
-
-        // §48.6 / G151: Developer-Mode auto-approve for localhost.
-        // Skips the approval prompt and synthesizes a permissive
-        // connect decision when settings allow + origin is localhost.
-        // Sign requests (signMessage / signAction / signPsbt / signIn)
-        // still go through approvals. The password is required to
-        // sign and the wallet never caches it, so connect is the only
-        // safe step to short-circuit.
         const settings = await deps.vault.settings.get().catch(() => null);
         const autoConnect = shouldAutoApproveConnect({ origin, settings });
-        const decision = autoConnect
-            ? {
-                approved: true,
-                chains: Array.isArray(req.chains) ? req.chains : [],
-                accounts: Array.isArray(req.accounts) ? req.accounts : [],
-                canSignMessage: false,
-                canSignAction: {},
+
+        const existing = await findConnectedSite(deps.vault, origin);
+        if (existing) {
+            // An auto-approved grant was never seen by the user, so it must not
+            // outlive the Developer-Mode setting that created it. Once
+            // auto-approve is off (or the origin no longer qualifies), drop the
+            // record and make this connect earn a real prompt.
+            if (existing.autoApproved === true && !autoConnect) {
+                await deps.vault.connectedSites.delete(existing.id);
+            } else {
+                await touchLastUsed(deps.vault, existing);
+                return {
+                    version: req.bridgeVersion ?? BRIDGE_SPEC_VERSION,
+                    supportedVersions: [...BRIDGE_SUPPORTED_VERSIONS],
+                    chains: existing.permissions.chains,
+                    accounts: existing.permissions.accounts,
+                };
             }
-            : await approvals.connect({
+        }
+
+        // §48.6 / G151: Developer-Mode auto-approve for localhost. Skips the
+        // approval prompt when settings allow + origin is localhost. Sign
+        // requests (signMessage / signAction / signPsbt / signIn) still go
+        // through approvals: the password is required to unwrap the seed and we
+        // never cache it, so connect is the only safe step to short-circuit.
+        //
+        // The granted scope is resolved from the wallet's own state and only
+        // narrowed by the request (resolveAutoApproveScope), because an empty
+        // chains/accounts list is a WILDCARD in this permission model, not an
+        // empty grant. Falls back to the prompt when no concrete scope resolves.
+        let decision = null;
+        if (autoConnect) {
+            const activeChainIds = filterChainIdsByActiveNetwork(
+                Object.keys(settings?.fees ?? {}),
+                settings,
+                deps.chainRegistry,
+            );
+            const accountIds = (await deps.vault.accounts.list()).map((a) => a.id);
+            const scope = resolveAutoApproveScope({
+                requestedChains: req.chains,
+                requestedAccounts: req.accounts,
+                activeChainIds,
+                accountIds,
+            });
+            if (scope) {
+                decision = {
+                    approved: true,
+                    chains: scope.chains,
+                    accounts: scope.accounts,
+                    canSignMessage: false,
+                    canSignAction: {},
+                };
+            }
+        }
+        const autoApproved = decision !== null;
+        if (!decision) {
+            decision = await approvals.connect({
                 origin,
                 appName,
                 appIcon,
                 requestedChains: req.chains,
                 requestedAccounts: req.accounts,
             });
+        }
         if (!decision || !decision.approved) {
             throw new UserRejectedError('connect');
         }
@@ -166,6 +201,7 @@ export function registerBridgeHandlers(host, opts = {}) {
         const site = schemas.createConnectedSite({
             origin, appName, appIcon,
             permissions,
+            autoApproved,
         });
         await deps.vault.connectedSites.put(site);
         return {

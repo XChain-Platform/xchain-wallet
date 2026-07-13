@@ -17,6 +17,33 @@
 // encoder options, call submitAction directly.
 
 import { submitAction } from './submitAction.js';
+import { isValidAddressForChain } from '../shared/utils/addressValidation.js';
+
+/**
+ * Fail closed on a destination that isn't a valid address for the chain this
+ * action will be broadcast on. The UI validates too, but this is the flow every
+ * caller shares, including the dApp bridge (`bridge.signAction`), which builds a
+ * SEND straight from site-supplied params and never passes through the Send
+ * form. A wrong-coin, wrong-network, or typo'd destination is an unspendable
+ * output, so the tokens are unrecoverable: refuse to build the PSBT instead.
+ *
+ * Skipped when the chain isn't in the registry, which is submitAction's error
+ * to raise, not ours.
+ *
+ * @param {string} fnName
+ * @param {string} address
+ * @param {import('../registry/index.js').ChainRegistry} chainRegistry
+ * @param {string} chainId
+ */
+export function assertValidDestination(fnName, address, chainRegistry, chainId) {
+    const descriptor = chainRegistry?.get?.(chainId);
+    if (!descriptor?.coin || !descriptor?.networkKind) return;
+    if (!isValidAddressForChain(address, descriptor.coin, descriptor.networkKind)) {
+        throw new Error(
+            `${fnName}: "${address}" is not a valid ${descriptor.coin} ${descriptor.networkKind} address`,
+        );
+    }
+}
 
 /**
  * @typedef {Object} SourceRef
@@ -61,6 +88,7 @@ export async function sendToken(opts) {
     if (opts.amount === undefined || opts.amount === null || opts.amount === '') {
         throw new Error('sendToken: amount is required');
     }
+    assertValidDestination('sendToken', opts.to, opts.chainRegistry, opts.chainId);
     const source = normalizeSource(opts.from, 'sendToken');
 
     /** @type {Record<string, string>} */

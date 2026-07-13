@@ -101,6 +101,31 @@ export function detectAddressCoin(address) {
 }
 
 /**
+ * True when `address` is a structurally valid address for ONE specific coin and
+ * network. This is the check a value-bearing action (SEND, SWEEP, DISPENSER,
+ * COINPAY) needs: those pay an on-chain output on the chain they're broadcast
+ * on, so a destination for a different coin, or for the right coin on the wrong
+ * network, is unspendable. Distinct from `isValidAddressAnyNetwork`, which is
+ * correct only for MESSAGE (whose recipient is deliberately chain-independent).
+ *
+ * Checks the base58check checksum / bech32 decode, so it also catches a typo'd
+ * or truncated address that happens to keep a plausible leading character.
+ *
+ * @param {string} address
+ * @param {string} coin       'bitcoin' | 'litecoin' | 'dogecoin'
+ * @param {string} network    'mainnet' | 'testnet' | 'regtest'
+ * @returns {boolean}
+ */
+export function isValidAddressForChain(address, coin, network) {
+    const a = String(address || '').trim();
+    if (!a) return false;
+    if (looksLikeDevMock(a)) return true;
+    const params = ADDRESS_PARAMS[coin]?.[network];
+    if (!params) return false;
+    return matchesParams(a, params);
+}
+
+/**
  * True when `address` is a structurally valid address on ANY supported coin and
  * network (or a dev-mock placeholder). A MESSAGE can be broadcast on any chain
  * regardless of the recipient's chain (a Bitcoin address can be messaged over

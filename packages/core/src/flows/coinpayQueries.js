@@ -43,6 +43,111 @@ export async function getCoinpayObligationsForAddress({ sdkRegistry, chainId, ad
     return sdk.getCoinpayObligations(address, 'address', opts);
 }
 
+// The explorer has returned obligations under several envelope shapes over
+// time; accept them all rather than silently reading zero rows (which, in the
+// verifier below, would fail closed on a legitimate payment).
+function extractRows(resp) {
+    if (!resp) return [];
+    if (Array.isArray(resp)) return resp;
+    for (const key of ['data', 'rows', 'obligations', 'coinpay_obligations']) {
+        if (Array.isArray(resp[key])) return resp[key];
+    }
+    return [];
+}
+
+/**
+ * Re-derive a COINPAY obligation from the chain at sign time and confirm it says
+ * what the caller thinks it says. Returns the authoritative obligation row;
+ * throws rather than let a mismatch reach the signer.
+ *
+ * Why this exists ( / F4): a COINPAY carries a native-coin output paying a
+ * payee an amount, and both fields arrive from an indexer query, get hydrated
+ * into form state, and are then passed back down to be signed. Nothing in that
+ * round trip re-checked them, so any tampering after the fetch - a compromised
+ * renderer, a stale or edited draft, a bug in the messaging layer, a caller
+ * passing its own values - produced a signed, broadcast payment of real coin to
+ * an attacker's address, and the user would have approved a screen that agreed
+ * with itself. The signed output is now pinned to an obligation the flow layer
+ * re-read for itself, immediately before signing.
+ *
+ * Scope, stated honestly: this re-read hits the same indexer, so it does NOT
+ * defend against an indexer that lies consistently. It closes the gap between
+ * fetch and sign. Verifying the obligation against the chain itself needs the
+ * SPV/light-client path .
+ *
+ * @param {SdkCtx & {
+ *   payerAddress: string,
+ *   orderMatchActionIndex: string,
+ *   payeeAddress: string,
+ *   coinAmount: number,
+ * }} params
+ * @returns {Promise<object>} the authoritative obligation row
+ */
+export async function verifyCoinpayObligation({
+    sdkRegistry,
+    chainId,
+    payerAddress,
+    orderMatchActionIndex,
+    payeeAddress,
+    coinAmount,
+}) {
+    const resp = await getCoinpayObligationsForAddress({
+        sdkRegistry,
+        chainId,
+        address: payerAddress,
+    });
+    const rows = extractRows(resp);
+    const want = String(orderMatchActionIndex);
+    const row = rows.find((r) => String(r.action_index ?? r.actionIndex) === want);
+    if (!row) {
+        throw new Error(
+            `verifyCoinpayObligation: no COINPAY obligation for ORDER_MATCH #${want} on ${payerAddress}`,
+        );
+    }
+
+    // Paying an obligation that is already fulfilled or expired burns the coin
+    // for nothing: the protocol won't settle it twice.
+    const status = String(row.coinpay_status ?? row.status ?? '');
+    if (status && status !== 'pending_coinpay') {
+        throw new Error(
+            `verifyCoinpayObligation: ORDER_MATCH #${want} is "${status}", not pending; refusing to pay it`,
+        );
+    }
+
+    const payer = row.payer_address ?? row.payerAddress;
+    if (payer && String(payer) !== String(payerAddress)) {
+        throw new Error(
+            `verifyCoinpayObligation: ORDER_MATCH #${want} is owed by ${payer}, not by ${payerAddress}`,
+        );
+    }
+
+    const truePayee = String(row.payee_address ?? row.payeeAddress ?? '');
+    if (!truePayee) {
+        throw new Error(`verifyCoinpayObligation: ORDER_MATCH #${want} has no payee address`);
+    }
+    if (truePayee !== String(payeeAddress)) {
+        throw new Error(
+            `verifyCoinpayObligation: payee mismatch for ORDER_MATCH #${want} `
+            + `(obligation pays ${truePayee}, asked to sign ${payeeAddress})`,
+        );
+    }
+
+    const trueAmount = Number(row.coin_amount ?? row.coinAmount);
+    if (!Number.isSafeInteger(trueAmount) || trueAmount <= 0) {
+        throw new Error(
+            `verifyCoinpayObligation: ORDER_MATCH #${want} has an unusable coin_amount (${row.coin_amount ?? row.coinAmount})`,
+        );
+    }
+    if (trueAmount !== Number(coinAmount)) {
+        throw new Error(
+            `verifyCoinpayObligation: amount mismatch for ORDER_MATCH #${want} `
+            + `(obligation owes ${trueAmount} base units, asked to sign ${coinAmount})`,
+        );
+    }
+
+    return row;
+}
+
 /**
  * Recorded COINPAY actions touching `address` on `chainId`. Used by
  * history-style surfaces (not by the Step 9 resume card, which cares

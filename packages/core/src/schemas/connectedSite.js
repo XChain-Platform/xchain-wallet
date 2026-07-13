@@ -55,6 +55,11 @@ export const CURRENT_VERSION = 1;
  * @property {string} lastUsedAt
  * @property {SitePermissions} permissions
  * @property {SessionHistoryEntry[]} sessionHistory
+ * @property {boolean} [autoApproved]    v2-tolerant: the grant was synthesized by the
+ *                                       Developer-Mode localhost auto-approve path
+ *                                       (§48.6 / G151), not chosen by the user at a
+ *                                       prompt. Re-checked on every reconnect so the
+ *                                       grant cannot outlive the setting that created it.
  */
 
 /**
@@ -63,6 +68,7 @@ export const CURRENT_VERSION = 1;
  * @param {string} input.appName
  * @param {string} [input.appIcon]
  * @param {SitePermissions} input.permissions
+ * @param {boolean} [input.autoApproved]
  * @returns {ConnectedSite}
  */
 export function createConnectedSite(input) {
@@ -77,6 +83,7 @@ export function createConnectedSite(input) {
         lastUsedAt: now,
         permissions: input.permissions,
         sessionHistory: [],
+        ...(input.autoApproved === true && { autoApproved: true }),
     };
 }
 
@@ -113,5 +120,8 @@ export function validateConnectedSite(record) {
     check(errors, 'lastUsedAt', isIsoTimestamp(r.lastUsedAt), 'must be an ISO timestamp');
     check(errors, 'permissions', isPermissions(r.permissions), 'malformed');
     checkEach(errors, 'sessionHistory', r.sessionHistory, isSessionEntry, 'malformed');
+    if (r.autoApproved !== undefined) {
+        check(errors, 'autoApproved', isBoolean(r.autoApproved), 'must be a boolean');
+    }
     return result(errors);
 }

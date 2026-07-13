@@ -20,7 +20,7 @@
 // can drop to submitAction directly.
 
 import { submitAction } from './submitAction.js';
-import { normalizeSource } from './sendToken.js';
+import { assertValidDestination, normalizeSource } from './sendToken.js';
 
 /**
  * @typedef {Object} SweepTokenOpts
@@ -54,6 +54,9 @@ import { normalizeSource } from './sendToken.js';
 export async function sweepToken(opts) {
     if (!opts) throw new Error('sweepToken: opts is required');
     if (!opts.to) throw new Error('sweepToken: to is required');
+    // A SWEEP moves every balance and ownership at once, so a bad destination
+    // costs the whole address rather than one send's worth.
+    assertValidDestination('sweepToken', opts.to, opts.chainRegistry, opts.chainId);
     const source = normalizeSource(opts.from, 'sweepToken');
 
     const balances = opts.balances ?? true;

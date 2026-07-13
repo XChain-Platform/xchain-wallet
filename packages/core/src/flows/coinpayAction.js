@@ -30,7 +30,8 @@
 // the address the user has keys for.
 
 import { submitAction } from './submitAction.js';
-import { normalizeSource } from './sendToken.js';
+import { assertValidDestination, normalizeSource } from './sendToken.js';
+import { verifyCoinpayObligation } from './coinpayQueries.js';
 
 /**
  * @typedef {Object} CoinpayActionOpts
@@ -94,6 +95,23 @@ export async function coinpayAction(opts) {
     }
 
     const source = normalizeSource(opts.from, 'coinpayAction');
+
+    //  / F4: the payee and the amount decide where real native coin goes,
+    // and both reached us as plain arguments that originated in an indexer query
+    // several layers up. Re-read the obligation here, in the flow that is about
+    // to sign, and refuse if it disagrees with what we were asked to pay. Also
+    // check the payee is a well-formed address on this chain: an output to a
+    // malformed address is unspendable, so the coin is lost even if the payee
+    // field was honest.
+    await verifyCoinpayObligation({
+        sdkRegistry: opts.sdkRegistry,
+        chainId: opts.chainId,
+        payerAddress: source.address,
+        orderMatchActionIndex: actionIndex,
+        payeeAddress: opts.payeeAddress,
+        coinAmount,
+    });
+    assertValidDestination('coinpayAction', opts.payeeAddress, opts.chainRegistry, opts.chainId);
 
     const params = {
         VERSION: '0',
