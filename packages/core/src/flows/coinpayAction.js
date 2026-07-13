@@ -30,6 +30,7 @@
 // the address the user has keys for.
 
 import { submitAction } from './submitAction.js';
+import { buildActionPsbt } from './buildActionPsbt.js';
 import { assertValidDestination, normalizeSource } from './sendToken.js';
 import { verifyCoinpayObligation } from './coinpayQueries.js';
 
@@ -56,54 +57,68 @@ import { verifyCoinpayObligation } from './coinpayQueries.js';
  */
 
 /**
- * @param {CoinpayActionOpts} opts
- * @returns {Promise<import('../sdk/submitWithSigner.js').SubmitResult>}
+ * Validate a base-unit native amount as an integer that survives JS number
+ * precision. A large DOGE obligation (supply ~1.3e18 koinu) can exceed
+ * Number.MAX_SAFE_INTEGER (~9e15 = ~90M DOGE); silently coercing it through
+ * Number() would round the native-coin output, underpaying (COINPAY rejected,
+ * buyer loses the coin with no settlement) or overpaying. Reject a non-integer
+ * string shape before coercion, then fail closed past safe-integer precision
+ * rather than sign a wrong output. (Full big-value support needs a string/BigInt
+ * output path through the encoder: .)
+ *
+ * @param {string | number} value
+ * @param {string} fnName
+ * @returns {number}
  */
-export async function coinpayAction(opts) {
-    if (!opts) throw new Error('coinpayAction: opts is required');
+function normalizeCoinAmount(value, fnName) {
+    const raw = typeof value === 'string' ? value.trim() : value;
+    if (typeof raw === 'string' && !/^\d+$/.test(raw)) {
+        throw new Error(`${fnName}: coinAmount must be an integer (base units)`);
+    }
+    const amount = Number(raw);
+    if (!Number.isFinite(amount) || amount <= 0) {
+        throw new Error(`${fnName}: coinAmount must be a positive number (base units)`);
+    }
+    if (!Number.isInteger(amount)) {
+        throw new Error(`${fnName}: coinAmount must be an integer (base units)`);
+    }
+    if (!Number.isSafeInteger(amount)) {
+        throw new Error(`${fnName}: coinAmount exceeds safe integer precision (base units)`);
+    }
+    return amount;
+}
+
+/**
+ * Shared preamble for every COINPAY path (broadcast, hardware, and the
+ * air-gapped watcher build). Validates the caller's inputs, re-derives the
+ * obligation from the chain, and returns the pieces a COINPAY transaction is
+ * built from.
+ *
+ *  / F4: the payee and the amount decide where real native coin goes, and
+ * both reach these flows as plain arguments that originated in an indexer query
+ * several layers up. Re-read the obligation here, in the flow that is about to
+ * build the payment, and refuse if it disagrees with what we were asked to pay.
+ * The native output is then built from the VERIFIED obligation row, never from
+ * the caller's copy of it. Also check the payee is a well-formed address on this
+ * chain: an output to a malformed address is unspendable, so the coin is lost
+ * even if the payee field was honest.
+ *
+ * @param {CoinpayActionOpts} opts
+ * @param {string} fnName
+ */
+async function prepareCoinpay(opts, fnName) {
+    if (!opts) throw new Error(`${fnName}: opts is required`);
     const actionIndex = opts.orderMatchActionIndex;
     if (typeof actionIndex !== 'string' || actionIndex.length === 0) {
-        throw new Error('coinpayAction: orderMatchActionIndex is required');
+        throw new Error(`${fnName}: orderMatchActionIndex is required`);
     }
     if (typeof opts.payeeAddress !== 'string' || opts.payeeAddress.length === 0) {
-        throw new Error('coinpayAction: payeeAddress is required');
+        throw new Error(`${fnName}: payeeAddress is required`);
     }
-    // Validate the base-unit amount as an integer that survives JS number
-    // precision. A large DOGE obligation (supply ~1.3e18 koinu) can exceed
-    // Number.MAX_SAFE_INTEGER (~9e15 = ~90M DOGE); silently coercing it
-    // through Number() would round the native-coin output, underpaying
-    // (COINPAY rejected, buyer loses the coin with no settlement) or
-    // overpaying. Reject a non-integer string shape before coercion, then
-    // fail closed on values past safe-integer precision rather than sign a
-    // wrong output. (Full big-value support needs a string/BigInt output
-    // path through the encoder; see sweep report open item.)
-    const rawAmount = typeof opts.coinAmount === 'string'
-        ? opts.coinAmount.trim()
-        : opts.coinAmount;
-    if (typeof rawAmount === 'string' && !/^\d+$/.test(rawAmount)) {
-        throw new Error('coinpayAction: coinAmount must be an integer (base units)');
-    }
-    const coinAmount = Number(rawAmount);
-    if (!Number.isFinite(coinAmount) || coinAmount <= 0) {
-        throw new Error('coinpayAction: coinAmount must be a positive number (base units)');
-    }
-    if (!Number.isInteger(coinAmount)) {
-        throw new Error('coinpayAction: coinAmount must be an integer (base units)');
-    }
-    if (!Number.isSafeInteger(coinAmount)) {
-        throw new Error('coinpayAction: coinAmount exceeds safe integer precision (base units)');
-    }
+    const coinAmount = normalizeCoinAmount(opts.coinAmount, fnName);
+    const source = normalizeSource(opts.from, fnName);
 
-    const source = normalizeSource(opts.from, 'coinpayAction');
-
-    //  / F4: the payee and the amount decide where real native coin goes,
-    // and both reached us as plain arguments that originated in an indexer query
-    // several layers up. Re-read the obligation here, in the flow that is about
-    // to sign, and refuse if it disagrees with what we were asked to pay. Also
-    // check the payee is a well-formed address on this chain: an output to a
-    // malformed address is unspendable, so the coin is lost even if the payee
-    // field was honest.
-    await verifyCoinpayObligation({
+    const obligation = await verifyCoinpayObligation({
         sdkRegistry: opts.sdkRegistry,
         chainId: opts.chainId,
         payerAddress: source.address,
@@ -111,16 +126,72 @@ export async function coinpayAction(opts) {
         payeeAddress: opts.payeeAddress,
         coinAmount,
     });
-    assertValidDestination('coinpayAction', opts.payeeAddress, opts.chainRegistry, opts.chainId);
 
-    const params = {
-        VERSION: '0',
-        ORDER_MATCH_ACTION_INDEX: String(actionIndex),
+    // Build from the obligation the chain vouches for, not from the request.
+    // verifyCoinpayObligation has already proven these equal, so this is belt
+    // and braces: it means a future caller cannot reintroduce the bug by
+    // threading its own values past the guard.
+    const payeeAddress = String(obligation.payee_address ?? obligation.payeeAddress);
+    const payAmount = normalizeCoinAmount(
+        obligation.coin_amount ?? obligation.coinAmount,
+        fnName,
+    );
+    assertValidDestination(fnName, payeeAddress, opts.chainRegistry, opts.chainId);
+
+    return {
+        source,
+        actionIndex,
+        payeeAddress,
+        coinAmount: payAmount,
+        params: {
+            VERSION: '0',
+            ORDER_MATCH_ACTION_INDEX: String(actionIndex),
+        },
     };
+}
+
+/**
+ * Encode-only COINPAY for §20 watcher mode: returns an unsigned PSBT request for
+ * an air-gapped signer. No vault, no signer, no broadcast.
+ *
+ * : this path used to call the GENERIC `buildActionPsbt` with
+ * `customOutputs` taken straight from form state, so it was the one COINPAY
+ * route that skipped the  verification: a watcher could be talked into
+ * building a PSBT that pays an attacker, and the air-gapped signer would only
+ * ever see the outputs it was handed. It now runs the same verified preamble as
+ * the signing paths, and the native output is built from the verified obligation.
+ *
+ * @param {CoinpayActionOpts & { encoderOpts?: object }} opts
+ */
+export async function buildCoinpayPsbtRequest(opts) {
+    const prepared = await prepareCoinpay(opts, 'buildCoinpayPsbtRequest');
+    return buildActionPsbt({
+        chainRegistry: opts.chainRegistry,
+        sdkRegistry: opts.sdkRegistry,
+        chainId: opts.chainId,
+        from: opts.from,
+        actionData: { action: 'COINPAY', params: prepared.params },
+        encoderOpts: {
+            ...(opts.encoderOpts ?? {}),
+            customOutputs: [
+                { address: prepared.payeeAddress, value: prepared.coinAmount },
+            ],
+        },
+    });
+}
+
+/**
+ * @param {CoinpayActionOpts} opts
+ * @returns {Promise<import('../sdk/submitWithSigner.js').SubmitResult>}
+ */
+export async function coinpayAction(opts) {
+    const {
+        source, actionIndex, payeeAddress, coinAmount, params,
+    } = await prepareCoinpay(opts, 'coinpayAction');
 
     const pendingTxMeta = opts.trackPendingTx === false ? undefined : {
         fromAddress: source.address,
-        toAddress: opts.payeeAddress,
+        toAddress: payeeAddress,
         actionSummary:
             `Pay COINPAY: ${coinAmount} (base units) for ORDER_MATCH #${actionIndex}`,
     };
@@ -138,7 +209,7 @@ export async function coinpayAction(opts) {
         encoderOpts: {
             pubkey: source.publicKey,
             customOutputs: [
-                { address: opts.payeeAddress, value: coinAmount },
+                { address: payeeAddress, value: coinAmount },
             ],
             ...(opts.fee !== undefined && { fee: opts.fee }),
             ...(opts.feePerKb !== undefined && { feePerKb: opts.feePerKb }),

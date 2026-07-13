@@ -20,7 +20,10 @@
 // coinpayAction now re-reads the obligation and refuses on any disagreement.
 
 import { describe, it, expect } from 'vitest';
-import { coinpayAction } from '../../../packages/core/src/flows/coinpayAction.js';
+import {
+    buildCoinpayPsbtRequest,
+    coinpayAction,
+} from '../../../packages/core/src/flows/coinpayAction.js';
 import { verifyCoinpayObligation } from '../../../packages/core/src/flows/coinpayQueries.js';
 
 const PAYER = 'mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn';       // BTC testnet
@@ -38,12 +41,21 @@ const OBLIGATION = {
 };
 
 // Returns an sdkRegistry whose obligation row can be overridden per-test.
-function fakeSdkRegistry(row = OBLIGATION, { envelope = 'bare' } = {}) {
+// `encoderCalls` records what the encoder was actually asked to build, so the
+// watcher tests can assert on the outputs that would reach an air-gapped signer.
+function fakeSdkRegistry(row = OBLIGATION, { envelope = 'bare', encoderCalls } = {}) {
     const rows = row === null ? [] : [row];
     const resp = envelope === 'bare' ? rows : { data: rows };
     return {
         get: () => ({
             getCoinpayObligations: async () => resp,
+            actions: { createAction: () => ({ actionString: 'COINPAY|0|4242' }) },
+            encoder: {
+                createTx: async (args) => {
+                    encoderCalls?.push(args);
+                    return { psbt: 'deadbeef', encoding: 'opreturn' };
+                },
+            },
         }),
     };
 }
@@ -137,6 +149,54 @@ describe('coinpayAction: refuses to sign an unverified payment', () => {
             sdkRegistry: fakeSdkRegistry({ ...OBLIGATION, payee_address: 'not-an-address' }),
             payeeAddress: 'not-an-address',
         })).rejects.toThrow(/coinpayAction: "not-an-address" is not a valid bitcoin testnet address/);
+    });
+});
+
+// : the air-gapped watcher build used to call the GENERIC buildActionPsbt
+// with customOutputs straight from form state, so it was the one COINPAY route
+// that skipped verification entirely. An air-gapped signer only ever sees the
+// outputs it is handed, so an unverified watcher build is a signed payment to
+// whoever the watcher was talked into encoding.
+describe('buildCoinpayPsbtRequest: the watcher build is verified too', () => {
+    it('refuses to encode a PSBT paying a swapped payee', async () => {
+        const encoderCalls = [];
+        await expect(buildCoinpayPsbtRequest({
+            ...baseOpts,
+            sdkRegistry: fakeSdkRegistry(OBLIGATION, { encoderCalls }),
+            payeeAddress: ATTACKER,
+        })).rejects.toThrow(/payee mismatch for ORDER_MATCH #4242/);
+        // Nothing was handed to the encoder at all.
+        expect(encoderCalls).toHaveLength(0);
+    });
+
+    it('refuses to encode a PSBT with a tampered amount', async () => {
+        const encoderCalls = [];
+        await expect(buildCoinpayPsbtRequest({
+            ...baseOpts,
+            sdkRegistry: fakeSdkRegistry(OBLIGATION, { encoderCalls }),
+            coinAmount: 1,
+        })).rejects.toThrow(/amount mismatch/);
+        expect(encoderCalls).toHaveLength(0);
+    });
+
+    it('refuses to encode against a fulfilled obligation', async () => {
+        await expect(buildCoinpayPsbtRequest({
+            ...baseOpts,
+            sdkRegistry: fakeSdkRegistry({ ...OBLIGATION, coinpay_status: 'fulfilled' }),
+        })).rejects.toThrow(/not pending/);
+    });
+
+    it('builds the native output from the VERIFIED obligation, not the request', async () => {
+        const encoderCalls = [];
+        const res = await buildCoinpayPsbtRequest({
+            ...baseOpts,
+            sdkRegistry: fakeSdkRegistry(OBLIGATION, { encoderCalls }),
+        });
+        expect(res.psbtHex).toBe('deadbeef');
+        expect(encoderCalls).toHaveLength(1);
+        expect(encoderCalls[0].customOutputs).toEqual([
+            { address: PAYEE, value: AMOUNT },
+        ]);
     });
 });
 

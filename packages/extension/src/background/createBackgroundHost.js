@@ -50,6 +50,7 @@ const {
     sendToken,
     buildSendPsbt,
     buildActionPsbt,
+    buildCoinpayPsbtRequest,
     sweepToken,
     issueToken,
     mintToken,
@@ -1990,6 +1991,13 @@ export function createBackgroundHost(deps) {
     // §41.4 COINPAY: buyer-side settlement for token/native-coin matches.
     host.register('action.coinpay', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
         return coinpayAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+    });
+    // : encode-only COINPAY for §20 watcher mode. A dedicated route rather
+    // than the generic `action.psbt`, because the payee and amount must be
+    // re-verified against the on-chain obligation before the output is built,
+    // and that check has no business living in a generic PSBT builder.
+    host.register('action.coinpay.psbt', async (req, { chainRegistry, sdkRegistry }) => {
+        return buildCoinpayPsbtRequest({ ...req, chainRegistry, sdkRegistry });
     });
     host.register('coinpays.obligationsForAddress', async (req, { sdkRegistry }) => {
         return getCoinpayObligationsForAddress({ ...req, sdkRegistry });

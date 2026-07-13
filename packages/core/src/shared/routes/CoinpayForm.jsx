@@ -235,18 +235,12 @@ export function CoinpayForm({
             };
             let r;
             if (isWatcherMode) {
-                const params = {
-                    VERSION: '0',
-                    ORDER_MATCH_ACTION_INDEX: String(summary.actionIndex),
-                };
-                r = await messaging.buildActionPsbtRequest({
-                    chainId: selected.chainId,
-                    from,
-                    actionData: { action: 'COINPAY', params },
-                    encoderOpts: {
-                        customOutputs: [{ address: summary.payeeAddress, value: summary.coinAmount }],
-                    },
-                });
+                // : goes through the COINPAY-specific encode route, which
+                // re-verifies the obligation before building the native output.
+                // The generic buildActionPsbtRequest would happily encode a
+                // payment to whatever payee/amount this screen handed it, and an
+                // air-gapped signer only ever sees the outputs it is given.
+                r = await messaging.buildCoinpayPsbtRequest(base);
             } else if (hw) {
                 r = await messaging.coinpayActionHw({ ...base, signerId: selected.addr.signerId });
             } else {

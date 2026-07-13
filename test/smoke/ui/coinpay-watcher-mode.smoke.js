@@ -9,9 +9,17 @@
 // contact legal@dankest.llc.
 
 // Smoke for §20 / Cluster X Step 22: CoinpayForm watcher-mode branch.
-// COINPAY needs encoderOpts.customOutputs to direct the buyer's
-// payment to the matched seller; preserved through the watcher-mode
-// buildActionPsbtRequest call.
+//
+// COINPAY needs a native-coin output paying the matched seller. This smoke used
+// to pin the form BUILDING that output itself and passing it to the generic
+// `buildActionPsbtRequest`, which is exactly the shape  removed: the
+// generic builder does no verification, so a watcher could be talked into
+// encoding a payment to any payee/amount its form state happened to hold, and an
+// air-gapped signer only ever sees the outputs it is handed.
+//
+// The contract is now inverted: the form must NOT construct the payment, it must
+// name the obligation and let the COINPAY-specific host route re-verify it
+// against the chain and build the output from the verified row.
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
@@ -20,20 +28,53 @@ import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
-const formSrc = readFileSync(
-    join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', 'CoinpayForm.jsx'),
-    'utf8',
-);
+const read = (...p) => readFileSync(join(wsRoot, ...p), 'utf8');
+const formSrc = read('packages', 'core', 'src', 'shared', 'routes', 'CoinpayForm.jsx');
 
 assert.match(formSrc, /import \{ useWalletMode \} from '\.\.\/hooks\/useWalletMode\.js';/);
 assert.match(formSrc, /import \{ WatcherResultPanel \} from '\.\.\/components\/WatcherResultPanel\.jsx';/);
 assert.match(formSrc, /const \{ isWatcherMode \} = useWalletMode\(\);/);
-assert.match(formSrc, /messaging\.buildActionPsbtRequest\(\{[\s\S]+?action: 'COINPAY'/);
-assert.match(formSrc, /ORDER_MATCH_ACTION_INDEX: String\(summary\.actionIndex\)/);
+
+// Watcher mode goes through the verifying COINPAY route.
 assert.match(
     formSrc,
-    /encoderOpts: \{[\s\S]+?customOutputs: \[\{ address: summary\.payeeAddress, value: summary\.coinAmount \}\]/,
-    'watcher-mode encoderOpts preserves the buyer-pays-seller customOutputs',
+    /messaging\.buildCoinpayPsbtRequest\(base\)/,
+    'watcher-mode COINPAY uses the verifying buildCoinpayPsbtRequest route',
 );
+
+// And must NOT hand-roll the payment output any more. Asserted against real code
+// (a call site / an object key), not any mention, so the comments explaining WHY
+// this is forbidden don't trip their own guard.
+assert.doesNotMatch(
+    formSrc,
+    /customOutputs\s*:/,
+    'CoinpayForm must not construct the native output itself (the host route builds it from the verified obligation)',
+);
+assert.doesNotMatch(
+    formSrc,
+    /messaging\.buildActionPsbtRequest\(/,
+    'CoinpayForm must not call the generic (unverified) PSBT builder',
+);
+
 assert.match(formSrc, /Create unsigned transaction/);
+
+// The route the form calls must actually exist on every shell's messaging
+// surface, and the host must register it.
+for (const [label, ...p] of [
+    ['extension', 'packages', 'extension', 'src', 'popup', 'messaging.js'],
+    ['web', 'packages', 'web', 'src', 'messaging.js'],
+    ['desktop', 'packages', 'desktop', 'renderer', 'messaging.js'],
+]) {
+    assert.match(
+        read(...p),
+        /export function buildCoinpayPsbtRequest\(opts\)[\s\S]{0,120}sendMessage\('action\.coinpay\.psbt'/,
+        `${label} messaging exports buildCoinpayPsbtRequest -> action.coinpay.psbt`,
+    );
+}
+assert.match(
+    read('packages', 'extension', 'src', 'background', 'createBackgroundHost.js'),
+    /host\.register\('action\.coinpay\.psbt'[\s\S]{0,200}buildCoinpayPsbtRequest/,
+    'background host registers action.coinpay.psbt -> buildCoinpayPsbtRequest',
+);
+
 console.log('coinpay-watcher-mode smoke OK');

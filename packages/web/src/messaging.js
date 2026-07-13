@@ -1041,6 +1041,10 @@ export function cancelOrderHw(opts) { return /** @type {any} */ (sendMessage('ac
 export function coinpayAction(opts) { return /** @type {any} */ (sendMessage('action.coinpay', opts)); }
 /** @param {object} opts */
 export function coinpayActionHw(opts) { return /** @type {any} */ (sendMessage('action.coinpay.hw', opts)); }
+// Watcher-mode COINPAY : verifies the obligation, then encodes. Use this
+// rather than buildActionPsbtRequest, which would skip the verification.
+/** @param {object} opts */
+export function buildCoinpayPsbtRequest(opts) { return /** @type {any} */ (sendMessage('action.coinpay.psbt', opts)); }
 /** @param {{ chainId: string, address: string, opts?: object }} req */
 export function getCoinpayObligationsForAddress(req) { return /** @type {any} */ (sendMessage('coinpays.obligationsForAddress', req)); }
 /** @param {{ chainId: string, address: string, opts?: object }} req */

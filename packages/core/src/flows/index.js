@@ -38,7 +38,7 @@ export { destroyToken } from './destroyToken.js';
 export { broadcastAction } from './broadcastAction.js';
 export { dispenserAction } from './dispenserAction.js';
 export { orderAction, cancelOrder } from './orderAction.js';
-export { coinpayAction } from './coinpayAction.js';
+export { buildCoinpayPsbtRequest, coinpayAction } from './coinpayAction.js';
 export { swapAction } from './swapAction.js';
 export { linkAction } from './linkAction.js';
 export { fileAction } from './fileAction.js';
