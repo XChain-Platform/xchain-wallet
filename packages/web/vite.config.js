@@ -28,6 +28,10 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import { CONTENT_SECURITY_POLICY } from './src/csp.js';
+// Subresource Integrity . The CSP says WHERE scripts may come from; SRI
+// pins WHAT they contain, so a tampered bundle on the asset host cannot execute
+// in a page that holds the user's decrypted seed. Build-only, like the CSP.
+import { sriPlugin } from './sri.js';
 // HTTPS is OPT-IN via the `VITE_HTTPS=1` env var. The wallet's crypto
 // surfaces (`crypto.subtle.*` for KDF + AEAD, `navigator.clipboard.*`,
 // `getUserMedia` for the camera scanner, WebUSB / WebHID for hardware
@@ -162,5 +166,7 @@ export default defineConfig({
         }),
         styleGuidePlugin,
         cspPlugin,
+        // Last: must see the final tag set + final bundle bytes.
+        sriPlugin(),
     ],
 });
