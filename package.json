@@ -19,7 +19,7 @@
         "typecheck": "pnpm -r --if-present typecheck",
         "lint": "pnpm -r --if-present lint",
         "build": "pnpm -r --if-present build",
-        "ci": "pnpm test:unit && pnpm test:security",
+        "ci": "pnpm test:unit && pnpm test:security && pnpm test:smoke",
         "test": "pnpm test:unit && pnpm test:smoke",
         "test:unit": "vitest run --config test/vitest/unit.config.js",
         "test:unit:watch": "vitest --config test/vitest/unit.config.js",

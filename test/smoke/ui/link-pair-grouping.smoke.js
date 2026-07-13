@@ -80,8 +80,11 @@ const histPath = join(routes, 'History.jsx');
 const hist = readFileSync(histPath, 'utf8');
 
 // Badge label addition.
-assert.ok(/subkind === 'link-pair'\) return 'CROSS-CHAIN'/.test(hist),
-    'groupBadgeLabel returns CROSS-CHAIN for link-pair');
+// The badge label now routes through the shared plain-language display map
+// (actionDisplayLabel('LINK') renders "Cross-chain") instead of a hardcoded
+// all-caps string. Pin the routing, not the literal.
+assert.ok(/subkind === 'link-pair'\) return actionDisplayLabel\('LINK'\)/.test(hist),
+    'groupBadgeLabel labels link-pair via actionDisplayLabel(LINK)');
 
 // Dual-chain badge in GroupCard.
 assert.ok(/isLinkPair\b/.test(hist),

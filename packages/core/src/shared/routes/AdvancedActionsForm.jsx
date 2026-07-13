@@ -43,6 +43,9 @@ const PROTOCOL_COIN_TICKER = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE'
  * @param {unknown} err
  * @returns {string}
  */
+// Exported for its own unit suite (test/unit/routes/advancedActionsValidationMessage.test.jsx):
+// a pure string-formatting helper is far cheaper to pin directly than through the
+// rendered form.
 export function formatValidationError(err) {
     if (typeof err === 'string') return err;
     if (err && typeof err === 'object') {

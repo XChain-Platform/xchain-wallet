@@ -60,10 +60,16 @@ const src = readFileSync(formPath, 'utf8');
 // --- 1. Single-component export --------------------------------------
 
 assert.ok(/export function AdvancedActionsForm\b/.test(src), 'AdvancedActionsForm is named export');
+// Exactly one COMPONENT export (PascalCase). The rule this pins is "one route
+// file, one screen", not "one export": exporting a pure helper so it can carry
+// its own unit suite is legitimate and desirable, and the original
+// count-every-export form flagged exactly that (formatValidationError, which has
+// five tests against it) as if it were a second component.
+const componentExports = (src.match(/^export\s+(?:function|const|class)\s+([A-Z]\w*)/gm) || []);
 assert.equal(
-    (src.match(/^export\s+(function|const|class)\b/gm) || []).length,
+    componentExports.length,
     1,
-    'AdvancedActionsForm.jsx only exports the component',
+    `AdvancedActionsForm.jsx exports exactly one component (found: ${componentExports.join(', ')})`,
 );
 assert.ok(
     /IssueTokenForm\.module\.css/.test(src),

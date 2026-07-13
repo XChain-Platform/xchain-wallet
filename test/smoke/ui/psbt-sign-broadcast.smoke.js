@@ -55,7 +55,11 @@ const formSrc = readFileSync(
 
 const handlerIdx = hostSrc.indexOf("host.register('broadcast.signedTx'");
 assert.notEqual(handlerIdx, -1, 'broadcast.signedTx handler registered');
-const handlerBlock = hostSrc.slice(handlerIdx, handlerIdx + 2400);
+// Slice to the START OF THE NEXT handler, not a magic character count: a fixed
+// window silently truncates the moment the handler grows, failing the smoke while
+// the property it guards is perfectly intact.
+const handlerEnd = hostSrc.indexOf("host.register(", handlerIdx + 1);
+const handlerBlock = hostSrc.slice(handlerIdx, handlerEnd === -1 ? undefined : handlerEnd);
 assert.match(handlerBlock, /chainId is required/, 'validates chainId presence');
 assert.match(handlerBlock, /txHex is required/, 'validates txHex presence');
 assert.match(handlerBlock, /sdkRegistry\.get\(chainId\)/, 'looks up SDK by chainId');

@@ -47,6 +47,24 @@ export async function resolveSdkFactory({ devMockFactory }) {
             source: 'real',
         };
     } catch (err) {
+        // A shipped wallet must NEVER silently fall back to the mock SDK: it
+        // serves fabricated addresses and balances, and signing/broadcast do not
+        // work. A user cannot tell the difference by looking, which makes the
+        // quiet fallback the dangerous option. Fail loudly in a production build.
+        //
+        // `import.meta.env.PROD` is statically replaced by Vite, so in a release
+        // bundle this collapses to `if (true) throw`, and the dev-mock branch
+        // below (including its warning string) is dead-code-eliminated out of the
+        // artifact entirely. That is what makes tools/build-reproduce's
+        // check-no-dev-mock.sh a real gate rather than a string that is compiled
+        // into every build and therefore always trips.
+        if (import.meta.env.PROD) {
+            throw new Error(
+                '[xchain-wallet/web] xchain-sdk failed to load in a production build; '
+                + 'refusing to fall back to the dev-mock SDK (it serves fake data). Reason: '
+                + (err?.message || err),
+            );
+        }
         if (!warned) {
             warned = true;
             // eslint-disable-next-line no-console -- intentional one-time diagnostic for dev-mock SDK fallback

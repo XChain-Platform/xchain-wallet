@@ -89,13 +89,24 @@ const RULES = {
     DIV_CLICK_NEEDS_ROLE: 'div-onclick-needs-role',
 };
 
+// Blank a comment out while KEEPING its newlines, so the stripped source has the
+// same line count as the original.
+function blankKeepingLines(match) {
+    return match.replace(/[^\n]/g, '');
+}
+
 function stripJsxComments(src) {
     // Strip JSX comment blocks `{/* ... */}` and JS line comments
     // `// ...` so the tag-matching regex doesn't catch tag-shaped
     // text inside docs / commented-out code.
-    let out = src.replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
+    //
+    // Multi-line comments are blanked rather than deleted: deleting them removed
+    // their newlines too, so every violation after a JSDoc block was reported at
+    // the wrong line (a 13-line block shifted everything below it up by 12).
+    // Line numbers that point at the wrong code make the audit untrustworthy.
+    let out = src.replace(/\{\/\*[\s\S]*?\*\/\}/g, blankKeepingLines);
     out = out.replace(/\/\/[^\n]*/g, '');
-    out = out.replace(/\/\*[\s\S]*?\*\//g, '');
+    out = out.replace(/\/\*[\s\S]*?\*\//g, blankKeepingLines);
     return out;
 }
 
@@ -282,17 +293,31 @@ function auditFile(file, rawSrc) {
             }
         }
 
-        // 4. <textarea>
+        // 4. <textarea> / <Textarea>. Same acceptance set as <input> above: this
+        // rule used to check ONLY aria-label/aria-labelledby/placeholder, so it
+        // false-positived on the wallet's own <Textarea label="..."> primitive,
+        // which associates a real <label htmlFor> with the control (Textarea.jsx)
+        // and is perfectly accessible. A rule that flags the correct pattern is
+        // worse than no rule: it trains people to ignore the audit.
         if (/^textarea$/i.test(tag)) {
             const hasAriaLabel = /\baria-label\s*=/.test(attrs)
                 || /\baria-labelledby\s*=/.test(attrs);
+            const hasLabelProp = /\blabel\s*=/.test(attrs);
             const hasPlaceholder = /\bplaceholder\s*=/.test(attrs);
-            if (!hasAriaLabel && !hasPlaceholder) {
+            const idMatch = /\bid\s*=\s*"([^"]+)"/.exec(attrs);
+            const hasMatchingHtmlForLabel = idMatch
+                && findIdReferencedLabel(src, idMatch[1]);
+            const hasDynamicHtmlForLabel = fileHasAnyHtmlForLabel(src);
+            if (!hasAriaLabel
+                && !hasLabelProp
+                && !hasPlaceholder
+                && !hasMatchingHtmlForLabel
+                && !hasDynamicHtmlForLabel) {
                 violations.push({
                     file,
                     line: startLine,
                     rule: RULES.TEXTAREA_NEEDS_LABEL,
-                    message: '<textarea> needs aria-label / aria-labelledby / placeholder',
+                    message: '<textarea> / <Textarea> needs label= / aria-label / aria-labelledby / placeholder / matching <label htmlFor>',
                     snippet,
                 });
             }

@@ -61,7 +61,9 @@ assert.ok(/export \{ InfoTip \} from '\.\/InfoTip\.jsx'/.test(indexSrc),
 // 6. Five integration sites import + invoke <InfoTip ...>.
 const integrations = [
     { src: sendSrc, file: 'Send.jsx', match: /aria="Replace-by-fee help"/ },
-    { src: feeSelSrc, file: 'FeeSelector.jsx', match: /aria="Network fee help"/ },
+    // Match any aria string: the point is that FeeSelector MOUNTS an InfoTip, not
+    // what that tip's aria label happens to be worded as this month.
+    { src: feeSelSrc, file: 'FeeSelector.jsx', match: /<InfoTip\s+aria="[^"]+"/ },
     { src: createSrc, file: 'CreateWallet.jsx', match: /aria="BIP39 passphrase help"/ },
     { src: dpSrc, file: 'DerivationPathCrossCheck.jsx', match: /aria="Derivation path help"/ },
     { src: adsSrc, file: 'AdsSection.jsx', match: /aria="Trigger threshold help"/ },

@@ -39,6 +39,20 @@ export async function resolveSdkFactory({ devMockFactory }) {
             source: 'real',
         };
     } catch (err) {
+        // A shipped wallet must NEVER silently fall back to the mock SDK: it
+        // serves fabricated addresses and balances, and signing/broadcast do not
+        // work. A user cannot tell the difference by looking. Fail loudly in a
+        // production build. See the web shell's sdkFactory for the full rationale;
+        // `import.meta.env.PROD` is statically replaced by Vite, so the dev-mock
+        // branch (and its warning string) is eliminated from the release artifact,
+        // which is what lets check-no-dev-mock.sh actually mean something.
+        if (import.meta.env.PROD) {
+            throw new Error(
+                '[xchain-wallet/extension] xchain-sdk failed to load in a production build; '
+                + 'refusing to fall back to the dev-mock SDK (it serves fake data). Reason: '
+                + (err?.message || err),
+            );
+        }
         if (!warned) {
             warned = true;
             // eslint-disable-next-line no-console -- intentional one-time diagnostic in the background service worker when xchain-sdk fails to load

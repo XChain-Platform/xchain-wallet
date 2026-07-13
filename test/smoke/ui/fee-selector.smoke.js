@@ -80,7 +80,14 @@ assert.match(cmp, /Fee estimate unavailable for this chain\./, 'empty-state copy
 
 // --- contextual help (§37 / G122 InfoTip) ------------------------------
 
-assert.match(cmp, /aria="Network fee help"/, 'fee selector carries the Network-fee InfoTip');
+// Anchor on the InfoTip's actual help copy rather than its `aria` string, which
+// was renamed ("Network fee help" -> "Fee priority help") in a UI pass without
+// changing the behaviour this smoke exists to protect.
+assert.match(
+    cmp,
+    /<InfoTip[\s\S]{0,80}?label="Pick how fast this transaction confirms/,
+    'fee selector carries the fee-priority InfoTip',
+);
 
 // --- CSS hooks ---------------------------------------------------------
 

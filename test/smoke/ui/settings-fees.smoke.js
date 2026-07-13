@@ -53,7 +53,10 @@ assert.match(src, /fees\.strategy === 'custom'/, 'custom-rate input gated on cus
 assert.match(src, /sats \/ KB/, 'custom rate is sats/KB');
 
 // RBF toggle present and disabled when descriptor doesn't support RBF
-assert.match(src, /label="RBF by default"/, 'RBF toggle present');
+// Anchor on the state the toggle is bound to, not its display copy: the wording
+// is deliberately reworded for plain language from time to time, and pinning the
+// label makes a copy edit look like a lost feature.
+assert.match(src, /checked=\{Boolean\(fees\.rbfByDefault\)\}/, 'RBF toggle present');
 assert.match(src, /disabled=\{!descriptor\?\.feeStrategy\?\.rbfSupported\}/, 'RBF toggle gates on chain support');
 
 // Empty-state message when no fee profiles present

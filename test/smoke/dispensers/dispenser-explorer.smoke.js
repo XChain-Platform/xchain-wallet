@@ -146,7 +146,10 @@ assert.ok(
     'pay-here panel calls out the bare-coin-payment UX expectation',
 );
 assert.ok(
-    /inherent risk of UTXO-chain/.test(detailSrc),
+    // Copy reworded for plain language ("inherent risk of UTXO-chain buys" ->
+    // "a normal risk when buying on these chains"). The WARNING is what matters:
+    // pin the substance (payment reaches the creator, nothing is released).
+    /the payment reaches the creator but[\s\S]{0,40}?no \{giveTick\} is released/.test(detailSrc),
     'token-paid review stage warns about UTXO-chain buy race',
 );
 assert.ok(

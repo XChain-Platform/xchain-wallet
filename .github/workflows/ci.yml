@@ -7,7 +7,10 @@ on:
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
+
 jobs:
+  # Unit + security + smoke. `pnpm run ci` is the same gate bin/ci-all.sh and the
+  # pre-push hook run, so local and CI cannot disagree about what "green" means.
   test:
     runs-on: ubuntu-latest
     steps:
@@ -25,3 +28,52 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Run test gate
         run: pnpm run ci
+
+  # Build the shipped shells, then run the gates that can ONLY be checked against a
+  # real build artifact. None of this can live in the `test` job: it has no dist/.
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enable pnpm (corepack)
+        run: corepack enable
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build all packages
+        run: pnpm -r --if-present build
+      # A shipped bundle must not be able to reach the dev-mock SDK: it serves
+      # fabricated addresses and balances that a user cannot tell from real ones.
+      # The sdkFactories refuse it under import.meta.env.PROD, so Vite eliminates
+      # that branch from the artifact and this grep is real evidence.
+      - name: No dev-mock SDK in the shipped bundles
+        run: bash tools/build-reproduce/check-no-dev-mock.sh
+      # Every integrity hash in the built index.html must match the bytes of the
+      # asset it points at. A mismatch does not weaken SRI, it bricks the page: the
+      # browser refuses to execute the bundle.
+      - name: Subresource Integrity hashes match the built assets
+        run: node test/smoke/security/web-sri.smoke.js
+
+  # Vulnerabilities in code that actually SHIPS. Deliberately --prod: the dev
+  # toolchain's advisories (vitest's UI server, vite's dev-server path handling)
+  # never reach a user, and blocking every push on them trains people to ignore the
+  # gate. Production deps currently carry no high/critical advisory.
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enable pnpm (corepack)
+        run: corepack enable
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Audit production dependencies
+        run: pnpm audit --prod --audit-level=high

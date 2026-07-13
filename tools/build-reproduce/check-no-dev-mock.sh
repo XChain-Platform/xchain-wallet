@@ -1,16 +1,28 @@
 #!/usr/bin/env bash
 # check-no-dev-mock.sh - pre-release gate.
 #
-# Greps `dist/` bundles for the dev-mock SDK fallback warning. Presence
-# of that string in a production build means xchain-sdk didn't resolve
-# during the Vite bundle pass - shipping it would produce pseudo-addresses
-# on mainnet. Hard-fails the release pipeline.
+# Greps the EXECUTABLE `dist/` bundles for the dev-mock SDK fallback. The dev-mock
+# SDK serves fabricated addresses and balances and cannot sign or broadcast;
+# shipping a bundle that can reach it would put pseudo-addresses in front of a
+# mainnet user, who has no way to tell by looking. Hard-fails the release.
+#
+# Why this check is meaningful (it previously was not): the fallback lives in a
+# catch branch in each shell's sdkFactory, so its warning string used to be
+# compiled into EVERY build, good or bad, and this grep tripped on a perfectly
+# healthy bundle. It only ever "passed" because CI never built, so dist/ never
+# existed. The sdkFactories now refuse the fallback under `import.meta.env.PROD`,
+# which Vite statically replaces, so a production build dead-code-eliminates the
+# dev-mock branch entirely. Absence of the marker is therefore real evidence.
+#
+# Sourcemaps are EXCLUDED: a .map file embeds the original source by definition,
+# so it will always contain the string, and it is never executed. Scanning them
+# would make this gate unsatisfiable again.
 #
 # Usage:
 #   bash tools/build-reproduce/check-no-dev-mock.sh
 #
 # Runs in CI post-build via:
-#   .github/workflows/release.yml (planned)
+#   .github/workflows/ci.yml (build job)
 set -euo pipefail
 
 DIST_DIRS=(
@@ -32,9 +44,9 @@ for dir in "${DIST_DIRS[@]}"; do
         continue
     fi
     for marker in "${MARKERS[@]}"; do
-        if grep -r -l -F "$marker" "$dir" > /dev/null 2>&1; then
+        if grep -r -l -F --exclude='*.map' "$marker" "$dir" > /dev/null 2>&1; then
             echo "FAIL $dir contains dev-SDK marker: \"$marker\""
-            grep -r -l -F "$marker" "$dir" | sed 's/^/    /'
+            grep -r -l -F --exclude='*.map' "$marker" "$dir" | sed 's/^/    /'
             failures=$((failures + 1))
         fi
     done

@@ -65,9 +65,13 @@ const requiredTerms = [
     'reproducible build', 'synchronized versioning',
     'RELEASE_HASHES.txt', 'smoke', 'spec gap ledger', 'cluster',
 ];
+// Separator: a hyphen, a colon, or (legacy) the long dash. The glossary used the
+// long dash until the repo-wide de-em-dash pass rewrote every entry to a hyphen;
+// this smoke still only accepted the old two, so all 45 terms "failed" while the
+// doc was perfectly well-formed. Accept the house style.
 for (const term of requiredTerms) {
     const escaped = term.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
-    const re = new RegExp(`\\*\\*${escaped}\\*\\*\\s*([\u2014:])`);
+    const re = new RegExp(`\\*\\*${escaped}\\*\\*\\s*([-:\u2014])`);
     assert.ok(re.test(docSrc),
         `glossary defines: **${term}** (followed by definition separator)`);
 }

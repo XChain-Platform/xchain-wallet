@@ -128,9 +128,12 @@ assert.match(
 
 // ─── 4. open-scanner reset ──────────────────────────────────────────────
 
+// Tolerate the braced form: a second reset (the UR fountain decoder) was added
+// alongside this one, so the single-statement `if (x) f()` became a block. The
+// property being pinned is the RESET ON OPEN, not the brace style.
 assert.match(
     formSrc,
-    /if \(scannerOpen\) setXcwCollector\(createXcwCollector\(\)\)/,
+    /if \(scannerOpen\)[\s\S]{0,120}?setXcwCollector\(createXcwCollector\(\)\)/,
     'opening the scanner resets the XCW collector',
 );
 

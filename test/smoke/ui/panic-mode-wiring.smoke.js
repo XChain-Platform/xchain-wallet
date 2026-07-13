@@ -128,7 +128,12 @@ assert.ok(
 // trace. Pin the write-before-broadcast ordering.
 const sigIdx = hostSrc.indexOf("host.register('broadcast.signedTx'");
 assert.notEqual(sigIdx, -1, 'broadcast.signedTx handler present');
-const sigBlock = hostSrc.slice(sigIdx, sigIdx + 2400);
+// Slice to the START OF THE NEXT handler, not a magic character count. A fixed
+// window silently truncates as soon as the handler grows (which is exactly what
+// happened: an added audit comment pushed the broadcastTx call past a 2400-char
+// cutoff, so this smoke "failed" while the invariant it guards was intact).
+const sigEnd = hostSrc.indexOf("host.register(", sigIdx + 1);
+const sigBlock = hostSrc.slice(sigIdx, sigEnd === -1 ? undefined : sigEnd);
 const auditPutIdx = sigBlock.indexOf('vault.pendingTxs.put(pending)');
 const auditBcIdx = sigBlock.indexOf('await sdk.encoder.broadcastTx(txHex)');
 assert.match(sigBlock, /schemas\.createPendingTx\(/, 'broadcast.signedTx builds a PendingTx audit record');

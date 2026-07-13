@@ -114,7 +114,10 @@ assert.ok(
     'ContractsList surfaces the empty "My contracts" state per chain',
 );
 assert.ok(
-    /No deposit or withdraw/i.test(listSrc),
+    // The copy is now built from the shared display map (it still RENDERS as
+    // "No deposit or withdraw actions recorded..."), so the phrase no longer
+    // exists as one literal in source. Pin the construction.
+    /actionDisplayLabel\('DEPOSIT'\)[\s\S]{0,60}?actionDisplayLabel\('WITHDRAW'\)[\s\S]{0,40}?actions recorded/.test(listSrc),
     'ContractsList surfaces the empty "My interactions" state per chain',
 );
 assert.ok(
