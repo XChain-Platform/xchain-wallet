@@ -58,6 +58,63 @@ jobs:
       - name: Subresource Integrity hashes match the built assets
         run: node test/smoke/security/web-sri.smoke.js
 
+  # Coverage ratchet (G166). Separate from `test` so the pre-push gate stays
+  # fast: instrumenting the run costs real time and nobody should pay it twice.
+  # The thresholds live in test/vitest/unit.config.js and sit just under today's
+  # numbers, so this job goes red on a REGRESSION, not on an aspiration.
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enable pnpm (corepack)
+        run: corepack enable
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Unit coverage vs thresholds
+        run: pnpm test:unit:coverage
+
+  # Browser-driven E2E against the web shell (Playwright).
+  #
+  # This job is the whole point of the suite. It previously existed but nothing
+  # ran it, and it died quietly: onboarding grew three screens (license gate,
+  # recovery-phrase verification, ADS consent) and every one of the 15 specs
+  # broke at the first click. A test suite nobody runs is not a safety net, it
+  # is a claim of one. It cannot live in `pnpm run ci` -- it needs a browser and
+  # a dev server, which the unit gate must not depend on -- so it gets its own
+  # job here, and now every push proves it.
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enable pnpm (corepack)
+        run: corepack enable
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      # Browser binaries are not in the pnpm store; fetch them explicitly.
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+      # The config spawns the Vite dev server itself (webServer), so there is
+      # nothing to start here. CI=1 makes it refuse to reuse a stray server.
+      - name: Run E2E suite
+        run: pnpm test:e2e
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: test/e2e/playwright-report/
+          retention-days: 7
+
   # Vulnerabilities in code that actually SHIPS. Deliberately --prod: the dev
   # toolchain's advisories (vitest's UI server, vite's dev-server path handling)
   # never reach a user, and blocking every push on them trains people to ignore the

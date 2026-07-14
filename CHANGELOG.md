@@ -16,10 +16,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `bin/sync-chain-registry.mjs`: snapshots the bundled chain descriptors into the hub's served `GET /api/v1/chain-registry` payload (drift-guarded in platform CI).
 - Agent-account management UI (§22 P4): provision wizard, policy editor, and account list/detail with an enable/disable toggle, wired across all three shells (Bitcoin only at launch).
 
+### Added
+- E2E suite runs in CI (new `e2e` job) and a coverage ratchet gates unit coverage against per-metric thresholds (new `coverage` job).
+- Shared Playwright fixture (`test/e2e/fixtures/wallet.js`) owning the cold-browser to unlocked-Home walk, plus a dedicated spec for the license-acceptance gate.
+
 ### Changed
 - Drop internal-service jargon from user-facing copy across ~14 staking/contract/poll/dispenser screens: "the indexer" now reads as "the network", and the "hub PBFT" consensus jargon is gone from the delegate-key hint and revocation message.
+- E2E a11y scans settle animations before analysing and now cover the license gate, recovery-phrase verification, and donation-consent screens.
 
 ### Fixed
+- Revive the Playwright E2E suite: all 15 specs had rotted to failing against three onboarding screens added since they were written (license gate, recovery-phrase verification, donation consent), unnoticed because nothing ran them.
+- Re-anchor the e2e and a11y harness smokes, which pinned literal test titles and an unsound UI-label substring check and so stayed green while every spec they guarded was broken.
 - Contract EXECUTE form: a malformed contract `abi` (a method whose `params` is not an array) no longer white-screens the wallet; the abi is sanitized before render and falls back to the manual lane.
 - Contract EXECUTE form: clear stale manual-lane params when an ABI method is auto-selected, so the auto-switch can't submit leftover params.
 - Desktop preload converted to CommonJS (`preload.cjs`): Electron cannot load ESM preloads under `sandbox: true`, so no contextBridge API was ever exposed and every renderer-to-main call failed in dev and packaged builds.

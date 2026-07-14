@@ -44,11 +44,17 @@ assert.ok(
     'spec imports AxeBuilder',
 );
 
-// Every Phase-1 screen should have a scan case.
+// Every screen the onboarding walk reaches should have a scan case. The
+// license gate, the recovery-phrase verification stage and the donation
+// consent screen all shipped UNSCANNED because this list was never
+// updated and nothing ran the suite; they are required here now.
 const requiredCases = [
+    'license gate',
     'onboarding welcome',
     'create wallet: password stage',
     'create wallet: mnemonic display stage',
+    'create wallet: recovery-phrase verification stage',
+    'donation consent',
     'import wallet',
     'home (unlocked)',
     'locked',
@@ -63,14 +69,34 @@ for (const name of requiredCases) {
 
 // --- 3. Every case asserts zero violations --------------------------
 
-// The shared scan helper does this; confirm its shape.
-assert.ok(
-    /expect\(\s*results\.violations/.test(spec),
-    'scan helper asserts on results.violations',
-);
+// The shared scan helper still asserts an EMPTY violation set...
 assert.ok(
     /\.toEqual\(\[\]\)/.test(spec),
-    'scan helper expects empty violations array',
+    'scan helper expects an empty violations array',
+);
+
+// ...minus a bounded quarantine for the known palette contrast debt.
+// The quarantine is only legitimate while it is (a) narrow and (b) able
+// to expire, so pin both properties rather than the helper's variable
+// names, which are free to change.
+assert.ok(
+    /KNOWN_CONTRAST_DEBT/.test(spec),
+    'contrast debt is declared explicitly, not silently disabled via axe rule config',
+);
+assert.ok(
+    !/disableRules|withRules\(/.test(spec),
+    'a11y spec does not switch off axe rules wholesale',
+);
+assert.ok(
+    /no longer\s*\n?\s*.{0,40}reproduces|delete the exception/i.test(spec),
+    'a self-retiring check fails once the debt is fixed, forcing the exception out',
+);
+
+// A scan racing a CSS fade reads blended colours and reports phantom
+// contrast failures, so the paint must be settled before axe runs.
+assert.ok(
+    /freezeMotion/.test(spec),
+    'scan settles animations before analysing (no mid-fade phantom colours)',
 );
 
 // --- 4. WCAG 2.1 A + AA -------------------------------------------

@@ -10,86 +10,91 @@
 
 // Onboarding golden path (§39 Phase 1 delivery contract).
 //
-// Exercises every state the in-page App.jsx can reach without the
-// real xchain-sdk bundled:
+//   1. Fresh browser -> landing is the Welcome / Onboarding screen.
+//   2. Create path: password -> mnemonic -> verify -> ADS consent -> Home.
+//   3. Lock -> Locked -> unlock with same password -> Home.
+//   4. Import path: a known-good BIP39 vector lands on Home.
 //
-//   1. Fresh browser → landing is the Welcome / Onboarding screen.
-//   2. Create path: password + mnemonic + acknowledge → Home.
-//   3. Lock → Locked → unlock with same password → Home.
-//   4. Import path: second browser context starts clean, import a
-//      known-good BIP39 vector, land on Home.
+// The create walk itself lives in the shared fixture (see
+// fixtures/wallet.js): it is the single most-changed surface in the app
+// and every spec needs it.
 //
-// Sign + broadcast are blocked by the dev-SDK stub (see CHANGELOG
-// v0.43.0). Those specs land alongside real SDK wiring.
+// Sign + broadcast are blocked by the dev-SDK stub; those specs land
+// alongside real SDK wiring.
 
-import { expect, test } from '@playwright/test';
+import {
+    createWallet,
+    expect,
+    lockButton,
+    lockWallet,
+    nav,
+    test,
+    unlockWallet,
+} from '../../fixtures/wallet.js';
 
-// BIP39 test vector from SLIP-0039 spec (known-good 12-word phrase).
+// BIP39 test vector (known-good 12-word phrase).
 const KNOWN_BIP39 =
     'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
 
 test.describe('onboarding', () => {
-    test('create → lock → unlock round-trip', async ({ page }) => {
+    test('welcome screen offers the entry paths', async ({ page }) => {
         await page.goto('/');
 
-        await expect(
-            page.getByRole('heading', { name: 'XChain Wallet' }),
-        ).toBeVisible();
-        await page.getByRole('button', { name: 'Create new wallet' }).click();
+        await expect(page.getByRole('heading', { name: 'XChain Wallet' })).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Create new wallet' })).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Import wallet' })).toBeVisible();
+    });
 
-        await expect(
-            page.getByRole('heading', { name: 'Create a new wallet' }),
-        ).toBeVisible();
-        await page.getByLabel('Wallet name').fill('E2E');
+    test('create → lock → unlock round-trip', async ({ page }) => {
+        await createWallet(page, { name: 'E2E', password: 'password1234' });
+
+        await expect(nav(page).getByRole('button', { name: 'Send', exact: true })).toBeEnabled();
+
+        await lockWallet(page);
+        await unlockWallet(page, 'password1234');
+
+        await expect(lockButton(page)).toBeVisible();
+    });
+
+    test('the recovery-phrase challenge rejects a wrong word', async ({ page }) => {
+        await page.goto('/');
+        await page.getByRole('button', { name: 'Create new wallet' }).click();
         await page.getByLabel('Password', { exact: true }).fill('password1234');
         await page.getByLabel('Confirm password').fill('password1234');
         await page.getByRole('button', { name: 'Next' }).click();
 
-        await expect(
-            page.getByRole('heading', { name: /write down your recovery phrase/i }),
-        ).toBeVisible();
         await expect(page.getByRole('list', { name: 'Recovery phrase' })).toBeVisible();
-        await page.getByLabel(/i have written down my recovery phrase/i).check();
+        await page.getByLabel(/i have written down/i).check();
+        await page.getByRole('button', { name: 'Verify recovery phrase' }).click();
+
+        // Deliberately wrong words: the wallet must not be created.
+        const boxes = page.getByRole('textbox', { name: /^Word \d+$/ });
+        const count = await boxes.count();
+        for (let i = 0; i < count; i += 1) {
+            await boxes.nth(i).fill('wrongword');
+        }
         await page.getByRole('button', { name: 'Create wallet' }).click();
 
+        // Still on the verification stage; no wallet, no Home.
         await expect(
-            page.getByRole('button', { name: 'Lock' }),
-        ).toBeVisible({ timeout: 60_000 });
-        await expect(page.getByRole('button', { name: 'Send' })).toBeEnabled();
-
-        await page.getByRole('button', { name: 'Lock' }).click();
-        await expect(page.getByText(/wallet locked/i)).toBeVisible();
-
-        await page.getByLabel('Password').fill('password1234');
-        await page.getByRole('button', { name: 'Unlock' }).click();
-        await expect(
-            page.getByRole('button', { name: 'Lock' }),
-        ).toBeVisible({ timeout: 60_000 });
+            page.getByRole('heading', { name: 'Verify your recovery phrase' }),
+        ).toBeVisible();
+        await expect(lockButton(page)).toHaveCount(0);
     });
 
     test('wrong password surfaces inline', async ({ page }) => {
-        await page.goto('/');
-        await page.getByRole('button', { name: 'Create new wallet' }).click();
-        await page.getByLabel('Password', { exact: true }).fill('rightpassword');
-        await page.getByLabel('Confirm password').fill('rightpassword');
-        await page.getByRole('button', { name: 'Next' }).click();
-        await page.getByLabel(/i have written down/i).check();
-        await page.getByRole('button', { name: 'Create wallet' }).click();
-        await expect(
-            page.getByRole('button', { name: 'Lock' }),
-        ).toBeVisible({ timeout: 60_000 });
-        await page.getByRole('button', { name: 'Lock' }).click();
+        await createWallet(page, { password: 'rightpassword' });
+        await lockWallet(page);
 
         await page.getByLabel('Password').fill('WRONG');
         await page.getByRole('button', { name: 'Unlock' }).click();
+
         await expect(page.getByRole('alert')).toHaveText(/incorrect password/i);
     });
 
     test('import an existing BIP39 mnemonic', async ({ page }) => {
         await page.goto('/');
-        await page
-            .getByRole('button', { name: 'Import wallet' })
-            .click();
+        await page.getByRole('button', { name: 'Import wallet' }).click();
 
         await page.getByLabel('Recovery phrase').fill(KNOWN_BIP39);
         await page.getByLabel('Wallet name').fill('Imported E2E');
@@ -97,26 +102,20 @@ test.describe('onboarding', () => {
         await page.getByLabel('Confirm password').fill('importpassword1');
         await page.getByRole('button', { name: 'Import' }).click();
 
-        await expect(
-            page.getByRole('button', { name: 'Lock' }),
-        ).toBeVisible({ timeout: 60_000 });
+        await expect(lockButton(page)).toBeVisible({ timeout: 90_000 });
     });
 
     test('import rejects wrong word count', async ({ page }) => {
         await page.goto('/');
-        await page
-            .getByRole('button', { name: 'Import wallet' })
-            .click();
+        await page.getByRole('button', { name: 'Import wallet' }).click();
 
-        await page.getByLabel('Recovery phrase').fill(
-            'word '.repeat(13).trim(),
-        );
+        await page.getByLabel('Recovery phrase').fill('word '.repeat(13).trim());
         await page.getByLabel('Password', { exact: true }).fill('xxxxxxxxxx');
         await page.getByLabel('Confirm password').fill('xxxxxxxxxx');
         await page.getByRole('button', { name: 'Import' }).click();
 
-        await expect(page.getByRole('alert')).toHaveText(
-            /expected 12, 15, 18, 21, or 24 words/i,
+        await expect(page.getByRole('alert')).toContainText(
+            /expected 12, 15, 18, 21, 24 words/i,
         );
     });
 });

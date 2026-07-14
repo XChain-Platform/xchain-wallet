@@ -56,92 +56,94 @@ assert.ok(
 
 // --- 3. Specs exist + cover the documented flows --------------------
 
-const onboardingSpec = readFileSync(
-    join(e2e, 'tests', 'onboarding', 'onboarding.spec.js'),
-    'utf8',
-);
-for (const phrase of [
-    'create → lock → unlock round-trip',
-    'wrong password surfaces inline',
-    'import an existing BIP39 mnemonic',
-    'import rejects wrong word count',
-    'Create new wallet',
-    'Import wallet',
-]) {
-    assert.ok(onboardingSpec.includes(phrase), `onboarding spec mentions "${phrase}"`);
+const specs = {
+    onboarding: join(e2e, 'tests', 'onboarding', 'onboarding.spec.js'),
+    licenseGate: join(e2e, 'tests', 'onboarding', 'license-gate.spec.js'),
+    send: join(e2e, 'tests', 'send', 'send-form.spec.js'),
+    a11y: join(e2e, 'tests', 'a11y', 'a11y.spec.js'),
+};
+for (const [name, file] of Object.entries(specs)) {
+    assert.ok(existsSync(file), `${name} spec exists`);
 }
 
-const sendSpec = readFileSync(
-    join(e2e, 'tests', 'send', 'send-form.spec.js'),
-    'utf8',
-);
-for (const phrase of [
-    'review + back preserves form state',
-    'protocol-forbidden memo characters are rejected',
-    'zero amount is rejected',
-    'broadcast attempt surfaces SDK-stub error',
-]) {
-    assert.ok(sendSpec.includes(phrase), `send spec mentions "${phrase}"`);
+// --- 5. Every spec drives the app through the SHARED fixture --------
+//
+// This is the invariant that keeps the suite alive. Onboarding is the
+// most-churned surface in the wallet: it grew a license gate, a
+// recovery-phrase verification stage and a donation-consent screen, and
+// because all 15 specs had each inlined their own copy of the create-
+// wallet walk, every one of them broke at the first click. The walk now
+// lives in exactly one place. A spec that re-implements it is a spec
+// that will rot on the next onboarding change.
+//
+// Deliberately NOT asserted here: individual test titles or UI copy. The
+// previous version of this smoke grepped for phrases like "review + back
+// preserves form state" and a list of button labels, which is why it
+// stayed green while every spec it was guarding was broken -- it pinned
+// the suite's prose, not its behaviour. Whether the specs actually pass
+// is the E2E job's business (see below), not a source-scanner's.
+// (The onboarding and a11y specs still drive the creation screens
+// directly -- one tests that walk, the other scans its intermediate
+// stages -- so "never touch onboarding" is not the rule. The rule is
+// that the walk has ONE canonical implementation and every spec that
+// just needs a wallet calls it.)
+for (const [name, file] of Object.entries(specs)) {
+    const src = readFileSync(file, 'utf8');
+    assert.ok(
+        /from '\.\.\/\.\.\/fixtures\/wallet\.js'/.test(src),
+        `${name} spec imports the shared wallet fixture`,
+    );
 }
+const sendSrc = readFileSync(specs.send, 'utf8');
+assert.ok(
+    /createWallet\(/.test(sendSrc),
+    'send spec seeds its wallet through the fixture helper, not an inlined walk',
+);
 
-// --- 4. README --------------------------------------------------------
+// --- 6. The license-gate bypass tracks the app's own constant -------
+//
+// The fixture seeds the acceptance keys so specs land on Welcome. That
+// bypass MUST derive the version from buildInfo.js: acceptance is
+// version-bound, so a hardcoded literal would silently stop matching on
+// the next terms bump and the gate would re-fire in front of every spec
+// -- resurrecting exactly the failure this suite just recovered from.
+const fixture = readFileSync(join(e2e, 'fixtures', 'wallet.js'), 'utf8');
+assert.ok(
+    /import \{ LICENSE_VERSION \} from '.*buildInfo\.js'/.test(fixture),
+    'fixture imports LICENSE_VERSION from the app rather than hardcoding it',
+);
+assert.ok(
+    /acceptLicense/.test(fixture),
+    'fixture exposes an acceptLicense option so the gate itself stays testable',
+);
+
+// --- 7. CI actually RUNS the suite ----------------------------------
+//
+// The root cause of the rot. The specs, the config and the browsers were
+// all present and correct; nothing executed them, so they decayed into
+// 15/15 failing without a single red build. A suite that no job runs is
+// not a safety net, it is a claim of one.
+const ci = readFileSync(join(wsRoot, '.github', 'workflows', 'ci.yml'), 'utf8');
+assert.ok(/^\s{2}e2e:/m.test(ci), 'ci.yml defines an e2e job');
+assert.ok(/pnpm test:e2e/.test(ci), 'ci.yml runs the e2e suite');
+assert.ok(
+    /playwright install/.test(ci),
+    'ci.yml installs the browser binaries the suite needs',
+);
+
+// --- 8. Artifacts do not leak into the repo -------------------------
+
+const gitignore = readFileSync(join(wsRoot, '.gitignore'), 'utf8');
+assert.ok(
+    /test\/e2e\/test-results/.test(gitignore),
+    '.gitignore covers Playwright test-results (traces, videos, screenshots)',
+);
 
 const readme = readFileSync(join(e2e, 'README.md'), 'utf8');
 assert.ok(readme.length > 200, 'README is non-trivial');
 assert.ok(/playwright/i.test(readme), 'README mentions playwright');
 
-// --- 5. CI workflow check removed ------------------------------------
-//
-// `.github/workflows/ci.yml` was removed at v0.54.0 to match the rest
-// of the xchain-* platform (none of the sibling services ship a
-// GitHub Actions workflow during the build phase). The test suite
-// still runs locally via `node packages/core/test/_run-smokes.js` and
-// Playwright runs via `pnpm --filter @xchain-wallet/e2e test`.
-
-// --- 6. test-results is git-ignored ---------------------------------
-
-const gitignore = readFileSync(join(wsRoot, '.gitignore'), 'utf8');
-// Nothing explicit yet; Playwright's default outputDir is
-// `./test-results` inside e2e. Add a pattern so runs don't leak.
-assert.ok(
-    /test-results/.test(gitignore) || /e2e\/test-results/.test(gitignore) || true,
-    'smoke note: test-results gitignore check deferred to piece 17',
-);
-
-// --- 7. Spec references do not depend on unshipped selectors --------
-
-// Sanity: every `getByRole({ name: ... })` target that a spec asserts
-// exists corresponds to a button label that actually renders.
-// Specs assert these labels; they must match the current UI copy.
-const expectedLabels = [
-    'Create new wallet',
-    'Import wallet',
-    'Next',
-    'Create wallet',
-    'Lock',
-    'Unlock',
-    'Send',
-    'Review',
-    'Back',
-    'Import',
-];
-// Every Phase-1 route lives under @xchain-wallet/core/shared/routes/
-// post-refactor; the UI corpus cross-check reads them all from there.
-const sharedRoutes = join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes');
-const homeJsx = readFileSync(join(sharedRoutes, 'Home.jsx'), 'utf8');
-const onboardingJsx = readFileSync(join(sharedRoutes, 'Onboarding.jsx'), 'utf8');
-const createJsx = readFileSync(join(sharedRoutes, 'CreateWallet.jsx'), 'utf8');
-const importJsx = readFileSync(join(sharedRoutes, 'ImportWallet.jsx'), 'utf8');
-const sendJsx = readFileSync(join(sharedRoutes, 'Send.jsx'), 'utf8');
-const lockedJsx = readFileSync(join(sharedRoutes, 'Locked.jsx'), 'utf8');
-const uiCorpus = [homeJsx, onboardingJsx, createJsx, importJsx, sendJsx, lockedJsx].join('\n');
-for (const label of expectedLabels) {
-    assert.ok(
-        uiCorpus.includes(label),
-        `UI corpus contains spec-referenced label "${label}"`,
-    );
-}
-
 console.log(
-    'OK: e2e harness smoke (workspace, playwright.config, onboarding + send specs, README, UI-label cross-check)',
+    'OK: e2e harness smoke (workspace + config wiring, 4 specs on the shared fixture, '
+    + 'license bypass tracks buildInfo, CI runs the suite, artifacts gitignored)',
 );
