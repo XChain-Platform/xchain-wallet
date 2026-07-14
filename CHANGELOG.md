@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - E2E suite runs in CI (new `e2e` job) and a coverage ratchet gates unit coverage against per-metric thresholds (new `coverage` job).
+- Shell integration tests for the background message host, which all three shells route every privileged operation through; the integration suite now runs in the `pnpm ci` gate, where it previously ran nowhere.
 - Shared Playwright fixture (`test/e2e/fixtures/wallet.js`) owning the cold-browser to unlocked-Home walk, plus a dedicated spec for the license-acceptance gate.
 
 ### Changed
