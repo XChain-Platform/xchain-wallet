@@ -33,7 +33,7 @@
 //       getSignerStatus={messaging.getSignerStatus}
 //   />
 
-import { Input } from '../../ui/index.js';
+import { Input, StatusMessage } from '../../ui/index.js';
 import { HwSignBlock } from './HwSignBlock.jsx';
 
 /**
@@ -88,20 +88,34 @@ export function SignCredentials({
     // Unlocked software session: no password needed ("password only at
     // unlock"). Show a brief note instead of the input; the form's submit
     // gate is relaxed in parallel (see useSignerReady).
+    //
+    // `submitError` MUST still render here . The locked branch below
+    // carries the error on the password Input, and the calling forms only
+    // render their own error banner for the watcher / hardware paths -- so
+    // when this branch returned the note ALONE, a failed submit on an unlocked
+    // software wallet had nowhere to surface. Pressing Sign did nothing, with
+    // no error, no busy state and no console output: the user cannot tell a
+    // rejected transaction from a dead button, and the natural response is to
+    // press it again.
     if (unlocked) {
         return (
-            <p
-                style={{
-                    margin: 'var(--xc-space-2) 0 0',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 'var(--xc-space-1)',
-                    fontSize: 'var(--xc-text-sm)',
-                    color: 'var(--xc-text-muted)',
-                }}
-            >
-                <span aria-hidden="true">🔓</span> Wallet unlocked. No password needed.
-            </p>
+            <>
+                <p
+                    style={{
+                        margin: 'var(--xc-space-2) 0 0',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 'var(--xc-space-1)',
+                        fontSize: 'var(--xc-text-sm)',
+                        color: 'var(--xc-text-muted)',
+                    }}
+                >
+                    <span aria-hidden="true">🔓</span> Wallet unlocked. No password needed.
+                </p>
+                {submitError ? (
+                    <StatusMessage variant="error">{submitError}</StatusMessage>
+                ) : null}
+            </>
         );
     }
     return (

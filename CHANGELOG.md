@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - E2E a11y scans settle animations before analysing and now cover the license gate, recovery-phrase verification, and donation-consent screens.
 
 ### Fixed
+- A failed transaction on an unlocked wallet is now shown to the user: the error surface lived on the password field, which isn't rendered once the session is unlocked, so every signing form silently swallowed submit failures (insufficient funds, encoder and broadcast errors) and pressing Sign looked like a dead button.
 - Revive the Playwright E2E suite: all 15 specs had rotted to failing against three onboarding screens added since they were written (license gate, recovery-phrase verification, donation consent), unnoticed because nothing ran them.
 - Re-anchor the e2e and a11y harness smokes, which pinned literal test titles and an unsound UI-label substring check and so stayed green while every spec they guarded was broken.
 - Contract EXECUTE form: a malformed contract `abi` (a method whose `params` is not an array) no longer white-screens the wallet; the abi is sanitized before render and falls back to the manual lane.

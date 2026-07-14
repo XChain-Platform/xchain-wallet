@@ -94,29 +94,23 @@ test.describe('send form', () => {
         await expect(page.getByRole('button', { name: /Sign on Bitcoin/ })).toBeVisible();
     });
 
-    test.fail(
-        'signing surfaces an outcome instead of silently doing nothing',
-        async ({ page }) => {
-            // KNOWN BUG . The dev-mock SDK cannot sign -- by design, it
-            // throws "Dev SDK stub: signing requires the real xchain-sdk". But the
-            // rejection is swallowed: pressing "Sign on Bitcoin" leaves the confirm
-            // stage untouched for 30s+ with no alert, no navigation, no busy state
-            // and not even a console error. A signing failure the user cannot see is
-            // the worst class of wallet bug, and an earlier version of this spec
-            // asserted exactly this invariant ("surfaces SDK-stub error instead of
-            // hanging") -- it regressed while the suite sat un-run.
-            //
-            // Marked test.fail() rather than deleted: Playwright still RUNS it, and
-            // will fail the suite if it ever PASSES. So the day signing reports its
-            // failure, this annotation has to come off. It cannot rot into a lie.
-            await toField(page).fill(VALID_BTC);
-            await amountField(page).fill('0.001');
-            await mainButton(page, 'Send').click();
+    test('a failed signing attempt surfaces an error ', async ({ page }) => {
+        // REGRESSION GUARD. A failing submit on an UNLOCKED software wallet used
+        // to vanish: the error surface lived on the password Input, which is not
+        // rendered once the session is unlocked, and the forms only showed their
+        // own error banner for the watcher / hardware paths. So pressing "Sign"
+        // left the confirm stage untouched with no alert, no busy state and no
+        // console error -- indistinguishable from a dead button.
+        //
+        // Here the dev-mock SDK cannot sign and rejects by design, which is a
+        // perfectly good failure to render. What matters is that the user is
+        // TOLD something went wrong rather than left staring at a stuck screen.
+        await toField(page).fill(VALID_BTC);
+        await amountField(page).fill('0.001');
+        await mainButton(page, 'Send').click();
 
-            await page.getByRole('button', { name: /Sign on Bitcoin/ }).click();
+        await page.getByRole('button', { name: /Sign on Bitcoin/ }).click();
 
-            // Either outcome is acceptable; silence is not.
-            await expect(page.getByRole('alert').first()).toBeVisible({ timeout: 15_000 });
-        },
-    );
+        await expect(page.getByRole('alert').first()).toBeVisible({ timeout: 20_000 });
+    });
 });

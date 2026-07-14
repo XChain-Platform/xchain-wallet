@@ -1284,7 +1284,14 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                         error={submitError || undefined}
                     />
                 )}
-                {(isWatcherMode || isHwSource) && submitError ? (
+                {/*
+                  * The password Input (the branch above, shown only when the
+                  * wallet is LOCKED) carries submitError on its `error` prop.
+                  * Every other path needs this banner -- including the unlocked
+                  * software path, which previously had no error surface at all,
+                  * so a failed send simply vanished .
+                  */}
+                {submitError && (isWatcherMode || isHwSource || signerReady) ? (
                     <StatusMessage
                         variant="error"
                         recovery={
