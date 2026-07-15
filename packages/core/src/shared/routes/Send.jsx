@@ -54,6 +54,7 @@ import { useToast } from '../components/ToastHost.jsx';
 import { AmountField } from '../components/AmountField.jsx';
 import { useHaptic } from '../hooks/useHaptic.js';
 import { useFormDraft } from '../hooks/useFormDraft.js';
+import { useScreenShortcuts } from '../keyboard/useScreenShortcuts.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import {
     formatWithThousands,
@@ -158,6 +159,21 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
     const { settings } = useSettings();
     const { showToast } = useToast();
     const haptic = useHaptic();
+
+    // §34.2: Cmd/Ctrl+Enter submits the visible stage's form (compose ->
+    // review, review -> sign). requestSubmit (not submit()) so the form's
+    // onSubmit validation path runs exactly as if the button was clicked.
+    useScreenShortcuts({
+        keys: {
+            'mod+enter': () => {
+                const form = document.getElementById('send-form')
+                    || document.getElementById('send-review-form');
+                if (!form) return false;
+                form.requestSubmit();
+                return true;
+            },
+        },
+    });
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -1144,7 +1160,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
 
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
-            <form onSubmit={handleSubmit} noValidate>
+            <form id="send-review-form" onSubmit={handleSubmit} noValidate>
                 <p className={styles.summary}>{decoded?.summary}</p>
                 <BalanceChanges
                     result={previewResult}

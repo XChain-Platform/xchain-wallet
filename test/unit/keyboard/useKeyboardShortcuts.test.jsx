@@ -93,6 +93,19 @@ describe('useKeyboardShortcuts', () => {
         expect(h.lock).toHaveBeenCalledOnce();
     });
 
+    it('honors §34.1 overrides: the rebound key fires, the default goes dead', () => {
+        const handlers = { navigate: vi.fn(), lock: vi.fn(), openHelp: vi.fn() };
+        function Rebound() {
+            useKeyboardShortcuts({ enabled: true, overrides: { lock: 'mod+j' }, handlers });
+            return null;
+        }
+        render(<Rebound />);
+        press({ key: 'l', ctrlKey: true });
+        expect(handlers.lock).not.toHaveBeenCalled();
+        press({ key: 'j', ctrlKey: true });
+        expect(handlers.lock).toHaveBeenCalledOnce();
+    });
+
     it('does nothing when disabled', () => {
         const h = setup({ enabled: false });
         press({ key: 'l', ctrlKey: true });

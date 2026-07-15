@@ -32,9 +32,11 @@ describe('SHORTCUTS table', () => {
     it('marks the command-palette entry as display-only (owned by useCommandPalette)', () => {
         const palette = SHORTCUTS.find((s) => s.id === 'command-palette');
         expect(palette.dispatch).toBe(false);
-        // Everything else is dispatchable.
+        // Everything else is either globally dispatched or a §34.2 context
+        // shortcut (action 'ctx:*', dispatched inside its route component).
         for (const s of SHORTCUTS.filter((x) => x.id !== 'command-palette')) {
-            expect(s.dispatch).toBe(true);
+            if (s.action.startsWith('ctx:')) expect(s.dispatch).toBe(false);
+            else expect(s.dispatch).toBe(true);
         }
     });
 });

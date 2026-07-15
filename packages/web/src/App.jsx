@@ -58,7 +58,8 @@ import { LeftNav, FullLayoutWithNav } from '@xchain-wallet/core/shared/component
 import { AppHeader } from '@xchain-wallet/core/shared/components/AppHeader.jsx';
 import { CommandPalette } from '@xchain-wallet/core/shared/commandPalette/CommandPalette.jsx';
 import { useCommandPalette } from '@xchain-wallet/core/shared/commandPalette/useCommandPalette.js';
-import { buildCommands, contactsToCommands, parseFreeformCommands } from '@xchain-wallet/core/shared/commandPalette/commandRegistry.js';
+import { buildCommands, contactsToCommands, parseFreeformCommands, balancesToCommands, sitesToCommands, settingsSectionsToCommands, helpToCommands } from '@xchain-wallet/core/shared/commandPalette/commandRegistry.js';
+import { buildBalanceRows } from '@xchain-wallet/core/shared/components/BalanceList.jsx';
 import { useKeyboardShortcuts } from '@xchain-wallet/core/shared/keyboard/useKeyboardShortcuts.js';
 import { ShortcutHelp } from '@xchain-wallet/core/shared/keyboard/ShortcutHelp.jsx';
 import { MenuRoute } from '@xchain-wallet/core/shared/routes/MenuRoute.jsx';
@@ -194,6 +195,9 @@ function AppInner() {
     const { variant } = useActiveVariant();
     const isFull = variant === 'full';
     const { showToast } = useToast();
+    // §34.1: settings carry the keyboard-shortcut overrides threaded into
+    // the palette hook, the dispatcher, and the help modal below.
+    const { settings } = useSettings();
     const [status, setStatus] = useState(/** @type {any} */ ({ state: 'loading' }));
     const [onboardingStep, setOnboardingStep] = useState(
         /** @type {'welcome' | 'create' | 'import' | 'import-freewallet'} */ ('welcome'),
@@ -310,25 +314,49 @@ function AppInner() {
     // §33 command palette: Cmd/Ctrl+K opens a launcher over every action and
     // destination. The global shortcut is inert unless the wallet is unlocked
     // (nothing to navigate to on the Locked / onboarding screens).
-    const palette = useCommandPalette({ enabled: status.state === 'unlocked' });
+    const palette = useCommandPalette({
+        enabled: status.state === 'unlocked',
+        binding: settings?.keyboard?.bindings?.['command-palette'],
+    });
     // Contacts feed the palette's fuzzy search (§33.2). Loaded lazily the
     // first time the palette opens so a locked/never-opened session pays
     // nothing; refreshed on each open so newly-saved contacts appear.
     const [paletteContacts, setPaletteContacts] = useState(/** @type {any[]} */ ([]));
+    //  entity search: token balances + connected sites join contacts in
+    // the palette's searchable surface. Same lazy contract: loaded on each
+    // open (each is one host round-trip), and a failed load just leaves that
+    // entity family out of the results.
+    const [paletteTokenRows, setPaletteTokenRows] = useState(/** @type {any[]} */ ([]));
+    const [paletteSites, setPaletteSites] = useState(/** @type {any[]} */ ([]));
     useEffect(() => {
         if (!palette.open || status.state !== 'unlocked' || !activeWalletId) return undefined;
         let cancelled = false;
         messaging.listContacts()
             .then((rows) => { if (!cancelled) setPaletteContacts(Array.isArray(rows) ? rows : []); })
             .catch(() => { /* palette still works without contacts */ });
+        messaging.getWalletBalances(activeWalletId, activeAccountId)
+            .then((balances) => {
+                if (cancelled) return;
+                setPaletteTokenRows(buildBalanceRows(balances, APP_CHAIN_REGISTRY, null));
+            })
+            .catch(() => { /* palette still works without token rows */ });
+        messaging.listConnectedSites()
+            .then((sites) => { if (!cancelled) setPaletteSites(Array.isArray(sites) ? sites : []); })
+            .catch(() => { /* palette still works without sites */ });
         return () => { cancelled = true; };
-    }, [palette.open, status.state, activeWalletId]);
+    }, [palette.open, status.state, activeWalletId, activeAccountId]);
     // §34 keyboard shortcuts: global core set + `g`-leader nav + the `?`
     // help modal. Disabled while locked, while the palette owns the keys, and
     // while the help modal itself is open.
     const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
+    // : which Settings section a palette deep-link should open.
+    // Cleared when the user backs out of Settings.
+    const [settingsInitialSection, setSettingsInitialSection] = useState(
+        /** @type {string | null} */ (null),
+    );
     useKeyboardShortcuts({
         enabled: status.state === 'unlocked' && !palette.open && !shortcutHelpOpen,
+        overrides: settings?.keyboard?.bindings,
         handlers: {
             navigate: setUnlockedView,
             lock: () => { lockWallet().then(refresh).catch(() => refresh()); },
@@ -1725,18 +1753,23 @@ function AppInner() {
                 // Connected Sites drilldown (§35.9 / G108) so the spec's
                 // implied "Connected" left-nav row has somewhere to land.
                 const activeWallet = walletList.find((w) => w.id === activeWalletId) || null;
+                // : palette deep-links land on a specific section via
+                // settingsInitialSection; the key forces a remount when the
+                // target changes while Settings is already the active view.
+                const settingsSubpage = unlockedView === 'connected-sites'
+                    ? 'connected-sites'
+                    : settingsInitialSection;
                 return (
                     <Settings
-                        onBack={() => setUnlockedView('home')}
+                        key={settingsSubpage || 'root'}
+                        onBack={() => { setSettingsInitialSection(null); setUnlockedView('home'); }}
                         activeWallet={activeWallet}
                         activeAccount={null}
                         onOpenWalletPicker={() => setUnlockedView('wallet-picker')}
                         onOpenAccountPicker={
                             activeWalletId ? () => setUnlockedView('account-picker') : undefined
                         }
-                        initialSubpageId={
-                            unlockedView === 'connected-sites' ? 'connected-sites' : null
-                        }
+                        initialSubpageId={settingsSubpage}
                     />
                 );
             }
@@ -1985,18 +2018,44 @@ function AppInner() {
                 hasBtcAddress,
                 hasGovernanceAddress,
             };
+            //  entity handlers: tokens open TokenDetail with the full
+            // ref the row already carries; sites land on the Connected Sites
+            // drilldown; settings sections deep-link via
+            // settingsInitialSection; help topics reuse both.
+            const openSettingsSection = (sectionId) => {
+                if (sectionId === 'connected-sites') { setUnlockedView('connected-sites'); return; }
+                setSettingsInitialSection(sectionId);
+                setUnlockedView('settings');
+            };
+            const paletteEntityCtx = {
+                openToken: (tok) => { setTokenDetailRef(tok); setUnlockedView('token-detail'); },
+                openConnectedSites: () => setUnlockedView('connected-sites'),
+                openSettings: openSettingsSection,
+                openHelp: () => setShortcutHelpOpen(true),
+            };
             const paletteCommands = [
                 ...buildCommands(paletteCtx),
+                ...balancesToCommands(paletteTokenRows, paletteEntityCtx),
                 ...contactsToCommands(paletteContacts, { navigate: setUnlockedView }),
+                ...sitesToCommands(paletteSites, paletteEntityCtx),
+                ...settingsSectionsToCommands(paletteEntityCtx),
+                ...helpToCommands(paletteEntityCtx),
             ];
             // §33.3: free-form intents like "send 100 MYTOKEN" open Send
             // prefilled. Send falls back to the first chain when the prefill
-            // carries no chainId, so amount + tick alone is enough.
+            // carries no chainId, so amount + tick alone is enough. A
+            // txid/date-shaped query offers "search history" .
             const paletteParseQuery = (q) => parseFreeformCommands(q, {
                 composeSend: ({ amount, tick }) => {
                     setSendPrefill({ amount, tick });
                     setSendBackTo('home');
                     setUnlockedView('send');
+                },
+                searchHistory: (query) => {
+                    setHistoryInitialQuery(query);
+                    setHistoryInitialChainCoin('');
+                    setHistoryReturnTo('home');
+                    setUnlockedView('history');
                 },
             });
             return (
@@ -2112,7 +2171,7 @@ function AppInner() {
                         commands={paletteCommands}
                         parseQuery={paletteParseQuery}
                     />
-                    <ShortcutHelp open={shortcutHelpOpen} onClose={() => setShortcutHelpOpen(false)} />
+                    <ShortcutHelp open={shortcutHelpOpen} onClose={() => setShortcutHelpOpen(false)} overrides={settings?.keyboard?.bindings} />
                 </FullLayoutWithNav>
             );
         }

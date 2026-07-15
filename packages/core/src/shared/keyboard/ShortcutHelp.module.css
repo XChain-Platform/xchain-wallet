@@ -88,3 +88,9 @@
     padding: 2px 7px;
     white-space: nowrap;
 }
+
+.footerNote {
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    margin: var(--xc-space-3) 0 0;
+}

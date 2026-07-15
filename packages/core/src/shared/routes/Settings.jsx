@@ -21,6 +21,7 @@ import { ConnectedSitesSection } from '../components/settings/ConnectedSitesSect
 import { ContactsSection } from '../components/settings/ContactsSection.jsx';
 import { DeveloperModeSection } from '../components/settings/DeveloperModeSection.jsx';
 import { DisplaySection } from '../components/settings/DisplaySection.jsx';
+import { KeyboardSection } from '../components/settings/KeyboardSection.jsx';
 import { FeesSection } from '../components/settings/FeesSection.jsx';
 import { LanguageRegionSection } from '../components/settings/LanguageRegionSection.jsx';
 import { NetworkEndpointsSection } from '../components/settings/NetworkEndpointsSection.jsx';
@@ -127,6 +128,15 @@ export function Settings({
             summary: displaySummary(settings),
         },
         {
+            id: 'keyboard',
+            title: 'Keyboard',
+            description: 'Keyboard shortcuts: view and rebind.',
+            keywords: 'keyboard shortcuts rebind keys hotkeys bindings palette',
+            kind: 'internal-drill',
+            Component: KeyboardSection,
+            summary: keyboardSummary(settings),
+        },
+        {
             id: 'language-region',
             title: 'Language & Region',
             description: 'Language, currency.',
@@ -183,10 +193,12 @@ export function Settings({
         {
             id: 'network',
             title: 'Network',
-            description: settings.developerMode
+            // Optional-chained: settings is null until the async read lands,
+            // and the section list renders during that window.
+            description: settings?.developerMode
                 ? 'Choose Mainnet, Testnet, or Regtest. Filters every visible chain and stops queries to the inactive networks. The page reloads on change.'
                 : 'Choose Mainnet or Testnet. Filters every visible chain and stops queries to the inactive networks. The page reloads on change.',
-            keywords: settings.developerMode
+            keywords: settings?.developerMode
                 ? 'network mainnet testnet regtest active filter chain switch mode dev'
                 : 'network mainnet testnet active filter chain switch mode',
             kind: 'panel',
@@ -504,6 +516,12 @@ function displaySummary(settings) {
     if (pinned > 0) parts.push(`${pinned} pinned`);
     if (hidden > 0) parts.push(`${hidden} hidden`);
     return parts.join(' · ');
+}
+
+function keyboardSummary(settings) {
+    if (!settings) return '-';
+    const n = Object.keys(settings.keyboard?.bindings || {}).length;
+    return n === 0 ? 'Defaults' : `${n} custom`;
 }
 
 function walletModeSummary(settings) {

@@ -19,6 +19,7 @@ import { useSettings } from '../hooks/useSettings.js';
 import { useProofVerification } from '../hooks/useProofVerification.js';
 import { HomeTabs } from '../components/HomeTabs.jsx';
 import { buildBalanceRows, detectSpamCandidates } from '../components/BalanceList.jsx';
+import { useScreenShortcuts } from '../keyboard/useScreenShortcuts.js';
 import { useToast } from '../components/ToastHost.jsx';
 import { BackupReminderCard } from '../components/BackupReminderCard.jsx';
 import { DemoBanner } from '../components/DemoBanner.jsx';
@@ -73,7 +74,7 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {(accountId: string) => void} [props.onSwitchAccount]   App-level setter for the active account (still used internally if a future inline picker lands)
  * @param {Array<{ id: string, label: string, description?: string, onSelect?: () => void }>} [props.extraActions]   §40+ entries surfaced in the small-mode pancake drawer; in full mode the host renders these via the dedicated ActionsMenu route
  */
-export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreateToken, onActions, onMyTokens, onMarketActivity, onMarkets, onDispensers, onResumeAirdrop, onResumeCoinpay, onMessaging, onContracts, onStaking, onHistory, onAddresses, onMigrateToBip39, onOpenWalletPicker, onOpenAccountPicker, onCrossChain, onContacts, onMultisig, onSignPsbt, onSignMessage, onVerifySignature, activeAccountId: activeAccountIdProp, onSwitchAccount, extraActions, onSelectToken, onSelectEntry, networkFilter: networkFilterProp, onNetworkFilterChange: onNetworkFilterChangeProp, tokenQuery: tokenQueryProp, onTokenQueryChange: onTokenQueryChangeProp }) {
+export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreateToken, onActions, onMyTokens, onMarketActivity, onMarkets, onDispensers, onResumeAirdrop, onResumeCoinpay, onMessaging, onContracts, onStaking, onHistory, onAddresses, onMigrateToBip39, onOpenWalletPicker, onOpenAccountPicker, onCrossChain, onContacts, onMultisig, onSignPsbt, onSignMessage, onVerifySignature, activeAccountId: activeAccountIdProp, onSwitchAccount, extraActions, onSelectToken, onSelectEntry, networkFilter: networkFilterProp, onNetworkFilterChange: onNetworkFilterChangeProp, tokenQuery: tokenQueryProp, onTokenQueryChange: onTokenQueryChangeProp, onCommandPalette }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -206,6 +207,47 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
             return next;
         });
     }, [messaging]);
+
+    // §34.2 Balances context shortcuts: p / h / o act on the balance row that
+    // currently has keyboard focus (rows are buttons, so Tab reaches them and
+    // each carries a data-balance-key stamp). No focused row -> the handler
+    // declines and the key does nothing, exactly like the spec's "selected
+    // token" precondition. Pin/hide respect the same opt-in affordance gates
+    // as the on-row buttons.
+    const focusedBalanceRow = useCallback(() => {
+        if (typeof document === 'undefined') return null;
+        const el = document.activeElement?.closest?.('[data-balance-key]');
+        const key = el?.getAttribute('data-balance-key');
+        if (!key || !balances) return null;
+        const rows = buildBalanceRows(balances, chainRegistry, activeByChain);
+        return rows.find((r) => `${r.chainId}:${r.tick}` === key) || null;
+    }, [balances, activeByChain]);
+
+    useScreenShortcuts({
+        enabled: !settingsOpen,
+        keys: {
+            p: () => {
+                const row = focusedBalanceRow();
+                if (!row || !showPinAffordance) return false;
+                const key = `${row.chainId}:${row.tick}`;
+                handleTogglePin(key, !pinnedTokens.includes(key));
+                return true;
+            },
+            h: () => {
+                const row = focusedBalanceRow();
+                if (!row || !showHideAffordance) return false;
+                const key = `${row.chainId}:${row.tick}`;
+                handleToggleHide(key, !hiddenTokens.includes(key));
+                return true;
+            },
+            o: () => {
+                const row = focusedBalanceRow();
+                if (!row || typeof onSelectToken !== 'function') return false;
+                onSelectToken(row);
+                return true;
+            },
+        },
+    });
 
     const handleToggleHide = useCallback((key, nextHidden) => {
         if (typeof key !== 'string' || !key) return;
@@ -701,6 +743,7 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
                         hiddenKeys={new Set(hiddenTokens)}
                         onToggleHide={showHideAffordance ? handleToggleHide : undefined}
                         verifyMap={verifyMap}
+                        onCommandPalette={onCommandPalette}
                         actions={(
                             <div className={styles.quickActions} role="group" aria-label="Quick actions">
                                 <button

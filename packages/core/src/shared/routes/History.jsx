@@ -37,6 +37,7 @@ import {
     STATUS_OPTIONS,
 } from '../utils/historyFilter.js';
 import { readChainSet, writeChainSet } from '../utils/chainFilterMemory.js';
+import { useScreenShortcuts } from '../keyboard/useScreenShortcuts.js';
 import styles from './History.module.css';
 
 const HISTORY_CHAIN_FILTER_KEY = 'history';
@@ -167,6 +168,18 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     // route resolves, ref-flag this so we don't re-select on every
     // re-render or after the user manually navigates away from the row.
     const initialFocusFiredRef = useRef(false);
+    const searchInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+
+    // §34.2 context shortcuts: '/' focuses the search input, 'e' opens the
+    // export modal. Single keys only, so they stay inert while any input has
+    // focus (useScreenShortcuts applies the same editable-target gate as the
+    // global dispatcher).
+    useScreenShortcuts({
+        keys: {
+            '/': () => { searchInputRef.current?.focus(); },
+            e: () => { setExportModalOpen(true); },
+        },
+    });
 
     // Step 1: resolve the wallet's addresses grouped by chainId.
     useEffect(() => {
@@ -640,6 +653,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 collapsible Filters section all in one container. */}
             <div className={styles.filterCard} role="group" aria-label="History filters">
                 <input
+                    ref={searchInputRef}
                     type="search"
                     className={styles.searchInput}
                     placeholder="Search action, address, token, txid, memo…"

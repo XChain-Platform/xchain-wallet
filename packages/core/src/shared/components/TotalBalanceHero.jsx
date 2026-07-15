@@ -33,8 +33,9 @@ import styles from './TotalBalanceHero.module.css';
  * @param {number | null} [props.lastSyncedAt]   Unix ms of the last successful balance fetch. Drives the staleness label rendered on the right of the note row.
  * @param {boolean} [props.filterOpen]           whether the inline filter row is currently shown; drives the filter button's pressed state
  * @param {() => void} [props.onToggleFilter]    when provided, renders a filter toggle button next to the chart toggle
+ * @param {() => void} [props.onCommandPalette]  when provided, renders a search button that opens the §33 command palette. The extension popup passes it (no AppHeader/LeftNav to host a trigger there); web + desktop leave it unset.
  */
-export function TotalBalanceHero({ rows, networkFilter, lastSyncedAt, filterOpen, onToggleFilter }) {
+export function TotalBalanceHero({ rows, networkFilter, lastSyncedAt, filterOpen, onToggleFilter, onCommandPalette }) {
     const { total, unpriced } = useMemo(() => sumFiatValue(rows), [rows]);
     const { settings } = useSettings();
     const { messaging } = useMessaging();
@@ -121,6 +122,18 @@ export function TotalBalanceHero({ rows, networkFilter, lastSyncedAt, filterOpen
                     ) : null}
                 </span>
                 <div className={styles.actions}>
+                    {typeof onCommandPalette === 'function' ? (
+                        <button
+                            type="button"
+                            className={styles.eye}
+                            onClick={onCommandPalette}
+                            aria-label="Open command palette"
+                            aria-keyshortcuts="Meta+K Control+K"
+                            title="Search (Cmd/Ctrl+K)"
+                        >
+                            <Icon.SearchIcon />
+                        </button>
+                    ) : null}
                     {typeof onToggleFilter === 'function' ? (
                         <button
                             type="button"

@@ -9,13 +9,14 @@
 // contact legal@dankest.llc.
 
 // §34.3 shortcut-help modal. Opened by `?` or Cmd/Ctrl+/ (see
-// useKeyboardShortcuts). Renders the SHORTCUTS table grouped by section, so it
-// is always in sync with what the dispatcher actually binds. Rebinding inline
-// (§34.1/§34.3) is a later item ; this is read-only for now.
+// useKeyboardShortcuts). Renders the effective (default + user-override)
+// bindings grouped by section, so it is always in sync with what the
+// dispatcher actually binds. Rebinding itself lives in Settings → Keyboard;
+// the footer points there.
 
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { Icon } from '../../ui/index.js';
-import { SHORTCUTS, SHORTCUT_GROUPS, formatBinding } from './shortcuts.js';
+import { SHORTCUT_GROUPS, formatBinding, resolveBindings } from './shortcuts.js';
 import styles from './ShortcutHelp.module.css';
 
 function isMac() {
@@ -28,8 +29,10 @@ function isMac() {
  * @param {object} props
  * @param {boolean} props.open
  * @param {() => void} props.onClose
+ * @param {Record<string, string>} [props.overrides]  settings.keyboard.bindings (§34.1)
  */
-export function ShortcutHelp({ open, onClose }) {
+export function ShortcutHelp({ open, onClose, overrides }) {
+    const shortcuts = useMemo(() => resolveBindings(overrides), [overrides]);
     useEffect(() => {
         if (!open) return undefined;
         const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); onClose(); } };
@@ -60,7 +63,7 @@ export function ShortcutHelp({ open, onClose }) {
                         <section key={group} className={styles.group}>
                             <h3 className={styles.groupTitle}>{group}</h3>
                             <dl className={styles.list}>
-                                {SHORTCUTS.filter((s) => s.group === group).map((s) => (
+                                {shortcuts.filter((s) => s.group === group).map((s) => (
                                     <div key={s.id} className={styles.row}>
                                         <dt className={styles.label}>{s.label}</dt>
                                         <dd className={styles.keys}>
@@ -77,6 +80,9 @@ export function ShortcutHelp({ open, onClose }) {
                             </dl>
                         </section>
                     ))}
+                    <p className={styles.footerNote}>
+                        Rebind shortcuts in Settings → Keyboard.
+                    </p>
                 </div>
             </div>
         </div>

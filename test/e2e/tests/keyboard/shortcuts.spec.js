@@ -42,3 +42,47 @@ test.describe('keyboard shortcuts', () => {
         await expect(unlockButton(page)).toBeVisible();
     });
 });
+
+// §34.1 rebinding + §34.2 context shortcuts ( residuals).
+test.describe('keyboard shortcut residuals', () => {
+    test('rebinding Lock wallet in Settings takes effect immediately', async ({ page }) => {
+        await createWallet(page);
+
+        // Palette deep-link into Settings -> Keyboard (also proves 's
+        // settings-section commands end-to-end).
+        await page.keyboard.press('ControlOrMeta+k');
+        await page.getByRole('dialog', { name: 'Command palette' })
+            .getByRole('combobox').fill('settings keyboard');
+        await page.keyboard.press('Enter');
+        await expect(page.getByText('Click Rebind, then press the new key combination.', { exact: false })).toBeVisible();
+
+        // Rebind Lock wallet to Cmd/Ctrl+J.
+        const lockRow = page.locator('div').filter({ hasText: /^Lock wallet/ }).last();
+        await lockRow.getByRole('button', { name: 'Rebind' }).click();
+        await page.keyboard.press('ControlOrMeta+j');
+        await expect(page.getByText(/Lock wallet is now/)).toBeVisible();
+
+        // The old combo is dead; the new one locks.
+        await page.keyboard.press('ControlOrMeta+l');
+        await expect(unlockButton(page)).toBeHidden();
+        await page.keyboard.press('ControlOrMeta+j');
+        await expect(unlockButton(page)).toBeVisible();
+    });
+
+    test('History: e opens the export modal, / focuses search (§34.2)', async ({ page }) => {
+        await createWallet(page);
+        await page.keyboard.press('g');
+        await page.keyboard.press('h');
+        await expect(nav(page).getByRole('button', { name: 'History', exact: true }))
+            .toHaveAttribute('aria-current', 'page');
+
+        await page.keyboard.press('/');
+        await expect(page.getByRole('searchbox', { name: 'Search history' })).toBeFocused();
+        // '/' inside the (now focused) input must NOT re-trigger; blur first.
+        await page.keyboard.press('Escape');
+        await page.getByRole('searchbox', { name: 'Search history' }).blur();
+
+        await page.keyboard.press('e');
+        await expect(page.getByRole('dialog', { name: 'Export history' })).toBeVisible();
+    });
+});

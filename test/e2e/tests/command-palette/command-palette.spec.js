@@ -71,4 +71,21 @@ test.describe('command palette', () => {
         await expect(dialog(page)).toBeHidden();
         await expect(navItem(page, 'Home')).toHaveAttribute('aria-current', 'page');
     });
+
+    test('token entity search opens TokenDetail with the full ref ', async ({ page }) => {
+        await createWallet(page);
+
+        // Balance rows join the palette's searchable surface on open. The
+        // fresh wallet carries the preview balance set, so a held token's
+        // tick resolves to a Tokens command that lands on its detail page.
+        await page.keyboard.press('ControlOrMeta+k');
+        await expect(dialog(page)).toBeVisible();
+        const input = dialog(page).getByRole('combobox');
+        await input.fill('pepecash');
+        const tokenOption = dialog(page).getByRole('option', { name: /Pepe Cash/ }).first();
+        await expect(tokenOption).toBeVisible();
+        await tokenOption.click();
+        await expect(dialog(page)).toBeHidden();
+        await expect(page.getByRole('main')).toContainText('PEPECASH');
+    });
 });

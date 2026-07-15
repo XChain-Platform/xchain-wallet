@@ -33,12 +33,15 @@ import { Icon } from '../../ui/index.js';
 export const COMMAND_CATEGORIES = /** @type {const} */ ([
     'Suggested',
     'Navigate',
+    'Tokens',
     'Create',
     'Trade',
     'Sign',
     'Contacts',
+    'Sites',
     'Wallet',
     'Settings',
+    'Help',
 ]);
 
 // §33.3 free-form query grammar. Kept intentionally small: "send"/"pay",
@@ -47,6 +50,15 @@ export const COMMAND_CATEGORIES = /** @type {const} */ ([
 // user just sees the normal fuzzy "Send" navigation command until they
 // finish typing.
 const SEND_QUERY_RE = /^(?:send|pay)\s+(\d+(?:\.\d+)?)\s+([a-z0-9]{1,32})\s*$/i;
+
+// §33.2 "History entries (txid / token / date prefix)". Instead of indexing
+// every history row (a per-address fan-out the palette shouldn't pay on each
+// open), a query that LOOKS like a history lookup yields a command that opens
+// the History route with its filter prefilled - History's own search already
+// matches txids, actions, and dates. Two shapes qualify: a hex string of 8+
+// chars (txid prefix) and a date prefix (YYYY, YYYY-MM, YYYY-MM-DD).
+const TXID_QUERY_RE = /^[0-9a-f]{8,64}$/i;
+const DATE_QUERY_RE = /^\d{4}(?:-\d{2}(?:-\d{2})?)?$/;
 
 /**
  * Parse a free-form palette query into synthetic action commands (§33.3).
@@ -60,7 +72,7 @@ const SEND_QUERY_RE = /^(?:send|pay)\s+(\d+(?:\.\d+)?)\s+([a-z0-9]{1,32})\s*$/i;
  * and prepends the result above the fuzzy matches.
  *
  * @param {string} rawQuery
- * @param {{ composeSend?: (intent: { amount: string, tick: string }) => void }} ctx
+ * @param {{ composeSend?: (intent: { amount: string, tick: string }) => void, searchHistory?: (query: string) => void }} ctx
  * @returns {import('./fuzzyMatch.js').Command[]}
  */
 export function parseFreeformCommands(rawQuery, ctx) {
@@ -80,6 +92,22 @@ export function parseFreeformCommands(rawQuery, ctx) {
             keywords: ['send', 'pay'],
             Icon: Icon.SendIcon,
             run: () => ctx.composeSend({ amount, tick }),
+        });
+    }
+
+    // History lookup by txid prefix or date prefix (§33.2). Gated on shapes
+    // that can't be an action/token name, so ordinary fuzzy queries never
+    // grow a noisy "search history" row above their real matches.
+    if (typeof ctx?.searchHistory === 'function'
+        && (TXID_QUERY_RE.test(query) || DATE_QUERY_RE.test(query))) {
+        out.push({
+            id: 'freeform-history-search',
+            category: 'Suggested',
+            title: `Search history for "${query}"`,
+            subtitle: 'Open History filtered to this query',
+            keywords: ['history', 'transaction', 'txid'],
+            Icon: Icon.HistoryIcon,
+            run: () => ctx.searchHistory(query),
         });
     }
 
@@ -222,6 +250,133 @@ export function contactsToCommands(contacts, ctx) {
             Icon: Icon.UserIcon,
             run: () => ctx.navigate('contacts'),
         });
+    }
+    return out;
+}
+
+/**
+ * Convert Home's balance rows into palette commands (§33.2 "Tokens").
+ * Rows come from `buildBalanceRows` and already carry the full ref
+ * TokenDetail needs, so `run` hands the whole row to a shell-supplied
+ * `openToken` (setTokenDetailRef + navigate('token-detail')). Skipped
+ * entirely when the shell doesn't wire `openToken`.
+ *
+ * @param {Array<{ chainId: string, tick: string, kind: string, displayName: string, chainShort?: string, chainDisplayName?: string }>} rows
+ * @param {{ openToken?: (row: object) => void }} ctx
+ * @returns {import('./fuzzyMatch.js').Command[]}
+ */
+export function balancesToCommands(rows, ctx) {
+    if (!Array.isArray(rows) || typeof ctx?.openToken !== 'function') return [];
+    const out = [];
+    for (const row of rows) {
+        if (!row || typeof row.chainId !== 'string' || typeof row.tick !== 'string') continue;
+        out.push({
+            id: `token-${row.chainId}-${row.tick}`,
+            category: 'Tokens',
+            title: row.displayName || row.tick,
+            subtitle: row.chainDisplayName ? `${row.tick} on ${row.chainDisplayName}` : row.tick,
+            keywords: ['token', row.tick, row.chainShort].filter(Boolean),
+            Icon: Icon.TokenIcon,
+            run: () => ctx.openToken(row),
+        });
+    }
+    return out;
+}
+
+/**
+ * Convert connected-site records into palette commands (§33.2 "Connected
+ * sites"). Each command opens the Connected Sites settings surface; a
+ * per-site detail deep-link would need selection state that surface doesn't
+ * expose yet. Skipped when the shell can't open that surface (extension
+ * popup, which has no connected-sites view).
+ *
+ * @param {Array<{ id: string, appName?: string, origin?: string }>} sites
+ * @param {{ openConnectedSites?: () => void }} ctx
+ * @returns {import('./fuzzyMatch.js').Command[]}
+ */
+export function sitesToCommands(sites, ctx) {
+    if (!Array.isArray(sites) || typeof ctx?.openConnectedSites !== 'function') return [];
+    const out = [];
+    for (const site of sites) {
+        if (!site || (!site.appName && !site.origin)) continue;
+        out.push({
+            id: `site-${site.id ?? site.origin}`,
+            category: 'Sites',
+            title: site.appName || site.origin,
+            subtitle: site.appName && site.origin ? `${site.origin} - manage permissions` : 'Manage permissions',
+            keywords: ['site', 'dapp', 'connected', site.origin].filter(Boolean),
+            Icon: Icon.LinkIcon,
+            run: () => ctx.openConnectedSites(),
+        });
+    }
+    return out;
+}
+
+// §33.2 "Settings pages". Static mirror of the Settings.jsx section list
+// (ids must match SectionDef.id there; the shell-wiring smoke pins this).
+// Sections whose visibility is conditional in Settings (accounts-addresses)
+// or that duplicate a dedicated palette entry (connected-sites) are omitted.
+const SETTINGS_SECTIONS = /** @type {const} */ ([
+    { id: 'this-wallet', title: 'This Wallet', keywords: ['wallet', 'rename', 'remove'] },
+    { id: 'appearance', title: 'Appearance', keywords: ['theme', 'dark', 'light', 'accent'] },
+    { id: 'display', title: 'Display', keywords: ['pinned', 'hidden', 'tokens'] },
+    { id: 'keyboard', title: 'Keyboard', keywords: ['shortcuts', 'rebind', 'keys', 'hotkeys'] },
+    { id: 'language-region', title: 'Language & Region', keywords: ['language', 'currency', 'fiat'] },
+    { id: 'privacy', title: 'Privacy', keywords: ['tor', 'rotation', 'blur'] },
+    { id: 'safety', title: 'Safety', keywords: ['autolock', 'panic', 'undo'] },
+    { id: 'wallet-mode', title: 'Wallet Mode', keywords: ['watcher', 'signer', 'air-gapped'] },
+    { id: 'backup', title: 'Backup', keywords: ['seed', 'phrase', 'restore', 'export'] },
+    { id: 'fees', title: 'Fees', keywords: ['fee', 'rbf', 'strategy'] },
+    { id: 'network', title: 'Network', keywords: ['mainnet', 'testnet', 'regtest'] },
+    { id: 'network-endpoints', title: 'Network & Endpoints', keywords: ['explorer', 'encoder', 'hub', 'url'] },
+    { id: 'notifications', title: 'Notifications', keywords: ['alerts', 'notify'] },
+    { id: 'ads', title: 'Donations', keywords: ['donation', 'ads', 'support'] },
+    { id: 'developer', title: 'Developer', keywords: ['dev', 'debug', 'regtest'] },
+    { id: 'about', title: 'About', keywords: ['version', 'license'] },
+]);
+
+/**
+ * Settings-section deep-link commands (§33.2). `openSettings(sectionId)` is
+ * shell-supplied (sets the Settings initialSubpageId and navigates); when
+ * absent (extension popup has no Settings route) no commands are produced.
+ *
+ * @param {{ openSettings?: (sectionId: string) => void }} ctx
+ * @returns {import('./fuzzyMatch.js').Command[]}
+ */
+export function settingsSectionsToCommands(ctx) {
+    if (typeof ctx?.openSettings !== 'function') return [];
+    return SETTINGS_SECTIONS.map((s) => ({
+        id: `settings-${s.id}`,
+        category: 'Settings',
+        title: `Settings → ${s.title}`,
+        subtitle: 'Open this settings section',
+        keywords: ['settings', ...s.keywords],
+        Icon: Icon.GearIcon,
+        run: () => ctx.openSettings(s.id),
+    }));
+}
+
+/**
+ * Help-topic commands (§33.2 "Help topics"). The wallet has no learn-mode
+ * article surface yet, so each question routes to the closest real
+ * destination (a settings section or the shortcut cheatsheet). Entries
+ * whose destination handler is missing are dropped, mirroring the verb
+ * commands' incremental-adoption pattern.
+ *
+ * @param {{ openSettings?: (sectionId: string) => void, openHelp?: () => void }} ctx
+ * @returns {import('./fuzzyMatch.js').Command[]}
+ */
+export function helpToCommands(ctx) {
+    const out = [];
+    if (typeof ctx?.openSettings === 'function') {
+        out.push(
+            { id: 'help-backup', category: 'Help', title: 'How do I back up my wallet?', subtitle: 'Opens Settings → Backup', keywords: ['help', 'backup', 'seed', 'recovery'], Icon: Icon.InfoIcon, run: () => ctx.openSettings('backup') },
+            { id: 'help-connect-dapp', category: 'Help', title: 'How do I manage connected sites?', subtitle: 'Opens Settings → Connected sites', keywords: ['help', 'dapp', 'connect', 'permissions'], Icon: Icon.InfoIcon, run: () => ctx.openSettings('connected-sites') },
+            { id: 'help-panic', category: 'Help', title: 'What is panic mode?', subtitle: 'Opens Settings → Safety', keywords: ['help', 'panic', 'emergency', 'lock'], Icon: Icon.InfoIcon, run: () => ctx.openSettings('safety') },
+        );
+    }
+    if (typeof ctx?.openHelp === 'function') {
+        out.push({ id: 'help-keys', category: 'Help', title: 'What keyboard shortcuts are there?', subtitle: 'Opens the shortcut cheatsheet', keywords: ['help', 'keys', 'hotkeys', 'shortcuts'], Icon: Icon.InfoIcon, run: () => ctx.openHelp() });
     }
     return out;
 }

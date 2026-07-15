@@ -205,7 +205,11 @@ export function CommandPalette({ open, onClose, commands, placeholder, parseQuer
                         </li>
                     ) : (
                         groups.map((group) => (
-                            <li key={group.category} role="presentation">
+                            // Keyed by category + first flat index, NOT category
+                            // alone: results are score-sorted, so one category can
+                            // split into several consecutive-run groups per render,
+                            // and duplicate keys make React leave stale rows behind.
+                            <li key={`${group.category}-${group.rows[0].index}`} role="presentation">
                                 <div className={styles.groupHead} role="presentation">
                                     {group.category}
                                 </div>

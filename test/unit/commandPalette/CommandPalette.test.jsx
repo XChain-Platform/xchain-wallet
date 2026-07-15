@@ -126,4 +126,27 @@ describe('CommandPalette', () => {
         fireEvent.keyDown(getInput(), { key: 'Enter' });
         expect(run).toHaveBeenCalledOnce();
     });
+
+    it('re-renders cleanly when one category splits into multiple groups (no stale rows)', () => {
+        // Score-sorted results can interleave categories, so the same
+        // category renders as several consecutive-run groups. Group keys
+        // must stay unique or React leaves zombie option rows behind on
+        // the next keystroke (the  e2e regression).
+        const mk = (id, category, title) => ({ id, category, title, run: () => {} });
+        const commands = [
+            mk('a1', 'Navigate', 'alpha one'),
+            mk('s1', 'Settings', 'alpha settings'),
+            mk('a2', 'Navigate', 'alpha two'),
+            mk('s2', 'Settings', 'alpha more settings'),
+        ];
+        render(<CommandPalette open onClose={() => {}} commands={commands} />);
+        // 'alpha' matches all four; title scoring interleaves the categories.
+        fireEvent.change(getInput(), { target: { value: 'alpha' } });
+        expect(screen.getAllByRole('option')).toHaveLength(4);
+        // Narrowing must drop rows, not orphan them in the DOM.
+        fireEvent.change(getInput(), { target: { value: 'alpha one' } });
+        const after = screen.getAllByRole('option');
+        expect(after).toHaveLength(1);
+        expect(after[0]).toHaveTextContent('alpha one');
+    });
 });

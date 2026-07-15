@@ -32,6 +32,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLastView } from '@xchain-wallet/core/shared/hooks/useLastView.js';
+import { useSettings } from '@xchain-wallet/core/shared/hooks/useSettings.js';
 import { MessagingProvider } from '@xchain-wallet/core/shared/MessagingProvider.jsx';
 import { Loading } from '@xchain-wallet/core/shared/routes/Loading.jsx';
 import { Onboarding } from '@xchain-wallet/core/shared/routes/Onboarding.jsx';
@@ -120,7 +121,7 @@ import { getSessionStatus, listWallets, lockWallet, listAccounts } from './messa
 import { LeftNav, FullLayoutWithNav } from '@xchain-wallet/core/shared/components/LeftNav.jsx';
 import { CommandPalette } from '@xchain-wallet/core/shared/commandPalette/CommandPalette.jsx';
 import { useCommandPalette } from '@xchain-wallet/core/shared/commandPalette/useCommandPalette.js';
-import { buildCommands, contactsToCommands, parseFreeformCommands } from '@xchain-wallet/core/shared/commandPalette/commandRegistry.js';
+import { buildCommands, contactsToCommands, parseFreeformCommands, sitesToCommands, settingsSectionsToCommands, helpToCommands } from '@xchain-wallet/core/shared/commandPalette/commandRegistry.js';
 import { useKeyboardShortcuts } from '@xchain-wallet/core/shared/keyboard/useKeyboardShortcuts.js';
 import { ShortcutHelp } from '@xchain-wallet/core/shared/keyboard/ShortcutHelp.jsx';
 import { BottomTabBar } from '@xchain-wallet/core/shared/components/BottomTabBar.jsx';
@@ -140,6 +141,9 @@ export function App() {
 
 function AppInner() {
     const [status, setStatus] = useState(/** @type {any} */ ({ state: 'loading' }));
+    // Keyboard-binding overrides for the palette + shortcuts live in
+    // settings; null-safe reads below tolerate the pre-load window.
+    const { settings } = useSettings();
     const [onboardingStep, setOnboardingStep] = useState(
         /** @type {'welcome' | 'create' | 'import' | 'import-freewallet'} */ ('welcome'),
     );
@@ -197,20 +201,44 @@ function AppInner() {
     // §33 command palette: Cmd/Ctrl+K opens a launcher over every action and
     // destination. Inert unless unlocked. Contacts feed its fuzzy search and
     // are loaded lazily the first time it opens.
-    const palette = useCommandPalette({ enabled: status.state === 'unlocked' });
+    const palette = useCommandPalette({
+        enabled: status.state === 'unlocked',
+        binding: settings?.keyboard?.bindings?.['command-palette'],
+    });
     const [paletteContacts, setPaletteContacts] = useState(/** @type {any[]} */ ([]));
+    //  entity search: connected sites join contacts in the palette's
+    // searchable surface. Same lazy contract as contacts: loaded on each
+    // open, and a failed load just drops that entity family from the
+    // results. Token entities are deliberately NOT offered on desktop: the
+    // shell has no held-token detail view (no 'token-detail' route; its
+    // tokenDetailRef feeds the owner-gated ManageToken), so there is nowhere
+    // correct for a token command to land. (Desktop also exposes no
+    // connected-sites bridge, so the sites load is guarded and normally
+    // stays empty.)
+    const [paletteSites, setPaletteSites] = useState(/** @type {any[]} */ ([]));
     useEffect(() => {
         if (!palette.open || status.state !== 'unlocked' || !activeWalletId) return undefined;
         let cancelled = false;
         messaging.listContacts()
             .then((rows) => { if (!cancelled) setPaletteContacts(Array.isArray(rows) ? rows : []); })
             .catch(() => { /* palette still works without contacts */ });
+        if (typeof messaging.listConnectedSites === 'function') {
+            messaging.listConnectedSites()
+                .then((sites) => { if (!cancelled) setPaletteSites(Array.isArray(sites) ? sites : []); })
+                .catch(() => { /* palette still works without sites */ });
+        }
         return () => { cancelled = true; };
-    }, [palette.open, status.state, activeWalletId]);
+    }, [palette.open, status.state, activeWalletId, activeAccountId]);
     // §34 keyboard shortcuts (see the web shell for the reference wiring).
     const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
+    // : which Settings section a palette deep-link should open.
+    // Cleared when the user backs out of Settings.
+    const [settingsInitialSection, setSettingsInitialSection] = useState(
+        /** @type {string | null} */ (null),
+    );
     useKeyboardShortcuts({
         enabled: status.state === 'unlocked' && !palette.open && !shortcutHelpOpen,
+        overrides: settings?.keyboard?.bindings,
         handlers: {
             navigate: setUnlockedView,
             lock: () => { lockWallet().then(refresh).catch(() => refresh()); },
@@ -277,6 +305,14 @@ function AppInner() {
     );
     const [historyInitialFocus, setHistoryInitialFocus] = useState(
         /** @type {{ chainId?: string, actionIndex?: string, txHash?: string } | null} */ (null),
+    );
+    // : a palette "search history" intent pre-populates History's
+    // search box (and optionally scopes its chain filter) on entry, then
+    // returns to whichever view launched it. Empty = no scoping.
+    const [historyInitialQuery, setHistoryInitialQuery] = useState('');
+    const [historyInitialChainCoin, setHistoryInitialChainCoin] = useState('');
+    const [historyReturnTo, setHistoryReturnTo] = useState(
+        /** @type {string} */ ('home'),
     );
     // Lock in "this window was detached" at mount; the resume-skip
     // gate stays on for the lifetime of the window even after we
@@ -1202,7 +1238,9 @@ function AppInner() {
                     <History
                         walletId={activeWalletId}
                         accountId={activeAccountId || undefined}
-                        onBack={() => setUnlockedView('home')}
+                        onBack={() => setUnlockedView(historyReturnTo)}
+                        initialSearchQuery={historyInitialQuery}
+                        initialChainCoin={historyInitialChainCoin}
                         initialFocus={historyInitialFocus}
                     />
                 );
@@ -1335,18 +1373,23 @@ function AppInner() {
                 // route the web shell ships; 'connected-sites' deep-links
                 // into the Connected Sites drilldown.
                 const activeWallet = walletList.find((w) => w.id === activeWalletId) || null;
+                // : palette deep-links land on a specific section via
+                // settingsInitialSection; the key forces a remount when the
+                // target changes while Settings is already the active view.
+                const settingsSubpage = unlockedView === 'connected-sites'
+                    ? 'connected-sites'
+                    : settingsInitialSection;
                 return (
                     <Settings
-                        onBack={() => setUnlockedView('home')}
+                        key={settingsSubpage || 'root'}
+                        onBack={() => { setSettingsInitialSection(null); setUnlockedView('home'); }}
                         activeWallet={activeWallet}
                         activeAccount={null}
                         onOpenWalletPicker={() => setUnlockedView('wallet-picker')}
                         onOpenAccountPicker={
                             activeWalletId ? () => setUnlockedView('account-picker') : undefined
                         }
-                        initialSubpageId={
-                            unlockedView === 'connected-sites' ? 'connected-sites' : null
-                        }
+                        initialSubpageId={settingsSubpage}
                     />
                 );
             }
@@ -1533,17 +1576,42 @@ function AppInner() {
                 hasBtcAddress,
                 hasGovernanceAddress,
             };
+            //  entity handlers: sites land on the Connected Sites
+            // drilldown; settings sections deep-link via
+            // settingsInitialSection; help topics open the shortcut help
+            // modal. No openToken here: desktop has no held-token detail
+            // view, so token commands are intentionally absent.
+            const openSettingsSection = (sectionId) => {
+                if (sectionId === 'connected-sites') { setUnlockedView('connected-sites'); return; }
+                setSettingsInitialSection(sectionId);
+                setUnlockedView('settings');
+            };
+            const paletteEntityCtx = {
+                openConnectedSites: () => setUnlockedView('connected-sites'),
+                openSettings: openSettingsSection,
+                openHelp: () => setShortcutHelpOpen(true),
+            };
             const paletteCommands = [
                 ...buildCommands(paletteCtx),
                 ...contactsToCommands(paletteContacts, { navigate: setUnlockedView }),
+                ...sitesToCommands(paletteSites, paletteEntityCtx),
+                ...settingsSectionsToCommands(paletteEntityCtx),
+                ...helpToCommands(paletteEntityCtx),
             ];
             // §33.3: free-form "send 100 MYTOKEN" opens Send prefilled (Send
-            // resolves the chain from the first available when unset).
+            // resolves the chain from the first available when unset). A
+            // txid/date-shaped query offers "search history" .
             const paletteParseQuery = (q) => parseFreeformCommands(q, {
                 composeSend: ({ amount, tick }) => {
                     setSendPrefill({ amount, tick });
                     setSendBackTo('home');
                     setUnlockedView('send');
+                },
+                searchHistory: (query) => {
+                    setHistoryInitialQuery(query);
+                    setHistoryInitialChainCoin('');
+                    setHistoryReturnTo('home');
+                    setUnlockedView('history');
                 },
             });
             return (
@@ -1590,7 +1658,7 @@ function AppInner() {
                         commands={paletteCommands}
                         parseQuery={paletteParseQuery}
                     />
-                    <ShortcutHelp open={shortcutHelpOpen} onClose={() => setShortcutHelpOpen(false)} />
+                    <ShortcutHelp open={shortcutHelpOpen} onClose={() => setShortcutHelpOpen(false)} overrides={settings?.keyboard?.bindings} />
                 </FullLayoutWithNav>
             );
         }

@@ -24,10 +24,13 @@ import { useCallback, useEffect, useState } from 'react';
 /**
  * @param {object} [opts]
  * @param {boolean} [opts.enabled=true]  install the global shortcut listener
+ * @param {string} [opts.binding='mod+k']  §34.1: the (rebindable) combo that
+ *        toggles the palette; only 'mod+<key>' shapes are honored.
  * @returns {{ open: boolean, openPalette: () => void, closePalette: () => void, togglePalette: () => void }}
  */
 export function useCommandPalette(opts = {}) {
-    const { enabled = true } = opts;
+    const { enabled = true, binding = 'mod+k' } = opts;
+    const comboKey = binding.startsWith('mod+') ? binding.slice(4).toLowerCase() : 'k';
     const [open, setOpen] = useState(false);
 
     const openPalette = useCallback(() => setOpen(true), []);
@@ -44,18 +47,16 @@ export function useCommandPalette(opts = {}) {
     useEffect(() => {
         if (!enabled || typeof window === 'undefined') return undefined;
         const onKey = (e) => {
-            // Cmd+K (mac) / Ctrl+K (win/linux). metaKey guards against
-            // Ctrl+K in a browser that maps it elsewhere; we accept either
+            // Cmd+key (mac) / Ctrl+key (win/linux). We accept either
             // modifier so both platforms get the same binding.
-            const k = e.key === 'K' || e.key === 'k';
-            if (k && (e.metaKey || e.ctrlKey) && !e.altKey) {
+            if ((e.key || '').toLowerCase() === comboKey && (e.metaKey || e.ctrlKey) && !e.altKey) {
                 e.preventDefault();
                 setOpen((v) => !v);
             }
         };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
-    }, [enabled]);
+    }, [enabled, comboKey]);
 
     return { open, openPalette, closePalette, togglePalette };
 }

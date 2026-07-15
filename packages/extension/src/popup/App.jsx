@@ -48,7 +48,9 @@ import { Locked } from '@xchain-wallet/core/shared/routes/Locked.jsx';
 import { Home } from '@xchain-wallet/core/shared/routes/Home.jsx';
 import { CommandPalette } from '@xchain-wallet/core/shared/commandPalette/CommandPalette.jsx';
 import { useCommandPalette } from '@xchain-wallet/core/shared/commandPalette/useCommandPalette.js';
-import { buildCommands, contactsToCommands, parseFreeformCommands } from '@xchain-wallet/core/shared/commandPalette/commandRegistry.js';
+import { buildCommands, contactsToCommands, parseFreeformCommands, balancesToCommands, helpToCommands } from '@xchain-wallet/core/shared/commandPalette/commandRegistry.js';
+import { buildBalanceRows } from '@xchain-wallet/core/shared/components/BalanceList.jsx';
+import { useSettings } from '@xchain-wallet/core/shared/hooks/useSettings.js';
 import { useKeyboardShortcuts } from '@xchain-wallet/core/shared/keyboard/useKeyboardShortcuts.js';
 import { ShortcutHelp } from '@xchain-wallet/core/shared/keyboard/ShortcutHelp.jsx';
 import { TokenDetail } from '@xchain-wallet/core/shared/routes/TokenDetail.jsx';
@@ -436,16 +438,33 @@ function AppInner() {
     // §33 command palette: Cmd/Ctrl+K opens a launcher over every action and
     // destination. Inert unless unlocked; contacts feed its fuzzy search and
     // load lazily the first time it opens.
-    const palette = useCommandPalette({ enabled: status.state === 'unlocked' });
+    // Custom keybindings (if the user rebound anything) come from settings;
+    // absent settings just fall back to the built-in defaults inside each hook.
+    const { settings } = useSettings();
+    const palette = useCommandPalette({
+        enabled: status.state === 'unlocked',
+        binding: settings?.keyboard?.bindings?.['command-palette'],
+    });
     const [paletteContacts, setPaletteContacts] = useState(/** @type {any[]} */ ([]));
+    //  entity search: token balances join contacts in the palette's
+    // searchable surface (the popup has no connected-sites view, so sites are
+    // omitted here). Same lazy contract: loaded on each open, and a failed
+    // load just leaves the token rows out of the results.
+    const [paletteTokenRows, setPaletteTokenRows] = useState(/** @type {any[]} */ ([]));
     useEffect(() => {
         if (!palette.open || status.state !== 'unlocked' || !activeWalletId) return undefined;
         let cancelled = false;
         messaging.listContacts()
             .then((rows) => { if (!cancelled) setPaletteContacts(Array.isArray(rows) ? rows : []); })
             .catch(() => { /* palette still works without contacts */ });
+        messaging.getWalletBalances(activeWalletId, activeAccountId)
+            .then((balances) => {
+                if (cancelled) return;
+                setPaletteTokenRows(buildBalanceRows(balances, APP_CHAIN_REGISTRY, null));
+            })
+            .catch(() => { /* palette still works without token rows */ });
         return () => { cancelled = true; };
-    }, [palette.open, status.state, activeWalletId]);
+    }, [palette.open, status.state, activeWalletId, activeAccountId]);
     // Shared catalogue + lazily-loaded contacts; each run() closes over this
     // shell's setUnlockedView (see the web shell for reference wiring). The
     // popup locks via messaging.lockWallet (Home owns the visible Lock button).
@@ -460,21 +479,39 @@ function AppInner() {
             hasBtcAddress,
             hasGovernanceAddress,
         }),
+        // : token rows open TokenDetail with the full ref the row
+        // carries. Connected-sites and settings-section commands are omitted
+        // in the popup (no such views here).
+        ...balancesToCommands(paletteTokenRows, {
+            openToken: (tok) => { setTokenDetailRef(tok); setUnlockedView('token-detail'); },
+        }),
         ...contactsToCommands(paletteContacts, { navigate: setUnlockedView }),
+        // With only openHelp supplied this emits just the shortcut-help topic
+        // (settings-backed help topics are omitted; the popup has no Settings
+        // route).
+        ...helpToCommands({ openHelp: () => setShortcutHelpOpen(true) }),
     ];
     // §33.3: free-form "send 100 MYTOKEN" opens Send prefilled (Send resolves
-    // the chain from the first available when the prefill carries none).
+    // the chain from the first available when the prefill carries none). A
+    // txid/date-shaped query offers "search history" .
     const paletteParseQuery = (q) => parseFreeformCommands(q, {
         composeSend: ({ amount, tick }) => {
             setSendPrefill({ amount, tick });
             setSendBackTo('home');
             setUnlockedView('send');
         },
+        searchHistory: (query) => {
+            setHistoryInitialQuery(query);
+            setHistoryInitialChainCoin('');
+            setHistoryReturnTo('home');
+            setUnlockedView('history');
+        },
     });
     // §34 keyboard shortcuts (see the web shell for the reference wiring).
     const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
     useKeyboardShortcuts({
         enabled: status.state === 'unlocked' && !palette.open && !shortcutHelpOpen,
+        overrides: settings?.keyboard?.bindings,
         handlers: {
             navigate: setUnlockedView,
             lock: () => { messaging.lockWallet().then(refresh).catch(refresh); },
@@ -1692,6 +1729,7 @@ function AppInner() {
                         onVerifySignature={activeWalletId ? () => setUnlockedView('verify-signature') : undefined}
                         activeAccountId={activeAccountId}
                         onSwitchAccount={handleSwitchAccount}
+                        onCommandPalette={palette.openPalette}
                     />
                 </>
             );
@@ -1705,7 +1743,7 @@ function AppInner() {
                         commands={paletteCommands}
                         parseQuery={paletteParseQuery}
                     />
-                    <ShortcutHelp open={shortcutHelpOpen} onClose={() => setShortcutHelpOpen(false)} />
+                    <ShortcutHelp open={shortcutHelpOpen} onClose={() => setShortcutHelpOpen(false)} overrides={settings?.keyboard?.bindings} />
                 </>
             );
         }

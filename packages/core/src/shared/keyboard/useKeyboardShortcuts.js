@@ -23,49 +23,63 @@
 // command palette is open (its own input owns the keys), and while the shortcut
 // help modal is open (so nav keys can't fire behind it).
 
-import { useEffect, useRef } from 'react';
-import { SHORTCUTS, isEditableTarget, parseBinding } from './shortcuts.js';
+import { useEffect, useMemo, useRef } from 'react';
+import { isEditableTarget, parseBinding, resolveBindings } from './shortcuts.js';
 
-// How long a `g` leader stays armed waiting for the second key.
+// How long a leader key stays armed waiting for the second key.
 const LEADER_WINDOW_MS = 1200;
 
-// Precompute lookups from the static table (module-level: the table never
-// changes at runtime yet).
-const COMBO = new Map();   // key -> action
-const SINGLE = new Map();  // key -> action
-const LEADER = new Map();  // second-key -> action  (all lead on 'g' today)
-for (const s of SHORTCUTS) {
-    if (!s.dispatch) continue;
-    for (const binding of [s.binding, s.altBinding].filter(Boolean)) {
-        const p = parseBinding(binding);
-        if (p.kind === 'combo') COMBO.set(p.key, s.action);
-        else if (p.kind === 'single') SINGLE.set(p.key, s.action);
-        else LEADER.set(p.key, s.action);
+/**
+ * Build the dispatcher's lookup maps from the effective (default +
+ * user-override) bindings. Leader sequences map lead-key -> (second-key ->
+ * action) so a rebind like 'g h' -> 't h' works without hardcoding 'g'.
+ *
+ * @param {Record<string, string> | null | undefined} overrides
+ */
+function buildLookups(overrides) {
+    const combo = new Map();   // key -> action
+    const single = new Map();  // key -> action
+    const leader = new Map();  // lead-key -> Map(second-key -> action)
+    for (const s of resolveBindings(overrides)) {
+        if (!s.dispatch) continue;
+        for (const binding of [s.binding, s.altBinding].filter(Boolean)) {
+            const p = parseBinding(binding);
+            if (p.kind === 'combo') combo.set(p.key, s.action);
+            else if (p.kind === 'single') single.set(p.key, s.action);
+            else {
+                if (!leader.has(p.lead)) leader.set(p.lead, new Map());
+                leader.get(p.lead).set(p.key, s.action);
+            }
+        }
     }
+    return { combo, single, leader };
 }
 
 /**
  * @param {object} opts
  * @param {boolean} [opts.enabled=true]
+ * @param {Record<string, string>} [opts.overrides]  settings.keyboard.bindings (§34.1)
  * @param {object} opts.handlers
  * @param {(view: string) => void} opts.handlers.navigate
  * @param {() => void} [opts.handlers.lock]
  * @param {() => void} [opts.handlers.openHelp]
  */
-export function useKeyboardShortcuts({ enabled = true, handlers }) {
+export function useKeyboardShortcuts({ enabled = true, overrides, handlers }) {
+    const lookups = useMemo(() => buildLookups(overrides), [overrides]);
     // Keep the latest handlers in a ref so the listener effect doesn't need to
     // re-bind (and lose leader state) every time the shell re-renders new
     // closures.
     const handlersRef = useRef(handlers);
     handlersRef.current = handlers;
-    const leaderRef = useRef(/** @type {{ armed: boolean, timer: any }} */ ({ armed: false, timer: null }));
+    const leaderRef = useRef(/** @type {{ armed: string | null, timer: any }} */ ({ armed: null, timer: null }));
 
     useEffect(() => {
         if (!enabled || typeof window === 'undefined') return undefined;
+        const { combo: COMBO, single: SINGLE, leader: LEADER } = lookups;
         const leader = leaderRef.current;
 
         const clearLeader = () => {
-            leader.armed = false;
+            leader.armed = null;
             if (leader.timer) { clearTimeout(leader.timer); leader.timer = null; }
         };
 
@@ -95,16 +109,17 @@ export function useKeyboardShortcuts({ enabled = true, handlers }) {
 
             // Second key of an armed leader sequence.
             if (leader.armed) {
-                const action = LEADER.get(key);
+                const action = LEADER.get(leader.armed)?.get(key);
                 clearLeader();
                 if (action) { e.preventDefault(); run(action); return; }
                 // A non-matching key just cancels the sequence; fall through so
                 // it can still trigger a single-key shortcut.
             }
 
-            // Arm the leader on `g` (only lead key today).
-            if (key === 'g') {
-                leader.armed = true;
+            // Arm a leader sequence when the key is a known lead ('g' by
+            // default; rebinding could introduce another).
+            if (LEADER.has(key)) {
+                leader.armed = key;
                 if (leader.timer) clearTimeout(leader.timer);
                 leader.timer = setTimeout(clearLeader, LEADER_WINDOW_MS);
                 return;
@@ -121,5 +136,5 @@ export function useKeyboardShortcuts({ enabled = true, handlers }) {
             window.removeEventListener('keydown', onKey);
             clearLeader();
         };
-    }, [enabled]);
+    }, [enabled, lookups]);
 }

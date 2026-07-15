@@ -44,10 +44,13 @@ for (const f of ['fuzzyMatch.js', 'commandRegistry.js', 'CommandPalette.jsx', 'C
     assert.ok(existsSync(join(wsRoot, moduleDir, f)), `${moduleDir}/${f} exists`);
 }
 
-// commandRegistry exports the two builders the shells depend on.
+// commandRegistry exports the builders the shells depend on.
 const registrySrc = read(`${moduleDir}/commandRegistry.js`);
 assert.ok(/export function buildCommands\b/.test(registrySrc), 'buildCommands is exported');
 assert.ok(/export function contactsToCommands\b/.test(registrySrc), 'contactsToCommands is exported');
+for (const fn of ['balancesToCommands', 'sitesToCommands', 'settingsSectionsToCommands', 'helpToCommands']) {
+    assert.ok(new RegExp(`export function ${fn}\\b`).test(registrySrc), `${fn} is exported ( entity search)`);
+}
 
 // --- every shell App mounts the palette ---------------------------------
 
@@ -104,6 +107,73 @@ for (const [label, path] of Object.entries(shells)) {
     );
     assert.ok(/<ShortcutHelp\b[\s\S]{0,120}?open=\{shortcutHelpOpen\}/.test(src),
         `${label} App mounts <ShortcutHelp> wired to shortcutHelpOpen`);
+
+    // : txid/date queries offer a history search in every shell.
+    assert.ok(/searchHistory:\s*\(query\)\s*=>/.test(src),
+        `${label} App supplies a searchHistory handler for txid/date queries`);
+    // §34.1: user overrides thread into the dispatcher + help modal.
+    assert.ok(/overrides:\s*settings\?\.keyboard\?\.bindings/.test(src),
+        `${label} App threads keyboard overrides into useKeyboardShortcuts`);
+    assert.ok(/<ShortcutHelp\b[\s\S]{0,200}?overrides=\{settings\?\.keyboard\?\.bindings\}/.test(src),
+        `${label} App threads keyboard overrides into ShortcutHelp`);
+    assert.ok(/binding:\s*settings\?\.keyboard\?\.bindings\?\.\['command-palette'\]/.test(src),
+        `${label} App threads the palette binding override into useCommandPalette`);
+}
+
+// ---  entity search per shell --------------------------------------
+// Tokens: web + popup open TokenDetail with the row ref. Desktop has no
+// held-token detail view, so it intentionally ships NO token commands.
+for (const label of ['web', 'extension popup']) {
+    const src = read(shells[label]);
+    assert.ok(/balancesToCommands\(/.test(src), `${label} App folds token balances into the palette`);
+    assert.ok(/openToken:\s*\(tok\)\s*=>\s*\{\s*setTokenDetailRef\(tok\);\s*setUnlockedView\('token-detail'\)/.test(src),
+        `${label} App's openToken sets the full token ref and opens token-detail`);
+}
+assert.ok(!/balancesToCommands\(/.test(read(shells.desktop)),
+    'desktop App ships no token commands (no held-token detail view to land on)');
+
+// Sites + settings deep-links + help topics: web + desktop (the popup has no
+// Settings route, so it only gets the openHelp-backed help topic).
+for (const label of ['web', 'desktop']) {
+    const src = read(shells[label]);
+    assert.ok(/sitesToCommands\(/.test(src), `${label} App folds connected sites into the palette`);
+    assert.ok(/settingsSectionsToCommands\(/.test(src), `${label} App folds settings sections into the palette`);
+    assert.ok(/setSettingsInitialSection\(/.test(src), `${label} App deep-links Settings via settingsInitialSection`);
+    assert.ok(/initialSubpageId=\{settingsSubpage\}/.test(src), `${label} App passes the deep-link section into Settings`);
+}
+assert.ok(/helpToCommands\(/.test(read(shells['extension popup'])),
+    'extension popup App folds help topics into the palette');
+assert.ok(/onCommandPalette=\{palette\.openPalette\}/.test(read(shells['extension popup'])),
+    'extension popup App wires the visible Home palette trigger ');
+
+// The popup trigger renders from TotalBalanceHero (threaded Home -> HomeTabs).
+const hero = read('packages/core/src/shared/components/TotalBalanceHero.jsx');
+assert.ok(/onCommandPalette\b/.test(hero) && /Open command palette/.test(hero),
+    'TotalBalanceHero renders the popup\'s "Open command palette" search button');
+
+// --- §34.1 rebinding + §34.2 context shortcuts ----------------------------
+
+const shortcutsSrc = read('packages/core/src/shared/keyboard/shortcuts.js');
+for (const fn of ['resolveBindings', 'isValidBinding', 'findBindingConflict', 'isRebindable']) {
+    assert.ok(new RegExp(`export function ${fn}\\b`).test(shortcutsSrc), `shortcuts.js exports ${fn} (§34.1)`);
+}
+const settingsRoute = read('packages/core/src/shared/routes/Settings.jsx');
+assert.ok(/id:\s*'keyboard'/.test(settingsRoute) && /KeyboardSection/.test(settingsRoute),
+    'Settings registers the Keyboard rebinding section');
+assert.ok(existsSync(join(wsRoot, 'packages/core/src/shared/components/settings/KeyboardSection.jsx')),
+    'KeyboardSection component exists');
+
+// Context shortcuts live in their routes via useScreenShortcuts.
+assert.ok(existsSync(join(wsRoot, 'packages/core/src/shared/keyboard/useScreenShortcuts.js')),
+    'useScreenShortcuts hook exists (§34.2)');
+for (const [route, key] of [
+    ['packages/core/src/shared/routes/History.jsx', 'e'],
+    ['packages/core/src/shared/routes/Send.jsx', "'mod+enter'"],
+    ['packages/core/src/shared/routes/Home.jsx', 'o'],
+]) {
+    const src = read(route);
+    assert.ok(/useScreenShortcuts\(\{/.test(src), `${route} mounts useScreenShortcuts`);
+    assert.ok(src.includes(key), `${route} binds its §34.2 key set`);
 }
 
 // --- visible triggers ----------------------------------------------------
@@ -122,4 +192,4 @@ assert.ok(/onCommandPalette=\{palette\.openPalette\}/.test(read(shells.web)),
 assert.ok(/onCommandPalette=\{palette\.openPalette\}/.test(read(shells.desktop)),
     'desktop App wires the LeftNav palette trigger');
 
-console.log('OK: command-palette shell wiring (§33 /: core module present; web + extension popup + desktop each import, install the Cmd/Ctrl+K hook gated on unlocked, build commands, and mount <CommandPalette>; AppHeader + LeftNav expose triggers)');
+console.log('OK: command-palette shell wiring (§33 / + §34 : core module present; web + extension popup + desktop each import, install the Cmd/Ctrl+K hook gated on unlocked, build commands, and mount <CommandPalette>; entity search + settings deep-links + popup trigger wired per shell; rebinding overrides threaded; §34.2 context shortcuts mounted in History/Send/Home)');

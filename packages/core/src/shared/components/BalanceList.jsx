@@ -167,6 +167,7 @@ function BalanceRowEl({ row, multisig, onSelect, pinned, onTogglePin, hidden, on
             className={`${styles.row} ${clickable ? styles.rowClickable : ''} ${pinned ? styles.rowPinned : ''}`}
             role="listitem"
             type={clickable ? 'button' : undefined}
+            data-balance-key={pinKey}
             onClick={handleClick}
             aria-label={clickable
                 ? `Open ${row.displayName || row.tick} details`
