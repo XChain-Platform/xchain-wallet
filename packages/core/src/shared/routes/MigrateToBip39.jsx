@@ -200,8 +200,8 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated }) {
                 <p className={styles.hint}>
                     Your legacy wallet is untouched. To complete the migration,
                     sweep balances from each legacy address below to the
-                    matching new-wallet address. Use Send (§40.1) or an
-                    advanced SWEEP action (§40.10) per chain. Your legacy
+                    matching new-wallet address. Use Send, or the advanced
+                    Sweep action, on each chain. Your legacy
                     wallet stays available as long as you want.
                 </p>
                 <dl className={styles.detailsList}>

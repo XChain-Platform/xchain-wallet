@@ -684,8 +684,8 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     </div>
                 ) : null}
                 <p className={styles.hint}>
-                    AIRDROP charges an XChain fee based on the number of
-                    recipients (§AIRDROP.md). The network computes the exact
+                    Airdrops charge an XChain fee based on the number of
+                    recipients. The network computes the exact
                     fee at execute time; make sure the source address holds
                     enough of {token.trim().toUpperCase() || 'the token'} +
                     fee tick to cover the full distribution.

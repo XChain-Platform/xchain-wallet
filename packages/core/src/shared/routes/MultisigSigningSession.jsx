@@ -382,9 +382,9 @@ export function MultisigSigningSession({ walletId, onBack }) {
             return wrap(
                 <>
                     <p className={styles.hint}>
-                        No multisig signing sessions for this wallet. A session is
-                        created when a multisig spend is composed (§22.3); Step 20
-                        wires the transaction-QR transport that drives contributions.
+                        No multisig signing sessions for this wallet. A session
+                        starts when you compose a multisig spend, and signers add
+                        their contributions by scanning the transaction QR code.
                     </p>
                     <div className={styles.actions}>
                     </div>
@@ -452,9 +452,9 @@ export function MultisigSigningSession({ walletId, onBack }) {
                     {roundLabel || (active.status === 'finalized' ? 'Finalized broadcast' : 'Export envelope')}
                 </p>
                 <p className={styles.hint}>
-                    Show this animated QR to a cosigner's wallet. Each frame is an
-                    XCW chunk (§20.3); the cosigner's wallet reassembles the
-                    envelope on its side.
+                    Show this animated QR to a cosigner's wallet. Each frame is
+                    part of the signing data; the cosigner's wallet reassembles
+                    the envelope on its side.
                 </p>
                 {exportFrames && exportFrames.error ? (
                     <div role="alert" className={styles.error}>{exportFrames.error}</div>

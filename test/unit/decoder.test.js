@@ -110,7 +110,7 @@ describe('decodeAction', () => {
                 chainId: 'bitcoin-mainnet',
                 chainRegistry,
             });
-            expect(d.summary).toMatch(/^Sign NOT_A_REAL_ACTION on Bitcoin$/);
+            expect(d.summary).toMatch(/^Sign Not a real action on Bitcoin$/);
             expect(d.warnings[0]).toMatch(/no plain-english summary/i);
         });
 
@@ -119,7 +119,7 @@ describe('decodeAction', () => {
                 action: 'UNKNOWN',
                 params: { FLAG: true, NESTED: { foo: 'bar' } },
             });
-            const nested = d.details.find((r) => r.label === 'NESTED');
+            const nested = d.details.find((r) => r.label === 'Nested');
             expect(nested?.value).toBe('{"foo":"bar"}');
         });
     });

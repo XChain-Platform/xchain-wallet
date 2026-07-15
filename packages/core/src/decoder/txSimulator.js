@@ -500,11 +500,15 @@ function simulateBatch(p, balMap, coinTick, feeEstimate, chainId, chainRegistry)
 function genericFallback(action, balMap, coinTick, feeEstimate) {
     const deltas = [];
     pushFeeRow(deltas, balMap, coinTick, feeEstimate);
+    // Mirrors actionDisplayLabel's fallback ("FOO_BAR" -> "Foo bar") so the
+    // note stays plain-language while the simulator stays importless.
+    const words = String(action || '').trim().toLowerCase().replace(/[_-]+/g, ' ');
+    const verb = words ? words.charAt(0).toUpperCase() + words.slice(1) : 'unknown action';
     return {
         deltas,
         sideEffects: [],
         notes: [
-            `Balance changes for "${action || 'unknown action'}" are not pre-simulated. The fee row above is the only confirmed debit.`,
+            `Balance changes for "${verb}" are not pre-simulated. The fee row above is the only confirmed debit.`,
         ],
     };
 }

@@ -612,7 +612,7 @@ function AppInner() {
             id: 'legacy-format',
             severity: 'info',
             title: 'Legacy FreeWallet format',
-            message: 'This wallet uses the 12-word Counterwallet format. Migrate to BIP39 for broader interop and stronger derivation.',
+            message: 'This wallet uses the 12-word Counterwallet format. Migrate to BIP39 for wider compatibility with other wallets and stronger security.',
             action: {
                 label: 'Migrate to BIP39',
                 onSelect: () => setUnlockedView('migrate-bip39'),
@@ -1322,6 +1322,8 @@ function AppInner() {
                         chainId={composePrefill?.chainId}
                         fromAddressId={composePrefill?.fromAddressId}
                         toAddress={composePrefill?.toAddress}
+                        initialMessage={composePrefill?.message}
+                        fixedEncryption={composePrefill?.fixedEncryption}
                         onBack={() => {
                             const from = composePrefill?.__from || 'messaging';
                             setComposePrefill(null);

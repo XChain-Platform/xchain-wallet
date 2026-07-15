@@ -568,7 +568,7 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
             id: 'legacy-format',
             severity: 'info',
             title: 'Legacy FreeWallet format',
-            message: 'This wallet uses the 12-word Counterwallet format. Migrate to BIP39 for broader interop and stronger derivation.',
+            message: 'This wallet uses the 12-word Counterwallet format. Migrate to BIP39 for wider compatibility with other wallets and stronger security.',
             action: { label: 'Migrate to BIP39', onSelect: onMigrateToBip39 },
         });
     }

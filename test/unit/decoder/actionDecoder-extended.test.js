@@ -76,7 +76,7 @@ describe('decodeAction extended', () => {
 
         it('multi-destroy (non-v0 VERSION) falls back to generic + irreversibility warning', () => {
             const d = decodeAction({ action: 'DESTROY', params: { TICK: 'XCP', AMOUNT: '5', VERSION: '1' } });
-            expect(d.summary).toMatch(/^Sign DESTROY/);
+            expect(d.summary).toMatch(/^Sign Destroy/);
             expect(d.warnings.some((w) => /irreversible/i.test(w))).toBe(true);
         });
 

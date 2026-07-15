@@ -27,6 +27,8 @@
 // the generic fallback; dedicated decoders for the remaining kinds
 // land alongside their authoring forms in later phases.
 
+import { actionDisplayLabel } from '../shared/utils/actionDisplayLabel.js';
+
 /**
  * @typedef {Object} DecodedAction
  * @property {string} summary          one-line plain-English recap
@@ -866,15 +868,23 @@ function collectLockFlags(p) {
 
 function genericFallback(action, p, chainSuffix) {
     // Fallback: unknown or later-phase action kinds.
+    // Param keys are raw wire fields (TICK, GAS_LIMIT); title-case them
+    // directly rather than via actionDisplayLabel, whose action-name map
+    // would mistranslate keys that collide with action verbs (e.g. LIST).
+    const humanizeKey = (k) => {
+        const words = String(k).trim().toLowerCase().replace(/[_-]+/g, ' ');
+        return words.charAt(0).toUpperCase() + words.slice(1);
+    };
     const paramEntries = Object.entries(p).map(([k, v]) => ({
-        label: k,
+        label: humanizeKey(k),
         value: typeof v === 'string' ? v : safeJson(v),
     }));
+    const verb = action ? actionDisplayLabel(action) : 'unknown action';
     return {
-        summary: `Sign ${action || 'unknown action'}${chainSuffix}`,
+        summary: `Sign ${verb}${chainSuffix}`,
         details: paramEntries,
         warnings: [
-            `No plain-English summary is available for "${action || 'unknown action'}" yet. Review the parameters carefully before approving.`,
+            `No plain-English summary is available for "${verb}" yet. Review the parameters carefully before approving.`,
         ],
     };
 }
