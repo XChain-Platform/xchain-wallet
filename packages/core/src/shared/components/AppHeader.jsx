@@ -27,6 +27,7 @@ import styles from './AppHeader.module.css';
  * @param {() => void} [props.onScan]                                when provided, the QR icon opens a dropdown with Scan plus the address options below
  * @param {() => void} [props.onManageAddresses]                     dropdown option under the QR icon: opens the address list
  * @param {() => void} [props.onViewAddress]                         dropdown option under the QR icon: opens the receive / view-address screen
+ * @param {() => void} [props.onCommandPalette]                      when provided, renders a search button that opens the §33 command palette (Cmd/Ctrl+K)
  * @param {() => void} [props.onLock]                                when provided, renders a one-tap lock button; same action as the "Lock wallet" row in the pancake menu
  * @param {boolean} [props.locking]                                  disables the lock button while a lock is in flight
  */
@@ -35,6 +36,7 @@ export function AppHeader({
     onScan,
     onManageAddresses,
     onViewAddress,
+    onCommandPalette,
     onLock,
     locking,
 }) {
@@ -48,6 +50,18 @@ export function AppHeader({
                 />
             </div>
             <div className={styles.right}>
+                {onCommandPalette ? (
+                    <button
+                        type="button"
+                        className={styles.menuBtn}
+                        onClick={onCommandPalette}
+                        aria-label="Open command palette"
+                        aria-keyshortcuts="Meta+K Control+K"
+                        title="Search (Cmd/Ctrl+K)"
+                    >
+                        <Icon.SearchIcon />
+                    </button>
+                ) : null}
                 <ScanMenu
                     onScan={onScan}
                     onManageAddresses={onManageAddresses}

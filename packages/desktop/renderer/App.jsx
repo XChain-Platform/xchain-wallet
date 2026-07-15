@@ -118,6 +118,11 @@ import { useGovernanceAddressesPresent } from '@xchain-wallet/core/shared/hooks/
 import * as messaging from './messaging.js';
 import { getSessionStatus, listWallets, lockWallet, listAccounts } from './messaging.js';
 import { LeftNav, FullLayoutWithNav } from '@xchain-wallet/core/shared/components/LeftNav.jsx';
+import { CommandPalette } from '@xchain-wallet/core/shared/commandPalette/CommandPalette.jsx';
+import { useCommandPalette } from '@xchain-wallet/core/shared/commandPalette/useCommandPalette.js';
+import { buildCommands, contactsToCommands, parseFreeformCommands } from '@xchain-wallet/core/shared/commandPalette/commandRegistry.js';
+import { useKeyboardShortcuts } from '@xchain-wallet/core/shared/keyboard/useKeyboardShortcuts.js';
+import { ShortcutHelp } from '@xchain-wallet/core/shared/keyboard/ShortcutHelp.jsx';
 import { BottomTabBar } from '@xchain-wallet/core/shared/components/BottomTabBar.jsx';
 import { QueuedBroadcastBanner } from '@xchain-wallet/core/shared/components/QueuedBroadcastBanner.jsx';
 import { DemoBanner } from '@xchain-wallet/core/shared/components/DemoBanner.jsx';
@@ -189,6 +194,29 @@ function AppInner() {
     // Unread-message count for the active wallet + account, surfaced as a badge
     // on the Messaging nav entries (see useMessagingUnread / msgReadMemory).
     const messagingUnread = useMessagingUnread(activeWalletId, activeAccountId);
+    // §33 command palette: Cmd/Ctrl+K opens a launcher over every action and
+    // destination. Inert unless unlocked. Contacts feed its fuzzy search and
+    // are loaded lazily the first time it opens.
+    const palette = useCommandPalette({ enabled: status.state === 'unlocked' });
+    const [paletteContacts, setPaletteContacts] = useState(/** @type {any[]} */ ([]));
+    useEffect(() => {
+        if (!palette.open || status.state !== 'unlocked' || !activeWalletId) return undefined;
+        let cancelled = false;
+        messaging.listContacts()
+            .then((rows) => { if (!cancelled) setPaletteContacts(Array.isArray(rows) ? rows : []); })
+            .catch(() => { /* palette still works without contacts */ });
+        return () => { cancelled = true; };
+    }, [palette.open, status.state, activeWalletId]);
+    // §34 keyboard shortcuts (see the web shell for the reference wiring).
+    const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
+    useKeyboardShortcuts({
+        enabled: status.state === 'unlocked' && !palette.open && !shortcutHelpOpen,
+        handlers: {
+            navigate: setUnlockedView,
+            lock: () => { lockWallet().then(refresh).catch(() => refresh()); },
+            openHelp: () => setShortcutHelpOpen(true),
+        },
+    });
     const [dispenserRef, setDispenserRef] = useState(
         /** @type {{ chainId: string, actionIndex: string, origin?: 'explorer' | 'list' | 'manage-token' } | null} */ (null),
     );
@@ -1492,6 +1520,32 @@ function AppInner() {
             const handleOpenSettings = () => setUnlockedView('settings');
             const activeWalletName =
                 walletList.find((w) => w.id === activeWalletId)?.name || undefined;
+            // §33 command list: shared catalogue + lazily-loaded contacts,
+            // each run() closing over this shell's setUnlockedView (see the
+            // web shell for the reference wiring).
+            const paletteCtx = {
+                navigate: setUnlockedView,
+                lock: handleNavLock,
+                refresh,
+                scan: () => setUnlockedView('scan'),
+                switchWallet: handleOpenWalletPicker,
+                openHelp: () => setShortcutHelpOpen(true),
+                hasBtcAddress,
+                hasGovernanceAddress,
+            };
+            const paletteCommands = [
+                ...buildCommands(paletteCtx),
+                ...contactsToCommands(paletteContacts, { navigate: setUnlockedView }),
+            ];
+            // §33.3: free-form "send 100 MYTOKEN" opens Send prefilled (Send
+            // resolves the chain from the first available when unset).
+            const paletteParseQuery = (q) => parseFreeformCommands(q, {
+                composeSend: ({ amount, tick }) => {
+                    setSendPrefill({ amount, tick });
+                    setSendBackTo('home');
+                    setUnlockedView('send');
+                },
+            });
             return (
                 <FullLayoutWithNav
                     nav={
@@ -1501,6 +1555,7 @@ function AppInner() {
                             onLock={handleNavLock}
                             onOpenWalletPicker={handleOpenWalletPicker}
                             onOpenSettings={handleOpenSettings}
+                            onCommandPalette={palette.openPalette}
                             walletName={activeWalletName}
                             hasBtcAddress={hasBtcAddress}
                             badges={{ messaging: messagingUnread }}
@@ -1529,6 +1584,13 @@ function AppInner() {
                     }
                 >
                     {routeNode}
+                    <CommandPalette
+                        open={palette.open}
+                        onClose={palette.closePalette}
+                        commands={paletteCommands}
+                        parseQuery={paletteParseQuery}
+                    />
+                    <ShortcutHelp open={shortcutHelpOpen} onClose={() => setShortcutHelpOpen(false)} />
                 </FullLayoutWithNav>
             );
         }

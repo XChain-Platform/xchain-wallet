@@ -127,6 +127,16 @@
     outline-offset: -2px;
 }
 
+/* §33 command-palette launcher row: a muted, pill-outlined variant of a
+   nav item so it reads as a search box rather than a destination. */
+.search {
+    margin: 0 var(--xc-space-3) var(--xc-space-2);
+    width: auto;
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-md);
+    color: var(--xc-text-muted);
+}
+
 .itemActive {
     background: var(--xc-surface);
     font-weight: 600;

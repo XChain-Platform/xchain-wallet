@@ -1,0 +1,90 @@
+/* §34.3 shortcut-help modal. Theme-token driven; tracks light/dark + forced
+   contrast automatically. */
+
+.overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 60;
+    background: rgba(0, 0, 0, 0.45);
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 10vh;
+    padding-inline: var(--xc-space-4);
+}
+
+.panel {
+    width: 100%;
+    max-width: 480px;
+    max-height: 78vh;
+    display: flex;
+    flex-direction: column;
+    background: var(--xc-surface-raised, var(--xc-surface));
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-lg);
+    box-shadow: var(--xc-shadow-md);
+    overflow: hidden;
+}
+
+.header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--xc-space-3) var(--xc-space-4);
+    border-bottom: 1px solid var(--xc-border);
+}
+
+.title { font-size: var(--xc-text-md); font-weight: 600; color: var(--xc-text); }
+
+.close {
+    display: inline-flex;
+    background: transparent;
+    border: 0;
+    color: var(--xc-text-muted);
+    cursor: pointer;
+    padding: var(--xc-space-1);
+    border-radius: var(--xc-radius-sm);
+}
+
+.close:hover, .close:focus-visible { color: var(--xc-text); outline: none; }
+.close svg { width: 18px; height: 18px; }
+
+.body { padding: var(--xc-space-3) var(--xc-space-4); overflow-y: auto; }
+
+.group { margin-bottom: var(--xc-space-4); }
+.group:last-child { margin-bottom: 0; }
+
+.groupTitle {
+    margin: 0 0 var(--xc-space-2);
+    font-size: var(--xc-text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--xc-text-muted);
+}
+
+.list { margin: 0; }
+
+.row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--xc-space-3);
+    padding: var(--xc-space-2) 0;
+}
+
+.label { font-size: var(--xc-text-sm); color: var(--xc-text); margin: 0; }
+
+.keys { display: inline-flex; align-items: center; gap: var(--xc-space-2); margin: 0; }
+
+.or { font-size: var(--xc-text-xs); color: var(--xc-text-muted); }
+
+.kbd {
+    font-family: var(--xc-font-sans);
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text);
+    background: var(--xc-bg-muted);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-sm);
+    padding: 2px 7px;
+    white-space: nowrap;
+}

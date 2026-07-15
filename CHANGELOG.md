@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Desktop shell chain-registry sync: Electron main fetches and verifies the hub registry at boot (the renderer CSP blocks external fetches) and renderer realms pull the verified batch over a new `xchain:chain-registry` IPC bridge.
 - `bin/sync-chain-registry.mjs`: snapshots the bundled chain descriptors into the hub's served `GET /api/v1/chain-registry` payload (drift-guarded in platform CI).
 - Agent-account management UI (§22 P4): provision wizard, policy editor, and account list/detail with an enable/disable toggle, wired across all three shells (Bitcoin only at launch).
+- Command palette (§33): Cmd/Ctrl+K opens a fuzzy launcher over navigation, action forms, and contacts with full keyboard control, in all three shells (web + extension popup + desktop). Free-form queries like "send 100 MYTOKEN" open Send prefilled (§33.3).
+- Keyboard shortcuts (§34): core global set (Cmd/Ctrl+L lock, +N send, +, settings, Cmd/Ctrl+/ help), a `g`-leader navigation (g h/s/r/d/c/b), and a `?` shortcut-help modal, across all three shells.
 
 ### Added
 - E2E suite runs in CI (new `e2e` job) and a coverage ratchet gates unit coverage against per-metric thresholds (new `coverage` job).

@@ -56,6 +56,11 @@ import { QueuedBroadcastBanner } from '@xchain-wallet/core/shared/components/Que
 import { DemoBanner } from '@xchain-wallet/core/shared/components/DemoBanner.jsx';
 import { LeftNav, FullLayoutWithNav } from '@xchain-wallet/core/shared/components/LeftNav.jsx';
 import { AppHeader } from '@xchain-wallet/core/shared/components/AppHeader.jsx';
+import { CommandPalette } from '@xchain-wallet/core/shared/commandPalette/CommandPalette.jsx';
+import { useCommandPalette } from '@xchain-wallet/core/shared/commandPalette/useCommandPalette.js';
+import { buildCommands, contactsToCommands, parseFreeformCommands } from '@xchain-wallet/core/shared/commandPalette/commandRegistry.js';
+import { useKeyboardShortcuts } from '@xchain-wallet/core/shared/keyboard/useKeyboardShortcuts.js';
+import { ShortcutHelp } from '@xchain-wallet/core/shared/keyboard/ShortcutHelp.jsx';
 import { MenuRoute } from '@xchain-wallet/core/shared/routes/MenuRoute.jsx';
 import { AlertsRoute } from '@xchain-wallet/core/shared/routes/AlertsRoute.jsx';
 import { registry as registryLib } from '@xchain-wallet/core';
@@ -302,6 +307,34 @@ function AppInner() {
     // Unread-message count for the active wallet + account, surfaced as a badge
     // on the Messaging nav entries (see useMessagingUnread / msgReadMemory).
     const messagingUnread = useMessagingUnread(activeWalletId, activeAccountId);
+    // §33 command palette: Cmd/Ctrl+K opens a launcher over every action and
+    // destination. The global shortcut is inert unless the wallet is unlocked
+    // (nothing to navigate to on the Locked / onboarding screens).
+    const palette = useCommandPalette({ enabled: status.state === 'unlocked' });
+    // Contacts feed the palette's fuzzy search (§33.2). Loaded lazily the
+    // first time the palette opens so a locked/never-opened session pays
+    // nothing; refreshed on each open so newly-saved contacts appear.
+    const [paletteContacts, setPaletteContacts] = useState(/** @type {any[]} */ ([]));
+    useEffect(() => {
+        if (!palette.open || status.state !== 'unlocked' || !activeWalletId) return undefined;
+        let cancelled = false;
+        messaging.listContacts()
+            .then((rows) => { if (!cancelled) setPaletteContacts(Array.isArray(rows) ? rows : []); })
+            .catch(() => { /* palette still works without contacts */ });
+        return () => { cancelled = true; };
+    }, [palette.open, status.state, activeWalletId]);
+    // §34 keyboard shortcuts: global core set + `g`-leader nav + the `?`
+    // help modal. Disabled while locked, while the palette owns the keys, and
+    // while the help modal itself is open.
+    const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
+    useKeyboardShortcuts({
+        enabled: status.state === 'unlocked' && !palette.open && !shortcutHelpOpen,
+        handlers: {
+            navigate: setUnlockedView,
+            lock: () => { lockWallet().then(refresh).catch(() => refresh()); },
+            openHelp: () => setShortcutHelpOpen(true),
+        },
+    });
     // §24 Cluster Y FOLLOWUP 3: track the resolved active-wallet record
     // so LeftNav / BottomTabBar can label the wallet switcher and so
     // the new 'settings' top-level view can pass `activeWallet` through
@@ -1937,6 +1970,35 @@ function AppInner() {
             const handleOpenSettings = () => setUnlockedView('settings');
             const activeWalletName =
                 walletList.find((w) => w.id === activeWalletId)?.name || undefined;
+            // §33: assemble the palette command list from the shared catalogue
+            // (navigation + authoring + signing + wallet verbs, gated exactly
+            // like the ActionsMenu) plus the lazily-loaded contacts. Every
+            // `run` closes over this shell's setUnlockedView, so selecting a
+            // command drives the same view state the nav does.
+            const paletteCtx = {
+                navigate: setUnlockedView,
+                lock: handleNavLock,
+                refresh,
+                scan: () => setGlobalScannerOpen(true),
+                switchWallet: handleOpenWalletPicker,
+                openHelp: () => setShortcutHelpOpen(true),
+                hasBtcAddress,
+                hasGovernanceAddress,
+            };
+            const paletteCommands = [
+                ...buildCommands(paletteCtx),
+                ...contactsToCommands(paletteContacts, { navigate: setUnlockedView }),
+            ];
+            // §33.3: free-form intents like "send 100 MYTOKEN" open Send
+            // prefilled. Send falls back to the first chain when the prefill
+            // carries no chainId, so amount + tick alone is enough.
+            const paletteParseQuery = (q) => parseFreeformCommands(q, {
+                composeSend: ({ amount, tick }) => {
+                    setSendPrefill({ amount, tick });
+                    setSendBackTo('home');
+                    setUnlockedView('send');
+                },
+            });
             return (
                 <FullLayoutWithNav
                     nav={
@@ -1985,6 +2047,7 @@ function AppInner() {
                                         }
                                     }}
                                     onScan={() => setGlobalScannerOpen(true)}
+                                    onCommandPalette={palette.openPalette}
                                     onManageAddresses={activeWalletId ? () => setUnlockedView('addresses') : undefined}
                                     onViewAddress={activeWalletId ? () => { setReceivePrefill(null); setUnlockedView('receive'); } : undefined}
                                     onLock={handleNavLock}
@@ -2043,6 +2106,13 @@ function AppInner() {
                             />
                         </div>
                     ) : null}
+                    <CommandPalette
+                        open={palette.open}
+                        onClose={palette.closePalette}
+                        commands={paletteCommands}
+                        parseQuery={paletteParseQuery}
+                    />
+                    <ShortcutHelp open={shortcutHelpOpen} onClose={() => setShortcutHelpOpen(false)} />
                 </FullLayoutWithNav>
             );
         }

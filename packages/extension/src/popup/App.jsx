@@ -46,6 +46,11 @@ import { RenameAccountForm } from '@xchain-wallet/core/shared/routes/RenameAccou
 import { readActiveAccount, writeActiveAccount } from '@xchain-wallet/core/shared/utils/activeAccountMemory.js';
 import { Locked } from '@xchain-wallet/core/shared/routes/Locked.jsx';
 import { Home } from '@xchain-wallet/core/shared/routes/Home.jsx';
+import { CommandPalette } from '@xchain-wallet/core/shared/commandPalette/CommandPalette.jsx';
+import { useCommandPalette } from '@xchain-wallet/core/shared/commandPalette/useCommandPalette.js';
+import { buildCommands, contactsToCommands, parseFreeformCommands } from '@xchain-wallet/core/shared/commandPalette/commandRegistry.js';
+import { useKeyboardShortcuts } from '@xchain-wallet/core/shared/keyboard/useKeyboardShortcuts.js';
+import { ShortcutHelp } from '@xchain-wallet/core/shared/keyboard/ShortcutHelp.jsx';
 import { TokenDetail } from '@xchain-wallet/core/shared/routes/TokenDetail.jsx';
 import { ToastHost } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
 import { ReachabilityBanner } from '@xchain-wallet/core/shared/components/ReachabilityBanner.jsx';
@@ -428,6 +433,55 @@ function AppInner() {
         onResume: setUnlockedView,
     });
 
+    // §33 command palette: Cmd/Ctrl+K opens a launcher over every action and
+    // destination. Inert unless unlocked; contacts feed its fuzzy search and
+    // load lazily the first time it opens.
+    const palette = useCommandPalette({ enabled: status.state === 'unlocked' });
+    const [paletteContacts, setPaletteContacts] = useState(/** @type {any[]} */ ([]));
+    useEffect(() => {
+        if (!palette.open || status.state !== 'unlocked' || !activeWalletId) return undefined;
+        let cancelled = false;
+        messaging.listContacts()
+            .then((rows) => { if (!cancelled) setPaletteContacts(Array.isArray(rows) ? rows : []); })
+            .catch(() => { /* palette still works without contacts */ });
+        return () => { cancelled = true; };
+    }, [palette.open, status.state, activeWalletId]);
+    // Shared catalogue + lazily-loaded contacts; each run() closes over this
+    // shell's setUnlockedView (see the web shell for reference wiring). The
+    // popup locks via messaging.lockWallet (Home owns the visible Lock button).
+    const paletteCommands = [
+        ...buildCommands({
+            navigate: setUnlockedView,
+            lock: () => { messaging.lockWallet().then(refresh).catch(refresh); },
+            refresh,
+            scan: () => setUnlockedView('scan'),
+            switchWallet: () => setUnlockedView('wallet-picker'),
+            openHelp: () => setShortcutHelpOpen(true),
+            hasBtcAddress,
+            hasGovernanceAddress,
+        }),
+        ...contactsToCommands(paletteContacts, { navigate: setUnlockedView }),
+    ];
+    // §33.3: free-form "send 100 MYTOKEN" opens Send prefilled (Send resolves
+    // the chain from the first available when the prefill carries none).
+    const paletteParseQuery = (q) => parseFreeformCommands(q, {
+        composeSend: ({ amount, tick }) => {
+            setSendPrefill({ amount, tick });
+            setSendBackTo('home');
+            setUnlockedView('send');
+        },
+    });
+    // §34 keyboard shortcuts (see the web shell for the reference wiring).
+    const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
+    useKeyboardShortcuts({
+        enabled: status.state === 'unlocked' && !palette.open && !shortcutHelpOpen,
+        handlers: {
+            navigate: setUnlockedView,
+            lock: () => { messaging.lockWallet().then(refresh).catch(refresh); },
+            openHelp: () => setShortcutHelpOpen(true),
+        },
+    });
+
     switch (status.state) {
         case 'loading':
             return <Loading />;
@@ -469,7 +523,12 @@ function AppInner() {
             );
         case 'locked':
             return <Locked onUnlocked={refresh} />;
-        case 'unlocked':
+        case 'unlocked': {
+            // §33: the palette must overlay whatever route is showing, so the
+            // route tree is computed in an IIFE and the case returns it beside
+            // a single <CommandPalette> mount (this shell has no shared layout
+            // wrapper like the web/desktop FullLayoutWithNav to hang it on).
+            const routeNode = (() => {
             if (unlockedView === 'send' && activeWalletId) {
                 return (
                     <Send
@@ -1636,6 +1695,20 @@ function AppInner() {
                     />
                 </>
             );
+            })();
+            return (
+                <>
+                    {routeNode}
+                    <CommandPalette
+                        open={palette.open}
+                        onClose={palette.closePalette}
+                        commands={paletteCommands}
+                        parseQuery={paletteParseQuery}
+                    />
+                    <ShortcutHelp open={shortcutHelpOpen} onClose={() => setShortcutHelpOpen(false)} />
+                </>
+            );
+        }
         default:
             return <Loading error={`unknown state "${status.state}"`} />;
     }

@@ -68,6 +68,7 @@ export function formatBadgeCount(n) {
  * @param {() => void} [props.onLock]
  * @param {() => void} [props.onOpenSettings]
  * @param {() => void} [props.onOpenWalletPicker]
+ * @param {() => void} [props.onCommandPalette]   when provided, renders a search row at the top that opens the §33 command palette (Cmd/Ctrl+K); shells with their own header search (web) leave it unset
  * @param {string} [props.walletName]
  * @param {boolean} [props.hasBtcAddress]
  * @param {Record<string, number>} [props.badges]   per-view unread/attention counts; a count > 0 renders a pill on that item (e.g. { messaging: 3 })
@@ -78,6 +79,7 @@ export function LeftNav({
     onLock,
     onOpenSettings,
     onOpenWalletPicker,
+    onCommandPalette,
     walletName,
     hasBtcAddress = false,
     badges = {},
@@ -103,6 +105,21 @@ export function LeftNav({
     return (
         <nav className={styles.nav} aria-label="Primary navigation">
             <div className={styles.brand}>XChain Wallet</div>
+            {onCommandPalette ? (
+                <button
+                    type="button"
+                    className={`${styles.item} ${styles.search}`}
+                    onClick={onCommandPalette}
+                    aria-label="Open command palette"
+                    aria-keyshortcuts="Meta+K Control+K"
+                    title="Search (Cmd/Ctrl+K)"
+                >
+                    <span className={styles.icon} aria-hidden="true">
+                        <Icon.SearchIcon />
+                    </span>
+                    <span className={styles.label}>Search</span>
+                </button>
+            ) : null}
             <ul className={styles.list} role="list">
                 {primary.map((item) => {
                     const active = isActive(item.id, currentView);
