@@ -15,7 +15,7 @@
 // if someone later re-adds desktop to Phase 1 without updating §40.12.
 
 import { strict as assert } from 'node:assert';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -23,14 +23,24 @@ const here = dirname(fileURLToPath(import.meta.url));
 // here = .../xchain-wallet/test → wsRoot is one up, platformRoot two up.
 const wsRoot = join(here, '..', '..', '..');
 const platformRoot = join(wsRoot, '..');
-const spec = readFileSync(
-    join(platformRoot, 'claude', 'reports', 'xchain-wallet', 'XCHAIN_WALLET_SPEC.md'),
-    'utf8',
-);
-const status = readFileSync(
-    join(platformRoot, 'claude', 'reports', 'xchain-wallet', 'IMPLEMENTATION_STATUS.md'),
-    'utf8',
-);
+const specPath = join(platformRoot, 'claude', 'reports', 'xchain-wallet', 'XCHAIN_WALLET_SPEC.md');
+const statusPath = join(platformRoot, 'claude', 'reports', 'xchain-wallet', 'IMPLEMENTATION_STATUS.md');
+
+// These audit the platform SPEC + STATUS docs, which live in the parent
+// repo's gitignored `claude/reports/` tree - present in a full monorepo
+// working tree (dev + the old Mac gate) but ABSENT from an isolated single-
+// repo CI checkout. Skip LOUDLY rather than fail: this guards dev docs, not
+// shipped product, so its absence in isolated CI is not a regression (unlike
+// the sdk derivation-parity guard, which fails loud because it guards shipped
+// behavior). Never silently pass.
+if (!existsSync(specPath) || !existsSync(statusPath)) {
+    console.log('SKIP: phase-scope smoke - platform spec/status docs not in this checkout '
+        + '(claude/reports/ is a gitignored parent-repo dir, absent in an isolated CI checkout)');
+    process.exit(0);
+}
+
+const spec = readFileSync(specPath, 'utf8');
+const status = readFileSync(statusPath, 'utf8');
 
 // --- §8.1 / §8.2 target matrix ----------------------------------------
 const s8 = spec.slice(spec.indexOf('## 8. Target Matrix'), spec.indexOf('## 9. Architecture'));

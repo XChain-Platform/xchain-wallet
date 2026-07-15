@@ -157,22 +157,29 @@ assert.ok(
     'PublishLabelsReport surfaces txid + size + discovery name',
 );
 
-// --- 5. FOLLOWUPS.md exists with the auto-sync + restore-fetch entries --
-
+// --- 5. FOLLOWUPS.md tracks the auto-sync + restore-fetch entries --------
+// FOLLOWUPS.md lives in the parent repo's gitignored `claude/reports/` tree:
+// present in a full monorepo working tree, ABSENT from an isolated single-repo
+// CI checkout. Skip this section loudly when it's not here (it audits a dev
+// doc, not shipped product); sections 1-4 above cover the in-repo UI wiring.
 const followups = join(
     xchainRoot, 'claude', 'reports', 'xchain-wallet', 'FOLLOWUPS.md',
 );
-assert.ok(existsSync(followups), 'claude/reports/xchain-wallet/FOLLOWUPS.md exists');
-const fSrc = readFileSync(followups, 'utf8');
-assert.ok(
-    /§17\/§19 Sign \/ Verify \/ Backup\b[^a-zA-Z0-9]+closed at v0\.154\.0/.test(fSrc),
-    'FOLLOWUPS.md has the §17/§19 Cluster B closing header at v0.154.0',
-);
-assert.ok(
-    /On-change debounced auto-sync/.test(fSrc),
-    'FOLLOWUPS.md tracks the auto-sync FOLLOWUP',
-);
-assert.ok(
-    /Fetch \+ decrypt \+ apply on restore/.test(fSrc),
-    'FOLLOWUPS.md tracks the restore-fetch FOLLOWUP',
-);
+if (existsSync(followups)) {
+    const fSrc = readFileSync(followups, 'utf8');
+    assert.ok(
+        /§17\/§19 Sign \/ Verify \/ Backup\b[^a-zA-Z0-9]+closed at v0\.154\.0/.test(fSrc),
+        'FOLLOWUPS.md has the §17/§19 Cluster B closing header at v0.154.0',
+    );
+    assert.ok(
+        /On-change debounced auto-sync/.test(fSrc),
+        'FOLLOWUPS.md tracks the auto-sync FOLLOWUP',
+    );
+    assert.ok(
+        /Fetch \+ decrypt \+ apply on restore/.test(fSrc),
+        'FOLLOWUPS.md tracks the restore-fetch FOLLOWUP',
+    );
+} else {
+    console.log('SKIP (section 5): FOLLOWUPS.md not in this checkout '
+        + '(gitignored parent-repo claude/reports/, absent in isolated CI)');
+}

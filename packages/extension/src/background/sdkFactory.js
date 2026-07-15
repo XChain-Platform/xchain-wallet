@@ -46,7 +46,10 @@ export async function resolveSdkFactory({ devMockFactory }) {
         // `import.meta.env.PROD` is statically replaced by Vite, so the dev-mock
         // branch (and its warning string) is eliminated from the release artifact,
         // which is what lets check-no-dev-mock.sh actually mean something.
-        if (import.meta.env.PROD) {
+        // `import.meta.env?.PROD` keeps that exact token (DCE preserved, verified by
+        // check-no-dev-mock.sh) while the optional chaining makes the fallback path
+        // Node-safe (import.meta.env is undefined under raw Node).
+        if (import.meta.env?.PROD) {
             throw new Error(
                 '[xchain-wallet/extension] xchain-sdk failed to load in a production build; '
                 + 'refusing to fall back to the dev-mock SDK (it serves fake data). Reason: '

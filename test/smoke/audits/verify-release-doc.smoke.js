@@ -71,7 +71,9 @@ const crossLinks = [
     'docs/Reproducible_Builds.md',
     'SECURITY.md',
     'docs/QA_Checklist.md',
-    'packages/desktop/Reproducible_Builds.md',
+    // All-caps to match the actual file; a case-sensitive host (or linux CI)
+    // 404s the mixed-case form, which the case-insensitive Mac FS hid.
+    'packages/desktop/REPRODUCIBLE_BUILDS.md',
 ];
 for (const linkPath of crossLinks) {
     assert.ok(docSrc.includes(linkPath),

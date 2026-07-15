@@ -149,7 +149,7 @@ diff reproduce-out/RELEASE_HASHES.txt RELEASE_HASHES.txt
 
 A zero-byte diff means the artifact matches what source produces.
 Any diff is diagnostic - see the desktop doc's
-[diagnostics section](../packages/desktop/Reproducible_Builds.md)
+[diagnostics section](../packages/desktop/REPRODUCIBLE_BUILDS.md)
 ("Toolchain drift / Timestamp leakage / Supply-chain tampering").
 
 ### Desktop (macOS / Windows)

@@ -58,7 +58,13 @@ export async function resolveSdkFactory({ devMockFactory }) {
         // artifact entirely. That is what makes tools/build-reproduce's
         // check-no-dev-mock.sh a real gate rather than a string that is compiled
         // into every build and therefore always trips.
-        if (import.meta.env.PROD) {
+        //
+        // `import.meta.env?.PROD` keeps the exact token Vite statically replaces
+        // (DCE still verified by tools/build-reproduce/check-no-dev-mock.sh), while
+        // the optional chaining short-circuits under raw Node - where
+        // `import.meta.env` is undefined - so importing this module in a Node test
+        // harness (the sdk-wiring smoke) doesn't throw on the fallback path.
+        if (import.meta.env?.PROD) {
             throw new Error(
                 '[xchain-wallet/web] xchain-sdk failed to load in a production build; '
                 + 'refusing to fall back to the dev-mock SDK (it serves fake data). Reason: '
