@@ -115,7 +115,7 @@ const chainRegistry = registryLib.defaultRegistry();
         chainId: 'bitcoin-mainnet',
         chainRegistry,
     });
-    assert.match(d.summary, /Sign ORDER on Bitcoin/);
+    assert.match(d.summary, /Sign Order on Bitcoin/);
     assert.ok(
         d.warnings.some((w) => /no plain-english summary is available/i.test(w)),
         'fallback surfaces the "not decoded" warning',
@@ -307,7 +307,7 @@ const chainRegistry = registryLib.defaultRegistry();
         chainId: 'bitcoin-mainnet',
         chainRegistry,
     });
-    assert.match(d.summary, /Sign DESTROY/);
+    assert.match(d.summary, /Sign Destroy/);
     assert.ok(
         d.warnings[0] && /irreversible/i.test(d.warnings[0]),
         'multi-destroy still leads with the irreversibility warning',
