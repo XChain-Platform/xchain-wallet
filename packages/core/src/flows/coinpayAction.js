@@ -61,14 +61,18 @@ import { verifyCoinpayObligation } from './coinpayQueries.js';
  * precision. A large DOGE obligation (supply ~1.3e18 koinu) can exceed
  * Number.MAX_SAFE_INTEGER (~9e15 = ~90M DOGE); silently coercing it through
  * Number() would round the native-coin output, underpaying (COINPAY rejected,
- * buyer loses the coin with no settlement) or overpaying. Reject a non-integer
- * string shape before coercion, then fail closed past safe-integer precision
- * rather than sign a wrong output. (Full big-value support needs a string/BigInt
- * output path through the encoder: .)
+ * buyer loses the coin with no settlement) or overpaying.
+ *
+ * : the encoder/SDK now carry >2^53-1 amounts exactly (BigInt money
+ * path; the value travels as an exact decimal string over JSON-RPC), so a
+ * big amount is no longer refused here. It must arrive as an exact decimal
+ * STRING and is returned as one; a Number past safe-integer precision is
+ * still rejected because it was already rounded before it reached us.
+ * Safe-range values keep returning a Number, unchanged.
  *
  * @param {string | number} value
  * @param {string} fnName
- * @returns {number}
+ * @returns {number | string} base units; a string iff the exact value exceeds 2^53-1
  */
 function normalizeCoinAmount(value, fnName) {
     const raw = typeof value === 'string' ? value.trim() : value;
@@ -83,7 +87,15 @@ function normalizeCoinAmount(value, fnName) {
         throw new Error(`${fnName}: coinAmount must be an integer (base units)`);
     }
     if (!Number.isSafeInteger(amount)) {
-        throw new Error(`${fnName}: coinAmount exceeds safe integer precision (base units)`);
+        if (typeof raw !== 'string') {
+            throw new Error(`${fnName}: coinAmount exceeds safe integer precision (base units); pass it as an exact decimal string`);
+        }
+        // 2^64-1 is the transaction output value field's wire ceiling; the
+        // encoder enforces the same bound (validator.js MAX_SATOSHI_U64).
+        if (BigInt(raw) > 0xffffffffffffffffn) {
+            throw new Error(`${fnName}: coinAmount exceeds the maximum 64-bit base-unit amount`);
+        }
+        return raw;
     }
     return amount;
 }

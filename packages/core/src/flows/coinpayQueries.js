@@ -132,13 +132,22 @@ export async function verifyCoinpayObligation({
         );
     }
 
-    const trueAmount = Number(row.coin_amount ?? row.coinAmount);
-    if (!Number.isSafeInteger(trueAmount) || trueAmount <= 0) {
+    // Compare in BigInt, not Number: a DOGE obligation can exceed 2^53-1 base
+    // units , where Number() rounds BOTH sides and two different
+    // amounts can collide after rounding. BigInt('...') throws on a
+    // non-integer shape, which is exactly the unusable-amount case.
+    let trueAmount;
+    try {
+        trueAmount = BigInt(String(row.coin_amount ?? row.coinAmount).trim());
+    } catch {
+        trueAmount = null;
+    }
+    if (trueAmount === null || trueAmount <= 0n) {
         throw new Error(
             `verifyCoinpayObligation: ORDER_MATCH #${want} has an unusable coin_amount (${row.coin_amount ?? row.coinAmount})`,
         );
     }
-    if (trueAmount !== Number(coinAmount)) {
+    if (trueAmount !== BigInt(String(coinAmount).trim())) {
         throw new Error(
             `verifyCoinpayObligation: amount mismatch for ORDER_MATCH #${want} `
             + `(obligation owes ${trueAmount} base units, asked to sign ${coinAmount})`,

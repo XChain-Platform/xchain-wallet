@@ -37,13 +37,23 @@ describe('flows/coinpayAction coinAmount guard', () => {
             .rejects.toThrow(/positive number/);
     });
 
-    it('fails closed on an amount past safe-integer precision (large DOGE)', async () => {
-        // 90071992547409910 koinu ~= 900,719,925 DOGE, well past
-        // Number.MAX_SAFE_INTEGER; Number() would silently round it.
+    it('accepts a >2^53-1 amount as an exact decimal string ', async () => {
+        // 90071992547409910 koinu ~= 900,719,925 DOGE, past
+        // Number.MAX_SAFE_INTEGER. The encoder/SDK now carry it exactly, so
+        // the guard admits the string form: it clears every amount guard and
+        // only then fails on the missing `from` source.
         await expect(coinpayAction({ ...BASE, coinAmount: '90071992547409910' }))
-            .rejects.toThrow(/safe integer precision/);
+            .rejects.toThrow(/from is required/);
+    });
+
+    it('still fails closed on a >2^53-1 NUMBER (already rounded upstream)', async () => {
         await expect(coinpayAction({ ...BASE, coinAmount: Number.MAX_SAFE_INTEGER + 2 }))
             .rejects.toThrow(/safe integer precision/);
+    });
+
+    it('rejects an amount above the u64 wire ceiling', async () => {
+        await expect(coinpayAction({ ...BASE, coinAmount: '18446744073709551616' })) // 2^64
+            .rejects.toThrow(/maximum 64-bit/);
     });
 
     it('accepts a valid in-range amount (proceeds past the amount guard)', async () => {
