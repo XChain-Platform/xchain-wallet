@@ -40,6 +40,7 @@ import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BUNDLED_DESCRIPTORS, FAMILY_MAINNET_COIN_TYPE_SLOT } from '../../../packages/core/src/registry/index.js';
+import { ADDRESS_PARAMS } from '../../../packages/core/src/shared/utils/addressValidation.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const sdkNetworksPath = join(here, '..', '..', '..', '..', 'xchain-sdk', 'src', 'networks.js');
@@ -74,6 +75,22 @@ describe('wallet descriptors vs xchain-sdk network params', () => {
             const net = NETWORKS[d.id];
             expect(net, `xchain-sdk has no network "${d.id}"`).toBeTruthy();
             expect(d.wifVersionByte).toBe(net.wif);
+        });
+
+        it(`${d.id}: ADDRESS_PARAMS byte params match xchain-sdk (pubKeyHash/scriptHash/bech32)`, () => {
+            // The wif leg above guards one hand-copied registry value; these are
+            // its three siblings (addressValidation.ADDRESS_PARAMS), read at
+            // runtime by matchesParams to accept/reject recipient addresses. An
+            // SDK bump that moves any byte would otherwise leave the wallet
+            // silently rejecting addresses the backend considers valid.
+            const [family, networkKind] = d.id.split('-');
+            const params = ADDRESS_PARAMS[family]?.[networkKind];
+            expect(params, `wallet ADDRESS_PARAMS has no entry for ${d.id}`).toBeTruthy();
+            const net = NETWORKS[d.id];
+            expect(net, `xchain-sdk has no network "${d.id}"`).toBeTruthy();
+            expect(params.p2pkh, `${d.id} p2pkh vs net.pubKeyHash`).toBe(net.pubKeyHash);
+            expect(params.p2sh, `${d.id} p2sh vs net.scriptHash`).toBe(net.scriptHash);
+            expect(params.hrp, `${d.id} hrp vs net.bech32`).toBe(net.bech32 ?? null);
         });
 
         it(`${d.id}: every derivation path uses the family's mainnet SLIP-44 slot`, () => {

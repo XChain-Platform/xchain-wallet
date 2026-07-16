@@ -39,6 +39,24 @@ import { useDeveloperMode } from '../hooks/useDeveloperMode.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { checkRecipientNovelty } from '../../flows/recipientNovelty.js';
 import { classifySignRisk } from '../../flows/signRiskClassifier.js';
+
+// Exact decimal-string -> satoshi conversion for the send-risk gates (#2249).
+// The old Math.floor(parseFloat(x) * 1e8) accumulated IEEE-754 rounding error
+// and biased downward, so an amount right at testSendThresholdSats (or a
+// classifySignRisk band edge) could gate one satoshi off. String/BigInt math
+// is exact; the submitted transaction already uses the exact decimal string,
+// so this only aligns the gates with what actually gets sent. Returns a
+// non-negative Number of sats, or null when the input is not a plain decimal.
+export function exactSatsFromDecimalString(raw) {
+    const s = String(raw).trim();
+    const m = /^(\d+)(?:\.(\d+))?$/.exec(s);
+    if (!m) return null;
+    const frac = (m[2] || '').slice(0, 8).padEnd(8, '0');
+    const sats = BigInt(m[1]) * 100000000n + BigInt(frac);
+    // Gate thresholds live far below 2^53; clamp instead of silently losing
+    // precision if someone types an absurd amount.
+    return sats > BigInt(Number.MAX_SAFE_INTEGER) ? Number.MAX_SAFE_INTEGER : Number(sats);
+}
 import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
@@ -463,9 +481,8 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
         const desc = chainId ? chainRegistry.get(chainId) : null;
         const nativeTicker = nativeTickerFor(desc);
         if (!nativeTicker || tick.trim().toUpperCase() !== nativeTicker) return null;
-        const amt = parseFloat(String(amount).trim());
-        if (!Number.isFinite(amt) || amt <= 0) return null;
-        const amountSats = Math.floor(amt * 1e8);
+        const amountSats = exactSatsFromDecimalString(amount);
+        if (amountSats === null || amountSats <= 0) return null;
         if (amountSats <= threshold) return null;
         const novelty = checkRecipientNovelty({
             address: dest,
@@ -898,11 +915,11 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
         if (!isHwSource) return { requireExplicitConfirm: false, reason: null };
         const desc = chainId ? chainRegistry.get(chainId) : null;
         const nativeTicker = nativeTickerFor(desc);
-        const amt = parseFloat(String(amount).trim());
+        const sats = exactSatsFromDecimalString(amount);
         const isNativeSend = !!nativeTicker
             && tick.trim().toUpperCase() === nativeTicker
-            && Number.isFinite(amt) && amt > 0;
-        const amountSats = isNativeSend ? Math.floor(amt * 1e8) : 0;
+            && sats !== null && sats > 0;
+        const amountSats = isNativeSend ? sats : 0;
         let recipientNovel = false;
         if (toAddress.trim() && desc?.coin) {
             const novelty = checkRecipientNovelty({

@@ -23,7 +23,11 @@ const bsc = base58check(sha256);
 
 // Address version bytes (P2PKH / P2SH) + segwit prefix (HRP) per coin and
 // network. DOGE has no segwit HRP. Same constants the indexer validates with.
-const ADDRESS_PARAMS = {
+// Hand-maintained copy of the xchain-sdk registry's byte params; exported ONLY
+// so wallet-sdk-derivation-parity.test.js can pin every entry against the
+// SDK's NETWORKS table (the same guard the wif leg already has) - runtime
+// callers use the validation functions below, never this table directly.
+export const ADDRESS_PARAMS = {
     bitcoin: {
         mainnet: { p2pkh: 0x00, p2sh: 0x05, hrp: 'bc' },
         testnet: { p2pkh: 0x6f, p2sh: 0xc4, hrp: 'tb' },

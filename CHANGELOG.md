@@ -36,6 +36,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Desktop preload converted to CommonJS (`preload.cjs`): Electron cannot load ESM preloads under `sandbox: true`, so no contextBridge API was ever exposed and every renderer-to-main call failed in dev and packaged builds.
 - Align `signers-ledger` `@noble/hashes` to `^1.8.0` (was `^1.5.0`); `LedgerSigner` imports from `@noble/hashes/sha2`, a path only present in >=1.7, so the old range was a latent breakage on an isolated install.
 
+## [0.333.1] - 2026-07-16
+
+### Fixed
+- Send.jsx converts decimal amounts to sats via exact BigInt string math (exactSatsFromDecimalString) at both gate sites instead of floating-point multiply ().
+- ExecuteContractForm copy humanized: 'Review contract call' / 'Call contract #N' / 'Contract call failed.' ().
+- ContractsList empty-state de-jargoned into plain language ().
+- ADDRESS_PARAMS exported for the new wallet-sdk derivation-parity integration test pinning every per-coin byte param against the SDK NETWORKS table ().
+
+
 ## [0.333.0] - 2026-06-20
 
 ### Security

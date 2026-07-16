@@ -339,11 +339,14 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                                     renderRow={(row) => <InteractionRow row={row} />} />
                     );
                 })}
+                {/* Keep the copy plain-language: this renders to end users, so no
+                    SDK method names or internal shorthand (#2255). The technical
+                    reason (SDK getExecutions is contract-scoped today) lives in
+                    the header comment at the top of this file. */}
                 <p className={styles.entryDescription}>
                     {actionDisplayLabel('EXECUTE')}-only interactions (method
-                    calls with no deposit) are not yet listed. The SDK's
-                    getExecutions is contract-scoped today; that lane surfaces
-                    on the contract detail page.
+                    calls that don&apos;t move funds) aren&apos;t listed here
+                    yet. Open a contract to see its call history.
                 </p>
             </Section>
             <Section title="Browse all contracts">

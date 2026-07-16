@@ -318,7 +318,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
             setSubmitError(
                 isBadPassword
                     ? 'Incorrect password.'
-                    : err?.message || 'Execute failed.',
+                    : err?.message || 'Contract call failed.',
             );
             setStage('review');
             if (!isWatcherMode && !isHwSource) {
@@ -338,8 +338,8 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
         <PageHeader
             onBack={onBack}
             title={stage === 'review' || stage === 'submitting'
-                    ? 'Review execute'
-                    : `Execute on contract #${contractActionIndex}`}
+                    ? 'Review contract call'
+                    : `Call contract #${contractActionIndex}`}
         />
     );
     const wrap = (children) => (
