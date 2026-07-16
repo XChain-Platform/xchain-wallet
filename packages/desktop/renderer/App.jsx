@@ -1032,6 +1032,8 @@ function AppInner() {
                         chainId={composePrefill?.chainId}
                         fromAddressId={composePrefill?.fromAddressId}
                         toAddress={composePrefill?.toAddress}
+                        initialMessage={composePrefill?.message}
+                        fixedEncryption={composePrefill?.fixedEncryption}
                         onBack={() => {
                             const from = composePrefill?.__from || 'messaging';
                             setComposePrefill(null);

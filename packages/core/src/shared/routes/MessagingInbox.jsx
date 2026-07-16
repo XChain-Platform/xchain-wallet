@@ -16,25 +16,14 @@ import {
     Input,
     AddressText,
  Icon,} from '@xchain-wallet/core/ui';
-import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
+import { flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
 import { coinFromChainId } from '../components/BalanceList.jsx';
-import { estimateNativeSendFee } from '../../flows/feeEstimate.js';
 import { readMsgRead, writeMsgRead, writeMsgUnread } from '../utils/msgReadMemory.js';
 import styles from './IssueTokenForm.module.css';
 import local from './MessagingInbox.module.css';
-
-const chainRegistry = registryLib.defaultRegistry();
-
-// User-facing native ticker for a chain (BTC / LTC / DOGE), used to label the
-// network-fee estimate on the send-confirmation screen.
-const NATIVE_TICKER_BY_COIN = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
-function nativeTickerFor(descriptor) {
-    if (!descriptor?.coin) return null;
-    return NATIVE_TICKER_BY_COIN[descriptor.coin] || descriptor.coin.toUpperCase();
-}
 
 /**
  * §41.7.2 Messaging inbox, scoped to the active account.
@@ -57,7 +46,9 @@ function nativeTickerFor(descriptor) {
  * @param {object} props
  * @param {string} props.walletId
  * @param {string} [props.activeAccountId]   scope the sweep to this account
- * @param {(prefill?: { chainId?: string, fromAddressId?: string, toAddress?: string }) => void} [props.onCompose]
+ * @param {(prefill?: { chainId?: string, fromAddressId?: string, toAddress?: string, message?: string, fixedEncryption?: 'ecies' | 'ecdh' | 'plaintext' }) => void} [props.onCompose]
+ *   opens the New-message form; thread replies pass the typed body plus the
+ *   conversation's encryption method (shown locked on the form)
  * @param {() => void} props.onBack
  */
 export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack }) {
@@ -96,19 +87,17 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack })
     // + network dropdown, mirroring the addresses page toolbar.
     const [query, setQuery] = useState('');
     const [network, setNetwork] = useState('all');
-    // Docked-composer draft + the message awaiting send confirmation. `draftText`
-    // is the live input; pressing Enter copies it into `pendingSend`, which swaps
-    // the thread for the confirmation screen (recipient + network fee). Cancel
-    // keeps `draftText` so the user can edit; send clears both.
+    // Docked-composer draft. Pressing Enter hands the trimmed text to
+    // onCompose, which opens the standard New-message form pre-filled with the
+    // recipient + body and the encryption locked to the conversation's method;
+    // the user reviews (and can adjust delivery network + fee) there.
     const [draftText, setDraftText] = useState('');
-    const [pendingSend, setPendingSend] = useState(/** @type {string | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
-    // Reset the composer when switching conversations so a half-typed draft (or a
-    // pending confirmation) never leaks into a different thread.
+    // Reset the composer when switching conversations so a half-typed draft
+    // never leaks into a different thread.
     useEffect(() => {
         setDraftText('');
-        setPendingSend(null);
     }, [selectedCounterparty]);
 
     useEffect(() => {
@@ -196,19 +185,6 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack })
         }
         return m;
     }, [addressesByChain]);
-
-    // Every message is broadcast over Dogecoin (cheap/fast) regardless of the
-    // recipient's chain (see flows/messageAction.js). This is the account's
-    // Dogecoin funding address + chain on the active network, used to pay the
-    // fee and sign. Null when the account has no Dogecoin address, in which case
-    // the send falls back to broadcasting on the recipient's own chain.
-    const dogeBroadcast = useMemo(() => {
-        const a = sweepAddrs.find(
-            (x) => chainRegistry.get(x.chainId)?.coin === 'dogecoin',
-        );
-        const rec = a ? recordByAddress[a.address] : null;
-        return rec ? { chainId: a.chainId, record: rec } : null;
-    }, [sweepAddrs, recordByAddress]);
 
     // Load the merged inbox. `pw` is null on the unlocked-session path; a
     // string on the password path.
@@ -370,16 +346,17 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack })
         return info ? { chainId: info.chainId, fromAddressId: info.id, fromAddress: ownerAddr } : null;
     }, [thread, ownerSet, addrInfoByAddress]);
 
-    // Encryption method the docked composer should reply with: match the most
-    // recent ECIES (1) / ECDH (2) message in the thread so an ECDH conversation
-    // (where the sender can read their own sent messages) keeps that property.
-    // AES (3) has no send surface, so fall back to ECIES.
-    const threadMethod = useMemo(() => {
+    // Encryption a reply should use, locked onto the compose form: match the
+    // most recent ECIES (1) / ECDH (2) message in the thread so an ECDH
+    // conversation (where the sender can read their own sent messages) keeps
+    // that property. A thread with no encrypted message is a plaintext (v3)
+    // conversation; AES (3) has no send surface, so it falls back to ECIES.
+    const threadEncryption = useMemo(() => {
         for (let i = thread.length - 1; i >= 0; i -= 1) {
-            if (thread[i].method === 2) return 2;
-            if (thread[i].method === 1) return 1;
+            if (thread[i].method === 2) return 'ecdh';
+            if (thread[i].method === 1) return 'ecies';
         }
-        return 1;
+        return thread.some((m) => m.method === 3) ? 'ecies' : 'plaintext';
     }, [thread]);
 
     // Interleave iMessage-style day separators: a single centered date header
@@ -429,14 +406,6 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack })
             });
         }
         setSelectedCounterparty(cp);
-    }
-
-    // Append a just-sent reply so it appears in the open thread immediately,
-    // without re-authenticating a full inbox re-sweep. ECIES sends can't be
-    // read back from chain (encrypted to the recipient only), so we show the
-    // plaintext we just typed for this optimistic row.
-    function appendSentMessage(msg) {
-        setMessages((prev) => [...prev, msg]);
     }
 
     const header = (
@@ -525,38 +494,6 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack })
         );
     }
 
-    // Send-confirmation screen: pressing Enter in the composer routes here
-    // first, so the user reviews the recipient + network fee before broadcast.
-    if (selectedCounterparty && pendingSend != null && replyContext) {
-        const confirmRecord = recordByAddress[replyContext.fromAddress];
-        if (confirmRecord) {
-            // The reply addresses the counterparty on the conversation's chain
-            // (that sets COIN), but broadcasts + pays the fee on Dogecoin when
-            // the account has a DOGE address, falling back to the conversation's
-            // own chain otherwise.
-            const broadcast = dogeBroadcast || { chainId: replyContext.chainId, record: confirmRecord };
-            return (
-                <SendConfirm
-                    walletId={walletId}
-                    demo={flowsLib.isDemoWallet(walletId)}
-                    messaging={messaging}
-                    signerReady={signerReady}
-                    variant={variant}
-                    isFull={isFull}
-                    chainId={replyContext.chainId}
-                    broadcastChainId={broadcast.chainId}
-                    fromRecord={broadcast.record}
-                    destination={selectedCounterparty}
-                    method={threadMethod}
-                    message={pendingSend}
-                    contactName={contactsByAddress[selectedCounterparty]}
-                    onSent={(msg) => { appendSentMessage(msg); setDraftText(''); setPendingSend(null); }}
-                    onCancel={() => setPendingSend(null)}
-                />
-            );
-        }
-    }
-
     // Thread view: tapping a conversation opens its full back-and-forth on a
     // dedicated screen. The header's back arrow returns to the list; a composer
     // docked in the footer sends a reply to the same counterparty.
@@ -625,13 +562,23 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack })
                 </ul>
             )
         );
-        const composer = replyRecord ? (
+        // Submitting hands the reply off to the standard New-message form
+        // (via onCompose) pre-filled with this conversation's recipient, the
+        // typed body, and the encryption locked to the thread's method. The
+        // form is where the user reviews and can adjust delivery network + fee.
+        const composer = replyRecord && onCompose ? (
             <ThreadComposer
                 value={draftText}
                 onChange={setDraftText}
                 onSubmit={() => {
                     const t = draftText.trim();
-                    if (t) setPendingSend(t);
+                    if (!t) return;
+                    setDraftText('');
+                    onCompose({
+                        toAddress: selectedCounterparty,
+                        message: t,
+                        fixedEncryption: threadEncryption,
+                    });
                 }}
             />
         ) : null;
@@ -759,8 +706,8 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack })
 /**
  * Docked thread composer: a single full-width message input in the Screen
  * footer. Submitting (Enter) hands the trimmed draft up to the parent, which
- * opens the send-confirmation screen; there is no send button. The input is
- * controlled by the parent so a draft survives the confirm/cancel round-trip.
+ * opens the standard New-message form pre-filled; there is no send button.
+ * The input is controlled by the parent so drafts reset per conversation.
  *
  * @param {object} props
  * @param {string} props.value
@@ -784,176 +731,6 @@ function ThreadComposer({ value, onChange, onSubmit }) {
                 aria-label="Message"
             />
         </form>
-    );
-}
-
-/**
- * Send-message confirmation screen. Reviews the recipient, the (estimated)
- * network fee, and the encryption before broadcasting, then sends via
- * messaging.messageAction and optimistically appends the message to the thread.
- * The from-address is always a software signer (it comes from the inbox sweep),
- * so no hardware-approval gate is needed; a wallet password is asked for only
- * when the session signer isn't already unlocked. Demo wallets append locally.
- *
- * @param {object} props
- * @param {string} props.walletId
- * @param {boolean} props.demo
- * @param {any} props.messaging
- * @param {boolean} props.signerReady
- * @param {'small' | 'full'} props.variant
- * @param {boolean} props.isFull
- * @param {string} props.chainId
- * @param {any} props.fromRecord            owner address record
- * @param {string} props.destination        counterparty address
- * @param {1 | 2} props.method              ECIES (1) or ECDH (2)
- * @param {string} props.message            plaintext to send
- * @param {string} [props.contactName]
- * @param {(msg: any) => void} props.onSent
- * @param {() => void} props.onCancel
- */
-function SendConfirm({
-    walletId, demo, messaging, signerReady, variant, isFull,
-    chainId, broadcastChainId, fromRecord, destination, method, message, contactName, onSent, onCancel,
-}) {
-    const [password, setPassword] = useState('');
-    const [sending, setSending] = useState(false);
-    const [error, setError] = useState(/** @type {string | null} */ (null));
-    const needsPassword = !demo && !signerReady;
-
-    // The fee is paid on the broadcast chain (Dogecoin), which can differ from
-    // the recipient's chain (`chainId`, which only sets COIN). Show that chain's
-    // native ticker + estimate so the cost the user sees is the cost they pay.
-    const feeChainId = broadcastChainId || chainId;
-    const descriptor = chainRegistry.get(feeChainId);
-    const ticker = nativeTickerFor(descriptor);
-    const fee = useMemo(() => estimateNativeSendFee({ chainId: feeChainId, chainRegistry }), [feeChainId]);
-
-    function optimisticRow(txid) {
-        return {
-            from: fromRecord.address,
-            to: destination,
-            // Show the plaintext we just sent: an ECIES message can't be read
-            // back from chain, but the sender always knows what they sent.
-            text: message,
-            encrypted: true,
-            method,
-            txid: txid || null,
-            block: null,
-            timestamp: Math.floor(Date.now() / 1000),
-            chainId,
-            format: 2,
-        };
-    }
-
-    async function handleConfirm() {
-        if (sending) return;
-        if (needsPassword && password.length === 0) {
-            setError('Enter your wallet password to send.');
-            return;
-        }
-        setSending(true);
-        setError(null);
-        try {
-            if (demo) {
-                onSent(optimisticRow(null));
-                return;
-            }
-            const result = await messaging.messageAction({
-                walletId,
-                chainId,
-                broadcastChainId: feeChainId,
-                from: {
-                    address: fromRecord.address,
-                    publicKey: fromRecord.publicKey,
-                    derivationPath: fromRecord.derivationPath,
-                    addressId: fromRecord.id,
-                    source: fromRecord.source,
-                    signerId: fromRecord.signerId,
-                },
-                destination,
-                message,
-                method,
-                password,
-            });
-            onSent(optimisticRow(result?.txid));
-        } catch (err) {
-            const name = err?.name;
-            if (name === 'WrongPasswordError' || name === 'InvalidPasswordError') {
-                setError('Incorrect password.');
-            } else if (name === 'PubkeyNotFoundError') {
-                setError("Can't encrypt: this address has no published key. Start a New message to send unencrypted.");
-            } else {
-                setError(err?.message || 'Could not send message.');
-            }
-            setSending(false);
-        }
-    }
-
-    const feeText = fee
-        ? `${fee.coinAmount} ${ticker || ''}`.trim() + (fee.rate ? ` (${fee.rate})` : '')
-        : 'Estimate unavailable';
-
-    const body = (
-        <>
-            <p className={styles.hint} style={{ marginTop: 0 }}>
-                Review this message before it is signed and broadcast.
-            </p>
-            <dl className={local.confirmList}>
-                <div className={local.confirmRow}>
-                    <dt className={local.confirmLabel}>To</dt>
-                    <dd className={local.confirmValue}>
-                        {contactName || <AddressText address={destination} truncate={false} />}
-                    </dd>
-                </div>
-                <div className={local.confirmRow}>
-                    <dt className={local.confirmLabel}>Encryption</dt>
-                    <dd className={local.confirmValue}>{methodLabel(method)}</dd>
-                </div>
-                <div className={local.confirmRow}>
-                    <dt className={local.confirmLabel}>Network fee</dt>
-                    <dd className={local.confirmValue}>{feeText}</dd>
-                </div>
-                <div className={local.confirmRow}>
-                    <dt className={local.confirmLabel}>Message</dt>
-                    <dd className={local.confirmValue} style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                        {message}
-                    </dd>
-                </div>
-            </dl>
-            {needsPassword ? (
-                <Input
-                    type="password"
-                    label="Wallet password"
-                    value={password}
-                    onChange={(e) => { setPassword(e.target.value); if (error) setError(null); }}
-                    autoComplete="current-password"
-                    aria-invalid={error ? true : undefined}
-                />
-            ) : null}
-            {error ? (
-                <p role="alert" className={styles.error} style={{ marginTop: '0.25rem' }}>{error}</p>
-            ) : null}
-            <div className={styles.actions}>
-                <Button variant="primary" block onClick={handleConfirm} loading={sending}>
-                    Send message
-                </Button>
-            </div>
-        </>
-    );
-
-    return (
-        <Screen
-            variant={variant}
-            header={(
-                <PageHeader
-                    onBack={onCancel}
-                    title="Send message"
-                    titleIcon={<Icon.MessageIcon />}
-                />
-            )}
-        >
-            {isFull ? <div className={styles.card}>{body}</div> : body}
-        </Screen>
     );
 }
 

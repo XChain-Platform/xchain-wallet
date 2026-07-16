@@ -26,7 +26,7 @@ import {
 } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { tickerColor } from '../components/BalanceList.jsx';
-import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
+import { ContactsPickerScreen } from '../components/ContactsPickerScreen.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { buildRecentDestinations } from '../../flows/recentDestinations.js';
@@ -288,9 +288,6 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
     // Contacts UX state: picker open/close, search query, and the
     // "save as contact" inline form (idle → naming → saving).
     const [contactsPickerOpen, setContactsPickerOpen] = useState(false);
-    // Address-book picker filters: free-text search + network ('all' | coin).
-    const [pickerQuery, setPickerQuery] = useState('');
-    const [pickerNetwork, setPickerNetwork] = useState('all');
 
     const [historyRows, setHistoryRows] = useState(/** @type {any[]} */ ([]));
     useEffect(() => {
@@ -357,26 +354,6 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
         setToError(null);
         setContactsPickerOpen(false);
     }, []);
-
-    // All saved addresses across every contact, flattened and filtered by the
-    // picker's network dropdown + search box. Unlike chainContacts (current
-    // chain only), this spans all networks so the user can search/filter freely.
-    const pickerRows = useMemo(() => {
-        const q = pickerQuery.trim().toLowerCase();
-        const out = [];
-        for (const c of contacts) {
-            for (const e of c?.entries || []) {
-                if (!e?.address) continue;
-                if (pickerNetwork !== 'all' && e.chain !== pickerNetwork) continue;
-                if (q) {
-                    const hay = `${c?.name || ''} ${e.address} ${e.label || ''}`.toLowerCase();
-                    if (!hay.includes(q)) continue;
-                }
-                out.push({ contact: c, entry: e });
-            }
-        }
-        return out;
-    }, [contacts, pickerQuery, pickerNetwork]);
 
 
     // §29.5 smart paste: BIP21 URI pre-fills amount/token/memo;
@@ -1348,76 +1325,16 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
     }
 
     // Contacts picker: rendered in place of the form when the user taps the
-    // contacts icon in the To field. Shows saved contact addresses across all
-    // networks with a 50/50 search + network-filter toolbar. Selecting a row
-    // fills the To field and returns to the form with all other state intact.
+    // contacts icon in the To field. Selecting a row fills the To field and
+    // returns to the form with all other state intact.
     if (contactsPickerOpen) {
-        const pickerHeader = (
-            <PageHeader
-                onBack={() => setContactsPickerOpen(false)}
-                title="Contacts"
-                titleIcon={<Icon.UsersIcon />}
-            />
-        );
-        const hasAnyAddress = contacts.some((c) => (c?.entries || []).some((e) => e?.address));
-        // Truly-empty path: no saved addresses at all. Render a single calm
-        // card so the page doesn't show a card-inside-a-card.
-        if (!hasAnyAddress) {
-            return (
-                <Screen variant={variant} header={pickerHeader}>
-                    <div
-                        className={isFull ? styles.cardFull : styles.cardSmall}
-                        style={{
-                            padding: 'var(--xc-space-6)',
-                            background: 'var(--xc-surface)',
-                            border: '1px solid var(--xc-border)',
-                            borderRadius: 'var(--xc-radius-lg)',
-                            textAlign: 'center',
-                            fontSize: 'var(--xc-text-md)',
-                            fontWeight: 600,
-                            color: 'var(--xc-text)',
-                        }}
-                    >
-                        You have no contacts yet
-                    </div>
-                </Screen>
-            );
-        }
         return (
-            <Screen variant={variant} header={pickerHeader}>
-                <div className={styles.abToolbar}>
-                    <input
-                        type="text"
-                        className={styles.abSearch}
-                        placeholder="Search"
-                        value={pickerQuery}
-                        onChange={(e) => setPickerQuery(e.target.value)}
-                        autoComplete="off"
-                        autoCorrect="off"
-                        spellCheck={false}
-                        aria-label="Search contacts"
-                    />
-                    <NetworkFilterDropdown value={pickerNetwork} onChange={setPickerNetwork} />
-                </div>
-                {pickerRows.length === 0 ? (
-                    <div className={styles.abEmpty}>No addresses match your filters.</div>
-                ) : (
-                    <ul className={styles.abList}>
-                        {pickerRows.map(({ contact, entry }) => (
-                            <li key={`${contact.id}:${entry.address}`}>
-                                <button
-                                    type="button"
-                                    className={styles.abRow}
-                                    onClick={() => handlePickContact(entry)}
-                                >
-                                    <span className={styles.abName}>{contact.name}</span>
-                                    <span className={styles.abAddr} title={entry.address}>{entry.address}</span>
-                                </button>
-                            </li>
-                        ))}
-                    </ul>
-                )}
-            </Screen>
+            <ContactsPickerScreen
+                contacts={contacts}
+                variant={variant}
+                onPick={handlePickContact}
+                onBack={() => setContactsPickerOpen(false)}
+            />
         );
     }
 
@@ -1490,7 +1407,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                 <button
                     type="button"
                     className={styles.inlineContactsButton}
-                    onClick={() => { setPickerQuery(''); setPickerNetwork('all'); setContactsPickerOpen(true); }}
+                    onClick={() => setContactsPickerOpen(true)}
                     aria-label="Open contacts"
                     title="Contacts"
                 >

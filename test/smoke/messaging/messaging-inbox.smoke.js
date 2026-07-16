@@ -105,24 +105,38 @@ assert.ok(/Share my key/.test(src),
 assert.ok(/useSignerReady\b/.test(src),
     'MessagingInbox uses signer-ready state to gate the inline password prompt');
 
-// --- 2c. Docked composer + send confirmation --------------------------
+// --- 2c. Docked composer hands replies to the New-message form --------
 
 assert.ok(/function ThreadComposer\b/.test(src),
     'MessagingInbox defines ThreadComposer (docked message input)');
-assert.ok(/onSubmit=\{\(\) => \{/.test(src) && /setPendingSend\(/.test(src),
-    'composer Enter routes the draft to the send-confirmation screen');
+assert.ok(/onSubmit=\{\(\) => \{/.test(src) && /onCompose\(\{/.test(src),
+    'composer Enter routes the draft to the New-message form via onCompose');
+assert.ok(/toAddress: selectedCounterparty/.test(src) && /message: t,/.test(src),
+    'the reply prefill carries the recipient and the typed body');
+assert.ok(/fixedEncryption: threadEncryption/.test(src) && /threadEncryption\b/.test(src),
+    'the reply locks the conversation encryption method onto the form');
 assert.ok(/className=\{local\.composerInput\}/.test(src) && !/className=\{local\.composerSend\}/.test(src),
     'composer is a full-width input with no send button');
-assert.ok(/function SendConfirm\b/.test(src),
-    'MessagingInbox defines a SendConfirm review screen');
-assert.ok(/title="Send message"/.test(src),
-    'confirmation screen is titled "Send message"');
-assert.ok(/messaging\.messageAction\s*\(/.test(src),
-    'confirmation sends via messaging.messageAction');
-assert.ok(/estimateNativeSendFee\b/.test(src) && /Network fee/.test(src),
-    'confirmation shows an estimated network (TX) fee');
+assert.ok(!/function SendConfirm\b/.test(src) && !/messaging\.messageAction\s*\(/.test(src),
+    'the bespoke SendConfirm screen is gone; ComposeMessage is the single send surface');
 assert.ok(!/>\s*Reply\s*</.test(src),
     'the old Reply button is removed from the thread view');
+
+// Every shell forwards the reply prefill (body + locked encryption) into
+// ComposeMessage.
+{
+    const shells = [
+        join(web, 'src', 'App.jsx'),
+        join(ext, 'src', 'popup', 'App.jsx'),
+        join(desktop, 'renderer', 'App.jsx'),
+    ];
+    for (const p of shells) {
+        const app = readFileSync(p, 'utf8');
+        assert.ok(/initialMessage=\{composePrefill\?\.message\}/.test(app)
+            && /fixedEncryption=\{composePrefill\?\.fixedEncryption\}/.test(app),
+            `${p} forwards message + fixedEncryption prefills to ComposeMessage`);
+    }
+}
 
 // --- 2d. iMessage-style day separators --------------------------------
 

@@ -24,10 +24,17 @@ import { registry as registryLib } from '@xchain-wallet/core';
 import { chainIconSmallUrl } from '../../branding/branding.js';
 import { isValidAddressAnyNetwork, detectAddressCoin } from '../utils/addressValidation.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { ContactsPickerScreen, contactsPickerStyles } from '../components/ContactsPickerScreen.jsx';
+import { buildDeliveryNetworkOptions } from '../utils/deliveryNetworks.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
-import { estimateNativeSendFee, estimateNativeSendFeeTiers, customFeeEstimate } from '../../flows/feeEstimate.js';
+import {
+    estimateNativeSendFee,
+    estimateNativeSendFeeTiers,
+    customFeeEstimate,
+    displayRateToSettingsCustom,
+} from '../../flows/feeEstimate.js';
 import { getFiatRate, coinToFiat } from '../../flows/priceLookup.js';
 import styles from './IssueTokenForm.module.css';
 
@@ -37,15 +44,6 @@ const chainRegistry = registryLib.defaultRegistry();
 // estimate on the review screen.
 const NATIVE_TICKER_BY_CHAIN = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
 
-// Delivery-network dropdown: user-facing coin labels, display order, and the
-// short "why pick this chain" note shown in brackets next to each network.
-const COIN_LABEL = { bitcoin: 'Bitcoin', litecoin: 'Litecoin', dogecoin: 'Dogecoin' };
-const COIN_ORDER = { bitcoin: 0, litecoin: 1, dogecoin: 2 };
-const COIN_CHARACTERISTIC = {
-    bitcoin: 'slowest + strongest',
-    litecoin: 'faster + cheaper',
-    dogecoin: 'fastest + cheapest',
-};
 
 /**
  * §41.7.3 Compose encrypted message.
@@ -75,6 +73,10 @@ const COIN_CHARACTERISTIC = {
  * @param {string} [props.chainId]           pre-selected source chain (from Inbox)
  * @param {string} [props.fromAddressId]     pre-selected source address
  * @param {string} [props.toAddress]         pre-filled recipient (from Inbox / Contact)
+ * @param {string} [props.initialMessage]    pre-filled body (a thread reply)
+ * @param {'ecies' | 'ecdh' | 'plaintext'} [props.fixedEncryption]  lock the
+ *   encryption to the conversation's method (thread replies must not switch
+ *   mid-conversation); the field still shows the level, just disabled
  * @param {() => void} props.onBack
  */
 export function ComposeMessage({
@@ -82,6 +84,8 @@ export function ComposeMessage({
     chainId: initialChainId,
     fromAddressId: initialFromAddressId,
     toAddress: initialToAddress,
+    initialMessage,
+    fixedEncryption,
     onBack,
 }) {
     const { messaging, shell } = useMessaging();
@@ -98,23 +102,27 @@ export function ComposeMessage({
         /** @type {string | null} */ (initialFromAddressId || null),
     );
     const [toAddress, setToAddress] = useState(initialToAddress || '');
-    const [message, setMessage] = useState('');
+    const [message, setMessage] = useState(initialMessage || '');
     const [password, setPassword] = useState('');
     // Network-fee tier picker (Low / Normal / Fast / Custom), mirroring Send.
     // Custom mode reveals a rate input. Defaults to Normal.
     const [feePick, setFeePick] = useState(
         /** @type {{ mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }} */ ({ mode: 'normal' }),
     );
+    // Address-book picker: contacts load once (silently; the picker just shows
+    // fewer rows on failure), the icon in the Address field opens the picker.
+    const [contacts, setContacts] = useState(/** @type {any[]} */ ([]));
+    const [contactsPickerOpen, setContactsPickerOpen] = useState(false);
     const [pubkeyState, setPubkeyState] = useState(
         /** @type {'idle' | 'checking' | 'found' | 'missing'} */ ('idle'),
     );
-    const [sendUnencrypted, setSendUnencrypted] = useState(false);
+    const [sendUnencrypted, setSendUnencrypted] = useState(fixedEncryption === 'plaintext');
     // Encryption choice when the recipient's pubkey is known: 'ecies' (default,
     // only the recipient can read) or 'ecdh' (a shared session key both parties
     // derive, so the sender can read their own sent messages too). ECDH needs
     // our private key to derive the secret, so it's unavailable on hardware.
     const [encryptionChoice, setEncryptionChoice] = useState(
-        /** @type {'ecies' | 'ecdh'} */ ('ecies'),
+        /** @type {'ecies' | 'ecdh'} */ (fixedEncryption === 'ecdh' ? 'ecdh' : 'ecies'),
     );
     // Tracks a sent ECDH key-exchange request (handshake) so the missing-pubkey
     // branch can confirm it without leaving the compose screen.
@@ -166,6 +174,15 @@ export function ComposeMessage({
         return () => { cancelled = true; };
     }, [walletId, messaging, initialChainId, fromAddressId]);
 
+    useEffect(() => {
+        if (typeof messaging.listContacts !== 'function') return undefined;
+        let cancelled = false;
+        messaging.listContacts()
+            .then((rows) => { if (!cancelled) setContacts(Array.isArray(rows) ? rows : []); })
+            .catch(() => {});
+        return () => { cancelled = true; };
+    }, [messaging]);
+
     // The recipient's own chain (the message's COIN / where their key is looked
     // up), derived from the address rather than the delivery network: a message
     // can be addressed to a Bitcoin address yet broadcast over Dogecoin. When
@@ -182,7 +199,7 @@ export function ComposeMessage({
     useEffect(() => {
         if (!destChainId || !toAddress.trim()) {
             setPubkeyState('idle');
-            setSendUnencrypted(false);
+            if (!fixedEncryption) setSendUnencrypted(false);
             return undefined;
         }
         let cancelled = false;
@@ -193,14 +210,14 @@ export function ComposeMessage({
                 .then((pubkey) => {
                     if (cancelled) return;
                     setPubkeyState(pubkey ? 'found' : 'missing');
-                    if (pubkey) setSendUnencrypted(false);
+                    if (pubkey && !fixedEncryption) setSendUnencrypted(false);
                 })
                 .catch(() => {
                     if (!cancelled) setPubkeyState('missing');
                 });
         }, 400);
         return () => { cancelled = true; clearTimeout(handle); };
-    }, [destChainId, toAddress, messaging]);
+    }, [destChainId, toAddress, messaging, fixedEncryption]);
 
     useEffect(() => {
         if (stage === 'review') {
@@ -221,32 +238,18 @@ export function ComposeMessage({
     });
 
     // The "Delivery network" options: one per chain the account holds, labeled
-    // by coin and ordered BTC, LTC, DOGE. The selected chain (`chainId`) is the
-    // network the message is delivered on: it sets COIN, resolves the
-    // recipient's pubkey, funds the tx, and pays the fee. Defaults to Dogecoin
-    // (see the address-load effect) since it's the cheapest to deliver on.
-    const deliveryOptions = useMemo(() => {
-        const out = [];
-        for (const cid of Object.keys(addressesByChain || {})) {
-            const coin = chainRegistry.get(cid)?.coin;
-            if (coin) out.push({ chainId: cid, coin, label: COIN_LABEL[coin] || coin });
-        }
-        out.sort((a, b) => (COIN_ORDER[a.coin] ?? 9) - (COIN_ORDER[b.coin] ?? 9));
-        return out;
-    }, [addressesByChain]);
-
-    // Network dropdown rows: coin logo + "Coin (characteristic)" so the user
-    // sees the trade-off (Dogecoin fastest + cheapest, Bitcoin slowest +
-    // strongest) at a glance.
-    const networkOptions = useMemo(() => deliveryOptions.map((o) => {
-        const note = COIN_CHARACTERISTIC[o.coin];
-        const url = chainIconSmallUrl(o.chainId);
-        return {
-            value: o.chainId,
-            label: note ? `${o.label} (${note})` : o.label,
-            icon: url ? <img src={url} alt="" /> : null,
-        };
-    }), [deliveryOptions]);
+    // "Coin (characteristic)" with the coin logo so the user sees the trade-off
+    // (Dogecoin fastest + cheapest, Bitcoin slowest + strongest) at a glance.
+    // The selected chain (`chainId`) is the network the message is delivered
+    // on: it sets COIN, resolves the recipient's pubkey, funds the tx, and
+    // pays the fee. Defaults to Dogecoin (see the address-load effect) since
+    // it's the cheapest to deliver on.
+    const networkOptions = useMemo(() => buildDeliveryNetworkOptions({
+        addressesByChain,
+        chainRegistry,
+        chainIconSmallUrl,
+        renderIcon: (url) => <img src={url} alt="" />,
+    }), [addressesByChain]);
 
     // Encryption dropdown rows: a lock for the encrypted methods, an open lock
     // for plain text, each with a one-line "who can read it" note.
@@ -287,6 +290,15 @@ export function ComposeMessage({
     const selectedFeeEstimate = feePick.mode === 'custom'
         ? customEstimate
         : (feeTiers ? feeTiers[feePick.mode] : estimateNativeSendFee({ chainId, chainRegistry, speed: feePick.mode }));
+
+    // The picked rate converted to the encoder's feePerKb unit (smallest-unit
+    // per KB), so the tier/custom choice actually prices the transaction. Null
+    // when there is no usable estimate (e.g. an empty custom rate), which
+    // falls back to the encoder's own default pricing.
+    const feePerKb = (selectedFeeEstimate && selectedFeeEstimate.unit
+        && Number.isFinite(selectedFeeEstimate.rateValue) && selectedFeeEstimate.rateValue > 0)
+        ? displayRateToSettingsCustom(selectedFeeEstimate.unit, selectedFeeEstimate.rateValue)
+        : null;
 
     // Fiat value of a fee amount, paid on the delivery network. Passed to the
     // FeeSelector so each tier's readout shows its cost in a colored bubble next
@@ -369,6 +381,7 @@ export function ComposeMessage({
                 method: sendUnencrypted
                     ? null
                     : (encryptionChoice === 'ecdh' && !hw ? 2 : 1),
+                ...(feePerKb != null ? { feePerKb } : {}),
             };
             const r = hw
                 ? await messaging.messageActionHw({ ...base, signerId: fromAddress.signerId })
@@ -566,19 +579,48 @@ export function ComposeMessage({
         );
     }
 
+    // Address-book picker: rendered in place of the form when the user taps
+    // the contacts icon in the Address field. Selecting a row fills the field
+    // and returns to the form with all other state intact.
+    if (contactsPickerOpen) {
+        return (
+            <ContactsPickerScreen
+                contacts={contacts}
+                variant={variant}
+                onPick={(entry) => {
+                    setToAddress(entry.address);
+                    setContactsPickerOpen(false);
+                }}
+                onBack={() => setContactsPickerOpen(false)}
+            />
+        );
+    }
+
     return wrap(
         <form onSubmit={handleReview} noValidate>
-            {/* 1. Address (recipient) */}
-            <Input
-                label="Address"
-                value={toAddress}
-                onChange={(e) => setToAddress(e.target.value)}
-                placeholder="Recipient address"
-                autoComplete="off"
-                autoCorrect="off"
-                spellCheck={false}
-                error={addressError}
-            />
+            {/* 1. Address (recipient), with an address-book shortcut */}
+            <div className={contactsPickerStyles.fieldWrap}>
+                <Input
+                    label="Address"
+                    value={toAddress}
+                    onChange={(e) => setToAddress(e.target.value)}
+                    placeholder="Recipient address"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    error={addressError}
+                    style={{ paddingRight: '48px' }}
+                />
+                <button
+                    type="button"
+                    className={contactsPickerStyles.inlineContactsButton}
+                    onClick={() => setContactsPickerOpen(true)}
+                    aria-label="Open contacts"
+                    title="Contacts"
+                >
+                    <Icon.UsersIcon />
+                </button>
+            </div>
 
             {/* 2. Message */}
             <Textarea
@@ -590,12 +632,14 @@ export function ComposeMessage({
                 style={{ minHeight: isFull ? '6rem' : '4rem' }}
             />
 
-            {/* 3. Encryption */}
+            {/* 3. Encryption. Locked (still visible) for thread replies: a
+                conversation keeps the method it started with. */}
             <IconSelect
                 label="Encryption"
                 value={encryptionValue}
                 onChange={onEncryptionChange}
                 options={encryptionOptions}
+                disabled={Boolean(fixedEncryption)}
             />
             {pubkeyState === 'checking' && encryptionValue !== 'plaintext' ? (
                 <p className={styles.hint} style={{ marginTop: '0.25rem' }}>

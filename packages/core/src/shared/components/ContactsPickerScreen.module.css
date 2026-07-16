@@ -1,0 +1,150 @@
+/* Copyright © 2025–2026 Dankest, LLC
+ * Based on XChain Platform by Dankest, LLC – https://dankest.llc
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ *
+ * This file is part of XChain Platform. Licensed under the GNU Affero
+ * General Public License v3.0 or later; see LICENSE.md. A commercial
+ * license (without AGPL source-disclosure terms) is available -
+ * contact legal@dankest.llc.
+ */
+
+/* Contacts picker toolbar: search + network filter, each 50% wide. The
+   bottom margin matches the screen body's top padding so the spacing above
+   and below the toolbar is equal. */
+.abToolbar {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--xc-space-2);
+    width: 100%;
+    margin-bottom: var(--xc-space-2);
+}
+
+.abSearch {
+    flex: 1 1 0;
+    min-width: 0;
+    box-sizing: border-box;
+    padding: var(--xc-space-2) var(--xc-space-3);
+    font-family: var(--xc-font-sans);
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text);
+    background: var(--xc-surface);
+    border: 1px solid var(--xc-border-strong);
+    border-radius: var(--xc-radius-md);
+}
+
+.abSearch::placeholder {
+    color: var(--xc-text-muted);
+}
+
+/* One card wrapping all results, mirroring the Home balances list: rows
+   separated by a hairline divider and highlighted on hover. Each row shows
+   the contact name on the first line and the address on the second. */
+.abList {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--xc-surface);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-md);
+    overflow: hidden;
+}
+
+.abRow {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    padding: var(--xc-space-3);
+    border-top: 1px solid var(--xc-border);
+    background: transparent;
+    color: var(--xc-text);
+    text-align: start;
+    cursor: pointer;
+}
+
+.abList li:first-child .abRow {
+    border-top: none;
+}
+
+.abRow:hover,
+.abRow:focus-visible {
+    background: var(--xc-bg-muted);
+    outline: none;
+}
+
+.abName {
+    font-weight: 700;
+    font-size: var(--xc-text-md);
+}
+
+.abAddr {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    font-family: var(--xc-font-mono);
+}
+
+.abEmpty {
+    padding: var(--xc-space-5) var(--xc-space-3);
+    text-align: center;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+}
+
+/* Truly-empty path: no saved addresses at all. A single calm card so the
+   page doesn't show a card-inside-a-card. */
+.emptyCard {
+    padding: var(--xc-space-6);
+    background: var(--xc-surface);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-lg);
+    text-align: center;
+    font-size: var(--xc-text-md);
+    font-weight: 600;
+    color: var(--xc-text);
+}
+
+/* Inline address-book affordance for an address Input: the caller wraps the
+   field in .fieldWrap and drops .inlineContactsButton inside it. */
+.fieldWrap {
+    position: relative;
+}
+
+.inlineContactsButton {
+    position: absolute;
+    inset-inline-end: 4px;
+    /* Stretch the button between the bottom of the label area and the
+       bottom of the input. Both anchors are CSS-known (Input.field has
+       gap space-1 below the text-sm label, and margin-bottom space-3
+       under the input). flex-centering inside lands the icon at the
+       input's vertical midpoint regardless of font-size / line-height. */
+    top: calc(0.875rem * 1.5 + var(--xc-space-2));
+    bottom: var(--xc-space-3);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    padding: 0;
+    border: none;
+    border-radius: var(--xc-radius-sm);
+    background: transparent;
+    color: var(--xc-text-muted);
+    cursor: pointer;
+}
+
+.inlineContactsButton:hover:not(:disabled) {
+    color: var(--xc-text);
+}
+
+.inlineContactsButton:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
