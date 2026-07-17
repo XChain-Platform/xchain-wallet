@@ -93,6 +93,9 @@ export {
 } from './rbfReplace.js';
 export {
     getFiatRate,
+    refreshFiatRates,
+    subscribeFiatRates,
+    configureFiatRateSource,
     coinToFiat,
     fiatToCoin,
 } from './priceLookup.js';

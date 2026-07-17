@@ -64,7 +64,8 @@ import {
     customFeeEstimate,
     settingsCustomToDisplayRate,
 } from '../../flows/feeEstimate.js';
-import { getFiatRate, coinToFiat, fiatToCoin } from '../../flows/priceLookup.js';
+import { coinToFiat, fiatToCoin } from '../../flows/priceLookup.js';
+import { useFiatRate } from '../hooks/useFiatRate.js';
 import { HwSignBlock } from '../components/HwSignBlock.jsx';
 import { BalanceChanges } from '../components/BalanceChanges.jsx';
 import { RawPsbtViewer } from '../components/RawPsbtViewer.jsx';
@@ -501,14 +502,14 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
 
     // §29.2 Max + §29.3 fiat toggle.
     // Fiat rate for "≈ $X.XX" preview + the optional fiat-entry mode.
-    // Marked as static placeholder until §45 wires the real oracle.
+    // Oracle-primary with CoinGecko fallback (§45, ); the
+    // fallback is gated on the privacy.priceDataEnabled setting.
     const fiatCurrency = settings?.fiatCurrency || 'USD';
-    const fiatRate = useMemo(() => {
-        const desc = chainId ? chainRegistry.get(chainId) : null;
-        const coin = desc?.coin;
-        if (!coin) return null;
-        return getFiatRate({ chainCoin: coin, fiatCurrency });
-    }, [chainId, fiatCurrency]);
+    const fiatRate = useFiatRate({
+        chainCoin: chainId ? chainRegistry.get(chainId)?.coin : null,
+        fiatCurrency,
+        allowCoingeckoFallback: settings?.privacy?.priceDataEnabled !== false,
+    });
 
     const isNativeSend = useMemo(() => {
         const desc = chainId ? chainRegistry.get(chainId) : null;

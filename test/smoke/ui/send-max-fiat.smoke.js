@@ -39,7 +39,7 @@ assert.match(
 );
 assert.match(
     sendSrc,
-    /import \{ getFiatRate, coinToFiat, fiatToCoin \} from '\.\.\/\.\.\/flows\/priceLookup\.js'/,
+    /import \{ coinToFiat, fiatToCoin \} from '\.\.\/\.\.\/flows\/priceLookup\.js'/,
     'imports priceLookup helpers',
 );
 
@@ -60,7 +60,7 @@ assert.doesNotMatch(
 
 // --- fiat rate + toggle state -----------------------------------------
 
-assert.match(sendSrc, /fiatRate = useMemo/, 'fiat rate memoized');
+assert.match(sendSrc, /fiatRate = useFiatRate\(/, 'fiat rate via oracle-backed hook ');
 assert.match(sendSrc, /amountInputMode/, 'amount-entry mode state');
 assert.match(sendSrc, /fiatAmount/, 'fiat-mode input state');
 assert.match(sendSrc, /'coin' \| 'fiat'/, 'mode union typed');

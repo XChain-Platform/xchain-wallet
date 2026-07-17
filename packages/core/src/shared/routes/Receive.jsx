@@ -30,7 +30,8 @@ import {
     estimateNativeSendFeeTiers,
     fetchNativeSendFeeTiers,
 } from '../../flows/feeEstimate.js';
-import { getFiatRate, coinToFiat, fiatToCoin } from '../../flows/priceLookup.js';
+import { coinToFiat, fiatToCoin } from '../../flows/priceLookup.js';
+import { useFiatRate } from '../hooks/useFiatRate.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { tickerColor } from '../components/BalanceList.jsx';
@@ -296,13 +297,15 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         const native = nativeTickerFor(activeChainId ? chainRegistry.get(activeChainId) : null);
         return native ? t === native : false;
     }, [reqTick, activeChainId]);
-    const fiatRate = useMemo(() => {
-        if (!isNativeRequest) return null;
-        const desc = activeChainId ? chainRegistry.get(activeChainId) : null;
-        const coin = desc?.coin;
-        if (!coin) return null;
-        return getFiatRate({ chainCoin: coin, fiatCurrency });
-    }, [isNativeRequest, activeChainId, fiatCurrency]);
+    // Oracle-primary with CoinGecko fallback (§45, ); the
+    // fallback is gated on the privacy.priceDataEnabled setting.
+    const fiatRate = useFiatRate({
+        chainCoin: isNativeRequest && activeChainId
+            ? chainRegistry.get(activeChainId)?.coin
+            : null,
+        fiatCurrency,
+        allowCoingeckoFallback: settings?.privacy?.priceDataEnabled !== false,
+    });
 
     const onAmountFieldChange = useCallback((rawValue, cursorPos) => {
         const stripped = String(rawValue).replace(/,/g, '');

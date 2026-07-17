@@ -35,7 +35,9 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
-import { getFiatRate, coinToFiat } from '../../flows/priceLookup.js';
+import { coinToFiat } from '../../flows/priceLookup.js';
+import { useFiatRate } from '../hooks/useFiatRate.js';
+import { useSettings } from '../hooks/useSettings.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -303,10 +305,14 @@ export function ComposeMessage({
     // Fiat value of a fee amount, paid on the delivery network. Passed to the
     // FeeSelector so each tier's readout shows its cost in a colored bubble next
     // to the time estimate. Tiny sub-cent fees collapse to "< $0.01".
-    const fiatRate = useMemo(
-        () => getFiatRate({ chainCoin: chainRegistry.get(chainId)?.coin, fiatCurrency: 'USD' }),
-        [chainId],
-    );
+    // Oracle-primary with CoinGecko fallback (§45, ); the
+    // fallback is gated on the privacy.priceDataEnabled setting.
+    const { settings } = useSettings();
+    const fiatRate = useFiatRate({
+        chainCoin: chainRegistry.get(chainId)?.coin,
+        fiatCurrency: 'USD',
+        allowCoingeckoFallback: settings?.privacy?.priceDataEnabled !== false,
+    });
     const fiatForFee = useMemo(() => (coinAmount) => {
         const v = coinToFiat(coinAmount, fiatRate);
         if (v == null || !Number.isFinite(v) || v <= 0) return null;
