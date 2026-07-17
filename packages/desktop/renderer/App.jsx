@@ -58,6 +58,7 @@ import { TokenWizard } from '@xchain-wallet/core/shared/routes/TokenWizard.jsx';
 import { ActionsMenu } from '@xchain-wallet/core/shared/routes/ActionsMenu.jsx';
 import { MyTokens } from '@xchain-wallet/core/shared/routes/MyTokens.jsx';
 import { ManageToken } from '@xchain-wallet/core/shared/routes/ManageToken.jsx';
+import { TokenDetail } from '@xchain-wallet/core/shared/routes/TokenDetail.jsx';
 import { MarketActivity } from '@xchain-wallet/core/shared/routes/MarketActivity.jsx';
 import { IssueTokenForm } from '@xchain-wallet/core/shared/routes/IssueTokenForm.jsx';
 import { MintForm } from '@xchain-wallet/core/shared/routes/MintForm.jsx';
@@ -121,7 +122,8 @@ import { getSessionStatus, listWallets, lockWallet, listAccounts } from './messa
 import { LeftNav, FullLayoutWithNav } from '@xchain-wallet/core/shared/components/LeftNav.jsx';
 import { CommandPalette } from '@xchain-wallet/core/shared/commandPalette/CommandPalette.jsx';
 import { useCommandPalette } from '@xchain-wallet/core/shared/commandPalette/useCommandPalette.js';
-import { buildCommands, contactsToCommands, parseFreeformCommands, sitesToCommands, settingsSectionsToCommands, helpToCommands } from '@xchain-wallet/core/shared/commandPalette/commandRegistry.js';
+import { buildCommands, contactsToCommands, parseFreeformCommands, balancesToCommands, sitesToCommands, settingsSectionsToCommands, helpToCommands } from '@xchain-wallet/core/shared/commandPalette/commandRegistry.js';
+import { buildBalanceRows } from '@xchain-wallet/core/shared/components/BalanceList.jsx';
 import { useKeyboardShortcuts } from '@xchain-wallet/core/shared/keyboard/useKeyboardShortcuts.js';
 import { ShortcutHelp } from '@xchain-wallet/core/shared/keyboard/ShortcutHelp.jsx';
 import { BottomTabBar } from '@xchain-wallet/core/shared/components/BottomTabBar.jsx';
@@ -130,6 +132,11 @@ import { DemoBanner } from '@xchain-wallet/core/shared/components/DemoBanner.jsx
 import { registerSigner as registerLocalSigner } from './signerBridge.js';
 import { pairTrezorSigner } from './signerFactories/trezorFactory.js';
 import { pairLedgerSigner } from './signerFactories/ledgerFactory.js';
+import { registry as registryLib } from '@xchain-wallet/core';
+
+// Same default chain registry the web shell uses: buildBalanceRows needs it
+// to resolve divisibility / display names for the palette's token rows.
+const APP_CHAIN_REGISTRY = registryLib.defaultRegistry();
 
 export function App() {
     return (
@@ -148,7 +155,7 @@ function AppInner() {
         /** @type {'welcome' | 'create' | 'import' | 'import-freewallet'} */ ('welcome'),
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'link-form' | 'attach-content' | 'project-roster' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'sign-message' | 'verify-signature' | 'sign-psbt' | 'scan'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'lock' | 'description' | 'transfer' | 'broadcast' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'coinpay' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'token-detail' | 'link-form' | 'attach-content' | 'project-roster' | 'parallel-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'sign-message' | 'verify-signature' | 'sign-psbt' | 'scan'} */ ('home'),
     );
     const [walletDetailsId, setWalletDetailsId] = useState(/** @type {string | null} */ (null));
     const [coSignerAccountId, setCoSignerAccountId] = useState(/** @type {string | null} */ (null));
@@ -178,7 +185,7 @@ function AppInner() {
     // to 'home'; SendPicker → Send sets it to 'send-picker' so backing
     // out lands on the token list the user was just browsing.
     const [sendBackTo, setSendBackTo] = useState(
-        /** @type {'home' | 'send-picker'} */ ('home'),
+        /** @type {'home' | 'send-picker' | 'token-detail'} */ ('home'),
     );
     // ReceivePicker → Receive prefill carrier; cleared when the user
     // backs out of Receive. Mirrors `sendPrefill` for the Send side.
@@ -206,15 +213,14 @@ function AppInner() {
         binding: settings?.keyboard?.bindings?.['command-palette'],
     });
     const [paletteContacts, setPaletteContacts] = useState(/** @type {any[]} */ ([]));
-    //  entity search: connected sites join contacts in the palette's
-    // searchable surface. Same lazy contract as contacts: loaded on each
-    // open, and a failed load just drops that entity family from the
-    // results. Token entities are deliberately NOT offered on desktop: the
-    // shell has no held-token detail view (no 'token-detail' route; its
-    // tokenDetailRef feeds the owner-gated ManageToken), so there is nowhere
-    // correct for a token command to land. (Desktop also exposes no
+    //  entity search: token balances + connected sites join contacts
+    // in the palette's searchable surface. Same lazy contract as contacts:
+    // loaded on each open, and a failed load just drops that entity family
+    // from the results. Token commands land on the 'token-detail' route
+    // ( desktop parity with the web shell). (Desktop exposes no
     // connected-sites bridge, so the sites load is guarded and normally
     // stays empty.)
+    const [paletteTokenRows, setPaletteTokenRows] = useState(/** @type {any[]} */ ([]));
     const [paletteSites, setPaletteSites] = useState(/** @type {any[]} */ ([]));
     useEffect(() => {
         if (!palette.open || status.state !== 'unlocked' || !activeWalletId) return undefined;
@@ -222,6 +228,12 @@ function AppInner() {
         messaging.listContacts()
             .then((rows) => { if (!cancelled) setPaletteContacts(Array.isArray(rows) ? rows : []); })
             .catch(() => { /* palette still works without contacts */ });
+        messaging.getWalletBalances(activeWalletId, activeAccountId)
+            .then((balances) => {
+                if (cancelled) return;
+                setPaletteTokenRows(buildBalanceRows(balances, APP_CHAIN_REGISTRY, null));
+            })
+            .catch(() => { /* palette still works without token rows */ });
         if (typeof messaging.listConnectedSites === 'function') {
             messaging.listConnectedSites()
                 .then((sites) => { if (!cancelled) setPaletteSites(Array.isArray(sites) ? sites : []); })
@@ -255,8 +267,12 @@ function AppInner() {
     const [sellNameRef, setSellNameRef] = useState(
         /** @type {{ chainId: string, tick: string, fromAddress?: string } | null} */ (null),
     );
+    // Shared token-context slot: Home balance rows / the palette's token
+    // commands fill it fully (kind, quantity, fiatRate, ...) for the
+    // held-token 'token-detail' view ; MyTokens fills the owner
+    // subset for the owner-gated 'manage-token' view.
     const [tokenDetailRef, setTokenDetailRef] = useState(
-        /** @type {{ chainId: string, tick: string, kind: string, divisibility?: number | null } | null} */ (null),
+        /** @type {{ chainId: string, tick: string, kind: string, displayName?: string, divisibility?: number | null, fiatRate?: number | null, quantity?: string, imageUrl?: string | null, issuer?: string | null } | null} */ (null),
     );
     // Which view to return to from a form. ManageToken sets this to
     // 'manage-token' before opening a per-token form so Back returns
@@ -1247,6 +1263,61 @@ function AppInner() {
                     />
                 );
             }
+            // : held-token detail view, ported from the web shell so
+            // Home balance rows and palette token commands land somewhere.
+            if (unlockedView === 'token-detail' && activeWalletId && tokenDetailRef) {
+                return (
+                    <TokenDetail
+                        walletId={activeWalletId}
+                        chainId={tokenDetailRef.chainId}
+                        tick={tokenDetailRef.tick}
+                        kind={tokenDetailRef.kind}
+                        displayName={tokenDetailRef.displayName}
+                        divisibility={tokenDetailRef.divisibility}
+                        fiatRate={tokenDetailRef.fiatRate}
+                        quantity={tokenDetailRef.quantity}
+                        imageUrl={tokenDetailRef.imageUrl}
+                        onBack={() => setUnlockedView('home')}
+                        onSend={() => {
+                            setSendPrefill({
+                                chainId: tokenDetailRef.chainId,
+                                tick: tokenDetailRef.tick,
+                                kind: tokenDetailRef.kind,
+                                displayName: tokenDetailRef.displayName,
+                                imageUrl: tokenDetailRef.imageUrl,
+                            });
+                            setSendBackTo('token-detail');
+                            setUnlockedView('send');
+                        }}
+                        onReceive={() => {
+                            setReceivePrefill({
+                                chainId: tokenDetailRef.chainId,
+                                tick: tokenDetailRef.tick,
+                                kind: tokenDetailRef.kind,
+                                displayName: tokenDetailRef.displayName,
+                                imageUrl: tokenDetailRef.imageUrl,
+                            });
+                            setUnlockedView('receive');
+                        }}
+                        onViewActivity={() => {
+                            const coin = String(tokenDetailRef.chainId || '').split('-')[0] || '';
+                            setHistoryInitialQuery('');
+                            setHistoryInitialChainCoin(coin);
+                            setHistoryReturnTo('token-detail');
+                            setUnlockedView('history');
+                        }}
+                        onBuy={() => {
+                            setMarketsAsset({
+                                chainId: tokenDetailRef.chainId,
+                                tick: tokenDetailRef.tick,
+                                kind: tokenDetailRef.kind,
+                                displayName: tokenDetailRef.displayName,
+                            });
+                            setUnlockedView('markets');
+                        }}
+                    />
+                );
+            }
             if (unlockedView === 'market-activity') {
                 return (
                     <MarketActivity
@@ -1532,7 +1603,16 @@ function AppInner() {
                     onMessaging={activeWalletId ? () => setUnlockedView('messaging') : undefined}
                     onContracts={activeWalletId && hasBtcAddress ? () => setUnlockedView('contracts-list') : undefined}
                     onStaking={activeWalletId && hasBtcAddress ? () => setUnlockedView('staking-dashboard') : undefined}
-                    onHistory={activeWalletId ? () => setUnlockedView('history') : undefined}
+                    onHistory={activeWalletId ? () => {
+                        setHistoryInitialQuery('');
+                        setHistoryInitialChainCoin('');
+                        setHistoryReturnTo('home');
+                        setUnlockedView('history');
+                    } : undefined}
+                    onSelectToken={activeWalletId ? (tok) => {
+                        setTokenDetailRef(tok);
+                        setUnlockedView('token-detail');
+                    } : undefined}
                     onAddresses={activeWalletId ? () => setUnlockedView('addresses') : undefined}
                     onResumeAirdrop={activeWalletId ? (id) => {
                         setResumeAirdropId(id);
@@ -1578,23 +1658,25 @@ function AppInner() {
                 hasBtcAddress,
                 hasGovernanceAddress,
             };
-            //  entity handlers: sites land on the Connected Sites
-            // drilldown; settings sections deep-link via
-            // settingsInitialSection; help topics open the shortcut help
-            // modal. No openToken here: desktop has no held-token detail
-            // view, so token commands are intentionally absent.
+            //  entity handlers: tokens open TokenDetail with the full
+            // ref the row already carries ( desktop parity); sites land
+            // on the Connected Sites drilldown; settings sections deep-link
+            // via settingsInitialSection; help topics open the shortcut help
+            // modal.
             const openSettingsSection = (sectionId) => {
                 if (sectionId === 'connected-sites') { setUnlockedView('connected-sites'); return; }
                 setSettingsInitialSection(sectionId);
                 setUnlockedView('settings');
             };
             const paletteEntityCtx = {
+                openToken: (tok) => { setTokenDetailRef(tok); setUnlockedView('token-detail'); },
                 openConnectedSites: () => setUnlockedView('connected-sites'),
                 openSettings: openSettingsSection,
                 openHelp: () => setShortcutHelpOpen(true),
             };
             const paletteCommands = [
                 ...buildCommands(paletteCtx),
+                ...balancesToCommands(paletteTokenRows, paletteEntityCtx),
                 ...contactsToCommands(paletteContacts, { navigate: setUnlockedView }),
                 ...sitesToCommands(paletteSites, paletteEntityCtx),
                 ...settingsSectionsToCommands(paletteEntityCtx),

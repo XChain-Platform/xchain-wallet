@@ -121,16 +121,24 @@ for (const [label, path] of Object.entries(shells)) {
 }
 
 // ---  entity search per shell --------------------------------------
-// Tokens: web + popup open TokenDetail with the row ref. Desktop has no
-// held-token detail view, so it intentionally ships NO token commands.
-for (const label of ['web', 'extension popup']) {
+// Tokens: every shell opens TokenDetail with the row ref (desktop gained the
+// 'token-detail' route + Home onSelectToken in ).
+for (const label of ['web', 'extension popup', 'desktop']) {
     const src = read(shells[label]);
     assert.ok(/balancesToCommands\(/.test(src), `${label} App folds token balances into the palette`);
     assert.ok(/openToken:\s*\(tok\)\s*=>\s*\{\s*setTokenDetailRef\(tok\);\s*setUnlockedView\('token-detail'\)/.test(src),
         `${label} App's openToken sets the full token ref and opens token-detail`);
 }
-assert.ok(!/balancesToCommands\(/.test(read(shells.desktop)),
-    'desktop App ships no token commands (no held-token detail view to land on)');
+//  desktop parity: token-detail route mounted and Home rows clickable.
+{
+    const src = read(shells.desktop);
+    assert.ok(/unlockedView === 'token-detail' && activeWalletId && tokenDetailRef/.test(src),
+        'desktop App renders the token-detail route');
+    assert.ok(/<TokenDetail\b/.test(src) && /import\s*\{\s*TokenDetail\s*\}\s*from\s*'@xchain-wallet\/core\/shared\/routes\/TokenDetail\.jsx'/.test(src),
+        'desktop App imports and mounts the shared TokenDetail route');
+    assert.ok(/onSelectToken=\{activeWalletId \? \(tok\) => \{\s*setTokenDetailRef\(tok\);\s*setUnlockedView\('token-detail'\);/.test(src),
+        'desktop Home wires onSelectToken so balance rows open token-detail');
+}
 
 // Sites + settings deep-links + help topics: web + desktop (the popup has no
 // Settings route, so it only gets the openHelp-backed help topic).

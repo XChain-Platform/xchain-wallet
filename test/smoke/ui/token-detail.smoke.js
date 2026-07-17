@@ -139,4 +139,20 @@ assert.ok(/setTokenDetailRef\b/.test(extApp),
 assert.ok(/onSelectToken=/.test(extApp),
     'extension App.jsx wires onSelectToken into Home');
 
+// --- 6. Desktop App.jsx wires the route ( parity) -------------------
+
+const deskApp = readFileSync(join(wsRoot, 'packages', 'desktop', 'renderer', 'App.jsx'), 'utf8');
+assert.ok(/from '@xchain-wallet\/core\/shared\/routes\/TokenDetail\.jsx'/.test(deskApp),
+    'desktop App.jsx imports TokenDetail');
+assert.ok(/'token-detail'/.test(deskApp),
+    'desktop App.jsx adds the token-detail view literal');
+assert.ok(/unlockedView === 'token-detail' && activeWalletId && tokenDetailRef/.test(deskApp),
+    'desktop App.jsx renders the token-detail route');
+assert.ok(/setTokenDetailRef\b/.test(deskApp),
+    'desktop App.jsx tracks tokenDetailRef state');
+assert.ok(/onSelectToken=/.test(deskApp),
+    'desktop App.jsx wires onSelectToken into Home');
+assert.ok(/setHistoryReturnTo\('token-detail'\)/.test(deskApp),
+    'desktop token-detail onViewActivity returns History back to token-detail');
+
 console.log('token-detail smoke OK');
