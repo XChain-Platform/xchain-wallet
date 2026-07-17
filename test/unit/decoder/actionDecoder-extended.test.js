@@ -276,7 +276,7 @@ describe('decodeAction extended', () => {
                 params: { GIVE_TICK: 'X', GIVE_AMOUNT: '1', GIVE_ESCROW: '10', GET_COIN: 'BTC', GET_AMOUNT: '1', ORACLE_ADDRESS: 'bc1qoracle', VERSION: '0' },
             });
             expect(d.summary).toContain('oracle-priced');
-            expect(d.warnings.some((w) => /FIAT_CODE/i.test(w))).toBe(true);
+            expect(d.warnings.some((w) => /fiat currency/i.test(w))).toBe(true);
         });
 
         it('v1 cancel with index', () => {

@@ -1438,7 +1438,7 @@ function GatedContentPanel({ walletId, chainId, tick, groups, loading, error, pa
                 <p className={styles.muted}>
                     No token-gated content published for {tick}. Holders unlock
                     creator drops, packs, and sealed bundles here when the issuer
-                    publishes encrypted FILE actions gated by this ticker.
+                    publishes locked content for this token.
                 </p>
             </div>
         );

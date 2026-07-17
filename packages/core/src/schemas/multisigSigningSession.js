@@ -255,8 +255,8 @@ export function pendingCosignerPubkeys(session) {
 
 /**
  * Human-readable summary for the sign screen header. For MuSig2 the
- * counter switches from "Nonces collected" to "Partial sigs collected"
- * as round 2 begins.
+ * counter switches from "Cosigners responded (round 1 of 2)" to
+ * "Signatures collected (round 2 of 2)" as round 2 begins.
  *
  * @param {MultisigSigningSession} session
  */
@@ -271,13 +271,13 @@ export function progressSummary(session) {
     if (isMusig2) {
         if (session.status === 'collecting-nonces') {
             return {
-                label: 'Nonces collected',
+                label: 'Cosigners responded (round 1 of 2)',
                 current: session.nonces.length,
                 threshold: t,
             };
         }
         return {
-            label: 'Partial sigs collected',
+            label: 'Signatures collected (round 2 of 2)',
             current: session.partialSigs.length,
             threshold: t,
         };

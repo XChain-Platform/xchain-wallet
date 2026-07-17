@@ -591,7 +591,7 @@ const TEMPLATES = [
     {
         id: 'collectible',
         name: 'Collectible',
-        tagline: 'Single-edition NFT via FILE action.',
+        tagline: 'One-of-a-kind collectible with on-chain artwork.',
         interactive: true,
     },
     {
@@ -823,7 +823,7 @@ function renderDetailsStage({
                     label="Image URL"
                     hint={isEdition
                         ? 'The artwork every copy shares, stored on-chain in the description. Use a stable URL (IPFS, your own host).'
-                        : "The collectible's image, stored in DESCRIPTION. Use a stable URL (IPFS, your own host)."}
+                        : "The collectible's image, stored on-chain in the description. Use a stable URL (IPFS, your own host)."}
                     value={imageUrl}
                     onChange={(e) => setImageUrl(e.target.value)}
                     autoComplete="off"
@@ -837,7 +837,7 @@ function renderDetailsStage({
                     label={isEdition ? 'Copies per mint' : 'Max mint per transaction (optional)'}
                     hint={isEdition
                         ? 'How many copies one mint claims. Anyone can mint until the edition sells out.'
-                        : 'Caps how much can be minted in one MINT action.'}
+                        : 'Caps how much can be minted in one transaction.'}
                     inputMode="decimal"
                     value={maxMint}
                     onChange={(e) => setMaxMint(e.target.value)}

@@ -262,7 +262,7 @@ describe('progressSummary', () => {
     it('MuSig2 collecting-nonces label', () => {
         const s = createMultisigSigningSession({ ...BASE_INPUT, scheme: 'taproot-musig2' });
         const ps = progressSummary(s);
-        expect(ps.label).toBe('Nonces collected');
+        expect(ps.label).toBe('Cosigners responded (round 1 of 2)');
     });
 
     it('MuSig2 collecting-sigs label', () => {
@@ -270,7 +270,7 @@ describe('progressSummary', () => {
         s.status = 'collecting-sigs';
         s.partialSigs = [{ pubkey: PK_A, sig: 'b'.repeat(64), contributedAt: new Date().toISOString() }];
         const ps = progressSummary(s);
-        expect(ps.label).toBe('Partial sigs collected');
+        expect(ps.label).toBe('Signatures collected (round 2 of 2)');
         expect(ps.current).toBe(1);
     });
 

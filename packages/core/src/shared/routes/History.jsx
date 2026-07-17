@@ -834,7 +834,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                             ? 'No cross-chain actions yet'
                             : 'No history yet'}
                         body={crossChainOnly
-                            ? 'Send a LINK action or receive one to see cross-chain entries here.'
+                            ? 'Make a cross-chain transfer or receive one to see entries here.'
                             : 'Once you send or receive on the selected chains, the activity feed populates.'}
                         actionLabel={!crossChainOnly && onReceive ? 'Receive' : undefined}
                         onAction={!crossChainOnly ? onReceive : undefined}
@@ -2284,10 +2284,10 @@ function shortenAddress(addr) {
  */
 function StatusPill({ status }) {
     if (status === 'confirmed') {
-        return <span className={`${styles.statusPill} ${styles.statusPillSuccess}`} title="Valid">Valid</span>;
+        return <span className={`${styles.statusPill} ${styles.statusPillSuccess}`} title="Confirmed">Confirmed</span>;
     }
     if (status === 'failed') {
-        return <span className={`${styles.statusPill} ${styles.statusPillError}`} title="Invalid">Invalid</span>;
+        return <span className={`${styles.statusPill} ${styles.statusPillError}`} title="Failed">Failed</span>;
     }
     return <span className={`${styles.statusPill} ${styles.statusPillPending}`} title="Pending">Pending</span>;
 }

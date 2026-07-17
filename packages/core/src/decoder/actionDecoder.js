@@ -231,7 +231,7 @@ function decodeList(p, chainSuffix) {
                     : []),
             ],
             warnings: [
-                ...(!edit ? ['Edit direction is empty. Specify add (1) or remove (2).'] : []),
+                ...(!edit ? ['Edit direction is empty. Specify whether to add or remove items.'] : []),
                 ...(!parent ? ['Parent list action index is empty.'] : []),
                 ...(count === 0 ? ['List has no items.'] : []),
             ],
@@ -245,14 +245,14 @@ function decodeList(p, chainSuffix) {
     return {
         summary,
         details: [
-            { label: 'Type', value: type === '1' ? 'TICK (token)' : type === '2' ? 'ADDRESS' : type },
+            { label: 'Type', value: type === '1' ? 'Token' : type === '2' ? 'Address' : type },
             { label: 'Items', value: String(count) },
             ...(count > 0 && count <= 5
                 ? [{ label: 'Sample', value: items.join(', ') }]
                 : []),
         ],
         warnings: [
-            ...(!type ? ['List type is empty. Specify 1 (TICK) or 2 (ADDRESS).'] : []),
+            ...(!type ? ['List type is empty. Specify a token list or an address list.'] : []),
             ...(count === 0 ? ['List has no items.'] : []),
         ],
     };
@@ -465,7 +465,7 @@ function decodeDispenser(p, chainSuffix) {
 
     // Pricing lane: determines how the one-liner reads.
     const payPriceLabel = oracle
-        ? `an oracle-priced ${fiatCode || 'FIAT'} amount`
+        ? `an oracle-priced ${fiatCode || 'fiat'} amount`
         : fiatAmount && fiatCode
             ? `${fiatAmount} ${fiatCode}`
             : getTick
@@ -510,10 +510,10 @@ function decodeDispenser(p, chainSuffix) {
             : []),
         ...(!getAmount ? ['Trigger amount is empty.'] : []),
         ...(!getTick && !getCoin
-            ? ['Buyer payment is ambiguous. Set either a token (GET_TICK) or a coin (GET_COIN).']
+            ? ['Buyer payment is ambiguous. Set either a token or a coin for the buyer to pay.']
             : []),
         ...(oracle && !fiatCode
-            ? ['Oracle pricing requires FIAT_CODE. The oracle publishes token prices in that fiat.']
+            ? ['Oracle pricing requires a fiat currency. The oracle publishes token prices in that fiat.']
             : []),
         ...baseWarnings,
     ];

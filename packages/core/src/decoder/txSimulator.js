@@ -350,7 +350,7 @@ function simulateDispenser(p, balMap, coinTick, feeEstimate) {
         deltas.push(deltaRow(giveTick, balMap, neg(giveEscrow), giveTick === coinTick));
     }
     const priceLabel = oracle
-        ? `oracle-priced in ${fiatCode || 'FIAT'}`
+        ? `oracle-priced in ${fiatCode || 'fiat'}`
         : fiatAmount && fiatCode
             ? `${fiatAmount} ${fiatCode}`
             : getTick

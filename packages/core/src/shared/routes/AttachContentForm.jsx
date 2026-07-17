@@ -366,7 +366,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 ? await messaging.fileActionHw({ ...base, signerId: fromAddress.signerId })
                 : await messaging.fileAction({ ...base, password });
             const txid = res?.txid || res?.broadcast?.txid;
-            if (!txid) throw new Error('FILE broadcast did not return a txid.');
+            if (!txid) throw new Error('Broadcast did not return a transaction id.');
             setFileTxid(txid);
             setPassword('');
             setStage('wait-index');

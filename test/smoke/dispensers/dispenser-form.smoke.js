@@ -111,15 +111,15 @@ assert.ok(
     'DispenserForm rejects escrow < give',
 );
 assert.ok(
-    /Set a trigger price, or enable FIAT \/ oracle/.test(src),
+    /Set a trigger price, or enable fiat \/ oracle/.test(src),
     'DispenserForm rejects when no pricing lane is filled',
 );
 assert.ok(
-    /Oracle pricing requires a FIAT_CODE/.test(src),
+    /Oracle pricing needs a fiat currency/.test(src),
     'DispenserForm requires fiat code when oracle is set',
 );
 assert.ok(
-    /FIAT amount must be in X\.XX format/.test(src),
+    /Fiat amount must look like 12\.34/.test(src),
     'DispenserForm enforces X.XX fiat amount',
 );
 
@@ -263,7 +263,7 @@ assert.ok(
         },
     });
     assert.ok(
-        v0bareOracle.warnings.some((w) => /Oracle pricing requires FIAT_CODE/.test(w)),
+        v0bareOracle.warnings.some((w) => /Oracle pricing requires a fiat currency/.test(w)),
         'v0 warns when oracle set without FIAT_CODE',
     );
 

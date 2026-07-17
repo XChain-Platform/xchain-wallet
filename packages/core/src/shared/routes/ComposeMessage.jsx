@@ -399,7 +399,7 @@ export function ComposeMessage({
             if (name === 'InvalidPasswordError') {
                 setSubmitError('Incorrect password.');
             } else if (name === 'PubkeyNotFoundError') {
-                setSubmitError('Recipient pubkey disappeared between lookup and send. Refresh and try again.');
+                setSubmitError("The recipient's encryption key is no longer available. Refresh and try again.");
                 setPubkeyState('missing');
             } else {
                 setSubmitError(err?.message || 'Send failed.');

@@ -380,8 +380,8 @@ const chainRegistry = registryLib.defaultRegistry();
     });
     assert.equal(d.summary, 'Create address list of 3 items on Bitcoin');
     assert.ok(
-        d.details.some((r) => r.label === 'Type' && /ADDRESS/.test(r.value)),
-        'LIST v0 type row reads ADDRESS',
+        d.details.some((r) => r.label === 'Type' && /Address/.test(r.value)),
+        'LIST v0 type row reads Address',
     );
     assert.ok(
         d.details.some((r) => r.label === 'Items' && r.value === '3'),

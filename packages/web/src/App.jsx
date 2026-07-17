@@ -2259,7 +2259,7 @@ function buildActionEntries({
         {
             id: 'dispenser',
             label: 'Create dispenser',
-            description: 'Open a vending machine that sells your token for coin or FIAT.',
+            description: 'Open a vending machine that sells your token for coin or fiat.',
             onSelect: onCreateDispenser,
         },
         {

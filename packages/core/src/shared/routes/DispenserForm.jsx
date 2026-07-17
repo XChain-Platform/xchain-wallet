@@ -383,7 +383,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         const fa = fiatAmount.trim();
         const trig = triggerPrice.trim();
         if (!oracle && !fa && !trig) {
-            setFormError('Set a trigger price, or enable FIAT / oracle pricing under Advanced.');
+            setFormError('Set a trigger price, or enable fiat / oracle pricing under Advanced.');
             return;
         }
         if (trig && Number(trig) < 0) {
@@ -391,11 +391,11 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             return;
         }
         if (oracle && !fiatCode) {
-            setFormError('Oracle pricing requires a FIAT_CODE. Pick a fiat currency under Advanced.');
+            setFormError('Oracle pricing needs a fiat currency. Pick one under Advanced.');
             return;
         }
         if (fa && !/^\d+\.\d{2}$/.test(fa)) {
-            setFormError('FIAT amount must be in X.XX format.');
+            setFormError('Fiat amount must look like 12.34.');
             return;
         }
         setFormError(null);
@@ -745,13 +745,13 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 onClick={() => setShowAdvanced((v) => !v)}
                 style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}
             >
-                {showAdvanced ? '▾ Advanced options' : '▸ Advanced options (FIAT pricing, oracle)'}
+                {showAdvanced ? '▾ Advanced options' : '▸ Advanced options (fiat pricing, oracle)'}
             </button>
 
             {showAdvanced ? (
                 <>
                     <label className={styles.pickerLabel}>
-                        Priced in FIAT (optional)
+                        Priced in fiat (optional)
                         <select
                             className={styles.picker}
                             value={fiatCode}
@@ -764,8 +764,8 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                         </select>
                     </label>
                     <Input
-                        label="FIAT amount (X.XX)"
-                        hint="Validator-priced FIAT dispenser. Leave blank if using a user oracle."
+                        label="Fiat amount (e.g. 12.34)"
+                        hint="Validator-priced fiat dispenser. Leave blank if using a user oracle."
                         inputMode="decimal"
                         value={fiatAmount}
                         onChange={(e) => setFiatAmount(e.target.value)}
@@ -773,7 +773,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     />
                     <Input
                         label="Oracle address (optional)"
-                        hint="User-oracle (PRICE v1) address for FIAT pricing. Requires a FIAT_CODE."
+                        hint="User-oracle (PRICE v1) address for fiat pricing. Requires a fiat currency."
                         value={oracleAddress}
                         onChange={(e) => setOracleAddress(e.target.value)}
                         autoComplete="off"

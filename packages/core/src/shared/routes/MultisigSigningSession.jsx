@@ -34,9 +34,9 @@ const {
  *     "Signatures collected: 2 of 3" and finalize is reachable as
  *     soon as threshold is met.
  *   - **Taproot-MuSig2** tracks two rounds. Round 1 collects 66-byte
- *     publicNonces ("Nonces collected: 2 of 3"); once threshold is
+ *     publicNonces ("Cosigners responded: 2 of 3"); once threshold is
  *     met the wallet aggregates them via `sdk.musig2.aggregateNonces`
- *     and the header switches to "Partial sigs collected: 2 of 3".
+ *     and the header switches to "Signatures collected: 2 of 3".
  *     Round 2 collects 32-byte partial sigs which are then aggregated
  *     into a single 64-byte Schnorr signature (BIP327); on chain
  *     this is indistinguishable from a single-sig taproot spend
@@ -602,10 +602,10 @@ export function MultisigSigningSession({ walletId, onBack }) {
             </p>
             {isMusig2 ? (
                 <p className={styles.hint}>
-                    Round 1: Nonces collected: {active.nonces.length} of {active.threshold}
+                    Round 1: Cosigners responded: {active.nonces.length} of {active.threshold}
                     {active.aggNonce ? ' (aggregated)' : ''}
                     <br />
-                    Round 2: Partial sigs collected: {active.partialSigs.length} of {active.threshold}
+                    Round 2: Signatures collected: {active.partialSigs.length} of {active.threshold}
                     {active.aggregatedSchnorrSig ? ' (aggregated Schnorr signature ready)' : ''}
                 </p>
             ) : null}
