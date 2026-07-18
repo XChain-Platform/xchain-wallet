@@ -47,10 +47,11 @@
             "brace-expansion@1": "^1.1.15",
             "brace-expansion@2": "^2.1.1",
             "brace-expansion@5": "^5.0.6",
-            "vite": ">=6.4.2 <7",
+            "vite": ">=6.4.3 <7",
             "protobufjs": ">=7.5.8",
             "@tootallnate/once": "^2.0.1",
-            "axios": "^1.16.1"
+            "axios": "^1.16.1",
+            "form-data": ">=4.0.6"
         }
     },
     "devDependencies": {
@@ -60,11 +61,11 @@
         "@testing-library/jest-dom": "^6.5.0",
         "@testing-library/react": "^16.0.1",
         "@vitejs/plugin-react": "^4.3.0",
-        "@vitest/coverage-v8": "^2.1.0",
+        "@vitest/coverage-v8": "^3.2.6",
         "jsdom": "^25.0.0",
         "react": "^18.3.0",
         "react-dom": "^18.3.0",
-        "vitest": "^2.1.0",
+        "vitest": "^3.2.6",
         "fast-check": "^4.6.0",
         "axe-core": "^4.10.0"
     }
