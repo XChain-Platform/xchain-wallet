@@ -21,8 +21,10 @@
 //   4. Both popup + web App.jsx wrap the router in <MessagingProvider>
 //      with the right shell value.
 //   5. The popup-local + web-local routes + their old component siblings
-//      (MnemonicGrid, ChainBalanceCard, useAutoLock) are gone; regressing
-//      to per-shell duplication would break the smoke.
+//      (MnemonicGrid, useAutoLock) are gone; regressing to per-shell
+//      duplication would break the smoke. ChainBalanceCard was later
+//      removed entirely (balances render via HomeTabs/BalanceList), so
+//      it must stay gone from shared components too.
 
 import { strict as assert } from 'node:assert';
 import { readFileSync, existsSync } from 'node:fs';
@@ -53,8 +55,6 @@ for (const rel of [
     'src/shared/hooks/useAutoLock.js',
     'src/shared/components/MnemonicGrid.jsx',
     'src/shared/components/MnemonicGrid.module.css',
-    'src/shared/components/ChainBalanceCard.jsx',
-    'src/shared/components/ChainBalanceCard.module.css',
     'src/shared/routes/Loading.jsx',
     'src/shared/routes/Loading.module.css',
     'src/shared/routes/Onboarding.jsx',
@@ -227,6 +227,10 @@ for (const gone of [
     'packages/web/src/routes/Onboarding.jsx',
     'packages/web/src/routes/Loading.jsx',
     'packages/web/src/components/MnemonicGrid.jsx',
+    // Dead code removed after the refactor: balances render via
+    // HomeTabs/BalanceList, so the shared card must stay deleted.
+    'packages/core/src/shared/components/ChainBalanceCard.jsx',
+    'packages/core/src/shared/components/ChainBalanceCard.module.css',
 ]) {
     assert.ok(
         !existsSync(join(wsRoot, gone)),

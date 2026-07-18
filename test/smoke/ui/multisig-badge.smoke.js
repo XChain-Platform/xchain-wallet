@@ -20,7 +20,6 @@ const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
 const core = join(wsRoot, 'packages', 'core');
 const sharedRoutes = join(core, 'src', 'shared', 'routes');
-const sharedComponents = join(core, 'src', 'shared', 'components');
 const ui = join(core, 'src', 'ui');
 
 // ─── MultisigBadge: exports from core/ui ─────────────────────
@@ -67,14 +66,6 @@ assert.ok(/getMultisigReceiveAddress/.test(history),
 assert.ok(/aria-pressed=\{multisigOnly\}/.test(history),
     'History\'s multisig-only chip carries aria-pressed for assistive tech');
 
-// ─── ChainBalanceCard: optional multisig prop ─────────────────
-
-const cardSrc = readFileSync(join(sharedComponents, 'ChainBalanceCard.jsx'), 'utf8');
-assert.ok(/multisig\b/.test(cardSrc),
-    'ChainBalanceCard accepts a multisig prop');
-assert.ok(/<MultisigBadge/.test(cardSrc),
-    'ChainBalanceCard renders MultisigBadge when multisig is provided');
-
 const home = readFileSync(join(sharedRoutes, 'Home.jsx'), 'utf8');
 assert.ok(/getMultisigReceiveAddress/.test(home),
     'Home fetches the multisig address to drive the indicator');
@@ -90,5 +81,5 @@ assert.ok(/<MultisigBadge[\s\S]*?threshold=\{(?:active|s)\.threshold\}[\s\S]*?co
     'MultisigSigningSession renders <MultisigBadge> against session.threshold + cosignerPubkeys.length');
 
 console.log(
-    'OK: multisig badge smoke (MultisigBadge: 3-scheme tone map + ARIA + data-scheme + Receive integration + History "Multisig only" filter chip + getMultisigReceiveAddress prefetch + ChainBalanceCard multisig prop + Home BTC-only badge gate + MultisigSigningSession header + list-row badge replaces inline schemeLabel)',
+    'OK: multisig badge smoke (MultisigBadge: 3-scheme tone map + ARIA + data-scheme + Receive integration + History "Multisig only" filter chip + getMultisigReceiveAddress prefetch + Home BTC-only badge gate + MultisigSigningSession header + list-row badge replaces inline schemeLabel)',
 );

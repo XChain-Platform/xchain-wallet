@@ -26,7 +26,7 @@ export function GrayCardSection() {
                 sizing={<>Default padding <code>var(--xc-space-3)</code> (12px). Address-row uses <code>var(--xc-space-2) var(--xc-space-3)</code> (tighter vertical). Asset card uses <code>var(--xc-space-3)</code> all around.</>}
                 doRule={<>✓ Use this for any "grouped block of fields / display values" · stack multiple cards with margin-bottom for vertical rhythm · combine with the stacked asset icon when the card represents an asset</>}
                 dontRule={<>✗ Add a drop shadow (defeats the flat look) · use a different background tint (consistency wins over micro-variation) · nest cards (gray-on-gray reads flat; pull the inner content out instead)</>}
-                supersedes={<>The matching <code>.addressBox</code>, <code>.assetCard</code>, <code>.qrBox</code>, multisig <code>&lt;section&gt;</code> rules in Receive.module.css; ChainBalanceCard's gray sub-rows. Lift into a <code>Card</code> primitive in <code>@xchain-wallet/core/ui</code> when a fourth caller appears.</>}
+                supersedes={<>The matching <code>.addressBox</code>, <code>.assetCard</code>, <code>.qrBox</code>, multisig <code>&lt;section&gt;</code> rules in Receive.module.css. Lift into a <code>Card</code> primitive in <code>@xchain-wallet/core/ui</code> when a fourth caller appears.</>}
             />
 
             <Markup>

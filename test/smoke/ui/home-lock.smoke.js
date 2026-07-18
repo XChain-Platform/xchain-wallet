@@ -18,8 +18,8 @@
 //      `locked: true` without error.
 //
 // Static coverage asserts Home.jsx wires lockWallet + listWallets +
-// getWalletBalances + useAutoLock, that ChainBalanceCard exists with
-// ChainBadge integration, and that messaging.js exposes the full set.
+// getWalletBalances + useAutoLock, and that messaging.js exposes the
+// full set.
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
@@ -51,7 +51,7 @@ assert.ok(
 // Home lives at @xchain-wallet/core/shared/routes/Home.jsx now. It
 // resolves lockWallet / listWallets / getWalletBalances off the
 // messaging module passed into <MessagingProvider>, and uses the
-// shared useAutoLock hook + ChainBalanceCard component.
+// shared useAutoLock hook (balances render via HomeTabs/BalanceList).
 const sharedHome = join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', 'Home.jsx');
 const home = readFileSync(sharedHome, 'utf8');
 for (const call of [
@@ -100,16 +100,6 @@ for (const ev of ['mousemove', 'keydown', 'scroll', 'click', 'touchstart']) {
         `shared useAutoLock listens for ${ev}`,
     );
 }
-
-const card = readFileSync(
-    join(wsRoot, 'packages', 'core', 'src', 'shared', 'components', 'ChainBalanceCard.jsx'),
-    'utf8',
-);
-assert.ok(
-    /export function ChainBalanceCard/.test(card),
-    'shared ChainBalanceCard exports the component',
-);
-assert.ok(card.includes('ChainBadge'), 'shared ChainBalanceCard uses ChainBadge');
 
 const bg = readFileSync(join(ext, 'src', 'background.js'), 'utf8');
 assert.ok(bg.includes('tearDownHost'), 'background.js defines tearDownHost');
