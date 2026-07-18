@@ -16,7 +16,11 @@
 // transaction actually carries.
 
 import { describe, it, expect } from 'vitest';
-import { exactSatsFromDecimalString } from '../../../packages/core/src/shared/routes/Send.jsx';
+import {
+    exactSatsFromDecimalString,
+    exactSatsBigIntFromDecimalString,
+    decimalStringFromSats,
+} from '../../../packages/core/src/shared/routes/Send.jsx';
 
 describe('exactSatsFromDecimalString (send-risk gate conversion)', () => {
     it('converts decimal-boundary values exactly where float math drifts', () => {
@@ -44,5 +48,49 @@ describe('exactSatsFromDecimalString (send-risk gate conversion)', () => {
 
     it('clamps absurd magnitudes instead of silently losing precision', () => {
         expect(exactSatsFromDecimalString('99999999999999999999')).toBe(Number.MAX_SAFE_INTEGER);
+    });
+});
+
+// : onMax and onSendSmallTest previously round-tripped through
+// parseFloat/toFixed, drifting whole sats on large DOGE balances and
+// emitting scientific notation ('1e-8') for one-sat amounts.
+describe('exactSatsBigIntFromDecimalString (Max sweep / small-test arithmetic)', () => {
+    it('is exact where parseFloat drifts on large balances', () => {
+        // 123456789.87654321 DOGE: parseFloat loses low-order sats above 2^53.
+        expect(exactSatsBigIntFromDecimalString('123456789.87654321')).toBe(12345678987654321n);
+        expect(exactSatsBigIntFromDecimalString('0.29')).toBe(29000000n);
+        expect(exactSatsBigIntFromDecimalString('90000000.00000001')).toBe(9000000000000001n);
+    });
+
+    it('accepts a bare leading dot like parseFloat did, rejects junk', () => {
+        expect(exactSatsBigIntFromDecimalString('.5')).toBe(50000000n);
+        expect(exactSatsBigIntFromDecimalString(' 1.000000019 ')).toBe(100000001n);
+        expect(exactSatsBigIntFromDecimalString('')).toBe(null);
+        expect(exactSatsBigIntFromDecimalString('.')).toBe(null);
+        expect(exactSatsBigIntFromDecimalString('1e8')).toBe(null);
+        expect(exactSatsBigIntFromDecimalString('-1')).toBe(null);
+    });
+});
+
+describe('decimalStringFromSats (non-scientific amount formatter)', () => {
+    it('never emits scientific notation', () => {
+        expect(decimalStringFromSats(1n)).toBe('0.00000001'); // old path gave '1e-8'
+        expect(decimalStringFromSats(100000000n)).toBe('1');
+        expect(decimalStringFromSats(29000000n)).toBe('0.29');
+        expect(decimalStringFromSats(12345678987654321n)).toBe('123456789.87654321');
+    });
+
+    it('strips trailing zeros and clamps negatives to zero', () => {
+        expect(decimalStringFromSats(150000000n)).toBe('1.5');
+        expect(decimalStringFromSats(0n)).toBe('0');
+        expect(decimalStringFromSats(-5n)).toBe('0');
+    });
+
+    it('round-trips a Max sweep exactly (balance minus fee)', () => {
+        const balance = exactSatsBigIntFromDecimalString('123456789.87654321');
+        const fee = exactSatsBigIntFromDecimalString('0.00226');
+        const display = decimalStringFromSats(balance - fee);
+        expect(display).toBe('123456789.87428321');
+        expect(exactSatsBigIntFromDecimalString(display)).toBe(balance - fee);
     });
 });

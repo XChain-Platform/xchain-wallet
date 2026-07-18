@@ -82,8 +82,13 @@ assert.match(sendSrc, /coinToFiat\(.*fiatRate\)/, 'fiat preview via coinToFiat')
 assert.match(sendSrc, /onMax = useCallback/, 'Max callback');
 assert.match(
     sendSrc,
-    /balanceNum - feeNum/,
-    'native send subtracts fee from balance',
+    /balanceSats - feeSats/,
+    'native send subtracts fee from balance in exact sats ',
+);
+assert.match(
+    sendSrc,
+    /decimalStringFromSats\(maxSats\)/,
+    'Max amount formatted via exact non-scientific formatter ',
 );
 assert.match(sendSrc, /maxDisabled=\{!sourceBalance\}/, 'Max disabled without balance prop forwarded to AmountField');
 

@@ -83,7 +83,12 @@ assert.match(
 // --- "Send small test" reduces amount + returns to form ----------------
 
 assert.match(sendSrc, /onSendSmallTest = useCallback/, 'small-test handler memoized');
-assert.match(sendSrc, /amt \* 0\.01/, '1% reduction');
+assert.match(sendSrc, /amtSats \/ 100n/, '1% reduction in exact sats ');
+assert.match(
+    sendSrc,
+    /decimalStringFromSats\(reduced\)/,
+    'small-test amount formatted via exact non-scientific formatter ',
+);
 assert.match(sendSrc, /setStage\('form'\)/, 'returns to form');
 
 // --- gate UI -----------------------------------------------------------

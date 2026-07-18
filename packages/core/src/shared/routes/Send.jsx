@@ -57,6 +57,31 @@ export function exactSatsFromDecimalString(raw) {
     // precision if someone types an absurd amount.
     return sats > BigInt(Number.MAX_SAFE_INTEGER) ? Number.MAX_SAFE_INTEGER : Number(sats);
 }
+
+// BigInt sibling of exactSatsFromDecimalString for amount *arithmetic*
+// (Max sweep, small-test reduction), where the result feeds back into the
+// amount field and eventually gets signed, so no clamp and no Number
+// round-trip is acceptable. Also accepts a bare leading dot ('.5') the way
+// parseFloat did, since this parses user-typed field values. Returns a
+// non-negative BigInt of sats, or null when the input is not a plain decimal.
+export function exactSatsBigIntFromDecimalString(raw) {
+    const s = String(raw).trim();
+    const m = /^(\d*)(?:\.(\d+))?$/.exec(s);
+    if (!m || (!m[1] && !m[2])) return null;
+    const frac = (m[2] || '').slice(0, 8).padEnd(8, '0');
+    return BigInt(m[1] || '0') * 100000000n + BigInt(frac);
+}
+
+// Exact sats -> plain decimal string, never scientific notation. The old
+// Number(x.toFixed(8)).toString() path rendered 1 sat as '1e-8', which the
+// encoder treats as a malformed AMOUNT. Trailing zeros are stripped for a
+// tidy display; negative inputs clamp to '0'.
+export function decimalStringFromSats(sats) {
+    const clamped = sats < 0n ? 0n : sats;
+    const whole = (clamped / 100000000n).toString();
+    const frac = (clamped % 100000000n).toString().padStart(8, '0').replace(/0+$/, '');
+    return frac ? `${whole}.${frac}` : whole;
+}
 import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
@@ -579,14 +604,13 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
     }, [amount, fiatRate]);
 
     const onSendSmallTest = useCallback(() => {
-        const amt = parseFloat(String(amount).trim());
-        if (!Number.isFinite(amt) || amt <= 0) return;
-        // 1% of the original, with a floor of one sat-equivalent so
-        // tiny sends don't round to zero.
-        const reduced = Math.max(amt * 0.01, 1e-8);
-        // Round to 8 decimals (BTC/LTC/DOGE precision) and strip
-        // trailing zeros for a tidy display.
-        const display = Number(reduced.toFixed(8)).toString();
+        const amtSats = exactSatsBigIntFromDecimalString(amount);
+        if (amtSats == null || amtSats <= 0n) return;
+        // 1% of the original (floor division in sats), with a floor of one
+        // sat so tiny sends don't round to zero. Exact BigInt math keeps
+        // the result a plain decimal string ('0.00000001', never '1e-8').
+        const reduced = amtSats / 100n > 1n ? amtSats / 100n : 1n;
+        const display = decimalStringFromSats(reduced);
         setAmount(display);
         setStage('form');
     }, [amount]);
@@ -818,14 +842,17 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
 
     const onMax = useCallback(() => {
         if (!sourceBalance || !sourceBalance.amount) return;
-        const balanceNum = parseFloat(sourceBalance.amount);
-        if (!Number.isFinite(balanceNum) || balanceNum <= 0) return;
-        let maxAmount = balanceNum;
+        // Exact string/BigInt math: this string is what gets signed, and a
+        // parseFloat round-trip on a large (>~90M-sat DOGE) balance drifts
+        // by whole sats, leaving dust behind or overshooting the balance.
+        const balanceSats = exactSatsBigIntFromDecimalString(sourceBalance.amount);
+        if (balanceSats == null || balanceSats <= 0n) return;
+        let maxSats = balanceSats;
         if (isNativeSend && feeEstimate) {
-            const feeNum = parseFloat(feeEstimate.coinAmount);
-            if (Number.isFinite(feeNum)) maxAmount = Math.max(0, balanceNum - feeNum);
+            const feeSats = exactSatsBigIntFromDecimalString(feeEstimate.coinAmount);
+            if (feeSats != null) maxSats = balanceSats > feeSats ? balanceSats - feeSats : 0n;
         }
-        const display = Number(maxAmount.toFixed(8)).toString();
+        const display = decimalStringFromSats(maxSats);
         setAmount(display);
         if (amountInputMode === 'fiat' && fiatRate) {
             const fv = coinToFiat(display, fiatRate);
