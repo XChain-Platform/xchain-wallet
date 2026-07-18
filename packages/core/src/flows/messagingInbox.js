@@ -98,8 +98,15 @@ async function fetchInboxForAddress({
     // just this address's home chain, decrypting with this address's WIF (the
     // COIN/destination is this address regardless of where it was broadcast).
     // De-dupe by txid; a same-chain send appears only once anyway.
+    //
+    // MSG-2: the txid dedup is first-occurrence-wins, so scan order decides
+    // which chain's row survives a txid collision. Put the address's home
+    // chain first: its rows are authoritative for this inbox, so a hostile
+    // secondary indexer cannot suppress or overwrite a genuine home-chain
+    // message by minting a colliding txid on another chain.
     const chainsToScan = (Array.isArray(queryChainIds) && queryChainIds.length)
-        ? queryChainIds : [chainId];
+        ? [chainId, ...queryChainIds.filter((cid) => cid !== chainId)]
+        : [chainId];
     const merged = [];
     const seenTxids = new Set();
     for (const scanChainId of chainsToScan) {

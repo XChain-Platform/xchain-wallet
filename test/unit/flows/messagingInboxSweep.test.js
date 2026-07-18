@@ -84,6 +84,45 @@ describe('getMessagingInboxSweep', () => {
         })).rejects.toThrow(/wrong password/);
     });
 
+    it('prefers the home-chain row when a txid collides across chains (MSG-2)', async () => {
+        // Two addresses on different chains, so the sweep's cross-chain scan
+        // set is ['dogecoin', 'bitcoin'] (address-list order puts dogecoin
+        // first). A hostile dogecoin indexer returns a row with the same txid
+        // as a genuine bitcoin message. Home-chain priority must make the
+        // bitcoin row win for the bitcoin-homed address despite dogecoin
+        // appearing earlier in the scan list.
+        const addrs = {
+            d1: { address: 'ADDR_DOGE', chain: 'dogecoin', network: 'regtest', derivationPath: "m/84'/3'/0'/0/0", source: 'hd' },
+            b1: { address: 'ADDR_BTC', chain: 'bitcoin', network: 'regtest', derivationPath: "m/84'/0'/0'/0/0", source: 'hd' },
+        };
+        const vault = { addresses: { get: async (id) => addrs[id] || null } };
+        const chainRegistry = { chainIdFor: (chain) => chain };
+        const sdkRegistry = {
+            get: (chainId) => ({
+                getMessagesForAddress: async (address) => {
+                    if (address === 'ADDR_BTC' && chainId === 'bitcoin') {
+                        return [{ txid: 'collide', text: 'genuine', timestamp: 10 }];
+                    }
+                    if (address === 'ADDR_BTC' && chainId === 'dogecoin') {
+                        return [{ txid: 'collide', text: 'forged', timestamp: 10 }];
+                    }
+                    return [];
+                },
+            }),
+        };
+        const signer = {
+            exportWifForPath: () => 'WIF',
+            exportWifForAddressId: () => 'WIF',
+        };
+        const res = await getMessagingInboxSweep({
+            vault, walletId: 'w1', chainRegistry, sdkRegistry, signer,
+            addressIds: ['d1', 'b1'],
+        });
+        expect(res.messages).toHaveLength(1);
+        expect(res.messages[0].text).toBe('genuine');
+        expect(res.messages[0].chainId).toBe('bitcoin');
+    });
+
     it('requires a non-empty addressIds array', async () => {
         const { vault, chainRegistry, sdkRegistry, signer } = makeDeps({});
         await expect(getMessagingInboxSweep({
