@@ -143,10 +143,23 @@ assert.match(
     /password\.length === 0/,
     'Enable form requires password',
 );
+// : errors surface via <StatusMessage variant="error"> (role="alert"
+// at runtime) with a one-click "Try again" recovery that re-runs the
+// registration attempt.
 assert.match(
     rowSrc,
-    /role="alert"/,
-    'Enable form surfaces errors via role=alert',
+    /<StatusMessage\s+variant="error"/,
+    'Enable form surfaces errors via StatusMessage variant=error (role=alert)',
+);
+assert.match(
+    rowSrc,
+    /label: 'Try again', onAction: retryRef\.current/,
+    'Enable-form error offers a Try again recovery affordance',
+);
+assert.match(
+    rowSrc,
+    /retryRef\.current = doEnable/,
+    'Registration failure records the pairing attempt as the retry action',
 );
 
 console.log('biometric-unlock-ui smoke OK');

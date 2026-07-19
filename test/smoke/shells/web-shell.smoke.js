@@ -132,13 +132,37 @@ const banner = readFileSync(
     join(webPkg, 'src', 'components', 'ExtensionBanner.jsx'),
     'utf8',
 );
+// Cluster F FOLLOWUP 2: the banner is a stateful affordance driven by the
+// useExtensionWallet hook. It offers to route the web app through the
+// extension and, on accept, persists the choice.
 assert.ok(
-    banner.includes("'xchain#initialized'"),
-    'ExtensionBanner listens for window.xchain init event',
+    /useExtensionWallet/.test(banner),
+    'ExtensionBanner is wired to the useExtensionWallet hook',
 );
 assert.ok(
-    /window\.xchain/.test(banner),
-    'ExtensionBanner checks window.xchain presence',
+    /Use extension wallet/.test(banner),
+    'ExtensionBanner offers the "Use extension wallet" accept action',
+);
+
+// Provider detection + the connect/persist handoff live in the hook and
+// its plain-logic core module.
+const extHook = readFileSync(join(webPkg, 'src', 'useExtensionWallet.js'), 'utf8');
+assert.ok(
+    extHook.includes("'xchain#initialized'"),
+    'useExtensionWallet listens for the window.xchain init event',
+);
+const extCore = readFileSync(join(webPkg, 'src', 'extensionWallet.js'), 'utf8');
+assert.ok(
+    /window/.test(extCore) && /\.xchain/.test(extCore),
+    'extensionWallet reads the window.xchain provider',
+);
+assert.ok(
+    /\.connect\(/.test(extCore),
+    'extensionWallet performs the §43.2 connect handshake on accept',
+);
+assert.ok(
+    extCore.includes('xc:use-extension-wallet'),
+    'extensionWallet persists the routing preference',
 );
 
 // --- 2. In-page host bridge round-trip -------------------------------

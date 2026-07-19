@@ -82,10 +82,12 @@
 //   node_modules/.bin/vitest run test/unit/routes-render.test.jsx \
 //     --config test/vitest/unit.config.js
 
-import { describe, it, beforeAll, afterAll, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import { render, act as domAct, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../packages/core/src/shared/MessagingProvider.jsx';
+import { MintForm } from '../../packages/core/src/shared/routes/MintForm.jsx';
+import { DestroyForm } from '../../packages/core/src/shared/routes/DestroyForm.jsx';
 
 // `domAct` (Testing Library's `act`, bound to the installed React) flushes
 // React effects/state in Layer 2.
@@ -349,6 +351,185 @@ describe('Layer 3: every shared route survives basic interaction', () => {
             if (err && EFFECT_BUG_RE.test(String(err && err.message))) {
                 throw err;
             }
+        });
+    });
+});
+
+// -----------------------------------------------------------------------
+// Layer 4: SUBMIT PAYLOAD ASSERTIONS.
+//
+// Layers 1-3 prove a form doesn't CRASH; they never assert WHAT it sends
+// to the background. That blind spot is exactly what made the shared
+// action-form machinery unsafe to extract (maintainability finding G6):
+// a hook that maps `from.addressId` wrong, drops a param, or routes the
+// wrong messaging method in one branch would sail through a crash probe.
+//
+// This layer drives the two canonical adopters of the shared
+// `useActionForm` hook (MintForm, DestroyForm) all the way to submit and
+// pins the emitted payload: the exact `from` descriptor, the composed
+// action params, and which messaging method each signer mode dispatches
+// (software vs. watcher-mode encode-only). It is a behavioral spec, not a
+// crash probe, so it uses a RECORDING messaging mock with realistic
+// method shapes instead of the generic Proxy above.
+// -----------------------------------------------------------------------
+
+// A newest-change-index-0 HD address, the default the hook auto-selects
+// as the fee payer.
+const HD_ADDRESS = Object.freeze({
+    id: 'addr-hd-0',
+    address: 'bc1qexampleexampleexampleexampleexampleex',
+    publicKey: '02aabbcc',
+    derivationPath: "m/84'/0'/0'/0/0",
+    source: 'hd',
+    signerId: 'signer-1',
+});
+
+// Recording messaging: real implementations for the calls these forms
+// make, capturing every dispatch in `calls`. Any other host call (privacy
+// gate, locale sync, signer status) falls through to a resolving no-op so
+// the render still settles.
+function recordingMessaging({ walletMode = 'full' } = {}) {
+    const calls = [];
+    const record = (method) => (args) => {
+        calls.push({ method, args });
+        // psbtHex for the watcher path, txid for the signed path; both
+        // route the form into its 'done' stage without extra host calls.
+        return Promise.resolve(
+            method === 'buildActionPsbtRequest'
+                ? { psbtHex: 'deadbeef' }
+                : { txid: `tx-${method}` },
+        );
+    };
+    const target = {
+        getAddressesByChain: () => Promise.resolve({ 'bitcoin-mainnet': [HD_ADDRESS] }),
+        signerReady: () => Promise.resolve({ ready: true }),
+        getSettings: () => Promise.resolve({ walletMode }),
+        getSignerStatus: () => Promise.resolve({ status: 'unlocked' }),
+        mintToken: record('mintToken'),
+        mintAssetHw: record('mintAssetHw'),
+        destroyToken: record('destroyToken'),
+        destroyAssetHw: record('destroyAssetHw'),
+        buildActionPsbtRequest: record('buildActionPsbtRequest'),
+    };
+    const messaging = new Proxy(target, {
+        get(t, prop) {
+            if (prop in t) return t[prop];
+            return () => Promise.resolve(EMPTY);
+        },
+    });
+    return { messaging, calls };
+}
+
+// Drive a single-action form from mount to submit, returning the recorded
+// dispatches. `confirm` is the typed-confirmation string some forms gate
+// on (DestroyForm needs "DESTROY").
+async function driveActionFormToSubmit(Form, { walletMode, confirm } = {}) {
+    const { messaging, calls } = recordingMessaging({ walletMode });
+    let utils;
+    await domAct(async () => {
+        utils = render(
+            React.createElement(
+                MessagingProvider,
+                { shell: 'web', messaging },
+                React.createElement(Form, { walletId: 'w', onBack() {} }),
+            ),
+        );
+        await drainMicrotasks();
+    });
+
+    // Fill the composer fields.
+    await domAct(async () => {
+        fireEvent.change(utils.getByLabelText('Ticker'), { target: { value: 'JDOG' } });
+        fireEvent.change(utils.getByLabelText('Amount'), { target: { value: '10' } });
+        await drainMicrotasks();
+    });
+
+    // Preview -> review stage.
+    await domAct(async () => {
+        fireEvent.click(utils.getByRole('button', { name: 'Preview' }));
+        await drainMicrotasks();
+    });
+
+    // Typed-confirmation gate (DestroyForm), if present.
+    if (confirm) {
+        const field = utils.queryByLabelText(/type .* to confirm/i);
+        if (field) {
+            await domAct(async () => {
+                fireEvent.change(field, { target: { value: confirm } });
+                await drainMicrotasks();
+            });
+        }
+    }
+
+    // Submit the review form via its (single) enabled submit button.
+    await domAct(async () => {
+        const submitBtn = Array.from(utils.container.querySelectorAll('button'))
+            .filter((b) => b.type === 'submit' && !b.disabled)
+            .pop();
+        if (!submitBtn) throw new Error('no enabled submit button in review stage');
+        fireEvent.click(submitBtn);
+        await drainMicrotasks();
+    });
+
+    return calls;
+}
+
+describe('Layer 4: action-form submit payloads (useActionForm dispatch)', () => {
+    it('MintForm (software) dispatches mintToken with the from descriptor + composed params', async () => {
+        const calls = await driveActionFormToSubmit(MintForm, { walletMode: 'full' });
+        const mint = calls.find((c) => c.method === 'mintToken');
+        expect(mint, 'mintToken was dispatched').toBeTruthy();
+        expect(calls.some((c) => c.method === 'buildActionPsbtRequest')).toBe(false);
+        expect(mint.args.chainId).toBe('bitcoin-mainnet');
+        expect(mint.args.from).toMatchObject({
+            address: HD_ADDRESS.address,
+            addressId: 'addr-hd-0',
+            source: 'hd',
+            signerId: 'signer-1',
+            derivationPath: HD_ADDRESS.derivationPath,
+        });
+        expect(mint.args.params).toEqual({ VERSION: '0', TICK: 'JDOG', AMOUNT: '10' });
+        // Signer-ready path sends an empty password, never undefined.
+        expect(mint.args.password).toBe('');
+    });
+
+    it('MintForm (watcher) routes the encode-only buildActionPsbtRequest with action MINT', async () => {
+        const calls = await driveActionFormToSubmit(MintForm, { walletMode: 'watcher' });
+        const enc = calls.find((c) => c.method === 'buildActionPsbtRequest');
+        expect(enc, 'buildActionPsbtRequest was dispatched').toBeTruthy();
+        expect(calls.some((c) => c.method === 'mintToken')).toBe(false);
+        expect(enc.args.chainId).toBe('bitcoin-mainnet');
+        expect(enc.args.from.addressId).toBe('addr-hd-0');
+        expect(enc.args.actionData).toEqual({
+            action: 'MINT',
+            params: { VERSION: '0', TICK: 'JDOG', AMOUNT: '10' },
+        });
+    });
+
+    it('DestroyForm (software) dispatches destroyToken with the from descriptor + composed params', async () => {
+        const calls = await driveActionFormToSubmit(DestroyForm, {
+            walletMode: 'full',
+            confirm: 'DESTROY',
+        });
+        const destroy = calls.find((c) => c.method === 'destroyToken');
+        expect(destroy, 'destroyToken was dispatched').toBeTruthy();
+        expect(calls.some((c) => c.method === 'buildActionPsbtRequest')).toBe(false);
+        expect(destroy.args.from.addressId).toBe('addr-hd-0');
+        expect(destroy.args.params).toEqual({ VERSION: '0', TICK: 'JDOG', AMOUNT: '10' });
+        expect(destroy.args.password).toBe('');
+    });
+
+    it('DestroyForm (watcher) routes the encode-only buildActionPsbtRequest with action DESTROY', async () => {
+        const calls = await driveActionFormToSubmit(DestroyForm, {
+            walletMode: 'watcher',
+            confirm: 'DESTROY',
+        });
+        const enc = calls.find((c) => c.method === 'buildActionPsbtRequest');
+        expect(enc, 'buildActionPsbtRequest was dispatched').toBeTruthy();
+        expect(calls.some((c) => c.method === 'destroyToken')).toBe(false);
+        expect(enc.args.actionData).toEqual({
+            action: 'DESTROY',
+            params: { VERSION: '0', TICK: 'JDOG', AMOUNT: '10' },
         });
     });
 });

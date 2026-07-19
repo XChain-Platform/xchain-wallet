@@ -1167,6 +1167,17 @@ export function getLinksForAddress(req) {
 }
 
 /**
+ * Latest block the indexer has processed for a chain (§28.3 "Indexed"
+ * timeline stage). Resolves `{ chainId, watermark }` where watermark is
+ * null when the explorer can't report it.
+ *
+ * @param {{ chainId: string }} req
+ */
+export function getIndexerWatermark(req) {
+    return /** @type {any} */ (sendMessage('indexer.watermark', req));
+}
+
+/**
  * Persist a §22 + §42.9 multisig configuration onto a Wallet record's
  * `.multisig` slot. For taproot-musig2 the bg handler aggregates the
  * cosigner pubkeys via `sdk.musig2.aggregateKeys` before encoding the

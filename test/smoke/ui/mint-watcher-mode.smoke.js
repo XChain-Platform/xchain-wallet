@@ -23,10 +23,13 @@ const formSrc = readFileSync(
     'utf8',
 );
 
+// §40 / G6: watcher-mode dispatch now lives in the shared useActionForm
+// hook. The form declares `action: 'MINT'`, and `isWatcherMode` +
+// the encode-only buildActionPsbtRequest branch are the hook's job.
 assert.match(
     formSrc,
-    /import \{ useWalletMode \} from '\.\.\/hooks\/useWalletMode\.js';/,
-    'imports useWalletMode hook',
+    /import \{ useActionForm \} from '\.\.\/hooks\/useActionForm\.js';/,
+    'imports the shared useActionForm hook',
 );
 assert.match(
     formSrc,
@@ -35,13 +38,13 @@ assert.match(
 );
 assert.match(
     formSrc,
-    /const \{ isWatcherMode \} = useWalletMode\(\);/,
-    'derives isWatcherMode via the shared hook',
+    /const \{[\s\S]+?isWatcherMode,[\s\S]+?\} = useActionForm\(\{/,
+    'derives isWatcherMode from the shared useActionForm hook',
 );
 assert.match(
     formSrc,
-    /messaging\.buildActionPsbtRequest\(\{[\s\S]+?action: 'MINT'/,
-    'submit handler routes through buildActionPsbtRequest with action MINT in watcher mode',
+    /useActionForm\(\{[\s\S]+?action:\s*'MINT'/,
+    'configures useActionForm with action MINT (drives the watcher encode call)',
 );
 assert.match(
     formSrc,

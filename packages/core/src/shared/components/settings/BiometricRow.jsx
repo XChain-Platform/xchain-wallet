@@ -26,7 +26,8 @@
 // state change so toggling between OS settings + the wallet stays in
 // sync without a refresh.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { StatusMessage } from '@xchain-wallet/core/ui';
 import {
     isBiometricSupported,
     isBiometricRegistered,
@@ -42,6 +43,11 @@ export function BiometricRow() {
     const [password, setPassword] = useState('');
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState(/** @type {string | null} */ (null));
+    // : re-run the pairing attempt on the recorded action. Biometric
+    // registration failures (prompt timeout, user-cancelled the OS dialog,
+    // transient WebAuthn error) are always retryable with the same password
+    // still in the field, so the error surface offers a one-click "Try again".
+    const retryRef = useRef(/** @type {null | (() => void)} */ (null));
 
     useEffect(() => {
         let cancelled = false;
@@ -53,21 +59,27 @@ export function BiometricRow() {
 
     const refreshRegistered = () => setRegistered(isBiometricRegistered());
 
-    async function handleEnable(event) {
-        event.preventDefault();
+    async function doEnable() {
         if (busy || password.length === 0) return;
         setBusy(true);
         setError(null);
+        retryRef.current = null;
         try {
             await registerBiometricCredential({ password });
             setPassword('');
             setShowEnableForm(false);
             refreshRegistered();
         } catch (err) {
+            retryRef.current = doEnable;
             setError(err?.message || 'Enabling biometric unlock failed.');
         } finally {
             setBusy(false);
         }
+    }
+
+    function handleEnable(event) {
+        event.preventDefault();
+        doEnable();
     }
 
     function handleDisable() {
@@ -154,9 +166,12 @@ export function BiometricRow() {
                     }}
                 />
                 {error ? (
-                    <span style={{ color: 'var(--xc-danger)', fontSize: 'var(--xc-text-xs)' }} role="alert">
+                    <StatusMessage
+                        variant="error"
+                        recovery={retryRef.current ? { label: 'Try again', onAction: retryRef.current } : undefined}
+                    >
                         {error}
-                    </span>
+                    </StatusMessage>
                 ) : null}
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--xc-space-2)' }}>
                     <button

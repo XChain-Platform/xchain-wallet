@@ -82,4 +82,23 @@ assert.ok(/messaging\.activateChainRequest\(/.test(sectionSrc),
 assert.ok(/disabled=\{disabled \|\| open\}/.test(sectionSrc) || /disabled=\{!developerMode\}/.test(sectionSrc),
     'DeveloperModeSection greys out the Activate button when Developer Mode is off');
 
-console.log('OK: activateChain flow + host + messaging shims + Settings UI smoke');
+// 7. §17.4 / FOLLOWUP 1: RegtestRow is HW-aware. It mounts the shared
+//    SignerSelectForm, branches on signer kind, threads signerId into
+//    the activation request, and swaps the password field for
+//    "check your device" copy when a hardware signer is selected.
+assert.ok(/import \{ SignerSelectForm \} from '\.\.\/\.\.\/routes\/SignerSelectForm\.jsx'/.test(sectionSrc),
+    'DeveloperModeSection imports SignerSelectForm');
+assert.ok(/<SignerSelectForm\b/.test(sectionSrc),
+    'RegtestRow renders <SignerSelectForm> so HW-paired wallets can pick a device');
+assert.ok(/const isHardware = Boolean\(signerId\)/.test(sectionSrc),
+    'RegtestRow branches on signer kind via isHardware');
+assert.ok(/signerId: signerId \|\| undefined/.test(sectionSrc),
+    'RegtestRow threads signerId into activateChainRequest');
+assert.ok(/password: isHardware \? undefined : password/.test(sectionSrc),
+    'RegtestRow omits the password for hardware signers');
+assert.ok(/!isHardware && password\.length === 0/.test(sectionSrc),
+    'RegtestRow only requires a wallet password for software signers');
+assert.ok(/check your device/i.test(sectionSrc),
+    'RegtestRow shows device-check copy for hardware signers');
+
+console.log('OK: activateChain flow + host + messaging shims + Settings UI + HW-aware smoke');

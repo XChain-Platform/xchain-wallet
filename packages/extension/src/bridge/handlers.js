@@ -33,8 +33,10 @@ import { flows, schemas } from '@xchain-wallet/core';
 import {
     resolveAutoApproveScope,
     shouldAutoApproveConnect,
+    shouldAutoApproveSign,
 } from '@xchain-wallet/core/shared/utils/originAutoApprove.js';
 import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
+import { createSignPasswordCache } from './signPasswordCache.js';
 import {
     BRIDGE_SPEC_VERSION,
     BRIDGE_SUPPORTED_VERSIONS,
@@ -61,18 +63,46 @@ const {
 
 const SUPPORTED_BRIDGE_ACTIONS = ['SEND', 'SWEEP'];
 
+// §43.2 parallel(): cap the batch so a single call can't ask the user to
+// review an unbounded list of sign screens (a hostile dApp DoS vector) and
+// can't spawn an unbounded fan-out of signing flows. 20 is far above any
+// legitimate cross-chain composer draft (§42.8.2) yet small enough that the
+// grouped approval modal stays reviewable.
+const MAX_PARALLEL_ACTIONS = 20;
+
 /**
  * @param {import('../background/MessageHost.js').MessageHost} host
  * @param {{
  *   approvals?: import('./Approvals.js').Approvals,
  *   signThrottle?: ReturnType<typeof createSignThrottle>,
  *   events?: typeof noopBridgeEvents,
+ *   signPasswordCache?: import('./signPasswordCache.js').SignPasswordCache,
  * }} [opts]
  */
 export function registerBridgeHandlers(host, opts = {}) {
     const approvals = opts.approvals ?? rejectAllApprovals;
     const signThrottle = opts.signThrottle ?? createSignThrottle();
     const events = opts.events ?? noopBridgeEvents;
+    // Cluster Q FOLLOWUP 3: Developer-Mode localhost auto-sign. Holds a
+    // password captured by a real sign approval so a later localhost sign
+    // request can reuse it instead of prompting. Lives in SW memory only;
+    // see signPasswordCache.js for the security posture. A single instance is
+    // shared across every sign handler registered here.
+    const signPasswordCache = opts.signPasswordCache ?? createSignPasswordCache();
+
+    // Cache the password from a genuine user approval so a subsequent
+    // localhost auto-sign can reuse it. A no-op unless Developer Mode + the
+    // localhost auto-sign timeout are both on (shouldAutoApproveSign), so this
+    // is inert on mainnet / production and for non-localhost origins.
+    const rememberSignPassword = (origin, settings, walletId, decision) => {
+        if (!walletId || !decision || typeof decision.password !== 'string') return;
+        if (!shouldAutoApproveSign({ origin, settings })) return;
+        signPasswordCache.remember(
+            walletId,
+            { password: decision.password, bip39Passphrase: decision.bip39Passphrase },
+            settings.autoSignLocalhostMs,
+        );
+    };
 
     // Cluster Q FOLLOWUP 4: every bridge handler logs entry / exit /
     // error to logConsole. The `source` is `bridge:<channel>` so the
@@ -146,10 +176,13 @@ export function registerBridgeHandlers(host, opts = {}) {
         }
 
         // §48.6 / G151: Developer-Mode auto-approve for localhost. Skips the
-        // approval prompt when settings allow + origin is localhost. Sign
-        // requests (signMessage / signAction / signPsbt / signIn) still go
-        // through approvals: the password is required to unwrap the seed and we
-        // never cache it, so connect is the only safe step to short-circuit.
+        // connect approval prompt when settings allow + origin is localhost.
+        // Sign auto-approval is a SEPARATE opt-in (settings.autoSignLocalhostMs
+        // / shouldAutoApproveSign, Cluster Q FOLLOWUP 3): a sign request may
+        // reuse a password captured by a prior approval, held only in
+        // service-worker memory. Connect auto-approve here never grants signing
+        // permissions (canSignMessage:false, canSignAction:{} below); the two
+        // gates are independent.
         //
         // The granted scope is resolved from the wallet's own state and only
         // narrowed by the request (resolveAutoApproveScope), because an empty
@@ -317,127 +350,78 @@ export function registerBridgeHandlers(host, opts = {}) {
         await assertAddressPermitted(deps, site, req.chainId, req.address);
         assertNotThrottled(signThrottle, req);
 
-        if (!site.permissions.canSignMessage) {
-            const decision = await approvals.signMessage({
-                origin: req.origin,
-                kind: 'signMessage',
-                chainId: req.chainId,
-                payload: { address: req.address, message: req.message },
-            });
-            if (!decision?.approved) throw new UserRejectedError('signMessage');
-            if (!decision.password) throw bridgeError('NO_PASSWORD', 'approvals must return password');
-            const result = await invokeSignMessage(deps, {
-                ...req,
-                walletId: decision.walletId ?? (await walletIdForAddress(deps.vault, req.address)),
-                password: decision.password,
-                bip39Passphrase: decision.bip39Passphrase,
-            });
-            if (decision.savePermanent) {
-                await updateSitePermissions(deps.vault, site, { canSignMessage: true }, { events });
+        const settings = await deps.vault.settings.get().catch(() => null);
+        const autoSign = shouldAutoApproveSign({ origin: req.origin, settings });
+        // Resolve the signing wallet from the request address up front: it is
+        // the cache key for recall AND the value we pass to the sign flow.
+        const walletId = await walletIdForAddress(deps.vault, req.address);
+
+        // Cluster Q FOLLOWUP 3: reuse a session-cached password (no prompt)
+        // when Developer-Mode localhost auto-sign is on and we have a live
+        // entry for this wallet. The address-permission + throttle gates above
+        // still ran, so auto-sign only bypasses the password prompt, never the
+        // security checks.
+        if (autoSign && walletId) {
+            const cached = signPasswordCache.recall(walletId);
+            if (cached) {
+                return invokeSignMessage(deps, {
+                    ...req,
+                    walletId,
+                    password: cached.password,
+                    bip39Passphrase: cached.bip39Passphrase,
+                });
             }
-            return result;
         }
-        // canSignMessage: the site is allowed, but we still need a
-        // password; approvals is asked for password-only.
+
+        // No cache hit: prompt. `alreadyGranted` tells the prompt the site
+        // already holds canSignMessage so it asks for password only.
         const decision = await approvals.signMessage({
             origin: req.origin,
             kind: 'signMessage',
             chainId: req.chainId,
-            payload: { address: req.address, message: req.message, alreadyGranted: true },
+            payload: {
+                address: req.address,
+                message: req.message,
+                ...(site.permissions.canSignMessage ? { alreadyGranted: true } : {}),
+            },
         });
         if (!decision?.approved) throw new UserRejectedError('signMessage');
         if (!decision.password) throw bridgeError('NO_PASSWORD', 'approvals must return password');
-        return invokeSignMessage(deps, {
+        const signWalletId = decision.walletId ?? walletId;
+        // Seed the cache from this real approval so the NEXT localhost sign
+        // can auto-sign. Inert unless auto-sign is enabled.
+        rememberSignPassword(req.origin, settings, signWalletId, decision);
+        const result = await invokeSignMessage(deps, {
             ...req,
-            walletId: decision.walletId ?? (await walletIdForAddress(deps.vault, req.address)),
+            walletId: signWalletId,
             password: decision.password,
             bip39Passphrase: decision.bip39Passphrase,
         });
+        if (!site.permissions.canSignMessage && decision.savePermanent) {
+            await updateSitePermissions(deps.vault, site, { canSignMessage: true }, { events });
+        }
+        return result;
     });
 
     register('bridge.signAction', async (req, deps) => {
         await assertNotBlocked(req, deps);
         const site = await requireSite(deps.vault, req);
-        assertChainPermitted(site, req.chainId);
         assertNotThrottled(signThrottle, req);
-        const actionName = req.action;
-        if (!SUPPORTED_BRIDGE_ACTIONS.includes(actionName)) {
-            // §43.2: unsupported actions return structured shape, not throw
-            return {
-                error: 'UNSUPPORTED_ACTION',
-                supportedActions: SUPPORTED_BRIDGE_ACTIONS.slice(),
-            };
-        }
-        const permission = site.permissions.canSignAction?.[actionName] ?? 'ask';
-        if (permission === 'never') throw bridgeError('ACTION_REJECTED_BY_POLICY', actionName);
-
-        // §43.3: enforce the per-account scope granted at connect. SEND/SWEEP
-        // both spend from `params.from`; a site scoped to a subset of accounts
-        // must not initiate a signature for an account it was never granted,
-        // even though the approval prompt would also surface it.
-        await assertAddressPermitted(deps, site, req.chainId, req.params?.from);
-
-        const decision = await approvals.signAction({
-            origin: req.origin,
-            kind: 'signAction',
-            chainId: req.chainId,
-            action: actionName,
-            payload: req.params,
+        const settings = await deps.vault.settings.get().catch(() => null);
+        // executeSignAction owns the chain/account gate, the approval, and the
+        // SEND/SWEEP flow. It is shared verbatim with bridge.parallel so the
+        // per-action security invariants live in exactly one place. The
+        // signPasswordCache + settings enable Developer-Mode localhost
+        // auto-sign for the single-action path only (parallel passes a
+        // preDecision, which suppresses auto-sign inside executeSignAction).
+        return executeSignAction(req, deps, {
+            approvals,
+            events,
+            site,
+            settings,
+            signPasswordCache,
+            rememberSignPassword,
         });
-        if (!decision?.approved) throw new UserRejectedError('signAction');
-        if (!decision.password) throw bridgeError('NO_PASSWORD', 'approvals must return password');
-
-        if (decision.savePermanent) {
-            await updateSitePermissions(deps.vault, site, {
-                canSignAction: {
-                    ...site.permissions.canSignAction,
-                    [actionName]: 'always',
-                },
-            }, { events });
-        }
-
-        // dApp-controlled params spread FIRST, trusted keys after: the approval
-        // popup and assertChainPermitted validated req.chainId, so params must
-        // never be able to override it (or the vault/password/registry deps)
-        // with an unchecked value. Spread-last let params.chainId re-route the
-        // signed action onto a chain the site was never permitted for.
-        //
-        // trackPendingTx is a trusted key for the same reason: it is not a
-        // protocol param, it is an internal control flag that gates whether
-        // submitAction writes the pre-spend PendingTx audit row. Left in the
-        // spread, a dApp could send trackPendingTx: false and get a
-        // user-approved spend that leaves no audit record and no
-        // BroadcastFailedError recovery. Re-applying it after the spread
-        // forces every bridge-driven spend to keep tracking on regardless of
-        // what the caller sent.
-        const params = req.params ?? {};
-        if (actionName === 'SEND') {
-            return sendToken({
-                ...params,
-                vault: deps.vault,
-                walletId: decision.walletId ?? (await walletIdForAddress(deps.vault, params.from)),
-                password: decision.password,
-                bip39Passphrase: decision.bip39Passphrase,
-                chainRegistry: deps.chainRegistry,
-                sdkRegistry: deps.sdkRegistry,
-                chainId: req.chainId,
-                trackPendingTx: true,
-            });
-        }
-        if (actionName === 'SWEEP') {
-            return sweepToken({
-                ...params,
-                vault: deps.vault,
-                walletId: decision.walletId ?? (await walletIdForAddress(deps.vault, params.from)),
-                password: decision.password,
-                bip39Passphrase: decision.bip39Passphrase,
-                chainRegistry: deps.chainRegistry,
-                sdkRegistry: deps.sdkRegistry,
-                trackPendingTx: true,
-                chainId: req.chainId,
-            });
-        }
-        throw bridgeError('UNREACHABLE', 'supported action fell through');
     });
 
     register('bridge.signPsbt', async (req, deps) => {
@@ -517,16 +501,79 @@ export function registerBridgeHandlers(host, opts = {}) {
         });
     });
 
-    register('bridge.parallel', async () => {
-        // §43.2 parallel() ships in Phase 4+ alongside cross-chain
-        // orchestration (§42.8.2). Returning a structured shape (not
-        // throwing) mirrors bridge.signAction's UNSUPPORTED_ACTION
-        // response so dApp authors can branch on `result.error`.
-        return {
-            error: 'PHASE_DEFERRED',
-            phase: 4,
-            message: 'bridge.parallel() ships alongside cross-chain orchestration in Phase 4+',
-        };
+    // §43.2 / §42.8.2 parallel(): the cross-chain composer batches N actions
+    // into one call. The wallet presents them as one grouped approval and then
+    // signs each in input order. The on-chain effect is N independent ACTIONs
+    // (no atomic multi-chain settlement primitive exists), so we do not promise
+    // atomicity: each entry carries its own `ok` flag and one action's refusal
+    // or failure never discards the entries already collected before it.
+    register('bridge.parallel', async (req, deps) => {
+        await assertNotBlocked(req, deps);
+        const site = await requireSite(deps.vault, req);
+        // One throttle token for the whole batch (not one per action): the user
+        // sees a single grouped modal, so it is one sign gesture to rate-limit.
+        assertNotThrottled(signThrottle, req);
+
+        const actions = Array.isArray(req.actions) ? req.actions : null;
+        if (!actions || actions.length === 0) {
+            throw bridgeError('INVALID_PARAMS', 'parallel requires a non-empty actions array');
+        }
+        if (actions.length > MAX_PARALLEL_ACTIONS) {
+            throw bridgeError('INVALID_PARAMS', `parallel accepts at most ${MAX_PARALLEL_ACTIONS} actions per call`);
+        }
+
+        // Grouped approval: when the shell implements approvals.parallel it
+        // shows ONE modal listing every action and captures the password once.
+        // A rejection there rejects the entire batch (nothing is signed). The
+        // returned per-action decision is threaded into executeSignAction so it
+        // does not re-prompt. Shells without the grouped modal fall back to the
+        // per-action approvals.signAction prompt inside executeSignAction.
+        let groupDecision = null;
+        if (typeof approvals.parallel === 'function') {
+            groupDecision = await approvals.parallel({
+                origin: req.origin,
+                kind: 'parallel',
+                actions: actions.map((a) => ({
+                    chainId: a?.chainId,
+                    action: a?.action,
+                    payload: a?.params,
+                })),
+            });
+            if (!groupDecision?.approved) throw new UserRejectedError('parallel');
+            if (!groupDecision.password) {
+                throw bridgeError('NO_PASSWORD', 'grouped approval must return password');
+            }
+        }
+
+        const results = [];
+        for (const action of actions) {
+            const actionReq = {
+                origin: req.origin,
+                appName: req.appName,
+                appIcon: req.appIcon,
+                chainId: action?.chainId,
+                action: action?.action,
+                params: action?.params,
+            };
+            try {
+                const raw = await executeSignAction(actionReq, deps, {
+                    approvals,
+                    events,
+                    site,
+                    // With a grouped decision, reuse it for every action so the
+                    // user is not prompted N more times after approving once.
+                    decision: groupDecision,
+                });
+                results.push(normalizeParallelResult(raw));
+            } catch (err) {
+                results.push({
+                    ok: false,
+                    error: err?.code ?? err?.name ?? 'INTERNAL_ERROR',
+                    message: err?.message,
+                });
+            }
+        }
+        return results;
     });
 
     register('bridge.signIn', async (req, deps) => {
@@ -590,6 +637,164 @@ export function registerBridgeHandlers(host, opts = {}) {
     });
 }
 
+
+// Sign one bridge ACTION end to end: chain/account gate → user approval →
+// SEND/SWEEP flow. Shared by bridge.signAction (single) and bridge.parallel
+// (batch) so the per-action security invariants exist in exactly one place.
+//
+// `ctx.site` is the already-resolved ConnectedSite (the caller ran requireSite
+// once). `ctx.decision`, when present, is a pre-captured approval (the grouped
+// parallel modal) and skips the per-action prompt.
+//
+// Returns the flow result on success, or a structured
+// `{ error: 'UNSUPPORTED_ACTION', ... }` for an action kind this wallet does
+// not sign. Throws BridgeError / UserRejectedError on a policy refusal so the
+// single-action caller propagates it and the batch caller folds it into a
+// per-action result.
+async function executeSignAction(req, deps, ctx) {
+    const {
+        approvals,
+        events,
+        site,
+        decision: preDecision,
+        settings,
+        signPasswordCache,
+        rememberSignPassword,
+    } = ctx;
+    assertChainPermitted(site, req.chainId);
+    const actionName = req.action;
+    if (!SUPPORTED_BRIDGE_ACTIONS.includes(actionName)) {
+        // §43.2: unsupported actions return structured shape, not throw
+        return {
+            error: 'UNSUPPORTED_ACTION',
+            supportedActions: SUPPORTED_BRIDGE_ACTIONS.slice(),
+        };
+    }
+    const permission = site.permissions.canSignAction?.[actionName] ?? 'ask';
+    if (permission === 'never') throw bridgeError('ACTION_REJECTED_BY_POLICY', actionName);
+
+    // §43.3: enforce the per-account scope granted at connect. SEND/SWEEP
+    // both spend from `params.from`; a site scoped to a subset of accounts
+    // must not initiate a signature for an account it was never granted,
+    // even though the approval prompt would also surface it.
+    await assertAddressPermitted(deps, site, req.chainId, req.params?.from);
+
+    // The signing wallet is the one that owns the spending address. Resolve it
+    // once: it keys the auto-sign cache and is the fallback walletId below.
+    const walletId = await walletIdForAddress(deps.vault, req.params?.from);
+
+    // Cluster Q FOLLOWUP 3: Developer-Mode localhost auto-sign. Only for the
+    // single-action path (preDecision means the grouped parallel modal already
+    // captured one password for the whole batch, so we must not also auto-sign
+    // per action). A cache hit builds a synthetic decision and skips the
+    // prompt; the chain + account gates above already ran.
+    let decision = preDecision ?? null;
+    let fromCache = false;
+    if (!decision
+        && signPasswordCache
+        && walletId
+        && shouldAutoApproveSign({ origin: req.origin, settings })) {
+        const cached = signPasswordCache.recall(walletId);
+        if (cached) {
+            decision = {
+                approved: true,
+                walletId,
+                password: cached.password,
+                bip39Passphrase: cached.bip39Passphrase,
+            };
+            fromCache = true;
+        }
+    }
+
+    // A grouped parallel decision is reused for every action in the batch; the
+    // single-action path (and the per-action fallback) prompts here.
+    if (!decision) {
+        decision = await approvals.signAction({
+            origin: req.origin,
+            kind: 'signAction',
+            chainId: req.chainId,
+            action: actionName,
+            payload: req.params,
+        });
+    }
+    if (!decision?.approved) throw new UserRejectedError('signAction');
+    if (!decision.password) throw bridgeError('NO_PASSWORD', 'approvals must return password');
+
+    // savePermanent is a single-action affordance (the per-action prompt's
+    // "always allow" checkbox). A reused groupDecision (parallel) never offers
+    // it, and a cache-synthesized decision never sets it, so neither can
+    // silently escalate a site to 'always'.
+    if (!preDecision && !fromCache && decision.savePermanent) {
+        await updateSitePermissions(deps.vault, site, {
+            canSignAction: {
+                ...site.permissions.canSignAction,
+                [actionName]: 'always',
+            },
+        }, { events });
+    }
+
+    // Seed the cache from a fresh single-action approval so the next localhost
+    // sign can auto-sign. Skipped for a parallel batch (preDecision) and for a
+    // decision that itself came from the cache. Inert unless auto-sign is on.
+    if (!preDecision && !fromCache && typeof rememberSignPassword === 'function') {
+        rememberSignPassword(req.origin, settings, decision.walletId ?? walletId, decision);
+    }
+
+    // dApp-controlled params spread FIRST, trusted keys after: the approval
+    // popup and assertChainPermitted validated req.chainId, so params must
+    // never be able to override it (or the vault/password/registry deps)
+    // with an unchecked value. Spread-last let params.chainId re-route the
+    // signed action onto a chain the site was never permitted for.
+    //
+    // trackPendingTx is a trusted key for the same reason: it is not a
+    // protocol param, it is an internal control flag that gates whether
+    // submitAction writes the pre-spend PendingTx audit row. Left in the
+    // spread, a dApp could send trackPendingTx: false and get a
+    // user-approved spend that leaves no audit record and no
+    // BroadcastFailedError recovery. Re-applying it after the spread
+    // forces every bridge-driven spend to keep tracking on regardless of
+    // what the caller sent.
+    const params = req.params ?? {};
+    if (actionName === 'SEND') {
+        return sendToken({
+            ...params,
+            vault: deps.vault,
+            walletId: decision.walletId ?? walletId,
+            password: decision.password,
+            bip39Passphrase: decision.bip39Passphrase,
+            chainRegistry: deps.chainRegistry,
+            sdkRegistry: deps.sdkRegistry,
+            chainId: req.chainId,
+            trackPendingTx: true,
+        });
+    }
+    if (actionName === 'SWEEP') {
+        return sweepToken({
+            ...params,
+            vault: deps.vault,
+            walletId: decision.walletId ?? walletId,
+            password: decision.password,
+            bip39Passphrase: decision.bip39Passphrase,
+            chainRegistry: deps.chainRegistry,
+            sdkRegistry: deps.sdkRegistry,
+            trackPendingTx: true,
+            chainId: req.chainId,
+        });
+    }
+    throw bridgeError('UNREACHABLE', 'supported action fell through');
+}
+
+// Normalize one executeSignAction return into a SignActionResult carrying an
+// explicit `ok` flag, so a parallel() caller can branch per entry without
+// re-deriving success from the presence of a txid. A structured
+// `{ error }` shape (e.g. UNSUPPORTED_ACTION) becomes `ok: false`; anything
+// else is a completed flow result and becomes `ok: true`.
+function normalizeParallelResult(raw) {
+    if (raw && typeof raw === 'object' && raw.error && raw.ok === undefined) {
+        return { ok: false, ...raw };
+    }
+    return { ok: true, ...(raw && typeof raw === 'object' ? raw : { value: raw }) };
+}
 
 function assertOrigin(req) {
     if (!req || typeof req.origin !== 'string' || !req.origin) {

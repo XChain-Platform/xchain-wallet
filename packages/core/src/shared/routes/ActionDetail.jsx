@@ -24,9 +24,10 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {any} props.entry                   the history entry the user clicked
  * @param {string} props.walletId
  * @param {number} [props.chainTip]           latest known block on the entry's chain (drives confirmation count)
+ * @param {number} [props.indexerWatermark]   latest indexed block on the entry's chain (drives the Indexed stage)
  * @param {() => void} props.onBack
  */
-export function ActionDetail({ entry, walletId, chainTip, onBack }) {
+export function ActionDetail({ entry, walletId, chainTip, indexerWatermark, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
 
@@ -98,6 +99,7 @@ export function ActionDetail({ entry, walletId, chainTip, onBack }) {
                     entry={entry}
                     peerCache={peerCache}
                     chainTip={chainTip}
+                    indexerWatermark={indexerWatermark}
                     walletId={walletId}
                 />
             </div>

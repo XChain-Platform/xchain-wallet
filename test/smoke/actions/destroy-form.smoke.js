@@ -76,11 +76,22 @@ assert.ok(
 assert.ok(/decoderLib\.decodeAction/.test(src), 'DestroyForm invokes decoder.decodeAction');
 assert.ok(src.includes('decoded.warnings'), 'DestroyForm renders decoder warnings');
 
-// --- 5. Sign wires through messaging.destroyToken ---------------------
+// --- 5. Sign dispatch via the shared useActionForm hook (G6) ----------
+//
+// Signer dispatch (watcher / HW / software) moved into useActionForm;
+// the form declares its messaging methods and calls the hook submit().
 
 assert.ok(
-    /messaging\.destroyToken\s*\(/.test(src),
-    'DestroyForm calls messaging.destroyToken from the sign stage',
+    /useActionForm\(/.test(src),
+    'DestroyForm dispatches through the shared useActionForm hook',
+);
+assert.ok(
+    /software:\s*'destroyToken'/.test(src),
+    'DestroyForm maps the software-signer path to destroyToken',
+);
+assert.ok(
+    /hw:\s*'destroyAssetHw'/.test(src),
+    'DestroyForm maps the hardware-signer path to destroyAssetHw',
 );
 assert.ok(
     src.includes("'InvalidPasswordError'"),

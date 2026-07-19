@@ -23,14 +23,16 @@
 //                    affordance; the passphrase cannot be recovered
 //                    from storage.
 //
-//   error            Inline `role="alert"` text with retry hint.
+//   error            `<StatusMessage variant="error">` (role="alert") with a
+//                    one-click "Try again" recovery on storage-write failure.
 //
 // The row deliberately doesn't ask for the wallet password to enable
 // or disable the duress passphrase. Anyone with the wallet open is
 // already trusted enough to lock it; rotating the duress passphrase
 // is a routine operation, not a privileged one.
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import { StatusMessage } from '@xchain-wallet/core/ui';
 import {
     isDuressConfigured,
     setDuressPassphrase,
@@ -44,10 +46,15 @@ export function DuressPassphraseRow() {
     const [pass, setPass] = useState('');
     const [confirm, setConfirm] = useState('');
     const [error, setError] = useState(/** @type {string | null} */ (null));
+    // : only the storage-write failure is retryable by re-running with
+    // the same inputs. The validation messages ("pick a passphrase", "do not
+    // match") are fixed by editing a field, so those leave retryRef null and
+    // the alert renders without a misleading "Try again" button.
+    const retryRef = useRef(/** @type {null | (() => void)} */ (null));
 
-    function handleSet(event) {
-        event.preventDefault();
+    function attemptSet() {
         setError(null);
+        retryRef.current = null;
         if (pass.length === 0) {
             setError('Pick a passphrase.');
             return;
@@ -63,8 +70,14 @@ export function DuressPassphraseRow() {
             setPass('');
             setConfirm('');
         } catch (err) {
+            retryRef.current = attemptSet;
             setError(err?.message || 'Could not save the duress passphrase.');
         }
+    }
+
+    function handleSet(event) {
+        event.preventDefault();
+        attemptSet();
     }
 
     function handleClear() {
@@ -138,9 +151,12 @@ export function DuressPassphraseRow() {
                     style={inputStyle}
                 />
                 {error ? (
-                    <span style={{ color: 'var(--xc-danger)', fontSize: 'var(--xc-text-xs)' }} role="alert">
+                    <StatusMessage
+                        variant="error"
+                        recovery={retryRef.current ? { label: 'Try again', onAction: retryRef.current } : undefined}
+                    >
                         {error}
-                    </span>
+                    </StatusMessage>
                 ) : null}
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--xc-space-2)' }}>
                     <button

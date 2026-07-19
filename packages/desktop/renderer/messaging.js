@@ -607,6 +607,17 @@ export function getLinksForAddress(req) {
     return /** @type {any} */ (sendMessage('links.address', req));
 }
 
+/**
+ * Latest block the indexer has processed for a chain (§28.3 "Indexed"
+ * timeline stage). Resolves `{ chainId, watermark }` where watermark is
+ * null when the explorer can't report it.
+ *
+ * @param {{ chainId: string }} req
+ */
+export function getIndexerWatermark(req) {
+    return /** @type {any} */ (sendMessage('indexer.watermark', req));
+}
+
 /** @param {object} req */
 export function createMultisigConfig(req) {
     return /** @type {any} */ (sendMessage('multisig.create', req));

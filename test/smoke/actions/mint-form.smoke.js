@@ -78,11 +78,28 @@ assert.ok(
 );
 assert.ok(src.includes('decoded.warnings'), 'MintForm renders decoder warnings');
 
-// --- 4. Sign wires through messaging.mintToken ------------------------
+// --- 4. Sign dispatch via the shared useActionForm hook (G6) ----------
+//
+// The signer dispatch (watcher / HW / software) moved into the shared
+// `useActionForm` hook; the form now declares its messaging methods
+// declaratively and calls the hook's `submit()`. Assert the wiring
+// instead of an inline `messaging.mintToken(` call.
 
 assert.ok(
-    /messaging\.mintToken\s*\(/.test(src),
-    'MintForm calls messaging.mintToken from the sign stage',
+    /useActionForm\(/.test(src),
+    'MintForm dispatches through the shared useActionForm hook',
+);
+assert.ok(
+    /software:\s*'mintToken'/.test(src),
+    'MintForm maps the software-signer path to mintToken',
+);
+assert.ok(
+    /hw:\s*'mintAssetHw'/.test(src),
+    'MintForm maps the hardware-signer path to mintAssetHw',
+);
+assert.ok(
+    /submit\(\{\s*params:\s*actionParams,\s*password\s*\}\)/.test(src),
+    'MintForm submit stage calls the hook submit() with params + password',
 );
 assert.ok(
     src.includes("'InvalidPasswordError'"),

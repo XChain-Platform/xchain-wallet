@@ -76,8 +76,8 @@ assert.ok(/🔗/.test(historySrc) && /Cross-chain only/.test(historySrc),
     'History exposes the 🔗 badge and "Cross-chain only" filter chip');
 
 // 5. Dual-side DetailCard renders peer info on row click.
-assert.ok(/function DetailCard\(\{ entry, peerCache, chainTip, walletId \}\)/.test(historySrc),
-    'DetailCard accepts entry + peerCache + chainTip + walletId');
+assert.ok(/function DetailCard\(\{ entry, peerCache, chainTip, indexerWatermark, walletId \}\)/.test(historySrc),
+    'DetailCard accepts entry + peerCache + chainTip + indexerWatermark + walletId');
 assert.ok(/peerCache\[peerKey\]/.test(historySrc),
     'DetailCard reads the peer entry from the cache');
 assert.ok(/peerCacheKey\(/.test(historySrc),

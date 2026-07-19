@@ -165,6 +165,7 @@ const {
     walletBalances,
     addressBalances,
     addressHistory,
+    indexerWatermark,
     verifyAddressBalance,
     verifyAddressAction,
     getActiveNetwork,
@@ -769,7 +770,9 @@ export function createBackgroundHost(deps) {
     // ads.perChain for the chainId, then derives the first address on
     // that chain for every existing account in the wallet. Idempotent:
     // re-activating a chain that already has fee + address records is
-    // a no-op. Software signers only: HW activation is FOLLOWUP work.
+    // a no-op. HW-aware (§17.4 / FOLLOWUP 1): when req.signerId names a
+    // paired hardware signer, pickSignerFromRequest builds a RemoteSigner
+    // against the device transport and no password is required.
     host.register('wallet.activateChain', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
         const walletId = req?.walletId;
         const signer = await pickSignerFromRequest({
@@ -2585,6 +2588,14 @@ export function createBackgroundHost(deps) {
 
     host.register('history.address', async (req, { sdkRegistry }) => {
         return addressHistory({ ...req, sdkRegistry });
+    });
+
+    // §28.3 "Indexed" timeline stage: latest block the indexer has
+    // processed for a chain. Read-only status probe; the flow degrades to
+    // { watermark: null } rather than throwing when the explorer can't
+    // report it, so a status outage never breaks the History view.
+    host.register('indexer.watermark', async (req, { sdkRegistry }) => {
+        return indexerWatermark({ ...req, sdkRegistry });
     });
 
     // §7/§8 SPV proof verification. Verifies a token balance / action

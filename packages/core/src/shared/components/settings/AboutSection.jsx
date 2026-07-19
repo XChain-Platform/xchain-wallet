@@ -14,8 +14,8 @@
 // Items whose underlying artifact isn't yet published render with a
 // muted "not yet published" hint instead of an inert link.
 
-import { useState } from 'react';
-import { Button } from '@xchain-wallet/core/ui';
+import { useRef, useState } from 'react';
+import { Button, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../../useMessaging.js';
 import {
     LICENSE_FILE,
@@ -61,6 +61,10 @@ export function AboutSection() {
     const [previewOpen, setPreviewOpen] = useState(false);
     const [previewBusy, setPreviewBusy] = useState(false);
     const [licenseOpen, setLicenseOpen] = useState(false);
+    // : both diagnostic paths (copy + preview) are retryable by
+    // re-running the same fetch, so the error surface offers a one-click
+    // "Try again" against whichever action last failed.
+    const retryRef = useRef(/** @type {null | (() => void)} */ (null));
 
     async function fetchDump() {
         if (typeof messaging?.getDiagnosticDump !== 'function') {
@@ -75,12 +79,14 @@ export function AboutSection() {
         setBusy(true);
         setStatus(null);
         setError(null);
+        retryRef.current = null;
         try {
             const text = preview ?? (await fetchDump());
             if (preview === null) setPreview(text);
             await navigator.clipboard?.writeText?.(text);
             setStatus(`Copied (${text.length.toLocaleString()} bytes). Paste into your bug report.`);
         } catch (err) {
+            retryRef.current = handleCopyDiagnostics;
             setError(err?.message || 'Could not copy diagnostics.');
         } finally {
             setBusy(false);
@@ -93,6 +99,7 @@ export function AboutSection() {
             return;
         }
         setError(null);
+        retryRef.current = null;
         if (preview !== null) {
             setPreviewOpen(true);
             return;
@@ -103,6 +110,7 @@ export function AboutSection() {
             setPreview(text);
             setPreviewOpen(true);
         } catch (err) {
+            retryRef.current = handleTogglePreview;
             setError(err?.message || 'Could not load diagnostics preview.');
         } finally {
             setPreviewBusy(false);
@@ -245,9 +253,12 @@ export function AboutSection() {
                 </div>
             ) : null}
             {error ? (
-                <div role="alert" style={{ color: 'var(--xc-danger, #B91C1C)', padding: 'var(--xc-space-2) var(--xc-space-3)' }}>
+                <StatusMessage
+                    variant="error"
+                    recovery={retryRef.current ? { label: 'Try again', onAction: retryRef.current } : undefined}
+                >
                     {error}
-                </div>
+                </StatusMessage>
             ) : null}
         </div>
     );

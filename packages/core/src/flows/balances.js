@@ -75,6 +75,62 @@ export async function addressHistory({ sdkRegistry, chainId, address, opts }) {
 }
 
 /**
+ * @typedef {Object} IndexerWatermarkResult
+ * @property {string} chainId
+ * @property {number | null} watermark   latest block index the indexer has
+ *                                        processed for this chain, or null when
+ *                                        the explorer can't report it
+ */
+
+/**
+ * Latest indexed block for a chain (§28.3 "Indexed" timeline stage). Reads
+ * the explorer's `/status` report and pulls `last_block` for this chain's
+ * coin: the highest block index the indexer has processed. The History view
+ * compares it against a row's `blockIndex` to decide whether the row's action
+ * has been fully indexed vs still being ingested.
+ *
+ * Never throws for a reachable-but-unhelpful response: a missing field or a
+ * status call the SDK doesn't support degrades to `watermark: null` so the
+ * timeline falls back to its confirmed-implies-indexed heuristic rather than
+ * showing a perpetually-pending row.
+ *
+ * @param {{ sdkRegistry: import('../sdk/SDKRegistry.js').SDKRegistry, chainId: string }} params
+ * @returns {Promise<IndexerWatermarkResult>}
+ */
+export async function indexerWatermark({ sdkRegistry, chainId }) {
+    if (!sdkRegistry) throw new Error('indexerWatermark: sdkRegistry is required');
+    if (!chainId) throw new Error('indexerWatermark: chainId is required');
+    const sdk = sdkRegistry.get(chainId);
+    if (!sdk || typeof sdk.getStatus !== 'function') {
+        return { chainId, watermark: null };
+    }
+    const status = await sdk.getStatus();
+    const lastBlock = status && typeof status === 'object' ? status.last_block : null;
+    if (!lastBlock || typeof lastBlock !== 'object') {
+        return { chainId, watermark: null };
+    }
+    // `/status` keys last_block by coin prefix (BTC / RBTC / TDOGE / …).
+    // Prefer this chain's own prefix from the explorer client; if it isn't
+    // reachable, fall back to the highest processed block across every coin
+    // the explorer serves, which is a safe lower bound for our coin.
+    const coinPrefix = sdk.explorer && typeof sdk.explorer.coin === 'string'
+        ? sdk.explorer.coin
+        : null;
+    // Guard against null/undefined explicitly: Number(null) is 0, which is
+    // finite, so a coin the explorer reports as `null` (status unavailable)
+    // must not be mistaken for a watermark of block 0.
+    const own = coinPrefix ? lastBlock[coinPrefix] : undefined;
+    if (own != null && Number.isFinite(Number(own))) {
+        return { chainId, watermark: Number(own) };
+    }
+    const values = Object.values(lastBlock)
+        .filter((v) => v != null)
+        .map((v) => Number(v))
+        .filter((n) => Number.isFinite(n));
+    return { chainId, watermark: values.length ? Math.max(...values) : null };
+}
+
+/**
  * @typedef {Object} WalletBalancesOpts
  * @property {import('../storage/Vault.js').Vault} vault
  * @property {string} walletId

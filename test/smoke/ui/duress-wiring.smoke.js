@@ -95,7 +95,12 @@ assert.match(
     /Passphrases do not match/,
     'mismatch error copy present',
 );
-assert.match(rowSrc, /role="alert"/, 'errors surface via role=alert');
+// : errors surface via <StatusMessage variant="error"> (role="alert"
+// at runtime). The storage-write failure records a "Try again" retry; the
+// validation messages leave retryRef null so no misleading button renders.
+assert.match(rowSrc, /<StatusMessage\s+variant="error"/, 'errors surface via StatusMessage variant=error (role=alert)');
+assert.match(rowSrc, /label: 'Try again', onAction: retryRef\.current/, 'save-failure error offers a Try again recovery affordance');
+assert.match(rowSrc, /retryRef\.current = attemptSet/, 'storage-write failure records the set attempt as the retry action');
 assert.match(rowSrc, /autoComplete="new-password"/, 'inputs hint as new-password to managers');
 
 console.log('duress-wiring smoke OK');

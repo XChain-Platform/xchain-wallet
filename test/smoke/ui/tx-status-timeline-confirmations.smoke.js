@@ -26,11 +26,34 @@ const read = (p) => readFileSync(join(root, p), 'utf8');
 const timelineSrc = read('packages/core/src/shared/components/TxStatusTimeline.jsx');
 const historySrc = read('packages/core/src/shared/routes/History.jsx');
 
-// 1. The component declares chainTip in its prop list and JSDoc.
-assert.ok(/export function TxStatusTimeline\(\{ entry, chainTip \}\)/.test(timelineSrc),
-    'TxStatusTimeline accepts a chainTip prop');
+// 1. The component declares chainTip + indexerWatermark in its prop list
+//    and JSDoc.
+assert.ok(/export function TxStatusTimeline\(\{ entry, chainTip, indexerWatermark \}\)/.test(timelineSrc),
+    'TxStatusTimeline accepts chainTip + indexerWatermark props');
 assert.ok(/@param \{number\} \[props\.chainTip\]/.test(timelineSrc),
     'TxStatusTimeline JSDoc documents the chainTip prop');
+assert.ok(/@param \{number\} \[props\.indexerWatermark\]/.test(timelineSrc),
+    'TxStatusTimeline JSDoc documents the indexerWatermark prop');
+
+// 1b. : the stages array carries the full §28.3 ladder, including
+//     the 'signed' (first) and 'indexed' (last) stages.
+for (const key of ['signed', 'broadcast', 'mempool', 'confirmed', 'indexed']) {
+    assert.ok(new RegExp(`key: '${key}'`).test(timelineSrc),
+        `TxStatusTimeline stages array includes the '${key}' stage`);
+}
+assert.ok(timelineSrc.indexOf("key: 'signed'") < timelineSrc.indexOf("key: 'broadcast'"),
+    "'signed' stage is rendered before 'broadcast'");
+assert.ok(timelineSrc.indexOf("key: 'confirmed'") < timelineSrc.indexOf("key: 'indexed'"),
+    "'indexed' stage is rendered after 'confirmed'");
+// Indexed is done once the watermark reaches the block; a confirmed row
+// with no watermark still reads as indexed (the wallet only shows rows the
+// indexer returned).
+assert.ok(/const indexed = confirmed && \(watermark > 0 \? watermark >= blockIndex : true\)/.test(timelineSrc),
+    'Indexed stage compares the watermark against the entry block with a confirmed fallback');
+// Signed is done from an explicit signedAt or an implied one (a txHash means
+// the tx was signed before broadcast).
+assert.ok(/const signed = signedAt > 0 \|\| txHash\.length > 0/.test(timelineSrc),
+    'Signed stage is done from signedAt or a present txHash');
 
 // 2. Confirmation count is computed as tip - blockIndex + 1 (so a tip
 //    that equals the row's block reads as "1 confirmation").
@@ -54,20 +77,30 @@ assert.ok(/const chainTipByChainId = useMemo/.test(historySrc),
     'History.jsx memoizes chainTipByChainId');
 assert.ok(/chainTip=\{chainTipByChainId\[entry\.chainId\]\}/.test(historySrc),
     'History.jsx threads chainTip into EntryRow');
-assert.ok(/function EntryRow\(\{[^}]*\bchainTip\b[^}]*\bwalletId\b[^}]*\}\)/.test(historySrc),
-    'EntryRow declares the chainTip prop');
-assert.ok(/<DetailCard entry=\{entry\} peerCache=\{peerCache\} isFull=\{isFull\} chainTip=\{chainTip\} walletId=\{walletId\} \/>/.test(historySrc),
-    'EntryRow forwards chainTip to DetailCard');
-assert.ok(/function DetailCard\(\{ entry, peerCache, chainTip, walletId \}\)/.test(historySrc),
-    'DetailCard declares the chainTip prop');
-assert.ok(/<TxStatusTimeline entry=\{entry\} chainTip=\{chainTip\} \/>/.test(historySrc),
-    'DetailCard forwards chainTip to TxStatusTimeline');
+assert.ok(/function EntryRow\(\{[^}]*\bchainTip\b[^}]*\bindexerWatermark\b[^}]*\bwalletId\b[^}]*\}\)/.test(historySrc),
+    'EntryRow declares the chainTip + indexerWatermark props');
+assert.ok(/<DetailCard entry=\{entry\} peerCache=\{peerCache\} isFull=\{isFull\} chainTip=\{chainTip\} indexerWatermark=\{indexerWatermark\} walletId=\{walletId\} \/>/.test(historySrc),
+    'EntryRow forwards chainTip + indexerWatermark to DetailCard');
+assert.ok(/function DetailCard\(\{ entry, peerCache, chainTip, indexerWatermark, walletId \}\)/.test(historySrc),
+    'DetailCard declares the chainTip + indexerWatermark props');
+assert.ok(/<TxStatusTimeline entry=\{entry\} chainTip=\{chainTip\} indexerWatermark=\{indexerWatermark\} \/>/.test(historySrc),
+    'DetailCard forwards chainTip + indexerWatermark to TxStatusTimeline');
 
-// 6. Both EntryRow occurrences in the row-render branches receive
-//    chainTip: group-member rows AND top-level rows.
+// : History.jsx fetches the per-chain indexer watermark and threads
+// it through every EntryRow alongside chainTip.
+assert.ok(/const \[indexerWatermarkByChainId, setIndexerWatermarkByChainId\] = useState/.test(historySrc),
+    'History.jsx holds indexerWatermarkByChainId state');
+assert.ok(/messaging\.getIndexerWatermark\(\{ chainId: cid \}\)/.test(historySrc),
+    'History.jsx fetches the watermark via messaging.getIndexerWatermark');
+
+// 6. Both EntryRow occurrences in the row-render branches receive both
+//    chainTip and indexerWatermark: group-member rows AND top-level rows.
 const entryRowMentions = (historySrc.match(/<EntryRow\b/g) || []).length;
 const entryRowChainTipMentions = (historySrc.match(/chainTip=\{chainTipByChainId\[entry\.chainId\]\}/g) || []).length;
 assert.equal(entryRowChainTipMentions, entryRowMentions,
     `every <EntryRow> in History.jsx receives chainTip (got ${entryRowChainTipMentions} of ${entryRowMentions})`);
+const wmMentions = (historySrc.match(/indexerWatermark=\{indexerWatermarkByChainId\[entry\.chainId\]\}/g) || []).length;
+assert.equal(wmMentions, entryRowMentions,
+    `every <EntryRow> in History.jsx receives indexerWatermark (got ${wmMentions} of ${entryRowMentions})`);
 
 console.log('OK: TxStatusTimeline confirmations + History.jsx wiring');

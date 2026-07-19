@@ -114,7 +114,8 @@ export const CLIPBOARD_AUTO_CLEAR_DEFAULT = 60;
  * @property {{ bindings?: Record<string, string> }} [keyboard]                                              v2-tolerant: §34.1 keyboard-shortcut overrides. `bindings` maps a shortcut id from keyboard/shortcuts.js to a binding string ('mod+k' / '?' / 'g h'); unknown ids and invalid strings are ignored at resolve time (resolveBindings), so a stale override can't break dispatch.
  * @property {boolean} [verifyProofs]                                                                      v2-tolerant: when true (default), the wallet cryptographically verifies token balances + actions against quorum-signed SPV checkpoints and badges each row. Set false to skip the extra proof traffic. Seam for a future pinned validator set / trusted checkpoint.
  * @property {boolean} [showVariantBadge]                                                                    v2-tolerant (web shell only). When true AND developerMode is on, the floating dev variant switcher (small / full / sidebar / extension preview) renders. Default false, so production never shows it.
- * @property {boolean} [autoApproveLocalhost]                                                                v2-tolerant: when developerMode is also on, bridge.connect from localhost / 127.0.0.1 / [::1] origins skips the approval prompt (§48.6 / G151). Sign requests still prompt.
+ * @property {boolean} [autoApproveLocalhost]                                                                v2-tolerant: when developerMode is also on, bridge.connect from localhost / 127.0.0.1 / [::1] origins skips the approval prompt (§48.6 / G151). Auto-sign is a separate opt-in (autoSignLocalhostMs).
+ * @property {number} [autoSignLocalhostMs]                                                                  v2-tolerant: Developer-Mode localhost auto-sign timeout in ms (Cluster Q FOLLOWUP 3). Absent / 0 = off (default). Positive value = for that long after a real sign approval, further sign requests from a localhost dApp reuse the session-cached password instead of prompting. Allowed values are AUTO_SIGN_LOCALHOST_OPTIONS (off / 5 min / 1 hour). Only ever consulted when developerMode is also on; the password lives in service-worker memory only and never persists.
  * @property {string[]} [blockedOrigins]                                                                     v2-tolerant: user-managed origin blocklist (§12 / G009). bridge.connect + the four sign methods reject with BLOCKED_BY_USER for matching origins. Stored as URL.origin strings or wildcard patterns (`*.example.com`, Cluster S FOLLOWUP 3).
  * @property {Array<{ at: number, action: 'add' | 'remove', entry: string, evictedSiteIds?: string[] }>} [blocklistAuditLog]   v2-tolerant: ring-buffer of recent blocklist mutations (Cluster S FOLLOWUP 4). Capped at 50 entries.
  * @property {{ burst?: number, windowMs?: number }} [signThrottle]                                          v2-tolerant: per-origin sign-request token-bucket limits (§12 / G012 / Cluster S FOLLOWUP 1). `burst` is positive integer max requests per window; `windowMs` is window length in ms (positive integer). Either field may be omitted to fall back to SIGN_THROTTLE_DEFAULT_BURST / SIGN_THROTTLE_DEFAULT_WINDOW_MS.
@@ -138,6 +139,21 @@ export const FORM_DRAFT_TTL_OPTIONS = Object.freeze([
     FORM_DRAFT_TTL_1H,
     FORM_DRAFT_TTL_24H,
     FORM_DRAFT_TTL_7D,
+]);
+
+// Developer-Mode localhost auto-sign timeout (Cluster Q FOLLOWUP 3), surfaced
+// in Settings > Privacy. The value is how long a password captured by a real
+// sign approval stays reusable for further localhost sign requests. `off`
+// disables the feature entirely (the default): no password is ever cached.
+// Only the three spec-listed postures are accepted; any other value fails
+// validation so a corrupt blob can't widen the window.
+export const AUTO_SIGN_LOCALHOST_OFF = 0;
+export const AUTO_SIGN_LOCALHOST_5M = 5 * 60 * 1000;
+export const AUTO_SIGN_LOCALHOST_1H = 60 * 60 * 1000;
+export const AUTO_SIGN_LOCALHOST_OPTIONS = Object.freeze([
+    AUTO_SIGN_LOCALHOST_OFF,
+    AUTO_SIGN_LOCALHOST_5M,
+    AUTO_SIGN_LOCALHOST_1H,
 ]);
 
 // Sign-throttle limits, surfaced in Settings (Cluster S FOLLOWUP 1).
@@ -414,6 +430,14 @@ export function validateSettings(record) {
             'showVariantBadge',
             isBoolean(r.showVariantBadge),
             'must be a boolean when present',
+        );
+    }
+    if (r.autoSignLocalhostMs !== undefined) {
+        check(
+            errors,
+            'autoSignLocalhostMs',
+            AUTO_SIGN_LOCALHOST_OPTIONS.includes(r.autoSignLocalhostMs),
+            'must be one of the allowed auto-sign timeouts (off / 5 min / 1 hour)',
         );
     }
     if (r.blockedOrigins !== undefined) {

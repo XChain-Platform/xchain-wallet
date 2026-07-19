@@ -259,6 +259,7 @@ export { resolveActiveAddresses, setActiveAddress } from './activeAddress.js';
 export {
     addressBalances,
     addressHistory,
+    indexerWatermark,
     walletBalances,
 } from './balances.js';
 export {

@@ -21,12 +21,20 @@
 //   - Auto-approve localhost dApps (`settings.autoApproveLocalhost`).
 //     §48.6 / G151: when both this and Developer Mode are on,
 //     `bridge.connect` from localhost / 127.0.0.1 / [::1] origins
-//     skips the approval prompt. Sign requests still prompt (the
-//     password is required to sign and the wallet never caches it).
+//     skips the approval prompt.
+//   - Localhost auto-sign timeout (`settings.autoSignLocalhostMs`).
+//     §48.6 / Cluster Q FOLLOWUP 3: a separate opt-in that, once set to
+//     5 min / 1 hour, lets a localhost sign request reuse the password
+//     from a prior approval (held in service-worker memory only) instead
+//     of prompting again. Off by default; a dev-only ergonomic.
 //   - Regtest networks subsection (§48.3 / G149). Lists the bundled
 //     regtest descriptors and lets the user activate one at runtime
 //     via `messaging.activateChainRequest`. Idempotent re-activation
-//     is a no-op.
+//     is a no-op. HW-aware (§17.4 / FOLLOWUP 1): when the wallet has a
+//     paired hardware signer the row surfaces a SignerSelectForm; picking
+//     the device passes its `signerId` and swaps the password field for
+//     "check your device" copy, since HW activation derives the new
+//     chain's address on the device instead of from a software seed.
 //   - Custom chains subsection (§9.7 / Cluster Q FOLLOWUP 2). Paste a
 //     JSON ChainDescriptor blob to add it to the running ChainRegistry;
 //     persisted across SW restarts. Remove cleans both the persisted
@@ -37,13 +45,23 @@
 //   - Raw PSBT inspector reveal on sign screens (§48.4)
 
 import { useEffect, useState } from 'react';
-import { registry as registryLib } from '@xchain-wallet/core';
+import { registry as registryLib, schemas } from '@xchain-wallet/core';
 import { useMessaging } from '../../useMessaging.js';
 import { useSettings } from '../../hooks/useSettings.js';
 import { LogConsole } from '../LogConsole.jsx';
-import { STACK, Status, ToggleRow } from './_settingsPrimitives.jsx';
+import { SignerSelectForm } from '../../routes/SignerSelectForm.jsx';
+import { ROW, ROW_HINT, SELECT, STACK, Status, ToggleRow } from './_settingsPrimitives.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
+
+// Cluster Q FOLLOWUP 3: labels for the localhost auto-sign timeout options.
+// Values come from the schema so the UI can never offer a timeout the
+// validator would reject.
+const AUTO_SIGN_LABELS = {
+    [schemas.settings.AUTO_SIGN_LOCALHOST_OFF]: 'Off (always prompt)',
+    [schemas.settings.AUTO_SIGN_LOCALHOST_5M]: '5 minutes',
+    [schemas.settings.AUTO_SIGN_LOCALHOST_1H]: '1 hour',
+};
 
 export function DeveloperModeSection() {
     const { settings, loading, error, update } = useSettings();
@@ -93,12 +111,51 @@ export function DeveloperModeSection() {
             />
             <ToggleRow
                 label="Auto-approve localhost dApps"
-                hint="Skip the bridge.connect prompt for http://localhost / 127.0.0.1 / [::1] origins. Requires Developer Mode. Sign requests still prompt (the password is needed to sign and the wallet never caches it)."
+                hint="Skip the bridge.connect prompt for http://localhost / 127.0.0.1 / [::1] origins. Requires Developer Mode. Signing is a separate opt-in below."
                 checked={Boolean(settings.autoApproveLocalhost)}
                 disabled={!settings.developerMode}
                 onChange={(v) => onToggle('autoApproveLocalhost', v)}
             />
+            <AutoSignLocalhostRow
+                developerMode={Boolean(settings.developerMode)}
+                value={settings.autoSignLocalhostMs}
+                onChange={(v) => onToggle('autoSignLocalhostMs', v)}
+            />
             <LogConsoleRow developerMode={Boolean(settings.developerMode)} />
+        </div>
+    );
+}
+
+// Cluster Q FOLLOWUP 3: localhost auto-sign timeout selector.
+//
+// A two-column row (label + hint, then a <select>) mirroring ToggleRow's
+// layout. The value is the raw ms timeout persisted to settings; `off` (0)
+// disables auto-sign entirely and is the default. Disabled until Developer
+// Mode is on. The options come straight from the schema so the control can
+// never persist a value validateSettings would reject.
+function AutoSignLocalhostRow({ developerMode, value, onChange }) {
+    const current = schemas.settings.AUTO_SIGN_LOCALHOST_OPTIONS.includes(value)
+        ? value
+        : schemas.settings.AUTO_SIGN_LOCALHOST_OFF;
+    return (
+        <div style={ROW}>
+            <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+                <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>Cache password for localhost auto-sign</span>
+                <span style={ROW_HINT}>
+                    After you approve one sign request from a localhost dApp, reuse that password for further sign requests for this long, instead of prompting each time. The password is held in memory only and cleared when the browser closes. Off by default. Requires Developer Mode. For local development only.
+                </span>
+            </div>
+            <select
+                aria-label="Cache password for localhost auto-sign"
+                value={current}
+                disabled={!developerMode}
+                onChange={(e) => onChange(Number(e.target.value))}
+                style={{ ...SELECT, cursor: developerMode ? 'pointer' : 'not-allowed', opacity: developerMode ? 1 : 0.5 }}
+            >
+                {schemas.settings.AUTO_SIGN_LOCALHOST_OPTIONS.map((ms) => (
+                    <option key={ms} value={ms}>{AUTO_SIGN_LABELS[ms]}</option>
+                ))}
+            </select>
         </div>
     );
 }
@@ -188,6 +245,11 @@ function RegtestRow({ descriptor, isActive, disabled }) {
     const [statusText, setStatusText] = useState(/** @type {string | null} */ (null));
     const [errorText, setErrorText] = useState(/** @type {string | null} */ (null));
     const [walletId, setWalletId] = useState(/** @type {string | null} */ (null));
+    // §17.4 / FOLLOWUP 1: signer selection. null = the implicit software
+    // seed (password path); a non-null signerId names a paired HW signer,
+    // which activates through the device instead of a wallet password.
+    const [signerId, setSignerId] = useState(/** @type {string | null} */ (null));
+    const isHardware = Boolean(signerId);
 
     useEffect(() => {
         let cancelled = false;
@@ -207,7 +269,9 @@ function RegtestRow({ descriptor, isActive, disabled }) {
             setErrorText('Activation is not wired in this shell yet.');
             return;
         }
-        if (password.length === 0) {
+        // Hardware signers derive the new chain's address on the device,
+        // so they need no wallet password; software seeds still do.
+        if (!isHardware && password.length === 0) {
             setErrorText('Wallet password is required.');
             return;
         }
@@ -218,7 +282,8 @@ function RegtestRow({ descriptor, isActive, disabled }) {
             const r = await messaging.activateChainRequest({
                 walletId,
                 chainId: descriptor.id,
-                password,
+                password: isHardware ? undefined : password,
+                signerId: signerId || undefined,
             });
             const created = Array.isArray(r?.addresses) ? r.addresses.length : 0;
             const skipped = Number.isFinite(r?.skippedAccounts) ? r.skippedAccounts : 0;
@@ -240,6 +305,7 @@ function RegtestRow({ descriptor, isActive, disabled }) {
     const onCancel = () => {
         setOpen(false);
         setPassword('');
+        setSignerId(null);
         setErrorText(null);
     };
 
@@ -282,46 +348,68 @@ function RegtestRow({ descriptor, isActive, disabled }) {
                 )}
             </div>
             {open ? (
-                <form onSubmit={onActivate} style={{ display: 'flex', gap: 'var(--xc-space-1)', alignItems: 'center', flexWrap: 'wrap' }}>
-                    <input
-                        type="password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        placeholder="Wallet password"
-                        autoComplete="current-password"
-                        disabled={busy}
-                        aria-label={`${descriptor.displayName} activation password`}
-                        style={{
-                            flex: 1,
-                            background: 'var(--xc-bg)',
-                            color: 'var(--xc-text)',
+                <form onSubmit={onActivate} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-1)' }}>
+                    {/* SignerSelectForm renders nothing when the wallet has no
+                        paired HW signer (auto-resolves to software), so software
+                        wallets keep the original password-only affordance. */}
+                    {walletId ? (
+                        <SignerSelectForm
+                            walletId={walletId}
+                            value={signerId}
+                            onChange={setSignerId}
+                            disabled={busy}
+                        />
+                    ) : null}
+                    {isHardware ? (
+                        <div
+                            role="note"
+                            style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-xs)' }}
+                        >
+                            Deriving the first {descriptor.displayName} address round-trips to your hardware device. Connect it and check your device to confirm the new address when prompted; no wallet password is needed.
+                        </div>
+                    ) : (
+                        <input
+                            type="password"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            placeholder="Wallet password"
+                            autoComplete="current-password"
+                            disabled={busy}
+                            aria-label={`${descriptor.displayName} activation password`}
+                            style={{
+                                flex: 1,
+                                background: 'var(--xc-bg)',
+                                color: 'var(--xc-text)',
+                                border: '1px solid var(--xc-border)',
+                                borderRadius: 'var(--xc-radius-sm)',
+                                padding: 'var(--xc-space-1) var(--xc-space-2)',
+                                fontSize: 'var(--xc-text-sm)',
+                            }}
+                        />
+                    )}
+                    <div style={{ display: 'flex', gap: 'var(--xc-space-1)' }}>
+                        <button type="submit" disabled={busy || (!isHardware && password.length === 0)} style={{
+                            background: 'var(--xc-accent-primary)',
+                            borderColor: 'var(--xc-accent-primary)',
+                            color: 'var(--xc-bg)',
+                            border: '1px solid',
+                            borderRadius: 'var(--xc-radius-sm)',
+                            padding: 'var(--xc-space-1) var(--xc-space-3)',
+                            fontSize: 'var(--xc-text-xs)',
+                            cursor: busy ? 'wait' : 'pointer',
+                        }}>
+                            {busy ? (isHardware ? 'Check your device…' : 'Activating…') : 'Activate'}
+                        </button>
+                        <button type="button" onClick={onCancel} disabled={busy} style={{
+                            background: 'transparent',
                             border: '1px solid var(--xc-border)',
+                            color: 'var(--xc-text)',
                             borderRadius: 'var(--xc-radius-sm)',
                             padding: 'var(--xc-space-1) var(--xc-space-2)',
-                            fontSize: 'var(--xc-text-sm)',
-                        }}
-                    />
-                    <button type="submit" disabled={busy || password.length === 0} style={{
-                        background: 'var(--xc-accent-primary)',
-                        borderColor: 'var(--xc-accent-primary)',
-                        color: 'var(--xc-bg)',
-                        border: '1px solid',
-                        borderRadius: 'var(--xc-radius-sm)',
-                        padding: 'var(--xc-space-1) var(--xc-space-3)',
-                        fontSize: 'var(--xc-text-xs)',
-                        cursor: busy ? 'wait' : 'pointer',
-                    }}>
-                        {busy ? 'Activating…' : 'Activate'}
-                    </button>
-                    <button type="button" onClick={onCancel} disabled={busy} style={{
-                        background: 'transparent',
-                        border: '1px solid var(--xc-border)',
-                        color: 'var(--xc-text)',
-                        borderRadius: 'var(--xc-radius-sm)',
-                        padding: 'var(--xc-space-1) var(--xc-space-2)',
-                        fontSize: 'var(--xc-text-xs)',
-                        cursor: 'pointer',
-                    }}>Cancel</button>
+                            fontSize: 'var(--xc-text-xs)',
+                            cursor: 'pointer',
+                        }}>Cancel</button>
+                    </div>
                 </form>
             ) : null}
             {statusText ? <Status text={statusText} /> : null}

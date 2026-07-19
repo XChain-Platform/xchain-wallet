@@ -8,8 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Screen, PageHeader, Button, Input, AnimatedQrFrames, MultisigBadge, QrScanner , Icon} from '@xchain-wallet/core/ui';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Screen, PageHeader, Button, Input, AnimatedQrFrames, MultisigBadge, QrScanner, StatusMessage , Icon} from '@xchain-wallet/core/ui';
 import { schemas, uri as uriLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './IssueTokenForm.module.css';
@@ -70,24 +70,36 @@ export function MultisigSigningSession({ walletId, onBack }) {
     const [signPassword, setSignPassword] = useState('');
     const [signResult, setSignResult] = useState(/** @type {string | null} */ (null));
 
+    //  (error-recovery sweep remainder): each error surface offers a
+    // one-click "Try again" against whatever action last failed. The
+    // failing handler records its own re-run here so the recovery button
+    // retries the right operation without the user re-navigating. Left
+    // null for errors that aren't retryable by re-running (malformed
+    // scan / wrong-envelope-kind), so no misleading button renders.
+    const retryRef = useRef(/** @type {null | (() => void | Promise<void>)} */ (null));
+    const fail = useCallback((message, retryFn) => {
+        retryRef.current = typeof retryFn === 'function' ? retryFn : null;
+        setError(message);
+    }, []);
+
     const refreshList = useCallback(async () => {
         try {
             const list = await messaging.listMultisigSigningSessions({ walletId });
             setSessions(Array.isArray(list) ? list : []);
         } catch (err) {
-            setError(err?.message || 'Failed to load multisig sessions.');
+            fail(err?.message || 'Failed to load multisig sessions.', refreshList);
             setSessions([]);
         }
-    }, [walletId, messaging]);
+    }, [walletId, messaging, fail]);
 
     const refreshActive = useCallback(async (id) => {
         try {
             const session = await messaging.getMultisigSigningSession({ sessionId: id });
             setActive(session);
         } catch (err) {
-            setError(err?.message || 'Failed to load session.');
+            fail(err?.message || 'Failed to load session.', () => refreshActive(id));
         }
-    }, [messaging]);
+    }, [messaging, fail]);
 
     useEffect(() => {
         refreshList();
@@ -106,7 +118,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
             await refreshActive(active.id);
             await refreshList();
         } catch (err) {
-            setError(err?.message || 'Aggregate failed.');
+            fail(err?.message || 'Aggregate failed.', handleAggregate);
         } finally {
             setBusy(false);
         }
@@ -121,7 +133,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
             await refreshActive(active.id);
             await refreshList();
         } catch (err) {
-            setError(err?.message || 'Cancel failed.');
+            fail(err?.message || 'Cancel failed.', handleCancel);
         } finally {
             setBusy(false);
         }
@@ -204,7 +216,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
             next = { ...collectorState };
         }
         if (next.error) {
-            setError(next.error);
+            fail(next.error, null);
             setCollectorState(next);
             return;
         }
@@ -240,18 +252,18 @@ export function MultisigSigningSession({ walletId, onBack }) {
                 });
                 setPasteResult(`ECDSA signature from ${shortPk(envelope.contribution.pubkey)} scanned.`);
             } else {
-                setError(`Scanned envelope kind "${envelope.kind}" is not a cosigner reply.`);
+                fail(`Scanned envelope kind "${envelope.kind}" is not a cosigner reply.`, null);
             }
             await refreshActive(active.id);
             await refreshList();
             setCollectorState(createXcwCollector());
             setPasteInput('');
         } catch (err) {
-            setError(err?.message || 'Failed to apply scanned contribution.');
+            fail(err?.message || 'Failed to apply scanned contribution.', null);
         } finally {
             setBusy(false);
         }
-    }, [active, busy, collectorState, messaging, refreshActive, refreshList]);
+    }, [active, busy, collectorState, messaging, refreshActive, refreshList, fail]);
 
     async function handleSignLocally() {
         if (!active || signPassword.length === 0) return;
@@ -270,7 +282,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
             await refreshActive(active.id);
             await refreshList();
         } catch (err) {
-            setError(err?.message || 'Local-signing failed.');
+            fail(err?.message || 'Local-signing failed.', handleSignLocally);
         } finally {
             setBusy(false);
         }
@@ -292,7 +304,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
         for (const line of lines) {
             state = addChunkToCollector(state, line);
             if (state.error) {
-                setError(state.error);
+                fail(state.error, null);
                 setCollectorState(state);
                 setBusy(false);
                 return;
@@ -308,7 +320,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
         try {
             envelope = decodeMultisigEnvelope(state.psbt);
         } catch (e) {
-            setError(e?.message || 'Failed to parse envelope.');
+            fail(e?.message || 'Failed to parse envelope.', null);
             setBusy(false);
             return;
         }
@@ -335,7 +347,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
                 });
                 setPasteResult(`ECDSA signature from ${shortPk(envelope.contribution.pubkey)} accepted.`);
             } else {
-                setError(`Envelope kind "${envelope.kind}" is not a cosigner reply.`);
+                fail(`Envelope kind "${envelope.kind}" is not a cosigner reply.`, null);
                 setBusy(false);
                 return;
             }
@@ -344,11 +356,18 @@ export function MultisigSigningSession({ walletId, onBack }) {
             setCollectorState(createXcwCollector());
             setPasteInput('');
         } catch (err) {
-            setError(err?.message || 'Failed to apply contribution.');
+            fail(err?.message || 'Failed to apply contribution.', handlePasteSubmit);
         } finally {
             setBusy(false);
         }
     }
+
+    // : recovery slot for the shared `error` surface. Present only
+    // when the last failure recorded a re-runnable action (retryRef);
+    // undefined otherwise so StatusMessage renders the diagnostic alone.
+    const errorRecovery = retryRef.current
+        ? { label: 'Try again', onAction: retryRef.current }
+        : undefined;
 
     const header = (
         <PageHeader
@@ -366,7 +385,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
     if (error && !active) {
         return wrap(
             <>
-                <div role="alert" className={styles.error}>{error}</div>
+                <StatusMessage variant="error" recovery={errorRecovery}>{error}</StatusMessage>
                 <div className={styles.actions}>
                 </div>
             </>,
@@ -457,7 +476,11 @@ export function MultisigSigningSession({ walletId, onBack }) {
                     the envelope on its side.
                 </p>
                 {exportFrames && exportFrames.error ? (
-                    <div role="alert" className={styles.error}>{exportFrames.error}</div>
+                    // Encode failure is derived from the current session's
+                    // state (a memo, not a user action): no re-run fixes it,
+                    // so the alert carries no recovery button. The user's
+                    // path forward is Back to tracker + Cancel session.
+                    <StatusMessage variant="error">{exportFrames.error}</StatusMessage>
                 ) : exportFrames && Array.isArray(exportFrames) ? (
                     <AnimatedQrFrames
                         frames={exportFrames}
@@ -514,7 +537,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
                     placeholder="Wallet password"
                 />
                 {signResult ? <p className={styles.hint}>{signResult}</p> : null}
-                {error ? <div role="alert" className={styles.error}>{error}</div> : null}
+                {error ? <StatusMessage variant="error" recovery={errorRecovery}>{error}</StatusMessage> : null}
                 <div className={styles.actions}>
                     <Button onClick={handleSignLocally} disabled={busy || signPassword.length === 0}>
                         {busy ? 'Signing…' : 'Sign with my key'}
@@ -552,7 +575,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
                     {collectorState.total ?? '?'}
                 </p>
                 {pasteResult ? <p className={styles.hint}>{pasteResult}</p> : null}
-                {error ? <div role="alert" className={styles.error}>{error}</div> : null}
+                {error ? <StatusMessage variant="error" recovery={errorRecovery}>{error}</StatusMessage> : null}
                 <div className={styles.actions}>
                     <Button
                         variant={scannerOpen ? 'ghost' : 'primary'}
@@ -627,7 +650,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
             {roundLabel ? (
                 <p className={styles.hint} data-testid="multisig-round-label">{roundLabel}</p>
             ) : null}
-            {error ? <div role="alert" className={styles.error}>{error}</div> : null}
+            {error ? <StatusMessage variant="error" recovery={errorRecovery}>{error}</StatusMessage> : null}
             <div className={styles.actions}>
                 {canAggregate && !isTerminal ? (
                     <Button onClick={handleAggregate} disabled={busy}>

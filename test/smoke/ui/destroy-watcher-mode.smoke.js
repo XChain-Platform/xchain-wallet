@@ -22,12 +22,15 @@ const formSrc = readFileSync(
     'utf8',
 );
 
-assert.match(formSrc, /import \{ useWalletMode \} from '\.\.\/hooks\/useWalletMode\.js';/);
+// §40 / G6: watcher-mode dispatch now lives in the shared useActionForm
+// hook. The form declares `action: 'DESTROY'`; `isWatcherMode` and the
+// encode-only buildActionPsbtRequest branch are the hook's job.
+assert.match(formSrc, /import \{ useActionForm \} from '\.\.\/hooks\/useActionForm\.js';/);
 assert.match(formSrc, /import \{ WatcherResultPanel \} from '\.\.\/components\/WatcherResultPanel\.jsx';/);
-assert.match(formSrc, /const \{ isWatcherMode \} = useWalletMode\(\);/);
+assert.match(formSrc, /const \{[\s\S]+?isWatcherMode,[\s\S]+?\} = useActionForm\(\{/);
 assert.match(
     formSrc,
-    /messaging\.buildActionPsbtRequest\(\{[\s\S]+?action: 'DESTROY'/,
+    /useActionForm\(\{[\s\S]+?action:\s*'DESTROY'/,
 );
 assert.match(formSrc, /if \(!isWatcherMode && !isHwSource && \(!signerReady && password\.length === 0\)\) return;/);
 assert.match(formSrc, /if \(result\?\.psbtHex && !txid\) \{[\s\S]+?<WatcherResultPanel/);

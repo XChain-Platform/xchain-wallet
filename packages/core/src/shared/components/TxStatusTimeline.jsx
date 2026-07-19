@@ -13,8 +13,11 @@ import styles from './TxStatusTimeline.module.css';
 /**
  * §28.3 / G079: Transaction status timeline. Renders a compact vertical
  * stage list for a History entry, computing stage state from the fields
- * the explorer already returns:
+ * the explorer already returns plus two optional data sources:
  *
+ *   - **Signed**: the entry carries a `signedAt` timestamp (queued-
+ *                 broadcast / hardware-signer records), OR a `txHash` is
+ *                 present (a broadcast tx was necessarily signed first).
  *   - **Broadcast**: txHash is present (mempool or confirmed)
  *   - **In mempool**: blockIndex === 0 (waiting for inclusion)
  *   - **Confirmed**: blockIndex > 0; cell labels the block + timestamp.
@@ -22,26 +25,57 @@ import styles from './TxStatusTimeline.module.css';
  *                     entry's block, the cell adds a confirmation count
  *                     ("· N confirmations") so the user can read tx
  *                     safety at a glance.
- *
- * Future work (cluster FOLLOWUP): a "Signed" stage when we start
- * tracking pendingTx records before broadcast, and an "Indexed" stage
- * once the indexer-sync watermark is exposed via messaging.
+ *   - **Indexed**: the indexer has processed the block carrying this
+ *                  action. Driven by `indexerWatermark` (the latest block
+ *                  the indexer has processed, from `getIndexerWatermark`):
+ *                  done when it is at or above the entry's block. With no
+ *                  watermark supplied, a confirmed row falls back to done,
+ *                  since a row the wallet can display was, by construction,
+ *                  read back from the indexer.
  *
  * @param {object} props
- * @param {{ blockIndex: number, timestamp: number, txHash: string, action: string }} props.entry
+ * @param {{ blockIndex: number, timestamp: number, txHash: string, action: string, signedAt?: number }} props.entry
  * @param {number} [props.chainTip] highest block index seen for the
  *        entry's chain. Used to render a confirmation count on
  *        confirmed rows. When omitted or <= entry.blockIndex - 1, the
  *        count is hidden.
+ * @param {number} [props.indexerWatermark] latest block index the indexer
+ *        has processed for the entry's chain. Drives the Indexed stage:
+ *        the row is indexed once the watermark reaches the entry's block.
  */
-export function TxStatusTimeline({ entry, chainTip }) {
+export function TxStatusTimeline({ entry, chainTip, indexerWatermark }) {
     const txHash = typeof entry?.txHash === 'string' ? entry.txHash : '';
     const blockIndex = Number(entry?.blockIndex ?? 0);
     const timestamp = Number(entry?.timestamp ?? 0);
+    const signedAt = Number(entry?.signedAt ?? 0);
     const inMempool = blockIndex === 0 && txHash.length > 0;
     const confirmed = blockIndex > 0;
     const tip = Number.isFinite(Number(chainTip)) ? Number(chainTip) : 0;
+    const watermark = Number.isFinite(Number(indexerWatermark)) ? Number(indexerWatermark) : 0;
     const confirmations = confirmed && tip >= blockIndex ? tip - blockIndex + 1 : 0;
+
+    // Signed: a broadcast tx was necessarily signed first, so a present
+    // txHash implies this stage is done. An explicit signedAt marks it
+    // done for a queued/pre-broadcast entry that has no hash yet.
+    const signed = signedAt > 0 || txHash.length > 0;
+    const signedSub = signedAt > 0
+        ? (relativeTime(signedAt) || 'Approved and signed')
+        : (signed
+            ? 'Approved and signed'
+            : 'Waiting for you to approve and sign');
+
+    // Indexed: the indexer has caught up to (or past) this action's block.
+    // A supplied watermark decides it; without one, a confirmed row is
+    // treated as indexed because the wallet only ever displays rows the
+    // indexer has already returned.
+    const indexed = confirmed && (watermark > 0 ? watermark >= blockIndex : true);
+    const indexedSub = indexed
+        ? (watermark > 0
+            ? `Fully processed · indexer at block ${watermark.toLocaleString()}`
+            : 'Fully processed and searchable')
+        : (confirmed
+            ? 'Indexer is still catching up to this block'
+            : 'Waiting to confirm before it can be processed');
     const confirmedSubBase = confirmed && timestamp > 0
         ? relativeTime(timestamp)
         : '';
@@ -52,6 +86,12 @@ export function TxStatusTimeline({ entry, chainTip }) {
         : confirmedSubBase;
 
     const stages = [
+        {
+            key: 'signed',
+            label: 'Signed',
+            done: signed,
+            sub: signedSub,
+        },
         {
             key: 'broadcast',
             label: 'Broadcast',
@@ -75,6 +115,12 @@ export function TxStatusTimeline({ entry, chainTip }) {
             label: confirmed ? `Confirmed at block ${blockIndex.toLocaleString()}` : 'Confirmed',
             done: confirmed,
             sub: confirmedSub,
+        },
+        {
+            key: 'indexed',
+            label: 'Indexed',
+            done: indexed,
+            sub: indexedSub,
         },
     ];
 

@@ -129,6 +129,14 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         /** @type {number | null} */ (null),
     );
     const [loadingChains, setLoadingChains] = useState(/** @type {Set<string>} */ (new Set()));
+    //  / §28.3 "Indexed" timeline stage: per-chain indexer watermark
+    // (latest processed block index) keyed by chainId. Fetched once per
+    // loaded chain via messaging.getIndexerWatermark; threaded into the
+    // TxStatusTimeline so a confirmed row can show whether the indexer has
+    // caught up to its block.
+    const [indexerWatermarkByChainId, setIndexerWatermarkByChainId] = useState(
+        /** @type {Record<string, number>} */ ({}),
+    );
     const [enabledChains, setEnabledChains] = useState(/** @type {Set<string>} */ (new Set()));
     const [crossChainOnly, setCrossChainOnly] = useState(false);
     const [multisigOnly, setMultisigOnly] = useState(false);
@@ -386,6 +394,37 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         }
         return tips;
     }, [entries]);
+
+    //  / §28.3: fetch the indexer watermark (latest processed block)
+    // per loaded chain so the TxStatusTimeline's Indexed stage reflects real
+    // indexer progress rather than the confirmed-implies-indexed fallback.
+    // Best-effort: a null/failed watermark for a chain is simply omitted, and
+    // the timeline degrades gracefully. Demo wallets skip the probe (there is
+    // no real explorer behind synthesized history).
+    useEffect(() => {
+        if (!addressesByChain) return undefined;
+        if (flowsLib.isDemoWallet(walletId)) return undefined;
+        const chains = Object.entries(addressesByChain)
+            .filter(([, addrs]) => Array.isArray(addrs) && addrs.length > 0)
+            .map(([cid]) => cid);
+        if (chains.length === 0) return undefined;
+        let cancelled = false;
+        Promise.all(
+            chains.map((cid) =>
+                messaging.getIndexerWatermark({ chainId: cid })
+                    .then((r) => ({ cid, watermark: r && r.watermark != null ? Number(r.watermark) : null }))
+                    .catch(() => ({ cid, watermark: null })),
+            ),
+        ).then((results) => {
+            if (cancelled) return;
+            const next = {};
+            for (const { cid, watermark } of results) {
+                if (Number.isFinite(watermark) && watermark > 0) next[cid] = watermark;
+            }
+            setIndexerWatermarkByChainId(next);
+        });
+        return () => { cancelled = true; };
+    }, [addressesByChain, messaging, walletId]);
 
     const visibleEntries = useMemo(() => {
         let list = entries.filter((e) => enabledChains.has(e.chainId));
@@ -889,6 +928,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                                                     peerCache={peerCache}
                                                     isFull={isFull}
                                                     chainTip={chainTipByChainId[entry.chainId]}
+                                                    indexerWatermark={indexerWatermarkByChainId[entry.chainId]}
                                                     walletId={walletId}
                                                     verify={actionVerifyMap[entry.key]}
                                                 />
@@ -910,6 +950,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                             peerCache={peerCache}
                             isFull={isFull}
                             chainTip={chainTipByChainId[entry.chainId]}
+                            indexerWatermark={indexerWatermarkByChainId[entry.chainId]}
                             walletId={walletId}
                             verify={actionVerifyMap[entry.key]}
                         />
@@ -924,7 +965,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
  * Inline detail card. For LINK-threaded entries we render two
  * `detailSide` blocks side-by-side; for everything else, one block.
  */
-export function DetailCard({ entry, peerCache, chainTip, walletId }) {
+export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walletId }) {
     const { messaging, shell } = useMessaging();
     const [balancesHidden] = useBalancesHidden();
     const [activeDetailTab, setActiveDetailTab] = useState(/** @type {'status' | 'details' | 'raw'} */ ('status'));
@@ -1310,7 +1351,7 @@ export function DetailCard({ entry, peerCache, chainTip, walletId }) {
                 ) : null}
 
                 {activeDetailTab === 'status' ? (
-                    <TxStatusTimeline entry={entry} chainTip={chainTip} />
+                    <TxStatusTimeline entry={entry} chainTip={chainTip} indexerWatermark={indexerWatermark} />
                 ) : null}
 
                 {activeDetailTab === 'raw' ? (
@@ -2027,7 +2068,7 @@ function coinOfChainId(chainId) {
  * One history row. Used both for top-level entries and for member rows
  * inside an expanded group card.
  */
-export function EntryRow({ entry, selected, showConnector, onClick, peerCache, isFull, chainTip, walletId, verify }) {
+export function EntryRow({ entry, selected, showConnector, onClick, peerCache, isFull, chainTip, indexerWatermark, walletId, verify }) {
     const d = chainRegistry.get(entry.chainId);
     return (
         <li data-history-key={entry.key}>
@@ -2087,7 +2128,7 @@ export function EntryRow({ entry, selected, showConnector, onClick, peerCache, i
                 </span>
             </button>
             {selected ? (
-                <DetailCard entry={entry} peerCache={peerCache} isFull={isFull} chainTip={chainTip} walletId={walletId} />
+                <DetailCard entry={entry} peerCache={peerCache} isFull={isFull} chainTip={chainTip} indexerWatermark={indexerWatermark} walletId={walletId} />
             ) : null}
         </li>
     );

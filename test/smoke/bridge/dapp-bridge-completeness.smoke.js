@@ -107,10 +107,19 @@ assert.ok(/xchain-inject-event/.test(cs),
 const banner = join(web, 'src', 'components', 'ExtensionBanner.jsx');
 assert.ok(existsSync(banner), 'ExtensionBanner.jsx exists');
 const bannerSrc = readFileSync(banner, 'utf8');
-assert.ok(/xchain#initialized/.test(bannerSrc),
-    'ExtensionBanner waits for the xchain#initialized event');
-assert.ok(/window\.xchain/.test(bannerSrc),
-    'ExtensionBanner detects window.xchain presence');
+// Cluster F FOLLOWUP 2: the banner delegates detection + the connect
+// handoff to the useExtensionWallet hook; provider detection and the
+// xchain#initialized listen now live there / in extensionWallet.js.
+assert.ok(/useExtensionWallet/.test(bannerSrc),
+    'ExtensionBanner uses the useExtensionWallet hook');
+assert.ok(/Use extension wallet/.test(bannerSrc),
+    'ExtensionBanner offers the accept action');
+const extHook = readFileSync(join(web, 'src', 'useExtensionWallet.js'), 'utf8');
+assert.ok(/xchain#initialized/.test(extHook),
+    'useExtensionWallet waits for the xchain#initialized event');
+const extCore = readFileSync(join(web, 'src', 'extensionWallet.js'), 'utf8');
+assert.ok(/window/.test(extCore) && /\.xchain/.test(extCore),
+    'extensionWallet detects window.xchain presence');
 
 const webApp = readFileSync(join(web, 'src', 'App.jsx'), 'utf8');
 assert.ok(/from ['"]\.\/components\/ExtensionBanner\.jsx['"]/.test(webApp),

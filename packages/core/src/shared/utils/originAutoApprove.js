@@ -8,24 +8,32 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// originAutoApprove (§48.6 / G151): Helpers that decide whether a
-// dApp bridge `connect` request from a given origin should be
+// originAutoApprove (§48.6 / G151 + Cluster Q FOLLOWUP 3): Helpers that
+// decide whether a dApp bridge request from a given origin should be
 // auto-approved without prompting the user.
 //
-// Scope: connect-only. Sign requests (signMessage, signAction,
-// signPsbt, signIn) ALWAYS go through the approval prompt: the
-// password is required to unwrap the seed and we deliberately never
-// cache it. Auto-approve is a developer ergonomics affordance, not a
-// security override.
+// Two independent gates, both off by default and both localhost-only:
+//   - shouldAutoApproveConnect: `connect` skips the permission prompt.
+//   - shouldAutoApproveSign: a sign request may reuse a password the user
+//     already entered this session (held by the bridge's signPasswordCache)
+//     instead of prompting again. Sign still requires the password to unwrap
+//     the seed; auto-sign reuses a cached one, it never signs without it.
 //
-// A request qualifies for auto-approve when ALL of:
+// A `connect` qualifies for auto-approve when ALL of:
 //   - settings.developerMode === true
 //   - settings.autoApproveLocalhost === true (v2-tolerant optional field)
 //   - origin parses as `localhost`, `127.0.0.1`, or `[::1]` on http(s),
 //     any port (Vite dev servers spin up random ports; we don't pin one).
 //
+// A sign request qualifies for auto-sign when ALL of:
+//   - settings.developerMode === true
+//   - settings.autoSignLocalhostMs is a positive number (the user-chosen
+//     cache timeout; absent / 0 = off, which is the default)
+//   - the origin is localhost (same test as above).
+//
 // Anything else returns false. The caller falls back to the normal
-// approvals prompt.
+// approvals prompt. Auto-approve is a developer ergonomics affordance,
+// not a security override.
 
 const LOCALHOST_HOSTNAMES = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
 const ALLOWED_PROTOCOLS = new Set(['http:', 'https:']);
@@ -59,6 +67,29 @@ export function shouldAutoApproveConnect({ origin, settings }) {
     if (!settings) return false;
     if (!settings.developerMode) return false;
     if (!settings.autoApproveLocalhost) return false;
+    return isLocalhostOrigin(origin);
+}
+
+/**
+ * Whether a sign request from `origin` may reuse a session-cached password
+ * (Developer-Mode localhost auto-sign, Cluster Q FOLLOWUP 3) instead of
+ * prompting. This is a SEPARATE opt-in from connect auto-approve: a user can
+ * auto-approve connect without ever enabling auto-sign, and vice versa.
+ *
+ * The timeout doubles as the on/off switch: any positive `autoSignLocalhostMs`
+ * enables it, absent / 0 disables it. Default settings omit the field, so
+ * auto-sign is off until the user deliberately picks a timeout.
+ *
+ * @param {object} args
+ * @param {string | null | undefined} args.origin
+ * @param {{ developerMode?: boolean, autoSignLocalhostMs?: number } | null | undefined} args.settings
+ * @returns {boolean}
+ */
+export function shouldAutoApproveSign({ origin, settings }) {
+    if (!settings) return false;
+    if (!settings.developerMode) return false;
+    const ttl = settings.autoSignLocalhostMs;
+    if (!Number.isFinite(ttl) || ttl <= 0) return false;
     return isLocalhostOrigin(origin);
 }
 

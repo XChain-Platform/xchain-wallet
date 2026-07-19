@@ -200,7 +200,22 @@ if (!parts || failure !== null) { /* reject - challenge tampered, expired, or si
 
 ### `parallel(actions: SignActionParams[]) → Promise<SignActionResult[]>`
 
-Phase 4+. Cross-chain parallel composer - the wallet groups every action into one approval modal and signs them in sequence (or atomically where the chain pair supports it). The result array preserves input order; per-action results carry their own `ok` flag.
+Cross-chain composer entry point. Pass a non-empty array of `SignActionParams` (at most 20). The wallet groups every action into a single approval modal, and once you approve the batch it signs each action in input order.
+
+There is no atomic multi-chain settlement primitive: the on-chain effect is N independent ACTIONs, so `parallel()` does not promise all-or-nothing. The returned array preserves input order and every entry carries its own `ok` flag. Branch per entry:
+
+```js
+const results = await provider.parallel([
+  { chainId: 'bitcoin-regtest',  action: 'SEND', params: { from, to, tick, amount } },
+  { chainId: 'litecoin-regtest', action: 'SEND', params: { from, to, tick, amount } },
+]);
+for (const r of results) {
+  if (r.ok) console.log('sent', r.txid);
+  else console.warn('action failed', r.error);   // e.g. USER_REJECTED, UNSUPPORTED_ACTION, CHAIN_NOT_PERMITTED
+}
+```
+
+Rejecting the grouped modal rejects the whole batch (nothing is signed). Only the action kinds in `signAction`'s supported set can appear in a batch; an unsupported kind comes back as `{ ok: false, error: 'UNSUPPORTED_ACTION', supportedActions }` in its slot without aborting the others. An empty array or one longer than 20 entries rejects the call with `INVALID_PARAMS`.
 
 ---
 

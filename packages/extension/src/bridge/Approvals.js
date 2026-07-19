@@ -67,6 +67,13 @@
  */
 
 /**
+ * @typedef {Object} ParallelApprovalRequest
+ * @property {string} origin
+ * @property {'parallel'} kind
+ * @property {{ chainId?: string, action?: string, payload?: unknown }[]} actions   the whole batch, in input order
+ */
+
+/**
  * @typedef {Object} Approvals
  * @property {(req: ConnectApprovalRequest) => Promise<ConnectApprovalResult>} connect
  * @property {(req: SignApprovalRequest) => Promise<SignApprovalResult>} signAction
@@ -74,6 +81,7 @@
  * @property {(req: SignApprovalRequest) => Promise<SignApprovalResult>} signPsbt
  * @property {(req: SignApprovalRequest) => Promise<SignApprovalResult>} coSign
  * @property {(req: SignApprovalRequest) => Promise<SignApprovalResult>} signIn
+ * @property {(req: ParallelApprovalRequest) => Promise<SignApprovalResult>} [parallel]   optional §43.2 grouped modal for parallel(); one prompt captures the password for the whole batch. When absent the bridge falls back to a per-action signAction prompt.
  */
 
 /**

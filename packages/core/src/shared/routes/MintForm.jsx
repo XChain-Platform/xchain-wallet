@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     Screen,
     PageHeader,
@@ -24,9 +24,8 @@ import {
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
 import { SignCredentials } from '../components/SignCredentials.jsx';
-import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
-import { useWalletMode } from '../hooks/useWalletMode.js';
+import { useActionForm } from '../hooks/useActionForm.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -55,22 +54,37 @@ const chainRegistry = registryLib.defaultRegistry();
  */
 export function MintForm({ walletId, onBack, initialChainId, initialTick, initialFromAddress }) {
     const { messaging, shell } = useMessaging();
-    const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
 
-    const [addressesByChain, setAddressesByChain] = useState(
-        /** @type {Record<string, any[]> | null} */ (null),
-    );
-    const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
-
-    const [chainId, setChainId] = useState(/** @type {string | null} */ (initialChainId || null));
-    const [fromAddressId, setFromAddressId] = useState(
-        /** @type {string | null} */ (null),
-    );
+    const lockedToken = !!(initialChainId && initialTick);
+    // Shared source-loading + `from` descriptor + signer dispatch (G6).
+    const {
+        addressesByChain,
+        loadError,
+        chainId,
+        setChainId,
+        fromAddress,
+        chainsWithAddresses,
+        descriptor,
+        signerReady,
+        isWatcherMode,
+        isHwSource,
+        hwStatus,
+        onHwStatusChange,
+        submit,
+    } = useActionForm({
+        walletId,
+        action: 'MINT',
+        submitMethods: { hw: 'mintAssetHw', software: 'mintToken' },
+        initialChainId,
+        initialFromAddress,
+        lockedToken,
+        noAddressMessage:
+            'No addresses on any chain yet. Use Receive to generate one before minting.',
+    });
 
     const [ticker, setTicker] = useState((initialTick || '').toUpperCase());
-    const lockedToken = !!(initialChainId && initialTick);
     const [amount, setAmount] = useState('');
     const [destination, setDestination] = useState('');
     const [password, setPassword] = useState('');
@@ -84,63 +98,10 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
     useEffect(() => {
-        let cancelled = false;
-        messaging.getAddressesByChain(walletId)
-            .then((byChain) => {
-                if (cancelled) return;
-                setAddressesByChain(byChain);
-                const first = Object.keys(byChain)[0];
-                if (!first) {
-                    setLoadError(
-                        'No addresses on any chain yet. Use Receive to generate one before minting.',
-                    );
-                    return;
-                }
-                // Honor an externally-locked chain (ManageToken context)
-                // by not overwriting it with the first-found chain.
-                if (!lockedToken) setChainId(first);
-            })
-            .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
-            });
-        return () => { cancelled = true; };
-    }, [walletId, messaging]);
-
-    useEffect(() => {
-        if (!chainId || !addressesByChain) return;
-        const all = addressesByChain[chainId] || [];
-        if (initialFromAddress) {
-            const match = all.find((a) => a.address === initialFromAddress);
-            if (match) { setFromAddressId(match.id); return; }
-        }
-        const addrs = all.filter(
-            (a) => a.source === 'hd' && a.derivationPath?.split('/')?.[4] === '0',
-        );
-        if (addrs.length > 0) {
-            const sorted = [...addrs].sort((a, b) => {
-                const ai = Number(a.derivationPath?.split('/')?.[5] ?? -1);
-                const bi = Number(b.derivationPath?.split('/')?.[5] ?? -1);
-                return bi - ai;
-            });
-            setFromAddressId(sorted[0].id);
-        } else {
-            setFromAddressId(null);
-        }
-    }, [chainId, addressesByChain, initialFromAddress]);
-
-    useEffect(() => {
         if (stage === 'review') {
             setTimeout(() => passwordRef.current?.focus(), 0);
         }
     }, [stage]);
-
-    const descriptor = chainId ? chainRegistry.get(chainId) : null;
-    const fromAddress = useMemo(() => {
-        if (!chainId || !fromAddressId || !addressesByChain) return null;
-        return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
-    }, [chainId, fromAddressId, addressesByChain]);
-
-    const chainsWithAddresses = addressesByChain ? Object.keys(addressesByChain) : [];
 
     const actionParams = useMemo(() => {
         /** @type {Record<string, string>} */
@@ -186,14 +147,6 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
         setStage('review');
     }
 
-    const isHwSource = fromAddress?.source === 'trezor' || fromAddress?.source === 'ledger';
-    const [hwStatus, setHwStatus] = useState('idle');
-    const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
-
-    // §20 / Cluster W FOLLOWUP 5: watcher-mode wallets route through
-    // the encode-only buildActionPsbt flow; no vault unlock, no signer.
-    const { isWatcherMode } = useWalletMode();
-
     async function handleSubmit(event) {
         event.preventDefault();
         if (stage === 'submitting') return;
@@ -202,31 +155,7 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
         setStage('submitting');
         setSubmitError(null);
         try {
-            const base = {
-                walletId,
-                chainId,
-                from: {
-                    address: fromAddress.address,
-                    publicKey: fromAddress.publicKey,
-                    derivationPath: fromAddress.derivationPath,
-                    addressId: fromAddress.id,
-                    source: fromAddress.source,
-                    signerId: fromAddress.signerId,
-                },
-                params: actionParams,
-            };
-            let res;
-            if (isWatcherMode) {
-                res = await messaging.buildActionPsbtRequest({
-                    chainId,
-                    from: base.from,
-                    actionData: { action: 'MINT', params: actionParams },
-                });
-            } else if (isHwSource) {
-                res = await messaging.mintAssetHw({ ...base, signerId: fromAddress.signerId });
-            } else {
-                res = await messaging.mintToken({ ...base, password });
-            }
+            const res = await submit({ params: actionParams, password });
             setResult(res);
             setPassword('');
             setStage('done');
