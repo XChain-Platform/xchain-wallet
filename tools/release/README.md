@@ -39,6 +39,22 @@ Build invocation per shell is documented in `CONTRIBUTING.md` →
 Both scripts use `set -euo pipefail`. Both refuse to overwrite an
 existing manifest / signature file unless `--force` is passed.
 
+**One-shot pnpm wrappers.** The root `package.json` exposes
+`pnpm release:sign` and `pnpm release:verify`, each of which targets
+`release-artifacts/<version>` (the version is read from the root
+`package.json` at invocation time), so a maintainer doesn't have to
+retype the tag. `pnpm release:sign` still requires
+`XCHAIN_RELEASE_GPG_KEY` to be set.
+
+**Pre-sign dev-mock gate.** Before hashing, `sign.sh` runs
+`tools/build-reproduce/check-no-dev-mock.sh` against the built
+`packages/{web,extension}/dist` trees. A bundle that reached the
+dev-mock SDK fallback (fabricated addresses, cannot sign) hard-fails the
+signing step - a maintainer can't accidentally sign a dev-mock-tainted
+build. Unbuilt shells SKIP cleanly. Set `SIGN_SKIP_DEV_MOCK_CHECK=1`
+only when signing artifacts that have no `dist` tree (e.g. a docs
+tarball).
+
 ## Environment variables
 
 | Var | Purpose | Required by |
@@ -46,18 +62,25 @@ existing manifest / signature file unless `--force` is passed.
 | `XCHAIN_RELEASE_GPG_KEY` | GPG key fingerprint or email used for signing. | `sign.sh` |
 | `XCHAIN_RELEASE_DIR` | Path to the directory containing artifacts to sign. | `sign.sh` (also accepts `--input <dir>`) |
 | `GNUPGHOME` | Optional override for the GPG home directory; useful when running from CI with a vendored key store. | both |
+| `SIGN_SKIP_DEV_MOCK_CHECK` | Set to `1` to skip the pre-sign dev-mock gate (only for non-shell artifacts with no `dist` tree). | `sign.sh` |
 
 ## Per-release procedure
 
 1. Build every shell at the release tag (`pnpm --filter @xchain-wallet/desktop dist`, `pnpm --filter @xchain-wallet/extension build`, `pnpm --filter @xchain-wallet/web build`).
 2. Stage all artifacts into a single directory: `release-artifacts/vX.Y.Z/`.
-3. Run `XCHAIN_RELEASE_GPG_KEY=<fingerprint> bash tools/release/sign.sh --input release-artifacts/vX.Y.Z/`.
+3. Run `XCHAIN_RELEASE_GPG_KEY=<fingerprint> pnpm release:sign` (equivalently `bash tools/release/sign.sh --input release-artifacts/vX.Y.Z/`). The pre-sign dev-mock gate runs first.
 4. Upload `RELEASE_HASHES.txt` + `RELEASE_HASHES.txt.asc` + every artifact to the GitHub release tag.
-5. Run `bash tools/release/verify.sh --input release-artifacts/vX.Y.Z/` from a clean checkout to confirm the round-trip.
+5. Run `pnpm release:verify` (equivalently `bash tools/release/verify.sh --input release-artifacts/vX.Y.Z/`) from a clean checkout to confirm the round-trip.
 
-The reproducible-build verification is a separate step - see
-[`tools/build-reproduce/`](../build-reproduce/) and
-[`docs/Reproducible_Builds.md`](../../docs/Reproducible_Builds.md).
+The reproducible-build verification is a separate step. Each shell ships
+its own third-party reproduce script + digest-pinned Dockerfile:
+
+- `pnpm --filter @xchain-wallet/desktop reproduce`
+- `pnpm --filter @xchain-wallet/web reproduce`
+- `pnpm --filter @xchain-wallet/extension reproduce`
+
+See [`tools/build-reproduce/`](../build-reproduce/) and each package's
+`REPRODUCIBLE_BUILDS.md` for the per-shell verification protocol.
 
 ## Status today
 

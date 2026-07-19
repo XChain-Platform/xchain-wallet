@@ -285,7 +285,9 @@ export {
 export {
     exportBackupFile,
     importBackupFile,
+    restoreFromBackupPointer,
     BackupConflictError,
+    BackupPointerUnresolvedError,
     BACKUP_PAYLOAD_VERSION,
 } from './backupFile.js';
 export { dryRunRestore, DEFAULT_DRY_RUN_GAP } from './dryRunRestore.js';

@@ -105,7 +105,7 @@ assert.match(
 );
 assert.match(
     hostSrc,
-    /signThrottle\s*\}\s*\)/,
+    /registerBridgeHandlers\([^;]*\bsignThrottle\b[^;]*\)/,
     'signThrottle is passed into registerBridgeHandlers',
 );
 assert.match(

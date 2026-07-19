@@ -176,6 +176,9 @@ async function buildStack() {
         chainRegistry,
         sdkRegistry,
         approvals: broker,
+        // Stand in for chrome.runtime.getURL so getSupportedChains can
+        // resolve chain-icon filenames to extension-origin URLs.
+        getAssetUrl: (p) => `chrome-extension://testext/${p}`,
     });
 
     return { host, vault, broker, fakeWindows: fw, wallet, account, address };
@@ -264,8 +267,18 @@ async function autoApprove(host, fakeWindows, result) {
     });
     assert.equal(chains.length, 9, 'registry exposes all 9 chains');
     assert.ok(
-        chains.every((d) => d.icon === ''),
-        'bridge.getSupportedChains elides raw icon filenames',
+        chains.every(
+            (d) => typeof d.icon === 'string'
+                && d.icon.startsWith('chrome-extension://testext/chain-icons/')
+                && d.icon.endsWith('-icon-20.png'),
+        ),
+        'bridge.getSupportedChains resolves icons to web-accessible extension URLs',
+    );
+    const btc = chains.find((d) => d.id === 'bitcoin-mainnet');
+    assert.equal(
+        btc.icon,
+        'chrome-extension://testext/chain-icons/bitcoin-mainnet-icon-20.png',
+        'bitcoin-mainnet icon resolves to its chain-icons path',
     );
 
     // 4c. signAction ISSUE → structured UNSUPPORTED_ACTION, no approval.

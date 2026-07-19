@@ -14,11 +14,62 @@ import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { LICENSE_NAME, LICENSE_FILE, LICENSE_VERSION } from '../../buildInfo.js';
 import { crypto as cryptoLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { OnboardingCarousel } from './OnboardingCarousel.jsx';
 import styles from './Onboarding.module.css';
 import pickerStyles from './WalletPicker.module.css';
 
 const LICENSE_STORAGE_KEY = 'xc:licenseAcceptedAt';
 const LICENSE_VERSION_KEY = 'xc:licenseAcceptedVersion';
+// §25.2 / Cluster J FOLLOWUP 3: once the first-time explainer carousel is
+// finished or skipped we record the timestamp so a returning user never
+// sees it again. Unlike the license key this is a soft, one-shot UX aid,
+// not a legal gate: it is never version-bumped.
+const EXPLAINER_SEEN_KEY = 'xc:onboardingExplainerSeenAt';
+
+// First-time explainer frames (§25.2). Deliberately short: four plain-
+// language screens covering the mental model a crypto newcomer needs
+// before the create/import fork. Copy avoids jargon ("gas", "network")
+// per the wallet's single product voice (§21.7).
+const EXPLAINER_FRAMES = [
+    {
+        id: 'self-custody',
+        icon: <Icon.LockIcon />,
+        title: 'You hold the keys',
+        body: 'This wallet is self-custodial. Your coins and tokens live on the blockchain, and only your keys can move them. No company, including us, can freeze or access your funds.',
+    },
+    {
+        id: 'recovery-phrase',
+        icon: <Icon.KeyIcon />,
+        title: 'Your recovery phrase is everything',
+        body: 'When you create a wallet you get a secret list of words. Anyone with those words controls your funds, and if you lose them, nobody can restore access. Write them down and keep them offline.',
+    },
+    {
+        id: 'transactions',
+        icon: <Icon.SendIcon />,
+        title: 'Sending is final',
+        body: 'A blockchain transaction cannot be reversed once it is confirmed. Always double-check the address and the amount before you sign. There is no undo and no support line to call.',
+    },
+    {
+        id: 'multi-chain',
+        icon: <Icon.TokenIcon />,
+        title: 'One wallet, several chains',
+        body: 'Bitcoin, Litecoin, and Dogecoin each have their own addresses here. The wallet keeps them separate on purpose so you always know which chain you are acting on.',
+    },
+];
+
+function readExplainerSeen() {
+    try {
+        return globalThis.localStorage?.getItem(EXPLAINER_SEEN_KEY) || null;
+    } catch {
+        return null;
+    }
+}
+
+function markExplainerSeen() {
+    try {
+        globalThis.localStorage?.setItem(EXPLAINER_SEEN_KEY, new Date().toISOString());
+    } catch { /* best-effort: the explainer just shows again next launch */ }
+}
 
 const LICENSE_SUMMARY = [
     { text: `By using ${branding.PRODUCT_NAME} you agree to the ${LICENSE_NAME}.` },
@@ -93,6 +144,10 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onDemoE
     const [licenseAcceptedVersion, setLicenseAcceptedVersion] = useState(() => readAcceptedVersion());
     const [scrolledToEnd, setScrolledToEnd] = useState(false);
     const [licenseAck, setLicenseAck] = useState(false);
+    // §25.2 / FOLLOWUP 3: the first-time explainer carousel shows once,
+    // only on the fresh-install path (never the unlocked-vault Add-Wallet
+    // lane, where `onBack` is supplied and the user is plainly a returner).
+    const [explainerSeenAt, setExplainerSeenAt] = useState(() => readExplainerSeen());
     const licenseScrollRef = useRef(/** @type {HTMLDivElement | null} */ (null));
     const licenseSatisfied = !!licenseAcceptedAt && licenseAcceptedVersion === LICENSE_VERSION;
 
@@ -116,6 +171,13 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onDemoE
         markAccepted();
         setLicenseAcceptedAt(new Date().toISOString());
         setLicenseAcceptedVersion(LICENSE_VERSION);
+    }
+
+    // Fired whether the user finishes ("Get started") or skips the
+    // explainer; either way it is dismissed for good on this device.
+    function handleExplainerDone() {
+        markExplainerSeen();
+        setExplainerSeenAt(new Date().toISOString());
     }
 
     async function handleEnterDemo() {
@@ -265,6 +327,23 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onDemoE
                         </Button>
                     </div>
                 </div>
+            </Screen>
+        );
+    }
+
+    // §25.2 / FOLLOWUP 3: first-time explainer carousel. Only on the
+    // fresh-install path (no `onBack`), only until it has been seen once.
+    // A returning user reaching Onboarding via the unlocked-vault
+    // Add-Wallet shortcut has clearly used the wallet before and skips it.
+    const showExplainer = !onBack && !explainerSeenAt;
+    if (showExplainer) {
+        return (
+            <Screen variant={variant} header={null}>
+                <OnboardingCarousel
+                    frames={EXPLAINER_FRAMES}
+                    variant={variant}
+                    onDone={handleExplainerDone}
+                />
             </Screen>
         );
     }

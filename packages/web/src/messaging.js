@@ -384,6 +384,16 @@ export function importBackupRequest(opts) {
 }
 
 /**
+ * §15.4 QR-from-backup-pointer restore: resolve a scanned backup pointer
+ * to its encrypted envelope and import it.
+ *
+ * @param {{ pointer: object, password: string, onConflict?: 'overwrite' | 'preserve' | 'error', mode?: 'fresh' | 'add' }} opts
+ */
+export function importBackupPointerRequest(opts) {
+    return /** @type {any} */ (sendMessage('wallet.importBackupPointer', opts));
+}
+
+/**
  * §48.3 / G149: runtime chain activation.
  *
  * @param {{ walletId: string, chainId: string, password: string, bip39Passphrase?: string, signerId?: string | null }} opts

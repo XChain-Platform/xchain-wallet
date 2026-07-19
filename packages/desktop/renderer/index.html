@@ -7,13 +7,14 @@
             CSP notes (§40.12):
             - `script-src 'self' https://connect.trezor.io` - Trezor
               Connect is loaded at runtime from Trezor's hosted global
-              build instead of bundling the T-RSL-licensed
-              `@trezor/connect-web` npm package (see
-              renderer/signerFactories/trezorFactory.js). The hosted
-              script runs in the renderer's own context, so it must be
-              in script-src. This is a deliberate posture change from the
-              previous iframe-only allowance; it is what keeps zero
-              `@trezor/*` code in the packaged app.
+              build instead of bundling the T-RSL-licensed Trezor Connect
+              npm package (see renderer/signerFactories/trezorFactory.js
+              for the exact specifier). The hosted script runs in the
+              renderer's own context, so it must be in script-src. This is
+              a deliberate posture change from the previous iframe-only
+              allowance; it is what keeps zero bundled Trezor package code
+              in the packaged app. That invariant is enforced at build
+              time by tools/build-reproduce/check-no-trezor-dist.sh.
             - `frame-src https://connect.trezor.io` - Trezor Connect also
               opens its signing UI in a cross-origin iframe/popup from
               this domain. Allow-listing it explicitly keeps the trust

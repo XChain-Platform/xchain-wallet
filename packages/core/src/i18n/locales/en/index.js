@@ -147,3 +147,8 @@ export const en = {
     'error.vaultClosed': 'Wallet is locked. Unlock to continue.',
     'error.genericLoad': 'Failed to load.',
 };
+
+// Default export so the lazy locale loader (`import.meta.glob(..., {
+// import: 'default' })` in i18n/index.js) can pull this dictionary as a
+// code-split chunk. The named `en` export stays for existing consumers.
+export default en;

@@ -110,6 +110,26 @@ else
     SHA256="sha256sum"
 fi
 
+# Pre-sign gate: refuse to sign if a shell bundle leaked the dev-mock SDK
+# fallback (fabricated addresses / cannot sign or broadcast). sign.sh
+# hashes whatever is in the input dir, so without this gate a maintainer
+# could sign a non-deterministic or dev-mock-tainted build and the
+# verify.sh round-trip would still pass. The gate scans the built
+# packages/{web,extension}/dist trees; if a shell isn't built it SKIPs
+# that target cleanly (see check-no-dev-mock.sh). Set
+# SIGN_SKIP_DEV_MOCK_CHECK=1 only for signing non-shell artifacts (e.g.
+# a docs tarball) where no dist tree is relevant.
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+DEV_MOCK_CHECK="$REPO_ROOT/tools/build-reproduce/check-no-dev-mock.sh"
+if [[ "${SIGN_SKIP_DEV_MOCK_CHECK:-0}" == "1" ]]; then
+    echo "sign.sh: SIGN_SKIP_DEV_MOCK_CHECK=1 - skipping dev-mock gate." >&2
+elif [[ -f "$DEV_MOCK_CHECK" ]]; then
+    echo "sign.sh: running pre-sign dev-mock gate ..." >&2
+    ( cd "$REPO_ROOT" && bash "$DEV_MOCK_CHECK" ) >&2
+else
+    echo "sign.sh: WARNING - check-no-dev-mock.sh not found; skipping gate." >&2
+fi
+
 MANIFEST="$INPUT_DIR/RELEASE_HASHES.txt"
 SIG="$MANIFEST.asc"
 

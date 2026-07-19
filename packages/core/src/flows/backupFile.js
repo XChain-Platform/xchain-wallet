@@ -40,6 +40,7 @@ import {
     stringifyBackupEnvelope,
 } from '../crypto/index.js';
 import { randomUUID } from '../util/uuid.js';
+import { parseBackupPointer } from '../uri/backupPointer.js';
 import { WalletNotFoundError } from './unlockWallet.js';
 
 export const BACKUP_PAYLOAD_VERSION = 1;
@@ -283,6 +284,85 @@ export async function importBackupFile({
         writes,
         skipped,
     };
+}
+
+export class BackupPointerUnresolvedError extends Error {
+    /** @param {import('../uri/backupPointer.js').BackupPointer} pointer */
+    constructor(pointer) {
+        super(`restoreFromBackupPointer: resolver returned no backup content for "${pointer?.location ?? '?'}"`);
+        this.name = 'BackupPointerUnresolvedError';
+        this.pointer = pointer;
+    }
+}
+
+/**
+ * @typedef {Object} RestoreFromBackupPointerOpts
+ * @property {import('../storage/Vault.js').Vault} vault
+ * @property {string | import('../uri/backupPointer.js').BackupPointer} pointer   a
+ *          backup-pointer URI string (parsed here) or an already-parsed
+ *          `BackupPointer` from `detectQrContent` / `parseBackupPointer`.
+ * @property {string} password                             backup password (NOT the wallet-unlock password)
+ * @property {(pointer: import('../uri/backupPointer.js').BackupPointer) => Promise<string | object> | string | object} resolveBackupContent
+ *          shell-injected resolver that turns the pointer's `location`
+ *          into the raw §19.4 envelope (a JSON string or parsed object).
+ *          Kept out of core so the flow stays network-free and
+ *          unit-testable; shells wire in the actual fetch (https / on-chain
+ *          FILE lookup).
+ * @property {'overwrite' | 'preserve' | 'error'} [onConflict]   default 'error'
+ * @property {'fresh' | 'add'} [mode]                       default 'fresh'
+ */
+
+/**
+ * @typedef {ImportBackupFileResult & { pointer: import('../uri/backupPointer.js').BackupPointer }} RestoreFromBackupPointerResult
+ */
+
+/**
+ * §15.4 QR-from-backup-pointer restore. Parses (or accepts) a backup
+ * pointer, hands it to the shell-injected `resolveBackupContent` to
+ * fetch the encrypted §19.4 envelope, then runs the exact same
+ * `importBackupFile` decrypt-and-merge path the file lane uses. The
+ * pointer only carries a location; the envelope is still
+ * password-encrypted, so the caller must supply the backup password
+ * just like the file lane.
+ *
+ * @param {RestoreFromBackupPointerOpts} opts
+ * @returns {Promise<RestoreFromBackupPointerResult>}
+ */
+export async function restoreFromBackupPointer({
+    vault,
+    pointer,
+    password,
+    resolveBackupContent,
+    onConflict = 'error',
+    mode = 'fresh',
+}) {
+    if (!vault) throw new Error('restoreFromBackupPointer: vault is required');
+    if (typeof password !== 'string' || password.length === 0) {
+        throw new Error('restoreFromBackupPointer: password is required');
+    }
+    if (typeof resolveBackupContent !== 'function') {
+        throw new Error('restoreFromBackupPointer: resolveBackupContent must be a function');
+    }
+
+    const parsed = typeof pointer === 'string' ? parseBackupPointer(pointer) : pointer;
+    if (!parsed || typeof parsed.location !== 'string' || parsed.location.length === 0) {
+        throw new Error('restoreFromBackupPointer: pointer must have a location');
+    }
+
+    const fileContent = await resolveBackupContent(parsed);
+    if (fileContent == null || (typeof fileContent === 'string' && fileContent.trim().length === 0)) {
+        throw new BackupPointerUnresolvedError(parsed);
+    }
+
+    const result = await importBackupFile({
+        vault,
+        fileContent,
+        password,
+        onConflict,
+        mode,
+    });
+
+    return { ...result, pointer: parsed };
 }
 
 /**

@@ -70,6 +70,14 @@ export function importBackupRequest(opts) {
     return /** @type {any} */ (sendMessage('wallet.importBackup', opts));
 }
 
+/**
+ * §15.4 QR-from-backup-pointer restore.
+ * @param {{ pointer: object, password: string, onConflict?: 'overwrite' | 'preserve' | 'error', mode?: 'fresh' | 'add' }} opts
+ */
+export function importBackupPointerRequest(opts) {
+    return /** @type {any} */ (sendMessage('wallet.importBackupPointer', opts));
+}
+
 /** §48.3 / G149: runtime chain activation. */
 export function activateChainRequest(opts) {
     return /** @type {any} */ (sendMessage('wallet.activateChain', opts));

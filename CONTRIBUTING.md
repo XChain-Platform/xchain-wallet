@@ -76,6 +76,36 @@ pnpm --filter @xchain-wallet/desktop dist:unpacked  # pre-signing Linux bundle (
 pnpm --filter @xchain-wallet/desktop reproduce      # rebuild and verify against RELEASE_HASHES.txt
 ```
 
+Every shell has a third-party reproduce script (digest-pinned Docker
+image + `SOURCE_DATE_EPOCH` from the release commit + a SHA-256
+manifest):
+
+```bash
+pnpm --filter @xchain-wallet/web reproduce          # browser SPA
+pnpm --filter @xchain-wallet/extension reproduce    # unpacked MV3 bundle (pre-store)
+```
+
+See each package's `REPRODUCIBLE_BUILDS.md` for scope caveats (the web
+deploy pipeline and the Chrome Web Store `.crx` re-sign are outside the
+reproducible boundary).
+
+### Signing a release
+
+Stage the built artifacts into `release-artifacts/<version>/`, then sign
+and verify the manifest with the release-signing scripts
+(`tools/release/`):
+
+```bash
+XCHAIN_RELEASE_GPG_KEY=<fingerprint> pnpm release:sign   # SHA-256 manifest + detached GPG signature
+pnpm release:verify                                      # re-check the round-trip from a clean tree
+```
+
+`pnpm release:sign` runs a pre-sign dev-mock gate
+(`tools/build-reproduce/check-no-dev-mock.sh`) so a bundle that reached
+the dev-mock SDK fallback can't be signed. Until the release GPG key is
+published (G180), `sign.sh` exits with a diagnostic pointing at
+`SECURITY.md`. Full procedure: `tools/release/README.md`.
+
 ---
 
 ## Tests

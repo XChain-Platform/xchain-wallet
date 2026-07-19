@@ -70,6 +70,39 @@ const SUPPORTED_BRIDGE_ACTIONS = ['SEND', 'SWEEP'];
 // grouped approval modal stays reviewable.
 const MAX_PARALLEL_ACTIONS = 20;
 
+// Subdirectory (relative to the extension root) where the build copies the
+// per-chain branding icons and exposes them via `web_accessible_resources`
+// (see packages/extension/vite.config.js + manifest.json). getSupportedChains
+// resolves a chain descriptor's bare icon filename against this path.
+const CHAIN_ICON_DIR = 'chain-icons';
+
+// Resolve a web-accessible-resource path to a URL a dApp can load. In the
+// MV3 service worker this yields `chrome-extension://<id>/<path>`; outside
+// the worker (unit/smoke harness with no `chrome`) it yields '' so the
+// bridge omits the field rather than emitting an unresolvable string.
+function defaultAssetUrl(path) {
+    const url = globalThis.chrome?.runtime?.getURL?.(path);
+    return typeof url === 'string' ? url : '';
+}
+
+/**
+ * Turn a chain descriptor's `icon` (a bare branding filename such as
+ * `bitcoin-mainnet-icon-20.png`) into a URL a dApp can fetch cross-origin.
+ * A descriptor that already carries an absolute or data URL (e.g. a
+ * user-added custom chain) is passed through untouched. Anything the
+ * resolver can't turn into a string collapses to '' so getSupportedChains
+ * never leaks an unresolvable bare filename.
+ * @param {(path: string) => string} getAssetUrl
+ * @param {unknown} icon
+ * @returns {string}
+ */
+function resolveChainIconUrl(getAssetUrl, icon) {
+    if (typeof icon !== 'string' || icon === '') return '';
+    if (/^(?:https?:|data:|chrome-extension:)/i.test(icon)) return icon;
+    const url = getAssetUrl(`${CHAIN_ICON_DIR}/${icon}`);
+    return typeof url === 'string' ? url : '';
+}
+
 /**
  * @param {import('../background/MessageHost.js').MessageHost} host
  * @param {{
@@ -77,12 +110,14 @@ const MAX_PARALLEL_ACTIONS = 20;
  *   signThrottle?: ReturnType<typeof createSignThrottle>,
  *   events?: typeof noopBridgeEvents,
  *   signPasswordCache?: import('./signPasswordCache.js').SignPasswordCache,
+ *   getAssetUrl?: (path: string) => string,
  * }} [opts]
  */
 export function registerBridgeHandlers(host, opts = {}) {
     const approvals = opts.approvals ?? rejectAllApprovals;
     const signThrottle = opts.signThrottle ?? createSignThrottle();
     const events = opts.events ?? noopBridgeEvents;
+    const getAssetUrl = opts.getAssetUrl ?? defaultAssetUrl;
     // Cluster Q FOLLOWUP 3: Developer-Mode localhost auto-sign. Holds a
     // password captured by a real sign approval so a later localhost sign
     // request can reuse it instead of prompting. Lives in SW memory only;
@@ -313,13 +348,14 @@ export function registerBridgeHandlers(host, opts = {}) {
             displayName: d.displayName,
             networkKind: d.networkKind,
             color: d.color,
-            // `d.icon` is a filename resolved by the shell's bundler.
-            // Exposing the raw filename to a dApp would be unresolvable
-            // cross-origin. A later shell-layer piece wires this into a
-            // `chrome.runtime.getURL(...)` call against a web-accessible
-            // tick path; until then omit the field rather than send a
-            // bare filename.
-            icon: '',
+            // `d.icon` is a bare branding filename (e.g.
+            // `bitcoin-mainnet-icon-20.png`). The extension build copies
+            // these into dist/chain-icons/ and lists them under
+            // web_accessible_resources, so we resolve the filename to an
+            // extension-origin URL the dApp can load cross-origin. Falls
+            // back to '' when no resolver is available (test harness with
+            // no `chrome`) or the descriptor carries no icon.
+            icon: resolveChainIconUrl(getAssetUrl, d.icon),
             addressTypes: d.addressTypes,
             defaultAddressType: d.defaultAddressType,
             supportedActions: d.supportedActions,

@@ -191,6 +191,7 @@ const {
     updateSettings,
     exportBackupFile,
     importBackupFile,
+    restoreFromBackupPointer,
     removeWallet,
     signMessageFlow,
     signPsbtFlow,
@@ -505,6 +506,11 @@ export function createBackgroundHost(deps) {
         approvals,
         getDiagnosticContext,
         bridgeEvents,
+        // Resolver that turns a web-accessible-resource path into a URL a
+        // dApp can load (getSupportedChains uses it for chain icons).
+        // Defaults inside registerBridgeHandlers to chrome.runtime.getURL;
+        // web/desktop shells and tests can inject their own.
+        getAssetUrl,
         // Cluster G FOLLOWUP 2: pluggable broadcast-queue persistence.
         // Default adapter picks chrome.storage.local (extension SW) or
         // localStorage (web/desktop renderers); pass `null` explicitly
@@ -1005,6 +1011,32 @@ export function createBackgroundHost(deps) {
             writes: r.writes,
             skipped: r.skipped,
             walletName: r.payload?.wallet?.name,
+        };
+    });
+
+    // §15.4: QR-from-backup-pointer restore. The renderer hands the
+    // parsed pointer (from `detectQrContent`) + the backup password.
+    // The host injects the resolver: it fetches the encrypted §19.4
+    // envelope from the pointer's `location` and hands it to the same
+    // `importBackupFile` merge path the file lane uses. Only https(s)
+    // locations are fetched; on-chain FILE references are a follow-up
+    // that needs SDK wiring and are rejected explicitly rather than
+    // silently ignored.
+    host.register('wallet.importBackupPointer', async (req, { vault }) => {
+        const r = await restoreFromBackupPointer({
+            vault,
+            pointer: req?.pointer,
+            password: req?.password,
+            onConflict: req?.onConflict,
+            mode: req?.mode,
+            resolveBackupContent: resolveBackupPointerContent,
+        });
+        return {
+            walletId: r.walletId,
+            writes: r.writes,
+            skipped: r.skipped,
+            walletName: r.payload?.wallet?.name,
+            pointer: r.pointer,
         };
     });
 
@@ -2670,7 +2702,38 @@ export function createBackgroundHost(deps) {
         });
     }
 
-    registerBridgeHandlers(host, { approvals, events: bridgeEvents, signThrottle });
+    registerBridgeHandlers(host, { approvals, events: bridgeEvents, signThrottle, getAssetUrl });
 
     return host;
+}
+
+// §15.4 backup-pointer resolver. Turns a pointer's `location` into the
+// raw encrypted §19.4 envelope text. Only https locations are fetched:
+// a wallet must not silently reach out to an arbitrary http origin, and
+// on-chain FILE references need SDK wiring that is deliberately left as a
+// follow-up rather than half-implemented here. The envelope is still
+// password-encrypted, so fetching it does not by itself expose funds.
+async function resolveBackupPointerContent(pointer) {
+    const location = pointer?.location;
+    if (typeof location !== 'string' || location.trim().length === 0) {
+        throw new Error('backup pointer has no location to resolve');
+    }
+    const loc = location.trim();
+    let url;
+    try {
+        url = new URL(loc);
+    } catch {
+        throw new Error(`backup pointer location is not a URL: "${loc}". On-chain pointers are not supported yet.`);
+    }
+    if (url.protocol !== 'https:') {
+        throw new Error(`unsupported backup-pointer location scheme "${url.protocol}" (only https is fetched).`);
+    }
+    if (typeof fetch !== 'function') {
+        throw new Error('this shell cannot fetch a backup pointer (no fetch available).');
+    }
+    const resp = await fetch(url.toString(), { redirect: 'follow' });
+    if (!resp.ok) {
+        throw new Error(`backup pointer fetch failed: HTTP ${resp.status}`);
+    }
+    return await resp.text();
 }

@@ -12,6 +12,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Screen, Button, Input, Icon, QrScanner, StatusMessage, InfoTip } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDropZone } from '../hooks/useDropZone.js';
+import { detectQrContent } from '../../uri/detectQrContent.js';
 import styles from './ImportWallet.module.css';
 import pickerStyles from './WalletPicker.module.css';
 
@@ -55,6 +56,13 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
     const [backupPassword, setBackupPassword] = useState('');
     const [backupOverwrite, setBackupOverwrite] = useState(false);
     const [backupFileName, setBackupFileName] = useState(/** @type {string | null} */ (null));
+    // §15.4 QR-from-backup-pointer restore. When a scanned QR classifies
+    // as a `backup-pointer`, we stash the parsed pointer here and the
+    // backup lane switches from "decode this file content" to "resolve
+    // this pointer, then decode". The backup password field is shared:
+    // the envelope stays password-encrypted either way.
+    const [backupScanning, setBackupScanning] = useState(false);
+    const [backupPointer, setBackupPointer] = useState(/** @type {import('../../uri/backupPointer.js').BackupPointer | null} */ (null));
     // §15.6: optional 25th-word BIP39 passphrase. Hidden behind a toggle so
     // users who never set one don't have to read the warning copy.
     // FreeWallet imports follow the Counterwallet legacy code path, which
@@ -112,35 +120,74 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
         },
     });
 
+    // Classify a QR frame scanned in the backup lane. Only a backup
+    // pointer is actionable here; a scanned mnemonic / WIF / address is
+    // rejected with a hint (those belong to the recovery-phrase lane and
+    // we never silently import secret material from a stray scan).
+    function handleBackupQrFrame(text) {
+        if (typeof text !== 'string' || text.trim().length === 0) return;
+        const detected = detectQrContent(text.trim());
+        if (detected.type === 'backup-pointer') {
+            setBackupPointer(detected.pointer);
+            setBackupScanning(false);
+            if (error) setError(null);
+            return;
+        }
+        setBackupScanning(false);
+        setError('That QR is not a backup pointer. Use the recovery-phrase lane for a seed or key QR.');
+    }
+
+    function clearBackupPointer() {
+        setBackupPointer(null);
+        if (error) setError(null);
+    }
+
     async function handleBackupSubmit(event) {
         event.preventDefault();
         if (busy) return;
-        if (backupContent.trim().length === 0) {
-            setError('Pick a backup file or paste its contents.');
+        const usingPointer = backupPointer !== null;
+        if (!usingPointer && backupContent.trim().length === 0) {
+            setError('Pick a backup file, paste its contents, or scan a backup pointer.');
             return;
         }
         if (backupPassword.length === 0) {
             setError('Backup password is required.');
             return;
         }
-        if (typeof messaging.importBackupRequest !== 'function') {
-            setError('Backup restore is not available in this shell.');
-            return;
-        }
+        const conflictArg = backupOverwrite ? 'overwrite' : 'error';
         setError(null);
         setBusy(true);
         try {
-            await messaging.importBackupRequest({
-                fileContent: backupContent,
-                password: backupPassword,
-                onConflict: backupOverwrite ? 'overwrite' : 'error',
-                // §19.4 / Cluster H FOLLOWUP 3: 'add' mode tells the
-                // host to re-mint wallet / account / address ids so
-                // the restored wallet coexists with what's in the
-                // vault already (vs the default 'fresh' import that
-                // keeps the original ids).
-                mode,
-            });
+            if (usingPointer) {
+                if (typeof messaging.importBackupPointerRequest !== 'function') {
+                    setError('Backup-pointer restore is not available in this shell.');
+                    setBusy(false);
+                    return;
+                }
+                await messaging.importBackupPointerRequest({
+                    pointer: backupPointer,
+                    password: backupPassword,
+                    onConflict: conflictArg,
+                    mode,
+                });
+            } else {
+                if (typeof messaging.importBackupRequest !== 'function') {
+                    setError('Backup restore is not available in this shell.');
+                    setBusy(false);
+                    return;
+                }
+                await messaging.importBackupRequest({
+                    fileContent: backupContent,
+                    password: backupPassword,
+                    onConflict: conflictArg,
+                    // §19.4 / Cluster H FOLLOWUP 3: 'add' mode tells the
+                    // host to re-mint wallet / account / address ids so
+                    // the restored wallet coexists with what's in the
+                    // vault already (vs the default 'fresh' import that
+                    // keeps the original ids).
+                    mode,
+                });
+            }
             onImported();
         } catch (err) {
             setError(err?.message || 'Failed to restore backup.');
@@ -329,9 +376,45 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
             ) : null}
             {lane === 'backup' ? (
                 <>
-                    <label className={styles.mnemonicLabel} htmlFor="xc-backup-file">
-                        Backup file
-                    </label>
+                    <div className={styles.mnemonicHeader}>
+                        <label className={styles.mnemonicLabel} htmlFor="xc-backup-file">
+                            Backup file
+                        </label>
+                        <button
+                            type="button"
+                            className={styles.scanButton}
+                            onClick={() => {
+                                setBackupScanning((s) => !s);
+                                if (error) setError(null);
+                            }}
+                            disabled={busy}
+                            aria-pressed={backupScanning}
+                        >
+                            {backupScanning ? 'Cancel scan' : 'Scan pointer QR'}
+                        </button>
+                    </div>
+                    {backupScanning ? (
+                        <div className={styles.scannerBox}>
+                            <QrScanner onFrame={handleBackupQrFrame} alt="Backup-pointer QR scanner" />
+                        </div>
+                    ) : null}
+                    {backupPointer ? (
+                        <div className={styles.backupPointerCard} role="status">
+                            <p className={styles.backupHint}>
+                                Backup pointer loaded{backupPointer.name ? `: ${backupPointer.name}` : ''}.
+                                {' '}Location: {backupPointer.location}
+                            </p>
+                            <button
+                                type="button"
+                                className={styles.scanButton}
+                                onClick={clearBackupPointer}
+                                disabled={busy}
+                            >
+                                Use a file instead
+                            </button>
+                        </div>
+                    ) : (
+                        <>
                     <input
                         id="xc-backup-file"
                         type="file"
@@ -343,7 +426,7 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                     {backupFileName ? (
                         <p className={styles.backupHint}>Loaded {backupFileName} ({backupContent.length.toLocaleString()} bytes).</p>
                     ) : (
-                        <p className={styles.backupHint}>Or drop a backup file onto the box below, or paste its contents.</p>
+                        <p className={styles.backupHint}>Or drop a backup file onto the box below, paste its contents, or scan a backup pointer.</p>
                     )}
                     <textarea
                         {...backupDrop.rootProps}
@@ -366,6 +449,8 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                             outlineOffset: backupDrop.isDragOver ? 2 : undefined,
                         }}
                     />
+                        </>
+                    )}
                     <Input
                         type="password"
                         label="Backup password"
@@ -394,7 +479,10 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                             loading={busy}
                             size={isFull ? undefined : 'sm'}
                             icon={<Icon.KeyIcon />}
-                            disabled={backupContent.trim().length === 0 || backupPassword.length === 0}
+                            disabled={
+                                (backupPointer === null && backupContent.trim().length === 0) ||
+                                backupPassword.length === 0
+                            }
                         >
                             Restore
                         </Button>

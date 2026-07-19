@@ -23,6 +23,7 @@ import { isValidBip39Mnemonic } from '../crypto/mnemonic.js';
 import { isValidCounterwalletMnemonic } from '../crypto/counterwallet.js';
 import { parseBip21Uri } from './bip21.js';
 import { parseXcwChunk, XCW_PREFIX } from './psbtQr.js';
+import { looksLikeBackupPointer, parseBackupPointer } from './backupPointer.js';
 
 export const PSBT_HEX_PREFIX = '70736274ff';
 
@@ -32,6 +33,7 @@ export const PSBT_HEX_PREFIX = '70736274ff';
  *   | { type: 'xchain-uri', parts: import('./bip21.js').Bip21Parts }
  *   | { type: 'psbt-hex', psbtHex: string }
  *   | { type: 'xcw-chunk', n: number, total: number, content: Uint8Array }
+ *   | { type: 'backup-pointer', pointer: import('./backupPointer.js').BackupPointer }
  *   | { type: 'wif', wif: string, decoded: ReturnType<typeof decodeWif> }
  *   | { type: 'mnemonic-bip39', mnemonic: string }
  *   | { type: 'mnemonic-counterwallet', mnemonic: string }
@@ -70,6 +72,23 @@ export function detectQrContent(input, opts = {}) {
             };
         } catch {
             // malformed XCW; fall through
+        }
+    }
+
+    // --- Step 0.5: backup pointer (§15.4) ---
+    // Matched before the generic URI branch: the `xchain-backup:` scheme
+    // is neither `xchain:` nor a chain BIP21 scheme, so it would
+    // otherwise fall through to `unknown`. `looksLikeBackupPointer`
+    // gates on the scheme so a malformed pointer still classifies as a
+    // (rejected) backup pointer rather than something unrelated.
+    if (looksLikeBackupPointer(raw)) {
+        try {
+            const pointer = parseBackupPointer(raw);
+            return { type: 'backup-pointer', pointer };
+        } catch {
+            // malformed pointer; nothing else claims this scheme, so it
+            // is genuinely unknown.
+            return { type: 'unknown' };
         }
     }
 

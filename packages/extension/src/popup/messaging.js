@@ -529,6 +529,19 @@ export function importBackupRequest(opts) {
 }
 
 /**
+ * §15.4 QR-from-backup-pointer restore. Hands the parsed pointer (from
+ * `detectQrContent`) + backup password to the host, which resolves the
+ * pointer's location to the encrypted envelope and imports it.
+ *
+ * Resolves to `{ walletId, writes, skipped, walletName, pointer }`.
+ *
+ * @param {{ pointer: object, password: string, onConflict?: 'overwrite' | 'preserve' | 'error', mode?: 'fresh' | 'add' }} opts
+ */
+export function importBackupPointerRequest(opts) {
+    return /** @type {any} */ (sendMessage('wallet.importBackupPointer', opts));
+}
+
+/**
  * §48.3 / G149 : runtime chain activation. Seeds settings.fees +
  * ads.perChain for the chainId and derives the first address on that
  * chain for every existing account. Idempotent.

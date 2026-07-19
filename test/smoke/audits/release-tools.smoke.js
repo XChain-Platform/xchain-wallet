@@ -151,4 +151,77 @@ try {
     rmSync(stage, { recursive: true, force: true });
 }
 
-console.log('OK: tools/release/ scaffolding smoke');
+// 5.  wiring: pnpm release:sign wrapper + pre-sign dev-mock gate.
+const rootPkg = JSON.parse(read('package.json'));
+assert.ok(rootPkg.scripts['release:sign'],
+    'root package.json has a release:sign script');
+assert.ok(/tools\/release\/sign\.sh/.test(rootPkg.scripts['release:sign']),
+    'release:sign wraps tools/release/sign.sh');
+assert.ok(/release-artifacts\//.test(rootPkg.scripts['release:sign']),
+    'release:sign targets release-artifacts/<version>');
+assert.ok(rootPkg.scripts['release:verify'] &&
+    /tools\/release\/verify\.sh/.test(rootPkg.scripts['release:verify']),
+    'root package.json has a release:verify wrapper');
+assert.ok(rootPkg.scripts['test:integration:regtest'] &&
+    /tools\/regtest\/test-integration\.sh/.test(rootPkg.scripts['test:integration:regtest']),
+    'root package.json has the regtest integration driver script');
+// The default test:integration stays network-free (must not gate on regtest).
+assert.ok(!/wait-ready|regtest/.test(rootPkg.scripts['test:integration']),
+    'default test:integration stays network-free (no regtest gate)');
+
+assert.ok(/check-no-dev-mock\.sh/.test(signSrc),
+    'sign.sh runs the pre-sign dev-mock gate');
+assert.ok(/SIGN_SKIP_DEV_MOCK_CHECK/.test(signSrc),
+    'sign.sh exposes the SIGN_SKIP_DEV_MOCK_CHECK escape hatch');
+
+// 6.  wiring: the regtest integration driver gates on wait-ready.
+const driverSrc = read('tools/regtest/test-integration.sh');
+assert.ok(/^#!\/usr\/bin\/env bash/.test(driverSrc), 'driver has bash shebang');
+assert.ok(/set -euo pipefail/.test(driverSrc), 'driver has strict-mode guard');
+assert.ok(/wait-ready\.sh/.test(driverSrc),
+    'driver gates on wait-ready.sh before running tests');
+assert.ok((statSync(join(root, 'tools/regtest/test-integration.sh')).mode & 0o111) !== 0,
+    'driver has the executable bit set');
+
+// 7.  wiring: per-target reproduce scripts for extension + web.
+for (const shell of ['web', 'extension']) {
+    const repro = `packages/${shell}/scripts/reproduce.sh`;
+    const buildSh = `packages/${shell}/scripts/build.sh`;
+    const dockerfile = `packages/${shell}/Dockerfile`;
+    for (const p of [repro, buildSh, dockerfile, `packages/${shell}/REPRODUCIBLE_BUILDS.md`]) {
+        assert.ok(existsSync(join(root, p)), `${p} exists`);
+    }
+    for (const p of [repro, buildSh]) {
+        assert.ok((statSync(join(root, p)).mode & 0o111) !== 0,
+            `${p} has the executable bit set`);
+    }
+    const reproSrc = read(repro);
+    assert.ok(/set -euo pipefail/.test(reproSrc), `${repro} has strict-mode guard`);
+    assert.ok(/SOURCE_DATE_EPOCH/.test(reproSrc),
+        `${repro} injects SOURCE_DATE_EPOCH`);
+    assert.ok(/git worktree add/.test(reproSrc),
+        `${repro} builds from an isolated worktree`);
+    assert.ok(new RegExp(`packages/${shell}/Dockerfile`).test(reproSrc),
+        `${repro} references its shell Dockerfile`);
+
+    const buildSrc = read(buildSh);
+    assert.ok(/--frozen-lockfile/.test(buildSrc),
+        `${buildSh} installs with --frozen-lockfile`);
+    assert.ok(/check-no-dev-mock\.sh/.test(buildSrc),
+        `${buildSh} runs the dev-mock gate before emitting a manifest`);
+    assert.ok(/sha256sum/.test(buildSrc) && /RELEASE_HASHES\.txt/.test(buildSrc),
+        `${buildSh} emits a SHA-256 RELEASE_HASHES.txt manifest`);
+
+    const dockerSrc = read(dockerfile);
+    assert.ok(/@sha256:/.test(dockerSrc),
+        `${dockerfile} pins its base image by digest`);
+    assert.ok(/NODE_SHA256=/.test(dockerSrc),
+        `${dockerfile} SHA256-verifies the Node tarball`);
+
+    const shellPkg = JSON.parse(read(`packages/${shell}/package.json`));
+    assert.ok(shellPkg.scripts.reproduce &&
+        /scripts\/reproduce\.sh/.test(shellPkg.scripts.reproduce),
+        `packages/${shell}/package.json has a reproduce script`);
+}
+
+console.log('OK: tools/release/ scaffolding smoke (incl.  release/reproduce wiring)');

@@ -10,32 +10,44 @@
 
 // i18n helper: §54.
 //
-// Tiny runtime with no dependencies. API surface:
+// Small runtime built on formatjs (`intl-messageformat`). API surface:
 //
 //   t(key, vars?)            - lookup + interpolate
 //   setLocale(locale)        - switch dictionary at runtime (triggers
-//                              onChange callbacks)
+//                              onChange callbacks); async when the target
+//                              locale must be lazily loaded first
 //   onLocaleChange(fn)       - subscribe; returns an unsubscribe fn
 //   registerLocale(code, d)  - add a dictionary at runtime
 //   getLocale()              - current locale code
-//   availableLocales()       - codes of registered dictionaries
+//   getDirection(locale?)    - 'rtl' | 'ltr' for the given (or current) code
+//   availableLocales()       - codes of registered + lazily-discoverable
+//                              dictionaries
 //
-// Interpolation supports:
-//
+// Interpolation is full ICU MessageFormat via `intl-messageformat`:
 //   {name}                                       - simple substitution
-//   {count, plural, one {…} other {…}}           - ICU plural (Intl.PluralRules)
-//   {kind, select, mainnet {…} other {…}}        - ICU select (exact match)
+//   {count, plural, one {…} other {…}}           - ICU plural
+//   {kind, select, mainnet {…} other {…}}        - ICU select
+//   {n, number, ::currency/USD}                  - number / currency
+//   {d, date, medium}                            - date / time
+//   {n, selectordinal, one {#st} other {#th}}    - ordinal plural
+// plus nested patterns and `#` inside plural/select cases.
 //
-// Inside plural / select cases, `#` is replaced by the value of the
-// argument. Nested ICU patterns are NOT supported (that's a deferred
-// piece per §54 / G173. The full ICU grammar can be swapped in later
-// (formatjs is the obvious choice) without changing the dictionary
-// shape, so dictionaries authored against this subset will keep
-// rendering correctly.
+// The pre-v0.334 build shipped a hand-rolled ICU subset. formatjs is
+// the drop-in successor the dictionaries were authored against, so the
+// swap needs no dictionary changes. Two behaviours the old helper had
+// are preserved on top of formatjs so callers and translators see the
+// same thing:
+//   - a var referenced by the template but missing from `vars` renders
+//     as its bare `{name}` token (visible to translators) instead of
+//     throwing, which is what raw formatjs does on a missing arg;
+//   - a malformed template never throws at render: it degrades to a
+//     legacy best-effort substitution.
 //
 // Fallback: missing keys fall back to English. Missing English keys
 // return the key itself (so dev sees the missing-string token
 // visually). No exception thrown.
+
+import { IntlMessageFormat } from 'intl-messageformat';
 
 import { en } from './locales/en/index.js';
 
@@ -44,6 +56,54 @@ import { en } from './locales/en/index.js';
 const DICTIONARIES = /** @type {Record<string, Dictionary>} */ ({ en });
 let currentLocale = 'en';
 const subscribers = new Set();
+
+// --- lazy locale discovery (§54 FOLLOWUP 5) --------------------------
+//
+// Under Vite, `import.meta.glob` compiles to a static map of dynamic
+// importers keyed by module path, so locale chunks are code-split and
+// only fetched when a user actually switches to them. Under plain Node
+// (smoke scripts) `import.meta.glob` doesn't exist, so LAZY_LOADERS is
+// an empty object and only statically-registered locales are visible.
+let LAZY_LOADERS = {};
+try {
+    // Vite rewrites this call to a static importer map at build time, so
+    // the guard cannot be a runtime `typeof` check (Vite leaves the bare
+    // `import.meta.glob` reference undefined and only transforms the
+    // call). Under plain Node there is no bundler: the call throws and we
+    // keep the empty map, so only statically-registered locales show up.
+    LAZY_LOADERS = import.meta.glob('./locales/*/index.js', { import: 'default' });
+} catch (_err) { /* no bundler present: lazy discovery disabled */ }
+
+const LOCALE_PATH_RE = /\/locales\/([^/]+)\/index\.js$/;
+
+/** Return the lazy importer for `code`, or null when none is known. */
+function lazyLoaderFor(code) {
+    for (const path in LAZY_LOADERS) {
+        const m = LOCALE_PATH_RE.exec(path);
+        if (m && m[1] === code) return LAZY_LOADERS[path];
+    }
+    return null;
+}
+
+// --- text direction (§54 FOLLOWUP 3) ---------------------------------
+//
+// Base-language codes whose script is right-to-left. `pseudo-rtl` is a
+// developer-only mirror locale (English copy wrapped in brackets) used
+// to flip the whole UI to `dir="rtl"` for visual inspection.
+const RTL_LANGS = new Set([
+    'ar', 'he', 'fa', 'ur', 'ps', 'sd', 'yi', 'dv', 'ckb', 'ug', 'nqo',
+]);
+
+/**
+ * @param {string} [locale] defaults to the current locale
+ * @returns {'rtl' | 'ltr'}
+ */
+export function getDirection(locale = currentLocale) {
+    const code = String(locale).toLowerCase();
+    if (code === 'pseudo-rtl') return 'rtl';
+    const base = code.split('-')[0];
+    return RTL_LANGS.has(base) ? 'rtl' : 'ltr';
+}
 
 /**
  * Register (or replace) a locale dictionary at runtime.
@@ -60,9 +120,14 @@ export function registerLocale(locale, dictionary) {
     DICTIONARIES[locale] = dictionary;
 }
 
-/** @returns {string[]} */
+/** @returns {string[]} registered plus lazily-discoverable locale codes */
 export function availableLocales() {
-    return Object.keys(DICTIONARIES).sort();
+    const codes = new Set(Object.keys(DICTIONARIES));
+    for (const path in LAZY_LOADERS) {
+        const m = LOCALE_PATH_RE.exec(path);
+        if (m) codes.add(m[1]);
+    }
+    return [...codes].sort();
 }
 
 /** @returns {string} */
@@ -70,16 +135,61 @@ export function getLocale() {
     return currentLocale;
 }
 
-/** @param {string} locale */
-export function setLocale(locale) {
-    if (!DICTIONARIES[locale]) {
-        throw new Error(`setLocale: unknown locale "${locale}"`);
-    }
-    if (locale === currentLocale) return;
+/** Flip the live locale, sync `document` direction, notify subscribers. */
+function applyLocale(locale) {
     currentLocale = locale;
+    if (typeof document !== 'undefined' && document.documentElement) {
+        document.documentElement.dir = getDirection(locale);
+        // `pseudo-rtl` is English copy, so advertise `en` to assistive
+        // tech / spellcheckers; real locales advertise themselves.
+        document.documentElement.lang = locale === 'pseudo-rtl' ? 'en' : locale;
+    }
     for (const fn of subscribers) {
         try { fn(locale); } catch (_err) { /* sub errors never bubble */ }
     }
+}
+
+/**
+ * Switch the active locale.
+ *
+ * Synchronous (and returns a resolved promise) when the target is
+ * already registered. When the target is only known as a lazily-loadable
+ * chunk, returns a promise that resolves after the chunk loads and the
+ * locale is applied; a chunk-load failure keeps the current locale
+ * (falling back to English's always-present dictionary) rather than
+ * rejecting. Throws synchronously only when the locale is neither
+ * registered nor lazily discoverable.
+ *
+ * @param {string} locale
+ * @returns {Promise<string>} the locale actually in effect afterwards
+ */
+export function setLocale(locale) {
+    if (locale === currentLocale) return Promise.resolve(locale);
+    if (DICTIONARIES[locale]) {
+        applyLocale(locale);
+        return Promise.resolve(locale);
+    }
+    const loader = lazyLoaderFor(locale);
+    if (!loader) {
+        throw new Error(`setLocale: unknown locale "${locale}"`);
+    }
+    return loader()
+        .then((mod) => {
+            // `{ import: 'default' }` hands back the default export
+            // directly, but tolerate a namespace object too.
+            DICTIONARIES[locale] = mod && mod.default ? mod.default : mod;
+            applyLocale(locale);
+            return locale;
+        })
+        .catch((err) => {
+            if (typeof console !== 'undefined') {
+                console.warn(
+                    `setLocale: failed to load "${locale}"; keeping "${currentLocale}"`,
+                    err,
+                );
+            }
+            return currentLocale;
+        });
 }
 
 /**
@@ -106,23 +216,101 @@ export function t(key, vars) {
     return format(raw, vars, currentLocale);
 }
 
+// --- formatjs message formatting -------------------------------------
+
+// Compiled IntlMessageFormat instances are immutable and reusable, so
+// memoise per (locale, template). Bounded to keep long-running shells
+// from growing the cache without limit.
+const MF_CACHE = new Map();
+const MF_CACHE_MAX = 500;
+
+function messageFormatFor(template, locale) {
+    const cacheKey = `${locale}\u0000${template}`;
+    let mf = MF_CACHE.get(cacheKey);
+    if (mf) return mf;
+    mf = new IntlMessageFormat(template, locale);
+    if (MF_CACHE.size >= MF_CACHE_MAX) MF_CACHE.clear();
+    MF_CACHE.set(cacheKey, mf);
+    return mf;
+}
+
 /**
- * Pure substitution helper, exported separately for callers that
- * already have a template string in hand (e.g. from an error envelope).
+ * Walk a parsed ICU AST collecting every argument name it references
+ * (including args nested inside plural / select cases and tags).
+ */
+function collectArgNames(ast, out) {
+    for (const el of ast) {
+        // 0 = literal, 7 = pound (`#`): neither names an argument.
+        if (el.type === 0 || el.type === 7) continue;
+        // 8 = tag: `el.value` is the tag name, not an arg.
+        if (el.type !== 8 && typeof el.value === 'string') out.add(el.value);
+        if (el.options) {
+            for (const selector in el.options) {
+                collectArgNames(el.options[selector].value, out);
+            }
+        }
+        if (el.children) collectArgNames(el.children, out);
+    }
+    return out;
+}
+
+/**
+ * Interpolate an ICU MessageFormat template.
  *
- * Implements a pragmatic ICU MessageFormat subset:
- *   {name}                                  → vars.name
- *   {arg, plural, one {…} other {…}}        → Intl.PluralRules
- *   {arg, select, key {…} other {…}}        → exact match
- *
- * Inside cases, `#` substitutes the argument's stringified value.
+ * Delegates to formatjs. Preserves two behaviours of the pre-formatjs
+ * helper: an argument the template references but the caller omits
+ * renders as its bare `{name}` token (rather than throwing), and a
+ * malformed template degrades to a best-effort substitution instead of
+ * throwing at render time.
  *
  * @param {string} template
  * @param {Record<string, string | number>} vars
- * @param {string} [locale]   default 'en' (used by Intl.PluralRules)
+ * @param {string} [locale]   default 'en'
  * @returns {string}
  */
 export function format(template, vars, locale = 'en') {
+    if (typeof template !== 'string') return String(template);
+    const values = vars || {};
+    // Fast path: no ICU markup at all.
+    if (!template.includes('{')) return template;
+    try {
+        const mf = messageFormatFor(template, locale);
+        // Pre-fill any referenced-but-missing arg with its bare token so
+        // formatjs doesn't throw on a missing value; translators still
+        // see the untranslated placeholder in the rendered output.
+        const filled = fillMissingArgs(mf, values);
+        return String(mf.format(filled));
+    } catch (_err) {
+        // Malformed ICU (or an unsupported construct): never throw at
+        // render; fall back to the legacy substitution.
+        return legacyFormat(template, values, locale);
+    }
+}
+
+/**
+ * Return a values object with every arg the template requires present:
+ * caller-supplied values win; anything missing gets its bare `{name}`
+ * token so the rendered string shows the untranslated placeholder.
+ */
+function fillMissingArgs(mf, values) {
+    const names = collectArgNames(mf.getAst(), new Set());
+    let filled = values;
+    for (const name of names) {
+        if (!Object.prototype.hasOwnProperty.call(values, name)) {
+            if (filled === values) filled = { ...values };
+            filled[name] = `{${name}}`;
+        }
+    }
+    return filled;
+}
+
+// --- legacy fallback substitution ------------------------------------
+//
+// The pre-formatjs hand-rolled ICU subset, kept only as a last-resort
+// path for templates formatjs refuses to parse. It handles simple
+// substitution, plural, select, `=N` exact match, and `#`.
+
+function legacyFormat(template, vars, locale = 'en') {
     if (typeof template !== 'string') return String(template);
     let i = 0;
     const out = [];
@@ -239,7 +427,7 @@ function formatCase(template, argName, valueStr, vars, locale) {
     if (!template) return '';
     // Inside cases, `#` is the argument value.
     const expanded = template.replace(/#/g, valueStr);
-    return format(expanded, vars, locale ?? 'en');
+    return legacyFormat(expanded, vars, locale ?? 'en');
 }
 
 export { en } from './locales/en/index.js';

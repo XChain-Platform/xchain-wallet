@@ -28,7 +28,7 @@
 //   - iconResizePlugin:  resizes the 128x128 favicon into the four PNG
 //     sizes the MV3 manifest expects (`icons` + `action.default_icon`).
 
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
@@ -67,6 +67,36 @@ function copyManifestPlugin() {
                 manifest,
                 'utf8',
             );
+        },
+    };
+}
+
+// Copy the per-chain branding icons the dApp bridge's getSupportedChains
+// hands out. Chain descriptors carry a bare filename (e.g.
+// `bitcoin-mainnet-icon-20.png`); the bridge resolves it to
+// `chrome-extension://<id>/chain-icons/<file>`, so the files must land at
+// dist/chain-icons/ AND be listed under manifest web_accessible_resources.
+// We copy every small (`*-icon-20.png`) icon so a new chain descriptor
+// doesn't need a build change.
+/**
+ * @param {{ sourceDir: URL, outDir: URL }} opts
+ */
+function copyChainIconsPlugin({ sourceDir, outDir }) {
+    return {
+        name: 'xchain-copy-chain-icons',
+        apply: 'build',
+        async closeBundle() {
+            const srcAbs = fileURLToPath(sourceDir);
+            const outAbs = fileURLToPath(outDir);
+            await mkdir(outAbs, { recursive: true });
+            const entries = await readdir(srcAbs);
+            const icons = entries.filter((f) => f.endsWith('-icon-20.png'));
+            for (const file of icons) {
+                await copyFile(
+                    fileURLToPath(new URL(file, sourceDir)),
+                    fileURLToPath(new URL(file, outDir)),
+                );
+            }
         },
     };
 }
@@ -166,6 +196,13 @@ export default defineConfig({
             protocolImports: true,
         }),
         copyManifestPlugin(),
+        copyChainIconsPlugin({
+            sourceDir: new URL(
+                '../core/src/branding/images/',
+                import.meta.url,
+            ),
+            outDir: new URL('./dist/chain-icons/', import.meta.url),
+        }),
         iconResizePlugin({
             source: new URL(
                 '../core/src/branding/images/favicon.png',

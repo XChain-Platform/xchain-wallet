@@ -9,7 +9,8 @@
     "scripts": {
         "build": "vite build",
         "dev": "vite",
-        "preview": "vite preview"
+        "preview": "vite preview",
+        "reproduce": "bash scripts/reproduce.sh"
     },
     "dependencies": {
         "@ledgerhq/hw-app-btc": "^10.21.0",

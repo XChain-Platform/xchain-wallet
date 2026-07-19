@@ -40,6 +40,10 @@
         {
             "resources": ["inject/xchainProvider.js"],
             "matches": ["http://*/*", "https://*/*"]
+        },
+        {
+            "resources": ["chain-icons/*"],
+            "matches": ["http://*/*", "https://*/*"]
         }
     ],
     "permissions": ["storage", "sidePanel", "notifications", "alarms"],

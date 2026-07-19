@@ -52,6 +52,11 @@ jobs:
       # that branch from the artifact and this grep is real evidence.
       - name: No dev-mock SDK in the shipped bundles
         run: bash tools/build-reproduce/check-no-dev-mock.sh
+      # `@trezor/connect-web` is T-RSL-licensed and forbids redistribution. It was
+      # unbundled in c541ac7 (Trezor Connect now loads from connect.trezor.io); this
+      # gate proves no @trezor/* code re-entered any shipped shell's dist bundle.
+      - name: No bundled @trezor code in the shipped bundles
+        run: bash tools/build-reproduce/check-no-trezor-dist.sh
       # Every integrity hash in the built index.html must match the bytes of the
       # asset it points at. A mismatch does not weaken SRI, it bricks the page: the
       # browser refuses to execute the bundle.

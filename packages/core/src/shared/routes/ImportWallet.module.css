@@ -226,3 +226,12 @@
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
 }
+
+.backupPointerCard {
+    margin-bottom: var(--xc-space-2);
+    padding: var(--xc-space-2);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-md);
+    background: var(--xc-surface-2);
+    word-break: break-all;
+}

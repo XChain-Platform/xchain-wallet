@@ -15,6 +15,14 @@ export {
 } from './bip21.js';
 export { detectQrContent, PSBT_HEX_PREFIX } from './detectQrContent.js';
 export {
+    parseBackupPointer,
+    buildBackupPointer,
+    looksLikeBackupPointer,
+    InvalidBackupPointerError,
+    BACKUP_POINTER_SCHEME,
+    BACKUP_POINTER_VERSION,
+} from './backupPointer.js';
+export {
     parseXchainUri,
     buildXchainUri,
     describeXchainIntent,

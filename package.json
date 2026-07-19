@@ -27,6 +27,7 @@
         "test:smoke": "node test/smoke/_run-smokes.js",
         "test:integration": "vitest run --config test/vitest/integration.config.js",
         "test:integration:watch": "vitest --config test/vitest/integration.config.js",
+        "test:integration:regtest": "bash tools/regtest/test-integration.sh",
         "test:boundary": "vitest run --config test/vitest/boundary.config.js",
         "test:chaos": "vitest run --config test/vitest/chaos.config.js",
         "test:fuzz": "vitest run --config test/vitest/fuzz.config.js",
@@ -38,7 +39,9 @@
         "test:a11y": "vitest run --config test/vitest/a11y.config.js",
         "test:e2e": "playwright test --config test/e2e/playwright.config.js",
         "test:e2e:headed": "playwright test --config test/e2e/playwright.config.js --headed",
-        "test:all": "pnpm test:unit && pnpm test:smoke && pnpm test:integration && pnpm test:boundary && pnpm test:chaos && pnpm test:fuzz && pnpm test:regression && pnpm test:security && pnpm test:a11y"
+        "test:all": "pnpm test:unit && pnpm test:smoke && pnpm test:integration && pnpm test:boundary && pnpm test:chaos && pnpm test:fuzz && pnpm test:regression && pnpm test:security && pnpm test:a11y",
+        "release:sign": "bash tools/release/sign.sh --input release-artifacts/$(node -p \"require('./package.json').version\")",
+        "release:verify": "bash tools/release/verify.sh --input release-artifacts/$(node -p \"require('./package.json').version\")"
     },
     "pnpm": {
         "overrides": {
