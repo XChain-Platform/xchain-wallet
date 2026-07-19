@@ -302,7 +302,7 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                 />
                 <Input
                     type="search"
-                    placeholder="Filter by name or #action_index"
+                    placeholder="Filter by name or number"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     aria-label="Filter contracts"

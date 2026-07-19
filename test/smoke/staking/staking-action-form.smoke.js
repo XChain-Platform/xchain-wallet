@@ -54,8 +54,8 @@ for (const stage of ['form', 'review', 'submitting', 'done']) {
 // Capability-staking model: UNSTAKE addresses a signing pubkey, not a tier.
 assert.ok(!/Tier 1/.test(formSrc) && !/Tier 2/.test(formSrc),
     'StakingActionForm does not surface tier labels (capability-staking model dropped tiers)');
-assert.ok(/label="Signing pubkey"/.test(formSrc),
-    'StakingActionForm renders a Signing pubkey input for unstake');
+assert.ok(/label="Signing public key"/.test(formSrc),
+    'StakingActionForm renders a Signing public key input for unstake');
 assert.ok(/SIGNING_PUBKEY:\s*signingPubkey\.trim/.test(formSrc),
     'StakingActionForm passes SIGNING_PUBKEY in action params');
 

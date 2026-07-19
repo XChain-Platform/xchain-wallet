@@ -36,6 +36,7 @@ import {
     draftFromAccount,
     buildPolicyDraft,
 } from './CoSignerPolicyEditor.jsx';
+import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -174,7 +175,7 @@ export function CoSignerAccountDetail({ accountId, onBack }) {
                     <CopyButton value={account.aggregateAddress || ''} label="Copy" />
                 </dd>
                 <dt className={styles.detailsLabel}>Allowed actions</dt>
-                <dd className={styles.detailsValue}>{(p.allowedActions || []).join(', ') || 'none'}</dd>
+                <dd className={styles.detailsValue}>{(p.allowedActions || []).map(actionDisplayLabel).join(', ') || 'none'}</dd>
                 <dt className={styles.detailsLabel}>Allowed recipients</dt>
                 <dd className={styles.detailsValue}>
                     {Array.isArray(p.allowedDestinations) && p.allowedDestinations.length > 0

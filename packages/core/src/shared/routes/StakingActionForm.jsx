@@ -349,10 +349,10 @@ export function StakingActionForm({ mode, walletId, chainId, onBack }) {
             {isUnstake ? (
                 <>
                     <p style={{ fontSize: '0.85rem', margin: '0 0 0.5rem', color: 'var(--muted, #666)' }}>
-                        Enter the signing pubkey to unstake. Returns the full active balance for that pubkey (original stake + any top-ups) after the cooldown. The protocol doesn't support partial unstakes.
+                        Enter the signing public key to unstake. Returns the full active balance for that public key (original stake + any top-ups) after the cooldown. The protocol doesn't support partial unstakes.
                     </p>
                     <Input
-                        label="Signing pubkey"
+                        label="Signing public key"
                         hint="64-character hex-encoded Ed25519 public key (the same one used to stake)."
                         value={signingPubkey}
                         onChange={(e) => setSigningPubkey(e.target.value)}

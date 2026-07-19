@@ -477,12 +477,12 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, onBa
             ) : null}
 
             <Input
-                label={mode === 'delegate' ? 'New signing pubkey (64-hex Ed25519)' : 'Signing pubkey (64-hex Ed25519)'}
+                label={mode === 'delegate' ? 'New signing public key' : 'Signing public key'}
                 hint={mode === 'delegate'
-                    ? 'The new Ed25519 pubkey to rotate to. Generate one offline; this wallet does not auto-generate validator keys.'
+                    ? '64-character hex-encoded Ed25519 public key to rotate to. Generate one offline; this wallet does not auto-generate validator keys.'
                     : mode === 'unstake'
-                        ? 'The Ed25519 pubkey identifying which contract-stake to begin cooldown for.'
-                        : 'The Ed25519 pubkey to associate with this stake. Re-staking with the same pubkey tops up.'}
+                        ? '64-character hex-encoded Ed25519 public key identifying which contract-stake to begin cooldown for.'
+                        : '64-character hex-encoded Ed25519 public key to associate with this stake. Re-staking with the same key tops up.'}
                 value={signingPubkey}
                 onChange={(e) => setSigningPubkey(e.target.value.trim())}
                 autoComplete="off"

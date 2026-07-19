@@ -95,7 +95,7 @@ assert.ok(
     'ContractsList sorts rows newest-block-first',
 );
 assert.ok(
-    /Filter by name or #action_index/.test(listSrc),
+    /Filter by name or number/.test(listSrc),
     'ContractsList renders a client-side search input',
 );
 

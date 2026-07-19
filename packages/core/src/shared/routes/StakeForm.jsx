@@ -550,7 +550,7 @@ export function StakeForm({ walletId, chainId, onBack }) {
             ) : null}
 
             <Input
-                label="Signing pubkey"
+                label="Signing public key"
                 hint="64-character hex-encoded Ed25519 public key. This key votes on the network on your behalf."
                 value={signingPubkey}
                 onChange={(e) => setSigningPubkey(e.target.value)}

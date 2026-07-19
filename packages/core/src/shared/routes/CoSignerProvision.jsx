@@ -211,7 +211,7 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
             />
 
             <Select
-                label="This wallet's key (daemon address)"
+                label="This wallet's key"
                 value={daemonAddressId}
                 onChange={(e) => setDaemonAddressId(e.target.value)}
                 hint="One of your addresses on this network. Its public key becomes this wallet's half of the pair."

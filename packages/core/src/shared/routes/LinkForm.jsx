@@ -625,7 +625,8 @@ function SidePanel({ title, chainIds, chainId, onChainChange, actionIndex, onAct
             />
 
             <Input
-                label="Action to reference (action_index)"
+                label="Action to reference"
+                hint="The number shown next to the action on the explorer."
                 value={actionIndex}
                 onChange={(e) => onActionIndexChange(e.target.value.replace(/\D/g, ''))}
                 inputMode="numeric"

@@ -1838,8 +1838,8 @@ function RecipientsBlock({ entry }) {
     const tick = String(entry?.raw?.TICK || entry?.raw?.tick || '').trim();
     const listIdx = String(entry?.raw?.LIST_ACTION_INDEX || entry?.raw?.list_action_index || '').trim();
     const defaultName = isDividend
-        ? `DIVIDEND #${entry?.actionIndex || '?'}${tick ? ` (${tick})` : ''} holders`
-        : `AIRDROP #${entry?.actionIndex || '?'}${listIdx ? ` (list #${listIdx})` : ''} recipients`;
+        ? `${actionDisplayLabel('DIVIDEND')} #${entry?.actionIndex || '?'}${tick ? ` (${tick})` : ''} holders`
+        : `${actionDisplayLabel('AIRDROP')} #${entry?.actionIndex || '?'}${listIdx ? ` (list #${listIdx})` : ''} recipients`;
 
     async function load() {
         setStage('loading');

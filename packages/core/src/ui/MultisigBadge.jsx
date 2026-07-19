@@ -71,7 +71,7 @@ const SCHEME_TAG = {
 const SCHEME_DESCRIPTION = {
     'p2sh-multisig':  'Classic multi-signature',
     'p2wsh-multisig': 'SegWit multi-signature (lower fees)',
-    'taproot-musig2': 'Taproot-MuSig2',
+    'taproot-musig2': 'Taproot multi-signature (looks like a single-key address)',
 };
 
 // Three distinct tones so a glance distinguishes scheme families

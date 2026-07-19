@@ -556,7 +556,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
             )}
             <Input
                 label="Gas limit"
-                hint="Upper bound of VM gas this call may consume. Default 50000."
+                hint="The most this call is allowed to spend on computation. Leave blank for the default (50000)."
                 inputMode="numeric"
                 value={gasLimit}
                 onChange={(e) => setGasLimit(e.target.value)}

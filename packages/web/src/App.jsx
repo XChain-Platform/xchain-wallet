@@ -2295,7 +2295,7 @@ function buildActionEntries({
         {
             id: 'swap',
             label: 'Swap tokens',
-            description: 'Atomic token-pair swap: no native coin, no follow-up payment needed.',
+            description: 'All-or-nothing token-pair swap (both sides complete together or neither does): no native coin, no follow-up payment needed.',
             onSelect: onSwap,
         },
         {
@@ -2307,13 +2307,13 @@ function buildActionEntries({
         {
             id: 'parallel',
             label: 'Parallel cross-chain actions',
-            description: 'Compose multiple independent actions across any chains and sign them sequentially. Not atomic; failures do not roll back.',
+            description: 'Compose multiple independent actions across any chains and sign them sequentially. Not all-or-nothing: if one side fails, the sides that already went through are not undone.',
             onSelect: onParallel,
         },
         {
             id: 'cross-chain-swap',
             label: 'Cross-chain swap',
-            description: 'Open a swap that gives a token on one chain and gets a token on another. Settles atomically when a counterparty fills the offer.',
+            description: 'Open a swap that gives a token on one chain and gets a token on another. Both sides settle together (all-or-nothing) when a counterparty fills the offer.',
             onSelect: onCrossChainSwap,
         },
         {

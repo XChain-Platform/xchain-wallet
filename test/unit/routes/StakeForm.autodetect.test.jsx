@@ -71,7 +71,7 @@ function mountForm(getStakesForAddress, extra = {}) {
 // Type a valid pubkey once the form (not the "Loading addresses…"
 // placeholder) is on screen; the detection effect fires on this change.
 async function enterPubkey(pubkey = PUBKEY) {
-    const input = await screen.findByLabelText('Signing pubkey');
+    const input = await screen.findByLabelText('Signing public key');
     fireEvent.change(input, { target: { value: pubkey } });
     return input;
 }

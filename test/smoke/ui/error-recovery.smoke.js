@@ -46,8 +46,11 @@ assert.ok(/StatusMessage/.test(sendSrc),
     'Send.jsx imports StatusMessage');
 assert.ok(/label: 'Use Max'/.test(sendSrc),
     'Send.jsx wires "Use Max" recovery');
-assert.ok(/\/insufficient\|not enough\/i\.test\(submitError\)/.test(sendSrc),
-    'Send.jsx detects insufficient-funds submit errors for the Use-Max recovery');
+//  migrated this from a regex over the displayed message to the
+// structured cause returned by humanizeError, so the Use-Max recovery keys
+// off the classified cause instead of re-parsing display copy.
+assert.ok(/submitErrorCause\s*===\s*'insufficient_funds'/.test(sendSrc),
+    'Send.jsx detects insufficient-funds submit errors (via humanizeError cause) for the Use-Max recovery');
 
 // 3. PsbtSignForm offers a "Clear" recovery for unrecognized paste.
 assert.ok(/StatusMessage/.test(psbtSrc),

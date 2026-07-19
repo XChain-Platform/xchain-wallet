@@ -33,6 +33,7 @@ import { buildRecentDestinations } from '../../flows/recentDestinations.js';
 import { detectAddressCoin, isValidAddressForChain } from '../utils/addressValidation.js';
 import { findLookalike } from '../utils/lookalike.js';
 import { checkPasteIntegrity } from '../utils/pasteIntegrity.js';
+import { humanizeError } from '../utils/humanizeError.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useDeveloperMode } from '../hooks/useDeveloperMode.js';
@@ -252,6 +253,13 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
     // Inline error on the To field, e.g. a wrong-chain destination address.
     const [toError, setToError] = useState(/** @type {string | null} */ (null));
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
+    // Raw backend/SDK/RPC error string kept for a collapsible "technical
+    // details" disclosure so debuggability is preserved without leading
+    // the review dialog with jargon ().
+    const [submitErrorDetail, setSubmitErrorDetail] = useState(/** @type {string | null} */ (null));
+    // Recognized cause from humanizeError; recovery affordances key off
+    // this instead of re-parsing the displayed message text.
+    const [submitErrorCause, setSubmitErrorCause] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
@@ -988,6 +996,8 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
         }
         setStage('submitting');
         setSubmitError(null);
+        setSubmitErrorDetail(null);
+        setSubmitErrorCause(null);
         try {
             const base = {
                 walletId,
@@ -1037,16 +1047,26 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                 // form with a dismissible "Transaction cancelled." toast.
                 // Form values stay intact so the user can edit and retry.
                 setSubmitError(null);
+                setSubmitErrorDetail(null);
+                setSubmitErrorCause(null);
                 setPassword('');
                 setStage('form');
                 showToast({ message: 'Transaction cancelled.' });
                 return;
             }
-            setSubmitError(
-                isBadPassword
-                    ? 'Incorrect password.'
-                    : rawMsg || 'Send failed.',
-            );
+            if (isBadPassword) {
+                setSubmitError('Incorrect password.');
+                setSubmitErrorDetail(null);
+                setSubmitErrorCause(null);
+            } else {
+                // #2505: lead with plain-language copy; keep the raw
+                // backend/SDK/RPC message for logs + a collapsible detail.
+                console.error('Send failed:', err); // eslint-disable-line no-console
+                const h = humanizeError(err, 'send');
+                setSubmitError(h.message);
+                setSubmitErrorDetail(rawMsg && rawMsg !== h.message ? rawMsg : null);
+                setSubmitErrorCause(h.cause);
+            }
             setStage('review');
             haptic.error();
             if (!isHwSource) {
@@ -1315,7 +1335,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                         value={password}
                         onChange={(e) => {
                             setPassword(e.target.value);
-                            if (submitError) setSubmitError(null);
+                            if (submitError) { setSubmitError(null); setSubmitErrorDetail(null); setSubmitErrorCause(null); }
                         }}
                         autoComplete="current-password"
                         disabled={stage === 'submitting'}
@@ -1333,12 +1353,22 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                     <StatusMessage
                         variant="error"
                         recovery={
-                            /insufficient|not enough/i.test(submitError) && sourceBalance && parseFloat(sourceBalance.amount || '0') > 0
+                            submitErrorCause === 'insufficient_funds' && sourceBalance && parseFloat(sourceBalance.amount || '0') > 0
                                 ? { label: 'Use Max', onAction: () => { setStage('form'); onMax(); } }
                                 : undefined
                         }
                     >
                         {submitError}
+                        {submitErrorDetail ? (
+                            <details style={{ marginTop: 'var(--xc-space-1)' }}>
+                                <summary style={{ cursor: 'pointer', fontSize: 'var(--xc-text-sm)', opacity: 0.85 }}>
+                                    Technical details
+                                </summary>
+                                <span style={{ fontSize: 'var(--xc-text-sm)', wordBreak: 'break-word' }}>
+                                    {submitErrorDetail}
+                                </span>
+                            </details>
+                        ) : null}
                     </StatusMessage>
                 ) : null}
                 <div className={styles.actions}>
