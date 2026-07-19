@@ -140,10 +140,18 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
     }, [contacts, query, networkFilter]);
 
     // When the global AppHeader QR scanner produces an address while this
-    // route is active, App.jsx sets scanPrefill and we open the new-contact
-    // form with that address already filled in.
+    // route is active, App.jsx sets scanPrefill. If the address already
+    // belongs to a contact we open that contact's detail view; otherwise we
+    // open the new-contact form with the address pre-filled.
     useEffect(() => {
         if (!scanPrefill) return;
+        const existing = findContactByAddress(contacts, scanPrefill.address);
+        if (existing) {
+            setActiveId(existing.id);
+            setMode('detail');
+            onScanPrefillConsumed?.();
+            return;
+        }
         const chain = coinFamilyFromChainId(scanPrefill.chainId) || 'bitcoin';
         setActiveId(null);
         setFormName('');
@@ -152,7 +160,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
         setSubmitError(null);
         setMode('edit');
         onScanPrefillConsumed?.();
-    }, [scanPrefill, onScanPrefillConsumed]);
+    }, [scanPrefill, contacts, onScanPrefillConsumed]);
 
     // Dismiss the address-picker dropdown on outside click or Escape.
     useEffect(() => {
@@ -209,12 +217,21 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                 setScanFromEdit(false);
                 setMode('edit');
             } else {
-                setActiveId(null);
-                setFormName('');
-                setFormNotes('');
-                setFormEntries([{ chain, address: outcome.address, label: '' }]);
-                setSubmitError(null);
-                setMode('edit');
+                // Standalone scan (not merging into an open form): jump to the
+                // matching contact's detail view when the address is already
+                // saved, else open a fresh new-contact form.
+                const existing = findContactByAddress(contacts, outcome.address);
+                if (existing) {
+                    setActiveId(existing.id);
+                    setMode('detail');
+                } else {
+                    setActiveId(null);
+                    setFormName('');
+                    setFormNotes('');
+                    setFormEntries([{ chain, address: outcome.address, label: '' }]);
+                    setSubmitError(null);
+                    setMode('edit');
+                }
             }
         } else {
             setScanFromEdit(false);
@@ -695,6 +712,20 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
         </>,
         { card: false },
     );
+}
+
+// Find an existing contact that already holds `address`, comparing on the
+// trimmed value case-insensitively. Bech32 addresses are case-insensitive by
+// spec, and base58 addresses differing only by case don't occur in practice,
+// so a lowercased compare is safe and avoids a false miss on a bech32 scan
+// whose stored copy differs in case. Returns the first match, or null.
+export function findContactByAddress(contacts, address) {
+    const needle = (address || '').trim().toLowerCase();
+    if (!needle || !Array.isArray(contacts)) return null;
+    return contacts.find((c) =>
+        Array.isArray(c.entries)
+        && c.entries.some((e) => (e.address || '').trim().toLowerCase() === needle),
+    ) || null;
 }
 
 function chainIdFor(chain) {
