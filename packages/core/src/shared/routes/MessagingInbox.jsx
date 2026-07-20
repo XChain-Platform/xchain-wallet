@@ -50,8 +50,10 @@ import local from './MessagingInbox.module.css';
  *   opens the New-message form; thread replies pass the typed body plus the
  *   conversation's encryption method (shown locked on the form)
  * @param {() => void} props.onBack
+ * @param {string} [props.initialCounterparty]  open this conversation thread
+ *   directly (e.g. returning from a compose form launched from that thread)
  */
-export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack }) {
+export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, initialCounterparty }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -71,7 +73,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack })
     );
     const [messages, setMessages] = useState(/** @type {any[]} */ ([]));
     const [selectedCounterparty, setSelectedCounterparty] = useState(
-        /** @type {string | null} */ (null),
+        /** @type {string | null} */ (initialCounterparty || null),
     );
     const [contactsByAddress, setContactsByAddress] = useState(
         /** @type {Record<string, string>} */ ({}),
@@ -578,6 +580,9 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack })
                         toAddress: selectedCounterparty,
                         message: t,
                         fixedEncryption: threadEncryption,
+                        // Lets the host return to this thread (not the list)
+                        // when the user backs out of the compose form.
+                        threadCounterparty: selectedCounterparty,
                     });
                 }}
             />
@@ -704,9 +709,10 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack })
 }
 
 /**
- * Docked thread composer: a single full-width message input in the Screen
- * footer. Submitting (Enter) hands the trimmed draft up to the parent, which
- * opens the standard New-message form pre-filled; there is no send button.
+ * Docked thread composer: a message input plus a send button in the Screen
+ * footer, rendered as one continuous bar. Submitting (Enter or the send
+ * button) hands the trimmed draft up to the parent, which opens the standard
+ * New-message form pre-filled.
  * The input is controlled by the parent so drafts reset per conversation.
  *
  * @param {object} props
@@ -730,6 +736,9 @@ function ThreadComposer({ value, onChange, onSubmit }) {
                 autoComplete="off"
                 aria-label="Message"
             />
+            <button type="submit" className={local.composerSend} aria-label="Send message">
+                <Icon.SendIcon />
+            </button>
         </form>
     );
 }

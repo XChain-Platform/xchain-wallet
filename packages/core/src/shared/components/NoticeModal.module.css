@@ -1,0 +1,45 @@
+.overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    background: rgba(15, 23, 42, 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--xc-space-4);
+}
+
+.panel {
+    width: 100%;
+    max-width: 320px;
+    background: var(--xc-surface);
+    color: var(--xc-text);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-lg);
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+    padding: var(--xc-space-4);
+    text-align: center;
+    animation: pop 140ms ease-out;
+}
+
+@keyframes pop {
+    from { transform: scale(0.96); opacity: 0.4; }
+    to   { transform: scale(1); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .panel { animation: none; }
+}
+
+.title {
+    margin: 0 0 var(--xc-space-2);
+    font-size: var(--xc-text-md);
+    font-weight: 700;
+}
+
+.message {
+    margin: 0 0 var(--xc-space-3);
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text-muted);
+    overflow-wrap: anywhere;
+}

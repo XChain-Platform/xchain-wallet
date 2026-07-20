@@ -20,7 +20,7 @@ import {
     ChainBadge,
     AddressText,
  Icon,} from '@xchain-wallet/core/ui';
-import { registry as registryLib } from '@xchain-wallet/core';
+import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { chainIconSmallUrl } from '../../branding/branding.js';
 import { isValidAddressAnyNetwork, detectAddressCoin } from '../utils/addressValidation.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -80,6 +80,10 @@ const NATIVE_TICKER_BY_CHAIN = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOG
  *   encryption to the conversation's method (thread replies must not switch
  *   mid-conversation); the field still shows the level, just disabled
  * @param {() => void} props.onBack
+ * @param {(result: { txid?: string | null }) => void} [props.onSent]  called
+ *   instead of showing the in-page "Message sent" screen when the send
+ *   succeeds; the host navigates (e.g. back to the thread) and surfaces its
+ *   own confirmation.
  */
 export function ComposeMessage({
     walletId,
@@ -89,6 +93,7 @@ export function ComposeMessage({
     initialMessage,
     fixedEncryption,
     onBack,
+    onSent,
 }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
@@ -366,6 +371,17 @@ export function ComposeMessage({
 
         setStage('submitting');
         setSubmitError(null);
+
+        // Demo wallet: the counterparties are fabricated addresses with no
+        // real keys or UTXOs, so a real encrypt/sign/broadcast can only fail
+        // (e.g. the pubkey-derivation guard). Pretend the send succeeded.
+        if (flowsLib.isDemoWallet(walletId)) {
+            await new Promise((resolve) => setTimeout(resolve, 600));
+            if (onSent) { onSent({ txid: null }); return; }
+            setResult({ txid: null });
+            setStage('done');
+            return;
+        }
         try {
             const base = {
                 walletId,
@@ -392,6 +408,7 @@ export function ComposeMessage({
             const r = hw
                 ? await messaging.messageActionHw({ ...base, signerId: fromAddress.signerId })
                 : await messaging.messageAction({ ...base, password });
+            if (onSent) { onSent(r); return; }
             setResult(r);
             setStage('done');
         } catch (err) {
@@ -453,7 +470,7 @@ export function ComposeMessage({
 
         const header = (
         <PageHeader
-            onBack={onBack}
+            onBack={stage === 'review' ? () => setStage('form') : onBack}
             title={stage === 'review' || stage === 'submitting' ? 'Review message' : 'New message'}
             titleIcon={<Icon.MessageIcon />}
         />
@@ -565,20 +582,13 @@ export function ComposeMessage({
                     <Button
                         type="submit"
                         variant="primary"
+                        block
                         loading={stage === 'submitting'}
                         disabled={hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
                     >
                         {hw
                             ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                            : 'Send message'}
-                    </Button>
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        onClick={() => setStage('form')}
-                        disabled={stage === 'submitting'}
-                    >
-                        Back
+                            : 'Confirm send'}
                     </Button>
                 </div>
             </form>,

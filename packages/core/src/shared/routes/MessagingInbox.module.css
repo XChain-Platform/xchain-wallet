@@ -167,16 +167,19 @@
    the bottom of the screen and supplies the top border + raised background.
    We pull against the footer's default padding (space-3 vertical / space-4
    horizontal) with negative margins so the bar reads as a tight, even space-2
-   gutter, without a global footer change. The message input spans the full
-   width; pressing Enter opens the send-confirmation screen. */
+   gutter, without a global footer change. The input and the send button are
+   joined into one continuous bar (shared border, radius only on the outer
+   corners); Enter or the button opens the send-confirmation screen. */
 .composer {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
+    align-items: stretch;
     margin: calc(var(--xc-space-2) - var(--xc-space-3)) calc(var(--xc-space-2) - var(--xc-space-4));
 }
 
 .composerInput {
-    width: 100%;
+    flex: 1 1 auto;
+    min-width: 0;
     box-sizing: border-box;
     padding: var(--xc-space-2) var(--xc-space-3);
     font-family: var(--xc-font-sans);
@@ -184,7 +187,33 @@
     color: var(--xc-text);
     background: var(--xc-surface);
     border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
+    border-right: none;
+    border-radius: var(--xc-radius-md) 0 0 var(--xc-radius-md);
+}
+
+.composerSend {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--xc-space-2) var(--xc-space-3);
+    color: #fff;
+    background: var(--xc-accent-primary);
+    border: 1px solid var(--xc-accent-primary);
+    border-radius: 0 var(--xc-radius-md) var(--xc-radius-md) 0;
+    cursor: pointer;
+}
+
+.composerSend:hover {
+    background: var(--xc-accent-primary-hover);
+    border-color: var(--xc-accent-primary-hover);
+}
+
+/* Replace the browser focus ring (which outlines only the input half and
+   breaks the continuous bar) with an accent border that meets the button. */
+.composerInput:focus {
+    outline: none;
+    border-color: var(--xc-accent-primary);
 }
 
 .composerInput::placeholder {

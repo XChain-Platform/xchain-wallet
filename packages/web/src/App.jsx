@@ -99,6 +99,7 @@ import { CoinpayForm } from '@xchain-wallet/core/shared/routes/CoinpayForm.jsx';
 import { SwapForm } from '@xchain-wallet/core/shared/routes/SwapForm.jsx';
 import { SellOwnershipForm } from '@xchain-wallet/core/shared/routes/SellOwnershipForm.jsx';
 import { MessagingInbox } from '@xchain-wallet/core/shared/routes/MessagingInbox.jsx';
+import { NoticeModal } from '@xchain-wallet/core/shared/components/NoticeModal.jsx';
 import { ComposeMessage } from '@xchain-wallet/core/shared/routes/ComposeMessage.jsx';
 import { ContactsList } from '@xchain-wallet/core/shared/routes/ContactsList.jsx';
 import { ContractsList } from '@xchain-wallet/core/shared/routes/ContractsList.jsx';
@@ -299,6 +300,14 @@ function AppInner() {
     const [composePrefill, setComposePrefill] = useState(
         /** @type {{ chainId?: string, fromAddressId?: string, toAddress?: string } | null} */ (null),
     );
+    // Conversation to reopen when the messaging inbox next mounts (set when
+    // backing out of a compose form launched from that thread's composer).
+    const [messagingThread, setMessagingThread] = useState(
+        /** @type {string | null} */ (null),
+    );
+    // Quick "Message sent" confirmation modal, shown over the view the user
+    // is returned to after a compose-form send succeeds.
+    const [messageSentNotice, setMessageSentNotice] = useState(false);
     const [contactScanPrefill, setContactScanPrefill] = useState(
         /** @type {{ address: string, chainId?: string } | null} */ (null),
     );
@@ -687,7 +696,7 @@ function AppInner() {
                         onDispensers={() => setUnlockedView('dispensers-list')}
                         onTokens={() => setUnlockedView('my-tokens')}
                         onMoreActions={() => setUnlockedView('actions')}
-                        onMessaging={() => setUnlockedView('messaging')}
+                        onMessaging={() => { setMessagingThread(null); setUnlockedView('messaging'); }}
                         onCrossChain={() => setUnlockedView('cross-chain')}
                         onContacts={() => { setFormReturnView(menuBackTo); setUnlockedView('contacts'); }}
                         onAddresses={() => setUnlockedView('addresses')}
@@ -1307,11 +1316,15 @@ function AppInner() {
                     <MessagingInbox
                         walletId={activeWalletId}
                         activeAccountId={activeAccountId || undefined}
+                        initialCounterparty={messagingThread || undefined}
                         onCompose={(prefill) => {
                             setComposePrefill(prefill || null);
                             setUnlockedView('compose-message');
                         }}
-                        onBack={() => setUnlockedView('home')}
+                        onBack={() => {
+                            setMessagingThread(null);
+                            setUnlockedView('home');
+                        }}
                     />
                 );
             }
@@ -1326,8 +1339,16 @@ function AppInner() {
                         fixedEncryption={composePrefill?.fixedEncryption}
                         onBack={() => {
                             const from = composePrefill?.__from || 'messaging';
+                            setMessagingThread(composePrefill?.threadCounterparty || null);
                             setComposePrefill(null);
                             setUnlockedView(from);
+                        }}
+                        onSent={() => {
+                            const from = composePrefill?.__from || 'messaging';
+                            setMessagingThread(composePrefill?.threadCounterparty || null);
+                            setComposePrefill(null);
+                            setUnlockedView(from);
+                            setMessageSentNotice(true);
                         }}
                     />
                 );
@@ -1918,7 +1939,7 @@ function AppInner() {
                         onMarketActivity={() => setUnlockedView('market-activity')}
                         onMarkets={activeWalletId ? () => setUnlockedView('markets') : undefined}
                         onDispensers={activeWalletId ? () => setUnlockedView('dispensers-list') : undefined}
-                        onMessaging={activeWalletId ? () => setUnlockedView('messaging') : undefined}
+                        onMessaging={activeWalletId ? () => { setMessagingThread(null); setUnlockedView('messaging'); } : undefined}
                         onContracts={activeWalletId && hasBtcAddress ? () => setUnlockedView('contracts-list') : undefined}
                         onStaking={activeWalletId && hasBtcAddress ? () => setUnlockedView('staking-dashboard') : undefined}
                         onHistory={activeWalletId ? () => {
@@ -2124,6 +2145,12 @@ function AppInner() {
                     }
                 >
                     {routeNode}
+                    {messageSentNotice ? (
+                        <NoticeModal
+                            title="Message sent"
+                            onClose={() => setMessageSentNotice(false)}
+                        />
+                    ) : null}
                     {globalScannerOpen ? (
                         <div
                             role="dialog"

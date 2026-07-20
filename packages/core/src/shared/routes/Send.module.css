@@ -264,19 +264,20 @@
 .bigField :global(label) {
     font-size: var(--xc-text-md);
     font-weight: 600;
+    /* Pinned so .inlineContactsButton's top offset below is exact. */
+    line-height: 20px;
 }
 
 .inlineContactsButton {
     position: absolute;
     inset-inline-end: 4px;
-    /* Stretch the button between the bottom of the label area and the
-       bottom of the input. Both anchors are CSS-known (Input.field has
-       gap space-1 below the text-sm label, and margin-bottom space-3
-       under the input). flex-centering inside lands the icon at the
-       input's vertical midpoint regardless of font-size / line-height
-       making the input taller than its 48px min-height. */
-    top: calc(0.875rem * 1.5 + var(--xc-space-2));
-    bottom: var(--xc-space-3);
+    /* Anchor the button over the input only, using the pinned label metrics
+       above (20px label line + the field's space-1 gap) and the To field's
+       48px input height. Never anchor to the field's bottom edge: hint/error
+       lines render inside the field and would drag the icon below the
+       input's midline. */
+    top: calc(20px + var(--xc-space-1));
+    height: 48px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
