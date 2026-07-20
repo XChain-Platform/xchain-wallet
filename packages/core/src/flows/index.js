@@ -394,6 +394,8 @@ export {
     synthesizeDemoMarketActivity,
     synthesizeDemoMessages,
     synthesizeDemoContacts,
+    synthesizeDemoDispensers,
+    synthesizeDemoDispenses,
 } from './demoFixtures.js';
 export {
     discoverUsedAddresses,

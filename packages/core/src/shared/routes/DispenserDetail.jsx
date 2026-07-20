@@ -20,12 +20,15 @@ import {
 import {
     registry as registryLib,
     decoder as decoderLib,
+    flows as flowsLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { multiplyAmounts } from '../../market/orderMath.js';
+import * as branding from '../../branding/branding.js';
 import styles from './IssueTokenForm.module.css';
+import local from './DispenserDetail.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -73,6 +76,30 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         /** @type {string | null} */ (null),
     );
 
+    // Refill (DISPENSER v2 edit: top up GIVE_ESCROW) mirrors the cancel flow.
+    const [refillStage, setRefillStage] = useState(
+        /** @type {'idle' | 'confirm' | 'submitting' | 'done'} */ ('idle'),
+    );
+    const [refillAmount, setRefillAmount] = useState('');
+    const [refillError, setRefillError] = useState(/** @type {string | null} */ (null));
+    const [refillResult, setRefillResult] = useState(/** @type {any | null} */ (null));
+    // Quick-action "More" popover.
+    const [moreOpen, setMoreOpen] = useState(false);
+    const moreWrapRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+    useEffect(() => {
+        if (!moreOpen) return undefined;
+        const onDown = (e) => {
+            if (moreWrapRef.current?.contains(e.target)) return;
+            setMoreOpen(false);
+        };
+        const onKey = (e) => { if (e.key === 'Escape') setMoreOpen(false); };
+        window.addEventListener('mousedown', onDown);
+        window.addEventListener('keydown', onKey);
+        return () => {
+            window.removeEventListener('mousedown', onDown);
+            window.removeEventListener('keydown', onKey);
+        };
+    }, [moreOpen]);
     const [cancelStage, setCancelStage] = useState(
         /** @type {'idle' | 'confirm' | 'submitting' | 'done'} */ ('idle'),
     );
@@ -102,14 +129,25 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         let cancelled = false;
         setLoading(true);
         setLoadError(null);
+        // Demo wallet: resolve the fixture row (owned by the first address
+        // on this chain) instead of querying an explorer.
+        const isDemo = flowsLib.isDemoWallet(walletId);
         Promise.all([
-            messaging.getDispenserByActionIndex({ chainId, actionIndex })
-                .then((resp) => (cancelled ? null : resp))
-                .catch((err) => { if (!cancelled) throw err; }),
+            isDemo
+                ? Promise.resolve(null)
+                : messaging.getDispenserByActionIndex({ chainId, actionIndex })
+                    .then((resp) => (cancelled ? null : resp))
+                    .catch((err) => { if (!cancelled) throw err; }),
             messaging.getAddressesByChain(walletId)
                 .then((byChain) => (cancelled ? null : byChain))
                 .catch(() => null),
-        ]).then(([resp, addrsByChain]) => {
+        ]).then(([realResp, addrsByChain]) => {
+            let resp = realResp;
+            if (isDemo && !cancelled) {
+                const first = (addrsByChain?.[chainId] || [])[0]?.address;
+                const rows = first ? flowsLib.synthesizeDemoDispensers(chainId, first) : [];
+                resp = rows.find((r) => String(r.action_index) === String(actionIndex)) || null;
+            }
             if (cancelled) return;
             const act = pickAction(resp);
             const disp = pickDispenser(resp);
@@ -149,7 +187,9 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             }
             setLoading(false);
 
-            if (source) {
+            if (isDemo) {
+                setDispenses(flowsLib.synthesizeDemoDispenses(actionIndex));
+            } else if (source) {
                 messaging.getDispenses({ chainId, query: source, type: 'source' })
                     .then((d) => { if (!cancelled) setDispenses(extractRows(d)); })
                     .catch(() => { /* best-effort; detail still usable without dispenses */ });
@@ -300,6 +340,62 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         }
     }
 
+    async function handleRefill(event) {
+        event.preventDefault();
+        if (refillStage === 'submitting' || !ownerAddress) return;
+        const amt = refillAmount.trim();
+        if (!amt || !(Number(amt) > 0)) { setRefillError('Enter a refill amount.'); return; }
+        if (!cancelHw && (!signerReady && password.length === 0)) return;
+        if (cancelHw && cancelHwStatus !== 'available') return;
+        setRefillStage('submitting');
+        setRefillError(null);
+        // Demo wallet: fabricated dispensers can't broadcast; simulate.
+        if (flowsLib.isDemoWallet(walletId)) {
+            await new Promise((resolve) => setTimeout(resolve, 600));
+            setRefillResult({ txid: null });
+            setPassword('');
+            setRefillStage('done');
+            return;
+        }
+        try {
+            const base = {
+                walletId,
+                chainId,
+                from: {
+                    address: ownerAddress.address,
+                    publicKey: ownerAddress.publicKey,
+                    derivationPath: ownerAddress.derivationPath,
+                    addressId: ownerAddress.id,
+                    source: ownerAddress.source,
+                    signerId: ownerAddress.signerId,
+                },
+                params: {
+                    VERSION: '2',
+                    DISPENSER_ACTION_INDEX: String(actionIndex),
+                    GIVE_ESCROW: amt,
+                },
+            };
+            const res = cancelHw
+                ? await messaging.dispenserActionHw({ ...base, signerId: ownerAddress.signerId })
+                : await messaging.dispenserAction({ ...base, password });
+            setRefillResult(res);
+            setPassword('');
+            setRefillStage('done');
+        } catch (err) {
+            const isBadPassword = err?.name === 'InvalidPasswordError';
+            setRefillError(
+                isBadPassword
+                    ? 'Incorrect password.'
+                    : err?.message || 'Refill failed.',
+            );
+            setRefillStage('confirm');
+            if (!cancelHw) {
+                passwordRef.current?.focus();
+                passwordRef.current?.select();
+            }
+        }
+    }
+
     async function handleCancel(event) {
         event.preventDefault();
         if (cancelStage === 'submitting' || !ownerAddress) return;
@@ -307,6 +403,14 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         if (cancelHw && cancelHwStatus !== 'available') return;
         setCancelStage('submitting');
         setCancelError(null);
+        // Demo wallet: fabricated dispensers can't broadcast; simulate.
+        if (flowsLib.isDemoWallet(walletId)) {
+            await new Promise((resolve) => setTimeout(resolve, 600));
+            setCancelResult({ txid: null });
+            setPassword('');
+            setCancelStage('done');
+            return;
+        }
         try {
             const base = {
                 walletId,
@@ -346,11 +450,14 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         const header = (
         <PageHeader
             onBack={onBack}
+            titleIcon={<Icon.TokenIcon />}
             title={cancelStage === 'confirm' || cancelStage === 'submitting'
-                    ? 'Confirm cancel'
-                    : buyStage === 'confirm' || buyStage === 'submitting'
-                        ? 'Review buy'
-                        : 'Dispenser detail'}
+                    ? 'Confirm close'
+                    : refillStage === 'confirm' || refillStage === 'submitting'
+                        ? 'Refill dispenser'
+                        : buyStage === 'confirm' || buyStage === 'submitting'
+                            ? 'Review buy'
+                            : 'Dispenser detail'}
         />
     );
     const wrap = (children) => (
@@ -380,6 +487,79 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     <Button variant="primary" onClick={onBack}>Done</Button>
                 </div>
             </>,
+        );
+    }
+
+    if (refillStage === 'done') {
+        const txid = refillResult?.txid || refillResult?.broadcast?.txid;
+        return wrap(
+            <>
+                <h2 className={styles.successTitle}>Refill submitted</h2>
+                <p className={styles.hint}>
+                    {refillAmount} {giveTick} moves into escrow when the edit confirms.
+                </p>
+                {txid ? (
+                    <>
+                        <p className={styles.successLabel}>Transaction ID</p>
+                        <code className={styles.txid}>{txid}</code>
+                    </>
+                ) : null}
+                <div className={styles.actions}>
+                    <Button variant="primary" onClick={() => { setRefillStage('idle'); setRefillAmount(''); }}>
+                        Done
+                    </Button>
+                </div>
+            </>,
+        );
+    }
+
+    if (refillStage === 'confirm' || refillStage === 'submitting') {
+        return wrap(
+            <form onSubmit={handleRefill} noValidate>
+                <p className={styles.summary}>
+                    Refill dispenser #{actionIndex}: add {giveTick} to escrow.
+                </p>
+                <Input
+                    label={`Amount of ${giveTick || 'tokens'} to add`}
+                    inputMode="decimal"
+                    value={refillAmount}
+                    onChange={(e) => {
+                        setRefillAmount(e.target.value);
+                        if (refillError) setRefillError(null);
+                    }}
+                    autoComplete="off"
+                />
+                <SignCredentials
+                    unlocked={signerReady}
+                    fromAddress={ownerAddress}
+                    chainId={chainId}
+                    password={password}
+                    onPasswordChange={(v) => {
+                        setPassword(v);
+                        if (refillError) setRefillError(null);
+                    }}
+                    onStatusChange={onCancelHwStatusChange}
+                    passwordRef={passwordRef}
+                    submitError={refillError}
+                    disabled={refillStage === 'submitting'}
+                    getSignerStatus={messaging.getSignerStatus}
+                />
+                {cancelHw && refillError ? (
+                    <div role="alert" className={styles.error}>{refillError}</div>
+                ) : null}
+                <div className={styles.actions}>
+                    <Button
+                        type="submit"
+                        variant="primary"
+                        loading={refillStage === 'submitting'}
+                        disabled={cancelHw ? cancelHwStatus !== 'available' : (!signerReady && password.length === 0)}
+                    >
+                        {cancelHw
+                            ? `Sign refill on ${ownerAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                            : 'Sign refill'}
+                    </Button>
+                </div>
+            </form>,
         );
     }
 
@@ -528,7 +708,6 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         );
     }
 
-    const rate = rateLabel(dispenser);
     const source = dispenser?.source || action?.source;
     const dispAddress = dispenser?.address;
     const matchingDispenses = dispenses.filter(
@@ -538,70 +717,149 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
 
     return wrap(
         <>
-            <p className={styles.summary}>
-                {dispenser?.give_tick ? `${dispenser.give_tick} Dispenser` : 'Dispenser'}
-                {descriptor ? ` on ${descriptor.displayName}` : ''}
-            </p>
+            {/* Stats hero: what's dispensed at what rate, how it's paid,
+                where it lives, how it's doing. Block height / action index
+                are secondary (action index lives in the More menu). */}
             <dl className={styles.detailsList}>
-                <dt className={styles.detailsLabel}>Rate</dt>
-                <dd className={styles.detailsValue}>{rate}</dd>
-                {source ? (
+                <dt className={styles.detailsLabel}>Dispensing</dt>
+                <dd className={styles.detailsValue}>
+                    {formatNum(giveAmount)} {giveTick || '?'} per fill
+                </dd>
+                <dt className={styles.detailsLabel}>Payment</dt>
+                <dd className={styles.detailsValue}>
+                    {formatNum(getAmount)} {getTick || getCoin || '?'}
+                    {getTick ? ' (token)' : getCoin ? ' (native coin)' : ''}
+                </dd>
+                {dispenser?.escrow_remaining != null ? (
                     <>
-                        <dt className={styles.detailsLabel}>Creator</dt>
+                        <dt className={styles.detailsLabel}>Balance</dt>
                         <dd className={styles.detailsValue}>
-                            <AddressText address={source} />
-                            {ownerAddress ? ' (you)' : ''}
+                            {formatNum(dispenser.escrow_remaining)} {giveTick || ''} in escrow
                         </dd>
                     </>
                 ) : null}
-                {dispAddress && dispAddress !== source ? (
+                {dispenser?.dispense_count != null ? (
                     <>
-                        <dt className={styles.detailsLabel}>Dispenser address</dt>
-                        <dd className={styles.detailsValue}>
-                            <AddressText address={dispAddress} />
+                        <dt className={styles.detailsLabel}>Dispenses</dt>
+                        <dd className={styles.detailsValue}>{formatNum(dispenser.dispense_count)}</dd>
+                    </>
+                ) : null}
+                {(dispAddress || source) ? (
+                    <>
+                        <dt className={styles.detailsLabel}>Address</dt>
+                        <dd className={styles.detailsValue} style={{ overflowWrap: 'anywhere' }}>
+                            <AddressText address={dispAddress || source} truncate={false} />
+                            {ownerAddress ? ' (you)' : ''}
                         </dd>
                     </>
                 ) : null}
                 <dt className={styles.detailsLabel}>Status</dt>
                 <dd className={styles.detailsValue}>{String(dispenser?.status || 'unknown')}</dd>
-                {dispenser?.block_index ? (
-                    <>
-                        <dt className={styles.detailsLabel}>Opened at block</dt>
-                        <dd className={styles.detailsValue}>{dispenser.block_index}</dd>
-                    </>
-                ) : null}
                 {dispenser?.memo ? (
                     <>
                         <dt className={styles.detailsLabel}>Memo</dt>
                         <dd className={styles.detailsValue}>{dispenser.memo}</dd>
                     </>
                 ) : null}
-                <dt className={styles.detailsLabel}>Action index</dt>
-                <dd className={styles.detailsValue}>#{actionIndex}</dd>
             </dl>
 
-            <p className={styles.hint}>
-                Remaining escrow and dispense count aren't published by the network yet.
-                Watch this surface for updates as the network fills in dispenser state.
-            </p>
+            <div className={local.quickActions} role="group" aria-label="Dispenser actions">
+                <button
+                    type="button"
+                    className={local.quickAction}
+                    onClick={() => setCancelStage('confirm')}
+                    disabled={!ownerAddress}
+                    title={ownerAddress ? 'Close this dispenser' : 'Only the owner can close'}
+                >
+                    <span className={local.quickActionIcon} aria-hidden="true"><Icon.XIcon /></span>
+                    <span>Close</span>
+                </button>
+                <button
+                    type="button"
+                    className={local.quickAction}
+                    onClick={() => setRefillStage('confirm')}
+                    disabled={!ownerAddress}
+                    title={ownerAddress ? 'Add escrow to this dispenser' : 'Only the owner can refill'}
+                >
+                    <span className={local.quickActionIcon} aria-hidden="true"><Icon.PlusIcon /></span>
+                    <span>Refill</span>
+                </button>
+                <button
+                    type="button"
+                    className={local.quickAction}
+                    onClick={() => {
+                        const base = descriptor?.explorer?.defaultUrl || branding.DEFAULT_EXPLORER_BASE;
+                        try { window.open(`${base}/action/${actionIndex}`, '_blank', 'noopener'); } catch { /* no-op */ }
+                    }}
+                    title="View on the XChain explorer"
+                >
+                    <img src={branding.logoUrl()} alt="" aria-hidden="true" className={local.quickActionLogo} />
+                    <span>XChain</span>
+                </button>
+                <div className={local.quickActionMoreWrap} ref={moreWrapRef}>
+                    <button
+                        type="button"
+                        className={local.quickAction}
+                        aria-haspopup="menu"
+                        aria-expanded={moreOpen}
+                        onClick={() => setMoreOpen((o) => !o)}
+                    >
+                        <span className={local.quickActionIcon} aria-hidden="true"><Icon.MoreIcon /></span>
+                        <span>More</span>
+                    </button>
+                    {moreOpen ? (
+                        <div className={local.quickActionMoreMenu} role="menu">
+                            <button
+                                type="button"
+                                role="menuitem"
+                                className={local.quickActionMoreItem}
+                                onClick={() => { setMoreOpen(false); handleCopy(dispAddress || source || '', 'address'); }}
+                            >
+                                <span aria-hidden="true"><Icon.CopyIcon /></span>
+                                <span>{copied === 'address' ? 'Copied' : 'Copy dispenser address'}</span>
+                            </button>
+                            <button
+                                type="button"
+                                role="menuitem"
+                                className={local.quickActionMoreItem}
+                                onClick={() => { setMoreOpen(false); handleCopy(String(actionIndex), 'index'); }}
+                            >
+                                <span aria-hidden="true"><Icon.CopyIcon /></span>
+                                <span>{copied === 'index' ? 'Copied' : 'Copy action index'}</span>
+                            </button>
+                        </div>
+                    ) : null}
+                </div>
+            </div>
 
-            {matchingDispenses.length > 0 ? (
-                <section style={{ marginTop: '1rem' }}>
-                    <p className={styles.successLabel}>Recent dispenses</p>
-                    <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                        {matchingDispenses.slice(0, 10).map((d) => (
-                            <li key={String(d.action_index)} style={{ padding: '0.25rem 0' }}>
-                                <code>#{d.action_index}</code>
-                                {' '}
-                                {d.give_amount ?? '?'} {d.give_tick || ''}
-                                {' → '}
-                                <AddressText address={d.destination || d.address || '?'} />
-                                {d.status ? ` (${d.status})` : ''}
-                            </li>
-                        ))}
-                    </ul>
-                </section>
-            ) : null}
+            <div className={local.tabBar} role="tablist">
+                <button type="button" role="tab" aria-selected="true" className={`${local.tab} ${local.tabActive}`}>
+                    Dispenses
+                </button>
+            </div>
+            <ul className={local.dispenseList}>
+                {matchingDispenses.length === 0 ? (
+                    <li><div className={local.dispenseEmpty}>No dispenses yet.</div></li>
+                ) : matchingDispenses.slice(0, 25).map((d) => {
+                    const paidAmount = d.get_amount ?? getAmount;
+                    const paidUnit = d.get_tick || d.get_coin || getTick || getCoin || '';
+                    return (
+                        <li key={String(d.action_index)}>
+                            <div className={local.dispenseRow}>
+                                <span className={local.dispenseAmount}>
+                                    {formatNum(d.give_amount)} {d.give_tick || giveTick || ''}
+                                </span>
+                                <span className={local.dispensePaid}>
+                                    {paidAmount != null ? `for ${formatNum(paidAmount)} ${paidUnit}`.trim() : ''}
+                                </span>
+                                <span className={local.dispenseWhen}>
+                                    {relativeTime(d.timestamp || d.block_time)}
+                                </span>
+                            </div>
+                        </li>
+                    );
+                })}
+            </ul>
 
             {canBuyWithSend ? (
                 <section style={{ marginTop: '1rem', padding: '0.75rem', border: '1px solid var(--xc-border)', borderRadius: '4px' }}>
@@ -690,18 +948,40 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 </section>
             ) : null}
 
-            <div className={styles.actions}>
-                {ownerAddress ? (
-                    <Button
-                        variant="danger"
-                        onClick={() => setCancelStage('confirm')}
-                    >
-                        Cancel dispenser
-                    </Button>
-                ) : null}
-            </div>
         </>,
     );
+}
+
+// Thousands separators on the integer part of a decimal string, exact
+// (no float round-trip): '4750' -> '4,750', '0.005' stays '0.005'.
+function formatNum(v) {
+    if (v == null || v === '') return '?';
+    const s = String(v);
+    const [int, frac] = s.split('.');
+    if (!/^\d+$/.test(int)) return s;
+    const grouped = int.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return frac != null ? `${grouped}.${frac}` : grouped;
+}
+
+// Human-readable "X ago". Accepts unix seconds or ms; '' for invalid
+// input so the row just omits the time. (Same shape as TxStatusTimeline's.)
+function relativeTime(ts) {
+    const n = Number(ts);
+    if (!n || !Number.isFinite(n)) return '';
+    const ms = n < 1e12 ? n * 1000 : n;
+    const diffSec = Math.floor((Date.now() - ms) / 1000);
+    if (diffSec < 5) return 'just now';
+    if (diffSec < 60) return `${diffSec} seconds ago`;
+    const min = Math.floor(diffSec / 60);
+    if (min < 60) return `${min} minute${min === 1 ? '' : 's'} ago`;
+    const hr = Math.floor(diffSec / 3600);
+    if (hr < 24) return `${hr} hour${hr === 1 ? '' : 's'} ago`;
+    const day = Math.floor(diffSec / 86400);
+    if (day < 30) return `${day} day${day === 1 ? '' : 's'} ago`;
+    const month = Math.floor(day / 30);
+    if (month < 12) return `${month} month${month === 1 ? '' : 's'} ago`;
+    const year = Math.floor(day / 365);
+    return `${year} year${year === 1 ? '' : 's'} ago`;
 }
 
 function DetailRow({ label, value }) {

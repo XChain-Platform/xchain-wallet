@@ -835,3 +835,111 @@ export function synthesizeDemoContacts() {
         entries: c.entries.map((e) => ({ ...e })),
     }));
 }
+
+/**
+ * Fabricated dispensers the demo wallet "owns", keyed by chain. Shapes
+ * mirror the explorer's dispenser rows (flattened DISPENSER fields on the
+ * action), so DispensersList / DispenserDetail render them unchanged:
+ * a mix of coin-paid and token-paid, open / closed / canceled, with and
+ * without a memo and a dedicated dispenser sub-address.
+ */
+const DEMO_DISPENSERS = /** @type {Record<string, any[]>} */ ({
+    'bitcoin-mainnet': [
+        {
+            action_index: '4200981', tx_hash: 'demo-disp-btc-1', block_index: 961842,
+            status: 'open', give_tick: 'RAREPEPE', give_amount: '1', imageUrl: DEMO_TOKEN_ICONS.RAREPEPE,
+            get_coin: 'BTC', get_tick: '', get_amount: '0.005',
+            address: 'bc1qdemodispenserrarepepe000000000000000001',
+            escrow_remaining: '7', dispense_count: 3,
+            memo: 'Rare Pepe vault: one per fill.',
+        },
+        {
+            action_index: '4200714', tx_hash: 'demo-disp-btc-2', block_index: 960377,
+            status: 'open', give_tick: 'PEPECASH', give_amount: '500', imageUrl: DEMO_TOKEN_ICONS.PEPECASH,
+            get_coin: '', get_tick: 'XCP', get_amount: '5',
+            memo: '',
+            escrow_remaining: '5500', dispense_count: 1,
+        },
+        {
+            action_index: '4198220', tx_hash: 'demo-disp-btc-3', block_index: 955104,
+            status: 'closed', give_tick: 'EXAMPLE', give_amount: '10', imageUrl: DEMO_TOKEN_ICONS.EXAMPLE,
+            get_coin: 'BTC', get_tick: '', get_amount: '0.0002',
+            memo: 'Launch promo (sold out).',
+            escrow_remaining: '0', dispense_count: 120,
+        },
+    ],
+    'dogecoin-mainnet': [
+        {
+            action_index: '7301556', tx_hash: 'demo-disp-doge-1', block_index: 6334120,
+            status: 'open', give_tick: 'DOGI', give_amount: '250',
+            get_coin: 'DOGE', get_tick: '', get_amount: '100',
+            address: 'D7demoDispenserDogi00000000000000001',
+            escrow_remaining: '4750', dispense_count: 2,
+        },
+        {
+            action_index: '7298431', tx_hash: 'demo-disp-doge-2', block_index: 6329988,
+            status: 'canceled', give_tick: 'WOW', give_amount: '10',
+            get_coin: '', get_tick: 'DOGI', get_amount: '50',
+            memo: 'Mispriced, reopened as #7301556.',
+            escrow_remaining: '0', dispense_count: 0,
+        },
+    ],
+    'litecoin-mainnet': [
+        {
+            action_index: '2107744', tx_hash: 'demo-disp-ltc-1', block_index: 3159402,
+            status: 'open', give_tick: 'MWEB', give_amount: '2.5',
+            get_coin: 'LTC', get_tick: '', get_amount: '0.5',
+            escrow_remaining: '47.5', dispense_count: 19,
+        },
+    ],
+});
+
+/**
+ * Fabricated fill events per dispenser action_index, for the detail page's
+ * "Recent dispenses" list. Buyer addresses are vanity fakes.
+ */
+const DEMO_DISPENSES = /** @type {Record<string, any[]>} */ ({
+    4200981: [
+        { action_index: '4201002', give_amount: '1', give_tick: 'RAREPEPE', get_amount: '0.005', get_coin: 'BTC', destination: 'bc1qdemobuyeralpha0000000000000000000000001', status: 'valid', ageSec: 7_200 },
+        { action_index: '4200997', give_amount: '1', give_tick: 'RAREPEPE', get_amount: '0.005', get_coin: 'BTC', destination: 'bc1qdemobuyerbravo0000000000000000000000002', status: 'valid', ageSec: 86_400 },
+        { action_index: '4200990', give_amount: '1', give_tick: 'RAREPEPE', get_amount: '0.005', get_coin: 'BTC', destination: 'bc1qdemobuyercharlie000000000000000000000003', status: 'valid', ageSec: 5 * 86_400 },
+    ],
+    4200714: [
+        { action_index: '4200850', give_amount: '500', give_tick: 'PEPECASH', get_amount: '5', get_tick: 'XCP', destination: 'bc1qdemobuyerdelta0000000000000000000000004', status: 'valid', ageSec: 32 * 86_400 },
+    ],
+    7301556: [
+        { action_index: '7301610', give_amount: '250', give_tick: 'DOGI', get_amount: '100', get_coin: 'DOGE', destination: 'D7demoBuyerEcho000000000000000000005', status: 'valid', ageSec: 90 },
+        { action_index: '7301587', give_amount: '250', give_tick: 'DOGI', get_amount: '100', get_coin: 'DOGE', destination: 'D7demoBuyerFoxtrot0000000000000000006', status: 'valid', ageSec: 3_600 },
+    ],
+});
+
+/**
+ * Dispensers the demo wallet opened on `chainId`, sourced from its first
+ * address so DispenserDetail's ownership check marks them "(you)".
+ * Regtest chain ids reuse their mainnet fixture so a regtest demo wallet
+ * is populated too.
+ *
+ * @param {string} chainId
+ * @param {string} sourceAddress   the demo wallet's address on that chain
+ * @returns {any[]}
+ */
+export function synthesizeDemoDispensers(chainId, sourceAddress) {
+    if (typeof sourceAddress !== 'string' || !sourceAddress) return [];
+    const rows = DEMO_DISPENSERS[chainId]
+        || DEMO_DISPENSERS[String(chainId).replace(/-(regtest|testnet)$/, '-mainnet')]
+        || [];
+    return rows.map((r) => ({ ...r, source: sourceAddress }));
+}
+
+/**
+ * Fill events for one demo dispenser (empty array when the fixture has
+ * none, e.g. the canceled one).
+ *
+ * @param {string | number} actionIndex
+ * @returns {any[]}
+ */
+export function synthesizeDemoDispenses(actionIndex) {
+    const rows = DEMO_DISPENSES[String(actionIndex)] || [];
+    const now = Math.floor(Date.now() / 1000);
+    return rows.map(({ ageSec, ...r }) => ({ ...r, timestamp: now - (ageSec || 0) }));
+}

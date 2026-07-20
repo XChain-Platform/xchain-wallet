@@ -776,6 +776,7 @@ function AppInner() {
                             setDispenserRef({ chainId, actionIndex, origin: 'list' });
                             setUnlockedView('dispenser-detail');
                         }}
+                        onCreateDispenser={() => setUnlockedView('dispenser')}
                         onBack={() => setUnlockedView('actions')}
                     />
                 );

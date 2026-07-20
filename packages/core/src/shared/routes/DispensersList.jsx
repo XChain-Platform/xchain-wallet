@@ -12,13 +12,15 @@ import { useEffect, useMemo, useState } from 'react';
 import {
     Screen,
     PageHeader,
-    Button,
-    ChainBadge,
-    AddressText,
- Icon,} from '@xchain-wallet/core/ui';
-import { registry as registryLib } from '@xchain-wallet/core';
+    Icon,
+} from '@xchain-wallet/core/ui';
+import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
+import * as branding from '../../branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
+import { coinFromChainId, tickerColor } from '../components/BalanceList.jsx';
 import styles from './ActionsMenu.module.css';
+import local from './DispensersList.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -44,9 +46,10 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {string} props.walletId
  * @param {string} [props.activeAccountId]   scope the address union to this account
  * @param {(chainId: string, actionIndex: string) => void} props.onOpenDispenser
+ * @param {() => void} [props.onCreateDispenser]  opens the Create dispenser form
  * @param {() => void} props.onBack
  */
-export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onBack }) {
+export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onCreateDispenser, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -60,6 +63,10 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onB
     const [dispensersByChain, setDispensersByChain] = useState(
         /** @type {Record<string, { loading: boolean, rows: any[], error: string | null }>} */ ({}),
     );
+    // In-page filters: free-text search + network dropdown, mirroring the
+    // contacts / messaging toolbars.
+    const [query, setQuery] = useState('');
+    const [network, setNetwork] = useState('all');
 
     useEffect(() => {
         let cancelled = false;
@@ -102,6 +109,22 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onB
         setDispensersByChain(initial);
 
         let cancelled = false;
+
+        // Demo wallet: no explorer to query; serve the fabricated dispensers
+        // owned by the first address on each chain.
+        if (flowsLib.isDemoWallet(walletId)) {
+            const demo = {};
+            for (const cid of chains) {
+                const first = (addressesByChain[cid] || [])[0]?.address;
+                demo[cid] = {
+                    loading: false,
+                    rows: first ? flowsLib.synthesizeDemoDispensers(cid, first) : [],
+                    error: null,
+                };
+            }
+            setDispensersByChain(demo);
+            return undefined;
+        }
         for (const cid of chains) {
             const addrs = (addressesByChain[cid] || []).map((a) => a.address);
             if (addrs.length === 0) {
@@ -147,26 +170,69 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onB
             });
         }
         return () => { cancelled = true; };
-    }, [addressesByChain, messaging]);
+    }, [addressesByChain, messaging, walletId]);
 
-    const chainsOrdered = useMemo(() => {
-        if (!addressesByChain) return [];
-        return Object.keys(addressesByChain).sort((a, b) => a.localeCompare(b));
-    }, [addressesByChain]);
+    // Flatten every chain's rows into one list, newest first. Each row is
+    // annotated with its chainId for the network overlay + detail link.
+    const allRows = useMemo(() => {
+        /** @type {any[]} */
+        const out = [];
+        for (const [cid, state] of Object.entries(dispensersByChain)) {
+            for (const row of (state.rows || [])) out.push({ ...row, chainId: cid });
+        }
+        out.sort((a, b) => Number(b.block_index || 0) - Number(a.block_index || 0));
+        return out;
+    }, [dispensersByChain]);
+
+    const anyLoading = useMemo(() => {
+        const states = Object.values(dispensersByChain);
+        if (states.length === 0) return true;
+        return states.some((s) => s.loading);
+    }, [dispensersByChain]);
+
+    const loadErrors = useMemo(() => (
+        Object.entries(dispensersByChain)
+            .filter(([, s]) => s.error)
+            .map(([cid, s]) => `${chainRegistry.get(cid)?.displayName || cid}: ${s.error}`)
+    ), [dispensersByChain]);
+
+    const visibleRows = useMemo(() => {
+        const q = query.trim().toLowerCase();
+        return allRows.filter((row) => {
+            if (network !== 'all' && coinFromChainId(row.chainId) !== network) return false;
+            if (!q) return true;
+            const label = row.address ? dispenserLabels[row.address] : undefined;
+            return [
+                row.give_tick, row.get_tick, row.get_coin, row.status,
+                row.memo, row.address, row.source, label,
+                String(row.action_index ?? ''),
+            ].some((v) => typeof v === 'string' && v.toLowerCase().includes(q));
+        });
+    }, [allRows, query, network, dispenserLabels]);
 
         const header = (
         <PageHeader
             onBack={onBack}
             backLabel="Back to home"
+            titleIcon={<Icon.TokenIcon />}
             title="My dispensers"
+            trailing={onCreateDispenser ? (
+                <button
+                    type="button"
+                    className={local.addBtn}
+                    onClick={() => onCreateDispenser()}
+                    aria-label="Create dispenser"
+                    title="Create dispenser"
+                >
+                    <Icon.PlusIcon />
+                </button>
+            ) : undefined}
         />
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            <div className={isFull ? styles.listFull : styles.listPopup}>
+            <div className={isFull ? local.wrapFull : local.wrapPopup}>
                 {children}
-            </div>
-            <div className={styles.actions}>
             </div>
         </Screen>
     );
@@ -177,7 +243,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onB
     if (!addressesByChain) {
         return wrap(<p className={styles.entryDescription}>Loading addresses…</p>);
     }
-    if (chainsOrdered.length === 0) {
+    if (Object.keys(addressesByChain).length === 0) {
         return wrap(
             <p className={styles.entryDescription}>
                 No addresses on any chain yet. Use Receive to generate one first, or Create dispenser to open your first.
@@ -186,81 +252,128 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onB
     }
 
     return wrap(
-        chainsOrdered.map((cid) => {
-            const d = chainRegistry.get(cid);
-            const state = dispensersByChain[cid] || { loading: true, rows: [], error: null };
-            return (
-                <ChainGroup
-                    key={cid}
-                    descriptor={d}
-                    chainId={cid}
-                    state={state}
-                    labels={dispenserLabels}
-                    onOpenDispenser={onOpenDispenser}
+        <>
+            <div className={local.toolbar}>
+                <input
+                    type="text"
+                    className={local.search}
+                    placeholder="Search"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    aria-label="Search dispensers"
                 />
-            );
-        }),
-    );
-}
-
-function ChainGroup({ descriptor, chainId, state, labels, onOpenDispenser }) {
-    return (
-        <section>
-            <header style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                {descriptor
-                    ? <ChainBadge descriptor={descriptor} size="sm" />
-                    : <span>{chainId}</span>}
-            </header>
-            {state.loading ? (
-                <p className={styles.entryDescription}>Loading…</p>
-            ) : state.error && state.rows.length === 0 ? (
+                <NetworkFilterDropdown value={network} onChange={setNetwork} />
+            </div>
+            {loadErrors.length > 0 ? (
                 <p role="alert" className={styles.entryDescription}>
-                    Couldn't load dispensers: {state.error}
+                    Couldn't load some dispensers. {loadErrors.join('; ')}
                 </p>
-            ) : state.rows.length === 0 ? (
+            ) : null}
+            {anyLoading && visibleRows.length === 0 ? (
+                <p className={styles.entryDescription}>Loading…</p>
+            ) : visibleRows.length === 0 ? (
                 <p className={styles.entryDescription}>
-                    No dispensers opened on {descriptor?.displayName || chainId} yet.
+                    {allRows.length === 0
+                        ? 'No dispensers opened yet. Use Create dispenser to open your first.'
+                        : 'No dispensers match the current filter.'}
                 </p>
             ) : (
-                state.rows.map((row) => (
-                    <DispenserRow
-                        key={String(row.action_index)}
-                        row={row}
-                        label={row.address ? (labels && labels[row.address]) : undefined}
-                        onSelect={() => onOpenDispenser(chainId, String(row.action_index))}
-                    />
-                ))
+                <div className={local.list} role="list">
+                    {visibleRows.map((row) => (
+                        <DispenserRow
+                            key={`${row.chainId}:${row.action_index}`}
+                            row={row}
+                            label={row.address ? dispenserLabels[row.address] : undefined}
+                            onSelect={() => onOpenDispenser(row.chainId, String(row.action_index))}
+                        />
+                    ))}
+                </div>
             )}
-        </section>
+        </>,
     );
 }
 
 function DispenserRow({ row, label, onSelect }) {
-    const rate = rateLabel(row);
+    const chainIconUrl = branding.chainIconSmallUrl(row.chainId);
     const status = String(row.status || '?');
     return (
         <button
             type="button"
-            className={styles.entry}
+            className={local.row}
+            role="listitem"
             onClick={onSelect}
+            aria-label={`Open ${row.give_tick || '?'} dispenser #${row.action_index ?? '?'}`}
         >
-            <span className={styles.entryLabel}>
-                {label ? `${label}: ` : ''}{row.give_tick || '?'} dispenser ({rate})
-            </span>
-            <span className={styles.entryDescription}>
-                #{row.action_index ?? '?'} · status {status}
-                {row.address ? ' · ' : ''}
-                {row.address ? <AddressText address={row.address} /> : null}
-            </span>
+            <div className={local.iconWrap}>
+                {row.imageUrl ? (
+                    <img
+                        src={row.imageUrl}
+                        alt=""
+                        aria-hidden="true"
+                        className={local.iconImg}
+                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    />
+                ) : (
+                    <span
+                        className={local.iconLetter}
+                        style={{ background: tickerColor(row.give_tick || '?'), color: '#FFFFFF' }}
+                        aria-hidden="true"
+                    >
+                        {(row.give_tick || '?').slice(0, 1)}
+                    </span>
+                )}
+                {chainIconUrl ? (
+                    <img
+                        src={chainIconUrl}
+                        alt=""
+                        aria-hidden="true"
+                        title={chainRegistry.get(row.chainId)?.displayName}
+                        className={local.chainOverlay}
+                    />
+                ) : null}
+            </div>
+            <div className={local.body}>
+                <div className={local.name}>
+                    {label ? `${label}: ` : ''}{row.give_tick || '?'}
+                </div>
+                <div className={local.subtitle}>{rateLabel(row)}</div>
+                <div className={local.subtitle}>
+                    {row.escrow_remaining != null
+                        ? `${formatNum(row.escrow_remaining)} ${row.give_tick || ''} in escrow`.trim()
+                        : 'Escrow pending'}
+                </div>
+            </div>
+            <div className={local.trailing}>
+                <span className={`${local.status} ${local[`status_${status}`] || ''}`}>{status}</span>
+                <span className={local.dispenseCount}>
+                    {row.dispense_count != null
+                        ? `${formatNum(row.dispense_count)} dispense${Number(row.dispense_count) === 1 ? '' : 's'}`
+                        : ''}
+                </span>
+            </div>
         </button>
     );
 }
 
+// Thousands separators on the integer part of a decimal string, exact
+// (no float round-trip): '4750' -> '4,750', '0.005' stays '0.005'.
+function formatNum(v) {
+    if (v == null || v === '') return '?';
+    const s = String(v);
+    const [int, frac] = s.split('.');
+    if (!/^\d+$/.test(int)) return s;
+    const grouped = int.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return frac != null ? `${grouped}.${frac}` : grouped;
+}
+
 function rateLabel(row) {
-    const give = `${row.give_amount ?? '?'} ${row.give_tick || '?'}`;
+    const give = `${formatNum(row.give_amount)} ${row.give_tick || '?'}`;
     const coin = row.get_coin || '';
     const tick = row.get_tick || '';
-    const amt = row.get_amount ?? '?';
+    const amt = formatNum(row.get_amount);
     const payAsset = tick || coin || '?';
     return `${give} per ${amt} ${payAsset}`;
 }

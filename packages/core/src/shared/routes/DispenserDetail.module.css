@@ -1,0 +1,198 @@
+/* Dispenser detail: home-style layout. Info hero at the top, a 4-up
+   quick-action grid (Close / Refill / XChain / More), then a tab strip
+   with the Dispenses list. Quick-action styles mirror Home.module.css. */
+
+.quickActions {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--xc-space-2);
+    /* Pull up against .detailsList's space-4 bottom margin so the grid
+       sits tight under the stats card. */
+    margin: calc(var(--xc-space-2) - var(--xc-space-4)) 0 var(--xc-space-3);
+}
+
+.quickAction {
+    appearance: none;
+    background: var(--xc-surface-raised);
+    border: 1px solid var(--xc-accent-primary);
+    border-radius: var(--xc-radius-md);
+    padding: var(--xc-space-3) var(--xc-space-1);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--xc-space-1);
+    cursor: pointer;
+    color: var(--xc-text);
+    font-family: inherit;
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+}
+
+.quickAction:hover:not(:disabled) {
+    background: var(--xc-bg-muted);
+}
+
+.quickAction:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
+.quickAction:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.quickActionIcon {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
+    color: var(--xc-accent-primary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* XChain button: brand logo in place of a line icon. */
+.quickActionLogo {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    object-fit: contain;
+    display: block;
+}
+
+.quickActionMoreWrap {
+    position: relative;
+    display: flex;
+    align-self: stretch;
+}
+
+.quickActionMoreWrap > .quickAction {
+    flex: 1 1 auto;
+    width: 100%;
+}
+
+.quickActionMoreMenu {
+    position: absolute;
+    top: calc(100% + 4px);
+    inset-inline-end: 0;
+    min-width: 200px;
+    background: var(--xc-surface);
+    border: 1px solid var(--xc-border-strong);
+    border-radius: var(--xc-radius-md);
+    box-shadow: var(--xc-shadow-md);
+    padding: var(--xc-space-1);
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+}
+
+.quickActionMoreItem {
+    appearance: none;
+    background: transparent;
+    border: none;
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    padding: var(--xc-space-2) var(--xc-space-3);
+    border-radius: var(--xc-radius-sm);
+    color: var(--xc-text);
+    font-family: inherit;
+    font-size: var(--xc-text-sm);
+    text-align: start;
+    cursor: pointer;
+}
+
+.quickActionMoreItem:hover:not(:disabled) {
+    background: var(--xc-bg-muted);
+}
+
+.quickActionMoreItem:disabled {
+    color: var(--xc-text-muted);
+    cursor: default;
+}
+
+/* Tab strip: single "Dispenses" tab today, shaped like the home tabs so
+   more tabs can join without a relayout. */
+.tabBar {
+    display: flex;
+    gap: var(--xc-space-4);
+    border-bottom: 1px solid var(--xc-border);
+    margin-bottom: var(--xc-space-3);
+}
+
+.tab {
+    appearance: none;
+    background: transparent;
+    border: none;
+    padding: var(--xc-space-2) 0;
+    font-family: inherit;
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    color: var(--xc-text-muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+}
+
+.tabActive {
+    color: var(--xc-text);
+    border-bottom-color: var(--xc-accent-primary);
+}
+
+/* Dispense rows: one card, hairline dividers. */
+.dispenseList {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--xc-surface);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-md);
+    overflow: hidden;
+}
+
+.dispenseRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--xc-space-2);
+    padding: var(--xc-space-3);
+    border-top: 1px solid var(--xc-border);
+    font-size: var(--xc-text-sm);
+}
+
+.dispenseList li:first-child .dispenseRow {
+    border-top: none;
+}
+
+.dispenseAmount {
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.dispensePaid {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--xc-text-muted);
+}
+
+.dispenseWhen {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+}
+
+.dispenseEmpty {
+    padding: var(--xc-space-5) var(--xc-space-3);
+    text-align: center;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+}

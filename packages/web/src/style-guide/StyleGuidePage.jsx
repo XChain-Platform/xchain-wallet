@@ -26,6 +26,8 @@ import { StackedAssetIconSection } from './sections/StackedAssetIconSection.jsx'
 import { AssetHeroSection } from './sections/AssetHeroSection.jsx';
 import { AssetCardSection } from './sections/AssetCardSection.jsx';
 import { BalanceListSection } from './sections/BalanceListSection.jsx';
+import { TokenSelectorSection } from './sections/TokenSelectorSection.jsx';
+import { AddressListSection } from './sections/AddressListSection.jsx';
 import { PillSegmentedSection } from './sections/PillSegmentedSection.jsx';
 import { ToggleBarSection } from './sections/ToggleBarSection.jsx';
 import { BigFieldSection } from './sections/BigFieldSection.jsx';
@@ -49,6 +51,8 @@ const SECTIONS = [
     { id: 'asset-hero',            label: 'Asset hero (Send)',      Component: AssetHeroSection },
     { id: 'asset-card',            label: 'Asset card (Receive)',   Component: AssetCardSection },
     { id: 'balance-list',          label: 'Balance / search list',  Component: BalanceListSection },
+    { id: 'token-selector',        label: 'Token selector page',    Component: TokenSelectorSection },
+    { id: 'address-list',          label: 'Address list (contacts)',Component: AddressListSection },
     { id: 'pill-segmented',        label: 'Pill segmented',         Component: PillSegmentedSection },
     { id: 'toggle-bar',            label: 'Toggle bar (filter)',    Component: ToggleBarSection },
     { id: 'big-field',             label: 'Big-field input',        Component: BigFieldSection },

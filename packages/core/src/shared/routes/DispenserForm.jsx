@@ -495,13 +495,13 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         setStage('form');
     }
 
-    const titleSuffix = descriptor ? ` on ${descriptor.displayName}` : '';
         const header = (
         <PageHeader
             onBack={onBack}
+            titleIcon={<Icon.TokenIcon />}
             title={stage === 'review' || stage === 'submitting'
                     ? 'Review dispenser'
-                    : `Create dispenser${titleSuffix}`}
+                    : 'Create Dispenser'}
         />
     );
     const wrap = (children) => (
