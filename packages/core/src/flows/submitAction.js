@@ -48,6 +48,7 @@ import { classifyBroadcastFailure } from './broadcastPermanence.js';
  * @property {string} chainId
  * @property {{ action: string, params: object }} actionData
  * @property {import('../sdk/submitWithSigner.js').SubmitEncoderOpts} encoderOpts
+ * @property {import('../sdk/submitWithSigner.js').PrebuiltPsbt} [prebuiltPsbt]    single-encode pipeline: sign this exact PSBT (composeForConfirm's output, already previewed + tamper-checked) byte-identically instead of rebuilding it.
  * @property {Array<{ inputIndex: number, path: string, sighashType?: number }>} signingPaths
  * @property {import('../signers/Signer.js').Signer} [signer]   pre-built signer (RemoteSigner for HW). When supplied, the flow skips unlockWallet entirely (no password KDF) and does not call `.lock()` at the end (signer lifecycle is the caller's responsibility).
  * @property {PendingTxMeta} [pendingTxMeta]     when set, the flow persists + updates a PendingTx record
@@ -83,6 +84,7 @@ export async function submitAction({
     chainId,
     actionData,
     encoderOpts,
+    prebuiltPsbt,
     signingPaths,
     signer: injectedSigner,
     pendingTxMeta,
@@ -192,7 +194,15 @@ export async function submitAction({
                 sdkRegistry,
                 chainId,
                 actionData,
+                // : when a prebuilt PSBT is supplied, submitWithSigner
+                // skips createAction + encoder.createTx and signs it byte-
+                // identically, so the ADS donation already folded into that
+                // PSBT at compose time is what broadcasts. The re-fold into
+                // effectiveEncoderOpts above is inert on this path (createTx
+                // never runs); the adsPlan it produced still drives the post-
+                // broadcast commitAdsStep below.
                 encoderOpts: effectiveEncoderOpts,
+                prebuiltPsbt,
                 signer,
                 signingPaths,
                 waitForTxid,

@@ -181,6 +181,25 @@ export function buildSendPsbtRequest(opts) {
 }
 
 /**
+ *  §5.3: host half of the single-encode pipeline. Compose the ONE
+ * PSBT the ConfirmActionModal previews and signs, resolve fee + ADS, and
+ * run the tamper check host-side. Resolves with a serializable, tamper-
+ * verified ComposedAction; rejects on tamper / compose failure.
+ * @param {object} opts   SEND base shape or { actionData, encoderOpts, from }
+ */
+export function composeForConfirm(opts) {
+    return /** @type {any} */ (sendMessage('action.composeForConfirm', opts));
+}
+
+/**
+ *  §4: run sdk.preflight host-side and return the report.
+ * @param {{ chainId: string, actionString: string, source?: string, localDeltas?: Array<{tick:string,amount:string}>, bypassCache?: boolean, mode?: 'report'|'enforce'|'local' }} opts
+ */
+export function preflight(opts) {
+    return /** @type {any} */ (sendMessage('action.preflight', opts));
+}
+
+/**
  * §20 / Cluster W FOLLOWUP 5: generic watcher-mode encode-only helper
  * for the non-Send action surface.
  * @param {object} opts

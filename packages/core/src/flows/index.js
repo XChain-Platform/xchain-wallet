@@ -30,6 +30,7 @@ export {
 export { submitAction } from './submitAction.js';
 export { sendToken, normalizeSource } from './sendToken.js';
 export { buildSendPsbt } from './buildSendPsbt.js';
+export { composeActionForConfirm } from './composeActionForConfirm.js';
 export { buildActionPsbt } from './buildActionPsbt.js';
 export { sweepToken } from './sweepToken.js';
 export { issueToken } from './issueToken.js';

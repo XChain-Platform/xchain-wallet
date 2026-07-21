@@ -38,6 +38,12 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useDeveloperMode } from '../hooks/useDeveloperMode.js';
 import { useSettings } from '../hooks/useSettings.js';
+import { useConfirmAction } from '../hooks/useConfirmAction.js';
+import { ConfirmActionModal } from '../components/ConfirmActionModal.jsx';
+import {
+    isConfirmModalSliceEnabled,
+    resolvePreflightPrivacy,
+} from '../../schemas/settings.js';
 import { checkRecipientNovelty } from '../../flows/recipientNovelty.js';
 import { classifySignRisk } from '../../flows/signRiskClassifier.js';
 
@@ -207,6 +213,13 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
     const { showToast } = useToast();
     const haptic = useHaptic();
 
+    //  §5.6 slice 1: the single-encode confirm modal. Flag-gated
+    // (read with code defaults, never vault-stamped) and scoped to the
+    // software-signer path for this slice; hardware + watcher sends stay on
+    // the legacy review->submit stage machine below until later slices.
+    const confirmAction = useConfirmAction();
+    const singleEncodeSend = isConfirmModalSliceEnabled(settings, 'send');
+
     // §34.2: Cmd/Ctrl+Enter submits the visible stage's form (compose ->
     // review, review -> sign). requestSubmit (not submit()) so the form's
     // onSubmit validation path runs exactly as if the button was clicked.
@@ -247,6 +260,11 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
     );
     const [fiatAmount, setFiatAmount] = useState('');
     const [password, setPassword] = useState('');
+    // Live mirror of `password` so the confirm-modal's onApprove closure
+    // (captured when the modal opened) reads what the user typed INTO the
+    // modal afterward, not the value at open time.
+    const passwordValueRef = useRef('');
+    passwordValueRef.current = password;
 
     const [stage, setStage] = useState(
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
@@ -936,6 +954,13 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
             return;
         }
         setFormError(null);
+        //  slice 1: with the flag on, software sends go straight to the
+        // single-encode confirm modal instead of the legacy review stage.
+        // Hardware + watcher keep the legacy path for this slice.
+        if (singleEncodeSend && !isWatcherMode && !isHwSource) {
+            openConfirmModal();
+            return;
+        }
         setStage('review');
     }
 
@@ -994,6 +1019,102 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
     useEffect(() => {
         setHwExplicitConfirmed(false);
     }, [signRisk.requireExplicitConfirm, fromAddress?.address, toAddress, amount]);
+
+    //  slice 1: the single-encode confirm-modal path. The modal is
+    // rendered only while the pipeline is live (preflighting..rechecking);
+    // on a terminal phase this component's own state takes over (done
+    // screen on success, form error on failure), so the modal cleanly
+    // unmounts. Phases where the modal is shown:
+    const CONFIRM_MODAL_PHASES = ['preflighting', 'ready', 'signing', 'rechecking'];
+    const confirmModalOpen = CONFIRM_MODAL_PHASES.includes(confirmAction.phase);
+
+    const modalDecoded = useMemo(() => {
+        if (!confirmModalOpen) return null;
+        return decoderLib.decodeAction({
+            action: 'SEND',
+            params: {
+                TICK: tick.trim(),
+                AMOUNT: String(amount).trim(),
+                DESTINATION: toAddress.trim(),
+                MEMO: memo.trim() || undefined,
+            },
+            chainId: chainId || undefined,
+            chainRegistry,
+        });
+    }, [confirmModalOpen, tick, amount, toAddress, memo, chainId]);
+
+    // Open the single-encode confirm modal for a software send. compose +
+    // tamper-check + pre-flight all run HOST-side (composeForConfirm /
+    // preflight over messaging); Approve signs the byte-identical prebuilt
+    // PSBT via sendToken.prebuiltPsbt. Resolves with sendToken's result.
+    const openConfirmModal = useCallback(async () => {
+        if (!chainId || !fromAddress) return;
+        const from = {
+            address: fromAddress.address,
+            publicKey: fromAddress.publicKey,
+            derivationPath: fromAddress.derivationPath,
+            addressId: fromAddress.id,
+            source: fromAddress.source,
+            signerId: fromAddress.signerId,
+        };
+        const sendBase = {
+            walletId,
+            chainId,
+            from,
+            to: toAddress.trim(),
+            tick: tick.trim(),
+            amount: String(amount).trim(),
+            memo: memo.trim() || undefined,
+            rbf: rbfEnabled,
+            ...(feePerKb != null ? { feePerKb } : {}),
+        };
+        setSubmitError(null);
+        setSubmitErrorDetail(null);
+        setSubmitErrorCause(null);
+        try {
+            const res = await confirmAction.confirm({
+                chainId,
+                source: from.address,
+                preflightOpts: {
+                    mode: resolvePreflightPrivacy(settings) === 'local' ? 'local' : 'report',
+                },
+                compose: () => messaging.composeForConfirm(sendBase),
+                preflight: (o) => messaging.preflight({ chainId, ...o }),
+                onApprove: (_creds, composed) => messaging.sendToken({
+                    ...sendBase,
+                    password: passwordValueRef.current,
+                    prebuiltPsbt: {
+                        psbtHex: composed.psbt,
+                        encoding: composed.encoding,
+                        actionString: composed.actionString,
+                        version: composed.version,
+                    },
+                }),
+            });
+            setResult(res);
+            setPassword('');
+            draft.clear();
+            setDraftPending(false);
+            setStage('done');
+            haptic.success();
+        } catch (err) {
+            // User rejection is a calm no-op: stay on the form untouched.
+            if (err && (err.reason === 'user-rejected' || err.name === 'UserRejectedError')) {
+                return;
+            }
+            // Everything else (compose/tamper failure, bad password, broadcast
+            // failure) surfaces in the form's existing error banner; the modal
+            // has already unmounted (terminal phase leaves CONFIRM_MODAL_PHASES).
+            const rawMsg = err?.message || '';
+            console.error('Send (confirm) failed:', err); // eslint-disable-line no-console
+            const h = humanizeError(err, 'send');
+            setFormError(h.message);
+            haptic.error();
+        }
+    }, [
+        chainId, fromAddress, walletId, toAddress, tick, amount, memo, rbfEnabled,
+        feePerKb, password, settings, messaging, confirmAction, draft, haptic,
+    ]);
 
     async function handleSubmit(event) {
         event.preventDefault();
@@ -1131,7 +1252,10 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
             setFiatAmount('');
             setToAddress('');
             setResult(null);
-            setPreviewResult(null);
+            // previewResult is a derived useMemo (no setter): clearing the
+            // amount/destination above already recomputes it. The old
+            // setPreviewResult(null) call referenced a non-existent setter and
+            // threw a ReferenceError the moment "Send another" was tapped.
         };
         const copyTxid = () => {
             if (!txid) return;
@@ -1616,16 +1740,52 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                 </StatusMessage>
             ) : null}
         </form>,
-        <div className={`${styles.actionsBar} ${isFull ? styles.actionsBarFull : ''}`.trim()}>
-            <Button
-                type="submit"
-                form="send-form"
-                variant="primary"
-                block
-            >
-                Send
-            </Button>
-        </div>,
+        <>
+            <div className={`${styles.actionsBar} ${isFull ? styles.actionsBarFull : ''}`.trim()}>
+                <Button
+                    type="submit"
+                    form="send-form"
+                    variant="primary"
+                    block
+                >
+                    Send
+                </Button>
+            </div>
+            {confirmModalOpen ? (
+                <ConfirmActionModal
+                    phase={confirmAction.phase}
+                    composed={confirmAction.composed}
+                    report={confirmAction.report}
+                    reportLoading={confirmAction.phase === 'preflighting'}
+                    acknowledged={confirmAction.acknowledged}
+                    onAcknowledge={confirmAction.acknowledge}
+                    canApprove={confirmAction.canApprove}
+                    onApprove={confirmAction.approve}
+                    onReject={confirmAction.reject}
+                    decoded={modalDecoded}
+                    simulation={null}
+                    chainLabel={descriptor?.displayName || chainId}
+                    feeText={feeEstimate?.coinAmount
+                        ? `Network fee: ${feeEstimate.coinAmount} ${nativeTickerFor(descriptor) || ''}`.trim()
+                        : undefined}
+                    credentialsReady={signerReady || password.length > 0}
+                    credentials={signerReady ? (
+                        <p className={styles.hint}>
+                            <span aria-hidden="true">🔓</span> Wallet unlocked. No password needed.
+                        </p>
+                    ) : (
+                        <Input
+                            type="password"
+                            label="Password"
+                            hint="Required to sign."
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            autoComplete="current-password"
+                        />
+                    )}
+                />
+            ) : null}
+        </>,
     );
 }
 

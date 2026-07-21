@@ -48,6 +48,8 @@ const {
     resolveActiveAddresses,
     setActiveAddress,
     sendToken,
+    normalizeSource,
+    composeActionForConfirm,
     buildSendPsbt,
     buildActionPsbt,
     buildCoinpayPsbtRequest,
@@ -1395,6 +1397,95 @@ export function createBackgroundHost(deps) {
     // no signer, no broadcast: caller supplies `actionData` + `encoderOpts`.
     host.register('action.psbt', async (req, { chainRegistry, sdkRegistry }) => {
         return buildActionPsbt({ ...req, chainRegistry, sdkRegistry });
+    });
+
+    //  §5.3: the HOST half of the single-encode pipeline. Compose the
+    // ONE PSBT the ConfirmActionModal previews and the signer signs, resolve
+    // fee + ADS, and run the tamper check HOST-side (decomposePsbt +
+    // decodeActionFromPsbt live here). Returns a serializable, already-
+    // tamper-verified ComposedAction; a tamper failure throws and crosses
+    // the boundary as an error the invoking form renders. No signer, no
+    // password, no broadcast: this is the pre-modal compose step only.
+    //
+    // Slice 1 wires SEND; the route accepts a ready `actionData` too so
+    // later slices (§5.6) reuse it without a new route. Own-chain addresses
+    // (change is allowed there by the output-set check) are resolved from
+    // the vault.
+    host.register('action.composeForConfirm', async (req, { vault, chainRegistry, sdkRegistry }) => {
+        const chainId = req?.chainId;
+        if (typeof chainId !== 'string' || !chainId) {
+            throw new Error('action.composeForConfirm: chainId is required');
+        }
+        const source = normalizeSource(req?.from, 'action.composeForConfirm');
+
+        // Build actionData/encoderOpts from either a generic payload or the
+        // SEND base shape (Send.jsx sends the latter in slice 1).
+        let actionData;
+        let encoderOpts;
+        if (req?.actionData && typeof req.actionData === 'object') {
+            actionData = req.actionData;
+            encoderOpts = { pubkey: source.publicKey, ...(req.encoderOpts || {}) };
+        } else {
+            if (!req?.to) throw new Error('action.composeForConfirm: to is required');
+            if (!req?.tick) throw new Error('action.composeForConfirm: tick is required');
+            if (req?.amount === undefined || req?.amount === null || req?.amount === '') {
+                throw new Error('action.composeForConfirm: amount is required');
+            }
+            /** @type {Record<string, string>} */
+            const params = { TICK: req.tick, AMOUNT: String(req.amount), DESTINATION: req.to };
+            if (req.memo !== undefined) params.MEMO = req.memo;
+            actionData = { action: 'SEND', params };
+            encoderOpts = {
+                pubkey: source.publicKey,
+                ...(req.fee !== undefined && { fee: req.fee }),
+                ...(req.feePerKb !== undefined && { feePerKb: req.feePerKb }),
+                ...(req.rbf !== undefined && { rbf: req.rbf }),
+            };
+        }
+
+        // Own addresses on this chain: change back to any of them is not a
+        // tamper. Best-effort - the source address is always added by the
+        // flow, so a resolve failure only loosens change detection to that.
+        let ownAddresses = [source.address];
+        try {
+            const byChain = await addressesByChain(req, { vault, chainRegistry });
+            const rows = byChain?.[chainId] || [];
+            ownAddresses = rows.map((r) => r.address).filter(Boolean);
+            if (!ownAddresses.includes(source.address)) ownAddresses.push(source.address);
+        } catch {
+            // fall through to [source.address]
+        }
+
+        return composeActionForConfirm({
+            vault, chainRegistry, sdkRegistry, chainId, actionData, encoderOpts,
+            source: source.address, ownAddresses,
+        });
+    });
+
+    //  §4: run sdk.preflight HOST-side (the SDK, its explorer endpoint,
+    // and Tier-2 state all live here) and return the serializable report. The
+    // popup's AbortController cannot cross the boundary; a superseded report
+    // is simply ignored by the hook once it resolves. `bypassCache` powers
+    // the Approve-time staleness re-check (§4.6).
+    host.register('action.preflight', async (req, { sdkRegistry }) => {
+        const chainId = req?.chainId;
+        if (typeof chainId !== 'string' || !chainId) {
+            throw new Error('action.preflight: chainId is required');
+        }
+        if (typeof req?.actionString !== 'string' || !req.actionString) {
+            throw new Error('action.preflight: actionString is required');
+        }
+        const sdk = sdkRegistry.get(chainId);
+        if (typeof sdk?.preflight !== 'function') {
+            throw new Error(`action.preflight: SDK for "${chainId}" lacks preflight`);
+        }
+        return sdk.preflight(req.actionString, {
+            source: req.source,
+            chain: chainId,
+            localDeltas: Array.isArray(req.localDeltas) ? req.localDeltas : undefined,
+            bypassCache: req.bypassCache === true,
+            preflight: req.mode || 'report',
+        });
     });
 
     // §17.5 / G025: verify signature. Pure SDK call, no signer / no

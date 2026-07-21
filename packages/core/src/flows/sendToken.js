@@ -70,6 +70,7 @@ export function assertValidDestination(fnName, address, chainRegistry, chainId) 
  * @property {number} [fee]                           absolute sats
  * @property {number} [feePerKb]
  * @property {boolean} [rbf]
+ * @property {import('../sdk/submitWithSigner.js').PrebuiltPsbt} [prebuiltPsbt]   single-encode pipeline: sign this exact composed PSBT byte-identically (the one the ConfirmActionModal previewed + tamper-checked) instead of rebuilding.
  * @property {import('../signers/Signer.js').Signer} [signer]    pre-built signer (RemoteSigner for HW)
  * @property {(txid: string, opts?: object) => Promise<unknown>} [waitForTxid]
  * @property {object} [waitOpts]
@@ -121,6 +122,7 @@ export async function sendToken(opts) {
             ...(opts.feePerKb !== undefined && { feePerKb: opts.feePerKb }),
             ...(opts.rbf !== undefined && { rbf: opts.rbf }),
         },
+        prebuiltPsbt: opts.prebuiltPsbt,
         signingPaths: [source.derivationPath
             ? { inputIndex: 0, path: source.derivationPath }
             : { inputIndex: 0, addressId: source.addressId }],

@@ -95,6 +95,19 @@ const createDevMockSdk = (constructorOpts) => {
     // so the fake-balance dataset can return chain-appropriate values.
     const chainId = constructorOpts?.network || 'bitcoin-mainnet';
 
+    //  dev-mock "PSBT": a marker-prefixed JSON blob (browser-safe, no
+    // Buffer) so encoder.createTx, wallet.decomposePsbt, and
+    // decoder.decodeActionFromPsbt round-trip the SAME structure and the
+    // confirm-pipeline tamper check stays self-consistent in the dev shell.
+    const MOCK_PSBT_MARKER = 'devmockpsbt:';
+    const encodeMockPsbt = (obj) => MOCK_PSBT_MARKER + JSON.stringify(obj);
+    const decodeMockPsbt = (hex) => {
+        if (typeof hex === 'string' && hex.startsWith(MOCK_PSBT_MARKER)) {
+            try { return JSON.parse(hex.slice(MOCK_PSBT_MARKER.length)); } catch { /* fall through */ }
+        }
+        return { inputs: [], outputs: [] };
+    };
+
     // Read-side stub. Any `get*` method the wallet calls before the
     // real SDK has finished loading (or when the real SDK isn't
     // resolvable at all) returns an empty list / zero-balance shape
@@ -199,6 +212,81 @@ const createDevMockSdk = (constructorOpts) => {
             },
             broadcastTx() { return Promise.reject(new Error('Dev SDK stub: broadcast requires the real xchain-sdk')); },
             importWIF() { throw new Error('Dev SDK stub: WIF import requires the real xchain-sdk'); },
+            // : the confirm pipeline's tamper check decomposes the PSBT
+            // host-side. The dev mock builds its "PSBT" as a marker-prefixed
+            // JSON blob (encodeMockPsbt below), so decompose just parses it
+            // back - self-consistent with encoder.createTx + decodeActionFromPsbt.
+            decomposePsbt(psbtHex) {
+                return decodeMockPsbt(psbtHex);
+            },
+        },
+        //  confirm pipeline: createAction + encoder.createTx + preflight +
+        // decodeActionFromPsbt so the single-encode modal can OPEN, tamper-check,
+        // and pre-flight in the dev shell (the real SDK isn't reachable here).
+        // Signing still throws by design (see wallet.signPsbt), so Approve fails
+        // loudly rather than broadcasting - the confirm-stage flow is what this
+        // unblocks, mirroring the real host boundary.
+        actions: {
+            createAction({ action, params }) {
+                // Minimal canonical SEND serializer: ACTION|0|TICK|AMOUNT|DEST[|MEMO].
+                const p = params || {};
+                const tail = [p.TICK, p.AMOUNT, p.DESTINATION];
+                if (p.MEMO != null && p.MEMO !== '') tail.push(p.MEMO);
+                return {
+                    actionString: [action, '0', ...tail.filter((f) => f != null)].join('|'),
+                    action,
+                    version: 0,
+                };
+            },
+        },
+        encoder: {
+            async createTx({ data, pubkey, customOutputs, change }) {
+                const changeAddr = change
+                    || sdkLib.mockDeriveAddress(chainId, 'p2wpkh', pubkey);
+                const outputs = [
+                    // Inline OP_RETURN action carrier (zero value).
+                    { address: null, scriptPubKeyHex: '6a00', scriptType: 'unknown', value: 0 },
+                    // Any caller custom outputs (native-fee dest / ADS donation).
+                    ...(Array.isArray(customOutputs) ? customOutputs : []).map((o) => ({
+                        address: String(o.address), scriptPubKeyHex: '0014', scriptType: 'p2wpkh', value: Number(o.value),
+                    })),
+                    // Change back to the wallet's own (source) address.
+                    { address: changeAddr, scriptPubKeyHex: '0014', scriptType: 'p2wpkh', value: 1000 },
+                ];
+                return { psbt: encodeMockPsbt({ actionString: data, outputs, inputs: [{ index: 0 }] }), encoding: 'OP_RETURN' };
+            },
+            broadcastTx() { return Promise.reject(new Error('Dev SDK stub: broadcast requires the real xchain-sdk')); },
+        },
+        decoder: {
+            decodeActionFromPsbt(psbtHex) {
+                const decoded = decodeMockPsbt(psbtHex);
+                return decoded.actionString
+                    ? { ok: true, actionString: decoded.actionString }
+                    : { ok: false, reason: 'decode-failed' };
+            },
+        },
+        // Best-effort dev pre-flight: parses a SEND string and flags an
+        // insufficient balance against the dev balance dataset so the
+        // excess-amount fail->fix flow is exercisable; otherwise passes.
+        async preflight(actionString, opts) {
+            const findings = [{ code: 'DRYRUN_VALID', severity: 'info', message: 'Dev mock: no on-chain dry-run.', source: 'client', overridable: false }];
+            let verdict = 'pass';
+            try {
+                const parts = String(actionString).split('|'); // SEND|0|TICK|AMOUNT|DEST[|MEMO]
+                const tick = parts[2];
+                const amount = Number(parts[3]);
+                const bals = await readStub.getBalances(opts?.source);
+                const row = Array.isArray(bals) ? bals.find((b) => String(b.tick).toUpperCase() === String(tick).toUpperCase()) : null;
+                // Dev balances are base units (8dp); the SEND amount is display
+                // units. Normalize at 8dp (right for the native-coin excess test;
+                // a dev approximation for other-decimal tokens).
+                const amountBase = amount * 1e8;
+                if (row && Number.isFinite(amount) && amountBase > Number(row.quantity ?? row.amount ?? 0)) {
+                    verdict = 'fail';
+                    findings.push({ code: 'BALANCE_INSUFFICIENT', severity: 'error', overridable: false, source: 'client', message: `Insufficient ${tick}: you don't have ${amount} ${tick}.`, data: { tick, amount } });
+                }
+            } catch { /* pass by default */ }
+            return { schemaVersion: 1, verdict, restricted: false, checksRun: ['BALANCE_INSUFFICIENT'], findings, unverified: [], quote: null, stateHeight: null, elapsedMs: 0 };
         },
         auth: {
             signMessage() { throw new Error('Dev SDK stub: message signing requires the real xchain-sdk'); },

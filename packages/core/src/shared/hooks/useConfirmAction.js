@@ -10,13 +10,17 @@
 
 // useConfirmAction ( §5.1, §5.3.5).
 //
-// Drives the single-encode confirm pipeline: compose PRE-OPEN, tamper-
-// check the built PSBT, open the modal, stream pre-flight, and on Approve
-// re-check staleness + input liveness before signing the byte-identical
-// PSBT. One modal per window, enforced by a module-level singleton (React
-// context would miss independently-mounted trees). Each invocation owns
-// one AbortController; Reject/close aborts everything and a superseded
-// report never renders.
+// Drives the single-encode confirm pipeline. All SDK work is HOST-side
+// (the React tree only reaches the host over `messaging`): the injected
+// `compose` runs composeForConfirm + the tamper check in the background
+// and resolves with an already-verified ComposedAction; `preflight` runs
+// sdk.preflight in the background. The hook itself is a pure UI state
+// machine: compose PRE-OPEN, open the modal, stream pre-flight, and on
+// Approve re-check staleness before signing the byte-identical PSBT. One
+// modal per window, enforced by a module-level singleton (React context
+// would miss independently-mounted trees). Each invocation owns one
+// AbortController; Reject/close aborts everything and a superseded report
+// never renders.
 //
 // The hook exposes reactive state for <ConfirmActionModal> plus approve()/
 // reject() the modal buttons call. confirm() resolves with onApprove's own
@@ -24,7 +28,6 @@
 // `user-rejected`) so forms can skip error toasts on Reject.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { assertNoTamper, TamperDetectedError } from '../../flows/confirmChecks.js';
 
 // Module-level singleton: only ONE confirm modal may be live per window.
 let activeInstanceId = null;
@@ -91,17 +94,21 @@ export function useConfirmAction() {
     }, [teardown]);
 
     /**
+     * All SDK access is HOST-side (the React tree only talks to the host over
+     * `messaging`): `compose` runs composeForConfirm AND the tamper check in
+     * the background and resolves with an already-verified ComposedAction (a
+     * tamper failure rejects here, so it lands in the compose-failure path and
+     * the modal never opens); `preflight` runs sdk.preflight in the background.
+     *
      * @param {Object} args
-     * @param {() => Promise<import('../../flows/composeForConfirm.js').ComposedAction>} args.compose
+     * @param {() => Promise<import('../../flows/composeForConfirm.js').ComposedAction>} args.compose   host compose + tamper (messaging.composeForConfirm)
      * @param {(credentials: object, composed: object) => Promise<any>} args.onApprove
      * @param {string} args.chainId
-     * @param {import('../../sdk/SDKRegistry.js').SDKRegistry} args.sdkRegistry
+     * @param {(reqOpts: { actionString: string, source?: string, localDeltas?: Array<{tick:string,amount:string}>, bypassCache?: boolean, mode?: string }) => Promise<object>} [args.preflight]   host preflight (messaging.preflight); omit to skip pre-flight
      * @param {string} [args.source]
-     * @param {string[]} [args.ownAddresses]
-     * @param {object} [args.preflightOpts]         { mode?, localDeltas? } forwarded to sdk.preflight
+     * @param {object} [args.preflightOpts]         { mode?, localDeltas? } forwarded to preflight
      * @param {object} [args.reservationLedger]     §4.7 ledger (reserve/release/localDeltas)
      * @param {{ tick?: string, amount?: string }} [args.reserve]  the amount to reserve at Approve
-     * @param {(psbtOrHex: string) => object} [args.decodeActionFromPsbt]  for the action-byte cross-check
      * @returns {Promise<any>}
      */
     const confirm = useCallback((args) => {
@@ -136,51 +143,32 @@ export function useConfirmAction() {
                 }
                 if (controller.signal.aborted) { settleReject(new UserRejectedError()); return; }
 
-                // Tamper checks on the exact built PSBT, BEFORE opening.
-                try {
-                    if (args.sdkRegistry && args.decodeActionFromPsbt) {
-                        const sdk = args.sdkRegistry.get(args.chainId);
-                        assertNoTamper({
-                            psbtHex: built.psbt,
-                            expected: built.expectedOutputs,
-                            ownAddresses: args.ownAddresses || [],
-                            decomposePsbt: (hex) => sdk.wallet.decomposePsbt(hex),
-                            actionString: built.actionString,
-                            decodeActionFromPsbt: args.decodeActionFromPsbt,
-                        });
-                    }
-                } catch (err) {
-                    setComposing(false);
-                    setPhase('error');
-                    setError(err);
-                    settleReject(err);
-                    return;
-                }
-
+                // compose() already ran the tamper check HOST-side; reaching
+                // here means the built PSBT is verified. A tamper (or any
+                // compose failure) rejected above, before this point.
                 composedRef.current = built;
                 setComposed(built);
                 setComposing(false);
                 setPhase('preflighting'); // MODAL OPENS HERE
 
-                // Pre-flight streams in; Approve stays disabled until it lands.
+                // Pre-flight streams in HOST-side; Approve stays disabled until
+                // it lands. Best-effort: any failure (or no preflight backend)
+                // goes ready with a null report so the user can still proceed.
+                if (typeof args.preflight !== 'function') { setPhase('ready'); return; }
                 try {
-                    const sdk = args.sdkRegistry.get(args.chainId);
                     const localDeltas = await gatherLocalDeltas(args);
-                    const rpt = await sdk.preflight(built.actionString, {
+                    const rpt = await args.preflight({
+                        actionString: built.actionString,
                         source: args.source,
-                        chain: args.chainId,
-                        signal: controller.signal,
                         localDeltas,
-                        preflight: args.preflightOpts?.mode || 'report',
+                        mode: args.preflightOpts?.mode || 'report',
                     });
                     if (controller.signal.aborted) return; // superseded; never render
                     reportStampRef.current = Date.now();
                     setReport(rpt);
                     setPhase('ready');
-                } catch (err) {
+                } catch {
                     if (controller.signal.aborted) return;
-                    // Pre-flight errors never block signing (best-effort); go
-                    // ready with a null report so the user can still proceed.
                     setReport(null);
                     setPhase('ready');
                 }
@@ -198,7 +186,6 @@ export function useConfirmAction() {
     const approve = useCallback(async (credentials) => {
         const args = optsRef.current;
         const built = composedRef.current;
-        const controller = abortRef.current;
         if (!args || !built) return;
 
         setPhase('signing');
@@ -207,13 +194,14 @@ export function useConfirmAction() {
         // the cache) + re-validate input liveness before signing.
         try {
             const stale = report && (Date.now() - reportStampRef.current > STALENESS_MS);
-            if (stale && args.sdkRegistry) {
+            if (stale && typeof args.preflight === 'function') {
                 setPhase('rechecking');
-                const sdk = args.sdkRegistry.get(args.chainId);
-                const fresh = await sdk.preflight(built.actionString, {
-                    source: args.source, chain: args.chainId, signal: controller?.signal,
-                    localDeltas: await gatherLocalDeltas(args), bypassCache: true,
-                    preflight: args.preflightOpts?.mode || 'report',
+                const fresh = await args.preflight({
+                    actionString: built.actionString,
+                    source: args.source,
+                    localDeltas: await gatherLocalDeltas(args),
+                    bypassCache: true,
+                    mode: args.preflightOpts?.mode || 'report',
                 });
                 setReport(fresh);
                 reportStampRef.current = Date.now();

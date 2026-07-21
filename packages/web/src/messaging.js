@@ -219,6 +219,31 @@ export function buildSendPsbtRequest(opts) {
 }
 
 /**
+ *  §5.3: the host half of the single-encode pipeline. Composes the
+ * ONE PSBT the ConfirmActionModal previews and the signer signs, resolves
+ * fee + ADS, and runs the tamper check host-side. Resolves with a
+ * serializable, already-tamper-verified ComposedAction; rejects (tamper /
+ * compose failure) so the invoking form renders the error and no modal opens.
+ *
+ * @param {object} opts   SEND base shape (walletId/chainId/from/to/tick/amount/memo/fee/feePerKb/rbf) or { actionData, encoderOpts, from }
+ * @returns {Promise<{ actionString: string, action: string, version: number|string, psbt: string, encoding: string, quote: object|null, adsPlan: object, expectedOutputs: object, tamperVerified: true }>}
+ */
+export function composeForConfirm(opts) {
+    return /** @type {any} */ (sendMessage('action.composeForConfirm', opts));
+}
+
+/**
+ *  §4: run sdk.preflight host-side and return the report. `bypassCache`
+ * powers the Approve-time staleness re-check.
+ *
+ * @param {{ chainId: string, actionString: string, source?: string, localDeltas?: Array<{tick:string,amount:string}>, bypassCache?: boolean, mode?: 'report'|'enforce'|'local' }} opts
+ * @returns {Promise<object>}
+ */
+export function preflight(opts) {
+    return /** @type {any} */ (sendMessage('action.preflight', opts));
+}
+
+/**
  * §20 / Cluster W FOLLOWUP 5: watcher-mode helper for the non-Send
  * action surface. Builds an unsigned PSBT for any XChain action without
  * unlocking the wallet, calling a signer, or broadcasting.
