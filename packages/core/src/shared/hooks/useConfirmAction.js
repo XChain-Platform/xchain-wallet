@@ -215,7 +215,11 @@ export function useConfirmAction() {
         } catch { /* re-check best-effort: proceed under the old report */ }
 
         // §4.7 reservation at Approve (post sync-disable, before async signing).
-        if (args.reservationLedger && args.reserve && args.reserve.tick) {
+        // Guarded on reservationId: a credential re-prompt (§5.3.4) calls
+        // approve() again for the SAME composed PSBT, and re-reserving would
+        // both double-count the amount and orphan the first id (teardown only
+        // releases the last one).
+        if (args.reservationLedger && args.reserve && args.reserve.tick && !optsRef.current.reservationId) {
             const rid = built.actionString + ':' + String(instanceId).slice(0, 8) + ':' + Date.now();
             optsRef.current.reservationId = rid;
             try {
@@ -226,13 +230,24 @@ export function useConfirmAction() {
         }
 
         try {
+            setError(null);   // clear a previous attempt's credential error
             const value = await args.onApprove(credentials, built);
             setPhase('done');
             settleResolve(value);
             return value;
         } catch (err) {
-            // Broadcast-permanence branching is handled by submitAction /
-            // the queue; here we surface a terminal error state.
+            // §5.3.4 signing-phase credential failure: re-prompt on the SAME
+            // PSBT instead of tearing the modal down. The confirm() promise
+            // stays PENDING so the caller's flow is uninterrupted and the user
+            // can just retype and Approve again (no re-compose, no re-sign of
+            // a different PSBT).
+            if (isCredentialFailure(err)) {
+                setError(err);
+                setPhase('ready');
+                return { interrupted: true, reason: 'bad-credentials' };
+            }
+            // Everything else is terminal here. Broadcast-permanence branching
+            // is handled by submitAction / the queue.
             setPhase('error');
             setError(err);
             settleReject(err);
@@ -270,6 +285,23 @@ function gatherLocalDeltas(args) {
 }
 
 function verdictRank(v) { return v === 'fail' ? 2 : v === 'warn' ? 1 : 0; }
+
+/**
+ * A signing-phase CREDENTIAL failure (§5.3.4) - bad password / declined HW -
+ * as opposed to a compose, pre-flight, or broadcast failure. These re-prompt
+ * on the same PSBT; everything else is terminal.
+ *
+ * The error crosses the messaging boundary as a plain object, so match on the
+ * fields that survive: `name` (what the software-unlock path throws) plus a
+ * code/message fallback.
+ */
+export function isCredentialFailure(err) {
+    if (!err) return false;
+    if (err.name === 'InvalidPasswordError') return true;
+    const code = err.code || err.reason;
+    if (code === 'INVALID_PASSWORD' || code === 'BAD_CREDENTIALS') return true;
+    return /incorrect password|invalid password|bad password/i.test(String(err.message || ''));
+}
 
 function computeCanApprove(report, acknowledged) {
     if (!report) return true; // no report (best-effort / timed out): allow

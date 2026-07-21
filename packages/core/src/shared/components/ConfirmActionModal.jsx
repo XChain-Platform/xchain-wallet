@@ -46,11 +46,12 @@ const OPEN_PHASES = new Set(['preflighting', 'ready', 'signing', 'rechecking', '
  * @param {import('react').ReactNode} props.credentials      the SignCredentials block (host wires it)
  * @param {'action'|'psbt'|'message'} [props.variant]
  * @param {boolean} [props.credentialsReady]                 whether credentials are complete (Enter/Approve enabled)
+ * @param {Error|string|null} [props.error]                  §5.3.4 in-modal error (e.g. a credential failure that re-prompts)
  */
 export function ConfirmActionModal({
     phase, composed, report, reportLoading, acknowledged, onAcknowledge,
     canApprove, onApprove, onReject, decoded, simulation, chainLabel,
-    credentials, credentialsReady = false, variant = 'action', feeText,
+    credentials, credentialsReady = false, variant = 'action', feeText, error = null,
 }) {
     const rootRef = useRef(null);
     const panelRef = useRef(null);
@@ -132,6 +133,16 @@ export function ConfirmActionModal({
 
                     {feeText ? (
                         <div className="confirm-modal-fee" data-testid="confirm-fee">{feeText}</div>
+                    ) : null}
+
+                    {/* §5.3.4: a credential failure returns the modal to `ready`
+                        with this error set, so the user retypes and re-approves
+                        the SAME PSBT. Sits directly above the credentials block
+                        so the message is adjacent to the field it refers to. */}
+                    {error ? (
+                        <div className="confirm-modal-error" role="alert" data-testid="confirm-error">
+                            {typeof error === 'string' ? error : (error?.message || 'Something went wrong.')}
+                        </div>
                     ) : null}
 
                     <div className="confirm-modal-credentials" ref={initialFocusRef}>

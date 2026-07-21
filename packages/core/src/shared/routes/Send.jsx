@@ -1772,6 +1772,10 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                     onReject={confirmAction.reject}
                     decoded={modalDecoded}
                     simulation={null}
+                    // §5.3.4: a bad password keeps the modal open at `ready`
+                    // with this set, so the user retypes and re-approves the
+                    // SAME PSBT instead of the modal tearing down.
+                    error={confirmAction.error}
                     chainLabel={descriptor?.displayName || chainId}
                     feeText={feeEstimate?.coinAmount
                         ? `Network fee: ${feeEstimate.coinAmount} ${nativeTickerFor(descriptor) || ''}`.trim()

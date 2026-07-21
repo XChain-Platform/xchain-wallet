@@ -87,5 +87,14 @@ assert.match(sendSrc, /password:\s*passwordValueRef\.current/, 'onApprove reads 
 // §4.7 reservation wired through messaging (host-shared ledger).
 assert.match(sendSrc, /reserve:\s*\(e\)\s*=>\s*messaging\.reserve\(e\)/, 'Send reserves via messaging at Approve');
 assert.match(sendSrc, /reserve:\s*\{\s*tick:/, 'Send passes the reserve amount');
+// §5.3.4 credential re-prompt: the hook returns to `ready` with an error and
+// the modal renders it, so a bad password does not tear the modal down.
+assert.match(sendSrc, /error=\{confirmAction\.error\}/, 'Send passes the confirm error into the modal');
+const hookSrc = read('packages', 'core', 'src', 'shared', 'hooks', 'useConfirmAction.js');
+assert.match(hookSrc, /isCredentialFailure\(err\)/, 'hook classifies credential failures');
+assert.match(hookSrc, /reason:\s*'bad-credentials'/, 'credential failure re-prompts instead of settling');
+assert.match(hookSrc, /!optsRef\.current\.reservationId/, 'reservation guarded against re-reserve on retry');
+const modalSrc = read('packages', 'core', 'src', 'shared', 'components', 'ConfirmActionModal.jsx');
+assert.match(modalSrc, /data-testid="confirm-error"/, 'modal has an in-modal error surface');
 
 console.log('confirm-modal-send-slice1.smoke.js OK');

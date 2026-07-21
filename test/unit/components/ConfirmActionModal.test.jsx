@@ -39,6 +39,28 @@ describe('ConfirmActionModal', () => {
         expect(screen.getByTestId('confirm-approve').textContent).toMatch(/Approve & Sign on Bitcoin/);
     });
 
+    it('renders no error region by default', () => {
+        render(<ConfirmActionModal {...base()} />);
+        expect(screen.queryByTestId('confirm-error')).toBeNull();
+    });
+
+    it('§5.3.4: surfaces a credential error in-modal (role=alert) while staying at ready', () => {
+        // A bad password returns the hook to `ready` with `error` set: the modal
+        // must stay open and TELL the user, so they can retype and re-approve
+        // the SAME PSBT rather than the modal tearing down.
+        render(<ConfirmActionModal {...base({ error: Object.assign(new Error('Incorrect password.'), { name: 'InvalidPasswordError' }) })} />);
+        const alert = screen.getByTestId('confirm-error');
+        expect(alert.getAttribute('role')).toBe('alert');
+        expect(alert.textContent).toMatch(/Incorrect password/);
+        // Still approvable: the user gets to try again.
+        expect(screen.getByTestId('confirm-approve').hasAttribute('disabled')).toBe(false);
+    });
+
+    it('accepts a plain string error', () => {
+        render(<ConfirmActionModal {...base({ error: 'Something broke.' })} />);
+        expect(screen.getByTestId('confirm-error').textContent).toMatch(/Something broke/);
+    });
+
     it('backdrop click is a no-op (does NOT reject)', () => {
         const onReject = vi.fn();
         render(<ConfirmActionModal {...base({ onReject })} />);

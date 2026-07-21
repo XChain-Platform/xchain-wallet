@@ -109,6 +109,82 @@ describe('useConfirmAction', () => {
         expect(out.err).toBeInstanceOf(UserRejectedError);
     });
 
+    it('§5.3.4: a bad password re-prompts on the SAME PSBT - back to ready, promise still PENDING', async () => {
+        const { result } = renderHook(() => useConfirmAction());
+        const badPw = Object.assign(new Error('Incorrect password.'), { name: 'InvalidPasswordError' });
+        let calls = 0;
+        let p; let settled = false;
+        await act(async () => {
+            p = result.current.confirm({
+                compose: async () => COMPOSED,
+                onApprove: async () => {
+                    calls += 1;
+                    if (calls === 1) throw badPw;
+                    return { txid: 'T' };
+                },
+                chainId: 'btc', preflight: preflightWith(),
+            });
+            p.then(() => { settled = true; }, () => { settled = true; });
+        });
+        await waitFor(() => expect(result.current.phase).toBe('ready'));
+
+        // First Approve: bad password -> stays open at `ready`, error surfaced,
+        // and crucially the confirm() promise has NOT settled.
+        await act(async () => { await result.current.approve({}); });
+        expect(result.current.phase).toBe('ready');
+        expect(result.current.error).toBe(badPw);
+        expect(settled).toBe(false);
+
+        // Retry succeeds against the SAME composed PSBT (no re-compose).
+        await act(async () => { await result.current.approve({}); });
+        await expect(p).resolves.toEqual({ txid: 'T' });
+        expect(calls).toBe(2);
+    });
+
+    it('does NOT double-reserve when a credential failure re-prompts', async () => {
+        const { result } = renderHook(() => useConfirmAction());
+        const badPw = Object.assign(new Error('bad'), { name: 'InvalidPasswordError' });
+        const reserve = vi.fn(async () => {});
+        const release = vi.fn(async () => {});
+        let calls = 0; let p;
+        await act(async () => {
+            p = result.current.confirm({
+                compose: async () => COMPOSED,
+                onApprove: async () => { calls += 1; if (calls === 1) throw badPw; return 'ok'; },
+                chainId: 'btc', preflight: preflightWith(),
+                reservationLedger: { reserve, release },
+                reserve: { tick: 'JDOG', amount: '5' },
+            });
+        });
+        await waitFor(() => expect(result.current.phase).toBe('ready'));
+        await act(async () => { await result.current.approve({}); });
+        await act(async () => { await result.current.approve({}); });
+        await p;
+        // One reservation for the whole confirm, not one per Approve attempt
+        // (re-reserving would double-count and orphan the first id).
+        expect(reserve).toHaveBeenCalledTimes(1);
+    });
+
+    it('a non-credential approve failure is still terminal (rejects)', async () => {
+        const { result } = renderHook(() => useConfirmAction());
+        let p;
+        await act(async () => {
+            p = settle(result.current.confirm({
+                compose: async () => COMPOSED,
+                onApprove: async () => { throw new Error('node unreachable'); },
+                chainId: 'btc', preflight: preflightWith(),
+            }));
+        });
+        await waitFor(() => expect(result.current.phase).toBe('ready'));
+        let out;
+        await act(async () => {
+            await result.current.approve({});
+            out = await p;
+        });
+        expect(out.err.message).toBe('node unreachable');
+        expect(result.current.phase).toBe('error');
+    });
+
     it('canApprove is false on a non-overridable error and true after acking an overridable one', async () => {
         const { result } = renderHook(() => useConfirmAction());
         const hardFail = preflightWith({ verdict: 'fail', findings: [{ code: 'DEST_ADDRESS_INVALID', severity: 'error', overridable: false, message: 'x' }], unverified: [] });
