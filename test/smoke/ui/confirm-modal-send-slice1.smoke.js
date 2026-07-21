@@ -70,6 +70,13 @@ const sendTokenSrc = read('packages', 'core', 'src', 'flows', 'sendToken.js');
 assert.match(sendTokenSrc, /prebuiltPsbt:\s*opts\.prebuiltPsbt/, 'sendToken forwards prebuiltPsbt');
 const submitActionSrc = read('packages', 'core', 'src', 'flows', 'submitAction.js');
 assert.match(submitActionSrc, /prebuiltPsbt,/, 'submitAction forwards prebuiltPsbt to submitWithSigner');
+// §5.3.4: permanence must ride in the error NAME - the messaging envelope
+// carries only { name, message }, so a custom field would be dropped.
+assert.match(submitActionSrc, /err\.name\s*=\s*permanence === 'permanent'/, 'submitAction stamps permanence into the error name');
+const hostEnvelopeSrc = read('packages', 'extension', 'src', 'background', 'MessageHost.js');
+assert.match(hostEnvelopeSrc, /return \{ ok: false, error: \{ name, message \} \}/, 'boundary envelope is still name+message only (permanence must not rely on custom fields)');
+const permanenceSrc = read('packages', 'core', 'src', 'flows', 'broadcastPermanence.js');
+assert.match(permanenceSrc, /export function broadcastFailureKindFromError/, 'permanence is recoverable from a boundary-crossed error');
 
 // --- Send.jsx flag-gated modal path ---------------------------------
 

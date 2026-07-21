@@ -58,6 +58,29 @@ const TRANSIENT_PATTERNS = [
     /txn-mempool-conflict/i,        // a competing UNconfirmed tx; may clear
 ];
 
+// Permanence has to survive the messaging boundary, and that envelope
+// carries ONLY `{ name, message }` (MessageHost.serializeError) - a custom
+// field would be silently dropped. So the classification is encoded in the
+// error NAME, the same mechanism the wallet already uses to recognise
+// InvalidPasswordError across the boundary. submitAction stamps one of
+// these before rethrowing; the confirm hook reads it back.
+export const BROADCAST_FAILED_PERMANENT_NAME = 'BroadcastFailedPermanentError';
+export const BROADCAST_FAILED_TRANSIENT_NAME = 'BroadcastFailedTransientError';
+
+/**
+ * Recover the broadcast-failure permanence from an error that may have
+ * crossed the messaging boundary (where only name + message survive).
+ *
+ * @param {unknown} err
+ * @returns {'permanent' | 'transient' | null}   null when this is not a broadcast failure
+ */
+export function broadcastFailureKindFromError(err) {
+    const name = err && /** @type {any} */ (err).name;
+    if (name === BROADCAST_FAILED_PERMANENT_NAME) return 'permanent';
+    if (name === BROADCAST_FAILED_TRANSIENT_NAME) return 'transient';
+    return null;
+}
+
 /**
  * @param {unknown} err   a BroadcastFailedError, an Error, or a raw reason string
  * @returns {'permanent' | 'transient'}

@@ -165,6 +165,55 @@ describe('useConfirmAction', () => {
         expect(reserve).toHaveBeenCalledTimes(1);
     });
 
+    it('§5.3.4 TRANSIENT broadcast failure RESOLVES as queued (not an error) and ends signed-not-broadcast', async () => {
+        // The tx is signed and handed to the rebroadcast queue host-side, so
+        // the user must NOT see a failure. Permanence crosses the messaging
+        // boundary in the error NAME (only name+message survive).
+        const { result } = renderHook(() => useConfirmAction());
+        const transient = Object.assign(new Error('broadcast failed (phase1): ECONNREFUSED'), {
+            name: 'BroadcastFailedTransientError',
+        });
+        let p;
+        await act(async () => {
+            p = result.current.confirm({
+                compose: async () => COMPOSED,
+                onApprove: async () => { throw transient; },
+                chainId: 'btc', preflight: preflightWith(),
+            });
+        });
+        await waitFor(() => expect(result.current.phase).toBe('ready'));
+        await act(async () => { await result.current.approve({}); });
+        const out = await p;
+        expect(out.queued).toBe(true);
+        expect(out.broadcast).toBe('queued');
+        expect(result.current.phase).toBe('signed-not-broadcast');
+        // Not surfaced as an error state.
+        expect(result.current.error).toBe(null);
+    });
+
+    it('§5.3.4 PERMANENT broadcast failure is terminal and REJECTS (re-compose required)', async () => {
+        const { result } = renderHook(() => useConfirmAction());
+        const permanent = Object.assign(new Error('broadcast failed (phase1): bad-txns-inputs-missingorspent'), {
+            name: 'BroadcastFailedPermanentError',
+        });
+        let p;
+        await act(async () => {
+            p = settle(result.current.confirm({
+                compose: async () => COMPOSED,
+                onApprove: async () => { throw permanent; },
+                chainId: 'btc', preflight: preflightWith(),
+            }));
+        });
+        await waitFor(() => expect(result.current.phase).toBe('ready'));
+        let out;
+        await act(async () => {
+            await result.current.approve({});
+            out = await p;
+        });
+        expect(out.err).toBe(permanent);
+        expect(result.current.phase).toBe('error');
+    });
+
     it('a non-credential approve failure is still terminal (rejects)', async () => {
         const { result } = renderHook(() => useConfirmAction());
         let p;

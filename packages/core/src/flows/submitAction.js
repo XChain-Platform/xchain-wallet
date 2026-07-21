@@ -28,7 +28,11 @@ import { unlockWallet } from './unlockWallet.js';
 import { submitWithSigner, BroadcastFailedError } from '../sdk/submitWithSigner.js';
 import { createPendingTx } from '../schemas/pendingTx.js';
 import { commitAdsStep, applyAdsPlanToEncoderOpts } from './ads.js';
-import { classifyBroadcastFailure } from './broadcastPermanence.js';
+import {
+    classifyBroadcastFailure,
+    BROADCAST_FAILED_PERMANENT_NAME,
+    BROADCAST_FAILED_TRANSIENT_NAME,
+} from './broadcastPermanence.js';
 
 /**
  * @typedef {Object} PendingTxMeta
@@ -223,6 +227,13 @@ export async function submitAction({
                 // fresh re-compose. A TRANSIENT failure keeps the existing
                 // queued-rebroadcast path (the SAME signed tx can still land).
                 const permanence = classifyBroadcastFailure(err);
+                // Stamp the permanence into the error NAME so it survives the
+                // messaging boundary (that envelope carries only name+message).
+                // `instanceof BroadcastFailedError` still holds - only the name
+                // changes - and it is read above, before this point.
+                err.name = permanence === 'permanent'
+                    ? BROADCAST_FAILED_PERMANENT_NAME
+                    : BROADCAST_FAILED_TRANSIENT_NAME;
                 if (permanence === 'permanent') {
                     if (pending) {
                         await writePending({

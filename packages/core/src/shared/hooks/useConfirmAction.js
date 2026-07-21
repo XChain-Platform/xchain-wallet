@@ -28,6 +28,7 @@
 // `user-rejected`) so forms can skip error toasts on Reject.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { broadcastFailureKindFromError } from '../../flows/broadcastPermanence.js';
 
 // Module-level singleton: only ONE confirm modal may be live per window.
 let activeInstanceId = null;
@@ -109,7 +110,11 @@ export function useConfirmAction() {
      * @param {object} [args.preflightOpts]         { mode?, localDeltas? } forwarded to preflight
      * @param {object} [args.reservationLedger]     §4.7 ledger (reserve/release/localDeltas)
      * @param {{ tick?: string, amount?: string }} [args.reserve]  the amount to reserve at Approve
-     * @returns {Promise<any>}
+     * @returns {Promise<any>}   resolves with onApprove's own return value; EXCEPT on a
+     *   TRANSIENT post-sign broadcast failure (§5.3.4), where it resolves with
+     *   `{ queued: true, broadcast: 'queued', error }` - the tx is signed and handed to the
+     *   rebroadcast queue, so callers must render "Signed - broadcast will retry", not an
+     *   error. A PERMANENT broadcast failure rejects (re-compose required).
      */
     const confirm = useCallback((args) => {
         if (activeInstanceId !== null) return Promise.reject(new ConfirmActionBusyError());
@@ -246,8 +251,33 @@ export function useConfirmAction() {
                 setPhase('ready');
                 return { interrupted: true, reason: 'bad-credentials' };
             }
-            // Everything else is terminal here. Broadcast-permanence branching
-            // is handled by submitAction / the queue.
+
+            // §5.3.4 post-sign broadcast failure, split on PERMANENCE.
+            // submitAction has already done the durable half host-side
+            // (PendingTx queued vs failed, queue handoff); the modal only has
+            // to end in the right terminal state.
+            const kind = broadcastFailureKindFromError(err);
+            if (kind === 'transient') {
+                // The tx IS signed and queued for rebroadcast - not a failure
+                // from the user's point of view. Terminal "Signed - broadcast
+                // will retry", and RESOLVE so callers don't render an error.
+                setPhase('signed-not-broadcast');
+                setError(null);
+                const queuedResult = { queued: true, broadcast: 'queued', error: { name: err?.name, message: err?.message } };
+                settleResolve(queuedResult);
+                return queuedResult;
+            }
+            if (kind === 'permanent') {
+                // Can never confirm as-is (inputs spent / confirmed conflict).
+                // PendingTx is already `failed`; re-signing is forbidden, so the
+                // caller must re-compose. Terminal error.
+                setPhase('error');
+                setError(err);
+                settleReject(err);
+                return undefined;
+            }
+
+            // Everything else is terminal.
             setPhase('error');
             setError(err);
             settleReject(err);

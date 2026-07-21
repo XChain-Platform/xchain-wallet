@@ -4,7 +4,12 @@
 // Broadcast-failure permanence classifier ( §5.3.4).
 
 import { describe, it, expect } from 'vitest';
-import { classifyBroadcastFailure } from '../../../packages/core/src/flows/broadcastPermanence.js';
+import {
+    classifyBroadcastFailure,
+    broadcastFailureKindFromError,
+    BROADCAST_FAILED_PERMANENT_NAME,
+    BROADCAST_FAILED_TRANSIENT_NAME,
+} from '../../../packages/core/src/flows/broadcastPermanence.js';
 
 describe('classifyBroadcastFailure', () => {
 
@@ -39,5 +44,26 @@ describe('classifyBroadcastFailure', () => {
     it('defaults ambiguous failures to TRANSIENT (keep the signed tx recoverable)', () => {
         expect(classifyBroadcastFailure(new Error('something weird happened'))).toBe('transient');
         expect(classifyBroadcastFailure(null)).toBe('transient');
+    });
+});
+
+// Permanence has to survive the messaging boundary, whose envelope carries
+// ONLY { name, message } - so it rides in the error NAME.
+describe('broadcastFailureKindFromError', () => {
+
+    it('recovers permanence from the stamped name', () => {
+        expect(broadcastFailureKindFromError({ name: BROADCAST_FAILED_PERMANENT_NAME })).toBe('permanent');
+        expect(broadcastFailureKindFromError({ name: BROADCAST_FAILED_TRANSIENT_NAME })).toBe('transient');
+    });
+
+    it('survives a boundary crossing that keeps only name + message', () => {
+        const wire = { name: BROADCAST_FAILED_TRANSIENT_NAME, message: 'broadcast failed (phase1): ECONNREFUSED' };
+        expect(broadcastFailureKindFromError(wire)).toBe('transient');
+    });
+
+    it('returns null for anything that is not a broadcast failure', () => {
+        expect(broadcastFailureKindFromError(new Error('nope'))).toBe(null);
+        expect(broadcastFailureKindFromError({ name: 'InvalidPasswordError' })).toBe(null);
+        expect(broadcastFailureKindFromError(null)).toBe(null);
     });
 });

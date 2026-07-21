@@ -1277,6 +1277,30 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
             return wrap(<WatcherResultPanel result={result} onSendAnother={sendAnother} onDone={onBack} />);
         }
 
+        // §5.3.4 TRANSIENT broadcast failure: the transaction IS signed and
+        // sitting in the rebroadcast queue, so this is emphatically not an
+        // error - but it is not confirmed-pending either. Say exactly that,
+        // and do not offer "Send another" (re-sending the same payment while
+        // a signed copy is queued is the double-broadcast trap §5.3.4 forbids).
+        if (result?.queued) {
+            return wrap(
+                <>
+                    <div className={styles.successCard} role="status" aria-live="polite">
+                        <div className={styles.successIcon} aria-hidden="true">⏳</div>
+                        <h2 className={styles.successTitle}>Signed. Broadcast will retry.</h2>
+                        <p className={styles.successHint}>
+                            Your transaction is signed but couldn&apos;t reach the network just now.
+                            It&apos;s queued and will be re-broadcast automatically. You can track it
+                            from the queued-transactions banner; don&apos;t send this payment again.
+                        </p>
+                    </div>
+                    <div className={styles.actions}>
+                        <Button variant="primary" onClick={onBack}>Done</Button>
+                    </div>
+                </>,
+            );
+        }
+
         return wrap(
             <>
                 <div className={styles.successCard} role="status" aria-live="polite">
