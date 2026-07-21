@@ -60,15 +60,19 @@ export const NATIVE_FEE_WARNING =
  *   the internal `payFeeInNativeCoin` flag stripped so it isn't forwarded to the encoder), plus
  *   the validated quote. Throws NativeFeeForfeitError when the action can't be safely paid natively.
  */
-export async function applyNativeFeePreflight({ sdk, actionData, encoderOpts = {}, source, onProgress } = {}) {
+export async function applyNativeFeePreflight({ sdk, actionData, encoderOpts = {}, source, onProgress, signal } = {}) {
     if (!encoderOpts.payFeeInNativeCoin) return { encoderOpts, quote: null };
     if (!sdk || typeof sdk.quoteNativeFee !== 'function') {
         throw new Error('applyNativeFeePreflight: sdk.quoteNativeFee is unavailable');
     }
+    if (signal && signal.aborted) throw new Error('aborted');
 
     if (typeof onProgress === 'function') onProgress('quoting_native_fee', {});
 
-    const quote = await sdk.quoteNativeFee(actionData, { source });
+    // `signal` is forwarded when the SDK's quote method accepts it (the
+    // compose-time quote can take seconds; Reject/close must be able to
+    // abort it). Older SDKs ignore the extra option harmlessly.
+    const quote = await sdk.quoteNativeFee(actionData, { source, signal });
     if (!quote || quote.supported === false) throw new NativeFeeForfeitError({ reason: 'unsupported', quote });
     if (quote.valid === false) throw new NativeFeeForfeitError({ reason: 'invalid', quote });
 

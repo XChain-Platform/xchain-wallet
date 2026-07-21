@@ -335,8 +335,8 @@ describe('empty migration maps (contact, connectedSite, pendingTx, etc.)', () =>
         expect(Object.keys(connectedSiteMigrations)).toHaveLength(0);
     });
 
-    it('pendingTxMigrations has no registered steps', () => {
-        expect(Object.keys(pendingTxMigrations)).toHaveLength(0);
+    it('pendingTxMigrations registers the v1 → v2 step ', () => {
+        expect(Object.keys(pendingTxMigrations)).toEqual(['1']);
     });
 
     it('multisigSigningSessionMigrations has no registered steps', () => {
@@ -385,10 +385,22 @@ describe('migrateConnectedSite (no-op)', () => {
     });
 });
 
-describe('migratePendingTx (no-op)', () => {
+describe('migratePendingTx v1 → v2 ( additive amount fields)', () => {
+    it('upgrades a v1 record to v2, seeding null amount fields', () => {
+        const r = migratePendingTx({ schemaVersion: 1, action: 'SEND', txid: 'abc' });
+        expect(r.schemaVersion).toBe(2);
+        expect(r.tick).toBe(null);
+        expect(r.amount).toBe(null);
+        expect(r.params).toBe(null);
+        // additive: existing fields survive untouched
+        expect(r.action).toBe('SEND');
+        expect(r.txid).toBe('abc');
+    });
+
     it('passes through at current version', () => {
-        const r = migratePendingTx({ schemaVersion: 1 });
-        expect(r.schemaVersion).toBe(1);
+        const r = migratePendingTx({ schemaVersion: 2, tick: 'JDOG', amount: '5' });
+        expect(r.schemaVersion).toBe(2);
+        expect(r.tick).toBe('JDOG');
     });
 });
 

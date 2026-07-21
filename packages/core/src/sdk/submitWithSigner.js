@@ -86,6 +86,14 @@ export class BroadcastFailedError extends Error {
  */
 
 /**
+ * @typedef {Object} PrebuiltPsbt
+ * @property {string} psbtHex        the exact PSBT the modal previewed + checked (signed byte-identically)
+ * @property {string} encoding       the encoding composeForConfirm chose
+ * @property {string} actionString   for the two-phase reveal + result
+ * @property {number|string} [version]
+ */
+
+/**
  * @typedef {Object} SubmitWithSignerOpts
  * @property {import('./SDKRegistry.js').SDKRegistry} sdkRegistry
  * @property {string} chainId
@@ -93,6 +101,10 @@ export class BroadcastFailedError extends Error {
  * @property {SubmitEncoderOpts} encoderOpts
  * @property {import('../signers/Signer.js').Signer} signer
  * @property {Array<{ inputIndex: number, path: string, sighashType?: number }>} signingPaths
+ * @property {PrebuiltPsbt} [prebuiltPsbt]    single-encode pipeline: when set, skip
+ *                                           createAction + encoder.createTx and sign THIS PSBT
+ *                                           byte-identically (the one composeForConfirm built,
+ *                                           the modal previewed, and the tamper checks passed).
  * @property {(txid: string, opts?: { timeout?: number, pollInterval?: number, requireValid?: boolean }) => Promise<unknown>} [waitForTxid]
  * @property {{ timeout?: number, pollInterval?: number, requireValid?: boolean }} [waitOpts]
  * @property {(phase: SubmitPhase, data: object) => void} [onProgress]
@@ -125,6 +137,7 @@ export async function submitWithSigner({
     encoderOpts,
     signer,
     signingPaths,
+    prebuiltPsbt,
     waitForTxid,
     waitOpts,
     onProgress = () => {},
@@ -151,29 +164,52 @@ export async function submitWithSigner({
         );
     }
 
-    // Step 1: create action string (no network call, just formatting).
-    onProgress('creating', { action: actionData.action });
-    const createResult = sdk.actions.createAction(actionData);
+    //  single-encode pipeline: when the caller supplies a prebuilt PSBT
+    // (composeForConfirm's output, already previewed + tamper-checked), skip
+    // createAction and encoder.createTx entirely and sign THAT PSBT byte-
+    // identically. The atomic createAction->createTx->sign path below is the
+    // legacy behaviour; both converge at Step 3.
+    let createResult, effectiveEncoderOpts, encoded, preflight;
+    if (prebuiltPsbt) {
+        // Preserve the phase events submitAction's lifecycle tracker consumes,
+        // but do NO rebuild: the PSBT is the one the user approved.
+        onProgress('creating', { action: actionData.action });
+        onProgress('encoding', { actionString: prebuiltPsbt.actionString });
+        createResult = {
+            actionString: prebuiltPsbt.actionString,
+            action: actionData.action,
+            version: prebuiltPsbt.version,
+        };
+        effectiveEncoderOpts = encoderOpts;
+        encoded = { psbt: prebuiltPsbt.psbtHex, encoding: prebuiltPsbt.encoding };
+        // The fee output is already baked into the prebuilt PSBT (composeForConfirm
+        // ran applyNativeFeePreflight before building), so no quote is recomputed here.
+        preflight = { quote: null };
+    } else {
+        // Step 1: create action string (no network call, just formatting).
+        onProgress('creating', { action: actionData.action });
+        createResult = sdk.actions.createAction(actionData);
 
-    // Step 1b: native-coin fee pre-flight. When the caller opted to pay the protocol fee in the
-    // native coin, this sizes the FEE_DESTINATION output and REFUSES (throws NativeFeeForfeitError)
-    // a transaction that can't be safely priced. A failed native-fee action forfeits the fee.
-    // No-op when payFeeInNativeCoin is not set.
-    const preflight = await applyNativeFeePreflight({
-        sdk,
-        actionData,
-        encoderOpts,
-        source: encoderOpts.change,
-        onProgress,
-    });
-    const effectiveEncoderOpts = preflight.encoderOpts;
+        // Step 1b: native-coin fee pre-flight. When the caller opted to pay the protocol fee in the
+        // native coin, this sizes the FEE_DESTINATION output and REFUSES (throws NativeFeeForfeitError)
+        // a transaction that can't be safely priced. A failed native-fee action forfeits the fee.
+        // No-op when payFeeInNativeCoin is not set.
+        preflight = await applyNativeFeePreflight({
+            sdk,
+            actionData,
+            encoderOpts,
+            source: encoderOpts.change,
+            onProgress,
+        });
+        effectiveEncoderOpts = preflight.encoderOpts;
 
-    // Step 2: encode to PSBT via the encoder service.
-    onProgress('encoding', { actionString: createResult.actionString });
-    const encoded = await encoder.createTx({
-        data: createResult.actionString,
-        ...effectiveEncoderOpts,
-    });
+        // Step 2: encode to PSBT via the encoder service.
+        onProgress('encoding', { actionString: createResult.actionString });
+        encoded = await encoder.createTx({
+            data: createResult.actionString,
+            ...effectiveEncoderOpts,
+        });
+    }
 
     // The signers now sign ONLY the inputs named in signingPaths (so a dApp PSBT
     // cannot get extra UTXOs signed). But this is the wallet's OWN action tx: every

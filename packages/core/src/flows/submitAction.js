@@ -27,7 +27,8 @@
 import { unlockWallet } from './unlockWallet.js';
 import { submitWithSigner, BroadcastFailedError } from '../sdk/submitWithSigner.js';
 import { createPendingTx } from '../schemas/pendingTx.js';
-import { commitAdsStep, resolveAdsPlanForNextTx } from './ads.js';
+import { commitAdsStep, applyAdsPlanToEncoderOpts } from './ads.js';
+import { classifyBroadcastFailure } from './broadcastPermanence.js';
 
 /**
  * @typedef {Object} PendingTxMeta
@@ -109,30 +110,8 @@ export async function submitAction({
     // reflect the actual tx that was broadcast, regardless of whether
     // the donation fired.
     const adsSettingsSnapshot = await vault.settings.get();
-    const adsPlan = resolveAdsPlanForNextTx(
-        adsSettingsSnapshot,
-        chainId,
-        chainRegistry,
-    );
-    const adsEnabledForChain =
-        adsSettingsSnapshot?.ads?.enabled === true &&
-        !!adsSettingsSnapshot?.ads?.perChain?.[chainId];
-
-    /** @type {typeof encoderOpts} */
-    let effectiveEncoderOpts = encoderOpts;
-    if (adsPlan.canSubmit) {
-        const donationOutput = {
-            address: adsPlan.donationAddress,
-            value: adsPlan.donationAmount,
-        };
-        effectiveEncoderOpts = {
-            ...encoderOpts,
-            customOutputs: [
-                ...(Array.isArray(encoderOpts?.customOutputs) ? encoderOpts.customOutputs : []),
-                donationOutput,
-            ],
-        };
-    }
+    const { encoderOpts: effectiveEncoderOpts, adsPlan, adsEnabledForChain } =
+        applyAdsPlanToEncoderOpts(adsSettingsSnapshot, chainId, chainRegistry, encoderOpts);
 
     // If the caller supplied pendingTxMeta, set up lifecycle persistence.
     // The tracker mutates a mutable record and writes through to the vault
@@ -227,28 +206,55 @@ export async function submitAction({
             // the optional onBroadcastFailure callback so the host can
             // also push to its in-process queue surface.
             if (err instanceof BroadcastFailedError) {
-                if (pending) {
-                    await writePending({
-                        status: 'queued',
-                        txid: err.txid,
-                        txHex: err.signedTxHex,
-                        error: err && err.message ? String(err.message) : String(err),
-                    });
-                }
-                if (typeof onBroadcastFailure === 'function') {
-                    try {
-                        await onBroadcastFailure({
-                            signedTxHex: err.signedTxHex,
+                //  §5.3.4: split the post-sign broadcast failure on
+                // PERMANENCE. A PERMANENT rejection (inputs spent/missing, or
+                // a confirmed conflict) can never confirm as-is: mark the
+                // PendingTx `failed` (never queued) so the modal offers a
+                // fresh re-compose. A TRANSIENT failure keeps the existing
+                // queued-rebroadcast path (the SAME signed tx can still land).
+                const permanence = classifyBroadcastFailure(err);
+                if (permanence === 'permanent') {
+                    if (pending) {
+                        await writePending({
+                            status: 'failed',
                             txid: err.txid,
-                            chainId: err.chainId,
-                            signedAt: err.signedAt,
-                            summary: pendingTxMeta?.actionSummary
-                                || `${actionData.action} on ${chainId}`,
-                            error: err.message,
+                            txHex: err.signedTxHex,
+                            error: err && err.message ? String(err.message) : String(err),
                         });
-                    } catch (_inner) {
-                        // Swallow callback errors; the broadcast
-                        // failure is the load-bearing signal.
+                    }
+                    // Do NOT invoke onBroadcastFailure: there is nothing to
+                    // queue. The caller sees the thrown error and re-composes.
+                } else {
+                    if (pending) {
+                        await writePending({
+                            status: 'queued',
+                            txid: err.txid,
+                            txHex: err.signedTxHex,
+                            error: err && err.message ? String(err.message) : String(err),
+                        });
+                    }
+                    if (typeof onBroadcastFailure === 'function') {
+                        try {
+                            await onBroadcastFailure({
+                                signedTxHex: err.signedTxHex,
+                                txid: err.txid,
+                                chainId: err.chainId,
+                                signedAt: err.signedAt,
+                                summary: pendingTxMeta?.actionSummary
+                                    || `${actionData.action} on ${chainId}`,
+                                error: err.message,
+                                // Carry the ADS-commit intent so the queue's
+                                // eventual-success handler advances the
+                                // accumulator (a queued tx is what donates,
+                                // not the failed immediate attempt). §5.3.4.
+                                adsCommit: adsEnabledForChain
+                                    ? { chainId, donationIncluded: adsPlan.canSubmit }
+                                    : null,
+                            });
+                        } catch (_inner) {
+                            // Swallow callback errors; the broadcast
+                            // failure is the load-bearing signal.
+                        }
                     }
                 }
             } else if (pending) {

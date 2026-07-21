@@ -196,3 +196,41 @@ export async function commitAdsStep({ vault, chainId, donationIncluded }) {
     }
     return next;
 }
+
+/**
+ * Resolve the ADS plan for `chainId` against a settings snapshot and,
+ * when `canSubmit`, fold the donation output into `encoderOpts.customOutputs`.
+ * Side-effect-free: reads settings only (the accumulator write stays in
+ * `commitAdsStep`, post-broadcast). Factored out of `submitAction` so the
+ * single-encode pipeline (`composeForConfirm`) resolves the donation output
+ * BEFORE the modal opens, giving the previewed/signed PSBT byte-identity
+ * ( §5.3.1), while `submitAction` keeps calling it unchanged.
+ *
+ * @param {import('../schemas/settings.js').Settings | null} settingsSnapshot
+ * @param {string} chainId
+ * @param {import('../registry/index.js').ChainRegistry} chainRegistry
+ * @param {Object} encoderOpts
+ * @returns {{ encoderOpts: Object, adsPlan: ReturnType<typeof resolveAdsPlanForNextTx>, adsEnabledForChain: boolean }}
+ */
+export function applyAdsPlanToEncoderOpts(settingsSnapshot, chainId, chainRegistry, encoderOpts) {
+    const adsPlan = resolveAdsPlanForNextTx(settingsSnapshot, chainId, chainRegistry);
+    const adsEnabledForChain =
+        settingsSnapshot?.ads?.enabled === true &&
+        !!settingsSnapshot?.ads?.perChain?.[chainId];
+
+    let nextEncoderOpts = encoderOpts;
+    if (adsPlan.canSubmit) {
+        const donationOutput = {
+            address: adsPlan.donationAddress,
+            value: adsPlan.donationAmount,
+        };
+        nextEncoderOpts = {
+            ...encoderOpts,
+            customOutputs: [
+                ...(Array.isArray(encoderOpts?.customOutputs) ? encoderOpts.customOutputs : []),
+                donationOutput,
+            ],
+        };
+    }
+    return { encoderOpts: nextEncoderOpts, adsPlan, adsEnabledForChain };
+}

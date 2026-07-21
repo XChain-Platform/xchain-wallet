@@ -145,7 +145,19 @@ export const settingsMigrations = {
     }),
 };
 /** @type {MigrationMap} */
-export const pendingTxMigrations = {};
+export const pendingTxMigrations = {
+    // v1 → v2 : additive structured amount fields for the
+    // pre-flight pending-delta machinery (§4.7). Legacy records carry no
+    // per-tick amount, so seed nulls; the wallet re-populates on the next
+    // submit. Purely additive, no data loss.
+    1: (r) => ({
+        ...r,
+        schemaVersion: 2,
+        tick: r.tick === undefined ? null : r.tick,
+        amount: r.amount === undefined ? null : r.amount,
+        params: r.params === undefined ? null : r.params,
+    }),
+};
 /** @type {MigrationMap} */
 export const multisigConfigMigrations = {
     // v1 → v2: §56.3 pre-launch Step 4. Add `id` so a wallet can
