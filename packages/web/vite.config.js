@@ -136,6 +136,26 @@ export default defineConfig({
             '@brandonblack/musig/base_crypto': musigBaseCrypto,
         },
     },
+    // xchain-sdk is a `link:` dependency, so it resolves OUTSIDE this project
+    // root and Vite does not treat it like a normal CJS package under
+    // node_modules. Left alone, `import('xchain-sdk')` yields a module whose
+    // inner `require('./src/XChainSDK.js')` calls survive verbatim; `require`
+    // is undefined in a browser, so evaluating it throws, resolveSdkFactory
+    // catches, and the wallet silently runs on the DEV-MOCK SDK (fabricated
+    // addresses/balances, signing a no-op). That is G163 / 's root cause.
+    //
+    // Forcing it into the dep optimizer makes esbuild do the CJS -> ESM
+    // transform properly (verified: .vite/deps/xchain-sdk.js is ~5 MB, carries
+    // the real decoder + preflight code, and contains zero literal requires).
+    //
+    // NOTE this fixes the DEV SERVER only, which is what Playwright drives.
+    // The production `vite build` path still ships the untransformed shim - see
+    // ; a build.commonjsOptions.include attempt collapses on
+    // vite-plugin-node-polyfills' bare shim specifiers resolving from the
+    // linked SDK's directory.
+    optimizeDeps: {
+        include: ['xchain-sdk'],
+    },
     build: {
         outDir: 'dist',
         emptyOutDir: true,
