@@ -343,6 +343,12 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     const giveTick = dispenser?.give_tick;
     const giveAmount = dispenser?.give_amount;
     const dispAddr = dispenser?.address;
+    // Fills this dispenser can still pay out, shown as a bubble next to the
+    // dispense count. Needs both the live escrow and the per-fill give amount.
+    const remainingFills = useMemo(
+        () => remainingFillsFrom(dispenser?.escrow_remaining, dispenser?.give_amount),
+        [dispenser],
+    );
     const isTokenPaid = Boolean(getTick) && !!getAmount;
     const isCoinPaid = !getTick && Boolean(getCoin) && !!getAmount;
     const canBuyWithSend = isTokenPaid && buyerAddresses.length > 0 && !ownerAddress;
@@ -852,7 +858,17 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 {dispenser?.dispense_count != null ? (
                     <>
                         <dt className={styles.detailsLabel}>Dispenses</dt>
-                        <dd className={styles.detailsValue}>{formatNum(dispenser.dispense_count)}</dd>
+                        <dd className={styles.detailsValue}>
+                            {formatNum(dispenser.dispense_count)}
+                            {remainingFills != null ? (
+                                <span
+                                    className={`${local.remainingPill} ${remainingFills > 0n ? local.remainingOk : local.remainingEmpty}`}
+                                    title={`${remainingFills} more fill${remainingFills === 1n ? '' : 's'} at ${formatNum(giveAmount)} ${giveTick || ''} each`.trim()}
+                                >
+                                    {formatNum(String(remainingFills))} left
+                                </span>
+                            ) : null}
+                        </dd>
                     </>
                 ) : null}
                 {source ? (
@@ -1077,6 +1093,32 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
 
 // Thousands separators on the integer part of a decimal string, exact
 // (no float round-trip): '4750' -> '4,750', '0.005' stays '0.005'.
+/**
+ * How many more times this dispenser can pay out:
+ * floor(escrow_remaining / give_amount).
+ *
+ * Both values are decimal strings, so scale them to a common integer basis and
+ * divide with BigInt. Float division misfloors on ordinary token amounts
+ * (0.3 / 0.1 === 2.9999999999999996, which would floor to 2 fills, not 3).
+ *
+ * @returns {bigint | null} null when either input is missing or unparseable.
+ */
+function remainingFillsFrom(escrowRemaining, giveAmount) {
+    if (escrowRemaining == null || giveAmount == null) return null;
+    const decimals = (v) => (String(v).split('.')[1] || '').length;
+    const scaled = (v, dp) => {
+        const s = String(v).trim();
+        if (!/^\d+(\.\d+)?$/.test(s)) return null;
+        const [int, frac = ''] = s.split('.');
+        return BigInt(int + frac.padEnd(dp, '0'));
+    };
+    const dp = Math.max(decimals(escrowRemaining), decimals(giveAmount));
+    const left = scaled(escrowRemaining, dp);
+    const perFill = scaled(giveAmount, dp);
+    if (left == null || perFill == null || perFill <= 0n) return null;
+    return left / perFill;
+}
+
 function formatNum(v) {
     if (v == null || v === '') return '?';
     const s = String(v);

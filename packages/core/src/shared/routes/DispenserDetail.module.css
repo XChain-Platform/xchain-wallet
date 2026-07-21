@@ -196,3 +196,28 @@
     color: var(--xc-text-muted);
     font-size: var(--xc-text-sm);
 }
+
+/* Remaining-fills bubble beside the dispense count: how many more times the
+   dispenser can pay out (escrow remaining / give per fill). Tinted green while
+   it can still dispense, red once the escrow is drained. Same pill shape as
+   the fee selector's readout chips. */
+.remainingPill {
+    display: inline-flex;
+    align-items: center;
+    margin-inline-start: var(--xc-space-2);
+    padding: 1px 9px;
+    border-radius: 999px;
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.remainingOk {
+    background: color-mix(in srgb, var(--xc-success) 14%, transparent);
+    color: var(--xc-success);
+}
+
+.remainingEmpty {
+    background: color-mix(in srgb, var(--xc-danger) 14%, transparent);
+    color: var(--xc-danger);
+}
