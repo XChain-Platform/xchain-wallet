@@ -187,7 +187,7 @@
     color: var(--xc-text);
     background: var(--xc-surface);
     border: 1px solid var(--xc-border-strong);
-    border-right: none;
+    border-inline-end: none;
     border-radius: var(--xc-radius-md) 0 0 var(--xc-radius-md);
 }
 

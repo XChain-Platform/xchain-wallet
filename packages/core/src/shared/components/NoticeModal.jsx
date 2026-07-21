@@ -40,7 +40,7 @@ export function NoticeModal({ title, message, confirmLabel = 'OK', onClose }) {
             onClick={onClose}
             tabIndex={-1}
         >
-            <div className={styles.panel} onClick={(e) => e.stopPropagation()} role="presentation">
+            <div className={styles.panel} onClick={(e) => e.stopPropagation()} role="presentation" tabIndex={-1}>
                 <p className={styles.title}>{title}</p>
                 {message ? <p className={styles.message}>{message}</p> : null}
                 <Button variant="primary" block onClick={onClose} autoFocus>

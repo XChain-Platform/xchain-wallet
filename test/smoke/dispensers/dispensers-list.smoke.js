@@ -100,7 +100,7 @@ assert.ok(
     'DispensersList surfaces the empty per-chain case',
 );
 assert.ok(
-    /Couldn't load dispensers/.test(listSrc),
+    /Couldn't load some dispensers/.test(listSrc),
     'DispensersList surfaces per-chain load errors without blocking other chains',
 );
 
@@ -123,8 +123,9 @@ assert.ok(
     'DispenserDetail fetches recent dispense events',
 );
 assert.ok(
-    /Remaining escrow and dispense count aren't published/.test(detailSrc),
-    'DispenserDetail calls out the indexer TODO (live escrow / dispense count)',
+    /remaining-fills counts are deferred/.test(detailSrc)
+        && /indexer surface doesn't expose them yet/.test(detailSrc),
+    'DispenserDetail acknowledges the deferred indexer data (live escrow / dispense count)',
 );
 
 // --- 4. Cancel flow ---------------------------------------------------
