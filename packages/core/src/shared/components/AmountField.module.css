@@ -17,18 +17,10 @@
     margin-bottom: 0;
 }
 
-/* Bumps font-size/padding on the underlying <input> and label inside
-   the shared Input so the field reads as a primary entry surface. */
-.bigField :global(input) {
-    font-size: var(--xc-text-lg);
-    padding: var(--xc-space-3) var(--xc-space-4);
-    min-height: 48px;
-}
-
-.bigField :global(label) {
-    font-size: var(--xc-text-md);
-    font-weight: 600;
-}
+/* The field size (font/padding/height) is owned by the shared Input via its
+   `size` prop ('md' default / 'lg' hero). AmountField no longer duplicates the
+   big-field values here; it just forwards `size` and reserves the right gutter
+   for the Max button via a small inline paddingRight. */
 
 .amountFieldWrap {
     position: relative;
@@ -37,10 +29,13 @@
 .amountMaxInline {
     position: absolute;
     inset-inline-end: var(--xc-space-2);
-    /* Stretch between the bottom of the label area and the bottom of
-       the input. */
-    top: calc(1rem * 1.5 + var(--xc-space-2));
-    bottom: var(--xc-space-3);
+    /* Vertically center the pill in the input box. The input sits at the
+       bottom of the wrap (label above it), so anchoring to the BOTTOM keeps
+       the position independent of label height and holds at both sizes. The
+       per-size bottom offset centers a 24px pill in the 36px (md) / 48px (lg)
+       input: (inputHeight - 24) / 2. */
+    bottom: 6px;
+    height: 24px;
     display: inline-flex;
     align-items: center;
     padding: 0 var(--xc-space-3);
@@ -51,6 +46,10 @@
     font-size: var(--xc-text-xs);
     font-weight: 700;
     cursor: pointer;
+}
+
+.amountFieldWrap[data-size='lg'] .amountMaxInline {
+    bottom: 12px;
 }
 
 .amountMaxInline:hover:not(:disabled) {

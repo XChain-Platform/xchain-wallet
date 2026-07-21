@@ -583,6 +583,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             {address ? (
                 <>
                     <AmountField
+                        size="lg"
                         amount={reqAmount}
                         fiatAmount={fiatAmount}
                         tick={reqTick.trim() || nativeTicker || ''}

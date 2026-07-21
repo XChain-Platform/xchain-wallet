@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useId, useMemo } from 'react';
+import { useId, useMemo, useState } from 'react';
 import styles from './FeeSelector.module.css';
 import { InfoTip } from './InfoTip.jsx';
 
@@ -30,6 +30,14 @@ const ETA_TONE = { low: 'etaLow', normal: 'etaNormal', fast: 'etaFast', custom: 
  * shown under the track. When the user lands on Custom, a sat/vB (or
  * equivalent) input appears in place of the readout so the rate can
  * be edited directly.
+ *
+ * Both readout figures are click-to-edit (when `allowCustom`): clicking
+ * the rate turns it into the Custom rate input, and clicking the fee
+ * amount turns it into an exact-fee input. An exact fee is converted to
+ * the equivalent rate (fee / vsize) before being emitted, so the
+ * onChange contract stays `{ mode: 'custom', customRate }` and callers
+ * recompute the estimate through the same custom-rate path. Either edit
+ * snaps the slider to the Custom stop.
  *
  * The component is presentation-only: it does NOT compute fees
  * itself. Callers fetch tiers via `estimateNativeSendFeeTiers` and
@@ -64,6 +72,13 @@ export function FeeSelector({
     coinTicker = '',
 }) {
     const customInputId = useId();
+    const feeInputId = useId();
+    // Exact-fee edit buffer. While non-null the fee readout renders as a
+    // text input echoing exactly what the user typed (so "0.0" doesn't
+    // get reformatted mid-keystroke); the derived rate flows out through
+    // onChange on every change. Cleared on blur/Enter or when the user
+    // moves the slider back to a preset tier.
+    const [feeDraft, setFeeDraft] = useState(null);
     const SPEEDS = allowCustom ? SPEEDS_WITH_CUSTOM : TIER_SPEEDS;
     const MAX_INDEX = SPEEDS.length - 1;
 
@@ -126,8 +141,53 @@ export function FeeSelector({
         if (speed === 'custom') {
             onChange({ mode: 'custom', customRate: seedCustomRate() });
         } else {
+            setFeeDraft(null);
             onChange({ mode: speed });
         }
+    };
+
+    // Convert an exact fee (coin-scale decimal) to the displayed-unit
+    // rate that produces it. Prefers the estimate's vsize (exact inverse
+    // of customFeeEstimate's sats = rate x vsize); falls back to the
+    // rate/fee ratio of a known tier when vsize is absent (doc fixtures).
+    const feeToDisplayRate = (fee) => {
+        const ref = tiers.normal || tiers.fast || tiers.low;
+        const vsize = activeEstimate?.vsize ?? ref?.vsize;
+        if (Number.isFinite(vsize) && vsize > 0) {
+            const raw = tiers.unit === 'DOGE/kB'
+                ? (fee * 1000) / vsize
+                : (fee * 1e8) / vsize;
+            return Number(raw.toFixed(8));
+        }
+        const refFee = parseFloat(ref?.coinAmount);
+        if (Number.isFinite(ref?.rateValue) && Number.isFinite(refFee) && refFee > 0) {
+            return Number(((fee * ref.rateValue) / refFee).toFixed(8));
+        }
+        return seedCustomRate();
+    };
+
+    const beginFeeEdit = () => {
+        if (disabled || !allowCustom) return;
+        setFeeDraft(activeEstimate?.coinAmount ?? '');
+    };
+
+    const onFeeDraftChange = (raw) => {
+        setFeeDraft(raw);
+        const n = parseFloat(raw);
+        onChange({
+            mode: 'custom',
+            customRate: Number.isFinite(n) && n >= 0 ? feeToDisplayRate(n) : 0,
+        });
+    };
+
+    // Click the tier rate readout to jump straight into Custom, seeded
+    // with the tier's own rate so the input opens ready to tweak.
+    const beginRateEdit = () => {
+        if (disabled || !allowCustom) return;
+        onChange({
+            mode: 'custom',
+            customRate: activeEstimate?.rateValue ?? seedCustomRate(),
+        });
     };
 
     const onSliderChange = (raw) => {
@@ -174,16 +234,49 @@ export function FeeSelector({
                         </button>
                     ))}
                 </div>
-                {(isCustom || activeEstimate) ? (() => {
+                {(isCustom || activeEstimate || feeDraft !== null) ? (() => {
                     const fiatStr = activeEstimate && typeof formatFiat === 'function'
                         ? formatFiat(activeEstimate.coinAmount)
                         : null;
+                    const editingFee = feeDraft !== null;
                     return (
                         <div className={styles.sliderReadout} role="status" aria-live="polite">
                             <span className={styles.sliderReadoutPrimary}>
-                                {activeEstimate ? (
+                                {editingFee ? (
+                                    <span className={styles.customRow}>
+                                        <input
+                                            id={feeInputId}
+                                            type="number"
+                                            inputMode="decimal"
+                                            min={0}
+                                            step="any"
+                                            className={`${styles.customInput} ${styles.feeInput}`}
+                                            value={feeDraft}
+                                            onChange={(e) => onFeeDraftChange(e.target.value)}
+                                            onBlur={() => setFeeDraft(null)}
+                                            onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+                                            aria-label={`Network fee amount${coinTicker ? ` (${coinTicker})` : ''}`}
+                                            disabled={disabled}
+                                            autoFocus
+                                        />
+                                        {coinTicker ? (
+                                            <span className={styles.sliderReadoutCoin}>{coinTicker}</span>
+                                        ) : null}
+                                    </span>
+                                ) : activeEstimate ? (
                                     <>
-                                        {activeEstimate.coinAmount}
+                                        {allowCustom ? (
+                                            <button
+                                                type="button"
+                                                className={styles.readoutEdit}
+                                                onClick={beginFeeEdit}
+                                                disabled={disabled}
+                                                aria-label="Edit exact fee amount"
+                                                title="Click to edit the exact fee"
+                                            >
+                                                {activeEstimate.coinAmount}
+                                            </button>
+                                        ) : activeEstimate.coinAmount}
                                         {coinTicker ? (
                                             <span className={styles.sliderReadoutCoin}> {coinTicker}</span>
                                         ) : null}
@@ -206,10 +299,21 @@ export function FeeSelector({
                                         onChange={(e) => onCustomRateChange(e.target.value)}
                                         aria-label={`Custom fee rate (${tiers.unit})`}
                                         disabled={disabled}
-                                        autoFocus
+                                        autoFocus={!editingFee}
                                     />
                                     <span className={styles.customUnit}>{tiers.unit}</span>
                                 </span>
+                            ) : !activeEstimate ? null : allowCustom ? (
+                                <button
+                                    type="button"
+                                    className={`${styles.readoutEdit} ${styles.sliderReadoutRate}`}
+                                    onClick={beginRateEdit}
+                                    disabled={disabled}
+                                    aria-label={`Edit fee rate (${tiers.unit})`}
+                                    title="Click to edit the fee rate"
+                                >
+                                    {activeEstimate.rate}
+                                </button>
                             ) : (
                                 <span className={styles.sliderReadoutRate}>{activeEstimate.rate}</span>
                             )}

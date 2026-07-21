@@ -22,9 +22,10 @@ import styles from './Input.module.css';
  * @property {string} [hint]
  * @property {string} [error]
  * @property {string} [id]
+ * @property {'md' | 'lg'} [size]   field size, matching Input.
  */
 export const Select = forwardRef(function Select(
-    { label, hint, error, id, children, ...rest },
+    { label, hint, error, id, size = 'md', children, ...rest },
     ref,
 ) {
     const autoId = useId();
@@ -35,7 +36,7 @@ export const Select = forwardRef(function Select(
     const selectClass = `${styles.input} ${error ? styles.invalid : ''}`.trim();
 
     return (
-        <div className={styles.field}>
+        <div className={`${styles.field} ${styles[size] || ''}`.trim()}>
             {label ? (
                 <label htmlFor={selectId} className={styles.label}>
                     {label}

@@ -252,19 +252,11 @@
     position: relative;
 }
 
-/* Bumps font-size/padding on the underlying <input> and label inside
-   Input, used for the To and Amount fields so they read as the
-   primary entry surfaces of the form. */
-.bigField :global(input) {
-    font-size: var(--xc-text-lg);
-    padding: var(--xc-space-3) var(--xc-space-4);
-    min-height: 48px;
-}
-
-.bigField :global(label) {
-    font-size: var(--xc-text-md);
-    font-weight: 600;
-    /* Pinned so .inlineContactsButton's top offset below is exact. */
+/* The To field is sized via the shared Input `size="lg"` prop now (see
+   Input.module.css `.lg`); the big-field values no longer live here. The
+   only local rule kept is pinning the To label's line-height to 20px so
+   .inlineContactsButton's absolute `top` offset below stays exact. */
+.toFieldWrap :global(label) {
     line-height: 20px;
 }
 

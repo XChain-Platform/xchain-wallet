@@ -95,6 +95,28 @@ assert.ok(
     'DispenserForm distinguishes wrong-password from other errors',
 );
 
+// --- 4b. Escrow uses the canonical AmountField ------------------------
+// The escrow field is the shared Send-style amount block (Max button +
+// "X TICK available" footer), not a bare Input. Balance comes from a
+// debounced getWalletBalances lookup scoped to the SOURCE address.
+
+assert.ok(
+    /import \{ AmountField \} from '\.\.\/components\/AmountField\.jsx'/.test(src),
+    'DispenserForm imports the shared AmountField',
+);
+assert.ok(
+    /label="Escrow amount"/.test(src),
+    'escrow AmountField keeps the "Escrow amount" label',
+);
+assert.ok(
+    /setEscrow\(sourceTickBalance\)/.test(src),
+    'escrow Max fills the SOURCE balance of the tick',
+);
+assert.ok(
+    /available/.test(src) && /sourceTickBalance/.test(src),
+    'escrow field shows an "available" balance footer',
+);
+
 // --- 5. Validation ----------------------------------------------------
 
 assert.ok(/Token ticker is required/.test(src), 'DispenserForm rejects empty ticker');

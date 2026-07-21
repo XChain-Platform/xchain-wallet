@@ -1,0 +1,113 @@
+/* TokenField: an inline token selector styled to match the shared Input's
+   field chrome (border/background/radius/label) at both sizes, so it sits in
+   a form indistinguishable in size from an Input/Select. The control is a
+   button (icon + ticker/chain text + caret) rather than an <input>, but the
+   sizing contract mirrors Input.module.css: default (md, 36px) values on
+   .control/.label, `.lg` overrides for the 48px hero size. */
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+    margin-bottom: var(--xc-space-3);
+}
+
+.label {
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text-muted);
+    font-weight: 500;
+}
+
+.control {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-3);
+    width: 100%;
+    padding: var(--xc-space-2) var(--xc-space-3);
+    min-height: 36px;
+    font-family: var(--xc-font-sans);
+    font-size: var(--xc-text-md);
+    color: var(--xc-text);
+    background: var(--xc-surface);
+    border: 1px solid var(--xc-border-strong);
+    border-radius: var(--xc-radius-md);
+    cursor: pointer;
+    text-align: start;
+    transition: border-color var(--xc-transition), box-shadow var(--xc-transition);
+}
+
+.control:hover:not(:disabled) {
+    border-color: var(--xc-accent-primary);
+}
+
+.control:focus-visible {
+    outline: none;
+    border-color: var(--xc-accent-primary);
+    box-shadow: 0 0 0 3px var(--xc-focus-ring);
+}
+
+.control:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.invalid {
+    border-color: var(--xc-danger);
+}
+.invalid:focus-visible {
+    box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.2);
+}
+
+/* lg (hero) size, matching Input.module.css `.lg`. */
+.lg .control {
+    font-size: var(--xc-text-lg);
+    padding: var(--xc-space-3) var(--xc-space-4);
+    min-height: 48px;
+}
+
+.lg .label {
+    font-size: var(--xc-text-md);
+    font-weight: 600;
+}
+
+.text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.tick {
+    font-weight: 700;
+    font-size: var(--xc-text-md);
+    color: var(--xc-text);
+    line-height: 1.2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.chain {
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    line-height: 1.2;
+}
+
+.placeholder {
+    flex: 1 1 auto;
+    color: var(--xc-text-muted);
+    text-align: start;
+}
+
+.caret {
+    display: inline-flex;
+    align-items: center;
+    color: var(--xc-text-muted);
+    flex: 0 0 auto;
+}
+
+.error {
+    font-size: var(--xc-text-xs);
+    color: var(--xc-danger);
+}

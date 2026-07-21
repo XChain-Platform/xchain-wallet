@@ -16,6 +16,7 @@ import {
     Input,
     ChainBadge,
     AddressText,
+    FeeSelector,
  Icon,} from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
@@ -24,13 +25,33 @@ import {
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
+import { AmountField } from '../components/AmountField.jsx';
+import { formatWithThousands } from '../utils/amountFormat.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { multiplyAmounts } from '../../market/orderMath.js';
+import {
+    estimateNativeSendFeeTiers,
+    customFeeEstimate,
+    displayRateToSettingsCustom,
+} from '../../flows/feeEstimate.js';
+import { coinToFiat } from '../../flows/priceLookup.js';
+import { useFiatRate } from '../hooks/useFiatRate.js';
+import { useSettings } from '../hooks/useSettings.js';
 import * as branding from '../../branding/branding.js';
 import styles from './IssueTokenForm.module.css';
 import local from './DispenserDetail.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+
+// Address rows in the stats hero: one line, full address shown when it
+// fits, CSS-ellipsized only when the cell actually runs out of width
+// (never the fixed first6…last6 truncation, never a second line).
+const ADDRESS_CELL_STYLE = {
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    minWidth: 0,
+};
 
 /**
  * Dispenser detail page (§40.7.1): management surface for a single
@@ -83,6 +104,11 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     const [refillAmount, setRefillAmount] = useState('');
     const [refillError, setRefillError] = useState(/** @type {string | null} */ (null));
     const [refillResult, setRefillResult] = useState(/** @type {any | null} */ (null));
+    // Owner's spendable balance of the give tick (coin-scale string),
+    // backing the refill AmountField's Max button + "available" footer.
+    const [refillBalance, setRefillBalance] = useState(
+        /** @type {string | null} */ (null),
+    );
     // Quick-action "More" popover.
     const [moreOpen, setMoreOpen] = useState(false);
     const moreWrapRef = useRef(/** @type {HTMLDivElement | null} */ (null));
@@ -100,6 +126,25 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             window.removeEventListener('keydown', onKey);
         };
     }, [moreOpen]);
+    // Resolve the owner's give-tick balance when the refill form opens.
+    useEffect(() => {
+        const tick = String(dispenser?.give_tick || '').toUpperCase();
+        if (refillStage === 'idle' || refillStage === 'done' || !ownerAddress || !tick) return undefined;
+        if (typeof messaging.getWalletBalances !== 'function') return undefined;
+        let cancelled = false;
+        messaging.getWalletBalances(walletId)
+            .then((byChain) => {
+                if (cancelled || !byChain) return;
+                const entries = byChain[chainId] || [];
+                const entry = entries.find((e) => e && e.address === ownerAddress.address);
+                const rows = entry ? decoderLib.balancesFromSdk(entry.balances) || [] : [];
+                const match = rows.find((b) => String(b.tick).toUpperCase() === tick);
+                setRefillBalance(match ? String(match.amount) : '0');
+            })
+            .catch(() => { /* footer just stays empty on failure */ });
+        return () => { cancelled = true; };
+    }, [refillStage, dispenser, ownerAddress, chainId, walletId, messaging]);
+
     const [cancelStage, setCancelStage] = useState(
         /** @type {'idle' | 'confirm' | 'submitting' | 'done'} */ ('idle'),
     );
@@ -121,6 +166,57 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     const [copied, setCopied] = useState(/** @type {string | null} */ (null));
 
     const descriptor = chainRegistry.get(chainId);
+
+    // Network-fee tier picker (Low / Normal / Fast / Custom) shared by the
+    // close and refill forms, mirroring ComposeMessage / Send.
+    const [feePick, setFeePick] = useState(
+        /** @type {{ mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }} */ ({ mode: 'normal' }),
+    );
+    const feeTiers = useMemo(
+        () => estimateNativeSendFeeTiers({ chainId, chainRegistry }),
+        [chainId],
+    );
+    const feeCustomEstimate = useMemo(
+        () => (feePick.mode === 'custom'
+            ? customFeeEstimate({ chainId, chainRegistry, rate: Number(feePick.customRate) || 0 })
+            : null),
+        [chainId, feePick],
+    );
+    const selectedFeeEstimate = feePick.mode === 'custom'
+        ? feeCustomEstimate
+        : (feeTiers ? feeTiers[feePick.mode] : null);
+    // Picked rate in the encoder's feePerKb unit; null falls back to the
+    // encoder's default pricing.
+    const feePerKb = (selectedFeeEstimate && selectedFeeEstimate.unit
+        && Number.isFinite(selectedFeeEstimate.rateValue) && selectedFeeEstimate.rateValue > 0)
+        ? displayRateToSettingsCustom(selectedFeeEstimate.unit, selectedFeeEstimate.rateValue)
+        : null;
+    const { settings } = useSettings();
+    const feeFiatRate = useFiatRate({
+        chainCoin: descriptor?.coin,
+        fiatCurrency: 'USD',
+        allowCoingeckoFallback: settings?.privacy?.priceDataEnabled !== false,
+    });
+    const fiatForFee = useMemo(() => (coinAmount) => {
+        const v = coinToFiat(coinAmount, feeFiatRate);
+        if (v == null || !Number.isFinite(v) || v <= 0) return null;
+        return v < 0.01 ? '< $0.01' : `$${v.toFixed(2)}`;
+    }, [feeFiatRate]);
+    const NATIVE_TICKER_BY_CHAIN = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
+    const feeCoinTicker = descriptor?.coin
+        ? (NATIVE_TICKER_BY_CHAIN[descriptor.coin] || descriptor.coin.toUpperCase())
+        : '';
+    const feeSelector = feeTiers ? (
+        <FeeSelector
+            label="Network fee"
+            coinTicker={feeCoinTicker}
+            formatFiat={fiatForFee}
+            tiers={feeTiers}
+            value={feePick}
+            onChange={setFeePick}
+            customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
+        />
+    ) : null;
 
     // Load the dispenser action + wallet addresses (to detect ownership)
     // in parallel. Recent dispenses come on a best-effort basis;
@@ -374,6 +470,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     DISPENSER_ACTION_INDEX: String(actionIndex),
                     GIVE_ESCROW: amt,
                 },
+                ...(feePerKb != null ? { feePerKb } : {}),
             };
             const res = cancelHw
                 ? await messaging.dispenserActionHw({ ...base, signerId: ownerAddress.signerId })
@@ -424,6 +521,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     signerId: ownerAddress.signerId,
                 },
                 params: cancelParams,
+                ...(feePerKb != null ? { feePerKb } : {}),
             };
             const res = cancelHw
                 ? await messaging.dispenserActionHw({ ...base, signerId: ownerAddress.signerId })
@@ -519,16 +617,28 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 <p className={styles.summary}>
                     Refill dispenser #{actionIndex}: add {giveTick} to escrow.
                 </p>
-                <Input
-                    label={`Amount of ${giveTick || 'tokens'} to add`}
-                    inputMode="decimal"
-                    value={refillAmount}
-                    onChange={(e) => {
-                        setRefillAmount(e.target.value);
+                <AmountField
+                    label="Refill amount"
+                    amount={refillAmount}
+                    tick={giveTick || ''}
+                    onAmountFieldChange={(rawValue) => {
+                        const stripped = String(rawValue).replace(/,/g, '');
+                        if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
+                        setRefillAmount(stripped);
                         if (refillError) setRefillError(null);
                     }}
-                    autoComplete="off"
+                    onMax={refillBalance && Number(refillBalance) > 0
+                        ? () => {
+                            setRefillAmount(refillBalance);
+                            if (refillError) setRefillError(null);
+                        }
+                        : undefined}
+                    maxDisabled={!refillBalance}
+                    balanceText={refillBalance != null
+                        ? `${formatWithThousands(refillBalance)} ${giveTick || ''} available`.replace(/\s+/g, ' ')
+                        : null}
                 />
+                {feeSelector}
                 <SignCredentials
                     unlocked={signerReady}
                     fromAddress={ownerAddress}
@@ -674,6 +784,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                         ))}
                     </div>
                 ) : null}
+                {feeSelector}
                 <SignCredentials
                         unlocked={signerReady}
                     fromAddress={ownerAddress}
@@ -744,12 +855,20 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                         <dd className={styles.detailsValue}>{formatNum(dispenser.dispense_count)}</dd>
                     </>
                 ) : null}
+                {source ? (
+                    <>
+                        <dt className={styles.detailsLabel}>Source</dt>
+                        <dd className={styles.detailsValue} style={ADDRESS_CELL_STYLE}>
+                            <AddressText address={source} truncate={false} />
+                            {ownerAddress ? ' (you)' : ''}
+                        </dd>
+                    </>
+                ) : null}
                 {(dispAddress || source) ? (
                     <>
                         <dt className={styles.detailsLabel}>Address</dt>
-                        <dd className={styles.detailsValue} style={{ overflowWrap: 'anywhere' }}>
+                        <dd className={styles.detailsValue} style={ADDRESS_CELL_STYLE}>
                             <AddressText address={dispAddress || source} truncate={false} />
-                            {ownerAddress ? ' (you)' : ''}
                         </dd>
                     </>
                 ) : null}
@@ -768,8 +887,10 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     type="button"
                     className={local.quickAction}
                     onClick={() => setCancelStage('confirm')}
-                    disabled={!ownerAddress}
-                    title={ownerAddress ? 'Close this dispenser' : 'Only the owner can close'}
+                    disabled={!ownerAddress || String(dispenser?.status) !== 'open'}
+                    title={!ownerAddress ? 'Only the owner can close'
+                        : String(dispenser?.status) !== 'open' ? 'Dispenser is not open'
+                        : 'Close this dispenser'}
                 >
                     <span className={local.quickActionIcon} aria-hidden="true"><Icon.XIcon /></span>
                     <span>Close</span>
@@ -778,8 +899,10 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     type="button"
                     className={local.quickAction}
                     onClick={() => setRefillStage('confirm')}
-                    disabled={!ownerAddress}
-                    title={ownerAddress ? 'Add escrow to this dispenser' : 'Only the owner can refill'}
+                    disabled={!ownerAddress || String(dispenser?.status) !== 'open'}
+                    title={!ownerAddress ? 'Only the owner can refill'
+                        : String(dispenser?.status) !== 'open' ? 'Dispenser is not open'
+                        : 'Add escrow to this dispenser'}
                 >
                     <span className={local.quickActionIcon} aria-hidden="true"><Icon.PlusIcon /></span>
                     <span>Refill</span>

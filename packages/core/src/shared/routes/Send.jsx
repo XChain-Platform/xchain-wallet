@@ -89,6 +89,7 @@ import {
     fetchNativeSendFeeTiers,
     customFeeEstimate,
     settingsCustomToDisplayRate,
+    displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
 import { coinToFiat, fiatToCoin } from '../../flows/priceLookup.js';
 import { useFiatRate } from '../hooks/useFiatRate.js';
@@ -97,6 +98,7 @@ import { BalanceChanges } from '../components/BalanceChanges.jsx';
 import { RawPsbtViewer } from '../components/RawPsbtViewer.jsx';
 import { useToast } from '../components/ToastHost.jsx';
 import { AmountField } from '../components/AmountField.jsx';
+import { TokenField } from '../components/TokenField.jsx';
 import { useHaptic } from '../hooks/useHaptic.js';
 import { useFormDraft } from '../hooks/useFormDraft.js';
 import { useScreenShortcuts } from '../keyboard/useScreenShortcuts.js';
@@ -831,6 +833,16 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
         return estimateNativeSendFee({ chainId, chainRegistry, speed: feePick.mode });
     }, [chainId, feePick, feeTiers]);
 
+    // The picked rate converted to the encoder's feePerKb unit (smallest-unit
+    // per KB), so the tier/custom choice actually prices the broadcast tx (not
+    // just the on-screen estimate). Null when there's no usable estimate (e.g.
+    // an empty custom rate), which falls back to the encoder's own default.
+    // Mirrors ComposeMessage / DispenserDetail.
+    const feePerKb = (feeEstimate && feeEstimate.unit
+        && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
+        ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
+        : null;
+
     // Native-unit balance available for the selected tick on the
     // source address, derived from the same SDK call the simulator
     // already runs. Drives Max + the "Available: X" hint. Lives below
@@ -1015,6 +1027,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                 amount: String(amount).trim(),
                 memo: memo.trim() || undefined,
                 rbf: rbfEnabled,
+                ...(feePerKb != null ? { feePerKb } : {}),
             };
             // §20 / G040: watcher mode encodes only. No password, no signer,
             // no broadcast. The result envelope carries `psbtHex` instead of
@@ -1450,8 +1463,9 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                 prefill={prefill}
                 onChangeAsset={onChangeAsset ? () => onChangeAsset({ address: toAddress, amount }) : undefined}
             />
-            <div className={`${styles.toFieldWrap} ${styles.bigField}`}>
+            <div className={styles.toFieldWrap}>
                 <AddressCombobox
+                    size="lg"
                     label={matchedContact
                         ? <>To <span className={styles.toContactName}>{matchedContact.contact.name}</span></>
                         : 'To'}
@@ -1470,14 +1484,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                     autoComplete="off"
                     autoCapitalize="none"
                     autoCorrect="off"
-                    style={{
-                        fontSize: 'var(--xc-text-lg)',
-                        paddingTop: 'var(--xc-space-3)',
-                        paddingBottom: 'var(--xc-space-3)',
-                        paddingLeft: 'var(--xc-space-4)',
-                        paddingRight: '52px',
-                        minHeight: '48px',
-                    }}
+                    style={{ paddingRight: '52px' }}
                 />
                 <button
                     type="button"
@@ -1500,16 +1507,27 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                 </div>
             ) : null}
             {!hasTokenSelected ? (
-                <Input
-                    label="Token"
-                    hint="Tick. Native coin by default."
-                    value={tick}
-                    onChange={(e) => setTick(e.target.value)}
-                    autoComplete="off"
-                    autoCapitalize="characters"
-                />
+                onChangeAsset ? (
+                    <TokenField
+                        size="lg"
+                        label="Token"
+                        value={null}
+                        onOpenPicker={() => onChangeAsset({ address: toAddress, amount })}
+                    />
+                ) : (
+                    <Input
+                        size="lg"
+                        label="Token"
+                        hint="Tick. Native coin by default."
+                        value={tick}
+                        onChange={(e) => setTick(e.target.value)}
+                        autoComplete="off"
+                        autoCapitalize="characters"
+                    />
+                )
             ) : null}
             <AmountField
+                size="lg"
                 amount={amount}
                 fiatAmount={fiatAmount}
                 tick={tick}

@@ -34,6 +34,9 @@ import styles from './ChainPicker.module.css';
  * @param {string} [props.label]
  * @param {string} [props.placeholder]
  * @param {boolean} [props.disabled]
+ * @param {'md' | 'lg'} [props.size]   field size, matching Input: 'md'
+ *        (36px, default) sits inline with a form's other inputs; 'lg'
+ *        (48px) for hero screens.
  * @param {boolean} [props.hideNetworkKind]   When true, suppresses the
  *        ` · testnet` / ` · regtest` suffix in the subtext. Useful on
  *        Receive where the page is already scoped to the user's own
@@ -48,6 +51,7 @@ export function ChainPicker({
     label,
     placeholder = 'Select a network',
     disabled,
+    size = 'md',
     hideNetworkKind = false,
 }) {
     const [open, setOpen] = useState(false);
@@ -97,7 +101,7 @@ export function ChainPicker({
     const selected = entries.find((e) => e.id === value) || null;
 
     return (
-        <div className={styles.wrap}>
+        <div className={`${styles.wrap} ${styles[size] || ''}`.trim()}>
             {label ? <span className={styles.label}>{label}</span> : null}
             <button
                 type="button"
@@ -108,22 +112,21 @@ export function ChainPicker({
                 aria-expanded={open ? 'true' : 'false'}
                 disabled={disabled}
             >
-                <span className={styles.triggerIcon} aria-hidden="true">
-                    {selected?.iconUrl ? <img src={selected.iconUrl} alt="" /> : null}
-                </span>
+                {selected?.iconUrl ? (
+                    <span className={styles.triggerIcon} aria-hidden="true">
+                        <img src={selected.iconUrl} alt="" />
+                    </span>
+                ) : null}
                 <span className={styles.triggerText}>
                     {selected ? (
                         <>
                             <span className={styles.triggerLabel}>{selected.label}</span>
-                            <span className={styles.triggerSub}>
-                                {selected.ticker}
-                                {!hideNetworkKind && selected.networkKind !== 'mainnet'
-                                    ? ` · ${selected.networkKind}`
-                                    : ''}
-                            </span>
+                            {!hideNetworkKind && selected.networkKind !== 'mainnet' ? (
+                                <span className={styles.triggerKind}>{` · ${selected.networkKind}`}</span>
+                            ) : null}
                         </>
                     ) : (
-                        <span className={styles.triggerLabel}>{placeholder}</span>
+                        <span className={styles.triggerPlaceholder}>{placeholder}</span>
                     )}
                 </span>
                 <span className={styles.triggerCaret} aria-hidden="true">

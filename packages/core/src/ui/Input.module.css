@@ -30,6 +30,23 @@
     box-shadow: 0 0 0 3px var(--xc-focus-ring);
 }
 
+/* Size contract. `.md` (36px) is the default and lives on `.input`/`.label`
+   above, so the md path needs no extra class. `.lg` is the "hero field"
+   treatment (Send's Amount/To): larger type, taller box, weightier label.
+   This is the single source of truth for the big-field look; AmountField
+   and Send used to duplicate these values inline. Applied to the `.field`
+   wrapper so it can size both the label and the input together. */
+.lg .input {
+    font-size: var(--xc-text-lg);
+    padding: var(--xc-space-3) var(--xc-space-4);
+    min-height: 48px;
+}
+
+.lg .label {
+    font-size: var(--xc-text-md);
+    font-weight: 600;
+}
+
 .invalid {
     border-color: var(--xc-danger);
 }

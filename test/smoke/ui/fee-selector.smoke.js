@@ -74,6 +74,36 @@ assert.match(
     'custom rate change writes back',
 );
 
+// --- click-to-edit readout (exact fee + rate) --------------------------
+// Clicking the fee amount opens an exact-fee input; the typed fee is
+// converted to the equivalent rate so onChange keeps the
+// { mode: 'custom', customRate } contract. Clicking the tier rate jumps
+// to Custom seeded with that tier's rate. Both gated on allowCustom.
+
+assert.match(cmp, /const feeToDisplayRate = /, 'exact fee converts to a display rate');
+assert.match(
+    cmp,
+    /customRate: Number\.isFinite\(n\) && n >= 0 \? feeToDisplayRate\(n\) : 0/,
+    'fee edit emits custom mode with the derived rate',
+);
+assert.match(
+    cmp,
+    /customRate: activeEstimate\?\.rateValue \?\? seedCustomRate\(\)/,
+    'rate click enters Custom seeded with the active tier rate',
+);
+assert.match(cmp, /aria-label="Edit exact fee amount"/, 'fee figure is an accessible edit button');
+assert.match(cmp, /aria-label=\{`Edit fee rate/, 'rate figure is an accessible edit button');
+assert.match(
+    cmp,
+    /if \(disabled \|\| !allowCustom\) return;/,
+    'edit affordances are gated on allowCustom',
+);
+assert.match(
+    cmp,
+    /aria-label=\{`Network fee amount/,
+    'exact-fee input is labelled',
+);
+
 // --- empty state -------------------------------------------------------
 
 assert.match(cmp, /Fee estimate unavailable for this chain\./, 'empty-state copy');
@@ -91,7 +121,7 @@ assert.match(
 
 // --- CSS hooks ---------------------------------------------------------
 
-for (const cls of ['wrap', 'label', 'sliderBlock', 'slider', 'sliderTicks', 'sliderTick', 'sliderTickActive', 'sliderReadout', 'customRow', 'customInput', 'customUnit', 'placeholder']) {
+for (const cls of ['wrap', 'label', 'sliderBlock', 'slider', 'sliderTicks', 'sliderTick', 'sliderTickActive', 'sliderReadout', 'customRow', 'customInput', 'customUnit', 'placeholder', 'readoutEdit', 'feeInput']) {
     assert.match(css, new RegExp(`\\.${cls}\\b`), `CSS hook .${cls}`);
 }
 

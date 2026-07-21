@@ -26,9 +26,10 @@ import styles from './Input.module.css';
  * @property {string} [hint]
  * @property {string} [error]
  * @property {string} [id]
+ * @property {'md' | 'lg'} [size]   field size: 'md' (36px, default) or 'lg' (48px hero field). Mirrors Button's size API.
  */
 export const Input = forwardRef(function Input(
-    { label, hint, error, id, type = 'text', onKeyDown, onKeyUp, onFocus, onBlur, ...rest },
+    { label, hint, error, id, size = 'md', type = 'text', onKeyDown, onKeyUp, onFocus, onBlur, ...rest },
     ref,
 ) {
     const autoId = useId();
@@ -76,7 +77,7 @@ export const Input = forwardRef(function Input(
     };
 
     return (
-        <div className={styles.field}>
+        <div className={`${styles.field} ${styles[size] || ''}`.trim()}>
             {label ? (
                 <label htmlFor={inputId} className={styles.label}>
                     {label}

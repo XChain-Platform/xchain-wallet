@@ -16,6 +16,7 @@ import {
     Input,
     ChainBadge,
     AddressText,
+    FeeSelector,
  Icon,} from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
@@ -25,7 +26,12 @@ import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { activeSourceId } from '../addressSelection.js';
-import { estimateNativeSendFee } from '../../flows/feeEstimate.js';
+import {
+    estimateNativeSendFee,
+    estimateNativeSendFeeTiers,
+    customFeeEstimate,
+    displayRateToSettingsCustom,
+} from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -224,13 +230,30 @@ export function CrossChainSwapForm({ walletId, onBack }) {
         return null;
     }, [giveCoinTicker, getCoinTicker, giveTick, getTick, expirationBlocks]);
 
-    // Network fee estimate for the give chain (the chain that pays the
-    // on-chain fee). Computed synchronously from the placeholder table;
-    // displayed on the review screen so the user sees a cost summary.
-    const feeEstimate = useMemo(
-        () => estimateNativeSendFee({ chainId: giveChainId, chainRegistry }),
+    // Network fee for the give chain (the chain that pays the on-chain fee):
+    // Low / Normal / Fast / Custom, editable via FeeSelector on the form
+    // stage. `feeEstimate` backs both the slider readout and the review row;
+    // `feePerKb` prices the broadcast. Mirrors ComposeMessage.
+    const [feePick, setFeePick] = useState(
+        /** @type {{ mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }} */ ({ mode: 'normal' }),
+    );
+    const feeTiers = useMemo(
+        () => estimateNativeSendFeeTiers({ chainId: giveChainId, chainRegistry }),
         [giveChainId],
     );
+    const feeCustomEstimate = useMemo(
+        () => (feePick.mode === 'custom'
+            ? customFeeEstimate({ chainId: giveChainId, chainRegistry, rate: Number(feePick.customRate) || 0 })
+            : null),
+        [giveChainId, feePick],
+    );
+    const feeEstimate = feePick.mode === 'custom'
+        ? feeCustomEstimate
+        : (feeTiers ? feeTiers[feePick.mode] : estimateNativeSendFee({ chainId: giveChainId, chainRegistry, speed: feePick.mode }));
+    const feePerKb = (feeEstimate && feeEstimate.unit
+        && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
+        ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
+        : null;
     const giveTicker = giveDescriptor?.coin
         ? NATIVE_TICKER_BY_COIN[giveDescriptor.coin] || giveDescriptor.coin.toUpperCase()
         : null;
@@ -295,6 +318,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                     signerId: fromAddress.signerId,
                 },
                 params,
+                ...(feePerKb != null ? { feePerKb } : {}),
             };
             let r;
             if (isWatcherMode) {
@@ -302,6 +326,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                     chainId: giveChainId,
                     from: base.from,
                     actionData: { action: 'SWAP', params },
+                    ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
                 });
             } else if (hw) {
                 r = await messaging.swapActionHw({ ...base, signerId: fromAddress.signerId });
@@ -606,6 +631,17 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                 value={memo}
                 onChange={(e) => setMemo(e.target.value)}
             />
+
+            {feeTiers ? (
+                <FeeSelector
+                    label="Network fee"
+                    coinTicker={giveTicker || ''}
+                    tiers={feeTiers}
+                    value={feePick}
+                    onChange={setFeePick}
+                    customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
+                />
+            ) : null}
 
             {validationError ? (
                 <p role="alert" className={styles.error}>{validationError}</p>

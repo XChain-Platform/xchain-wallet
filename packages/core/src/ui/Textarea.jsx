@@ -22,9 +22,10 @@ import styles from './Input.module.css';
  * @property {string} [hint]
  * @property {string} [error]
  * @property {string} [id]
+ * @property {'md' | 'lg'} [size]   field size, matching Input.
  */
 export const Textarea = forwardRef(function Textarea(
-    { label, hint, error, id, style, ...rest },
+    { label, hint, error, id, size = 'md', style, ...rest },
     ref,
 ) {
     const autoId = useId();
@@ -35,7 +36,7 @@ export const Textarea = forwardRef(function Textarea(
     const textareaClass = `${styles.input} ${error ? styles.invalid : ''}`.trim();
 
     return (
-        <div className={styles.field}>
+        <div className={`${styles.field} ${styles[size] || ''}`.trim()}>
             {label ? (
                 <label htmlFor={textareaId} className={styles.label}>
                     {label}

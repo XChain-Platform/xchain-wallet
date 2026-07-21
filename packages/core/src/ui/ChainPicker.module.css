@@ -3,7 +3,7 @@
     width: 100%;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: var(--xc-space-1);
     margin-bottom: var(--xc-space-3);
 }
 
@@ -13,30 +13,37 @@
     color: var(--xc-text-muted);
 }
 
+/* Trigger matches the shared Input chrome (border / background / radius) and
+   the size contract: md (36px) sits inline with a form's other inputs; lg
+   (48px) for hero screens. One line: icon + chain name + optional
+   network-kind suffix + caret (the fuller ticker/kind detail lives in the
+   dropdown rows below). */
 .trigger {
     appearance: none;
     width: 100%;
     display: flex;
     align-items: center;
     gap: var(--xc-space-2);
-    padding: 10px 12px;
+    min-height: 36px;
+    padding: var(--xc-space-2) var(--xc-space-3);
+    font-size: var(--xc-text-md);
     background: var(--xc-surface);
     border: 1px solid var(--xc-border-strong);
-    border-radius: 10px;
+    border-radius: var(--xc-radius-md);
     color: var(--xc-text);
     cursor: pointer;
     text-align: start;
-    transition: background var(--xc-transition), border-color var(--xc-transition);
+    transition: border-color var(--xc-transition), box-shadow var(--xc-transition);
 }
 
 .trigger:hover:not(:disabled) {
-    background: var(--xc-bg-muted);
-    border-color: var(--xc-text-muted);
+    border-color: var(--xc-accent-primary);
 }
 
 .trigger:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
+    outline: none;
+    border-color: var(--xc-accent-primary);
+    box-shadow: 0 0 0 3px var(--xc-focus-ring);
 }
 
 .trigger:disabled {
@@ -46,44 +53,47 @@
 
 .triggerIcon {
     flex: 0 0 auto;
-    width: 28px;
-    height: 28px;
+    width: 20px;
+    height: 20px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border-radius: 50%;
-    background: var(--xc-bg-muted);
-    overflow: hidden;
 }
 
 .triggerIcon img {
-    width: 22px;
-    height: 22px;
+    width: 20px;
+    height: 20px;
     display: block;
+    border-radius: 50%;
 }
 
 .triggerText {
     flex: 1 1 auto;
     min-width: 0;
     display: flex;
-    flex-direction: column;
-    line-height: 1.15;
+    align-items: baseline;
+    gap: 4px;
+    overflow: hidden;
 }
 
 .triggerLabel {
-    font-weight: 600;
-    font-size: var(--xc-text-sm);
+    font-size: inherit;
     color: var(--xc-text);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-.triggerSub {
+.triggerKind {
+    flex: 0 0 auto;
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
     font-family: var(--xc-font-mono);
     letter-spacing: 0.04em;
+}
+
+.triggerPlaceholder {
+    color: var(--xc-text-muted);
 }
 
 .triggerCaret {
@@ -92,6 +102,24 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
+}
+
+/* lg (hero) size, matching Input.module.css `.lg`. */
+.lg .trigger {
+    min-height: 48px;
+    padding: var(--xc-space-3) var(--xc-space-4);
+    font-size: var(--xc-text-lg);
+}
+
+.lg .label {
+    font-size: var(--xc-text-md);
+    font-weight: 600;
+}
+
+.lg .triggerIcon,
+.lg .triggerIcon img {
+    width: 24px;
+    height: 24px;
 }
 
 /* Popover */

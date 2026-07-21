@@ -15,6 +15,7 @@ import {
     Button,
     ChainBadge,
     AddressText,
+    FeeSelector,
  Icon,} from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -22,7 +23,12 @@ import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
-import { estimateNativeSendFee } from '../../flows/feeEstimate.js';
+import {
+    estimateNativeSendFee,
+    estimateNativeSendFeeTiers,
+    customFeeEstimate,
+    displayRateToSettingsCustom,
+} from '../../flows/feeEstimate.js';
 import { coinpayExpiryText } from '../../market/coinpayExpiry.js';
 import styles from './IssueTokenForm.module.css';
 
@@ -182,12 +188,33 @@ export function CoinpayForm({
         };
     }, [selected]);
 
-    // Fee estimate for the review screen. Recomputed when the selected
-    // chain changes; null for unknown chains or missing chainId.
-    const feeEstimate = useMemo(() => {
-        if (!selected?.chainId) return null;
-        return estimateNativeSendFee({ chainId: selected.chainId, chainRegistry });
-    }, [selected]);
+    // Network fee: Low / Normal / Fast / Custom, editable via FeeSelector on
+    // the obligation-confirm stage. `feeEstimate` backs the slider readout and
+    // the review row; `feePerKb` prices the broadcast. Mirrors ComposeMessage.
+    const [feePick, setFeePick] = useState(
+        /** @type {{ mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }} */ ({ mode: 'normal' }),
+    );
+    const feeTiers = useMemo(
+        () => (selected?.chainId
+            ? estimateNativeSendFeeTiers({ chainId: selected.chainId, chainRegistry })
+            : null),
+        [selected],
+    );
+    const feeCustomEstimate = useMemo(
+        () => (selected?.chainId && feePick.mode === 'custom'
+            ? customFeeEstimate({ chainId: selected.chainId, chainRegistry, rate: Number(feePick.customRate) || 0 })
+            : null),
+        [selected, feePick],
+    );
+    const feeEstimate = !selected?.chainId
+        ? null
+        : (feePick.mode === 'custom'
+            ? feeCustomEstimate
+            : (feeTiers ? feeTiers[feePick.mode] : estimateNativeSendFee({ chainId: selected.chainId, chainRegistry, speed: feePick.mode })));
+    const feePerKb = (feeEstimate && feeEstimate.unit
+        && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
+        ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
+        : null;
 
     // §20 / Cluster W FOLLOWUP 5: watcher-mode encode-only branch.
     const { isWatcherMode } = useWalletMode();
@@ -240,11 +267,22 @@ export function CoinpayForm({
                 // The generic buildActionPsbtRequest would happily encode a
                 // payment to whatever payee/amount this screen handed it, and an
                 // air-gapped signer only ever sees the outputs it is given.
-                r = await messaging.buildCoinpayPsbtRequest(base);
+                r = await messaging.buildCoinpayPsbtRequest({
+                    ...base,
+                    ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
+                });
             } else if (hw) {
-                r = await messaging.coinpayActionHw({ ...base, signerId: selected.addr.signerId });
+                r = await messaging.coinpayActionHw({
+                    ...base,
+                    signerId: selected.addr.signerId,
+                    ...(feePerKb != null ? { feePerKb } : {}),
+                });
             } else {
-                r = await messaging.coinpayAction({ ...base, password });
+                r = await messaging.coinpayAction({
+                    ...base,
+                    password,
+                    ...(feePerKb != null ? { feePerKb } : {}),
+                });
             }
             setResult(r);
             setStage('done');
@@ -520,6 +558,17 @@ export function CoinpayForm({
                             </>
                         ) : null}
                     </dl>
+
+                    {feeTiers ? (
+                        <FeeSelector
+                            label="Network fee"
+                            coinTicker={coinTicker}
+                            tiers={feeTiers}
+                            value={feePick}
+                            onChange={setFeePick}
+                            customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
+                        />
+                    ) : null}
 
                     {submitError ? (
                         <div role="alert" className={styles.error}>{submitError}</div>

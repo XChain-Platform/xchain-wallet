@@ -17,6 +17,7 @@ import {
     ChainBadge,
     ChainPicker,
     AddressText,
+    FeeSelector,
  Icon,} from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -29,7 +30,12 @@ import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 import { preferredSourceId } from '../addressSelection.js';
-import { estimateNativeSendFee } from '../../flows/feeEstimate.js';
+import {
+    estimateNativeSendFee,
+    estimateNativeSendFeeTiers,
+    customFeeEstimate,
+    displayRateToSettingsCustom,
+} from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -187,12 +193,30 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
     // §20 / Cluster W FOLLOWUP 5: watcher-mode encode-only branch.
     const { isWatcherMode } = useWalletMode();
 
-    // Network fee estimate shown on the review screen. Computed once and
-    // memoized; the chain is locked during review so staleness isn't a risk.
-    const feeEstimate = useMemo(
-        () => estimateNativeSendFee({ chainId, chainRegistry }),
+    // Network fee: Low / Normal / Fast / Custom, editable via FeeSelector on
+    // the form stage. `feeEstimate` is the estimate for the current pick and
+    // backs both the slider readout and the review row; `feePerKb` prices the
+    // broadcast. Mirrors ComposeMessage / DispenserDetail.
+    const [feePick, setFeePick] = useState(
+        /** @type {{ mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }} */ ({ mode: 'normal' }),
+    );
+    const feeTiers = useMemo(
+        () => estimateNativeSendFeeTiers({ chainId, chainRegistry }),
         [chainId],
     );
+    const feeCustomEstimate = useMemo(
+        () => (feePick.mode === 'custom'
+            ? customFeeEstimate({ chainId, chainRegistry, rate: Number(feePick.customRate) || 0 })
+            : null),
+        [chainId, feePick],
+    );
+    const feeEstimate = feePick.mode === 'custom'
+        ? feeCustomEstimate
+        : (feeTiers ? feeTiers[feePick.mode] : estimateNativeSendFee({ chainId, chainRegistry, speed: feePick.mode }));
+    const feePerKb = (feeEstimate && feeEstimate.unit
+        && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
+        ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
+        : null;
 
     // handleReview validates the form then moves to the review stage.
     // No signing happens here: the actual flow calls live in handleSubmit
@@ -251,6 +275,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                 },
                 params,
                 payFeeInNativeCoin: payFeeInNativeCoin || undefined,
+                ...(feePerKb != null ? { feePerKb } : {}),
             };
             let r;
             if (isWatcherMode) {
@@ -258,7 +283,10 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                     chainId,
                     from: base.from,
                     actionData: { action: 'SWAP', params },
-                    encoderOpts: { payFeeInNativeCoin: payFeeInNativeCoin || undefined },
+                    encoderOpts: {
+                        payFeeInNativeCoin: payFeeInNativeCoin || undefined,
+                        ...(feePerKb != null ? { feePerKb } : {}),
+                    },
                 });
             } else if (hw) {
                 r = await messaging.swapActionHw({ ...base, signerId: fromAddress.signerId });
@@ -550,6 +578,17 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                 value={memo}
                 onChange={(e) => setMemo(e.target.value)}
             />
+
+            {feeTiers ? (
+                <FeeSelector
+                    label="Network fee"
+                    coinTicker={coinTicker}
+                    tiers={feeTiers}
+                    value={feePick}
+                    onChange={setFeePick}
+                    customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
+                />
+            ) : null}
 
             <NativeFeeToggle
                 checked={payFeeInNativeCoin}

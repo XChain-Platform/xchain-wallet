@@ -35,11 +35,18 @@ assert.match(formSrc, /import \{ useWalletMode \} from '\.\.\/hooks\/useWalletMo
 assert.match(formSrc, /import \{ WatcherResultPanel \} from '\.\.\/components\/WatcherResultPanel\.jsx';/);
 assert.match(formSrc, /const \{ isWatcherMode \} = useWalletMode\(\);/);
 
-// Watcher mode goes through the verifying COINPAY route.
+// Watcher mode goes through the verifying COINPAY route. (The call spreads
+// `base` plus the chosen network fee under encoderOpts, so match the call,
+// not the exact argument shape.)
 assert.match(
     formSrc,
-    /messaging\.buildCoinpayPsbtRequest\(base\)/,
+    /messaging\.buildCoinpayPsbtRequest\(\{\s*\n\s*\.\.\.base/,
     'watcher-mode COINPAY uses the verifying buildCoinpayPsbtRequest route',
+);
+assert.match(
+    formSrc,
+    /buildCoinpayPsbtRequest\([\s\S]{0,120}encoderOpts:\s*\{\s*feePerKb\s*\}/,
+    'watcher-mode COINPAY threads the picked fee via encoderOpts.feePerKb',
 );
 
 // And must NOT hand-roll the payment output any more. Asserted against real code

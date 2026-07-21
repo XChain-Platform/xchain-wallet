@@ -22,6 +22,8 @@ import {
     decoder as decoderLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { AmountField } from '../components/AmountField.jsx';
+import { formatWithThousands } from '../utils/amountFormat.js';
 import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
@@ -113,6 +115,12 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     const [fiatCode, setFiatCode] = useState('');
     const [fiatAmount, setFiatAmount] = useState('');
     const [showAdvanced, setShowAdvanced] = useState(false);
+    // SOURCE address's balance of `ticker` (coin-scale string), backing
+    // the escrow AmountField's Max button + "available" footer. Null
+    // while unresolved or when no ticker is entered.
+    const [sourceTickBalance, setSourceTickBalance] = useState(
+        /** @type {string | null} */ (null),
+    );
     const [password, setPassword] = useState('');
     const [payFeeInNativeCoin, setPayFeeInNativeCoin] = useState(false);
 
@@ -270,6 +278,30 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     }, [chainId, fromAddressId, addressesByChain]);
 
     const chainsWithAddresses = addressesByChain ? Object.keys(addressesByChain) : [];
+
+    // Resolve the SOURCE address's balance of the entered ticker for the
+    // escrow AmountField (Max + "available"). Debounced on the ticker for
+    // the same reason as the source-resolve effect above.
+    useEffect(() => {
+        const tick = ticker.trim().toUpperCase();
+        setSourceTickBalance(null);
+        if (!chainId || !fromAddress || !tick) return undefined;
+        if (typeof messaging.getWalletBalances !== 'function') return undefined;
+        let cancelled = false;
+        const timer = setTimeout(() => {
+            messaging.getWalletBalances(walletId, activeAccountId)
+                .then((byChain) => {
+                    if (cancelled || !byChain) return;
+                    const entries = byChain[chainId] || [];
+                    const entry = entries.find((e) => e && e.address === fromAddress.address);
+                    const rows = entry ? decoderLib.balancesFromSdk(entry.balances) || [] : [];
+                    const match = rows.find((b) => String(b.tick).toUpperCase() === tick);
+                    setSourceTickBalance(match ? String(match.amount) : '0');
+                })
+                .catch(() => { /* footer just stays empty on failure */ });
+        }, 400);
+        return () => { cancelled = true; clearTimeout(timer); };
+    }, [ticker, chainId, fromAddress, activeAccountId, walletId, messaging]);
 
     const fillsEstimate = useMemo(() => {
         const ga = Number(giveAmount);
@@ -722,13 +754,22 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 onChange={(e) => setGiveAmount(e.target.value)}
                 autoComplete="off"
             />
-            <Input
+            <AmountField
                 label="Escrow amount"
-                hint="Total tokens locked in the dispenser. Must be ≥ one fill."
-                inputMode="decimal"
-                value={escrow}
-                onChange={(e) => setEscrow(e.target.value)}
-                autoComplete="off"
+                amount={escrow}
+                tick={ticker}
+                onAmountFieldChange={(rawValue) => {
+                    const stripped = String(rawValue).replace(/,/g, '');
+                    if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
+                    setEscrow(stripped);
+                }}
+                onMax={sourceTickBalance && Number(sourceTickBalance) > 0
+                    ? () => setEscrow(sourceTickBalance)
+                    : undefined}
+                maxDisabled={!sourceTickBalance}
+                balanceText={sourceTickBalance != null && ticker.trim()
+                    ? `${formatWithThousands(sourceTickBalance)} ${ticker.trim().toUpperCase()} available`
+                    : null}
             />
             <Input
                 label={`Trigger price${coinTicker ? ` (${coinTicker})` : ''}`}

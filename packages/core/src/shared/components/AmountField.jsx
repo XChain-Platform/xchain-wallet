@@ -22,6 +22,7 @@ import styles from './AmountField.module.css';
 
 /**
  * @param {object} props
+ * @param {string} [props.label]                             field label; defaults to "Amount". The active unit is appended either way.
  * @param {string} props.amount                              canonical coin-scale amount (always)
  * @param {string} [props.fiatAmount]                        raw text in the fiat input mode; ignored when `amountInputMode === 'coin'`
  * @param {string} [props.tick]                              ticker shown in the label when in coin mode (e.g. 'BTC')
@@ -34,9 +35,12 @@ import styles from './AmountField.module.css';
  * @param {() => void} [props.onMax]                         when omitted, the inline Max button is hidden
  * @param {boolean} [props.maxDisabled]                      grey out the Max button (e.g. while balance is loading)
  * @param {import('react').ReactNode} [props.balanceText]    right-hand footer text, typically "X.XX BTC available". Omit when meaningless (e.g. Receive).
+ * @param {'md' | 'lg'} [props.size]                         field size, forwarded to the inner Input. Defaults to 'md' (compact) so it matches a form's other inputs; hero screens (Send/Receive) pass 'lg'.
  */
 export function AmountField({
+    label = 'Amount',
     amount,
+    size = 'md',
     fiatAmount = '',
     tick = '',
     fiatRate = null,
@@ -69,24 +73,18 @@ export function AmountField({
     }
 
     return (
-        <div className={`${styles.amountBlock} ${styles.bigField}`}>
-            <div className={styles.amountFieldWrap}>
+        <div className={styles.amountBlock}>
+            <div className={styles.amountFieldWrap} data-size={size}>
                 <Input
                     ref={inputRef}
-                    label={activeUnit ? `Amount (${activeUnit})` : 'Amount'}
+                    size={size}
+                    label={activeUnit ? `${label} (${activeUnit})` : label}
                     inputMode="decimal"
                     value={formatWithThousands(inputValue)}
                     onChange={(e) => onAmountFieldChange(e.target.value, e.target.selectionStart)}
                     autoComplete="off"
                     placeholder="0.00"
-                    style={{
-                        fontSize: 'var(--xc-text-lg)',
-                        paddingTop: 'var(--xc-space-3)',
-                        paddingBottom: 'var(--xc-space-3)',
-                        paddingLeft: 'var(--xc-space-4)',
-                        paddingRight: onMax ? '64px' : 'var(--xc-space-4)',
-                        minHeight: '48px',
-                    }}
+                    style={onMax ? { paddingRight: '64px' } : undefined}
                 />
                 {onMax ? (
                     <button

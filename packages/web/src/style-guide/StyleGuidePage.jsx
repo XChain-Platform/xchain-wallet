@@ -30,7 +30,11 @@ import { TokenSelectorSection } from './sections/TokenSelectorSection.jsx';
 import { AddressListSection } from './sections/AddressListSection.jsx';
 import { PillSegmentedSection } from './sections/PillSegmentedSection.jsx';
 import { ToggleBarSection } from './sections/ToggleBarSection.jsx';
-import { BigFieldSection } from './sections/BigFieldSection.jsx';
+import { FieldSizesSection } from './sections/FieldSizesSection.jsx';
+import { AmountFieldSection } from './sections/AmountFieldSection.jsx';
+import { AddressFieldSection } from './sections/AddressFieldSection.jsx';
+import { TokenFieldSection } from './sections/TokenFieldSection.jsx';
+import { ChainPickerSection } from './sections/ChainPickerSection.jsx';
 import { FeeSelectorSection } from './sections/FeeSelectorSection.jsx';
 import { VoiceSection } from './sections/VoiceSection.jsx';
 import { StatesSection } from './sections/StatesSection.jsx';
@@ -55,7 +59,11 @@ const SECTIONS = [
     { id: 'address-list',          label: 'Address list (contacts)',Component: AddressListSection },
     { id: 'pill-segmented',        label: 'Pill segmented',         Component: PillSegmentedSection },
     { id: 'toggle-bar',            label: 'Toggle bar (filter)',    Component: ToggleBarSection },
-    { id: 'big-field',             label: 'Big-field input',        Component: BigFieldSection },
+    { id: 'field-sizes',           label: 'Field sizes',            Component: FieldSizesSection },
+    { id: 'amount-field',          label: 'Amount field',           Component: AmountFieldSection },
+    { id: 'address-field',         label: 'Address field',          Component: AddressFieldSection },
+    { id: 'token-field',           label: 'Token field',            Component: TokenFieldSection },
+    { id: 'chain-picker',          label: 'Chain picker',           Component: ChainPickerSection },
     { id: 'fee-selector',          label: 'Fee selector',           Component: FeeSelectorSection },
     { id: 'voice',                 label: 'Voice & microcopy',      Component: VoiceSection },
     { id: 'states',                label: 'Loading / empty / error',Component: StatesSection },
