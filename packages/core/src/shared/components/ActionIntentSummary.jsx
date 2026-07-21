@@ -18,6 +18,8 @@
 // (via txSimulator.simulateAction fed parse() output) and passes them in,
 // keeping this component pure and trivially testable.
 
+import styles from './ActionIntentSummary.module.css';
+
 /**
  * @param {object} props
  * @param {{ summary: string, details: Array<{label: string, value: string}>, warnings: string[] }} props.decoded
@@ -25,13 +27,13 @@
  */
 export function ActionIntentSummary({ decoded, simulation }) {
     return (
-        <div className="action-intent" data-testid="action-intent">
-            <p className="action-intent-summary">{decoded.summary}</p>
+        <div className={styles.intent} data-testid="action-intent">
+            <p className={styles.summary}>{decoded.summary}</p>
 
             {decoded.details.length > 0 ? (
-                <dl className="action-intent-details">
+                <dl className={styles.details}>
                     {decoded.details.map((d, i) => (
-                        <div key={`${d.label}-${i}`} className="action-intent-row">
+                        <div key={`${d.label}-${i}`} className={styles.row}>
                             <dt>{d.label}</dt>
                             <dd>{d.value}</dd>
                         </div>
@@ -40,21 +42,21 @@ export function ActionIntentSummary({ decoded, simulation }) {
             ) : null}
 
             {decoded.warnings.length > 0 ? (
-                <ul className="action-intent-warnings">
+                <ul className={styles.warnings}>
                     {decoded.warnings.map((w, i) => (<li key={i}>{w}</li>))}
                 </ul>
             ) : null}
 
             {simulation && Array.isArray(simulation.deltas) && simulation.deltas.length > 0 ? (
-                <div className="action-intent-deltas" data-testid="action-intent-deltas">
+                <div className={styles.deltas} data-testid="action-intent-deltas">
                     {simulation.deltas.map((d, i) => (
-                        <div key={`${d.tick}-${i}`} className="action-intent-delta">
-                            <span className="delta-tick">{d.tick}</span>
-                            <span className="delta-values">{d.before} → {d.after}</span>
+                        <div key={`${d.tick}-${i}`} className={styles.delta}>
+                            <span className={styles.deltaTick}>{d.tick}</span>
+                            <span className={styles.deltaValues}>{d.before} → {d.after}</span>
                         </div>
                     ))}
                     {Array.isArray(simulation.notes)
-                        ? simulation.notes.map((n, i) => (<p key={i} className="delta-note">{n}</p>))
+                        ? simulation.notes.map((n, i) => (<p key={i} className={styles.deltaNote}>{n}</p>))
                         : null}
                 </div>
             ) : null}

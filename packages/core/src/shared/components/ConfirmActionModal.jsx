@@ -25,6 +25,7 @@ import { Button } from '@xchain-wallet/core/ui';
 import { useFocusTrap, useInertBackground } from '../utils/focusTrap.js';
 import { ActionIntentSummary } from './ActionIntentSummary.jsx';
 import { PreflightPanel } from './PreflightPanel.jsx';
+import styles from './ConfirmActionModal.module.css';
 
 const PRE_SIGN_PHASES = new Set(['preflighting', 'ready']);
 const OPEN_PHASES = new Set(['preflighting', 'ready', 'signing', 'rechecking', 'done', 'error', 'signed-not-broadcast']);
@@ -100,24 +101,24 @@ export function ConfirmActionModal({
         // on the panel, which is what the focus trap operates over.
         <div
             ref={rootRef}
-            className="confirm-modal-overlay"
+            className={styles.overlay}
             data-testid="confirm-modal"
         >
             <div
                 ref={panelRef}
-                className="confirm-modal-panel"
+                className={styles.panel}
                 role="dialog"
                 aria-modal="true"
                 aria-label={`Confirm ${decoded?.summary || 'action'}`}
             >
                 {/* Header (pinned) */}
-                <header className="confirm-modal-header">
-                    <span className="confirm-modal-action-label">{decoded?.summary?.split('\n')[0]}</span>
-                    <span className="confirm-modal-chain-badge" data-testid="confirm-chain-badge">{chainLabel}</span>
+                <header className={styles.header}>
+                    <span className={styles.actionLabel}>{decoded?.summary?.split('\n')[0]}</span>
+                    <span className={styles.chainBadge} data-testid="confirm-chain-badge">{chainLabel}</span>
                 </header>
 
                 {/* Body (scrolls) */}
-                <div className="confirm-modal-body">
+                <div className={styles.body}>
                     {variant !== 'message' && decoded ? (
                         <ActionIntentSummary decoded={decoded} simulation={simulation} />
                     ) : null}
@@ -132,7 +133,7 @@ export function ConfirmActionModal({
                     ) : null}
 
                     {feeText ? (
-                        <div className="confirm-modal-fee" data-testid="confirm-fee">{feeText}</div>
+                        <div className={styles.fee} data-testid="confirm-fee">{feeText}</div>
                     ) : null}
 
                     {/* §5.3.4: a credential failure returns the modal to `ready`
@@ -140,32 +141,32 @@ export function ConfirmActionModal({
                         the SAME PSBT. Sits directly above the credentials block
                         so the message is adjacent to the field it refers to. */}
                     {error ? (
-                        <div className="confirm-modal-error" role="alert" data-testid="confirm-error">
+                        <div className={styles.error} role="alert" data-testid="confirm-error">
                             {typeof error === 'string' ? error : (error?.message || 'Something went wrong.')}
                         </div>
                     ) : null}
 
-                    <div className="confirm-modal-credentials" ref={initialFocusRef}>
+                    <div className={styles.credentials} ref={initialFocusRef}>
                         {credentials}
                     </div>
 
-                    <p className="confirm-modal-hw-note">
+                    <p className={styles.hwNote}>
                         A hardware device verifies native outputs and destinations only; the action
                         data is obfuscated on-chain, so this screen is where you verify the action intent.
                     </p>
 
                     {phase === 'rechecking' ? (
-                        <p className="confirm-modal-recheck" data-testid="confirm-rechecking">Re-checking…</p>
+                        <p className={styles.recheck} data-testid="confirm-rechecking">Re-checking…</p>
                     ) : null}
                     {phase === 'signed-not-broadcast' ? (
-                        <p className="confirm-modal-queued" data-testid="confirm-queued">
+                        <p className={styles.queued} data-testid="confirm-queued">
                             Signed - broadcast will retry.
                         </p>
                     ) : null}
                 </div>
 
                 {/* Footer (pinned) */}
-                <footer className="confirm-modal-footer">
+                <footer className={styles.footer}>
                     <Button
                         variant="secondary"
                         onClick={onReject}

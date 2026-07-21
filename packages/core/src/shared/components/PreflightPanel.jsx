@@ -17,6 +17,8 @@
 // Exported standalone so the extension approval screen and the co-signer
 // preview surface can reuse it (§5.5).
 
+import styles from './PreflightPanel.module.css';
+
 /**
  * @param {object} props
  * @param {import('xchain-sdk').PreflightReport | null} props.report
@@ -27,15 +29,15 @@
 export function PreflightPanel({ report, loading, acknowledged, onAcknowledge }) {
     if (loading && !report) {
         return (
-            <div className="preflight-panel" data-testid="preflight-panel" aria-live="polite" aria-busy="true">
-                <span className="preflight-spinner">Checking…</span>
+            <div className={styles.panel} data-testid="preflight-panel" aria-live="polite" aria-busy="true">
+                <span className={styles.spinner}>Checking…</span>
             </div>
         );
     }
     if (!report) {
         return (
-            <div className="preflight-panel" data-testid="preflight-panel" aria-live="polite">
-                <span className="preflight-unverified">Pre-flight unavailable; proceeding is at your discretion.</span>
+            <div className={styles.panel} data-testid="preflight-panel" aria-live="polite">
+                <span className={styles.unverified}>Pre-flight unavailable; proceeding is at your discretion.</span>
             </div>
         );
     }
@@ -46,26 +48,26 @@ export function PreflightPanel({ report, loading, acknowledged, onAcknowledge })
 
     return (
         <div
-            className="preflight-panel"
+            className={styles.panel}
             data-testid="preflight-panel"
             data-verdict={report.verdict}
             aria-live={isFail ? 'assertive' : 'polite'}
         >
-            <div className={`preflight-chip preflight-chip--${report.verdict}`} data-testid="preflight-chip">
+            <div className={`${styles.chip} ${styles[`chip_${report.verdict}`] || ''}`.trim()} data-testid="preflight-chip">
                 {report.verdict === 'pass' ? 'Looks good' : report.verdict === 'warn' ? 'Review warnings' : 'Will likely fail'}
             </div>
 
             {report.restricted ? (
-                <div className="preflight-restricted-chip" data-testid="preflight-restricted">Partial check</div>
+                <div className={styles.restrictedChip} data-testid="preflight-restricted">Partial check</div>
             ) : null}
 
             {errors.length > 0 ? (
-                <ul className="preflight-errors">
+                <ul className={styles.errors}>
                     {errors.map((f) => (
-                        <li key={f.code} className="preflight-finding preflight-finding--error">
-                            <span className="preflight-finding-msg">{f.message}</span>
+                        <li key={f.code} className={`${styles.finding} ${styles.findingError}`}>
+                            <span className={styles.findingMsg}>{f.message}</span>
                             {f.overridable ? (
-                                <label className="preflight-ack">
+                                <label className={styles.ack}>
                                     <input
                                         type="checkbox"
                                         checked={acknowledged.has(f.code)}
@@ -81,9 +83,9 @@ export function PreflightPanel({ report, loading, acknowledged, onAcknowledge })
             ) : null}
 
             {warnings.length > 0 ? (
-                <ul className="preflight-warnings">
+                <ul className={styles.warnings}>
                     {warnings.map((f, i) => (
-                        <li key={`${f.code}-${i}`} className="preflight-finding preflight-finding--warning">
+                        <li key={`${f.code}-${i}`} className={`${styles.finding} ${styles.findingWarning}`}>
                             {f.message}
                         </li>
                     ))}
@@ -91,7 +93,7 @@ export function PreflightPanel({ report, loading, acknowledged, onAcknowledge })
             ) : null}
 
             {report.unverified && report.unverified.length > 0 ? (
-                <details className="preflight-unverified-list">
+                <details className={styles.unverifiedList}>
                     <summary>Could not verify ({report.unverified.length})</summary>
                     <ul>
                         {report.unverified.map((u, i) => (<li key={`${u.check}-${i}`}>{u.reason}</li>))}
@@ -100,7 +102,7 @@ export function PreflightPanel({ report, loading, acknowledged, onAcknowledge })
             ) : null}
 
             {typeof report.stateHeight === 'number' ? (
-                <div className="preflight-stamp">Checked at block {report.stateHeight}</div>
+                <div className={styles.stamp}>Checked at block {report.stateHeight}</div>
             ) : null}
         </div>
     );

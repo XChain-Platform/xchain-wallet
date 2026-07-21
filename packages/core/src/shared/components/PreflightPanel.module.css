@@ -1,0 +1,124 @@
+/* PreflightPanel ( §5.2.4). Verdict chip + findings grouped by
+   severity. Severity is never colour-only: the chip carries its own words
+   ("Looks good" / "Review warnings" / "Will likely fail") and findings are
+   list items, so the panel still reads correctly to a screen reader and
+   under a colour-vision deficiency. */
+
+.panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    padding: var(--xc-space-3);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-md);
+    background: var(--xc-bg-muted);
+    font-size: var(--xc-text-sm);
+}
+
+.spinner,
+.unverified {
+    color: var(--xc-text-muted);
+}
+
+.chip {
+    align-self: flex-start;
+    padding: 2px var(--xc-space-2);
+    border-radius: var(--xc-radius-pill);
+    font-size: var(--xc-text-xs);
+    font-weight: 700;
+}
+
+.chip_pass {
+    background: var(--xc-success);
+    color: var(--xc-text-inverted);
+}
+
+.chip_warn {
+    background: var(--xc-warning-bg);
+    color: var(--xc-warning-text);
+    border: 1px solid var(--xc-warning);
+}
+
+.chip_fail {
+    background: var(--xc-danger-bg);
+    color: var(--xc-danger-text);
+    border: 1px solid var(--xc-danger);
+}
+
+.restrictedChip {
+    align-self: flex-start;
+    padding: 2px var(--xc-space-2);
+    border-radius: var(--xc-radius-pill);
+    font-size: var(--xc-text-xs);
+    background: var(--xc-bg-muted);
+    color: var(--xc-text-muted);
+    border: 1px dashed var(--xc-border-strong);
+}
+
+.errors,
+.warnings {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+}
+
+.finding {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+    padding: var(--xc-space-2);
+    border-radius: var(--xc-radius-sm);
+    /* A leading bar keeps severity legible without relying on hue alone. */
+    border-inline-start: 3px solid transparent;
+    overflow-wrap: anywhere;
+}
+
+.findingError {
+    background: var(--xc-danger-bg);
+    color: var(--xc-danger-text);
+    border-inline-start-color: var(--xc-danger);
+}
+
+.findingWarning {
+    background: var(--xc-warning-bg);
+    color: var(--xc-warning-text);
+    border-inline-start-color: var(--xc-warning);
+}
+
+.findingMsg {
+    display: block;
+}
+
+/* The §4.2 explicit acknowledgment for a network-sourced (overridable)
+   error. Generous hit area: this is the control that unblocks signing. */
+.ack {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+    cursor: pointer;
+    padding-block: var(--xc-space-1);
+}
+
+.unverifiedList {
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+}
+
+.unverifiedList summary {
+    cursor: pointer;
+}
+
+.unverifiedList ul {
+    margin: var(--xc-space-1) 0 0;
+    padding-inline-start: var(--xc-space-4);
+}
+
+.stamp {
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+}

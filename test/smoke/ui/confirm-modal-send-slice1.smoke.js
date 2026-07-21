@@ -97,4 +97,30 @@ assert.match(hookSrc, /!optsRef\.current\.reservationId/, 'reservation guarded a
 const modalSrc = read('packages', 'core', 'src', 'shared', 'components', 'ConfirmActionModal.jsx');
 assert.match(modalSrc, /data-testid="confirm-error"/, 'modal has an in-modal error surface');
 
+// --- the confirm surface is STYLED (regression guard) ---------------
+// It shipped unstyled once: the three components used global class-name
+// strings with no stylesheet anywhere, so the "modal" rendered as bare
+// markup. Each must import its co-located CSS module (the codebase
+// convention, cf. NoticeModal) and define no global class strings.
+for (const name of ['ConfirmActionModal', 'ActionIntentSummary', 'PreflightPanel']) {
+    const jsx = read('packages', 'core', 'src', 'shared', 'components', `${name}.jsx`);
+    assert.match(jsx, new RegExp(`import styles from '\\./${name}\\.module\\.css'`), `${name}: imports its CSS module`);
+    assert.doesNotMatch(jsx, /className="(confirm-modal|preflight|action-intent|delta)-/, `${name}: no unstyled global class strings`);
+    // The stylesheet must exist and be non-trivial.
+    const css = read('packages', 'core', 'src', 'shared', 'components', `${name}.module.css`);
+    assert.ok(css.length > 200, `${name}.module.css is present and non-empty`);
+}
+
+// §5.2.7 layout contract is a SAFETY property, not cosmetics: header and
+// footer pinned, body the only scroll region, so a long BATCH/AIRDROP
+// intent can never push Reject/Approve off-screen in the ~360x600 popup.
+const modalCss = read('packages', 'core', 'src', 'shared', 'components', 'ConfirmActionModal.module.css');
+assert.match(modalCss, /\.panel\s*\{[^}]*flex-direction:\s*column/s, 'panel is a flex column');
+assert.match(modalCss, /\.panel\s*\{[^}]*max-height/s, 'panel is capped to the viewport');
+assert.match(modalCss, /\.body\s*\{[^}]*overflow-y:\s*auto/s, 'body scrolls internally');
+assert.match(modalCss, /\.body\s*\{[^}]*min-height:\s*0/s, 'body can shrink (flex overflow needs min-height:0)');
+assert.match(modalCss, /\.header\s*\{[^}]*flex:\s*0 0 auto/s, 'header is pinned');
+assert.match(modalCss, /\.footer\s*\{[^}]*flex:\s*0 0 auto/s, 'footer is pinned');
+assert.match(modalCss, /prefers-reduced-motion/, 'entry animation respects reduced-motion');
+
 console.log('confirm-modal-send-slice1.smoke.js OK');
