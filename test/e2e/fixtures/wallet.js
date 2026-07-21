@@ -137,6 +137,7 @@ export async function createWallet(page, options = {}) {
     const { password = DEFAULT_PASSWORD, name, ads = 'decline' } = options;
 
     await page.goto('/');
+    await dismissIntroCarousel(page);
     await page.getByRole('button', { name: 'Create new wallet' }).click();
 
     if (name) await page.getByLabel('Wallet name').fill(name);
@@ -156,6 +157,32 @@ export async function createWallet(page, options = {}) {
     // Argon2id runs on the CI runner's CPU; this is the slow step.
     await expect(lockButton(page)).toBeVisible({ timeout: 90_000 });
     return words;
+}
+
+/**
+ * Dismisses the pre-onboarding intro carousel ("You hold the keys" / Skip /
+ * Back / Next) that now sits in FRONT of the welcome screen.
+ *
+ * This is the same rot that killed the suite before (see the header note): a
+ * new onboarding screen lands, the fixture doesn't know about it, and every
+ * spec dies identically in `beforeEach` waiting for a button that is one
+ * screen away. It went unnoticed this time because the CI `e2e` job has been
+ * failing for unrelated billing reasons since 2026-07-16, so nothing ran.
+ *
+ * Tolerant by design: if the carousel is ever removed, `Skip` simply won't be
+ * there and this becomes a no-op rather than a new failure.
+ */
+export async function dismissIntroCarousel(page) {
+    const skip = page.getByRole('button', { name: 'Skip' });
+    try {
+        await skip.waitFor({ state: 'visible', timeout: 5_000 });
+    } catch {
+        return;                     // no carousel: nothing to dismiss
+    }
+    await skip.click();
+    // The welcome screen is what the caller actually needs.
+    await page.getByRole('button', { name: 'Create new wallet' })
+        .waitFor({ state: 'visible', timeout: 15_000 });
 }
 
 /** Answers the ADS donation-consent screen shown at the end of onboarding. */

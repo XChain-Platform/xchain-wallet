@@ -153,8 +153,15 @@ export default defineConfig({
     // ; a build.commonjsOptions.include attempt collapses on
     // vite-plugin-node-polyfills' bare shim specifiers resolving from the
     // linked SDK's directory.
+    // GATED: opt in with VITE_XCHAIN_REAL_SDK=1. Unconditionally pre-bundling
+    // the real SDK makes the app talk to a live backend at boot, and when none
+    // is reachable (the default for dev + the e2e suite) wallet creation HANGS
+    // - measured: the send spec passes in 12s on the dev-mock and times out
+    // after 7min on the real SDK against a half-configured regtest stack. So
+    // the real SDK is opt-in until the wallet degrades gracefully on an
+    // unreachable backend (that hang is its own defect, ).
     optimizeDeps: {
-        include: ['xchain-sdk'],
+        include: process.env.VITE_XCHAIN_REAL_SDK === '1' ? ['xchain-sdk'] : [],
     },
     build: {
         outDir: 'dist',
