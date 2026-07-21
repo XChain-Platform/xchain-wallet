@@ -262,15 +262,11 @@ export function useConfirmAction() {
     };
 }
 
-async function gatherLocalDeltas(args) {
-    const deltas = Array.isArray(args.preflightOpts?.localDeltas) ? args.preflightOpts.localDeltas.slice() : [];
-    if (args.reservationLedger) {
-        try {
-            const reserved = await args.reservationLedger.localDeltas(args.chainId, null);
-            for (const r of reserved) deltas.push(r);
-        } catch { /* best-effort */ }
-    }
-    return deltas;
+// Only the caller's explicit pending deltas are gathered here. In-flight
+// approval reservations are netted HOST-side (action.preflight reads the
+// shared ledger), so netting them again here would double-count.
+function gatherLocalDeltas(args) {
+    return Array.isArray(args.preflightOpts?.localDeltas) ? args.preflightOpts.localDeltas.slice() : [];
 }
 
 function verdictRank(v) { return v === 'fail' ? 2 : v === 'warn' ? 1 : 0; }

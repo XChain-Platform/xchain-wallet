@@ -244,6 +244,19 @@ export function preflight(opts) {
 }
 
 /**
+ *  §4.7: register an in-flight approval reservation on the host-shared
+ * ledger (at Approve) so a concurrent window's preflight nets it.
+ * @param {{ id: string, chainId: string, tick: string, amount: string }} opts
+ */
+export function reserve(opts) {
+    return /** @type {any} */ (sendMessage('action.reserve', opts));
+}
+/** Release a reservation by id on a terminal state. @param {{ id: string }} opts */
+export function releaseReservation(opts) {
+    return /** @type {any} */ (sendMessage('action.releaseReservation', opts));
+}
+
+/**
  * §20 / Cluster W FOLLOWUP 5: watcher-mode helper for the non-Send
  * action surface. Builds an unsigned PSBT for any XChain action without
  * unlocking the wallet, calling a signer, or broadcasting.

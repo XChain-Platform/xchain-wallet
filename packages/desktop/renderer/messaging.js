@@ -200,6 +200,19 @@ export function preflight(opts) {
 }
 
 /**
+ *  §4.7: register / release an in-flight approval reservation on the
+ * host-shared ledger so concurrent confirm flows net each other.
+ * @param {{ id: string, chainId: string, tick: string, amount: string }} opts
+ */
+export function reserve(opts) {
+    return /** @type {any} */ (sendMessage('action.reserve', opts));
+}
+/** @param {{ id: string }} opts */
+export function releaseReservation(opts) {
+    return /** @type {any} */ (sendMessage('action.releaseReservation', opts));
+}
+
+/**
  * §20 / Cluster W FOLLOWUP 5: generic watcher-mode encode-only helper
  * for the non-Send action surface.
  * @param {object} opts

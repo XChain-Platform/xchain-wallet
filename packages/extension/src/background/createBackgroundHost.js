@@ -50,6 +50,7 @@ const {
     sendToken,
     normalizeSource,
     composeActionForConfirm,
+    createReservationLedger,
     buildSendPsbt,
     buildActionPsbt,
     buildCoinpayPsbtRequest,
@@ -533,6 +534,14 @@ export function createBackgroundHost(deps) {
         ...hostDeps
     } = deps ?? {};
     const host = new MessageHost(hostDeps);
+
+    //  §4.7: ONE reservation ledger per host, shared across every
+    // approval window. A single background SW serves all popup windows, so
+    // an in-memory ledger already closes the two-window same-balance race
+    // (both windows' preflights net each other's approved-but-unbroadcast
+    // amounts). Persisting it to chrome.storage.session (to also survive an
+    // SW kill mid-modal, §5.4) is a follow-up: pass that store adapter here.
+    const reservationLedger = createReservationLedger();
 
     // Cluster Q FOLLOWUP 5: hydrate + start mirroring as early as
     // possible so a worker crash mid-boot still leaves the next session
@@ -1479,13 +1488,37 @@ export function createBackgroundHost(deps) {
         if (typeof sdk?.preflight !== 'function') {
             throw new Error(`action.preflight: SDK for "${chainId}" lacks preflight`);
         }
+        // §4.7: net the host-shared reservations for this chain into localDeltas
+        // so a second approval window sees the first's approved-but-unbroadcast
+        // amount and warns instead of double-spending. `excludeReservationId`
+        // keeps a window from netting its OWN reservation (unused in the current
+        // Send flow, where reserve always follows the last preflight).
+        const reserved = await reservationLedger.localDeltas(chainId, req.excludeReservationId);
+        const callerDeltas = Array.isArray(req.localDeltas) ? req.localDeltas : [];
+        const localDeltas = [...callerDeltas, ...reserved];
         return sdk.preflight(req.actionString, {
             source: req.source,
             chain: chainId,
-            localDeltas: Array.isArray(req.localDeltas) ? req.localDeltas : undefined,
+            localDeltas: localDeltas.length ? localDeltas : undefined,
             bypassCache: req.bypassCache === true,
             preflight: req.mode || 'report',
         });
+    });
+
+    // §4.7: register / release an in-flight approval reservation. The hook
+    // reserves at Approve (post sync-disable, before signing) and releases on
+    // any terminal state (broadcast, reject, abort). Release ordering is the
+    // caller's concern (§4.7: PendingTx row before release, so a concurrent
+    // window transiently double-counts rather than seeing neither).
+    host.register('action.reserve', async (req) => {
+        await reservationLedger.reserve({
+            id: req?.id, chainId: req?.chainId, tick: req?.tick, amount: req?.amount,
+        });
+        return { ok: true };
+    });
+    host.register('action.releaseReservation', async (req) => {
+        await reservationLedger.release(req?.id);
+        return { ok: true };
     });
 
     // §17.5 / G025: verify signature. Pure SDK call, no signer / no

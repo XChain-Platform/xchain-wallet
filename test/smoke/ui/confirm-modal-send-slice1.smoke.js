@@ -33,6 +33,12 @@ assert.match(hostSrc, /composeActionForConfirm\(/, 'compose route calls the host
 assert.match(hostSrc, /sdk\.preflight\(/, 'preflight route calls sdk.preflight host-side');
 // The compose route resolves own-chain addresses so change is not a tamper.
 assert.match(hostSrc, /addressesByChain\(/, 'compose route resolves ownAddresses from the vault');
+// §4.7 two-window race: a host-shared reservation ledger + reserve/release
+// routes, and preflight nets the reservations into localDeltas.
+assert.match(hostSrc, /const reservationLedger = createReservationLedger\(\)/, 'host-shared reservation ledger');
+assert.match(hostSrc, /host\.register\('action\.reserve'/, 'reserve route registered');
+assert.match(hostSrc, /host\.register\('action\.releaseReservation'/, 'release route registered');
+assert.match(hostSrc, /reservationLedger\.localDeltas\(chainId/, 'preflight nets reservations into localDeltas');
 
 // --- host flow (composeActionForConfirm) ----------------------------
 
@@ -54,6 +60,8 @@ for (const [shell, ...p] of [
     assert.match(src, /sendMessage\('action\.composeForConfirm'/, `${shell}: composeForConfirm routes to the host`);
     assert.match(src, /export function preflight\(/, `${shell}: preflight method`);
     assert.match(src, /sendMessage\('action\.preflight'/, `${shell}: preflight routes to the host`);
+    assert.match(src, /export function reserve\(/, `${shell}: reserve method`);
+    assert.match(src, /export function releaseReservation\(/, `${shell}: releaseReservation method`);
 }
 
 // --- prebuilt-PSBT threading (core) ---------------------------------
@@ -76,5 +84,8 @@ assert.match(sendSrc, /prebuiltPsbt:\s*\{/, 'Approve signs the prebuilt PSBT via
 assert.match(sendSrc, /singleEncodeSend && !isWatcherMode && !isHwSource/, 'modal path scoped to software sends');
 // The onApprove password is read from a live ref, not a stale closure.
 assert.match(sendSrc, /password:\s*passwordValueRef\.current/, 'onApprove reads the live password ref');
+// §4.7 reservation wired through messaging (host-shared ledger).
+assert.match(sendSrc, /reserve:\s*\(e\)\s*=>\s*messaging\.reserve\(e\)/, 'Send reserves via messaging at Approve');
+assert.match(sendSrc, /reserve:\s*\{\s*tick:/, 'Send passes the reserve amount');
 
 console.log('confirm-modal-send-slice1.smoke.js OK');

@@ -1078,6 +1078,14 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                 preflightOpts: {
                     mode: resolvePreflightPrivacy(settings) === 'local' ? 'local' : 'report',
                 },
+                // §4.7 two-window race: reserve this amount at Approve on the
+                // host-shared ledger; a concurrent window's preflight nets it.
+                // The ledger lives host-side (messaging), release on any terminal.
+                reservationLedger: {
+                    reserve: (e) => messaging.reserve(e),
+                    release: (id) => messaging.releaseReservation({ id }),
+                },
+                reserve: { tick: tick.trim(), amount: String(amount).trim() },
                 compose: () => messaging.composeForConfirm(sendBase),
                 preflight: (o) => messaging.preflight({ chainId, ...o }),
                 onApprove: (_creds, composed) => messaging.sendToken({
