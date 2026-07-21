@@ -90,7 +90,16 @@ const chainRegistry = registryLib.defaultRegistry();
 // (pubkey, type) so createWallet / importMnemonic persist real vault
 // records. Signing / broadcast / WIF-import throw loudly; those
 // paths have no non-SDK implementation.
-const createDevMockSdk = (constructorOpts) => {
+//
+// : the whole mock is gated on `import.meta.env?.PROD`, which Vite
+// statically replaces, so a production build dead-code-eliminates the
+// entire implementation (and the devFakeBalances dataset it pulls in).
+// That is what makes tools/build-reproduce/check-no-dev-mock.sh's grep
+// for the mock implementation real evidence: before this gate the mock
+// was referenced from live code paths and shipped in every build. The
+// `?.` keeps the module importable under raw Node (smoke harness),
+// where import.meta.env is undefined and the mock stays available.
+const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
     // Each per-chain SDK instance carries its own `network` (chainId)
     // so the fake-balance dataset can return chain-appropriate values.
     const chainId = constructorOpts?.network || 'bitcoin-mainnet';
@@ -313,17 +322,42 @@ const createDevMockSdk = (constructorOpts) => {
     });
 };
 
+// /: pre-resolution placeholder for PRODUCTION builds, where
+// the dev mock is compiled out. Any SDK call that lands before the real
+// factory swaps in (or after it failed to load) throws loudly instead of
+// serving fabricated data. Callable-and-traversable so both
+// `sdk.getBalances(...)` and `sdk.wallet.deriveAddress(...)` shapes hit
+// the throw rather than a confusing "not a function".
+function makeLoadingSdkSurface() {
+    const thrower = () => {
+        throw new Error(
+            '[xchain-wallet/web] xchain-sdk is not loaded yet (or failed to '
+            + 'load); refusing to serve data. See sdkResolved.',
+        );
+    };
+    return new Proxy(thrower, {
+        get(_target, prop) {
+            // Not a thenable: `await sdk` must not recurse into the proxy.
+            if (prop === 'then') return undefined;
+            return makeLoadingSdkSurface();
+        },
+        apply() { return thrower(); },
+    });
+}
+const createLoadingSdk = () => makeLoadingSdkSurface();
+
 // Build the SDKRegistry against a boot-time-resolved factory. Starts
-// with the dev mock so the module is usable synchronously; the real
-// factory swaps in once the dynamic import settles. A lazy swap like
-// this is safe because `SDKRegistry._instances` caches per chain, so
-// early-bind calls (onboarding) get the mock and post-resolution
-// calls (Send) get the real SDK. For a clean production run users
-// should onboard AFTER the swap; the `sdkResolved` promise below
-// gives callers a handle on that.
+// with the dev mock (dev builds) or a throwing placeholder (production,
+// where the mock is DCE-d out) so the module is usable synchronously;
+// the real factory swaps in once the dynamic import settles. A lazy
+// swap like this is safe because `SDKRegistry._instances` caches per
+// chain, so early-bind calls (onboarding) get the boot factory and
+// post-resolution calls (Send) get the real SDK. For a clean production
+// run users should onboard AFTER the swap; the `sdkResolved` promise
+// below gives callers a handle on that.
 let sdkRegistry = new sdkLib.SDKRegistry({
     chainRegistry,
-    sdkFactory: createDevMockSdk,
+    sdkFactory: createDevMockSdk ?? createLoadingSdk,
 });
 
 export const sdkResolved = resolveSdkFactory({ devMockFactory: createDevMockSdk })
@@ -334,7 +368,21 @@ export const sdkResolved = resolveSdkFactory({ devMockFactory: createDevMockSdk 
         });
         return result.source;
     })
-    .catch(() => 'dev-mock');
+    .catch((err) => {
+        // : never swallow the production refusal. sdkFactory.js throws
+        // under import.meta.env.PROD precisely so a shipped wallet cannot
+        // silently run without the real SDK; discarding that here (the old
+        // `.catch(() => 'dev-mock')`) left the registry on the mock with no
+        // symptom. In production: log loudly and re-throw so every
+        // `sdkResolved` consumer sees the failure, leaving the registry on
+        // the throwing placeholder (the mock does not exist in this build).
+        // In dev / Node harnesses the mock fallback is expected and fine.
+        if (import.meta.env?.PROD) {
+            console.error('[xchain-wallet/web] SDK resolution failed:', err);
+            throw err;
+        }
+        return 'dev-mock';
+    });
 
 /** Default active chains for onboarding. Users can change later via Settings. */
 export const DEFAULT_ACTIVE_CHAIN_IDS = [

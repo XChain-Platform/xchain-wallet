@@ -42,7 +42,7 @@ import {
     attachSessionMetaListener,
     attachSignerBridgeListener,
     createBackgroundHost,
-    createDevMockSdk,
+    createDevMockSdk as createDevMockSdkImpl,
     resolveSdkFactory,
 } from './background/index.js';
 import { SIGNING_SECRET_SESSION_KEY, loadSigningSecret } from './background/signingSecretSession.js';
@@ -91,14 +91,43 @@ try {
         .catch(() => { /* soft enhancement; bundled descriptors keep serving */ });
 } catch { /* never block worker boot */ }
 
-// Build the SDKRegistry against the dev mock synchronously so the
-// service worker can register handlers immediately, then swap in the
-// real `xchain-sdk`-backed factory once the dynamic import settles.
+// : gate the dev mock on `import.meta.env?.PROD` (statically
+// replaced by Vite) so a production build dead-code-eliminates the mock
+// implementation entirely; check-no-dev-mock.sh greps dist/ for it. The
+// `?.` keeps this Node-safe for the smoke harness, where import.meta.env
+// is undefined and the mock stays available.
+const createDevMockSdk = import.meta.env?.PROD ? null : createDevMockSdkImpl;
+
+// /: pre-resolution placeholder for PRODUCTION builds, where
+// the dev mock is compiled out. Throws loudly on any call instead of
+// serving fabricated data. Mirrors packages/web/src/hostBridge.js.
+function makeLoadingSdkSurface() {
+    const thrower = () => {
+        throw new Error(
+            '[xchain-wallet/extension] xchain-sdk is not loaded yet (or '
+            + 'failed to load); refusing to serve data. See sdkResolved.',
+        );
+    };
+    return new Proxy(thrower, {
+        get(_target, prop) {
+            // Not a thenable: `await sdk` must not recurse into the proxy.
+            if (prop === 'then') return undefined;
+            return makeLoadingSdkSurface();
+        },
+        apply() { return thrower(); },
+    });
+}
+const createLoadingSdk = () => makeLoadingSdkSurface();
+
+// Build the SDKRegistry against the dev mock (dev builds) or a throwing
+// placeholder (production) synchronously so the service worker can
+// register handlers immediately, then swap in the real
+// `xchain-sdk`-backed factory once the dynamic import settles.
 // Callers that need to wait on real-SDK availability can await
 // `sdkResolved` before issuing sign / broadcast requests.
 let sdkRegistry = new sdkLib.SDKRegistry({
     chainRegistry,
-    sdkFactory: createDevMockSdk,
+    sdkFactory: createDevMockSdk ?? createLoadingSdk,
 });
 
 export const sdkResolved = resolveSdkFactory({ devMockFactory: createDevMockSdk })
@@ -109,7 +138,18 @@ export const sdkResolved = resolveSdkFactory({ devMockFactory: createDevMockSdk 
         });
         return result.source;
     })
-    .catch(() => 'dev-mock');
+    .catch((err) => {
+        // : never swallow the production refusal (see the web shell's
+        // hostBridge.js for the full rationale). In production, log and
+        // re-throw so `sdkResolved` consumers see the failure; the registry
+        // stays on the throwing placeholder. In dev / Node harnesses the
+        // dev-mock fallback is expected.
+        if (import.meta.env?.PROD) {
+            console.error('[xchain-wallet/extension] SDK resolution failed:', err);
+            throw err;
+        }
+        return 'dev-mock';
+    });
 
 // Module-scoped so the broker survives across unlock / lock cycles;
 // rejecting any pending approval on window-close continues to work even

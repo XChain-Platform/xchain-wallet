@@ -164,6 +164,81 @@ try {
 }
 assert.ok(threw, 'resolveSdkFactory rejects when no devMockFactory passed');
 
+// --- 5. /556/557 production-safety invariants -------------------
+
+// : the dev-mock implementations must be gated on import.meta.env
+// PROD so a production build dead-code-eliminates them; otherwise
+// check-no-dev-mock.sh's implementation grep is a false green.
+assert.ok(
+    /createDevMockSdk = import\.meta\.env\?\.PROD \? null :/.test(hostBridge),
+    'hostBridge PROD-gates createDevMockSdk for dead-code elimination',
+);
+assert.ok(
+    /createDevMockSdk = import\.meta\.env\?\.PROD \? null : createDevMockSdkImpl/.test(background),
+    'background PROD-gates createDevMockSdk for dead-code elimination',
+);
+
+// : sdkResolved must NOT swallow the production refusal thrown by
+// resolveSdkFactory; the old `.catch(() => 'dev-mock')` left the registry
+// silently on the mock. The catch must re-throw under PROD.
+for (const [name, src] of [['hostBridge', hostBridge], ['background', background]]) {
+    // Comment lines may cite the old pattern; test code lines only.
+    const codeOnly = src
+        .split('\n')
+        .filter((line) => !/^\s*(?:\/\/|\*|\/\*)/.test(line))
+        .join('\n');
+    assert.ok(
+        !/\.catch\(\(\)\s*=>\s*'dev-mock'\)/.test(codeOnly),
+        `${name} no longer discards SDK-resolution failures outright`,
+    );
+    assert.ok(
+        /SDK resolution failed/.test(src) && /throw err;/.test(src),
+        `${name} re-throws the production SDK-resolution refusal`,
+    );
+    // Both shells boot the registry off a throwing placeholder in PROD
+    // (where the mock does not exist) rather than crashing on null.
+    assert.ok(
+        /createDevMockSdk \?\? createLoadingSdk/.test(src),
+        `${name} falls back to the throwing loading-surface factory in PROD`,
+    );
+}
+
+// : the release gate must grep for the mock IMPLEMENTATION, not just
+// the fallback warning strings, and  positively require SDK-unique
+// literals so "SDK failed to bundle at all" cannot pass either.
+const gate = readFileSync(
+    join(wsRoot, 'tools', 'build-reproduce', 'check-no-dev-mock.sh'),
+    'utf8',
+);
+for (const marker of ['Dev SDK stub', 'devmockpsbt', 'CONTRACT_LINT_FAILED', 'ENCODER_NOT_CONFIGURED']) {
+    assert.ok(
+        gate.includes(`"${marker}"`),
+        `check-no-dev-mock.sh checks marker: ${marker}`,
+    );
+}
+
+// : both shell Vite configs must give the link:-resolved SDK the CJS
+// transform (commonjsOptions.include) and resolve the polyfill shim +
+// SDK-repl specifiers the transform surfaces.
+for (const shell of ['web', 'extension']) {
+    const cfg = readFileSync(
+        join(wsRoot, 'packages', shell, 'vite.config.js'),
+        'utf8',
+    );
+    assert.ok(
+        /commonjsOptions:\s*\{[^}]*include:\s*\[\/node_modules\/,\s*\/xchain-sdk\/\]/.test(cfg),
+        `${shell} vite config includes xchain-sdk in the commonjs transform`,
+    );
+    assert.ok(
+        cfg.includes("vite-plugin-node-polyfills/shims/"),
+        `${shell} vite config resolves the bare polyfill-shim specifiers`,
+    );
+    assert.ok(
+        /repl\\\.js\$/.test(cfg),
+        `${shell} vite config routes xchain-sdk's repl.js to the browser shim`,
+    );
+}
+
 console.log(
-    'OK: sdk wiring smoke (web + extension factories, hostBridge + background sdkResolved, fallback warn once, dep declared)',
+    'OK: sdk wiring smoke (web + extension factories, hostBridge + background sdkResolved, fallback warn once, dep declared, PROD refuses dev-mock: DCE gate + loud catch + commonjs transform of linked SDK)',
 );

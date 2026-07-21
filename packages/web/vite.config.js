@@ -104,6 +104,40 @@ const replBrowserShim = fileURLToPath(
     new URL('../core/src/shims/repl-browser.js', import.meta.url),
 );
 
+// : vite-plugin-node-polyfills rewrites Buffer/process/global
+// references inside transformed CJS to bare
+// `vite-plugin-node-polyfills/shims/*` specifiers. Those resolve fine for
+// packages under this project's node_modules, but xchain-sdk is a `link:`
+// dep living OUTSIDE the project root, and pnpm's strict node_modules
+// layout cannot resolve the plugin package from the SDK's directory. That
+// unresolvable specifier is what sank the build.commonjsOptions route the
+// first time. Resolve the shims to absolute paths from THIS package's
+// context and hand them to Rollup before its node-resolve runs.
+// (resolve.alias does not help here: the commonjs plugin emits the bare id
+// directly, bypassing the alias step.)
+const shimRequire = createRequire(import.meta.url);
+const polyfillShimResolver = {
+    name: 'xchain-polyfill-shim-resolver',
+    enforce: 'pre',
+    resolveId(source, importer) {
+        if (source.startsWith('vite-plugin-node-polyfills/shims/')) {
+            return shimRequire.resolve(source);
+        }
+        // xchain-sdk/src/repl.js carries a top-level `require.main ===
+        // module` CLI-entry check that the commonjs transform leaves as a
+        // bare `require`, which throws on load in a browser. The wallet
+        // never uses the SDK REPL, so route the module to the repl browser
+        // shim (startREPL resolves to undefined, which nothing calls).
+        if (
+            /(^|\/)repl\.js$/.test(source)
+            && importer && importer.includes('xchain-sdk')
+        ) {
+            return replBrowserShim;
+        }
+        return null;
+    },
+};
+
 // xchain-sdk's musig2.js does `require('@brandonblack/musig/base_crypto')`.
 // Node resolves that subpath to lib/base_crypto.js, but esbuild's dep
 // scanner rejects the package's exports map and aborts `vite optimize`,
@@ -148,11 +182,9 @@ export default defineConfig({
     // transform properly (verified: .vite/deps/xchain-sdk.js is ~5 MB, carries
     // the real decoder + preflight code, and contains zero literal requires).
     //
-    // NOTE this fixes the DEV SERVER only, which is what Playwright drives.
-    // The production `vite build` path still ships the untransformed shim - see
-    // ; a build.commonjsOptions.include attempt collapses on
-    // vite-plugin-node-polyfills' bare shim specifiers resolving from the
-    // linked SDK's directory.
+    // NOTE this covers the DEV SERVER only, which is what Playwright drives.
+    // The production `vite build` path is handled separately :
+    // build.commonjsOptions.include below plus polyfillShimResolver above.
     // GATED: opt in with VITE_XCHAIN_REAL_SDK=1. Unconditionally pre-bundling
     // the real SDK makes the app talk to a live backend at boot, and when none
     // is reachable (the default for dev + the e2e suite) wallet creation HANGS
@@ -168,6 +200,19 @@ export default defineConfig({
         emptyOutDir: true,
         target: 'es2022',
         sourcemap: true,
+        //  (prod half of G163): Rollup's commonjs pass defaults to
+        // /node_modules/ only, and the `link:`-resolved xchain-sdk lives
+        // outside every node_modules dir, so without this include the
+        // emitted chunk kept literal require() calls, threw in the browser,
+        // and the wallet silently fell back to the dev-mock SDK. Explicitly
+        // include the SDK (keeping the node_modules default) so it gets the
+        // same CJS -> ESM treatment as any registry dependency. The bare
+        // polyfill-shim specifiers this transform surfaces are resolved by
+        // polyfillShimResolver above.
+        commonjsOptions: {
+            include: [/node_modules/, /xchain-sdk/],
+            transformMixedEsModules: true,
+        },
     },
     server: {
         port: 5173,
@@ -184,6 +229,7 @@ export default defineConfig({
         allowedHosts: ['localhost', '127.0.0.1', 'devhost'],
     },
     plugins: [
+        polyfillShimResolver,
         react(),
         ...(httpsEnabled ? [basicSsl()] : []),
         nodePolyfills({

@@ -25,7 +25,10 @@ let warned = false;
  * @returns {Promise<{ factory: () => any, source: 'real' | 'dev-mock' }>}
  */
 export async function resolveSdkFactory({ devMockFactory }) {
-    if (typeof devMockFactory !== 'function') {
+    // In production builds the dev mock is dead-code-eliminated  and
+    // the background passes null; the PROD branch below throws before the
+    // fallback would ever be used, so only require it where it can run.
+    if (typeof devMockFactory !== 'function' && !import.meta.env?.PROD) {
         throw new Error('resolveSdkFactory: devMockFactory is required');
     }
     try {

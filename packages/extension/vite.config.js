@@ -29,6 +29,7 @@
 //     sizes the MV3 manifest expects (`icons` + `action.default_icon`).
 
 import { copyFile, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
@@ -46,6 +47,40 @@ const httpBrowserShim = fileURLToPath(
 const replBrowserShim = fileURLToPath(
     new URL('../core/src/shims/repl-browser.js', import.meta.url),
 );
+
+//  (mirrors packages/web/vite.config.js): vite-plugin-node-polyfills
+// rewrites Buffer/process/global inside transformed CJS to bare
+// `vite-plugin-node-polyfills/shims/*` specifiers, which cannot resolve
+// from the `link:`-resolved xchain-sdk directory under pnpm's strict
+// layout. Resolve them from THIS package's context instead.
+const shimRequire = createRequire(import.meta.url);
+const polyfillShimResolver = {
+    name: 'xchain-polyfill-shim-resolver',
+    enforce: 'pre',
+    resolveId(source, importer) {
+        if (source.startsWith('vite-plugin-node-polyfills/shims/')) {
+            return shimRequire.resolve(source);
+        }
+        // xchain-sdk/src/repl.js carries a top-level `require.main ===
+        // module` CLI-entry check that the commonjs transform leaves as a
+        // bare `require`, which throws on load in a browser. The wallet
+        // never uses the SDK REPL, so route the module to the repl browser
+        // shim (startREPL resolves to undefined, which nothing calls).
+        if (
+            /(^|\/)repl\.js$/.test(source)
+            && importer && importer.includes('xchain-sdk')
+        ) {
+            return replBrowserShim;
+        }
+        return null;
+    },
+};
+
+// xchain-sdk's musig2.js does `require('@brandonblack/musig/base_crypto')`;
+// resolve the subpath from the SDK's own context (see the web config).
+const musigBaseCrypto = createRequire(
+    fileURLToPath(new URL('../../../xchain-sdk/package.json', import.meta.url)),
+).resolve('@brandonblack/musig/base_crypto');
 
 function copyManifestPlugin() {
     return {
@@ -144,6 +179,8 @@ export default defineConfig({
             // src/repl.js. The wallet never calls startREPL, so the
             // shim throws loudly if anything does.
             repl: replBrowserShim,
+            // Point the bare musig subpath at its real file (see note above).
+            '@brandonblack/musig/base_crypto': musigBaseCrypto,
         },
     },
     build: {
@@ -152,6 +189,17 @@ export default defineConfig({
         target: 'es2022',
         sourcemap: false,
         minify: false,
+        // : xchain-sdk is a `link:` dep living outside every
+        // node_modules dir, so Rollup's commonjs pass (default include
+        // /node_modules/) skipped it and the bundle kept literal require()
+        // calls; evaluating those throws in the worker and the extension
+        // silently fell back to the dev-mock SDK. Include the SDK explicitly;
+        // polyfillShimResolver above resolves the bare shim specifiers the
+        // transform surfaces.
+        commonjsOptions: {
+            include: [/node_modules/, /xchain-sdk/],
+            transformMixedEsModules: true,
+        },
         rollupOptions: {
             input: {
                 background: fileURLToPath(new URL('./src/background.js', import.meta.url)),
@@ -189,6 +237,7 @@ export default defineConfig({
     // manifest.json at the package root is copied via the plugin below.
     publicDir: false,
     plugins: [
+        polyfillShimResolver,
         react(),
         nodePolyfills({
             include: ['buffer', 'process', 'crypto', 'events', 'stream', 'util'],
