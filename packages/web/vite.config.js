@@ -121,7 +121,20 @@ const polyfillShimResolver = {
     enforce: 'pre',
     resolveId(source, importer) {
         if (source.startsWith('vite-plugin-node-polyfills/shims/')) {
-            return shimRequire.resolve(source);
+            // Resolve under the ESM ("import"/browser) condition, NOT the
+            // CJS one. `require.resolve` picks the exports map's "require"
+            // branch -> dist/index.cjs, which Vite then serves raw over
+            // /@fs/ in dev; it has no `default` export, so the app died at
+            // boot with a blank page ("does not provide an export named
+            // 'default'"). The package ships an ESM build alongside it
+            // (exports.import -> dist/index.js) and that is what a browser
+            // bundle wants. Falls back to require.resolve so an older
+            // layout without the ESM build still resolves.
+            try {
+                return fileURLToPath(import.meta.resolve(source));
+            } catch {
+                return shimRequire.resolve(source);
+            }
         }
         // xchain-sdk/src/repl.js carries a top-level `require.main ===
         // module` CLI-entry check that the commonjs transform leaves as a
