@@ -21,6 +21,8 @@
  * @property {string} explorerUrl       fully-formed URL
  * @property {string} encoderUrl
  * @property {string} hubUrl
+ * @property {number} [timeout]     per-request ms budget (; see DEFAULT_SDK_NETWORK_OPTIONS)
+ * @property {{ maxRetries: number, baseDelay: number, maxDelay: number }} [retry]
  */
 
 /**
@@ -63,6 +65,21 @@
  * @property {string} [hubUrl]
  */
 
+/**
+ *  (§49 offline/degraded mode): bounded network patience for every
+ * SDK instance the wallet creates. xchain-sdk's own defaults are tuned
+ * for servers: a 30s per-request timeout times 4 attempts (1 try + 3
+ * retries) with exponential backoff is over two minutes of silence PER
+ * CALL, which is why the wallet froze for ~7 minutes instead of
+ * degrading when its backend was unreachable. An interactive wallet must
+ * fail loudly in seconds; callers that genuinely need more patience can
+ * override via the `networkOptions` constructor opt.
+ */
+export const DEFAULT_SDK_NETWORK_OPTIONS = Object.freeze({
+    timeout: 10_000,
+    retry: Object.freeze({ maxRetries: 1, baseDelay: 500, maxDelay: 2_000 }),
+});
+
 export class UnknownChainError extends Error {
     constructor(chainId) {
         super(`SDKRegistry: unknown chain "${chainId}"`);
@@ -77,8 +94,10 @@ export class SDKRegistry {
      * @param {import('../registry/index.js').ChainRegistry} opts.chainRegistry
      * @param {SDKFactory} opts.sdkFactory
      * @param {Record<string, EndpointOverride>} [opts.endpointOverrides]
+     * @param {{ timeout?: number, retry?: { maxRetries?: number, baseDelay?: number, maxDelay?: number } }} [opts.networkOptions]
+     *        overrides for DEFAULT_SDK_NETWORK_OPTIONS (merged shallowly)
      */
-    constructor({ chainRegistry, sdkFactory, endpointOverrides = {} }) {
+    constructor({ chainRegistry, sdkFactory, endpointOverrides = {}, networkOptions = {} }) {
         if (!chainRegistry) throw new Error('SDKRegistry: chainRegistry is required');
         if (typeof sdkFactory !== 'function') {
             throw new Error('SDKRegistry: sdkFactory must be a function');
@@ -86,6 +105,10 @@ export class SDKRegistry {
         this._chainRegistry = chainRegistry;
         this._sdkFactory = sdkFactory;
         this._endpointOverrides = endpointOverrides;
+        this._networkOptions = {
+            timeout: networkOptions.timeout ?? DEFAULT_SDK_NETWORK_OPTIONS.timeout,
+            retry: { ...DEFAULT_SDK_NETWORK_OPTIONS.retry, ...(networkOptions.retry ?? {}) },
+        };
         /** @type {Map<string, XChainSDKLike>} */
         this._instances = new Map();
     }
@@ -166,6 +189,10 @@ export class SDKRegistry {
             explorerUrl: over.explorerUrl ?? joinEndpoint(d.explorer),
             encoderUrl: over.encoderUrl ?? joinEndpoint(d.encoder),
             hubUrl: over.hubUrl ?? joinEndpoint(d.hub),
+            // Bounded network patience : the real XChainSDK honors
+            // `timeout` + `retry` per client; the dev mock ignores them.
+            timeout: this._networkOptions.timeout,
+            retry: this._networkOptions.retry,
         });
     }
 }

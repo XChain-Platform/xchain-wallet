@@ -11,7 +11,7 @@
 // Unit tests for SDKRegistry: the per-chain SDK instance cache.
 
 import { describe, it, expect } from 'vitest';
-import { SDKRegistry, UnknownChainError } from '../../../packages/core/src/sdk/SDKRegistry.js';
+import { SDKRegistry, UnknownChainError, DEFAULT_SDK_NETWORK_OPTIONS } from '../../../packages/core/src/sdk/SDKRegistry.js';
 import { defaultRegistry } from '../../../packages/core/src/registry/index.js';
 
 const chainRegistry = defaultRegistry();
@@ -46,6 +46,51 @@ describe('sdk/SDKRegistry', () => {
             const reg = new SDKRegistry({ chainRegistry, sdkFactory: fakeFactory });
             expect(() => reg.get('bogus-chain'))
                 .toThrow(UnknownChainError);
+        });
+    });
+
+    // : the wallet froze for minutes when its backend was
+    // unreachable because SDK instances were built with xchain-sdk's
+    // server-tuned defaults (30s timeout x 4 attempts, per call). The
+    // registry now hands every factory call a bounded timeout + retry
+    // policy so an offline backend surfaces as a fast, loud error.
+    describe('network patience ', () => {
+        const captureFactory = () => {
+            const calls = [];
+            return { calls, factory: (opts) => { calls.push(opts); return fakeFactory(opts); } };
+        };
+
+        it('passes bounded default timeout + retry to the factory', () => {
+            const { calls, factory } = captureFactory();
+            const reg = new SDKRegistry({ chainRegistry, sdkFactory: factory });
+            reg.get('bitcoin-mainnet');
+            expect(calls).toHaveLength(1);
+            expect(calls[0].timeout).toBe(DEFAULT_SDK_NETWORK_OPTIONS.timeout);
+            expect(calls[0].retry).toEqual(DEFAULT_SDK_NETWORK_OPTIONS.retry);
+        });
+
+        it('defaults stay interactive-grade: worst case under 30s per call', () => {
+            const { timeout, retry } = DEFAULT_SDK_NETWORK_OPTIONS;
+            // 1 try + maxRetries retries, each up to `timeout`, plus
+            // backoff delays capped at maxDelay between attempts.
+            const worstCase =
+                (1 + retry.maxRetries) * timeout + retry.maxRetries * retry.maxDelay;
+            expect(worstCase).toBeLessThan(30_000);
+        });
+
+        it('honours networkOptions overrides, merged over the defaults', () => {
+            const { calls, factory } = captureFactory();
+            const reg = new SDKRegistry({
+                chainRegistry,
+                sdkFactory: factory,
+                networkOptions: { timeout: 3_000, retry: { maxRetries: 0 } },
+            });
+            reg.get('litecoin-mainnet');
+            expect(calls[0].timeout).toBe(3_000);
+            expect(calls[0].retry).toEqual({
+                ...DEFAULT_SDK_NETWORK_OPTIONS.retry,
+                maxRetries: 0,
+            });
         });
     });
 

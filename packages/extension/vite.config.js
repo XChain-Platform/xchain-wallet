@@ -175,6 +175,11 @@ export default defineConfig({
             // for connection pooling; browser manages its own pool, so
             // our tiny no-op shim avoids pulling in stream-http (~30 KB).
             http: httpBrowserShim,
+            // : the same clients pick `require('https').Agent` for
+            // https endpoints (every mainnet default); without this alias
+            // real-SDK construction throws in the browser and wallet
+            // creation never completes.
+            https: httpBrowserShim,
             // repl is loaded transitively via xchain-sdk/index.js →
             // src/repl.js. The wallet never calls startREPL, so the
             // shim throws loudly if anything does.
