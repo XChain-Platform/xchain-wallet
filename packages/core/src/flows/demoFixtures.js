@@ -846,6 +846,15 @@ export function synthesizeDemoContacts() {
 const DEMO_DISPENSERS = /** @type {Record<string, any[]>} */ ({
     'bitcoin-mainnet': [
         {
+            // In the 1-hour close window: close requested (status
+            // 'cancelling'), escrow not yet released.
+            action_index: '4201230', tx_hash: 'demo-disp-btc-4', block_index: 962011,
+            status: 'cancelling', give_tick: 'BANANE', give_amount: '20',
+            get_coin: 'BTC', get_tick: '', get_amount: '0.0004',
+            escrow_remaining: '160', dispense_count: 42,
+            memo: 'Winding down: close requested, escrow releases when the window ends.',
+        },
+        {
             action_index: '4200981', tx_hash: 'demo-disp-btc-1', block_index: 961842,
             status: 'open', give_tick: 'RAREPEPE', give_amount: '1', imageUrl: DEMO_TOKEN_ICONS.RAREPEPE,
             get_coin: 'BTC', get_tick: '', get_amount: '0.005',

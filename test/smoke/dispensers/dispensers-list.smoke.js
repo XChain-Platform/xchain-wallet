@@ -257,8 +257,11 @@ for (const [shell, appPath] of [
         /id:\s*['"]dispensers-list['"]/.test(app),
         `${shell} registers the My dispensers entry`,
     );
+    // Accept both the bare-arrow form and a block body that records a
+    // back-target before navigating; either way onMyDispensers must
+    // land on the dispensers-list sub-route.
     assert.ok(
-        /onMyDispensers:\s*\(\)\s*=>\s*setUnlockedView\('dispensers-list'\)/.test(app),
+        /onMyDispensers:\s*\(\)\s*=>\s*(?:setUnlockedView\('dispensers-list'\)|\{[^}]*setUnlockedView\('dispensers-list'\)[^}]*\})/.test(app),
         `${shell} wires onMyDispensers to the list sub-route`,
     );
     assert.ok(

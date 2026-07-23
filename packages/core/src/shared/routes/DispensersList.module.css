@@ -212,3 +212,8 @@
     align-items: flex-end;
     gap: var(--xc-space-1);
 }
+
+.status_cancelling {
+    background: rgba(234, 179, 8, 0.15);
+    color: var(--xc-warning, #B45309);
+}

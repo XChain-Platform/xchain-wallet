@@ -230,6 +230,9 @@ function AppInner() {
     const [messagingThread, setMessagingThread] = useState(
         /** @type {string | null} */ (null),
     );
+    // View to return to when backing out of My Dispensers (recorded at
+    // each navigation into the list; back otherwise loses the origin).
+    const [dispensersBackTo, setDispensersBackTo] = useState('home');
     // Quick "Message sent" confirmation modal, shown over the view the user
     // is returned to after a compose-form send succeeds.
     const [messageSentNotice, setMessageSentNotice] = useState(false);
@@ -777,7 +780,7 @@ function AppInner() {
                             setUnlockedView('dispenser-detail');
                         }}
                         onCreateDispenser={() => setUnlockedView('dispenser')}
-                        onBack={() => setUnlockedView('actions')}
+                        onBack={() => setUnlockedView(dispensersBackTo || 'home')}
                     />
                 );
             }
@@ -1530,7 +1533,7 @@ function AppInner() {
                             onTransferOwnership: () => setUnlockedView('transfer'),
                             onBroadcast: () => setUnlockedView('broadcast'),
                             onCreateDispenser: () => setUnlockedView('dispenser'),
-                            onMyDispensers: () => setUnlockedView('dispensers-list'),
+                            onMyDispensers: () => { setDispensersBackTo(unlockedView); setUnlockedView('dispensers-list'); },
                             onBrowseDispensers: () => setUnlockedView('dispenser-explorer'),
                             onPayDividend: () => setUnlockedView('dividend'),
                             onAirdrop: () => {
@@ -1714,7 +1717,7 @@ function AppInner() {
                         onMyTokens={activeWalletId ? () => setUnlockedView('my-tokens') : undefined}
                         onMarketActivity={activeWalletId ? () => setUnlockedView('market-activity') : undefined}
                         onMarkets={activeWalletId ? () => setUnlockedView('markets') : undefined}
-                        onDispensers={activeWalletId ? () => setUnlockedView('dispensers-list') : undefined}
+                        onDispensers={activeWalletId ? () => { setDispensersBackTo(unlockedView); setUnlockedView('dispensers-list'); } : undefined}
                         onMessaging={activeWalletId ? () => { setMessagingThread(null); setUnlockedView('messaging'); } : undefined}
                         onContracts={activeWalletId && hasBtcAddress ? () => setUnlockedView('contracts-list') : undefined}
                         onStaking={activeWalletId && hasBtcAddress ? () => setUnlockedView('staking-dashboard') : undefined}
