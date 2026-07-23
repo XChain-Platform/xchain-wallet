@@ -1352,7 +1352,7 @@ export function verifyReceiveAddress(opts) {
 }
 
 /**
- * Derive the next dispenser sub-address (change=2) under an account (§16).
+ * Derive the next role='dispenser' external address under an account (§16).
  * Same shape as generateReceiveAddress; pass `accountId` to scope it.
  * @param {object} opts
  * @returns {Promise<{ id: string, address: string, label: string, addressType: string, derivationPath: string | null }>}

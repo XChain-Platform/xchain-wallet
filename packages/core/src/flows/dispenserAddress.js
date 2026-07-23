@@ -33,6 +33,7 @@
 import { createAddress } from '../schemas/address.js';
 import { NoMatchingAccountError } from './receiveAddress.js';
 import { unlockWallet } from './unlockWallet.js';
+import { tickerForCoin } from '../registry/coinTicker.js';
 
 /**
  * @typedef {Object} DispenserAddressOpts
@@ -47,7 +48,7 @@ import { unlockWallet } from './unlockWallet.js';
  * @property {string} [accountId]               preferred, pick the Account by id
  * @property {number} [accountIndex]            fallback, pick by BIP44 index (default 0). Ignored when `accountId` is supplied.
  * @property {string} [addressType]             defaults to descriptor.defaultAddressType
- * @property {string} [label]                   defaults to "Dispenser #N+1"
+ * @property {string} [label]                   defaults to "<TICKER> Dispenser #N+1" (e.g. "BTC Dispenser #2")
  */
 
 /**
@@ -172,7 +173,7 @@ export async function dispenserAddress({
             derivationPath: derived.path,
             address: derived.address,
             publicKey: derived.publicKey,
-            label: label ?? `Dispenser #${dispenserCount + 1}`,
+            label: label ?? `${tickerForCoin(descriptor.coin)} Dispenser #${dispenserCount + 1}`,
             role: 'dispenser',
             signerId: signer.id,
         });

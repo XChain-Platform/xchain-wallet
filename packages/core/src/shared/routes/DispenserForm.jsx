@@ -83,8 +83,8 @@ const FIAT_CODES = ['USD', 'CAD', 'AUD', 'MXN', 'GBP', 'JPY', 'CNY', 'CHF', 'BRL
  *
  * §16: each dispenser is opened on its own dedicated address. SOURCE
  * stays the token-holding main address (it signs and the escrow debits
- * from it); GET_ADDRESS is a fresh change=2 dispenser sub-address under
- * the active account. This is a single DISPENSER action: it debits
+ * from it); GET_ADDRESS is a fresh role='dispenser' external address
+ * under the active account. This is a single DISPENSER action: it debits
  * SOURCE and escrows into the dispenser at GET_ADDRESS in one tx
  * (DISPENSER.md fresh-address exception; SOURCE keeps cancel authority).
  *
@@ -110,7 +110,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     const [fromAddressId, setFromAddressId] = useState(
         /** @type {string | null} */ (null),
     );
-    // §16: the fresh change=2 dispenser sub-address used as GET_ADDRESS.
+    // §16: the fresh role='dispenser' address used as GET_ADDRESS.
     // Derived once per (chain, account) at review time, so an abandoned
     // form consumes no dispenser index.
     const [dispenserGetAddress, setDispenserGetAddress] = useState(

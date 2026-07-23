@@ -195,7 +195,9 @@ describe('dispenserAddress (§16)', () => {
 
     it('labels by dispenser count, not by external index', async () => {
         // Four receive addresses but zero dispensers: the next dispenser
-        // derives at external index 4 yet is still labeled "Dispenser #1".
+        // derives at external index 4 yet is still labeled "BTC Dispenser
+        // #1" (coin-prefixed like receive labels, so multi-chain lists
+        // don't show colliding "Dispenser #1" rows).
         const receiveAddrs = [0, 1, 2, 3].map((i) => createAddress({
             accountId: 'acct-a',
             chain: 'bitcoin',
@@ -210,10 +212,10 @@ describe('dispenserAddress (§16)', () => {
         const vault = makeVault({ accounts: [ACCOUNT_A], addresses: receiveAddrs });
         const first = await dispenserAddress(base(vault, signer));
         expect(first.derivationPath).toBe("m/84'/0'/0'/0/4");
-        expect(first.label).toBe('Dispenser #1');
+        expect(first.label).toBe('BTC Dispenser #1');
         // Second dispenser: index 5, label increments to #2.
         const second = await dispenserAddress(base(vault, signer));
         expect(second.derivationPath).toBe("m/84'/0'/0'/0/5");
-        expect(second.label).toBe('Dispenser #2');
+        expect(second.label).toBe('BTC Dispenser #2');
     });
 });

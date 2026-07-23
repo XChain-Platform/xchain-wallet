@@ -278,7 +278,7 @@ export function verifyReceiveAddress(opts) {
     return /** @type {any} */ (sendMessage('receive.verifyAddress', opts));
 }
 
-/** Derive the next dispenser sub-address (change=2) under an account (§16). */
+/** Derive the next role='dispenser' external address under an account (§16). */
 export function generateDispenserAddress(opts) {
     return /** @type {any} */ (sendMessage('dispenser.getAddress', opts));
 }

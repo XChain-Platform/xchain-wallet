@@ -1314,9 +1314,10 @@ export function createBackgroundHost(deps) {
         });
     });
 
-    // §16 dispenser sub-address. Same signer-resolution path as
-    // receive.getAddress; derives the next change=2 address under the
-    // active account so dispenser inventory stays off the receive branch.
+    // §16 dispenser address. Same signer-resolution path as
+    // receive.getAddress; derives the next external (change=0) address
+    // under the active account, tagged role='dispenser' (see
+    // flows/dispenserAddress.js for why it shares the receive branch).
     host.register('dispenser.getAddress', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
         const signer = await pickSignerFromRequest({
             vault,

@@ -9,9 +9,14 @@
 // contact legal@dankest.llc.
 
 // AddAddressModal: the "Add address" affordance on the Addresses page.
-// A small overlay popup with three fields, coin, address type, and how
-// many addresses to generate, then batch-derives that many receive
-// addresses for the active account.
+// A small overlay popup with four fields, coin, address type, purpose,
+// and how many addresses to generate, then batch-derives that many
+// addresses for the active account. Purpose picks the derive flow:
+// 'receive' (default) or 'dispenser' (§16), which tags the record
+// role='dispenser' so it surfaces under the Misc filter and in the
+// Create Dispenser form's existing-address picker. Both draw from the
+// same external change=0 index space; dispenser-ness is metadata, not
+// a separate branch.
 //
 // Generation is SEQUENTIAL: each generateReceiveAddress call computes the
 // next BIP44 index from the already-persisted records, so running them in
@@ -84,6 +89,7 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
     const [chainId, setChainId] = useState(coinOptions[0]?.chainId || '');
     const selected = coinOptions.find((c) => c.chainId === chainId) || coinOptions[0] || null;
     const [addressType, setAddressType] = useState(selected?.defaultAddressType || '');
+    const [purpose, setPurpose] = useState(/** @type {'receive' | 'dispenser'} */ ('receive'));
     const [count, setCount] = useState('1');
     const [busy, setBusy] = useState(false);
     const [done, setDone] = useState(0);
@@ -111,9 +117,12 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
         setError(null);
         setDone(0);
         try {
+            const generate = purpose === 'dispenser'
+                ? messaging.generateDispenserAddress
+                : messaging.generateReceiveAddress;
             for (let i = 0; i < n; i += 1) {
                 // eslint-disable-next-line no-await-in-loop -- sequential by design (see header)
-                await messaging.generateReceiveAddress({ walletId, chainId, accountId, addressType });
+                await generate({ walletId, chainId, accountId, addressType });
                 setDone(i + 1);
             }
             onGenerated?.(n);
@@ -175,6 +184,28 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
                                 })}
                             </select>
                         </label>
+                        {typeof messaging.generateDispenserAddress === 'function' ? (
+                            <label className={styles.field}>
+                                <span className={styles.label}>Purpose</span>
+                                <select
+                                    className={styles.select}
+                                    value={purpose}
+                                    onChange={(e) => {
+                                        setPurpose(/** @type {'receive' | 'dispenser'} */ (e.target.value));
+                                        setError(null);
+                                    }}
+                                    disabled={busy}
+                                >
+                                    <option value="receive">Receive</option>
+                                    <option value="dispenser">Dispenser</option>
+                                </select>
+                                {purpose === 'dispenser' ? (
+                                    <span className={styles.hint}>
+                                        Listed under Misc on the Addresses page and offered when opening a dispenser.
+                                    </span>
+                                ) : null}
+                            </label>
+                        ) : null}
                         <label className={styles.field}>
                             <span className={styles.label}>Number of addresses</span>
                             <input

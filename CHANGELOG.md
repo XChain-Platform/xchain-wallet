@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Add addresses form gains a Purpose selector (Receive or Dispenser) that batch-generates role-tagged dispenser addresses, whose default labels are now coin-prefixed (e.g. "BTC Dispenser #1") like receive labels.
 - Governance-poll notifications: the wallet notifies when a new VOTE poll opens for a token you hold, flagging binding polls (settings toggle, all three shells).
 - `xchain:{COIN}/execute` deep links (web + extension): the boot-time `?uri=` handler routes contract/method/params/gas into a prefilled ExecuteContractForm.
 - ABI-driven EXECUTE lane: when a contract declares an `abi` block, the form renders a method selector plus named/typed parameter inputs, with the manual lane as an explicit fallback.

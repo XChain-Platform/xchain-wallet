@@ -36,6 +36,7 @@ import { createContext } from 'react';
  * @property {(opts: any) => Promise<any>} [createAccount]
  * @property {(opts: any) => Promise<any>} [sendToken]
  * @property {(opts: any) => Promise<any>} [generateReceiveAddress]
+ * @property {(opts: any) => Promise<any>} [generateDispenserAddress]
  * @property {(opts: any) => Promise<any>} [verifyReceiveAddress]
  *
  * @typedef {object} MessagingContextValue
