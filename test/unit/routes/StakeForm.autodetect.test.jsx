@@ -163,7 +163,9 @@ describe('StakeForm new-vs-top-up auto-detect (getStakesForAddress)', () => {
         await enterPubkey();
         // Adding 10 to the aggregated 150 projects a 160 total, which
         // exactly meets the price threshold.
-        fireEvent.change(await screen.findByLabelText('Amount'), {
+        // AmountField suffixes the active unit into the label ("Amount
+        // (XCHAIN)"), so match on the prefix.
+        fireEvent.change(await screen.findByLabelText(/^Amount/), {
             target: { value: '10' },
         });
 
